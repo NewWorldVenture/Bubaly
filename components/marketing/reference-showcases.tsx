@@ -259,8 +259,8 @@ export function FeaturesReferencePage() {
           </FeatureCard>
         </section>
 
-        <section className="mx-0 mt-[18px] grid h-auto min-h-[105px] items-center gap-5 rounded-[13px] border border-white/[0.09] bg-[radial-gradient(circle_at_55%_0%,rgba(82,63,232,.15),transparent_46%),linear-gradient(110deg,rgba(89,48,189,.13),rgba(8,17,28,.9))] px-7 py-5 sm:mx-[14px] lg:h-[109px] lg:py-3">
-          <div className="flex items-center gap-5">
+        <section className="mx-0 mt-[18px] grid h-auto min-h-[105px] items-center gap-5 rounded-[13px] border border-white/[0.09] bg-[radial-gradient(circle_at_55%_0%,rgba(82,63,232,.15),transparent_46%),linear-gradient(110deg,rgba(89,48,189,.13),rgba(8,17,28,.9))] px-7 py-5 sm:mx-[14px] lg:flex lg:h-[109px] lg:py-3">
+          <div className="flex items-center gap-5 lg:min-w-0 lg:flex-1">
             <Sparkles className="hidden h-10 w-10 shrink-0 text-violet-400 sm:block" strokeWidth={1.7} />
             <div>
               <h2 className="text-[19px] font-semibold tracking-[-0.02em]">One app. Every part of your family life.</h2>
