@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useApp } from '@/hooks/use-app';
-import { useRealtimeQuery } from '@/hooks/use-realtime-query';
+import { useApp } from '@/components/app/app-context';
+import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import {
   Sun, Moon, CalendarDays, RefreshCw, Sparkles, AlertTriangle,
   CheckCircle2, Clock, X, Loader2, TrendingUp,
   ChevronRight, Star, Tv2, LayoutGrid,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils/cn';
 import type { Database } from '@/lib/database.types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -593,13 +593,13 @@ export function BriefingModule() {
   // Live data for kitchen mode
   const { data: rawEvents } = useRealtimeQuery<CalEvent>({
     table: 'calendar_events',
-    select: 'id, title, starts_at, ends_at, location, assignee_id, category',
-    filter: { family_id: familyId },
+    familyId,
+    fetcher: (sb) => sb.from('calendar_events').select('*').eq('family_id', familyId) as never,
   });
   const { data: rawReminders } = useRealtimeQuery<ReminderRow>({
     table: 'reminders',
-    select: 'id, title, remind_at',
-    filter: { family_id: familyId, is_done: false },
+    familyId,
+    fetcher: (sb) => sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false) as never,
   });
 
   const todayEvents = useMemo(() => {
