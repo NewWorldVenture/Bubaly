@@ -131,3 +131,32 @@ export async function adminRevokeInviteAction(inviteId: string): Promise<Result>
   revalidatePath('/admin/users');
   return { ok: true };
 }
+
+/**
+ * Signed URL for any family's document, via the service role. The browser's
+ * anon-key client can't do this for the super admin — Storage RLS only grants
+ * access to actual family members, and the admin isn't a member of every family.
+ */
+export async function adminGetDocumentUrlAction(storagePath: string): Promise<Result<{ url: string }>> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+
+  const supabase = createServiceClient();
+  const { data, error } = await supabase.storage.from('documents').createSignedUrl(storagePath, 120);
+  if (error || !data) return { ok: false, error: error?.message ?? 'Could not create a link' };
+  return { ok: true, data: { url: data.signedUrl } };
+}
+
+/** Deletes a document's storage object and database row. Not reversible — confirmed client-side first. */
+export async function adminDeleteDocumentAction(documentId: string, storagePath: string): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+
+  const supabase = createServiceClient();
+  await supabase.storage.from('documents').remove([storagePath]);
+  const { error } = await supabase.from('documents').delete().eq('id', documentId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/admin/content');
+  return { ok: true };
+}
