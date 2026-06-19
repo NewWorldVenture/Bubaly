@@ -21,7 +21,7 @@ function timezones(): string[] {
     const all = intl.supportedValuesOf?.('timeZone');
     if (all?.length) return all;
   } catch { /* fall through */ }
-  return ['UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London'];
+  return ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu', 'UTC', 'Europe/London'];
 }
 
 type Added = { kind: 'local' | 'invite'; label: string; sub: string; color?: string };
@@ -31,7 +31,7 @@ export function OnboardingWizard() {
   const { success, error } = useToast();
   const tz = useMemo(timezones, []);
   const guessTz = useMemo(() => {
-    try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'UTC'; }
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'America/New_York'; }
   }, []);
 
   const [step, setStep] = useState(1);
@@ -45,7 +45,7 @@ export function OnboardingWizard() {
     setLoading(true);
     const res = await createFamilyAction({
       name: String(form.get('name') ?? ''),
-      timezone: String(form.get('timezone') ?? 'UTC'),
+      timezone: String(form.get('timezone') ?? 'America/New_York'),
     });
     setLoading(false);
     if (!res.ok) return error(res.error);
