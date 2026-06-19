@@ -133,7 +133,7 @@ export function CalendarModule() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('gcal') === 'connected') { success('Google Calendar connected!'); window.history.replaceState({}, '', window.location.pathname); }
     else if (params.get('gcal') === 'error') { toastError('Google Calendar connection failed.'); window.history.replaceState({}, '', window.location.pathname); }
-  }, []);
+  }, [success, toastError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll to 7am on mount
   useEffect(() => {
@@ -181,10 +181,11 @@ export function CalendarModule() {
   // Upcoming events for sidebar (next 7 days)
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const upcoming = useMemo(() => {
-    const weekEnd = new Date(today.getTime() + 7 * 86400000);
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(now.getTime() + 7 * 86400000);
     return [...data].filter(e => {
       const d = new Date(e.starts_at);
-      return d >= today && d <= weekEnd;
+      return d >= now && d <= weekEnd;
     }).sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()).slice(0, 8);
   }, [data]);
 

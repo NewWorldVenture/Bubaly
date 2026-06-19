@@ -15,7 +15,7 @@ export function WelcomeEmail({ name }: { name: string }) {
           Welcome to FamilyOS, {name}!
         </h1>
         <p style={{ color: '#94a0b8', lineHeight: 1.6, marginBottom: 24 }}>
-          Your family's command center is ready. Start by adding your family members, scheduling events on the calendar, or asking your AI assistant to plan the week.
+          Your family&apos;s command center is ready. Start by adding your family members, scheduling events on the calendar, or asking your AI assistant to plan the week.
         </p>
 
         <div style={{ background: '#091019', border: '1px solid #23364e', borderRadius: 16, padding: 24, marginBottom: 24 }}>

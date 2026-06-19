@@ -59,7 +59,7 @@ export function GroceryModule() {
       }
       setListLoading(false);
     })();
-  }, [familyId]);
+  }, [familyId, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: items, loading, error, refresh } = useRealtimeQuery<Item>({
     table: 'grocery_items', familyId, deps: [familyId, listId],
