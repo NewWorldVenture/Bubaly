@@ -28,7 +28,7 @@ export const APP_NAV: NavItem[] = [
   { href: '/dashboard/sports', label: 'Sports', icon: Trophy },
   { href: '/dashboard/health', label: 'Health', icon: HeartPulse },
   { href: '/dashboard/documents', label: 'Documents', icon: FolderLock },
-  { href: '/dashboard/home', label: 'Home', icon: Home },
+  { href: '/dashboard/home', label: 'Home & Maintenance', icon: Home },
   { href: '/dashboard/notes', label: 'Notes', icon: StickyNote },
   { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
   { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound },

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Home, Plus, Trash2, Wrench, Package, Check } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { Home, Plus, Trash2, Wrench, Package, Check, Shield, FileText, Upload, ExternalLink, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -15,12 +15,30 @@ import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { isManager } from '@/lib/constants/roles';
+import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import type { Tables } from '@/lib/database.types';
 
 type HomeAsset = Tables<'home_assets'>;
 type MaintenanceTask = Tables<'maintenance_tasks'>;
+type WarrantyDoc = Tables<'documents'>;
 
 const PRIORITY_TONE = { low: 'neutral', medium: 'brand', high: 'danger' } as const;
+
+function fmtBytes(bytes: number | null): string {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+/** Expiry status for a warranty date — drives the badge tone everywhere it's shown. */
+function expiryStatus(dateStr: string | null): { tone: 'danger' | 'warning' | 'success' | 'neutral'; label: string } {
+  if (!dateStr) return { tone: 'neutral', label: 'No expiration set' };
+  const days = Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
+  if (days < 0) return { tone: 'danger', label: `Expired ${fmtRelative(dateStr)}` };
+  if (days <= 30) return { tone: 'warning', label: `Expires ${fmtRelative(dateStr)}` };
+  return { tone: 'success', label: `Expires ${fmtRelative(dateStr)}` };
+}
 
 export function HomeModule() {
   const { familyId, userId, role } = useApp();
@@ -28,6 +46,7 @@ export function HomeModule() {
   const { success, error: toastError } = useToast();
   const [openAsset, setOpenAsset] = useState(false);
   const [openTask, setOpenTask] = useState(false);
+  const [warrantyAsset, setWarrantyAsset] = useState<HomeAsset | null>(null);
 
   const { data: assets, loading: assetsLoading, error: assetsError, refresh: refreshAssets } = useRealtimeQuery<HomeAsset>({
     table: 'home_assets',
@@ -45,6 +64,52 @@ export function HomeModule() {
       supabase.from('maintenance_tasks').select('*').eq('family_id', familyId)
         .in('status', ['todo', 'in_progress']).order('due_at', { ascending: true, nullsFirst: false }),
   });
+
+  const { data: warrantyDocs, loading: docsLoading, error: docsError, refresh: refreshDocs } = useRealtimeQuery<WarrantyDoc>({
+    table: 'documents',
+    familyId,
+    deps: [familyId],
+    fetcher: (supabase) =>
+      supabase.from('documents').select('*').eq('family_id', familyId)
+        .not('asset_id', 'is', null).order('created_at', { ascending: false }),
+  });
+
+  const docsByAsset = useMemo(() => {
+    const map = new Map<string, WarrantyDoc[]>();
+    for (const d of warrantyDocs) {
+      if (!d.asset_id) continue;
+      if (!map.has(d.asset_id)) map.set(d.asset_id, []);
+      map.get(d.asset_id)!.push(d);
+    }
+    return map;
+  }, [warrantyDocs]);
+
+  function refreshWarranty() {
+    void refreshAssets();
+    void refreshDocs();
+  }
+
+  // Every asset with a tracked expiration date and/or an attached warranty file,
+  // soonest-expiring first — this powers the "All Warranties" rollup below.
+  const warrantyRows = useMemo(() => {
+    return assets
+      .map((asset) => {
+        const files = docsByAsset.get(asset.id) ?? [];
+        const earliestDocExpiry = files
+          .map((f) => f.expires_at)
+          .filter((d): d is string => !!d)
+          .sort()[0];
+        const expiry = earliestDocExpiry ?? asset.warranty_until ?? null;
+        return { asset, files, expiry };
+      })
+      .filter((row) => row.expiry || row.files.length > 0)
+      .sort((a, b) => {
+        if (!a.expiry && !b.expiry) return a.asset.name.localeCompare(b.asset.name);
+        if (!a.expiry) return 1;
+        if (!b.expiry) return -1;
+        return a.expiry.localeCompare(b.expiry);
+      });
+  }, [assets, docsByAsset]);
 
   async function completeTask(id: string) {
     const supabase = createClient();
@@ -64,15 +129,23 @@ export function HomeModule() {
     void refreshAssets();
   }
 
-  if (assetsLoading || tasksLoading) return <LoadingBlock />;
+  async function viewFile(doc: WarrantyDoc) {
+    const supabase = createClient();
+    const { url, error } = await getDocumentSignedUrl(supabase, doc.storage_path);
+    if (error || !url) return toastError(error ?? 'Could not open file');
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  if (assetsLoading || tasksLoading || docsLoading) return <LoadingBlock />;
   if (assetsError) return <ErrorState message={assetsError} onRetry={refreshAssets} />;
   if (tasksError) return <ErrorState message={tasksError} onRetry={refreshTasks} />;
+  if (docsError) return <ErrorState message={docsError} onRetry={refreshDocs} />;
 
   return (
     <div className="module-page">
       <PageHeader
         title="Home & Maintenance"
-        description="Track appliances, assets, and maintenance tasks."
+        description="Track appliances, assets, warranties, and maintenance tasks."
         action={manager && (
           <div className="flex gap-2">
             <Button variant="ghost" onClick={() => setOpenAsset(true)}><Package className="h-4 w-4" /> Add asset</Button>
@@ -80,6 +153,55 @@ export function HomeModule() {
           </div>
         )}
       />
+
+      {/* All Warranties */}
+      <Card>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <Shield className="h-4 w-4 text-success" /> All warranties
+          </h2>
+          <Badge tone={warrantyRows.length > 0 ? 'success' : 'neutral'}>{warrantyRows.length}</Badge>
+        </div>
+        {warrantyRows.length === 0 ? (
+          <EmptyState icon={Shield} title="No warranties tracked yet"
+            description="Open any asset below and click “Manage warranty” to log an expiration date or upload the warranty card or receipt." />
+        ) : (
+          <ul className="space-y-2">
+            {warrantyRows.map(({ asset, files, expiry }) => {
+              const status = expiryStatus(expiry);
+              return (
+                <li key={asset.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10">
+                    <Home className="h-4 w-4 text-brand" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{asset.name}</p>
+                    <Badge tone={status.tone}>{status.label}</Badge>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {files.map((f) => (
+                      <button
+                        key={f.id}
+                        onClick={() => viewFile(f)}
+                        className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated"
+                        title={f.title}
+                      >
+                        <FileText className="h-3.5 w-3.5" /> View{files.length > 1 ? '' : ' file'}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setWarrantyAsset(asset)}
+                      className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated"
+                    >
+                      <Shield className="h-3.5 w-3.5" /> Manage
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
 
       {/* Maintenance Tasks */}
       <Card>
@@ -123,28 +245,39 @@ export function HomeModule() {
           <EmptyState icon={Package} title="No assets tracked" description="Add appliances and items to track warranties and maintenance." />
         ) : (
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-            {assets.map((a) => (
-              <div key={a.id} className="flex items-start gap-3 rounded-xl border border-border bg-surface/40 p-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10">
-                  <Home className="h-4 w-4 text-brand" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{a.name}</p>
-                  <div className="text-xs text-muted">
-                    {a.brand && <span>{a.brand} </span>}
-                    {a.model && <span>{a.model}</span>}
+            {assets.map((a) => {
+              const files = docsByAsset.get(a.id) ?? [];
+              const status = expiryStatus(files.map((f) => f.expires_at).filter((d): d is string => !!d).sort()[0] ?? a.warranty_until);
+              return (
+                <div key={a.id} className="flex items-start gap-3 rounded-xl border border-border bg-surface/40 p-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10">
+                    <Home className="h-4 w-4 text-brand" />
                   </div>
-                  {a.warranty_until && (
-                    <p className="mt-0.5 text-xs text-muted">Warranty: {fmtDate(a.warranty_until)}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{a.name}</p>
+                    <div className="text-xs text-muted">
+                      {a.brand && <span>{a.brand} </span>}
+                      {a.model && <span>{a.model}</span>}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <Badge tone={status.tone}>{status.label}</Badge>
+                      {files.length > 0 && <Badge tone="neutral">{files.length} file{files.length > 1 ? 's' : ''}</Badge>}
+                    </div>
+                    <button
+                      onClick={() => setWarrantyAsset(a)}
+                      className="mt-2 flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-medium hover:bg-elevated"
+                    >
+                      <Shield className="h-3.5 w-3.5" /> Manage warranty
+                    </button>
+                  </div>
+                  {manager && (
+                    <button onClick={() => removeAsset(a.id)} className="rounded-lg p-1.5 text-muted hover:text-danger" aria-label="Remove">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   )}
                 </div>
-                {manager && (
-                  <button onClick={() => removeAsset(a.id)} className="rounded-lg p-1.5 text-muted hover:text-danger" aria-label="Remove">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>
@@ -157,7 +290,141 @@ export function HomeModule() {
         <NewTaskModal familyId={familyId} userId={userId} assets={assets}
           onClose={() => setOpenTask(false)} onCreated={() => { setOpenTask(false); void refreshTasks(); }} />
       )}
+      {warrantyAsset && (
+        <WarrantyModal
+          asset={warrantyAsset}
+          files={docsByAsset.get(warrantyAsset.id) ?? []}
+          familyId={familyId}
+          userId={userId}
+          manager={manager}
+          onClose={() => setWarrantyAsset(null)}
+          onChanged={refreshWarranty}
+        />
+      )}
     </div>
+  );
+}
+
+function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onChanged }: {
+  asset: HomeAsset; files: WarrantyDoc[]; familyId: string; userId: string; manager: boolean;
+  onClose: () => void; onChanged: () => void;
+}) {
+  const { success, error: toastError } = useToast();
+  const [warrantyUntil, setWarrantyUntil] = useState(asset.warranty_until ?? '');
+  const [savingDate, setSavingDate] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function saveDate() {
+    setSavingDate(true);
+    const supabase = createClient();
+    const { error } = await supabase.from('home_assets')
+      .update({ warranty_until: warrantyUntil || null }).eq('id', asset.id);
+    setSavingDate(false);
+    if (error) return toastError(error.message);
+    success('Warranty date saved');
+    onChanged();
+  }
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploading(true);
+    const supabase = createClient();
+    const { path, error: uploadError } = await uploadFamilyDocument(supabase, {
+      familyId, folder: `warranties/${asset.id}`, file,
+    });
+    if (uploadError || !path) {
+      setUploading(false);
+      return toastError(uploadError ?? 'Upload failed');
+    }
+    const { error: insertError } = await supabase.from('documents').insert({
+      family_id: familyId, created_by: userId, asset_id: asset.id,
+      title: file.name, category: 'warranty', storage_path: path,
+      mime_type: file.type || null, size_bytes: file.size, expires_at: warrantyUntil || null,
+    });
+    setUploading(false);
+    if (insertError) {
+      await removeFamilyDocument(supabase, path);
+      return toastError(insertError.message);
+    }
+    success('Warranty document saved');
+    onChanged();
+  }
+
+  async function viewFile(doc: WarrantyDoc) {
+    const supabase = createClient();
+    const { url, error } = await getDocumentSignedUrl(supabase, doc.storage_path);
+    if (error || !url) return toastError(error ?? 'Could not open file');
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  async function removeFile(doc: WarrantyDoc) {
+    setRemovingId(doc.id);
+    const supabase = createClient();
+    await removeFamilyDocument(supabase, doc.storage_path);
+    const { error } = await supabase.from('documents').delete().eq('id', doc.id);
+    setRemovingId(null);
+    if (error) return toastError(error.message);
+    success('File removed');
+    onChanged();
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Warranty — ${asset.name}`} description="Keep the expiration date and the warranty card or receipt together, right on the asset.">
+      <div className="space-y-5">
+        <Field label="Warranty expires">
+          {(id) => (
+            <div className="flex gap-2">
+              <Input id={id} type="date" value={warrantyUntil} onChange={(e) => setWarrantyUntil(e.target.value)} disabled={!manager} />
+              {manager && <Button variant="secondary" loading={savingDate} onClick={saveDate}>Save</Button>}
+            </div>
+          )}
+        </Field>
+
+        <div>
+          <p className="mb-2 text-sm font-medium">Warranty documents</p>
+          {files.length === 0 ? (
+            <p className="text-sm text-muted">No file uploaded yet.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {files.map((f) => (
+                <li key={f.id} className="flex items-center gap-2 rounded-lg border border-border bg-surface/50 px-3 py-2">
+                  <FileText className="h-4 w-4 shrink-0 text-brand" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm">{f.title}</p>
+                    <p className="text-xs text-muted">{fmtBytes(f.size_bytes)} · added {fmtDate(f.created_at, 'MMM d, yyyy')}</p>
+                  </div>
+                  <button onClick={() => viewFile(f)} className="rounded-lg p-1.5 text-muted hover:text-brand" aria-label="View file">
+                    <ExternalLink className="h-4 w-4" />
+                  </button>
+                  {manager && (
+                    <button onClick={() => removeFile(f)} disabled={removingId === f.id} className="rounded-lg p-1.5 text-muted hover:text-danger disabled:opacity-50" aria-label="Remove file">
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {manager && (
+            <>
+              <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx" onChange={handleFile} />
+              <Button type="button" variant="secondary" className="mt-3 w-full" loading={uploading} onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-4 w-4" /> Upload warranty card or receipt
+              </Button>
+            </>
+          )}
+        </div>
+
+        <div className="flex justify-end pt-1">
+          <Button type="button" variant="ghost" onClick={onClose}>Close</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -202,7 +469,9 @@ function NewAssetModal({ familyId, userId, onClose, onCreated }: {
           <Field label="Brand">{(id) => <Input id={id} name="brand" placeholder="Bosch" />}</Field>
           <Field label="Model">{(id) => <Input id={id} name="model" placeholder="SHPM88Z75N" />}</Field>
         </div>
-        <Field label="Warranty until">{(id) => <Input id={id} name="warranty_until" type="date" />}</Field>
+        <Field label="Warranty until" hint="You can also upload the warranty card after creating the asset.">
+          {(id) => <Input id={id} name="warranty_until" type="date" />}
+        </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={loading}>Add asset</Button>
