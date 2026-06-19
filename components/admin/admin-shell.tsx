@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { Bell, ChevronDown, LogOut, Search, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, Search, ShieldCheck, Users } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { Avatar } from '@/components/ui/avatar';
@@ -77,7 +77,7 @@ export function AdminShell({
         </nav>
         <div className="space-y-3 px-3 pb-4">
           <Link href="/dashboard" className="flex items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to my dashboard
+            <Users className="h-3.5 w-3.5" /> Switch to Parent Role
           </Link>
           <AdminProfile name={adminName} email={adminEmail} />
         </div>
@@ -130,7 +130,7 @@ export function AdminShell({
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                 <div className="absolute right-0 top-full z-20 mt-2 w-48 rounded-xl glass-card p-1 shadow-glass animate-fade-in">
                   <Link href="/dashboard" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
-                    <ArrowLeft className="h-4 w-4" /> My dashboard
+                    <Users className="h-4 w-4" /> Switch to Parent Role
                   </Link>
                   <form action="/auth/signout" method="post">
                     <button type="submit" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated">

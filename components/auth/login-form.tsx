@@ -33,8 +33,13 @@ export function LoginForm() {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword(parsed.data);
       if (error) throw error;
-      const redirect = params.get('redirect') || '/dashboard';
-      router.push(redirect);
+      const redirectParam = params.get('redirect');
+      let destination = redirectParam || '/dashboard';
+      if (!redirectParam) {
+        const { data: isAdmin } = await supabase.rpc('is_super_admin');
+        if (isAdmin) destination = '/admin';
+      }
+      router.push(destination);
       router.refresh();
     } catch (err) {
       toastError(err instanceof Error ? err.message : 'Could not sign in');
