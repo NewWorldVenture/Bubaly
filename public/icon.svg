@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c5dff"/>
+      <stop offset="100%" stop-color="#f4996e"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#090c14"/>
+  <rect width="512" height="512" rx="112" fill="url(#g)" opacity="0.15"/>
+  <!-- House shape -->
+  <path d="M256 128 L152 220 L152 368 L224 368 L224 296 L288 296 L288 368 L360 368 L360 220 Z"
+        fill="url(#g)" opacity="0.9"/>
+  <!-- Door -->
+  <rect x="232" y="296" width="48" height="72" rx="6" fill="#090c14" opacity="0.6"/>
+  <!-- Chimney -->
+  <rect x="300" y="140" width="28" height="50" rx="4" fill="url(#g)" opacity="0.7"/>
+</svg>
