@@ -1,0 +1,82 @@
+// Server-side auth + active-family resolution. Used by every protected page/layout.
+import { redirect } from 'next/navigation';
+import { createServer } from './server';
+import type { MemberRole } from '@/lib/constants/roles';
+import type { Tables } from '@/lib/database.types';
+
+export type FamilyMembership = {
+  familyId: string;
+  family: Tables<'families'>;
+  role: MemberRole;
+  member: Tables<'family_members'>;
+};
+
+export type UserContext = {
+  user: { id: string; email: string | null };
+  memberships: FamilyMembership[];
+  active: FamilyMembership;
+};
+
+/** Returns the signed-in user or null. */
+export async function getUser() {
+  const supabase = await createServer();
+  const { data } = await supabase.auth.getUser();
+  return data.user;
+}
+
+/**
+ * Resolves the full user + active-family context. Returns null when not signed in,
+ * or { needsFamily: true } when signed in but not yet in any family.
+ */
+export async function getUserContext(): Promise<UserContext | { needsFamily: true } | null> {
+  const supabase = await createServer();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return null;
+
+  const { data: members } = await supabase
+    .from('family_members')
+    .select('*')
+    .eq('user_id', auth.user.id)
+    .eq('is_active', true);
+
+  const rows = members ?? [];
+  if (rows.length === 0) return { needsFamily: true };
+
+  const familyIds = rows.map((m) => m.family_id);
+  const { data: families } = await supabase.from('families').select('*').in('id', familyIds);
+  const byId = new Map((families ?? []).map((f) => [f.id, f]));
+
+  const memberships: FamilyMembership[] = rows
+    .map((m) => {
+      const family = byId.get(m.family_id);
+      return family
+        ? { familyId: m.family_id, family, role: m.role as MemberRole, member: m }
+        : null;
+    })
+    .filter((m): m is FamilyMembership => m !== null);
+
+  if (memberships.length === 0) return { needsFamily: true };
+
+  const { data: prefs } = await supabase
+    .from('user_preferences')
+    .select('active_family_id')
+    .eq('user_id', auth.user.id)
+    .maybeSingle();
+
+  const active =
+    memberships.find((m) => m.familyId === prefs?.active_family_id) ?? memberships[0];
+
+  return {
+    user: { id: auth.user.id, email: auth.user.email ?? null },
+    memberships,
+    active,
+  };
+}
+
+/** Guard for app pages: redirects to /login or /onboarding as needed. */
+export async function requireUserContext(): Promise<UserContext> {
+  const ctx = await getUserContext();
+  if (!ctx) redirect('/login');
+  if ('needsFamily' in ctx) redirect('/onboarding');
+  return ctx;
+}

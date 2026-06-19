@@ -1,0 +1,95 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { PartyPopper, AlertTriangle, LogIn } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { LoadingBlock } from '@/components/ui/states';
+import { createClient } from '@/lib/supabase/client';
+
+type State =
+  | { phase: 'loading' }
+  | { phase: 'needs-auth'; token: string }
+  | { phase: 'accepting' }
+  | { phase: 'done' }
+  | { phase: 'error'; message: string };
+
+export function JoinInvite() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const token = params.get('token') ?? '';
+  const [state, setState] = useState<State>({ phase: 'loading' });
+
+  useEffect(() => {
+    if (!token) {
+      setState({ phase: 'error', message: 'This invite link is missing its token.' });
+      return;
+    }
+    const supabase = createClient();
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) {
+        setState({ phase: 'needs-auth', token });
+        return;
+      }
+      setState({ phase: 'accepting' });
+      const { data, error } = await supabase.rpc('accept_invite', { p_token: token });
+      if (error || !data) {
+        setState({ phase: 'error', message: error?.message ?? 'This invite is invalid or expired.' });
+        return;
+      }
+      setState({ phase: 'done' });
+      setTimeout(() => {
+        router.push('/dashboard');
+        router.refresh();
+      }, 1400);
+    })();
+  }, [token, router]);
+
+  if (state.phase === 'loading' || state.phase === 'accepting') {
+    return <div className="glass-card p-8"><LoadingBlock label="Joining your family…" /></div>;
+  }
+
+  if (state.phase === 'needs-auth') {
+    const redirect = `/join?token=${encodeURIComponent(state.token)}`;
+    return (
+      <div className="glass-card p-8 text-center animate-fade-in">
+        <LogIn className="mx-auto h-12 w-12 text-brand" />
+        <h1 className="mt-4 text-xl font-semibold">You’ve been invited</h1>
+        <p className="mt-2 text-sm text-muted">
+          Sign in or create an account with the email your invite was sent to, and you’ll join automatically.
+        </p>
+        <div className="mt-6 flex flex-col gap-3">
+          <Link href={`/login?redirect=${encodeURIComponent(redirect)}`}>
+            <Button className="w-full">Sign in</Button>
+          </Link>
+          <Link href={`/signup?redirect=${encodeURIComponent(redirect)}`}>
+            <Button variant="secondary" className="w-full">Create account</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (state.phase === 'done') {
+    return (
+      <div className="glass-card p-8 text-center animate-fade-in">
+        <PartyPopper className="mx-auto h-12 w-12 text-success" />
+        <h1 className="mt-4 text-xl font-semibold">Welcome to the family!</h1>
+        <p className="mt-2 text-sm text-muted">Taking you to your dashboard…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass-card p-8 text-center animate-fade-in">
+      <AlertTriangle className="mx-auto h-12 w-12 text-danger" />
+      <h1 className="mt-4 text-xl font-semibold">Invite problem</h1>
+      <p className="mt-2 text-sm text-muted">{state.message}</p>
+      <Link href="/dashboard" className="mt-6 inline-block">
+        <Button variant="secondary">Go to dashboard</Button>
+      </Link>
+    </div>
+  );
+}

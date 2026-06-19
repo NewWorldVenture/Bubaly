@@ -3,7 +3,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
 const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
-  '/ai', '/mobile', '/faq', '/blog', '/contact', '/login', '/signup', '/auth'];
+  '/ai', '/mobile', '/faq', '/blog', '/contact', '/login', '/signup', '/auth',
+  '/join', '/offline'];
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next({ request: req });
