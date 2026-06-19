@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { CreditCard, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
@@ -32,11 +32,28 @@ const PLAN_LABELS: Record<string, { name: string; description: string; price: st
   family_annual: { name: 'FamilyOS Family (Annual)', description: 'Save 20% with an annual subscription.', price: '$95.99/yr' },
 };
 
+async function startCheckout(plan: 'family_monthly' | 'family_annual') {
+  const res = await fetch('/api/billing/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan }),
+  });
+  const json = await res.json();
+  if (json.url) window.location.href = json.url;
+}
+
+async function openPortal() {
+  const res = await fetch('/api/billing/portal', { method: 'POST' });
+  const json = await res.json();
+  if (json.url) window.location.href = json.url;
+}
+
 export function BillingModule() {
   const { familyId, role } = useApp();
   const admin = isAdmin(role);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     const supabase = createClient();
@@ -60,11 +77,18 @@ export function BillingModule() {
 
       {/* Current plan */}
       <Card>
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold">Current plan</h2>
-          <Badge tone={config.tone as 'success' | 'warning' | 'danger' | 'neutral'}>
-            <span className="flex items-center gap-1">{config.icon} {config.label}</span>
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge tone={config.tone as 'success' | 'warning' | 'danger' | 'neutral'}>
+              <span className="flex items-center gap-1">{config.icon} {config.label}</span>
+            </Badge>
+            {admin && subscription && (
+              <Button size="sm" variant="ghost" loading={pending} onClick={() => startTransition(() => void openPortal())}>
+                Manage
+              </Button>
+            )}
+          </div>
         </div>
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -92,7 +116,8 @@ export function BillingModule() {
             <div className="rounded-xl border border-border bg-surface/60 p-4">
               <p className="font-semibold">Monthly</p>
               <p className="mt-1 text-2xl font-bold">$9.99<span className="text-sm font-normal text-muted">/mo</span></p>
-              <Button className="mt-3 w-full" onClick={() => alert('Stripe integration coming in Phase 8.')}>
+              <Button className="mt-3 w-full" loading={pending}
+                onClick={() => startTransition(() => void startCheckout('family_monthly'))}>
                 Get started
               </Button>
             </div>
@@ -102,7 +127,8 @@ export function BillingModule() {
                 <Badge tone="success">Save 20%</Badge>
               </div>
               <p className="mt-1 text-2xl font-bold">$7.99<span className="text-sm font-normal text-muted">/mo</span></p>
-              <Button className="mt-3 w-full" onClick={() => alert('Stripe integration coming in Phase 8.')}>
+              <Button className="mt-3 w-full" loading={pending}
+                onClick={() => startTransition(() => void startCheckout('family_annual'))}>
                 Get annual
               </Button>
             </div>
