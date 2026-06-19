@@ -14,36 +14,34 @@ export function SiteHeader() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/5 bg-[#060b12]/86 backdrop-blur-xl">
-      <div className="mx-auto flex h-[76px] max-w-[1440px] items-center justify-between gap-4 px-6 sm:px-10 lg:px-12">
+    <header className="sticky top-0 z-50 border-b border-white/[0.045] bg-[#030911]/92 backdrop-blur-xl">
+      <div className="mx-auto flex h-16 max-w-[1180px] items-center justify-between gap-4 px-5 sm:px-8">
         <Logo />
 
-        <nav className="hidden h-full items-center gap-7 lg:flex">
+        <nav className="hidden h-full items-center gap-[30px] lg:flex">
           {MARKETING_NAV.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                'relative inline-flex h-full items-center text-sm font-semibold text-white/88 transition hover:text-white',
+                'relative inline-flex h-full items-center text-xs font-medium text-white/90 transition hover:text-white',
                 pathname === item.href && 'text-violet-400',
               )}
             >
               {item.label}
               {pathname === item.href && (
-                <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-violet-500" />
+                <span className="absolute inset-x-0 bottom-0 h-px rounded-full bg-violet-500" />
               )}
             </Link>
           ))}
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link href="/login" className="hidden sm:block">
-            <Button variant="ghost" size="sm" className="text-white hover:bg-white/8">Log in</Button>
+          <Link href="/login" className="hidden h-9 items-center px-3 text-xs font-medium text-white/85 transition hover:text-white sm:inline-flex">
+            Log in
           </Link>
-          <Link href="/signup" className="hidden sm:block">
-            <Button size="sm" className="rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-6 shadow-glow">
-              Get Started Free
-            </Button>
+          <Link href="/signup" className="hidden h-9 items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110 sm:inline-flex">
+            Get Started Free
           </Link>
           <button
             className="rounded-lg p-2 text-white lg:hidden focus-ring"

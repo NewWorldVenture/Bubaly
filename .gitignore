@@ -10,3 +10,4 @@ supabase/.branches
 supabase/.temp
 client_secret*.json
 .env_DH.txt
+*.tsbuildinfo

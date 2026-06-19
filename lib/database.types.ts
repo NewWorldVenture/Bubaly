@@ -19,6 +19,13 @@ export type NotificationType =
   | 'maintenance_task' | 'grocery_reminder' | 'document_expiry' | 'family_invite' | 'system';
 export type SubscriptionStatus =
   | 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid';
+export type AccountType = 'checking' | 'savings' | 'credit' | 'investment' | 'retirement';
+export type TransactionType = 'income' | 'expense' | 'transfer';
+export type BudgetPeriod = 'weekly' | 'monthly' | 'yearly';
+export type BillStatus = 'upcoming' | 'paid' | 'overdue';
+export type MetricType = 'steps' | 'sleep_hours' | 'heart_rate' | 'calories' | 'active_minutes' | 'distance' | 'weight' | 'water_cups';
+export type GameResult = 'win' | 'loss' | 'tie';
+export type GradeType = 'test' | 'quiz' | 'homework' | 'project' | 'final' | 'participation' | 'other';
 export type ThemePref = 'dark' | 'light' | 'system';
 export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
 
@@ -187,6 +194,65 @@ export interface Database {
         { id?: string; family_id: string; billing_customer_id?: string | null; plan?: string; status?: SubscriptionStatus; provider_ref?: string | null; current_period_end?: string | null; seats?: number },
         Partial<{ plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; seats: number }>
       >;
+      // ── Financial ──────────────────────────────────────────
+      financial_accounts: T<
+        { id: string; family_id: string; name: string; type: AccountType; institution: string | null; last_four: string | null; balance: number; currency: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; type?: AccountType; institution?: string | null; last_four?: string | null; balance?: number; currency?: string; created_by?: string | null },
+        Partial<{ name: string; type: AccountType; institution: string | null; last_four: string | null; balance: number; currency: string }>
+      >;
+      transactions: T<
+        { id: string; family_id: string; account_id: string | null; name: string; amount: number; category: string | null; date: string; type: TransactionType; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; account_id?: string | null; name: string; amount: number; category?: string | null; date?: string; type?: TransactionType; notes?: string | null; created_by?: string | null },
+        Partial<{ account_id: string | null; name: string; amount: number; category: string | null; date: string; type: TransactionType; notes: string | null }>
+      >;
+      budgets: T<
+        { id: string; family_id: string; category: string; amount: number; period: BudgetPeriod; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; category: string; amount: number; period?: BudgetPeriod; created_by?: string | null },
+        Partial<{ category: string; amount: number; period: BudgetPeriod }>
+      >;
+      bills: T<
+        { id: string; family_id: string; name: string; amount: number; due_date: string; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; amount: number; due_date: string; is_recurring?: boolean; recurrence?: string | null; status?: BillStatus; category?: string | null; created_by?: string | null },
+        Partial<{ name: string; amount: number; due_date: string; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null }>
+      >;
+      savings_goals: T<
+        { id: string; family_id: string; name: string; target_amount: number; current_amount: number; target_date: string | null; emoji: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; target_amount: number; current_amount?: number; target_date?: string | null; emoji?: string | null; created_by?: string | null },
+        Partial<{ name: string; target_amount: number; current_amount: number; target_date: string | null; emoji: string | null }>
+      >;
+      // ── Health ──────────────────────────────────────────────
+      health_metrics: T<
+        { id: string; family_id: string; member_id: string; type: MetricType; value: number; unit: string | null; recorded_at: string; created_at: string },
+        { id?: string; family_id: string; member_id: string; type: MetricType; value: number; unit?: string | null; recorded_at?: string },
+        Partial<{ type: MetricType; value: number; unit: string | null; recorded_at: string }>
+      >;
+      workout_logs: T<
+        { id: string; family_id: string; member_id: string; activity: string; duration_minutes: number | null; calories: number | null; distance: number | null; notes: string | null; recorded_at: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; activity: string; duration_minutes?: number | null; calories?: number | null; distance?: number | null; notes?: string | null; recorded_at?: string; created_by?: string | null },
+        Partial<{ activity: string; duration_minutes: number | null; calories: number | null; distance: number | null; notes: string | null; recorded_at: string }>
+      >;
+      // ── School ──────────────────────────────────────────────
+      school_classes: T<
+        { id: string; family_id: string; member_id: string; subject: string; teacher: string | null; room: string | null; time_slot: string | null; day_of_week: number | null; school_name: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; subject: string; teacher?: string | null; room?: string | null; time_slot?: string | null; day_of_week?: number | null; school_name?: string | null; created_by?: string | null },
+        Partial<{ subject: string; teacher: string | null; room: string | null; time_slot: string | null; day_of_week: number | null; school_name: string | null }>
+      >;
+      grades: T<
+        { id: string; family_id: string; member_id: string; class_id: string | null; subject: string; title: string | null; grade: string | null; grade_type: GradeType; score: number | null; max_score: number | null; date: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; class_id?: string | null; subject: string; title?: string | null; grade?: string | null; grade_type?: GradeType; score?: number | null; max_score?: number | null; date?: string; created_by?: string | null },
+        Partial<{ class_id: string | null; subject: string; title: string | null; grade: string | null; grade_type: GradeType; score: number | null; max_score: number | null; date: string }>
+      >;
+      // ── Sports ──────────────────────────────────────────────
+      teams: T<
+        { id: string; family_id: string; member_id: string | null; sport: string; team_name: string; season: string | null; coach: string | null; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; sport: string; team_name: string; season?: string | null; coach?: string | null; is_active?: boolean; created_by?: string | null },
+        Partial<{ member_id: string | null; sport: string; team_name: string; season: string | null; coach: string | null; is_active: boolean }>
+      >;
+      game_results: T<
+        { id: string; family_id: string; team_id: string; opponent: string; our_score: number; their_score: number; date: string; result: GameResult; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; team_id: string; opponent: string; our_score?: number; their_score?: number; date?: string; result: GameResult; notes?: string | null; created_by?: string | null },
+        Partial<{ opponent: string; our_score: number; their_score: number; date: string; result: GameResult; notes: string | null }>
+      >;
       user_preferences: T<
         { user_id: string; theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; notification_prefs: Json } & Stamps,
         { user_id: string; theme?: ThemePref; push_enabled?: boolean; email_enabled?: boolean; expo_push_token?: string | null; active_family_id?: string | null; notification_prefs?: Json },
@@ -212,6 +278,13 @@ export interface Database {
       meal_type: MealType;
       notification_type: NotificationType;
       subscription_status: SubscriptionStatus;
+      account_type: AccountType;
+      transaction_type: TransactionType;
+      budget_period: BudgetPeriod;
+      bill_status: BillStatus;
+      metric_type: MetricType;
+      game_result: GameResult;
+      grade_type: GradeType;
       theme_pref: ThemePref;
       ai_role: AiRole;
     };

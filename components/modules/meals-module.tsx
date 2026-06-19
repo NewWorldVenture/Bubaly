@@ -21,14 +21,6 @@ const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 const MEAL_LABELS: Record<MealType, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snacks' };
 const MEAL_ICONS: Record<MealType, string> = { breakfast: '🌅', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
 
-const RECIPE_SUGGESTIONS = [
-  { name: 'One-Pan Lemon Garlic Chicken', time: '30 min', rating: '4.8', reviews: 124, emoji: '🍋' },
-  { name: 'Creamy Tomato Basil Pasta', time: '25 min', rating: '4.7', reviews: 98, emoji: '🍝' },
-  { name: 'Honey Mustard Salmon', time: '25 min', rating: '4.9', reviews: 87, emoji: '🐟' },
-  { name: 'Veggie Fried Rice', time: '20 min', rating: '4.6', reviews: 76, emoji: '🍚' },
-  { name: 'Chocolate Banana Smoothie', time: '10 min', rating: '4.8', reviews: 64, emoji: '🍌' },
-];
-
 const MEAL_IDEAS = [
   { label: 'High Protein Meals', emoji: '💪' },
   { label: 'Quick & Easy Dinners', emoji: '⚡' },
@@ -269,24 +261,28 @@ export function MealsModule() {
           })}
         </div>
 
-        {/* Recommended Recipes */}
+        {/* Meal Library */}
         <div className="flex-shrink-0 border-t border-border px-5 py-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold">Recommended Recipes</h2>
-            <button className="text-xs text-brand hover:underline">View all recipes →</button>
+            <h2 className="text-base font-semibold">Your Meal Library</h2>
+            <button onClick={() => setNewMealOpen(true)} className="text-xs text-brand hover:underline">+ Add meal</button>
           </div>
-          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-            {RECIPE_SUGGESTIONS.map((r) => (
-              <div key={r.name} className="group cursor-pointer rounded-xl border border-border bg-surface/40 p-3 transition hover:bg-elevated/40">
-                <div className="mb-2 flex h-16 items-center justify-center rounded-lg bg-elevated text-3xl">{r.emoji}</div>
-                <div className="text-xs font-semibold leading-snug">{r.name}</div>
-                <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted">
-                  <span>⭐ {r.rating} ({r.reviews})</span>
-                  <span>⏱ {r.time}</span>
+          {library.length > 0 ? (
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+              {library.slice(0, 10).map((m) => (
+                <div key={m.id} className="group cursor-pointer rounded-xl border border-border bg-surface/40 p-3 transition hover:bg-elevated/40">
+                  <div className="mb-2 flex h-16 items-center justify-center rounded-lg bg-elevated text-3xl">{MEAL_ICONS[m.meal_type]}</div>
+                  <div className="text-xs font-semibold leading-snug">{m.name}</div>
+                  <div className="mt-1.5 text-[10px] text-muted capitalize">{m.meal_type}</div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center py-8 text-center">
+              <p className="text-sm text-muted">No meals in your library yet</p>
+              <button onClick={() => setNewMealOpen(true)} className="mt-2 text-xs font-semibold text-brand">Add your first meal →</button>
+            </div>
+          )}
         </div>
       </div>
 

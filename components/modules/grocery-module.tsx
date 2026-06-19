@@ -25,18 +25,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Pantry': '#f59e0b', 'Beverages': '#8b5cf6', 'Household': '#14b8a6', 'Other': '#6b7280',
 };
 
-const SMART_SUGGESTIONS = [
-  { name: 'Greek Yogurt', reason: 'Often bought with berries', emoji: '🫙' },
-  { name: 'Oat Milk', reason: 'Low on this item', emoji: '🥛' },
-  { name: 'Chicken Breast', reason: 'Based on your meal plan', emoji: '🍗' },
-];
-
-const MY_LISTS_MOCK = [
-  { name: 'Main Grocery List', items: 42, active: true },
-  { name: 'Costco Run', items: 18 },
-  { name: 'Quick Trip', items: 7 },
-  { name: 'Party Supplies', items: 11 },
-];
 
 export function GroceryModule() {
   const { familyId, userId } = useApp();
@@ -298,48 +286,14 @@ export function GroceryModule() {
           </div>
         </div>
 
-        {/* My Lists */}
+        {/* Quick Tips */}
         <div className="sidebar-card">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold">My Lists</p>
-            <button className="flex items-center gap-1 text-xs text-brand hover:underline"><Plus className="h-3 w-3" /> New List</button>
+          <div className="mb-1 text-sm font-semibold">Quick Tips</div>
+          <div className="mb-3 text-[10px] text-muted">Organize your shopping</div>
+          <div className="space-y-2 text-xs text-muted">
+            <p>Use categories to group items by aisle for faster shopping.</p>
+            <p>Check off items as you shop — they stay at the bottom for reference.</p>
           </div>
-          <div className="space-y-1.5">
-            {MY_LISTS_MOCK.map(l => (
-              <div key={l.name} className={cn('flex items-center gap-2.5 rounded-lg border px-3 py-2', l.active ? 'border-brand/40 bg-brand/10' : 'border-border/50 bg-surface/60 hover:bg-elevated cursor-pointer transition')}>
-                <div className={cn('flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-xs', l.active ? 'bg-brand text-brand-fg' : 'bg-elevated text-muted')}>
-                  {l.active ? '📋' : '📄'}
-                </div>
-                <div className="min-w-0">
-                  <div className={cn('truncate text-xs font-medium', l.active && 'text-brand')}>{l.name}</div>
-                  <div className="text-[10px] text-muted">{l.items} items</div>
-                </div>
-                <MoreHorizontal className="ml-auto h-3.5 w-3.5 text-muted flex-shrink-0" />
-              </div>
-            ))}
-          </div>
-          <button className="mt-3 text-xs text-brand hover:underline">View all lists →</button>
-        </div>
-
-        {/* Smart Suggestions */}
-        <div className="sidebar-card">
-          <div className="mb-1 text-sm font-semibold">Smart Suggestions</div>
-          <div className="mb-3 text-[10px] text-muted">Based on your meals &amp; history</div>
-          <div className="space-y-2">
-            {SMART_SUGGESTIONS.map(s => (
-              <div key={s.name} className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-surface/60 px-3 py-2">
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-elevated text-base">{s.emoji}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium">{s.name}</div>
-                  <div className="text-[10px] text-muted">{s.reason}</div>
-                </div>
-                <button className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-border bg-surface hover:bg-brand/20 hover:border-brand/50 transition">
-                  <Plus className="h-3 w-3 text-muted" />
-                </button>
-              </div>
-            ))}
-          </div>
-          <button className="mt-3 text-xs text-brand hover:underline">View more suggestions →</button>
         </div>
       </div>
     </div>

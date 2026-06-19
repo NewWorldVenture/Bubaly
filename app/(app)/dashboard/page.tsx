@@ -34,17 +34,17 @@ function StatCard({ href, label, value, icon: Icon, bg, linkLabel }: {
   bg: string; linkLabel: string;
 }) {
   return (
-    <Link href={href} className="flex flex-col rounded-2xl border border-white/8 bg-white/[0.035] p-5 transition hover:bg-white/[0.05]">
+    <Link href={href} className="flex flex-col rounded-2xl border border-border bg-surface/40 p-5 transition hover:bg-elevated">
       <div className="flex items-center gap-3">
         <div className={cn('grid h-11 w-11 place-items-center rounded-xl', bg)}>
           <Icon className="h-5 w-5 text-white" />
         </div>
         <div>
           <p className="text-2xl font-bold leading-none">{value}</p>
-          <p className="mt-0.5 text-xs text-white/55">{label}</p>
+          <p className="mt-0.5 text-xs text-muted">{label}</p>
         </div>
       </div>
-      <p className="mt-3 text-xs font-semibold text-violet-300">{linkLabel} →</p>
+      <p className="mt-3 text-xs font-semibold text-brand">{linkLabel} →</p>
     </Link>
   );
 }
@@ -127,15 +127,15 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             {greeting}, {firstName}! <span>👋</span>
           </h1>
-          <p className="mt-1 text-sm text-white/55">Here&apos;s what&apos;s happening with your family today.</p>
+          <p className="mt-1 text-sm text-muted">Here&apos;s what&apos;s happening with your family today.</p>
         </div>
-        <div className="hidden shrink-0 items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 sm:flex">
+        <div className="hidden shrink-0 items-center gap-3 rounded-2xl border border-border bg-white/[0.03] px-4 py-3 sm:flex">
           <span className="text-3xl">⛅</span>
           <div>
             <p className="text-xl font-bold">72°F</p>
-            <p className="text-xs text-white/55">Partly Cloudy</p>
+            <p className="text-xs text-muted">Partly Cloudy</p>
           </div>
-          <div className="border-l border-white/10 pl-3 text-xs text-white/40">
+          <div className="border-l border-border pl-3 text-xs text-muted">
             <p>H 74°</p><p>L 58°</p>
           </div>
         </div>
@@ -152,22 +152,22 @@ export default async function DashboardPage() {
       {/* Row 2: Schedule | Upcoming | AI widget */}
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Today's schedule */}
-        <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Today&apos;s Schedule</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-violet-300">View Calendar</Link>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand">View Calendar</Link>
           </div>
           {todayEvents && todayEvents.length > 0 ? (
             <ul className="space-y-3">
               {todayEvents.map((e, i) => (
                 <li key={e.id} className="flex items-center gap-3">
-                  <span className="w-14 shrink-0 text-xs text-white/50 tabular-nums">
+                  <span className="w-14 shrink-0 text-xs text-muted tabular-nums">
                     {e.all_day ? 'All Day' : fmtTime(e.starts_at)}
                   </span>
                   <div className={cn('h-2.5 w-2.5 shrink-0 rounded-full', ACCENT[i % ACCENT.length])} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{e.title}</p>
-                    {e.location && <p className="truncate text-xs text-white/40">{e.location}</p>}
+                    {e.location && <p className="truncate text-xs text-muted">{e.location}</p>}
                   </div>
                   <div className="flex -space-x-1.5">
                     {(members ?? []).slice(0, 2).map((m) => (
@@ -179,20 +179,20 @@ export default async function DashboardPage() {
             </ul>
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
-              <Calendar className="h-8 w-8 text-white/15" />
-              <p className="mt-2 text-sm text-white/35">Nothing scheduled today</p>
+              <Calendar className="h-8 w-8 text-muted/30" />
+              <p className="mt-2 text-sm text-muted/60">Nothing scheduled today</p>
             </div>
           )}
-          <Link href="/dashboard/calendar" className="mt-4 flex items-center gap-1 text-xs text-white/40 hover:text-white/60">
+          <Link href="/dashboard/calendar" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-white/60">
             View full calendar <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
 
         {/* Upcoming Events */}
-        <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Upcoming Events</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-violet-300">View all</Link>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand">View all</Link>
           </div>
           {upcomingEvents && upcomingEvents.length > 0 ? (
             <ul className="space-y-3">
@@ -208,7 +208,7 @@ export default async function DashboardPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold">{e.title}</p>
-                      <p className="text-xs text-white/45">{e.all_day ? 'All Day' : fmtTime(e.starts_at)}</p>
+                      <p className="text-xs text-muted">{e.all_day ? 'All Day' : fmtTime(e.starts_at)}</p>
                     </div>
                   </li>
                 );
@@ -216,11 +216,11 @@ export default async function DashboardPage() {
             </ul>
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
-              <Calendar className="h-8 w-8 text-white/15" />
-              <p className="mt-2 text-sm text-white/35">No upcoming events</p>
+              <Calendar className="h-8 w-8 text-muted/30" />
+              <p className="mt-2 text-sm text-muted/60">No upcoming events</p>
             </div>
           )}
-          <Link href="/dashboard/calendar" className="mt-4 flex items-center gap-1 text-xs text-white/40 hover:text-white/60">
+          <Link href="/dashboard/calendar" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-white/60">
             View full calendar <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
@@ -229,7 +229,7 @@ export default async function DashboardPage() {
         <div className="rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-violet-300" />
+              <Sparkles className="h-4 w-4 text-brand" />
               <h2 className="font-semibold">AI Assistant</h2>
             </div>
           </div>
@@ -240,13 +240,13 @@ export default async function DashboardPage() {
               { icon: ShoppingCart, text: 'Add items to your grocery list based on your meal plan.', cta: 'View list' },
               { icon: CheckCircle2, text: `You have ${openChores ?? 0} tasks due this week.`, cta: 'View tasks' },
             ].map(({ icon: Icon, text, cta }) => (
-              <div key={text} className="flex gap-3 rounded-xl bg-white/[0.04] p-3">
+              <div key={text} className="flex gap-3 rounded-xl bg-surface/40 p-3">
                 <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-violet-500/15">
-                  <Icon className="h-4 w-4 text-violet-300" />
+                  <Icon className="h-4 w-4 text-brand" />
                 </div>
                 <div>
-                  <p className="text-xs leading-5 text-white/72">{text}</p>
-                  <p className="text-xs font-semibold text-violet-300">{cta} →</p>
+                  <p className="text-xs leading-5 text-fg/80">{text}</p>
+                  <p className="text-xs font-semibold text-brand">{cta} →</p>
                 </div>
               </div>
             ))}
@@ -258,10 +258,10 @@ export default async function DashboardPage() {
       </div>
 
       {/* Meals this week */}
-      <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+      <div className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-semibold">Meals This Week</h2>
-          <Link href="/dashboard/meals" className="text-xs font-semibold text-violet-300">View meal plan</Link>
+          <Link href="/dashboard/meals" className="text-xs font-semibold text-brand">View meal plan</Link>
         </div>
         <div className="grid grid-cols-7 gap-2">
           {DAYS.map((day, i) => {
@@ -271,18 +271,18 @@ export default async function DashboardPage() {
             return (
               <div key={day} className="flex flex-col items-center gap-1.5">
                 <Link href="/dashboard/meals" className={cn(
-                  'flex h-14 w-full flex-col items-center justify-center rounded-xl text-2xl transition hover:bg-white/[0.08]',
-                  name ? 'bg-white/[0.06]' : 'border border-dashed border-white/10'
+                  'flex h-14 w-full flex-col items-center justify-center rounded-xl text-2xl transition hover:bg-elevated',
+                  name ? 'bg-elevated' : 'border border-dashed border-border'
                 )}>
-                  {name ? MEAL_EMOJIS[type] ?? '🍽️' : <Plus className="h-4 w-4 text-white/20" />}
+                  {name ? MEAL_EMOJIS[type] ?? '🍽️' : <Plus className="h-4 w-4 text-muted/40" />}
                 </Link>
-                <p className="text-[10px] text-white/45">{day}</p>
-                {name && <p className="line-clamp-2 text-center text-[10px] font-medium leading-tight text-white/65">{name}</p>}
+                <p className="text-[10px] text-muted">{day}</p>
+                {name && <p className="line-clamp-2 text-center text-[10px] font-medium leading-tight text-muted">{name}</p>}
               </div>
             );
           })}
         </div>
-        <Link href="/dashboard/grocery" className="mt-4 flex items-center gap-2 text-xs text-white/40 hover:text-white/60">
+        <Link href="/dashboard/grocery" className="mt-4 flex items-center gap-2 text-xs text-muted hover:text-white/60">
           <ShoppingCart className="h-3.5 w-3.5" /> Add to grocery list
         </Link>
       </div>
@@ -290,10 +290,10 @@ export default async function DashboardPage() {
       {/* Row 3: Chores Progress + Grocery List */}
       <div className="grid gap-5 lg:grid-cols-2">
         {/* Chores donut */}
-        <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Chores Progress</h2>
-            <Link href="/dashboard/chores" className="text-xs font-semibold text-violet-300">View all</Link>
+            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand">View all</Link>
           </div>
           <div className="flex items-center gap-8">
             <div className="relative h-32 w-32 shrink-0">
@@ -309,7 +309,7 @@ export default async function DashboardPage() {
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-2xl font-black">{pct}%</span>
-                <span className="text-[10px] text-white/45">Completed</span>
+                <span className="text-[10px] text-muted">Completed</span>
               </div>
             </div>
             <div className="space-y-3">
@@ -322,22 +322,22 @@ export default async function DashboardPage() {
                   <div className={cn('h-3 w-3 rounded-full', color)} />
                   <div>
                     <p className="text-sm font-bold">{val}</p>
-                    <p className="text-xs text-white/45">{label}</p>
+                    <p className="text-xs text-muted">{label}</p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-          <Link href="/dashboard/chores" className="mt-4 flex items-center gap-1 text-xs text-white/40 hover:text-white/60">
+          <Link href="/dashboard/chores" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-white/60">
             View chores <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
 
         {/* Grocery List */}
-        <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Grocery List</h2>
-            <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-xs font-bold text-violet-300">
+            <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-xs font-bold text-brand">
               {groceryItems?.length ?? 0} items
             </span>
           </div>
@@ -352,12 +352,12 @@ export default async function DashboardPage() {
             </ul>
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
-              <ShoppingCart className="h-8 w-8 text-white/15" />
-              <p className="mt-2 text-sm text-white/35">Grocery list is empty</p>
-              <Link href="/dashboard/grocery" className="mt-2 text-xs font-semibold text-violet-300">Add items →</Link>
+              <ShoppingCart className="h-8 w-8 text-muted/30" />
+              <p className="mt-2 text-sm text-muted/60">Grocery list is empty</p>
+              <Link href="/dashboard/grocery" className="mt-2 text-xs font-semibold text-brand">Add items →</Link>
             </div>
           )}
-          <Link href="/dashboard/grocery" className="mt-4 flex items-center gap-1 text-xs text-white/40 hover:text-white/60">
+          <Link href="/dashboard/grocery" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-white/60">
             View full list <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
@@ -366,10 +366,10 @@ export default async function DashboardPage() {
       {/* Row 4: Tasks Due + Recent Activity + Family Members */}
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Tasks due */}
-        <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Tasks Due</h2>
-            <Link href="/dashboard/chores" className="text-xs font-semibold text-violet-300">View all</Link>
+            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand">View all</Link>
           </div>
           {dueTasks && dueTasks.length > 0 ? (
             <ul className="space-y-3">
@@ -379,10 +379,10 @@ export default async function DashboardPage() {
                 const member = (members ?? []).find((m) => m.id === t.member_id);
                 return (
                   <li key={t.id} className="flex items-center gap-3">
-                    <div className="h-4 w-4 shrink-0 rounded-full border-2 border-white/25" />
+                    <div className="h-4 w-4 shrink-0 rounded-full border-2 border-border" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">Task</p>
-                      <p className={cn('text-xs', isToday ? 'font-semibold text-orange-400' : 'text-white/40')}>
+                      <p className={cn('text-xs', isToday ? 'font-semibold text-orange-400' : 'text-muted')}>
                         {isToday ? 'Due Today' : daysUntil != null ? `Due in ${daysUntil} days` : 'No due date'}
                       </p>
                     </div>
@@ -398,29 +398,29 @@ export default async function DashboardPage() {
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <CheckCircle2 className="h-8 w-8 text-emerald-400/30" />
-              <p className="mt-2 text-sm text-white/35">All caught up!</p>
+              <p className="mt-2 text-sm text-muted/60">All caught up!</p>
             </div>
           )}
-          <Link href="/dashboard/chores" className="mt-4 flex items-center gap-1 text-xs text-white/40 hover:text-white/60">
+          <Link href="/dashboard/chores" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-white/60">
             View all tasks <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
 
         {/* Recent Activity */}
-        <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Recent Activity</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-violet-300">View All</Link>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand">View All</Link>
           </div>
           <ul className="space-y-3">
             {(todayEvents ?? []).slice(0, 3).map((e, i) => (
               <li key={e.id} className="flex items-start gap-3">
                 <div className={cn('mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg', ACCENT[i % ACCENT.length] + '/20')}>
-                  <Calendar className={cn('h-4 w-4', ['text-emerald-300', 'text-violet-300', 'text-blue-300'][i])} />
+                  <Calendar className={cn('h-4 w-4', ['text-emerald-300', 'text-brand', 'text-blue-300'][i])} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{e.title} added to calendar</p>
-                  <p className="text-xs text-white/35">Today</p>
+                  <p className="text-xs text-muted/60">Today</p>
                 </div>
               </li>
             ))}
@@ -429,22 +429,22 @@ export default async function DashboardPage() {
                 <Avatar name={m.display_name} color={m.color} size={32} className="shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{m.display_name} is a member</p>
-                  <p className="text-xs text-white/35">Recently</p>
+                  <p className="text-xs text-muted/60">Recently</p>
                 </div>
               </li>
             ))}
             {((todayEvents?.length ?? 0) === 0 && (members?.length ?? 0) === 0) && (
-              <li className="py-6 text-center text-sm text-white/35">No recent activity</li>
+              <li className="py-6 text-center text-sm text-muted/60">No recent activity</li>
             )}
           </ul>
         </div>
 
         {/* Family Members */}
-        <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Family Members</h2>
             {isManager(ctx.active.role) && (
-              <Link href="/dashboard/settings#members" className="text-xs font-semibold text-violet-300">Manage</Link>
+              <Link href="/dashboard/settings#members" className="text-xs font-semibold text-brand">Manage</Link>
             )}
           </div>
           <ul className="space-y-2.5">
@@ -453,7 +453,7 @@ export default async function DashboardPage() {
                 <Avatar name={m.display_name} color={m.color} size={32} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{m.display_name}</p>
-                  <p className="text-xs capitalize text-white/40">
+                  <p className="text-xs capitalize text-muted">
                     {m.role === 'parent' ? 'Admin' : m.role}
                   </p>
                 </div>
@@ -461,7 +461,7 @@ export default async function DashboardPage() {
             ))}
           </ul>
           {isManager(ctx.active.role) && (
-            <Link href="/dashboard/settings#members" className="mt-4 flex items-center gap-2 text-xs font-medium text-violet-300 hover:text-violet-200">
+            <Link href="/dashboard/settings#members" className="mt-4 flex items-center gap-2 text-xs font-medium text-brand hover:text-violet-200">
               <Users className="h-3.5 w-3.5" /> Invite a family member
             </Link>
           )}

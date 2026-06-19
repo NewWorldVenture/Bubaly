@@ -116,14 +116,7 @@ export function DocumentsModule() {
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorState message={error} />;
 
-  const recentDocs = data.slice(0, 8);
-  const RECENT_FALLBACK: { id: string; title: string; category: string; created_at: string; member_id: string | null; size_bytes: number | null; mime_type: string | null; storage_path: string }[] = [
-    { id: 'a', title: 'Passport - Emma.pdf', category: 'id', created_at: new Date(Date.now() - 3600000).toISOString(), member_id: null, size_bytes: 2 * 1024 * 1024, mime_type: 'application/pdf', storage_path: '' },
-    { id: 'b', title: 'Insurance Card 2024.pdf', category: 'insurance', created_at: new Date(Date.now() - 86400000).toISOString(), member_id: null, size_bytes: 800 * 1024, mime_type: 'application/pdf', storage_path: '' },
-    { id: 'c', title: 'School Report Card Q3.pdf', category: 'school', created_at: new Date(Date.now() - 86400000 * 2).toISOString(), member_id: null, size_bytes: 1200 * 1024, mime_type: 'application/pdf', storage_path: '' },
-  ];
-
-  const displayDocs = recentDocs.length > 0 ? recentDocs : (RECENT_FALLBACK as unknown as Document[]);
+  const displayDocs = data.slice(0, 8);
 
   return (
     <div className="module-with-sidebar">
