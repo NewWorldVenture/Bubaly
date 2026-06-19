@@ -1,0 +1,16 @@
+# Minimal Supabase config. Run `supabase init` to generate the full file,
+# or use this as-is for local dev (`supabase start`).
+project_id = "familyos"
+
+[db]
+port = 54322
+major_version = 15
+
+[auth]
+enable_signup = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+
+[storage]
+enabled = true
+# Create a PRIVATE bucket named "documents"; serve via signed URLs only.
