@@ -63,9 +63,9 @@ export default async function SiteAdminPage() {
   const actorById = new Map((actors ?? []).map((a) => [a.id, a]));
 
   return (
-    <div className="space-y-6">
+    <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Site Admin</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Dashboard</h1>
         <p className="mt-1 text-sm text-muted">Cross-family oversight — every family on FamilyOS, in one place.</p>
       </div>
 

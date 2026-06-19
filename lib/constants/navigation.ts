@@ -1,7 +1,8 @@
 import {
   LayoutDashboard, Calendar, CheckSquare, UtensilsCrossed, ShoppingCart,
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
-  Sparkles, Settings, CreditCard, UsersRound, type LucideIcon,
+  Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
+  FolderKanban, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -33,6 +34,19 @@ export const APP_NAV: NavItem[] = [
   { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
   { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
+];
+
+/**
+ * Site Admin sidebar — every entry here must point at a real, working page.
+ * No "coming soon" stubs: if a console section isn't built yet, it isn't listed.
+ */
+export const ADMIN_NAV: NavItem[] = [
+  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin/users', label: 'Users & Families', icon: UsersRound },
+  { href: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
+  { href: '/admin/system', label: 'System Overview', icon: Activity },
+  { href: '/admin/content', label: 'Content Management', icon: FolderKanban },
+  { href: '/admin/security', label: 'Security', icon: ShieldCheck },
 ];
 
 /** Bottom tab bar on mobile web — the 5 highest-frequency destinations. */
