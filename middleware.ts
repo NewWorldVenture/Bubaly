@@ -9,6 +9,15 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next({ request: req });
   const path = req.nextUrl.pathname;
+
+  // If an OAuth code lands on the wrong path, forward it to /auth/callback
+  const code = req.nextUrl.searchParams.get('code');
+  if (code && path !== '/auth/callback') {
+    const url = req.nextUrl.clone();
+    url.pathname = '/auth/callback';
+    return NextResponse.redirect(url);
+  }
+
   const isPublic = PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
