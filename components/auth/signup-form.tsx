@@ -9,6 +9,7 @@ import { Input, Field } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { signUpSchema, fieldErrors } from '@/lib/validation';
+import { GoogleIcon } from '@/components/auth/google-icon';
 
 export function SignupForm() {
   const router = useRouter();
@@ -16,7 +17,24 @@ export function SignupForm() {
   const { error: toastError } = useToast();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
+
+  async function signUpWithGoogle() {
+    setGoogleLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+      },
+    });
+    if (error) {
+      toastError(error.message);
+      setGoogleLoading(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -82,7 +100,23 @@ export function SignupForm() {
       <p className="mt-1 text-sm text-muted">
         Start free{plan ? ` on the ${plan} plan` : ''} — no credit card required.
       </p>
-      <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
+
+      <button
+        onClick={signUpWithGoogle}
+        disabled={googleLoading}
+        className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-surface/60 px-4 py-2.5 text-sm font-medium transition hover:bg-elevated disabled:opacity-60"
+      >
+        <GoogleIcon />
+        {googleLoading ? 'Redirecting…' : 'Sign up with Google'}
+      </button>
+
+      <div className="relative my-5 flex items-center gap-3">
+        <div className="flex-1 border-t border-border" />
+        <span className="text-xs text-muted">or</span>
+        <div className="flex-1 border-t border-border" />
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <Field label="Your name" error={errors.fullName} required>
           {(id) => <Input id={id} name="fullName" autoComplete="name" placeholder="Jordan Rivera" autoFocus />}
         </Field>
