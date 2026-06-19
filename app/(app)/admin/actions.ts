@@ -2,8 +2,9 @@
 
 import * as React from 'react';
 import { revalidatePath } from 'next/cache';
-import { isSuperAdmin } from '@/lib/supabase/auth';
+import { isSuperAdmin, getUser } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
+import { logAudit } from '@/lib/server/audit';
 import { getResend, FROM_EMAIL, APP_URL } from '@/lib/email';
 import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
@@ -14,6 +15,19 @@ type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string
 async function assertSuperAdmin(): Promise<Result> {
   if (!(await isSuperAdmin())) return { ok: false, error: 'Not authorized' };
   return { ok: true };
+}
+
+/** Every admin action logs under this actor, tagged so it's distinguishable from in-family activity. */
+async function adminAuditLog(entry: {
+  familyId: string | null;
+  action: string;
+  resource: string;
+  resourceId?: string | null;
+  metadata?: Record<string, unknown> | null;
+}) {
+  const supabase = createServiceClient();
+  const user = await getUser();
+  await logAudit(supabase, { ...entry, actorId: user?.id ?? null, metadata: { ...entry.metadata, via: 'site_admin' } });
 }
 
 /** Creates a real auth.users account (Supabase-hosted invite email) and, optionally, drops them straight into a family. */
@@ -44,6 +58,10 @@ export async function adminCreateUserAction(input: {
     if (memberError) return { ok: false, error: `User created, but joining the family failed: ${memberError.message}` };
   }
 
+  await adminAuditLog({
+    familyId: input.familyId ?? null, action: 'create', resource: 'users',
+    resourceId: data.user.id, metadata: { email: parsedEmail.data },
+  });
   revalidatePath('/admin/users');
   return { ok: true };
 }
@@ -66,11 +84,12 @@ export async function adminCreateFamilyAction(input: {
   const { data: owner } = await supabase.from('profiles').select('id').eq('email', parsedEmail.data).maybeSingle();
   if (!owner) return { ok: false, error: 'No account found with that email — create the user first' };
 
-  const { error } = await supabase.from('families').insert({
+  const { data: family, error } = await supabase.from('families').insert({
     name, timezone: input.timezone || 'UTC', created_by: owner.id,
-  });
+  }).select('id').single();
   if (error) return { ok: false, error: error.message };
 
+  await adminAuditLog({ familyId: family.id, action: 'create', resource: 'families', resourceId: family.id, metadata: { name, owner_email: parsedEmail.data } });
   revalidatePath('/admin/users');
   return { ok: true };
 }
@@ -81,9 +100,11 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result>
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
-  const { error } = await supabase.from('family_members').update({ is_active: false }).eq('id', memberId);
+  const { data: member, error } = await supabase.from('family_members')
+    .update({ is_active: false }).eq('id', memberId).select('family_id, display_name').single();
   if (error) return { ok: false, error: error.message };
 
+  await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name } });
   revalidatePath('/admin/users');
   return { ok: true };
 }
@@ -115,6 +136,7 @@ export async function adminResendInviteAction(inviteId: string): Promise<Result>
     }),
   });
 
+  await adminAuditLog({ familyId: invite.family_id, action: 'resend', resource: 'invites', resourceId: inviteId, metadata: { email: invite.email } });
   revalidatePath('/admin/users');
   return { ok: true };
 }
@@ -125,9 +147,11 @@ export async function adminRevokeInviteAction(inviteId: string): Promise<Result>
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
-  const { error } = await supabase.from('invites').update({ status: 'revoked' }).eq('id', inviteId);
+  const { data: invite, error } = await supabase.from('invites')
+    .update({ status: 'revoked' }).eq('id', inviteId).select('family_id, email').single();
   if (error) return { ok: false, error: error.message };
 
+  await adminAuditLog({ familyId: invite.family_id, action: 'revoke', resource: 'invites', resourceId: inviteId, metadata: { email: invite.email } });
   revalidatePath('/admin/users');
   return { ok: true };
 }
@@ -153,10 +177,12 @@ export async function adminDeleteDocumentAction(documentId: string, storagePath:
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
+  const { data: doc } = await supabase.from('documents').select('family_id, title').eq('id', documentId).maybeSingle();
   await supabase.storage.from('documents').remove([storagePath]);
   const { error } = await supabase.from('documents').delete().eq('id', documentId);
   if (error) return { ok: false, error: error.message };
 
+  await adminAuditLog({ familyId: doc?.family_id ?? null, action: 'delete', resource: 'documents', resourceId: documentId, metadata: { title: doc?.title } });
   revalidatePath('/admin/content');
   return { ok: true };
 }
