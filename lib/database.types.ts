@@ -28,6 +28,7 @@ export type GameResult = 'win' | 'loss' | 'tie';
 export type GradeType = 'test' | 'quiz' | 'homework' | 'project' | 'final' | 'participation' | 'other';
 export type ThemePref = 'dark' | 'light' | 'system';
 export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
+export type RecordKind = 'medical' | 'dental';
 
 type Stamps = { created_at: string; updated_at: string };
 
@@ -133,6 +134,21 @@ export interface Database {
         { id: string; family_id: string; medication_id: string; time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null } & Stamps,
         { id?: string; family_id: string; medication_id: string; time_of_day: string; days_of_week?: number[]; starts_on?: string; ends_on?: string | null },
         Partial<{ time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null }>
+      >;
+      health_providers: T<
+        { id: string; family_id: string; member_id: string | null; kind: RecordKind; name: string; specialty: string | null; practice_name: string | null; phone: string | null; fax: string | null; email: string | null; address: string | null; is_primary: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; kind?: RecordKind; name: string; specialty?: string | null; practice_name?: string | null; phone?: string | null; fax?: string | null; email?: string | null; address?: string | null; is_primary?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; kind: RecordKind; name: string; specialty: string | null; practice_name: string | null; phone: string | null; fax: string | null; email: string | null; address: string | null; is_primary: boolean; notes: string | null }>
+      >;
+      insurance_policies: T<
+        { id: string; family_id: string; member_id: string | null; kind: RecordKind; insurer: string; plan_name: string | null; plan_type: string | null; policy_number: string | null; group_number: string | null; rx_bin: string | null; rx_pcn: string | null; rx_group: string | null; customer_service_phone: string | null; front_image_path: string | null; back_image_path: string | null; effective_date: string | null; is_primary: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; kind?: RecordKind; insurer: string; plan_name?: string | null; plan_type?: string | null; policy_number?: string | null; group_number?: string | null; rx_bin?: string | null; rx_pcn?: string | null; rx_group?: string | null; customer_service_phone?: string | null; front_image_path?: string | null; back_image_path?: string | null; effective_date?: string | null; is_primary?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; kind: RecordKind; insurer: string; plan_name: string | null; plan_type: string | null; policy_number: string | null; group_number: string | null; rx_bin: string | null; rx_pcn: string | null; rx_group: string | null; customer_service_phone: string | null; front_image_path: string | null; back_image_path: string | null; effective_date: string | null; is_primary: boolean; notes: string | null }>
+      >;
+      medical_profiles: T<
+        { id: string; family_id: string; member_id: string; blood_type: string | null; allergies: string | null; conditions: string | null; current_medications: string | null; primary_physician: string | null; preferred_pharmacy: string | null; pharmacy_phone: string | null; emergency_contact_name: string | null; emergency_contact_phone: string | null; emergency_contact_relation: string | null; immunizations: string | null; dental_notes: string | null; notes: string | null; updated_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; blood_type?: string | null; allergies?: string | null; conditions?: string | null; current_medications?: string | null; primary_physician?: string | null; preferred_pharmacy?: string | null; pharmacy_phone?: string | null; emergency_contact_name?: string | null; emergency_contact_phone?: string | null; emergency_contact_relation?: string | null; immunizations?: string | null; dental_notes?: string | null; notes?: string | null; updated_by?: string | null },
+        Partial<{ blood_type: string | null; allergies: string | null; conditions: string | null; current_medications: string | null; primary_physician: string | null; preferred_pharmacy: string | null; pharmacy_phone: string | null; emergency_contact_name: string | null; emergency_contact_phone: string | null; emergency_contact_relation: string | null; immunizations: string | null; dental_notes: string | null; notes: string | null; updated_by: string | null }>
       >;
       home_assets: T<
         { id: string; family_id: string; name: string; category: string | null; location: string | null; brand: string | null; model: string | null; purchased_on: string | null; warranty_until: string | null; notes: string | null; created_by: string | null } & Stamps,
@@ -294,6 +310,7 @@ export interface Database {
       grade_type: GradeType;
       theme_pref: ThemePref;
       ai_role: AiRole;
+      record_kind: RecordKind;
     };
   };
 }

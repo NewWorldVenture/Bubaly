@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Calendar, CheckSquare, UtensilsCrossed, ShoppingCart,
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
-  FolderKanban, Plug, BarChart3, Sun, type LucideIcon,
+  FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -29,6 +29,8 @@ export const APP_NAV: NavItem[] = [
   { href: '/dashboard/school', label: 'School', icon: GraduationCap },
   { href: '/dashboard/sports', label: 'Sports', icon: Trophy },
   { href: '/dashboard/health', label: 'Health', icon: HeartPulse },
+  { href: '/dashboard/medical', label: 'Medical', icon: Stethoscope },
+  { href: '/dashboard/dental', label: 'Dental', icon: Smile },
   { href: '/dashboard/documents', label: 'Documents', icon: FolderLock },
   { href: '/dashboard/home', label: 'Home & Maintenance', icon: Home },
   { href: '/dashboard/notes', label: 'Notes', icon: StickyNote },

@@ -281,3 +281,29 @@ body::before {
   .coarse\:py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
   .coarse\:gap-4 { gap: 1rem; }
 }
+
+/* ============================================================
+   Print — the Medical/Dental "Provider Info File" and check-in
+   sheets render inside a fixed overlay tagged .print-sheet. When
+   printing we hide the whole app and lay the sheet out on white
+   paper so it saves to a clean PDF (browser Print → Save as PDF).
+   ============================================================ */
+@media print {
+  body * { visibility: hidden !important; }
+  .print-sheet, .print-sheet * { visibility: visible !important; }
+  .print-hide, .print-hide * { display: none !important; }
+  .print-sheet {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
+  }
+  .print-sheet .print-page { color: #000 !important; background: #fff !important; }
+  @page { margin: 0.5in; }
+}
