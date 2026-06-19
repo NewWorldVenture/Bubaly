@@ -1,267 +1,243 @@
-'use client';
-
-import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Send, Plus, Trash2 } from 'lucide-react';
-import { useApp } from '@/components/app/app-context';
-import { createClient } from '@/lib/supabase/client';
-import { useToast } from '@/components/ui/toast';
-import { PageHeader } from '@/components/app/page-header';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
-import { fmtRelative } from '@/lib/utils/format';
+import {
+  CalendarDays,
+  CheckCircle2,
+  CloudSun,
+  Gift,
+  ListChecks,
+  PlusCircle,
+  School,
+  ShoppingCart,
+  Sparkles,
+  UtensilsCrossed,
+} from 'lucide-react';
+import { AssistantInputBar } from '@/components/app/app-shell';
 import { cn } from '@/lib/utils/cn';
-import type { Tables } from '@/lib/database.types';
 
-type Conversation = Tables<'ai_conversations'>;
-type Message = Tables<'ai_messages'>;
+const chips = [
+  [CalendarDays, "What's happening today?"],
+  [UtensilsCrossed, 'Plan dinners for the week'],
+  [Sparkles, 'Add soccer practice every Tuesday'],
+  [ListChecks, 'Create chores for the kids'],
+  [School, 'Summarize our week'],
+  [PlusCircle, 'More suggestions'],
+] as const;
+
+const schedule = [
+  ['8:00 AM', 'School Drop-off'],
+  ['10:00 AM', 'Math Meeting'],
+  ['4:30 PM', 'Soccer Practice'],
+] as const;
 
 export function AssistantModule() {
-  const { familyId, userId } = useApp();
-  const { error: toastError } = useToast();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConv, setActiveConv] = useState<Conversation | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const [loadingConvs, setLoadingConvs] = useState(true);
-  const [loadingMsgs, setLoadingMsgs] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    loadConversations();
-  }, [familyId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  async function loadConversations() {
-    const supabase = createClient();
-    const { data } = await supabase.from('ai_conversations').select('*')
-      .eq('family_id', familyId).order('updated_at', { ascending: false }).limit(20);
-    setConversations(data ?? []);
-    setLoadingConvs(false);
-  }
-
-  async function loadMessages(conv: Conversation) {
-    setActiveConv(conv);
-    setLoadingMsgs(true);
-    const supabase = createClient();
-    const { data } = await supabase.from('ai_messages').select('*')
-      .eq('conversation_id', conv.id).order('created_at', { ascending: true });
-    setMessages(data ?? []);
-    setLoadingMsgs(false);
-  }
-
-  async function newConversation() {
-    const supabase = createClient();
-    const { data, error } = await supabase.from('ai_conversations').insert({
-      family_id: familyId,
-      user_id: userId,
-      title: 'New conversation',
-      provider: 'anthropic',
-      model: process.env.NEXT_PUBLIC_AI_MODEL ?? 'claude-sonnet-4-6',
-    }).select().single();
-    if (error || !data) return toastError(error?.message ?? 'Could not start conversation');
-    setConversations((prev) => [data, ...prev]);
-    setActiveConv(data);
-    setMessages([]);
-  }
-
-  async function deleteConversation(id: string) {
-    const supabase = createClient();
-    await supabase.from('ai_conversations').delete().eq('id', id);
-    setConversations((prev) => prev.filter((c) => c.id !== id));
-    if (activeConv?.id === id) { setActiveConv(null); setMessages([]); }
-  }
-
-  async function sendMessage() {
-    if (!input.trim() || !activeConv || sending) return;
-    const userMessage = input.trim();
-    setInput('');
-    setSending(true);
-
-    // Optimistically add user message
-    const optimistic: Message = {
-      id: `tmp_${Date.now()}`,
-      family_id: familyId,
-      conversation_id: activeConv.id,
-      role: 'user',
-      content: userMessage,
-      tool_calls: null,
-      tool_results: null,
-      created_at: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, optimistic]);
-
-    try {
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId: activeConv.id, message: userMessage }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Failed');
-
-      // Update conversation title if this is the first message
-      if (messages.length === 0) {
-        const title = userMessage.slice(0, 60);
-        await createClient().from('ai_conversations').update({ title }).eq('id', activeConv.id);
-        setConversations((prev) => prev.map((c) => c.id === activeConv.id ? { ...c, title } : c));
-      }
-
-      // Reload actual messages from DB
-      const supabase = createClient();
-      const { data } = await supabase.from('ai_messages').select('*')
-        .eq('conversation_id', activeConv.id).order('created_at', { ascending: true });
-      setMessages(data ?? []);
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Something went wrong');
-      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
-    } finally {
-      setSending(false);
-    }
-  }
-
-  function handleKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      void sendMessage();
-    }
-  }
-
-  const STARTERS = [
-    'Summarize what\'s happening this week',
-    'Suggest 5 quick dinners for the week',
-    'What chores are still open?',
-    'Help me plan a family game night',
-  ];
-
-  if (loadingConvs) return <LoadingBlock />;
-
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4">
-      {/* Sidebar */}
-      <div className="hidden w-60 shrink-0 flex-col gap-2 lg:flex">
-        <Button onClick={newConversation} className="w-full"><Plus className="h-4 w-4" /> New chat</Button>
-        <div className="flex-1 space-y-1 overflow-y-auto">
-          {conversations.map((c) => (
-            <div
-              key={c.id}
-              className={cn(
-                'group flex items-center gap-2 rounded-xl px-3 py-2 text-sm cursor-pointer hover:bg-elevated transition',
-                activeConv?.id === c.id && 'bg-brand/10 text-brand',
-              )}
-              onClick={() => loadMessages(c)}
-            >
-              <Sparkles className="h-3.5 w-3.5 shrink-0" />
-              <span className="flex-1 truncate">{c.title}</span>
-              <button
-                onClick={(e) => { e.stopPropagation(); void deleteConversation(c.id); }}
-                className="hidden rounded p-0.5 hover:text-danger group-hover:block"
-                aria-label="Delete"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
+    <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_330px]">
+      <section className="min-w-0">
+        <div className="flex items-center gap-4">
+          <span className="glow-dot h-14 w-14" />
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-black">AI Assistant</h1>
+            <span className="rounded-md bg-violet-700 px-3 py-1 text-xs font-black">BETA</span>
+          </div>
+        </div>
+
+        <div className="mt-10">
+          <h2 className="text-5xl font-black leading-tight">Hi, Sarah!</h2>
+          <p className="mt-2 bg-gradient-to-r from-violet-400 to-fuchsia-200 bg-clip-text text-4xl font-black text-transparent">
+            How can I help your family today?
+          </p>
+          <p className="mt-5 text-lg text-white/70">I can help you plan, organize, and stay ahead of everything.</p>
+        </div>
+
+        <div className="mt-8 flex flex-wrap gap-3">
+          {chips.map(([Icon, label]) => (
+            <button key={label} className="inline-flex h-12 items-center gap-3 rounded-full border border-white/10 bg-white/[0.035] px-5 text-sm text-white/88 hover:bg-white/[0.07]">
+              <Icon className="h-5 w-5 text-violet-400" />
+              {label}
+            </button>
           ))}
         </div>
-      </div>
 
-      {/* Chat area */}
-      <div className="flex flex-1 flex-col">
-        {!activeConv ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-6">
-            <div className="text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand/10">
-                <Sparkles className="h-8 w-8 text-brand" />
-              </div>
-              <h2 className="text-xl font-bold">Your family assistant</h2>
-              <p className="mt-1 text-sm text-muted">Ask anything about your family's schedule, meals, chores, and more.</p>
-            </div>
-            <div className="grid w-full max-w-md gap-2">
-              {STARTERS.map((s) => (
-                <button
-                  key={s}
-                  onClick={async () => { await newConversation(); setInput(s); }}
-                  className="rounded-xl border border-border bg-surface/60 px-4 py-2.5 text-left text-sm hover:bg-elevated transition"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-            <Button onClick={newConversation}><Plus className="h-4 w-4" /> Start a conversation</Button>
-          </div>
-        ) : (
-          <Card className="flex flex-1 flex-col overflow-hidden p-0">
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {loadingMsgs ? (
-                <LoadingBlock />
-              ) : messages.length === 0 ? (
-                <div className="flex h-full items-center justify-center">
-                  <p className="text-sm text-muted">Send a message to get started.</p>
-                </div>
-              ) : (
-                messages.filter((m) => m.role === 'user' || m.role === 'assistant').map((m) => (
-                  <div key={m.id} className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
-                    {m.role === 'assistant' && (
-                      <div className="mr-2 mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-brand/10">
-                        <Sparkles className="h-4 w-4 text-brand" />
-                      </div>
-                    )}
-                    <div
-                      className={cn(
-                        'max-w-[75%] rounded-2xl px-4 py-2.5 text-sm',
-                        m.role === 'user'
-                          ? 'bg-brand text-white rounded-br-sm'
-                          : 'bg-surface/80 border border-border rounded-bl-sm',
-                      )}
-                    >
-                      <p className="whitespace-pre-wrap">{m.content}</p>
-                    </div>
-                  </div>
-                ))
-              )}
-              {sending && (
-                <div className="flex justify-start">
-                  <div className="mr-2 mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-brand/10">
-                    <Sparkles className="h-4 w-4 text-brand" />
-                  </div>
-                  <div className="rounded-2xl rounded-bl-sm border border-border bg-surface/80 px-4 py-3">
-                    <div className="flex gap-1">
-                      {[0, 1, 2].map((i) => (
-                        <div key={i} className="h-1.5 w-1.5 rounded-full bg-muted animate-pulse" style={{ animationDelay: `${i * 150}ms` }} />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div ref={bottomRef} />
-            </div>
+        <div className="my-10 grid grid-cols-[1fr_auto_1fr] items-center gap-5 text-sm text-white/50">
+          <span className="h-px bg-white/12" />
+          Today
+          <span className="h-px bg-white/12" />
+        </div>
 
-            {/* Input */}
-            <div className="border-t border-border p-3">
-              <div className="flex items-end gap-2">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKey}
-                  placeholder="Ask your family assistant…"
-                  rows={1}
-                  className="flex-1 resize-none rounded-xl border border-border bg-surface/60 px-4 py-2.5 text-sm placeholder:text-muted focus-ring transition"
-                  style={{ maxHeight: '120px' }}
-                />
-                <Button onClick={() => void sendMessage()} loading={sending} disabled={!input.trim()}>
-                  <Send className="h-4 w-4" />
-                </Button>
+        <div className="space-y-8">
+          <AssistantMessage>
+            <p className="font-semibold">Good morning, Sarah. Here's what's on the agenda for today.</p>
+            <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.035] p-5">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-bold text-violet-300">3 events today</span>
+                <a className="text-violet-300" href="/dashboard/calendar">View schedule</a>
               </div>
-              <p className="mt-1.5 text-center text-xs text-muted">Press Enter to send · Shift+Enter for new line</p>
+              <div className="mt-4 space-y-3">
+                {schedule.map(([time, title]) => (
+                  <div key={title} className="grid grid-cols-[90px_1fr] text-sm">
+                    <span>{time}</span>
+                    <span>{title}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 flex items-center justify-between text-sm">
+                <span className="font-bold text-emerald-300">2 tasks due</span>
+                <a className="text-violet-300" href="/dashboard/chores">View tasks</a>
+              </div>
+              <p className="mt-3 text-sm text-white/70">Science Project - Due Tomorrow</p>
+              <p className="mt-2 text-sm text-white/70">Take out the trash - Due Today</p>
+              <div className="mt-5 flex items-center justify-between text-sm">
+                <span className="font-bold text-orange-300">1 medication reminder</span>
+                <a className="text-violet-300" href="/dashboard/health">View</a>
+              </div>
             </div>
-          </Card>
-        )}
-      </div>
+          </AssistantMessage>
+
+          <UserBubble text="Plan dinners for the week that my kids will actually eat." time="9:15 AM" />
+
+          <AssistantMessage>
+            <p className="font-semibold">Sure. Here's a kid-friendly dinner plan for this week based on your family's favorites.</p>
+            <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.035] p-5">
+              <h3 className="font-bold">This Week's Dinner Plan</h3>
+              <div className="mt-4 space-y-3 text-sm">
+                {[
+                  ['Mon', 'Chicken Tacos with Rice'],
+                  ['Tue', 'Spaghetti with Meatballs'],
+                  ['Wed', 'Homemade Pizza'],
+                  ['Thu', 'Cheesy Burgers & Fries'],
+                  ['Fri', 'Fish Tacos with Slaw'],
+                  ['Sat', 'BBQ Chicken & Veggies'],
+                  ['Sun', 'Sunday Soup & Grilled Cheese'],
+                ].map(([day, meal]) => (
+                  <div key={day} className="grid grid-cols-[48px_1fr]">
+                    <span className="text-white/65">{day}</span>
+                    <span>{meal}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <button className="rounded-full border border-violet-400/40 px-4 py-2 text-sm font-bold text-violet-300">Add to Meal Plan</button>
+                <button className="rounded-full border border-violet-400/40 px-4 py-2 text-sm font-bold text-violet-300">Regenerate</button>
+              </div>
+            </div>
+          </AssistantMessage>
+
+          <UserBubble text="Add soccer practice every Tuesday at 6pm." time="9:16 AM" />
+
+          <AssistantMessage>
+            <p className="font-semibold text-white/88">All set. I've added Soccer Practice every Tuesday at 6:00 PM to the calendar.</p>
+            <button className="mt-5 rounded-full border border-violet-400/45 px-5 py-2.5 text-sm font-bold text-violet-300">Open Calendar</button>
+          </AssistantMessage>
+
+          <AssistantInputBar />
+          <p className="text-center text-xs text-white/45">AI can make mistakes. Please double-check important information.</p>
+        </div>
+      </section>
+
+      <aside className="space-y-6">
+        <SideCard title="At a Glance">
+          {[
+            [CalendarDays, '5', 'Events Today'],
+            [CheckCircle2, '3', 'Tasks Due'],
+            [Sparkles, '1', 'Medication Reminder'],
+            [CloudSun, '72F', 'Partly Cloudy'],
+          ].map(([Icon, value, label]) => (
+            <div key={String(label)} className="flex items-center gap-4 py-2">
+              <Icon className="h-7 w-7 text-white/85" />
+              <div>
+                <p className="text-xl font-bold">{value}</p>
+                <p className="text-sm text-white/62">{label}</p>
+              </div>
+            </div>
+          ))}
+        </SideCard>
+
+        <SideCard title="Upcoming" action="View Calendar">
+          {[
+            ['Soccer Practice', 'Tomorrow - 6:00 PM', 'bg-emerald-500'],
+            ['Piano Lesson', 'Wed, May 22 - 4:00 PM', 'bg-indigo-500'],
+            ['Field Trip', 'Fri, May 24 - All Day', 'bg-orange-500'],
+            ["Mom's Birthday", 'Sun, May 26 - All Day', 'bg-rose-500'],
+          ].map(([title, meta, color]) => (
+            <div key={title} className="flex items-center gap-4 py-2">
+              <span className={cn('grid h-10 w-10 place-items-center rounded-full', color)}>
+                <CalendarDays className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="font-bold">{title}</p>
+                <p className="text-sm text-white/62">{meta}</p>
+              </div>
+            </div>
+          ))}
+        </SideCard>
+
+        <SideCard title="Smart Suggestions">
+          {[
+            ['Emma has a science project due tomorrow. Want me to help create a study plan?', Sparkles],
+            ['You usually grocery shop on Sundays. Should I prepare the list?', ShoppingCart],
+            ['It looks like the HVAC filter needs to be changed soon.', HomeIcon],
+          ].map(([text, Icon]) => (
+            <div key={String(text)} className="flex gap-4 py-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500/12">
+                <Icon className="h-5 w-5 text-violet-300" />
+              </span>
+              <p className="text-sm leading-6 text-white/74">{text}</p>
+            </div>
+          ))}
+          <button className="mt-3 w-full rounded-full border border-violet-500/45 py-3 text-sm font-bold text-violet-300">View All Suggestions</button>
+        </SideCard>
+
+        <SideCard title="Recent Activity" action="View All">
+          {['Soccer Practice added to calendar', 'Dinner plan created', 'Grocery list updated', 'Math Meeting added', 'New document uploaded'].map((item, index) => (
+            <div key={item} className="flex items-center gap-4 py-2 text-sm">
+              <CheckCircle2 className={cn('h-5 w-5', ['text-emerald-400', 'text-orange-400', 'text-emerald-400', 'text-violet-400', 'text-blue-400'][index])} />
+              <span className="flex-1">{item}</span>
+              <span className="text-xs text-white/45">{index < 2 ? `9:${16 - index} AM` : index === 2 ? 'Yesterday' : 'May 18'}</span>
+            </div>
+          ))}
+        </SideCard>
+
+        <SideCard title="Try saying something like...">
+          {['What do we have going on this week?', 'Create a grocery list from our meal plan', 'Remind me to order camp forms', "What are my kids' activities today?"].map((prompt) => (
+            <button key={prompt} className="mt-2 block w-full rounded-full border border-white/10 bg-white/[0.035] px-4 py-2.5 text-left text-xs text-white/82">
+              "{prompt}"
+            </button>
+          ))}
+        </SideCard>
+      </aside>
     </div>
   );
+}
+
+function AssistantMessage({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex gap-5">
+      <span className="glow-dot mt-1 h-10 w-10 shrink-0" />
+      <div className="showcase-card max-w-[470px] rounded-xl p-5">{children}</div>
+    </div>
+  );
+}
+
+function UserBubble({ text, time }: { text: string; time: string }) {
+  return (
+    <div className="ml-auto max-w-[520px] text-right">
+      <div className="inline-flex rounded-xl bg-violet-700 px-6 py-4 text-base font-medium">{text}</div>
+      <p className="mt-2 text-xs text-white/45">You - {time}</p>
+    </div>
+  );
+}
+
+function SideCard({ title, action, children }: { title: string; action?: string; children: React.ReactNode }) {
+  return (
+    <section className="showcase-card rounded-2xl p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-bold">{title}</h2>
+        {action && <a className="text-sm font-semibold text-violet-300">{action}</a>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function HomeIcon({ className }: { className?: string }) {
+  return <Gift className={className} />;
 }
