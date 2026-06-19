@@ -1,19 +1,15 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
 import {
-  CalendarDays,
-  CheckCircle2,
-  CloudSun,
-  Gift,
-  ListChecks,
-  PlusCircle,
-  School,
-  ShoppingCart,
-  Sparkles,
-  UtensilsCrossed,
+  CalendarDays, CheckCircle2, CloudSun, Gift, ListChecks, Mic,
+  Plus, PlusCircle, School, Send, ShoppingCart, Sparkles, UtensilsCrossed,
 } from 'lucide-react';
-import { AssistantInputBar } from '@/components/app/app-shell';
+import { useApp } from '@/components/app/app-context';
+import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils/cn';
 
-const chips = [
+const CHIPS = [
   [CalendarDays, "What's happening today?"],
   [UtensilsCrossed, 'Plan dinners for the week'],
   [Sparkles, 'Add soccer practice every Tuesday'],
@@ -22,188 +18,289 @@ const chips = [
   [PlusCircle, 'More suggestions'],
 ] as const;
 
-const schedule = [
-  ['8:00 AM', 'School Drop-off'],
-  ['10:00 AM', 'Math Meeting'],
-  ['4:30 PM', 'Soccer Practice'],
-] as const;
+const PROMPTS = [
+  'What do we have going on this week?',
+  'Create a grocery list from our meal plan',
+  'Remind me to order camp forms',
+  "What are my kids' activities today?",
+];
 
-const glanceItems = [
-  [CalendarDays, '5', 'Events Today'],
-  [CheckCircle2, '3', 'Tasks Due'],
-  [Sparkles, '1', 'Medication Reminder'],
-  [CloudSun, '72F', 'Partly Cloudy'],
-] as const;
+const TRY_PROMPTS = PROMPTS;
 
-const suggestionItems = [
-  ['Emma has a science project due tomorrow. Want me to help create a study plan?', Sparkles],
-  ['You usually grocery shop on Sundays. Should I prepare the list?', ShoppingCart],
-  ['It looks like the HVAC filter needs to be changed soon.', HomeIcon],
-] as const;
+type Message = { role: 'user' | 'assistant'; content: string; id: string };
+type GlanceItem = { icon: React.ComponentType<{ className?: string }>; value: string; label: string };
+type UpcomingEvent = { id: string; title: string; starts_at: string; all_day: boolean };
+type ActivityItem = { icon: React.ComponentType<{ className?: string }>; text: string; time: string; color: string };
+
+function generateId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
 export function AssistantModule() {
+  const { family, selfMember } = useApp();
+  const firstName = (selfMember?.display_name || 'there').split(' ')[0];
+
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [convId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem('assistant-conv-id');
+      if (stored) return stored;
+      const id = generateId();
+      sessionStorage.setItem('assistant-conv-id', id);
+      return id;
+    }
+    return generateId();
+  });
+
+  // Sidebar data
+  const [glance, setGlance] = useState<GlanceItem[]>([
+    { icon: CalendarDays, value: '—', label: 'Events Today' },
+    { icon: CheckCircle2, value: '—', label: 'Tasks Due' },
+    { icon: Gift, value: '1', label: 'Medication Reminder' },
+    { icon: CloudSun, value: '72°F', label: 'Partly Cloudy' },
+  ]);
+  const [upcoming, setUpcoming] = useState<UpcomingEvent[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Load sidebar data
+  useEffect(() => {
+    if (!family?.id) return;
+    const supabase = createClient();
+    const now = new Date();
+    const start = new Date(now); start.setHours(0, 0, 0, 0);
+    const end = new Date(start); end.setDate(end.getDate() + 1);
+    const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
+
+    Promise.all([
+      supabase.from('calendar_events').select('id, title, starts_at, all_day')
+        .eq('family_id', family.id).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()),
+      supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
+        .eq('family_id', family.id).in('status', ['todo', 'in_progress']),
+      supabase.from('calendar_events').select('id, title, starts_at, all_day')
+        .eq('family_id', family.id).gte('starts_at', end.toISOString()).lte('starts_at', in14.toISOString())
+        .order('starts_at').limit(4),
+    ]).then(([{ data: todayEvts }, { count: openChores }, { data: upEvts }]) => {
+      setGlance([
+        { icon: CalendarDays, value: String(todayEvts?.length ?? 0), label: 'Events Today' },
+        { icon: CheckCircle2, value: String(openChores ?? 0), label: 'Tasks Due' },
+        { icon: Gift, value: '1', label: 'Medication Reminder' },
+        { icon: CloudSun, value: '72°F', label: 'Partly Cloudy' },
+      ]);
+      setUpcoming(upEvts ?? []);
+      setActivity((todayEvts ?? []).slice(0, 3).map((e, i) => ({
+        icon: CalendarDays,
+        text: `${e.title} added to calendar`,
+        time: ['9:16 AM', '9:15 AM', 'Yesterday'][i] ?? 'Recently',
+        color: ['text-emerald-400', 'text-orange-400', 'text-violet-400'][i] ?? 'text-violet-400',
+      })));
+    });
+  }, [family?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Show initial greeting message
+  useEffect(() => {
+    setMessages([{
+      id: 'init',
+      role: 'assistant',
+      content: `Good morning, ${firstName}! Here's what's on the agenda for today. Ask me anything about your family's schedule, meals, chores, or anything else!`,
+    }]);
+  }, [firstName]);
+
+  async function send(text?: string) {
+    const msg = (text ?? input).trim();
+    if (!msg || loading) return;
+    setInput('');
+
+    const userMsg: Message = { role: 'user', content: msg, id: generateId() };
+    setMessages((prev) => [...prev, userMsg]);
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: convId, message: msg }),
+      });
+      const data = await res.json() as { reply?: string; error?: string };
+      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply ?? 'Sorry, I had trouble with that.', id: generateId() }]);
+    } catch {
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'Something went wrong. Please try again.', id: generateId() }]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const ACCENT_COLORS = ['bg-emerald-500', 'bg-indigo-500', 'bg-orange-500', 'bg-rose-500'];
+
   return (
     <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_330px]">
-      <section className="min-w-0">
+      {/* Main chat column */}
+      <section className="flex min-h-0 min-w-0 flex-col">
         <div className="flex items-center gap-4">
-          <span className="glow-dot h-14 w-14" />
+          <div className="glow-dot h-14 w-14 shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-blue-600 shadow-glow" />
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-black">AI Assistant</h1>
             <span className="rounded-md bg-violet-700 px-3 py-1 text-xs font-black">BETA</span>
           </div>
         </div>
 
-        <div className="mt-10">
-          <h2 className="text-5xl font-black leading-tight">Hi, Sarah!</h2>
+        <div className="mt-8">
+          <h2 className="text-5xl font-black">Hi, {firstName}! 👋</h2>
           <p className="mt-2 bg-gradient-to-r from-violet-400 to-fuchsia-200 bg-clip-text text-4xl font-black text-transparent">
             How can I help your family today?
           </p>
-          <p className="mt-5 text-lg text-white/70">I can help you plan, organize, and stay ahead of everything.</p>
+          <p className="mt-4 text-lg text-white/65">I can help you plan, organize, and stay ahead of everything.</p>
         </div>
 
-        <div className="mt-8 flex flex-wrap gap-3">
-          {chips.map(([Icon, label]) => (
-            <button key={label} className="inline-flex h-12 items-center gap-3 rounded-full border border-white/10 bg-white/[0.035] px-5 text-sm text-white/88 hover:bg-white/[0.07]">
-              <Icon className="h-5 w-5 text-violet-400" />
+        <div className="mt-7 flex flex-wrap gap-2.5">
+          {CHIPS.map(([Icon, label]) => (
+            <button
+              key={label} onClick={() => void send(label === 'More suggestions' ? 'Give me more suggestions for things I can ask you.' : label)}
+              className="inline-flex h-11 items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.04] px-4 text-sm text-white/85 transition hover:bg-white/[0.07]"
+            >
+              <Icon className="h-4 w-4 text-violet-400" />
               {label}
             </button>
           ))}
         </div>
 
-        <div className="my-10 grid grid-cols-[1fr_auto_1fr] items-center gap-5 text-sm text-white/50">
-          <span className="h-px bg-white/12" />
-          Today
-          <span className="h-px bg-white/12" />
+        <div className="my-8 grid grid-cols-[1fr_auto_1fr] items-center gap-4 text-xs text-white/40">
+          <span className="h-px bg-white/10" /> Today <span className="h-px bg-white/10" />
         </div>
 
-        <div className="space-y-8">
-          <AssistantMessage>
-            <p className="font-semibold">Good morning, Sarah. Here&apos;s what&apos;s on the agenda for today.</p>
-            <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.035] p-5">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-bold text-violet-300">3 events today</span>
-                <a className="text-violet-300" href="/dashboard/calendar">View schedule</a>
+        <div className="flex-1 space-y-6 overflow-y-auto pb-4">
+          {messages.map((msg) =>
+            msg.role === 'assistant' ? (
+              <div key={msg.id} className="flex gap-4">
+                <div className="mt-1 h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-blue-600 shadow-glow" />
+                <div className="max-w-[480px] rounded-2xl border border-white/8 bg-white/[0.04] p-5 text-sm leading-6">
+                  {msg.content}
+                </div>
               </div>
-              <div className="mt-4 space-y-3">
-                {schedule.map(([time, title]) => (
-                  <div key={title} className="grid grid-cols-[90px_1fr] text-sm">
-                    <span>{time}</span>
-                    <span>{title}</span>
-                  </div>
+            ) : (
+              <div key={msg.id} className="ml-auto max-w-[520px] text-right">
+                <div className="inline-block rounded-2xl bg-violet-700 px-5 py-3.5 text-sm font-medium">
+                  {msg.content}
+                </div>
+              </div>
+            )
+          )}
+          {loading && (
+            <div className="flex gap-4">
+              <div className="mt-1 h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-blue-600" />
+              <div className="flex items-center gap-1.5 rounded-2xl border border-white/8 bg-white/[0.04] px-5 py-4">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-2 w-2 animate-bounce rounded-full bg-violet-400" style={{ animationDelay: `${i * 0.15}s` }} />
                 ))}
               </div>
-              <div className="mt-5 flex items-center justify-between text-sm">
-                <span className="font-bold text-emerald-300">2 tasks due</span>
-                <a className="text-violet-300" href="/dashboard/chores">View tasks</a>
-              </div>
-              <p className="mt-3 text-sm text-white/70">Science Project - Due Tomorrow</p>
-              <p className="mt-2 text-sm text-white/70">Take out the trash - Due Today</p>
-              <div className="mt-5 flex items-center justify-between text-sm">
-                <span className="font-bold text-orange-300">1 medication reminder</span>
-                <a className="text-violet-300" href="/dashboard/health">View</a>
-              </div>
             </div>
-          </AssistantMessage>
+          )}
+          <div ref={bottomRef} />
+        </div>
 
-          <UserBubble text="Plan dinners for the week that my kids will actually eat." time="9:15 AM" />
-
-          <AssistantMessage>
-            <p className="font-semibold">Sure. Here&apos;s a kid-friendly dinner plan for this week based on your family&apos;s favorites.</p>
-            <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.035] p-5">
-              <h3 className="font-bold">This Week&apos;s Dinner Plan</h3>
-              <div className="mt-4 space-y-3 text-sm">
-                {[
-                  ['Mon', 'Chicken Tacos with Rice'],
-                  ['Tue', 'Spaghetti with Meatballs'],
-                  ['Wed', 'Homemade Pizza'],
-                  ['Thu', 'Cheesy Burgers & Fries'],
-                  ['Fri', 'Fish Tacos with Slaw'],
-                  ['Sat', 'BBQ Chicken & Veggies'],
-                  ['Sun', 'Sunday Soup & Grilled Cheese'],
-                ].map(([day, meal]) => (
-                  <div key={day} className="grid grid-cols-[48px_1fr]">
-                    <span className="text-white/65">{day}</span>
-                    <span>{meal}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <button className="rounded-full border border-violet-400/40 px-4 py-2 text-sm font-bold text-violet-300">Add to Meal Plan</button>
-                <button className="rounded-full border border-violet-400/40 px-4 py-2 text-sm font-bold text-violet-300">Regenerate</button>
-              </div>
-            </div>
-          </AssistantMessage>
-
-          <UserBubble text="Add soccer practice every Tuesday at 6pm." time="9:16 AM" />
-
-          <AssistantMessage>
-            <p className="font-semibold text-white/88">All set. I&apos;ve added Soccer Practice every Tuesday at 6:00 PM to the calendar.</p>
-            <button className="mt-5 rounded-full border border-violet-400/45 px-5 py-2.5 text-sm font-bold text-violet-300">Open Calendar</button>
-          </AssistantMessage>
-
-          <AssistantInputBar />
-          <p className="text-center text-xs text-white/45">AI can make mistakes. Please double-check important information.</p>
+        {/* Input bar */}
+        <div className="mt-4">
+          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+            <Plus className="h-5 w-5 shrink-0 text-white/45" />
+            <input
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/45"
+              placeholder="Ask anything or give a command..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
+              disabled={loading}
+            />
+            <button onClick={() => void send()} disabled={loading || !input.trim()} className="grid h-10 w-10 place-items-center rounded-full bg-violet-700 disabled:opacity-40">
+              <Send className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="mt-3 text-center text-xs text-white/35">AI can make mistakes. Please double-check important information.</p>
         </div>
       </section>
 
-      <aside className="space-y-6">
+      {/* Sidebar */}
+      <aside className="space-y-5">
+        {/* At a Glance */}
         <SideCard title="At a Glance">
-          {glanceItems.map(([Icon, value, label]) => (
-            <div key={String(label)} className="flex items-center gap-4 py-2">
-              <Icon className="h-7 w-7 text-white/85" />
+          {glance.map(({ icon: Icon, value, label }) => (
+            <div key={label} className="flex items-center gap-4 py-2.5">
+              <Icon className="h-6 w-6 shrink-0 text-white/80" />
               <div>
                 <p className="text-xl font-bold">{value}</p>
-                <p className="text-sm text-white/62">{label}</p>
+                <p className="text-xs text-white/55">{label}</p>
               </div>
             </div>
           ))}
         </SideCard>
 
-        <SideCard title="Upcoming" action="View Calendar">
-          {[
-            ['Soccer Practice', 'Tomorrow - 6:00 PM', 'bg-emerald-500'],
-            ['Piano Lesson', 'Wed, May 22 - 4:00 PM', 'bg-indigo-500'],
-            ['Field Trip', 'Fri, May 24 - All Day', 'bg-orange-500'],
-            ["Mom's Birthday", 'Sun, May 26 - All Day', 'bg-rose-500'],
-          ].map(([title, meta, color]) => (
-            <div key={title} className="flex items-center gap-4 py-2">
-              <span className={cn('grid h-10 w-10 place-items-center rounded-full', color)}>
-                <CalendarDays className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="font-bold">{title}</p>
-                <p className="text-sm text-white/62">{meta}</p>
+        {/* Upcoming */}
+        <SideCard title="Upcoming" action={<a href="/dashboard/calendar" className="text-xs font-semibold text-violet-300">View Calendar</a>}>
+          {upcoming.length > 0 ? upcoming.map((e, i) => {
+            const d = new Date(e.starts_at);
+            return (
+              <div key={e.id} className="flex items-center gap-3 py-2.5">
+                <span className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-full text-white', ACCENT_COLORS[i % ACCENT_COLORS.length])}>
+                  <CalendarDays className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="font-semibold text-sm">{e.title}</p>
+                  <p className="text-xs text-white/55">
+                    {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    {!e.all_day && ` · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          }) : (
+            <p className="py-4 text-sm text-white/35 text-center">No upcoming events</p>
+          )}
         </SideCard>
 
+        {/* Smart Suggestions */}
         <SideCard title="Smart Suggestions">
-          {suggestionItems.map(([text, Icon]) => (
-            <div key={String(text)} className="flex gap-4 py-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500/12">
-                <Icon className="h-5 w-5 text-violet-300" />
+          {[
+            { icon: Sparkles, text: 'Emma has a science project due tomorrow. Want me to help create a study plan?' },
+            { icon: ShoppingCart, text: 'You usually grocery shop on Sundays. Should I prepare the list?' },
+            { icon: Gift, text: 'It looks like the HVAC filter needs to be changed soon.' },
+          ].map(({ icon: Icon, text }) => (
+            <button key={text} onClick={() => void send(text.split('?')[0] + '?')} className="flex gap-3 py-2.5 text-left hover:opacity-80 transition">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-500/12">
+                <Icon className="h-4 w-4 text-violet-300" />
               </span>
-              <p className="text-sm leading-6 text-white/74">{text}</p>
-            </div>
+              <p className="text-xs leading-5 text-white/70">{text}</p>
+            </button>
           ))}
-          <button className="mt-3 w-full rounded-full border border-violet-500/45 py-3 text-sm font-bold text-violet-300">View All Suggestions</button>
+          <button className="mt-2 w-full rounded-full border border-violet-500/40 py-2.5 text-xs font-bold text-violet-300 hover:border-violet-400">
+            View All Suggestions
+          </button>
         </SideCard>
 
-        <SideCard title="Recent Activity" action="View All">
-          {['Soccer Practice added to calendar', 'Dinner plan created', 'Grocery list updated', 'Math Meeting added', 'New document uploaded'].map((item, index) => (
-            <div key={item} className="flex items-center gap-4 py-2 text-sm">
-              <CheckCircle2 className={cn('h-5 w-5', ['text-emerald-400', 'text-orange-400', 'text-emerald-400', 'text-violet-400', 'text-blue-400'][index])} />
-              <span className="flex-1">{item}</span>
-              <span className="text-xs text-white/45">{index < 2 ? `9:${16 - index} AM` : index === 2 ? 'Yesterday' : 'May 18'}</span>
+        {/* Recent Activity */}
+        <SideCard title="Recent Activity" action={<a href="/dashboard/calendar" className="text-xs font-semibold text-violet-300">View All</a>}>
+          {activity.length > 0 ? activity.map((a) => (
+            <div key={a.text} className="flex items-center gap-3 py-2 text-xs">
+              <a.icon className={cn('h-4 w-4 shrink-0', a.color)} />
+              <span className="flex-1 text-white/75">{a.text}</span>
+              <span className="shrink-0 text-white/35">{a.time}</span>
             </div>
-          ))}
+          )) : (
+            <p className="py-3 text-xs text-white/35 text-center">No recent activity</p>
+          )}
         </SideCard>
 
+        {/* Try saying */}
         <SideCard title="Try saying something like...">
-          {['What do we have going on this week?', 'Create a grocery list from our meal plan', 'Remind me to order camp forms', "What are my kids' activities today?"].map((prompt) => (
-            <button key={prompt} className="mt-2 block w-full rounded-full border border-white/10 bg-white/[0.035] px-4 py-2.5 text-left text-xs text-white/82">
-              {`"${prompt}"`}
+          {TRY_PROMPTS.map((p) => (
+            <button key={p} onClick={() => void send(p)}
+              className="mt-2 block w-full rounded-full border border-white/8 bg-white/[0.03] px-4 py-2.5 text-left text-xs text-white/75 transition hover:bg-white/[0.06]">
+              &quot;{p}&quot;
             </button>
           ))}
         </SideCard>
@@ -212,36 +309,14 @@ export function AssistantModule() {
   );
 }
 
-function AssistantMessage({ children }: { children: React.ReactNode }) {
+function SideCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="flex gap-5">
-      <span className="glow-dot mt-1 h-10 w-10 shrink-0" />
-      <div className="showcase-card max-w-[470px] rounded-xl p-5">{children}</div>
-    </div>
-  );
-}
-
-function UserBubble({ text, time }: { text: string; time: string }) {
-  return (
-    <div className="ml-auto max-w-[520px] text-right">
-      <div className="inline-flex rounded-xl bg-violet-700 px-6 py-4 text-base font-medium">{text}</div>
-      <p className="mt-2 text-xs text-white/45">You - {time}</p>
-    </div>
-  );
-}
-
-function SideCard({ title, action, children }: { title: string; action?: string; children: React.ReactNode }) {
-  return (
-    <section className="showcase-card rounded-2xl p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-bold">{title}</h2>
-        {action && <a className="text-sm font-semibold text-violet-300">{action}</a>}
+    <section className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-semibold">{title}</h2>
+        {action}
       </div>
       {children}
     </section>
   );
-}
-
-function HomeIcon({ className }: { className?: string }) {
-  return <Gift className={className} />;
 }
