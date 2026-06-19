@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { stripe, STRIPE_PLANS, type StripePlan } from '@/lib/stripe';
+import { getStripe, STRIPE_PLANS, type StripePlan } from '@/lib/stripe';
 
 export async function POST(req: NextRequest) {
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
+    const stripe = getStripe();
 
     const { plan } = await req.json() as { plan: StripePlan };
     const priceId = STRIPE_PLANS[plan];
