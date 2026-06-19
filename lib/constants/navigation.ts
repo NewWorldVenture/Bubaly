@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Calendar, CheckSquare, UtensilsCrossed, ShoppingCart,
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
-  FolderKanban, type LucideIcon,
+  FolderKanban, Plug, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -47,6 +47,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/system', label: 'System Overview', icon: Activity },
   { href: '/admin/content', label: 'Content Management', icon: FolderKanban },
   { href: '/admin/security', label: 'Security', icon: ShieldCheck },
+  { href: '/admin/integrations', label: 'Integrations', icon: Plug },
 ];
 
 /** Bottom tab bar on mobile web — the 5 highest-frequency destinations. */
