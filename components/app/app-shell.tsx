@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { ChevronDown, Check, Gift, LogOut, Mic, Moon, Plus, Search, Send, Settings as SettingsIcon, Sparkles, SunMedium } from 'lucide-react';
+import { ChevronDown, Check, Gift, LogOut, Mic, Moon, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, Sparkles, SunMedium } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { APP_NAV, MOBILE_TABS } from '@/lib/constants/navigation';
@@ -76,7 +76,7 @@ function FamilySwitcher() {
 }
 
 function UserMenu() {
-  const { userEmail, selfMember } = useApp();
+  const { userEmail, selfMember, isSuperAdmin } = useApp();
   const [open, setOpen] = useState(false);
   const name = selfMember?.display_name ?? userEmail ?? 'You';
 
@@ -98,6 +98,11 @@ function UserMenu() {
               <p className="truncate text-xs text-muted">{userEmail}</p>
             </div>
             <div className="my-1 h-px bg-border" />
+            {isSuperAdmin && (
+              <Link href="/admin" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-brand hover:bg-elevated">
+                <ShieldCheck className="h-4 w-4" /> Site Admin
+              </Link>
+            )}
             <Link href="/dashboard/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
               <SettingsIcon className="h-4 w-4" /> Settings
             </Link>

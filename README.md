@@ -34,6 +34,7 @@ middleware.ts                   session refresh + protected-route guard
 - Managers (`parent`/`adult`) gate invites, billing, and member management via `can_manage_family()` / `is_family_admin()`.
 - The service-role key is server-only (webhooks, cron, push dispatch). The browser only ever uses the anon key, so the AI assistant physically cannot read another family's data.
 - Documents live in a **private** Storage bucket; serve via signed URLs only.
+- A site-wide **Super Administrator** (currently `daniel.hughen@gmail.com`, see `supabase/migrations/0008_super_admins.sql`) is the one exception to family isolation: `/admin` checks `is_super_admin()` (a `SECURITY DEFINER` function matched against an allowlist table no client can read directly) and, only then, uses the service-role client for genuine cross-family oversight. Add more admins via `insert into public.super_admins (email) values (...)`.
 
 ## Local setup
 ```bash

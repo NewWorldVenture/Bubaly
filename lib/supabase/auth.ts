@@ -25,6 +25,19 @@ export async function getUser() {
 }
 
 /**
+ * True only for the site-wide Super Administrator (matched by email against the
+ * super_admins allowlist, independent of family membership). Unlike family roles,
+ * this grants oversight of the whole site, not a single household — use sparingly.
+ */
+export async function isSuperAdmin(): Promise<boolean> {
+  const supabase = await createServer();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return false;
+  const { data } = await supabase.rpc('is_super_admin');
+  return data === true;
+}
+
+/**
  * Resolves the full user + active-family context. Returns null when not signed in,
  * or { needsFamily: true } when signed in but not yet in any family.
  */

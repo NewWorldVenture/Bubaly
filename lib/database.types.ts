@@ -258,6 +258,12 @@ export interface Database {
         { user_id: string; theme?: ThemePref; push_enabled?: boolean; email_enabled?: boolean; expo_push_token?: string | null; active_family_id?: string | null; notification_prefs?: Json },
         Partial<{ theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; notification_prefs: Json }>
       >;
+      // ── Site-wide super admin allowlist (email-keyed; readable only via is_super_admin()) ──
+      super_admins: T<
+        { email: string; created_at: string },
+        { email: string; created_at?: string },
+        Partial<{ email: string }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
@@ -267,6 +273,7 @@ export interface Database {
       is_family_member: { Args: { p_family_id: string }; Returns: boolean };
       can_manage_family: { Args: { p_family_id: string }; Returns: boolean };
       is_family_admin: { Args: { p_family_id: string }; Returns: boolean };
+      is_super_admin: { Args: Record<string, never>; Returns: boolean };
     };
     Enums: {
       member_role: MemberRole;

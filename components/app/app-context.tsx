@@ -14,6 +14,8 @@ export type AppContextValue = {
   family: Tables<'families'>;
   role: MemberRole;
   families: FamilyOption[];
+  /** Site-wide Super Administrator — independent of any family role. */
+  isSuperAdmin: boolean;
   members: Tables<'family_members'>[];
   /** The current user's member row in the active family (if they have one). */
   selfMember: Tables<'family_members'> | null;
