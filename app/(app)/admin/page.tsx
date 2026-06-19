@@ -8,6 +8,9 @@ import { EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'Site Admin', robots: { index: false } };
+// Always render fresh — this reads live, cross-family data via the service-role
+// client, which carries no dynamic API of its own to force this automatically.
+export const dynamic = 'force-dynamic';
 
 function StatCard({ icon: Icon, label, value }: {
   icon: React.ComponentType<{ className?: string }>; label: string; value: number;

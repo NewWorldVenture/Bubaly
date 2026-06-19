@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/states';
 import { PLANS, type Plan } from '@/lib/constants/plans';
 import { fmtDate, fmtMoney } from '@/lib/utils/format';
-import type { Tables } from '@/lib/database.types';
+import { GrowthChart } from '@/components/admin/growth-chart';
 
 export const metadata: Metadata = { title: 'Subscriptions', robots: { index: false } };
+export const dynamic = 'force-dynamic';
 
 const TABS = [
   { key: 'plans', label: 'Plans' },
@@ -61,38 +62,6 @@ function PlanDonut({ counts, total }: { counts: Map<string, number>; total: numb
         })}
       </ul>
     </div>
-  );
-}
-
-/** Real cumulative-growth area chart from actual subscription creation timestamps. */
-function GrowthChart({ subscriptions }: { subscriptions: Tables<'subscriptions'>[] }) {
-  const days = 30;
-  const now = new Date();
-  const points: number[] = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const cutoff = new Date(now);
-    cutoff.setDate(cutoff.getDate() - i);
-    cutoff.setHours(23, 59, 59, 999);
-    points.push(subscriptions.filter((s) => new Date(s.created_at) <= cutoff).length);
-  }
-  const max = Math.max(...points, 1);
-  const w = 600, h = 160;
-  const path = points
-    .map((v, i) => `${i === 0 ? 'M' : 'L'} ${(i / (points.length - 1)) * w} ${h - (v / max) * (h - 10) - 5}`)
-    .join(' ');
-  const areaPath = `${path} L ${w} ${h} L 0 ${h} Z`;
-
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-40 w-full" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="growthFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#7c5dff" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#7c5dff" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaPath} fill="url(#growthFill)" />
-      <path d={path} fill="none" stroke="#7c5dff" strokeWidth="2" />
-    </svg>
   );
 }
 
@@ -190,7 +159,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
           <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
             <Card>
               <h2 className="mb-4 text-base font-semibold">Subscriptions over time <span className="text-muted">(last 30 days)</span></h2>
-              <GrowthChart subscriptions={subs} />
+              <GrowthChart timestamps={subs.map((s) => s.created_at)} />
             </Card>
             <Card>
               <h2 className="mb-3 text-base font-semibold">By plan</h2>

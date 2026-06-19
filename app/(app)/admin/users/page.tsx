@@ -15,6 +15,7 @@ import { RoleDonut } from '@/components/admin/role-donut';
 import type { Tables } from '@/lib/database.types';
 
 export const metadata: Metadata = { title: 'Users & Families', robots: { index: false } };
+export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 10;
 const TABS = [
