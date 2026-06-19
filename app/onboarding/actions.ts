@@ -23,6 +23,18 @@ export async function createFamilyAction(input: { name: string; timezone: string
     .single();
   if (error || !family) return { ok: false, error: error?.message ?? 'Could not create family' };
 
+  // Add the creator as a parent member of the new family.
+  const displayName = auth.user.user_metadata?.full_name
+    ?? auth.user.email?.split('@')[0]
+    ?? 'Parent';
+  await supabase.from('family_members').insert({
+    family_id: family.id,
+    user_id: auth.user.id,
+    role: 'parent',
+    display_name: displayName,
+    is_active: true,
+  });
+
   // Make this the active family for the creator.
   await supabase.from('user_preferences').upsert(
     { user_id: auth.user.id, active_family_id: family.id },
