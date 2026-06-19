@@ -3,7 +3,7 @@ import './globals.css';
 import { ThemeScript } from '@/components/theme/theme-script';
 import { ToastProvider } from '@/components/ui/toast';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://familyos.app';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://theagoras.com';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
