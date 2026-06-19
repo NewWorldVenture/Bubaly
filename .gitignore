@@ -8,3 +8,4 @@ out/
 .DS_Store
 supabase/.branches
 supabase/.temp
+client_secret*.json

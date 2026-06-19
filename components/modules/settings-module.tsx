@@ -160,14 +160,22 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
     if (!email) return toastError('Email is required');
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.from('invites').insert({
+    const { data: invite, error } = await supabase.from('invites').insert({
       family_id: familyId,
       email,
       role,
       invited_by: userId,
+    }).select('id').single();
+    if (error || !invite) { setLoading(false); return toastError(error?.message ?? 'Failed'); }
+
+    // Fire invite email (non-blocking — don't fail UI if email fails)
+    void fetch('/api/email/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inviteId: invite.id }),
     });
+
     setLoading(false);
-    if (error) return toastError(error.message);
     onSent();
   }
 
