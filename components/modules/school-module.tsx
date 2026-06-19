@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useMemo, useState } from 'react';
 import { BookOpen, Calendar, ChevronRight, Filter, GraduationCap, MoreHorizontal, Plus, Sparkles } from 'lucide-react';
@@ -10,6 +10,8 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -18,7 +20,7 @@ const TABS = ['Overview', 'Assignments', 'Classes', 'Grades', 'Resources'] as co
 type Tab = (typeof TABS)[number];
 const EVENT_TYPES = ['general', 'holiday', 'field_trip', 'parent_meeting', 'exam', 'concert', 'sport', 'graduation', 'assignment', 'announcement'];
 const PRIO_STYLE: Record<string, string> = { High: 'bg-red-500/15 text-red-400 border border-red-500/25', Medium: 'bg-blue-500/15 text-blue-400 border border-blue-500/25', Low: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25' };
-const STATUS_STYLE: Record<string, string> = { 'Not Started': 'bg-white/10 text-white/60', 'In Progress': 'bg-violet-500/15 text-violet-300', Submitted: 'bg-emerald-500/15 text-emerald-300' };
+const STATUS_STYLE: Record<string, string> = { 'Not Started': 'bg-surface/40 text-muted', 'In Progress': 'bg-violet-500/15 text-violet-300', Submitted: 'bg-emerald-500/15 text-emerald-300' };
 const SUBJECT_ICONS: Record<string, string> = { Math: '📐', English: '📝', Science: '🔬', History: '🏛️', Spanish: '🌎', Art: '🎨', Music: '🎵', PE: '⚽' };
 const CLASS_SCHEDULE = [
   { time: '8:00 AM', subject: 'Math', room: 'Room 203', color: 'bg-violet-500' },
@@ -95,40 +97,41 @@ export function SchoolModule() {
   const ACCENT = ['bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-orange-500'];
 
   return (
-    <div className="flex gap-6 xl:gap-8">
-      <div className="min-w-0 flex-1 space-y-5">
-        <div className="flex items-start justify-between">
-          <div><h1 className="text-2xl font-bold">School</h1><p className="mt-1 text-sm text-white/55">Stay on top of classes, assignments, and school events.</p></div>
-          <button onClick={() => setOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-4 py-2.5 text-sm font-bold shadow-glow"><Plus className="h-4 w-4" /> Add Item</button>
-        </div>
-        <div className="flex items-center justify-between border-b border-white/8">
-          <div className="flex">{TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={cn('px-4 py-3 text-sm font-medium transition', tab === t ? 'border-b-2 border-violet-400 text-white' : 'text-white/50 hover:text-white/80')}>{t}</button>)}</div>
+    <div className="module-with-sidebar">
+      <div className="module-main module-page">
+        <PageHeader
+          title="School"
+          description="Stay on top of classes, assignments, and school events."
+          action={<button onClick={() => setOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Add Item</button>}
+        />
+        <div className="flex items-center justify-between border-b border-border">
+          <div className="tab-bar">{TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>)}</div>
           <div className="flex gap-2 pb-1">
-            <button className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/55"><Filter className="h-3 w-3" /> Filter</button>
-            <button className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/55"><MoreHorizontal className="h-3 w-3" /> More</button>
+            <button className="btn-inline"><Filter className="h-3 w-3" /> Filter</button>
+            <button className="btn-inline"><MoreHorizontal className="h-3 w-3" /> More</button>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid-stats gap-3">
           {[
             { icon: GraduationCap, label: 'Students', value: Math.max(members.length, 3), sub: 'Across all grades', bg: 'bg-violet-600/20 text-violet-300' },
             { icon: BookOpen, label: 'Assignments Due', value: Math.max(upcoming.length, 7), sub: 'This week', bg: 'bg-emerald-600/20 text-emerald-300' },
             { icon: Calendar, label: 'Events', value: Math.max(sidebarEvents.length, 2), sub: 'This week', bg: 'bg-orange-600/20 text-orange-300' },
             { icon: GraduationCap, label: 'Average Grade', value: 'A-', sub: 'This term', bg: 'bg-blue-600/20 text-blue-300' },
           ].map(({ icon: Icon, label, value, sub, bg }) => (
-            <div key={label} className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+            <div key={label} className="stat-card">
               <div className={cn('mb-3 grid h-10 w-10 place-items-center rounded-xl', bg)}><Icon className="h-5 w-5" /></div>
-              <p className="text-2xl font-black">{value}</p><p className="text-sm font-semibold">{label}</p><p className="text-xs text-white/40">{sub}</p>
+              <p className="text-2xl font-black">{value}</p><p className="text-sm font-semibold">{label}</p><p className="text-xs text-muted">{sub}</p>
             </div>
           ))}
         </div>
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03]">
+        <div className="rounded-2xl border border-border bg-surface/40">
           <div className="flex items-center justify-between p-5">
             <h2 className="font-semibold">Upcoming Assignments</h2>
-            <button className="flex items-center gap-1 text-xs font-semibold text-violet-300">View all assignments <ChevronRight className="h-3.5 w-3.5" /></button>
+            <button className="flex items-center gap-1 text-xs font-semibold text-brand">View all assignments <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
-          <div className="overflow-x-auto">
+          <div className="table-responsive overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="border-t border-white/8 text-xs text-white/40">
+              <thead><tr className="border-t border-border text-xs text-muted">
                 <th className="px-5 py-3 text-left font-medium">Assignment</th>
                 <th className="px-4 py-3 text-left font-medium">Student</th>
                 <th className="px-4 py-3 text-left font-medium">Subject</th>
@@ -150,36 +153,36 @@ export function SchoolModule() {
                   })
                   : FALLBACK_ROWS.map((r) => ({ ...r, key: r.title, member: members[r.sidx % Math.max(members.length, 1)] }))
                 ).map((row) => (
-                  <tr key={row.key} className="hover:bg-white/[0.02]">
+                  <tr key={row.key} className="hover:bg-surface/20">
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         <span className="text-lg">{SUBJECT_ICONS[row.subject] ?? '📚'}</span>
-                        <div><p className="font-medium">{row.title}</p><p className="text-xs text-white/40">{row.sub}</p></div>
+                        <div><p className="font-medium">{row.title}</p><p className="text-xs text-muted">{row.sub}</p></div>
                       </div>
                     </td>
                     <td className="px-4 py-3.5">
-                      {row.member ? <div className="flex items-center gap-2"><Avatar name={row.member.display_name} color={row.member.color} size={28} /><span>{row.member.display_name.split(' ')[0]}</span></div> : <span className="text-white/30">—</span>}
+                      {row.member ? <div className="flex items-center gap-2"><Avatar name={row.member.display_name} color={row.member.color} size={28} /><span>{row.member.display_name.split(' ')[0]}</span></div> : <span className="text-muted/60">—</span>}
                     </td>
-                    <td className="px-4 py-3.5 text-white/70">{row.subject}</td>
-                    <td className="px-4 py-3.5"><p className="font-medium">{row.due}</p><p className={cn('text-xs', row.urgent ? 'text-orange-400' : 'text-white/40')}>{row.dueSub}</p></td>
+                    <td className="px-4 py-3.5 text-fg">{row.subject}</td>
+                    <td className="px-4 py-3.5"><p className="font-medium">{row.due}</p><p className={cn('text-xs', row.urgent ? 'text-orange-400' : 'text-muted')}>{row.dueSub}</p></td>
                     <td className="px-4 py-3.5"><span className={cn('rounded-full px-2.5 py-1 text-xs font-bold', PRIO_STYLE[row.prio])}>{row.prio}</span></td>
                     <td className="px-4 py-3.5"><span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', STATUS_STYLE[row.status])}>{row.status}</span></td>
-                    <td className="px-4 py-3.5"><button className="text-white/25 hover:text-white/60"><MoreHorizontal className="h-4 w-4" /></button></td>
+                    <td className="px-4 py-3.5"><button className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="border-t border-white/8 p-4 text-center">
-            <button className="mx-auto flex items-center gap-1 text-xs font-semibold text-violet-300">View all assignments <ChevronRight className="h-3.5 w-3.5" /></button>
+          <div className="border-t border-border p-4 text-center">
+            <button className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand">View all assignments <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
         </div>
         <div className="grid gap-5 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Class Schedules</h2><button className="text-xs font-semibold text-violet-300">View full schedule →</button></div>
+          <div className="rounded-2xl border border-border bg-surface/40 p-5">
+            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Class Schedules</h2><button className="text-xs font-semibold text-brand">View full schedule →</button></div>
             <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
               {members.slice(0, 4).map((m, i) => (
-                <button key={m.id} onClick={() => setScheduleIdx(i)} className={cn('flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition', scheduleIdx === i ? 'bg-violet-600 text-white' : 'border border-white/10 text-white/60 hover:text-white/80')}>
+                <button key={m.id} onClick={() => setScheduleIdx(i)} className={cn('flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition', scheduleIdx === i ? 'bg-brand text-white' : 'border border-border text-muted hover:text-fg')}>
                   <Avatar name={m.display_name} color={m.color} size={18} />{m.display_name.split(' ')[0]}
                 </button>
               ))}
@@ -187,30 +190,30 @@ export function SchoolModule() {
             <div className="space-y-2.5">
               {CLASS_SCHEDULE.map(({ time, subject, room, color }) => (
                 <div key={time} className="flex items-center gap-3 text-sm">
-                  <span className="w-16 shrink-0 text-xs text-white/45 tabular-nums">{time}</span>
+                  <span className="w-16 shrink-0 text-xs text-muted tabular-nums">{time}</span>
                   <div className={cn('h-2.5 w-2.5 shrink-0 rounded-full', color)} />
                   <span className="flex-1 font-medium">{subject}</span>
-                  <span className="text-xs text-white/40">{room}</span>
+                  <span className="text-xs text-muted">{room}</span>
                 </div>
               ))}
             </div>
           </div>
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">School Announcements</h2><button className="text-xs font-semibold text-violet-300">View all →</button></div>
+          <div className="rounded-2xl border border-border bg-surface/40 p-5">
+            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">School Announcements</h2><button className="text-xs font-semibold text-brand">View all →</button></div>
             <div className="space-y-4">
               {ANNOUNCEMENTS_MOCK.map((a) => (
                 <div key={a.title} className="flex gap-3">
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/[0.04] text-lg">{a.icon}</div>
-                  <div><p className="text-sm font-semibold">{a.title}</p><p className="mt-0.5 text-xs leading-5 text-white/55">{a.body}</p><p className="mt-1 text-xs text-white/30">{a.time}</p></div>
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface/40 text-lg">{a.icon}</div>
+                  <div><p className="text-sm font-semibold">{a.title}</p><p className="mt-0.5 text-xs leading-5 text-muted">{a.body}</p><p className="mt-1 text-xs text-muted/60">{a.time}</p></div>
                 </div>
               ))}
             </div>
           </div>
         </div>
       </div>
-      <aside className="hidden w-72 shrink-0 space-y-5 xl:block">
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Upcoming School Events</h2><button className="text-xs font-semibold text-violet-300">View calendar →</button></div>
+      <aside className="module-sidebar hidden lg:flex lg:flex-col gap-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Upcoming School Events</h2><button className="text-xs font-semibold text-brand">View calendar →</button></div>
           <div className="space-y-3">
             {(sidebarEvents.length > 0 ? sidebarEvents : [
               { id: 'a', starts_at: new Date(Date.now() + 86400000 * 3).toISOString(), title: 'PTA Meeting', notes: 'School Library', event_type: 'parent_meeting', family_id: familyId, school_name: null, ends_at: null, source: null, member_id: null, created_by: null },
@@ -224,51 +227,51 @@ export function SchoolModule() {
                   <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-lg text-center text-white', ACCENT[i % ACCENT.length])}>
                     <div><p className="text-[9px] font-bold uppercase">{d.toLocaleDateString('en-US', { month: 'short' })}</p><p className="text-sm font-black leading-none">{d.getDate()}</p></div>
                   </div>
-                  <div><p className="text-sm font-semibold">{e.title}</p><p className="text-xs text-white/45">{d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p>{e.notes && <p className="text-xs text-white/35">{e.notes}</p>}</div>
+                  <div><p className="text-sm font-semibold">{e.title}</p><p className="text-xs text-muted">{d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p>{e.notes && <p className="text-xs text-muted/60">{e.notes}</p>}</div>
                 </div>
               );
             })}
           </div>
-          <button className="mt-4 flex items-center gap-1 text-xs text-violet-300">View all events <ChevronRight className="h-3.5 w-3.5" /></button>
+          <button className="mt-4 flex items-center gap-1 text-xs text-brand">View all events <ChevronRight className="h-3.5 w-3.5" /></button>
         </div>
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-          <h2 className="mb-4 font-semibold">Grade Summary <span className="text-xs text-white/35">(This Term)</span></h2>
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          <h2 className="mb-4 font-semibold">Grade Summary <span className="text-xs text-muted/60">(This Term)</span></h2>
           <div className="flex items-center gap-4">
             <div className="relative h-24 w-24 shrink-0">
               <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
                 <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="14" />
                 {gradeSegs.map((s, i) => s.dash > 0 && <circle key={i} cx="50" cy="50" r="40" fill="none" stroke={s.color} strokeWidth="14" strokeDasharray={`${s.dash} ${circ}`} strokeDashoffset={s.offset} />)}
               </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-xl font-black">{GRADE_DATA.gpa}</span><span className="text-[9px] text-white/40">GPA</span></div>
+              <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-xl font-black">{GRADE_DATA.gpa}</span><span className="text-[9px] text-muted">GPA</span></div>
             </div>
             <div className="space-y-1.5">
               {GRADE_DATA.dist.map(({ label, count, color }) => (
                 <div key={label} className="flex items-center gap-2 text-xs">
                   <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
-                  <span className="flex-1 text-white/60">{label}</span><span className="font-bold">{count}</span>
+                  <span className="flex-1 text-muted">{label}</span><span className="font-bold">{count}</span>
                 </div>
               ))}
             </div>
           </div>
-          <button className="mt-4 flex items-center gap-1 text-xs text-violet-300">View grade details <ChevronRight className="h-3.5 w-3.5" /></button>
+          <button className="mt-4 flex items-center gap-1 text-xs text-brand">View grade details <ChevronRight className="h-3.5 w-3.5" /></button>
         </div>
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Important Dates</h2><button className="text-xs font-semibold text-violet-300">View all</button></div>
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Important Dates</h2><button className="text-xs font-semibold text-brand">View all</button></div>
           <div className="space-y-3">
             {IMPORTANT_DATES.map(({ month, day, label, sub }) => (
               <div key={label} className="flex items-start gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500/15 text-center"><div><p className="text-[9px] font-bold uppercase text-violet-300">{month}</p><p className="text-sm font-black text-violet-200 leading-none">{day}</p></div></div>
-                <div><p className="text-sm font-semibold">{label}</p><p className="text-xs text-white/40">{sub}</p></div>
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand/15 text-center"><div><p className="text-[9px] font-bold uppercase text-brand">{month}</p><p className="text-sm font-black text-violet-200 leading-none">{day}</p></div></div>
+                <div><p className="text-sm font-semibold">{label}</p><p className="text-xs text-muted">{sub}</p></div>
               </div>
             ))}
           </div>
-          <button className="mt-4 flex items-center gap-1 text-xs text-violet-300">View academic calendar <ChevronRight className="h-3.5 w-3.5" /></button>
+          <button className="mt-4 flex items-center gap-1 text-xs text-brand">View academic calendar <ChevronRight className="h-3.5 w-3.5" /></button>
         </div>
-        <div className="rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-violet-600/20"><Sparkles className="h-6 w-6 text-violet-300" /></div>
+        <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand" /></div>
           <h3 className="font-bold">AI Study Helper</h3>
-          <p className="mt-2 text-xs leading-5 text-white/55">Get study tips, homework help, and resources for your kids.</p>
-          <button className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 py-2.5 text-sm font-bold shadow-glow">Ask AI</button>
+          <p className="mt-2 text-xs leading-5 text-muted">Get study tips, homework help, and resources for your kids.</p>
+          <button className="btn-cta mt-4 w-full">Ask AI</button>
         </div>
       </aside>
       <Modal open={open} title="Add School Event" onClose={() => setOpen(false)}>
@@ -278,7 +281,7 @@ export function SchoolModule() {
           <Field label="Student">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">All</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label="Date & Time">{(id) => <Input id={id} type="datetime-local" value={form.starts_at} onChange={(e) => setForm((f) => ({ ...f, starts_at: e.target.value }))} />}</Field>
           <Field label="Notes">{(id) => <Input id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />}</Field>
-          <button onClick={save} disabled={saving || !form.title || !form.starts_at} className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 py-3 text-sm font-bold disabled:opacity-40">{saving ? 'Saving…' : 'Add Event'}</button>
+          <Button className="w-full" onClick={save} disabled={saving || !form.title || !form.starts_at}>{saving ? 'Saving…' : 'Add Event'}</Button>
         </div>
       </Modal>
     </div>

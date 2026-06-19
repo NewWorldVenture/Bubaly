@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useMemo, useState } from 'react';
 import { Activity, ChevronRight, Filter, Heart, MoreHorizontal, Plus, Sparkles, Zap } from 'lucide-react';
@@ -10,6 +10,8 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -44,7 +46,7 @@ const INSIGHTS_MOCK = [
 ];
 
 const HEALTH_SUMMARY = [
-  { label: 'Avg Steps', value: '7,114', sub: 'Family average', color: 'text-violet-300' },
+  { label: 'Avg Steps', value: '7,114', sub: 'Family average', color: 'text-brand' },
   { label: 'Avg Sleep', value: '8h 22m', sub: 'Per night', color: 'text-blue-300' },
   { label: 'Calories Burned', value: '1,892', sub: 'Today combined', color: 'text-emerald-300' },
   { label: 'Active Days', value: '5 / 7', sub: 'This week', color: 'text-orange-300' },
@@ -106,32 +108,33 @@ export function HealthModule() {
   const ACCENT = ['bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-orange-500'];
 
   return (
-    <div className="flex gap-6 xl:gap-8">
-      <div className="min-w-0 flex-1 space-y-5">
-        <div className="flex items-start justify-between">
-          <div><h1 className="text-2xl font-bold">Health</h1><p className="mt-1 text-sm text-white/55">Track fitness, wellness, and health across your whole family.</p></div>
-          <button onClick={() => setOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-4 py-2.5 text-sm font-bold shadow-glow"><Plus className="h-4 w-4" /> Add Checkup</button>
+    <div className="module-with-sidebar">
+      <div className="module-main space-y-5">
+        <PageHeader
+          title="Health"
+          description="Track fitness, wellness, and health across your whole family."
+          action={<Button onClick={() => setOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Add Checkup</Button>}
+        />
+        <div className="flex items-center justify-between border-b border-border">
+          <div className="tab-bar">{TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>)}</div>
+          <div className="shrink-0 pb-1"><button className="btn-inline"><Filter className="h-3 w-3" /> Filter</button></div>
         </div>
-        <div className="flex items-center justify-between border-b border-white/8">
-          <div className="flex overflow-x-auto">{TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={cn('px-4 py-3 text-sm font-medium transition whitespace-nowrap', tab === t ? 'border-b-2 border-violet-400 text-white' : 'text-white/50 hover:text-white/80')}>{t}</button>)}</div>
-          <div className="shrink-0 pb-1"><button className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/55"><Filter className="h-3 w-3" /> Filter</button></div>
-        </div>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid-stats gap-3">
           {[
             { icon: Heart, label: 'Family Members', value: members.length || 4, sub: 'Tracking health', bg: 'bg-rose-600/20 text-rose-300' },
-            { icon: Activity, label: 'Steps Today', value: '28,456', sub: 'Family combined', bg: 'bg-violet-600/20 text-violet-300' },
+            { icon: Activity, label: 'Steps Today', value: '28,456', sub: 'Family combined', bg: 'bg-brand/15 text-brand' },
             { icon: Zap, label: 'Active Calories', value: '1,892', sub: 'Today combined', bg: 'bg-orange-600/20 text-orange-300' },
             { icon: Activity, label: 'Avg Sleep', value: '8h 22m', sub: 'Last night', bg: 'bg-blue-600/20 text-blue-300' },
           ].map(({ icon: Icon, label, value, sub, bg }) => (
-            <div key={label} className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+            <div key={label} className="rounded-2xl border border-border bg-surface/40 p-4">
               <div className={cn('mb-3 grid h-10 w-10 place-items-center rounded-xl', bg)}><Icon className="h-5 w-5" /></div>
-              <p className="text-2xl font-black">{value}</p><p className="text-sm font-semibold">{label}</p><p className="text-xs text-white/40">{sub}</p>
+              <p className="text-2xl font-black">{value}</p><p className="text-sm font-semibold">{label}</p><p className="text-xs text-muted">{sub}</p>
             </div>
           ))}
         </div>
         <div className="grid gap-5 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Activity Summary</h2><span className="text-xs text-white/40">Today</span></div>
+          <div className="rounded-2xl border border-border bg-surface/40 p-5">
+            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Activity Summary</h2><span className="text-xs text-muted">Today</span></div>
             <div className="flex items-center gap-6">
               <div className="relative h-32 w-32 shrink-0">
                 <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
@@ -141,48 +144,48 @@ export function HealthModule() {
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-2xl font-black">{goalPct}%</span>
-                  <span className="text-[10px] text-white/40">Goal Met</span>
+                  <span className="text-[10px] text-muted">Goal Met</span>
                 </div>
               </div>
               <div className="space-y-3 flex-1">
                 {[{ label: 'Steps', val: '8,234', goal: '10,000', pct: 82 }, { label: 'Calories', val: '1,245', goal: '2,000', pct: 62 }, { label: 'Active Min', val: '38', goal: '60', pct: 63 }].map((s) => (
                   <div key={s.label}>
-                    <div className="flex justify-between text-xs mb-1"><span className="text-white/60">{s.label}</span><span className="font-semibold">{s.val} / {s.goal}</span></div>
-                    <div className="h-1.5 rounded-full bg-white/8"><div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-emerald-400" style={{ width: `${s.pct}%` }} /></div>
+                    <div className="flex justify-between text-xs mb-1"><span className="text-muted">{s.label}</span><span className="font-semibold">{s.val} / {s.goal}</span></div>
+                    <div className="h-1.5 rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-emerald-400" style={{ width: `${s.pct}%` }} /></div>
                   </div>
                 ))}
               </div>
             </div>
             <div className="mt-5">
-              <p className="mb-3 text-xs text-white/40">This Week</p>
+              <p className="mb-3 text-xs text-muted">This Week</p>
               <div className="flex items-end gap-1.5 h-16">
                 {WEEKLY_BARS.map(({ day, val }) => (
                   <div key={day} className="flex flex-1 flex-col items-center gap-1">
                     <div className="w-full rounded-sm bg-gradient-to-t from-violet-600 to-blue-400 opacity-80" style={{ height: `${val}%` }} />
-                    <span className="text-[9px] text-white/35">{day}</span>
+                    <span className="text-[9px] text-muted/60">{day}</span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Family Health at a Glance</h2><button className="text-xs font-semibold text-violet-300">View details →</button></div>
+          <div className="rounded-2xl border border-border bg-surface/40 p-5">
+            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Family Health at a Glance</h2><button className="text-xs font-semibold text-brand">View details &rarr;</button></div>
             <div className="space-y-3">
               {members.slice(0, 4).map((m, i) => {
                 const stats = MEMBER_STATS[i % MEMBER_STATS.length];
                 return (
-                  <div key={m.id} className="rounded-xl border border-white/8 p-3">
+                  <div key={m.id} className="rounded-xl border border-border p-3">
                     <div className="flex items-center gap-3 mb-2.5">
                       <Avatar name={m.display_name} color={m.color} size={32} />
-                      <div className="flex-1"><p className="text-sm font-semibold">{m.display_name}</p><p className="text-xs text-white/40">{m.role}</p></div>
+                      <div className="flex-1"><p className="text-sm font-semibold">{m.display_name}</p><p className="text-xs text-muted">{m.role}</p></div>
                       <span className="text-xs font-bold" style={{ color: stats.color }}>{stats.pct}%</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                      <div><p className="font-bold">{stats.steps.toLocaleString()}</p><p className="text-white/40">Steps</p></div>
-                      <div><p className="font-bold">{stats.sleep}</p><p className="text-white/40">Sleep</p></div>
-                      <div><p className="font-bold">{stats.hr} bpm</p><p className="text-white/40">Heart Rate</p></div>
+                      <div><p className="font-bold">{stats.steps.toLocaleString()}</p><p className="text-muted">Steps</p></div>
+                      <div><p className="font-bold">{stats.sleep}</p><p className="text-muted">Sleep</p></div>
+                      <div><p className="font-bold">{stats.hr} bpm</p><p className="text-muted">Heart Rate</p></div>
                     </div>
-                    <div className="mt-2.5 h-1.5 rounded-full bg-white/8"><div className="h-full rounded-full" style={{ width: `${stats.pct}%`, background: stats.color }} /></div>
+                    <div className="mt-2.5 h-1.5 rounded-full bg-border"><div className="h-full rounded-full" style={{ width: `${stats.pct}%`, background: stats.color }} /></div>
                   </div>
                 );
               })}
@@ -190,45 +193,45 @@ export function HealthModule() {
           </div>
         </div>
         <div className="grid gap-5 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Recent Workouts</h2><button className="text-xs font-semibold text-violet-300">View all →</button></div>
+          <div className="rounded-2xl border border-border bg-surface/40 p-5">
+            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Recent Workouts</h2><button className="text-xs font-semibold text-brand">View all &rarr;</button></div>
             <div className="space-y-3">
               {WORKOUTS_MOCK.map((w) => (
                 <div key={w.name} className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/[0.04] text-xl">{w.icon}</div>
-                  <div className="flex-1 min-w-0"><p className="text-sm font-semibold">{w.name}</p><p className="text-xs text-white/45">{w.sub}</p></div>
-                  <div className="text-right shrink-0"><p className="text-sm font-bold text-emerald-300">{w.cal}</p><p className="text-xs text-white/35">{w.time}</p></div>
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface/40 text-xl">{w.icon}</div>
+                  <div className="flex-1 min-w-0"><p className="text-sm font-semibold">{w.name}</p><p className="text-xs text-muted">{w.sub}</p></div>
+                  <div className="text-right shrink-0"><p className="text-sm font-bold text-emerald-300">{w.cal}</p><p className="text-xs text-muted/60">{w.time}</p></div>
                 </div>
               ))}
             </div>
           </div>
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Health Insights</h2><span className="flex items-center gap-1 text-xs text-violet-300"><Sparkles className="h-3 w-3" /> AI-powered</span></div>
+          <div className="rounded-2xl border border-border bg-surface/40 p-5">
+            <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Health Insights</h2><span className="flex items-center gap-1 text-xs text-brand"><Sparkles className="h-3 w-3" /> AI-powered</span></div>
             <div className="space-y-3">
               {INSIGHTS_MOCK.map((insight) => (
                 <div key={insight.text} className={cn('flex items-start gap-3 rounded-xl border p-3', insight.color)}>
                   <span className="text-lg shrink-0">{insight.icon}</span>
-                  <p className="text-xs leading-5 text-white/80">{insight.text}</p>
+                  <p className="text-xs leading-5 text-fg">{insight.text}</p>
                 </div>
               ))}
             </div>
           </div>
         </div>
       </div>
-      <aside className="hidden w-72 shrink-0 space-y-5 xl:block">
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
+      <aside className="module-sidebar hidden lg:flex lg:flex-col gap-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <h2 className="mb-4 font-semibold">Health Summary</h2>
           <div className="space-y-4">
             {HEALTH_SUMMARY.map(({ label, value, sub, color }) => (
               <div key={label} className="flex items-center justify-between">
-                <div><p className="text-sm font-semibold">{label}</p><p className="text-xs text-white/40">{sub}</p></div>
+                <div><p className="text-sm font-semibold">{label}</p><p className="text-xs text-muted">{sub}</p></div>
                 <span className={cn('text-lg font-black', color)}>{value}</span>
               </div>
             ))}
           </div>
         </div>
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Upcoming Checkups</h2><button className="text-xs font-semibold text-violet-300">View all →</button></div>
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Upcoming Checkups</h2><button className="text-xs font-semibold text-brand">View all &rarr;</button></div>
           <div className="space-y-3">
             {appts.slice(0, 4).map((a, i) => {
               const d = new Date(a.starts_at);
@@ -240,36 +243,36 @@ export function HealthModule() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold">{a.title}</p>
-                    {member && <p className="text-xs text-white/45">{member.display_name}</p>}
-                    {a.notes && <p className="text-xs text-white/35">{a.notes}</p>}
+                    {member && <p className="text-xs text-muted">{member.display_name}</p>}
+                    {a.notes && <p className="text-xs text-muted/60">{a.notes}</p>}
                   </div>
                 </div>
               );
             })}
           </div>
-          <button onClick={() => setOpen(true)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 py-2.5 text-xs font-semibold text-white/60 hover:text-white/80">
+          <button onClick={() => setOpen(true)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-xs font-semibold text-muted hover:text-fg">
             <Plus className="h-3.5 w-3.5" /> Add Checkup
           </button>
         </div>
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Health Reminders</h2><button className="text-xs font-semibold text-violet-300">View all →</button></div>
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Health Reminders</h2><button className="text-xs font-semibold text-brand">View all &rarr;</button></div>
           <div className="space-y-3">
             {(reminders.length > 0
               ? reminders.map((r) => ({ title: r.title, notes: r.notes }))
               : REMINDERS_FALLBACK
             ).slice(0, 4).map((r) => (
               <div key={r.title} className="flex items-start gap-3">
-                <div className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 border-white/20" />
-                <div><p className="text-sm font-semibold">{r.title}</p>{r.notes && <p className="text-xs text-white/40">{r.notes}</p>}</div>
+                <div className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 border-border" />
+                <div><p className="text-sm font-semibold">{r.title}</p>{r.notes && <p className="text-xs text-muted">{r.notes}</p>}</div>
               </div>
             ))}
           </div>
         </div>
-        <div className="rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-violet-600/20"><Sparkles className="h-6 w-6 text-violet-300" /></div>
+        <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand" /></div>
           <h3 className="font-bold">AI Health Coach</h3>
-          <p className="mt-2 text-xs leading-5 text-white/55">Get personalized health tips and wellness insights for your family.</p>
-          <button className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 py-2.5 text-sm font-bold shadow-glow">Ask AI</button>
+          <p className="mt-2 text-xs leading-5 text-muted">Get personalized health tips and wellness insights for your family.</p>
+          <Button onClick={() => {}} className="btn-cta mt-4 w-full">Ask AI</Button>
         </div>
       </aside>
       <Modal open={open} title="Add Appointment" onClose={() => setOpen(false)}>
@@ -278,7 +281,7 @@ export function HealthModule() {
           <Field label="Member">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">All</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label="Date & Time">{(id) => <Input id={id} type="datetime-local" value={form.starts_at} onChange={(e) => setForm((f) => ({ ...f, starts_at: e.target.value }))} />}</Field>
           <Field label="Notes (Provider, Location)">{(id) => <Input id={id} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="e.g. Dr. Martinez · Oak Medical" />}</Field>
-          <button onClick={save} disabled={saving || !form.title || !form.starts_at} className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 py-3 text-sm font-bold disabled:opacity-40">{saving ? 'Saving…' : 'Add Appointment'}</button>
+          <Button onClick={save} disabled={saving || !form.title || !form.starts_at} loading={saving} className="w-full">{saving ? 'Saving...' : 'Add Appointment'}</Button>
         </div>
       </Modal>
     </div>

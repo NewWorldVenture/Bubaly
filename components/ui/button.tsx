@@ -3,7 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
-type Size = 'sm' | 'md' | 'lg';
+type Size = 'sm' | 'md' | 'lg' | 'icon';
 
 const VARIANTS: Record<Variant, string> = {
   primary:
@@ -15,9 +15,10 @@ const VARIANTS: Record<Variant, string> = {
 };
 
 const SIZES: Record<Size, string> = {
-  sm: 'h-9 px-3 text-sm gap-1.5',
-  md: 'h-11 px-5 text-sm gap-2',
-  lg: 'h-13 px-7 text-base gap-2.5 h-[3.25rem]',
+  sm: 'h-9 min-w-[2.25rem] px-3 text-sm gap-1.5',
+  md: 'h-11 min-w-[2.75rem] px-5 text-sm gap-2',
+  lg: 'h-[3.25rem] min-w-[3.25rem] px-7 text-base gap-2.5',
+  icon: 'h-10 w-10 p-0 justify-center',
 };
 
 export interface ButtonProps
@@ -27,7 +28,6 @@ export interface ButtonProps
   loading?: boolean;
 }
 
-/** Primary action button. Large tap targets, accessible focus ring, loading state. */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', loading, disabled, children, ...props }, ref) => (
     <button

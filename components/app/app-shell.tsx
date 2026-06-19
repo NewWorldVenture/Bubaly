@@ -76,7 +76,7 @@ function FamilySwitcher() {
 }
 
 function UserMenu() {
-  const { userEmail, selfMember, family } = useApp();
+  const { userEmail, selfMember } = useApp();
   const [open, setOpen] = useState(false);
   const name = selfMember?.display_name ?? userEmail ?? 'You';
 
@@ -87,7 +87,7 @@ function UserMenu() {
         className="inline-flex items-center rounded-full focus-ring"
         aria-label="Account menu"
       >
-        <Avatar name={name} color={selfMember?.color} size={40} />
+        <Avatar name={name} color={selfMember?.color} size={36} className="sm:h-10 sm:w-10" />
       </button>
       {open && (
         <>
@@ -117,13 +117,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-dvh bg-[#040a12] text-white lg:flex">
+    <div className="min-h-dvh bg-bg text-fg lg:flex">
       {/* Desktop sidebar */}
-      <aside className="hidden w-[280px] shrink-0 flex-col border-r border-white/8 bg-[#050c15] lg:flex">
-        <div className="px-7 py-7">
+      <aside className="hidden w-sidebar shrink-0 flex-col border-r border-border/60 bg-surface/30 lg:flex">
+        <div className="px-5 py-5 xl:px-7 xl:py-7">
           <Logo href="/dashboard" markVariant="home" />
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto px-4 pb-4">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4 xl:px-4">
           {APP_NAV.map((item) => {
             const active = isActive(pathname, item.href);
             return (
@@ -131,8 +131,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium transition',
-                  active ? 'bg-gradient-to-r from-violet-700 to-violet-950 text-white shadow-glow' : 'text-white/82 hover:bg-white/[0.06] hover:text-white',
+                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition xl:px-4 xl:py-3 xl:text-base',
+                  active ? 'bg-brand/15 text-brand shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg',
                 )}
               >
                 <item.icon className="h-5 w-5 shrink-0" />
@@ -141,25 +141,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="space-y-5 px-4 pb-5">
+        <div className="space-y-4 px-3 pb-4 xl:px-4 xl:pb-5">
           <FamilySwitcher />
-          <div className="rounded-2xl border border-violet-400/25 bg-gradient-to-b from-violet-500/15 to-white/[0.035] p-5 text-center">
-            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-violet-600/20">
-              <Sparkles className="h-10 w-10 text-violet-300" />
+          <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4 text-center xl:p-5">
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand/15 xl:h-20 xl:w-20">
+              <Sparkles className="h-8 w-8 text-brand xl:h-10 xl:w-10" />
             </div>
-            <h2 className="mt-4 font-bold">Your AI Chief of Staff</h2>
-            <p className="mt-3 text-sm leading-6 text-white/68">
+            <h2 className="mt-3 text-sm font-bold xl:mt-4 xl:text-base">Your AI Chief of Staff</h2>
+            <p className="mt-2 text-xs leading-5 text-muted xl:mt-3 xl:text-sm xl:leading-6">
               I&apos;m here to help your family stay organized, save time, and reduce stress.
             </p>
-            <Link href="/ai" className="mt-5 inline-flex w-full justify-center rounded-lg bg-violet-700 px-4 py-3 text-sm font-bold">
+            <Link href="/ai" className="mt-3 inline-flex w-full justify-center rounded-lg bg-brand px-4 py-2.5 text-sm font-bold text-brand-fg transition hover:opacity-90 xl:mt-5 xl:py-3">
               Learn More
             </Link>
           </div>
-          <div className="grid grid-cols-2 rounded-xl border border-white/8 bg-white/[0.035] p-1 text-sm">
-            <button className="flex items-center justify-center gap-2 rounded-lg bg-blue-900/70 py-3 font-semibold">
+          <div className="grid grid-cols-2 rounded-xl border border-border bg-surface/40 p-1 text-sm">
+            <button className="flex items-center justify-center gap-2 rounded-lg bg-brand/15 py-2.5 font-semibold text-brand">
               <Moon className="h-4 w-4" /> Dark
             </button>
-            <button className="flex items-center justify-center gap-2 rounded-lg py-3 text-white/70">
+            <button className="flex items-center justify-center gap-2 rounded-lg py-2.5 text-muted">
               <SunMedium className="h-4 w-4" /> Light
             </button>
           </div>
@@ -169,29 +169,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex h-[88px] items-center gap-5 border-b border-white/8 bg-[#050b13]/85 px-4 backdrop-blur-xl sm:px-7">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/60 bg-bg/85 px-3 backdrop-blur-xl sm:h-topbar sm:gap-5 sm:px-5 lg:px-7">
           <Link href="/dashboard" className="lg:hidden">
-            <LogoMark className="h-9 w-9" variant="home" />
+            <LogoMark className="h-8 w-8 sm:h-9 sm:w-9" variant="home" />
           </Link>
           <div className="flex-1" />
-          <label className="hidden h-12 w-full max-w-[360px] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.045] px-4 text-white/55 md:flex">
-            <input className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/55" placeholder="Ask anything..." />
-            <Search className="h-5 w-5" />
+          <label className="hidden h-10 w-full max-w-[320px] items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 text-muted md:flex lg:max-w-[360px] xl:h-12 xl:gap-3 xl:px-4">
+            <Search className="h-4 w-4 shrink-0" />
+            <input className="min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-muted" placeholder="Ask anything..." />
           </label>
-          <Link href="/dashboard/notifications" className="hidden h-10 w-10 items-center justify-center rounded-full text-white hover:bg-white/[0.06] md:inline-flex">
+          <Link href="/dashboard/notifications" className="hidden h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg md:inline-flex">
             <Gift className="h-5 w-5" />
           </Link>
           <NotificationBell />
           <UserMenu />
         </header>
 
-        <main className="flex-1 px-4 pb-24 pt-6 sm:px-7 lg:pb-10">
+        <main className="flex-1 px-3 pb-24 pt-4 sm:px-5 sm:pt-6 lg:px-7 lg:pb-8">
           <div className="mx-auto max-w-[1480px]">{children}</div>
         </main>
       </div>
 
       {/* Mobile bottom tabs */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/85 backdrop-blur-xl lg:hidden">
+      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/90 backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex max-w-lg items-stretch justify-around">
           {MOBILE_TABS.map((item) => {
             const active = isActive(pathname, item.href);
@@ -200,11 +200,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition',
+                  'flex flex-1 flex-col items-center gap-0.5 pb-1 pt-2 text-[11px] font-medium transition',
                   active ? 'text-brand' : 'text-muted',
                 )}
               >
-                <item.icon className="h-6 w-6" />
+                <item.icon className={cn('h-6 w-6', active && 'scale-110')} />
                 {item.label}
               </Link>
             );
@@ -217,17 +217,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 export function AssistantInputBar() {
   return (
-    <div className="flex min-h-24 items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.045] px-4">
-      <Plus className="h-6 w-6 text-white/55" />
+    <div className="flex min-h-20 items-center gap-2 rounded-2xl border border-border bg-surface/40 px-3 sm:min-h-24 sm:gap-3 sm:px-4">
+      <Plus className="h-5 w-5 text-muted sm:h-6 sm:w-6" />
       <input
-        className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-white/55"
+        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted sm:text-base"
         placeholder="Ask anything or give a command..."
       />
-      <button className="grid h-12 w-12 place-items-center rounded-full bg-violet-700">
-        <Mic className="h-6 w-6" />
+      <button className="grid h-10 w-10 place-items-center rounded-full bg-brand sm:h-12 sm:w-12">
+        <Mic className="h-5 w-5 text-brand-fg sm:h-6 sm:w-6" />
       </button>
-      <button className="grid h-12 w-12 place-items-center rounded-full bg-white/10">
-        <Send className="h-6 w-6" />
+      <button className="grid h-10 w-10 place-items-center rounded-full bg-elevated sm:h-12 sm:w-12">
+        <Send className="h-5 w-5 sm:h-6 sm:w-6" />
       </button>
     </div>
   );

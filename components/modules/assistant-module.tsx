@@ -140,39 +140,39 @@ export function AssistantModule() {
   const ACCENT_COLORS = ['bg-emerald-500', 'bg-indigo-500', 'bg-orange-500', 'bg-rose-500'];
 
   return (
-    <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_330px]">
+    <div className="flex flex-col gap-7 lg:flex-row">
       {/* Main chat column */}
-      <section className="flex min-h-0 min-w-0 flex-col">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-4">
           <div className="glow-dot h-14 w-14 shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-blue-600 shadow-glow" />
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-black">AI Assistant</h1>
-            <span className="rounded-md bg-violet-700 px-3 py-1 text-xs font-black">BETA</span>
+            <span className="rounded-md bg-brand px-3 py-1 text-xs font-black text-brand-fg">BETA</span>
           </div>
         </div>
 
         <div className="mt-8">
-          <h2 className="text-5xl font-black">Hi, {firstName}! 👋</h2>
-          <p className="mt-2 bg-gradient-to-r from-violet-400 to-fuchsia-200 bg-clip-text text-4xl font-black text-transparent">
+          <h2 className="text-3xl font-black sm:text-5xl">Hi, {firstName}! 👋</h2>
+          <p className="mt-2 bg-gradient-to-r from-violet-400 to-fuchsia-200 bg-clip-text text-2xl font-black text-transparent sm:text-4xl">
             How can I help your family today?
           </p>
-          <p className="mt-4 text-lg text-white/65">I can help you plan, organize, and stay ahead of everything.</p>
+          <p className="mt-4 text-base text-muted sm:text-lg">I can help you plan, organize, and stay ahead of everything.</p>
         </div>
 
-        <div className="mt-7 flex flex-wrap gap-2.5">
+        <div className="mt-7 flex gap-2.5 overflow-x-auto scrollbar-none sm:flex-wrap sm:overflow-x-visible">
           {CHIPS.map(([Icon, label]) => (
             <button
               key={label} onClick={() => void send(label === 'More suggestions' ? 'Give me more suggestions for things I can ask you.' : label)}
-              className="inline-flex h-11 items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.04] px-4 text-sm text-white/85 transition hover:bg-white/[0.07]"
+              className="inline-flex h-11 shrink-0 items-center gap-2.5 rounded-full border border-border bg-surface/40 px-4 text-sm text-fg transition hover:bg-elevated"
             >
-              <Icon className="h-4 w-4 text-violet-400" />
+              <Icon className="h-4 w-4 text-brand" />
               {label}
             </button>
           ))}
         </div>
 
-        <div className="my-8 grid grid-cols-[1fr_auto_1fr] items-center gap-4 text-xs text-white/40">
-          <span className="h-px bg-white/10" /> Today <span className="h-px bg-white/10" />
+        <div className="my-8 grid grid-cols-[1fr_auto_1fr] items-center gap-4 text-xs text-muted">
+          <span className="h-px bg-border" /> Today <span className="h-px bg-border" />
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto pb-4">
@@ -180,13 +180,13 @@ export function AssistantModule() {
             msg.role === 'assistant' ? (
               <div key={msg.id} className="flex gap-4">
                 <div className="mt-1 h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-blue-600 shadow-glow" />
-                <div className="max-w-[480px] rounded-2xl border border-white/8 bg-white/[0.04] p-5 text-sm leading-6">
+                <div className="max-w-[480px] rounded-2xl border border-border bg-surface/40 p-5 text-sm leading-6">
                   {msg.content}
                 </div>
               </div>
             ) : (
               <div key={msg.id} className="ml-auto max-w-[520px] text-right">
-                <div className="inline-block rounded-2xl bg-violet-700 px-5 py-3.5 text-sm font-medium">
+                <div className="inline-block rounded-2xl bg-brand px-5 py-3.5 text-sm font-medium text-brand-fg">
                   {msg.content}
                 </div>
               </div>
@@ -195,9 +195,9 @@ export function AssistantModule() {
           {loading && (
             <div className="flex gap-4">
               <div className="mt-1 h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-blue-600" />
-              <div className="flex items-center gap-1.5 rounded-2xl border border-white/8 bg-white/[0.04] px-5 py-4">
+              <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-surface/40 px-5 py-4">
                 {[0, 1, 2].map((i) => (
-                  <div key={i} className="h-2 w-2 animate-bounce rounded-full bg-violet-400" style={{ animationDelay: `${i * 0.15}s` }} />
+                  <div key={i} className="h-2 w-2 animate-bounce rounded-full bg-brand" style={{ animationDelay: `${i * 0.15}s` }} />
                 ))}
               </div>
             </div>
@@ -207,41 +207,41 @@ export function AssistantModule() {
 
         {/* Input bar */}
         <div className="mt-4">
-          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-            <Plus className="h-5 w-5 shrink-0 text-white/45" />
+          <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-4 py-3">
+            <Plus className="h-5 w-5 shrink-0 text-muted" />
             <input
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/45"
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
               placeholder="Ask anything or give a command..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
               disabled={loading}
             />
-            <button onClick={() => void send()} disabled={loading || !input.trim()} className="grid h-10 w-10 place-items-center rounded-full bg-violet-700 disabled:opacity-40">
+            <button onClick={() => void send()} disabled={loading || !input.trim()} className="grid h-10 w-10 place-items-center rounded-full bg-brand text-brand-fg disabled:opacity-40">
               <Send className="h-4 w-4" />
             </button>
           </div>
-          <p className="mt-3 text-center text-xs text-white/35">AI can make mistakes. Please double-check important information.</p>
+          <p className="mt-3 text-center text-xs text-muted/60">AI can make mistakes. Please double-check important information.</p>
         </div>
       </section>
 
-      {/* Sidebar */}
-      <aside className="space-y-5">
+      {/* Sidebar — hidden on mobile, horizontal scroll cards on md, vertical on lg */}
+      <aside className="hidden lg:block lg:w-[330px] lg:shrink-0 lg:space-y-5">
         {/* At a Glance */}
         <SideCard title="At a Glance">
           {glance.map(({ icon: Icon, value, label }) => (
             <div key={label} className="flex items-center gap-4 py-2.5">
-              <Icon className="h-6 w-6 shrink-0 text-white/80" />
+              <Icon className="h-6 w-6 shrink-0 text-fg" />
               <div>
                 <p className="text-xl font-bold">{value}</p>
-                <p className="text-xs text-white/55">{label}</p>
+                <p className="text-xs text-muted">{label}</p>
               </div>
             </div>
           ))}
         </SideCard>
 
         {/* Upcoming */}
-        <SideCard title="Upcoming" action={<a href="/dashboard/calendar" className="text-xs font-semibold text-violet-300">View Calendar</a>}>
+        <SideCard title="Upcoming" action={<a href="/dashboard/calendar" className="text-xs font-semibold text-brand">View Calendar</a>}>
           {upcoming.length > 0 ? upcoming.map((e, i) => {
             const d = new Date(e.starts_at);
             return (
@@ -251,7 +251,7 @@ export function AssistantModule() {
                 </span>
                 <div>
                   <p className="font-semibold text-sm">{e.title}</p>
-                  <p className="text-xs text-white/55">
+                  <p className="text-xs text-muted">
                     {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     {!e.all_day && ` · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
                   </p>
@@ -259,7 +259,7 @@ export function AssistantModule() {
               </div>
             );
           }) : (
-            <p className="py-4 text-sm text-white/35 text-center">No upcoming events</p>
+            <p className="py-4 text-sm text-muted/60 text-center">No upcoming events</p>
           )}
         </SideCard>
 
@@ -271,27 +271,27 @@ export function AssistantModule() {
             { icon: Gift, text: 'It looks like the HVAC filter needs to be changed soon.' },
           ].map(({ icon: Icon, text }) => (
             <button key={text} onClick={() => void send(text.split('?')[0] + '?')} className="flex gap-3 py-2.5 text-left hover:opacity-80 transition">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-500/12">
-                <Icon className="h-4 w-4 text-violet-300" />
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10">
+                <Icon className="h-4 w-4 text-brand" />
               </span>
-              <p className="text-xs leading-5 text-white/70">{text}</p>
+              <p className="text-xs leading-5 text-fg/80">{text}</p>
             </button>
           ))}
-          <button className="mt-2 w-full rounded-full border border-violet-500/40 py-2.5 text-xs font-bold text-violet-300 hover:border-violet-400">
+          <button className="mt-2 w-full rounded-full border border-brand/40 py-2.5 text-xs font-bold text-brand hover:border-brand">
             View All Suggestions
           </button>
         </SideCard>
 
         {/* Recent Activity */}
-        <SideCard title="Recent Activity" action={<a href="/dashboard/calendar" className="text-xs font-semibold text-violet-300">View All</a>}>
+        <SideCard title="Recent Activity" action={<a href="/dashboard/calendar" className="text-xs font-semibold text-brand">View All</a>}>
           {activity.length > 0 ? activity.map((a) => (
             <div key={a.text} className="flex items-center gap-3 py-2 text-xs">
               <a.icon className={cn('h-4 w-4 shrink-0', a.color)} />
-              <span className="flex-1 text-white/75">{a.text}</span>
-              <span className="shrink-0 text-white/35">{a.time}</span>
+              <span className="flex-1 text-fg/80">{a.text}</span>
+              <span className="shrink-0 text-muted/60">{a.time}</span>
             </div>
           )) : (
-            <p className="py-3 text-xs text-white/35 text-center">No recent activity</p>
+            <p className="py-3 text-xs text-muted/60 text-center">No recent activity</p>
           )}
         </SideCard>
 
@@ -299,7 +299,7 @@ export function AssistantModule() {
         <SideCard title="Try saying something like...">
           {TRY_PROMPTS.map((p) => (
             <button key={p} onClick={() => void send(p)}
-              className="mt-2 block w-full rounded-full border border-white/8 bg-white/[0.03] px-4 py-2.5 text-left text-xs text-white/75 transition hover:bg-white/[0.06]">
+              className="mt-2 block w-full rounded-full border border-border bg-surface/40 px-4 py-2.5 text-left text-xs text-fg/80 transition hover:bg-elevated">
               &quot;{p}&quot;
             </button>
           ))}
@@ -311,7 +311,7 @@ export function AssistantModule() {
 
 function SideCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+    <section className="rounded-2xl border border-border bg-surface/40 p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-semibold">{title}</h2>
         {action}

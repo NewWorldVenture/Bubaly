@@ -64,7 +64,7 @@ export function SettingsModule() {
   const activeMembers = members.filter((m) => m.is_active);
 
   return (
-    <div className="space-y-6">
+    <div className="module-page">
       <PageHeader title="Settings" description="Manage your profile, family, and members." />
 
       {/* Profile */}

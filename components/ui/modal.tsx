@@ -46,18 +46,18 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          'relative z-10 w-full max-w-lg glass-card max-h-[92dvh] overflow-y-auto rounded-b-none rounded-t-3xl p-6 animate-fade-in sm:rounded-3xl',
+          'relative z-10 w-full max-w-lg glass-card max-h-[85dvh] sm:max-h-[92dvh] overflow-y-auto rounded-b-none rounded-t-3xl p-4 sm:p-6 animate-slide-up sm:animate-fade-in sm:rounded-3xl',
           className,
         )}
       >
-        <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="mb-3 flex items-start justify-between gap-3 sm:mb-4 sm:gap-4">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-            {description && <p className="mt-1 text-sm text-muted">{description}</p>}
+            <h2 className="text-base font-semibold tracking-tight sm:text-lg">{title}</h2>
+            {description && <p className="mt-1 text-xs text-muted sm:text-sm">{description}</p>}
           </div>
           <button
             onClick={onClose}
-            className="rounded-full p-1.5 text-muted hover:bg-elevated hover:text-fg focus-ring"
+            className="rounded-full p-2 text-muted hover:bg-elevated hover:text-fg focus-ring"
             aria-label="Close"
           >
             <X className="h-5 w-5" />

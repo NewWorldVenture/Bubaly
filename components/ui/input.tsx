@@ -2,7 +2,7 @@ import { forwardRef, useId } from 'react';
 import { cn } from '@/lib/utils/cn';
 
 const base =
-  'w-full rounded-xl bg-surface/60 border border-border px-4 text-fg placeholder:text-muted transition focus-ring disabled:opacity-50';
+  'w-full rounded-xl bg-surface/60 border border-border px-3 sm:px-4 text-fg text-sm sm:text-base placeholder:text-muted transition focus-ring disabled:opacity-50';
 
 export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...props }, ref) => (

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Plus, CheckCircle2, Circle, MoreHorizontal, Trophy, Filter, SlidersHorizontal } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, MoreHorizontal, Filter, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -11,6 +11,8 @@ import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { PageHeader } from '@/components/app/page-header';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -157,30 +159,28 @@ export function ChoresModule() {
   ];
 
   return (
-    <div className="flex h-full min-h-0 gap-0">
+    <div className="module-with-sidebar">
       {/* Main */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex-shrink-0 border-b border-border px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div>
-              <h1 className="text-2xl font-bold">Tasks &amp; Chores</h1>
-              <p className="mt-0.5 text-sm text-muted">Stay on top of what needs to get done.</p>
-            </div>
-            {manager && (
-              <button onClick={() => setOpen(true)} className="ml-auto flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition">
+      <div className="module-main">
+        <div className="module-page">
+          <PageHeader
+            title="Tasks & Chores"
+            description="Stay on top of what needs to get done."
+            action={manager ? (
+              <Button onClick={() => setOpen(true)}>
                 <Plus className="h-4 w-4" /> Add Task
-              </button>
-            )}
-          </div>
+              </Button>
+            ) : undefined}
+          />
 
-          <div className="mt-4 grid grid-cols-4 gap-3">
+          <div className="grid-stats">
             {[
               { label: 'All Tasks', value: data.length, icon: '📋', color: 'text-brand' },
               { label: 'Due Today', value: dueToday.length, icon: '📅', color: 'text-amber-400' },
               { label: 'Due This Week', value: dueThisWeek.length, icon: '🗓️', color: 'text-blue-400' },
               { label: 'Completed', value: completed.length, icon: '✅', color: 'text-green-400' },
             ].map(s => (
-              <div key={s.label} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-4 py-3">
+              <div key={s.label} className="stat-card">
                 <span className="text-2xl">{s.icon}</span>
                 <div>
                   <div className={cn('text-2xl font-bold', s.color)}>{s.value}</div>
@@ -190,27 +190,29 @@ export function ChoresModule() {
             ))}
           </div>
 
-          <div className="mt-4 flex items-center gap-1">
-            {TABS.map(t => (
-              <button key={t.key} onClick={() => setTab(t.key)}
-                className={cn('rounded-lg px-3 py-1.5 text-xs font-medium transition', tab === t.key ? 'bg-brand/20 text-brand' : 'text-muted hover:text-foreground hover:bg-elevated')}>
-                {t.label}
-              </button>
-            ))}
+          <div className="mt-4 flex flex-wrap items-center gap-1">
+            <div className="tab-bar">
+              {TABS.map(t => (
+                <button key={t.key} onClick={() => setTab(t.key)}
+                  className={cn('tab-item', tab === t.key ? 'tab-item-active' : 'tab-item-inactive')}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
             <div className="ml-auto flex items-center gap-2">
-              <button className="flex items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 py-1.5 text-xs font-medium hover:bg-elevated transition">
+              <button className="btn-inline">
                 <Filter className="h-3 w-3" /> Filter
               </button>
-              <button className="flex items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 py-1.5 text-xs font-medium hover:bg-elevated transition">
+              <button className="btn-inline">
                 <SlidersHorizontal className="h-3 w-3" /> Sort
               </button>
             </div>
           </div>
-        </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
-          <div className="overflow-hidden rounded-xl border border-border bg-surface/30">
-            <div className="grid grid-cols-[1fr_140px_130px_100px_120px_40px] border-b border-border bg-surface/40 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          {/* Data table / card list */}
+          <div className="mt-4 overflow-hidden rounded-xl border border-border bg-surface/30">
+            {/* Desktop table header */}
+            <div className="hidden lg:grid grid-cols-[1fr_140px_130px_100px_120px_40px] border-b border-border bg-surface/40 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
               <div>Task</div><div>Assigned To</div><div>Due Date</div><div>Priority</div><div>Status</div><div />
             </div>
 
@@ -220,40 +222,87 @@ export function ChoresModule() {
                 <p className="text-sm font-medium">All caught up!</p>
                 <p className="text-xs text-muted">No tasks in this view.</p>
               </div>
-            ) : filtered.map((a, idx) => {
-              const member = memberById.get(a.member_id);
-              const { label: dueLabel, urgent } = fmtDue(a.due_at);
-              const done = ['approved', 'done'].includes(a.status);
-              const submitted = a.status === 'submitted';
-              return (
-                <div key={a.id}
-                  className={cn('grid grid-cols-[1fr_140px_130px_100px_120px_40px] items-center border-b border-border/50 px-4 py-3 transition hover:bg-elevated/30', idx === filtered.length - 1 && 'border-b-0')}>
-                  <div className="flex items-center gap-3 min-w-0">
-                    <button onClick={() => toggle(a)} disabled={!!busy || done} className="flex-shrink-0">
-                      {done ? <CheckCircle2 className="h-4 w-4 text-green-400" />
-                        : submitted ? <CheckCircle2 className="h-4 w-4 text-amber-400" />
-                        : <Circle className={cn('h-4 w-4 text-muted hover:text-brand transition', busy === a.id && 'animate-pulse')} />}
-                    </button>
-                    <div className="min-w-0">
-                      <div className={cn('truncate text-sm font-medium', done && 'line-through text-muted')}>{a.chore?.title ?? '—'}</div>
-                      <div className="text-[10px] text-muted">Chore</div>
-                    </div>
-                  </div>
-                  <div>{member ? <div className="flex items-center gap-1.5"><Avatar name={member.display_name} color={member.color} size={22} /><span className="text-xs text-muted">{member.display_name}</span></div> : <span className="text-xs text-muted">—</span>}</div>
-                  <div className={cn('text-xs font-medium', urgent ? 'text-red-400' : 'text-muted')}>{dueLabel}</div>
-                  <div>{a.chore?.priority ? <span className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize', PRIORITY_STYLES[a.chore.priority])}>{a.chore.priority}</span> : <span className="text-xs text-muted">—</span>}</div>
-                  <div><span className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold', STATUS_STYLES[a.status] ?? '')}>{STATUS_LABELS[a.status] ?? a.status}</span></div>
-                  <div className="flex justify-end">
-                    {submitted && manager
-                      ? <button onClick={() => approve(a)} disabled={!!busy} className="rounded-md bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400 hover:bg-green-500/30 transition">Approve</button>
-                      : <button className="rounded p-1 text-muted hover:text-foreground"><MoreHorizontal className="h-4 w-4" /></button>}
-                  </div>
+            ) : (
+              <>
+                {/* Desktop table rows */}
+                <div className="hidden lg:block divide-y divide-border/50">
+                  {filtered.map((a) => {
+                    const member = memberById.get(a.member_id);
+                    const { label: dueLabel, urgent } = fmtDue(a.due_at);
+                    const done = ['approved', 'done'].includes(a.status);
+                    const submitted = a.status === 'submitted';
+                    return (
+                      <div key={a.id}
+                        className="grid grid-cols-[1fr_140px_130px_100px_120px_40px] items-center px-4 py-3 transition hover:bg-surface/20">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <button onClick={() => toggle(a)} disabled={!!busy || done} className="flex-shrink-0">
+                            {done ? <CheckCircle2 className="h-4 w-4 text-green-400" />
+                              : submitted ? <CheckCircle2 className="h-4 w-4 text-amber-400" />
+                              : <Circle className={cn('h-4 w-4 text-muted hover:text-brand transition', busy === a.id && 'animate-pulse')} />}
+                          </button>
+                          <div className="min-w-0">
+                            <div className={cn('truncate text-sm font-medium', done && 'line-through text-muted')}>{a.chore?.title ?? '—'}</div>
+                            <div className="text-[10px] text-muted">Chore</div>
+                          </div>
+                        </div>
+                        <div>{member ? <div className="flex items-center gap-1.5"><Avatar name={member.display_name} color={member.color} size={22} /><span className="text-xs text-muted">{member.display_name}</span></div> : <span className="text-xs text-muted">—</span>}</div>
+                        <div className={cn('text-xs font-medium', urgent ? 'text-red-400' : 'text-muted')}>{dueLabel}</div>
+                        <div>{a.chore?.priority ? <span className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize', PRIORITY_STYLES[a.chore.priority])}>{a.chore.priority}</span> : <span className="text-xs text-muted">—</span>}</div>
+                        <div><span className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold', STATUS_STYLES[a.status] ?? '')}>{STATUS_LABELS[a.status] ?? a.status}</span></div>
+                        <div className="flex justify-end">
+                          {submitted && manager
+                            ? <button onClick={() => approve(a)} disabled={!!busy} className="rounded-md bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400 hover:bg-green-500/30 transition">Approve</button>
+                            : <button className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+
+                {/* Mobile card list */}
+                <div className="lg:hidden divide-y divide-border/50">
+                  {filtered.map((a) => {
+                    const member = memberById.get(a.member_id);
+                    const { label: dueLabel, urgent } = fmtDue(a.due_at);
+                    const done = ['approved', 'done'].includes(a.status);
+                    const submitted = a.status === 'submitted';
+                    return (
+                      <div key={a.id} className="flex items-start gap-3 px-4 py-3 transition hover:bg-surface/20">
+                        <button onClick={() => toggle(a)} disabled={!!busy || done} className="mt-0.5 flex-shrink-0">
+                          {done ? <CheckCircle2 className="h-4 w-4 text-green-400" />
+                            : submitted ? <CheckCircle2 className="h-4 w-4 text-amber-400" />
+                            : <Circle className={cn('h-4 w-4 text-muted hover:text-brand transition', busy === a.id && 'animate-pulse')} />}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <div className={cn('text-sm font-medium', done && 'line-through text-muted')}>{a.chore?.title ?? '—'}</div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                            {member && (
+                              <div className="flex items-center gap-1">
+                                <Avatar name={member.display_name} color={member.color} size={18} />
+                                <span className="text-[11px] text-muted">{member.display_name}</span>
+                              </div>
+                            )}
+                            <span className={cn('text-[11px] font-medium', urgent ? 'text-red-400' : 'text-muted')}>{dueLabel}</span>
+                            {a.chore?.priority && (
+                              <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-semibold capitalize', PRIORITY_STYLES[a.chore.priority])}>{a.chore.priority}</span>
+                            )}
+                            <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-semibold', STATUS_STYLES[a.status] ?? '')}>{STATUS_LABELS[a.status] ?? a.status}</span>
+                          </div>
+                        </div>
+                        <div className="flex-shrink-0">
+                          {submitted && manager
+                            ? <button onClick={() => approve(a)} disabled={!!busy} className="rounded-md bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400 hover:bg-green-500/30 transition">Approve</button>
+                            : <button className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
 
             {manager && (
-              <button onClick={() => setOpen(true)} className="flex w-full items-center gap-2 px-4 py-3 text-sm text-muted hover:bg-elevated/30 hover:text-foreground transition">
+              <button onClick={() => setOpen(true)} className="flex w-full items-center gap-2 px-4 py-3 text-sm text-muted hover:bg-surface/20 hover:text-fg transition">
                 <Plus className="h-4 w-4" /> Add Task
               </button>
             )}
@@ -262,8 +311,8 @@ export function ChoresModule() {
       </div>
 
       {/* Right sidebar */}
-      <div className="hidden w-72 flex-shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-surface/20 p-4 xl:flex">
-        <div className="rounded-xl border border-border bg-surface/40 p-4">
+      <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
+        <div className="sidebar-card">
           <p className="mb-3 text-sm font-semibold">Chores Overview</p>
           <div className="flex items-center gap-4">
             <DonutChart segments={[{ value: completed.length, color: '#22c55e' }, { value: data.filter(a => a.status === 'in_progress').length, color: '#3b82f6' }, { value: data.filter(a => a.status === 'todo').length, color: '#475569' }]} total={data.length} />
@@ -280,7 +329,7 @@ export function ChoresModule() {
         </div>
 
         {selfMember && (
-          <div className="rounded-xl border border-border bg-surface/40 p-4">
+          <div className="sidebar-card">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-sm font-semibold">My Chores</p>
               <button className="text-xs text-brand hover:underline">View all</button>
@@ -308,7 +357,7 @@ export function ChoresModule() {
           </div>
         )}
 
-        <div className="rounded-xl border border-border bg-surface/40 p-4">
+        <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold">Family Progress</p>
             <span className="text-[10px] text-muted">This Week</span>
@@ -386,10 +435,10 @@ function NewChoreModal({ familyId, userId, members, onClose, onSaved }: {
           <Field label="Due date">{(id) => <Input id={id} name="due_at" type="date" />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-elevated transition">Cancel</button>
-          <button type="submit" disabled={loading} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition disabled:opacity-60">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" loading={loading}>
             {loading ? 'Saving…' : 'Add Task'}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>

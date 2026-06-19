@@ -1,10 +1,5 @@
 import type { Config } from 'tailwindcss';
 
-/**
- * FamilyOS design system.
- * Colors are driven by CSS variables (see app/globals.css) so the same tokens
- * serve dark (default) and light themes without duplicating the palette.
- */
 const config: Config = {
   darkMode: 'class',
   content: [
@@ -13,6 +8,14 @@ const config: Config = {
     './lib/**/*.{ts,tsx}',
   ],
   theme: {
+    screens: {
+      xs: '480px',
+      sm: '640px',
+      md: '768px',
+      lg: '1024px',
+      xl: '1280px',
+      '2xl': '1536px',
+    },
     extend: {
       colors: {
         bg: 'rgb(var(--bg) / <alpha-value>)',
@@ -46,10 +49,29 @@ const config: Config = {
       backdropBlur: {
         xs: '2px',
       },
+      spacing: {
+        'safe-b': 'var(--safe-bottom)',
+        'safe-t': 'var(--safe-top)',
+        'sidebar': 'var(--sidebar-width)',
+        'topbar': 'var(--topbar-height)',
+        'mobile-tab': 'var(--mobile-tab-height)',
+      },
       keyframes: {
         'fade-in': {
           from: { opacity: '0', transform: 'translateY(8px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'fade-in-up': {
+          from: { opacity: '0', transform: 'translateY(16px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'slide-up': {
+          from: { transform: 'translateY(100%)' },
+          to: { transform: 'translateY(0)' },
+        },
+        'slide-in-right': {
+          from: { transform: 'translateX(100%)' },
+          to: { transform: 'translateX(0)' },
         },
         'pulse-soft': {
           '0%, 100%': { opacity: '1' },
@@ -58,6 +80,9 @@ const config: Config = {
       },
       animation: {
         'fade-in': 'fade-in 0.4s ease-out both',
+        'fade-in-up': 'fade-in-up 0.5s ease-out both',
+        'slide-up': 'slide-up 0.3s ease-out both',
+        'slide-in-right': 'slide-in-right 0.3s ease-out both',
         'pulse-soft': 'pulse-soft 2s ease-in-out infinite',
       },
     },

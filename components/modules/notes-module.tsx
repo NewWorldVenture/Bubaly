@@ -55,7 +55,7 @@ export function NotesModule() {
   const rest = data.filter((n) => !n.is_pinned);
 
   return (
-    <div className="space-y-6">
+    <div className="module-page">
       <PageHeader
         title="Notes"
         description="Shared family notes, lists, and reminders."

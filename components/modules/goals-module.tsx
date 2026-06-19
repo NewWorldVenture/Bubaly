@@ -58,7 +58,7 @@ export function GoalsModule() {
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   return (
-    <div className="space-y-6">
+    <div className="module-page">
       <PageHeader
         title="Family Goals"
         description="Set goals, track progress, and celebrate achievements together."

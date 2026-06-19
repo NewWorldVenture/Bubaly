@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Settings, Check, X as XIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Settings, Check, X as XIcon } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -9,6 +9,8 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { PageHeader } from '@/components/app/page-header';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, MealType } from '@/lib/database.types';
 
@@ -107,30 +109,30 @@ export function MealsModule() {
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   return (
-    <div className="flex h-full min-h-0 gap-0">
+    <div className="module-with-sidebar">
       {/* Main */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="module-main overflow-y-auto">
         {/* Header */}
         <div className="flex-shrink-0 border-b border-border px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div>
-              <h1 className="text-2xl font-bold">Meals</h1>
-              <p className="mt-0.5 text-sm text-muted">Plan, organize, and enjoy healthy meals together.</p>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <button className="flex items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm font-medium hover:bg-elevated transition">
-                <Settings className="h-4 w-4" /> Plan Settings
-              </button>
-              <button onClick={() => setNewMealOpen(true)} className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition">
-                <Plus className="h-4 w-4" /> Add Meal
-              </button>
-            </div>
-          </div>
+          <PageHeader
+            title="Meals"
+            description="Plan, organize, and enjoy healthy meals together."
+            action={
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm">
+                  <Settings className="h-4 w-4" /> Plan Settings
+                </Button>
+                <Button size="sm" onClick={() => setNewMealOpen(true)}>
+                  <Plus className="h-4 w-4" /> Add Meal
+                </Button>
+              </div>
+            }
+          />
 
           {/* Tab strip */}
-          <div className="mt-4 flex items-center gap-1">
+          <div className="tab-bar mt-4">
             {['Meal Plan', 'Recipes', 'Favorites'].map((t, i) => (
-              <button key={t} className={cn('rounded-lg px-4 py-1.5 text-sm font-medium transition', i === 0 ? 'bg-brand/20 text-brand' : 'text-muted hover:text-foreground hover:bg-elevated')}>
+              <button key={t} className={cn('tab-item', i === 0 ? 'tab-item-active' : 'tab-item-inactive')}>
                 {t}
               </button>
             ))}
@@ -138,7 +140,7 @@ export function MealsModule() {
         </div>
 
         {/* Week navigator */}
-        <div className="flex-shrink-0 flex items-center gap-3 border-b border-border px-5 py-3">
+        <div className="flex flex-shrink-0 flex-wrap items-center gap-3 border-b border-border px-5 py-3">
           <button onClick={() => setWeekOffset(w => w - 1)} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronLeft className="h-4 w-4" /></button>
           <button onClick={() => setWeekOffset(w => w + 1)} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronRight className="h-4 w-4" /></button>
           <span className="flex items-center gap-2 text-sm font-semibold">
@@ -146,14 +148,14 @@ export function MealsModule() {
           </span>
           <div className="ml-auto flex items-center gap-1 rounded-lg border border-border bg-surface/40 p-0.5">
             {['Week', 'Month'].map((v, i) => (
-              <button key={v} className={cn('rounded-md px-3 py-1 text-xs font-medium capitalize transition', i === 0 ? 'bg-brand text-white' : 'text-muted hover:text-foreground')}>{v}</button>
+              <button key={v} className={cn('rounded-md px-3 py-1 text-xs font-medium capitalize transition', i === 0 ? 'bg-brand text-brand-fg' : 'text-muted hover:text-fg')}>{v}</button>
             ))}
           </div>
-          <button className="rounded-lg border border-border bg-surface/60 px-3 py-1.5 text-xs font-medium hover:bg-elevated transition">Filters</button>
+          <Button variant="outline" size="sm" className="hidden sm:inline-flex">Filters</Button>
         </div>
 
-        {/* Week meal grid */}
-        <div className="flex-1 px-5 py-4">
+        {/* Week meal grid — desktop */}
+        <div className="hidden flex-1 px-5 py-4 md:block">
           <div className="overflow-hidden rounded-xl border border-border">
             {/* Day headers */}
             <div className="grid border-b border-border bg-surface/40" style={{ gridTemplateColumns: '100px repeat(7, 1fr)' }}>
@@ -166,7 +168,7 @@ export function MealsModule() {
                     <div className={cn('text-[10px] font-semibold uppercase tracking-wide', isToday ? 'text-brand' : 'text-muted')}>
                       {d.toLocaleDateString('en-US', { weekday: 'short' })}
                     </div>
-                    <div className={cn('text-xs font-bold', isToday ? 'text-brand' : 'text-foreground')}>
+                    <div className={cn('text-xs font-bold', isToday ? 'text-brand' : 'text-fg')}>
                       {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </div>
                   </div>
@@ -200,7 +202,7 @@ export function MealsModule() {
                           <div className="text-center text-[10px] font-medium leading-tight">{plan.meal?.name ?? 'Meal'}</div>
                           <button onClick={(e) => { e.stopPropagation(); removePlan(plan.id); }}
                             className="absolute -right-1 -top-1 hidden rounded-full bg-danger p-0.5 group-hover:flex">
-                            <XIcon className="h-2.5 w-2.5 text-white" />
+                            <XIcon className="h-2.5 w-2.5 text-brand-fg" />
                           </button>
                         </div>
                       ) : (
@@ -221,13 +223,59 @@ export function MealsModule() {
           </div>
         </div>
 
+        {/* Week meal grid — mobile (stacked day-by-day) */}
+        <div className="flex-1 space-y-3 px-4 py-4 md:hidden">
+          {days.map((d, di) => {
+            const dStr = d.toISOString().slice(0, 10);
+            const isToday = dStr === todayStr;
+            return (
+              <div key={di} className={cn('overflow-hidden rounded-xl border border-border', isToday && 'border-brand/40')}>
+                <div className={cn('flex items-center gap-2 border-b border-border px-3 py-2', isToday ? 'bg-brand/10' : 'bg-surface/40')}>
+                  <span className={cn('text-sm font-semibold', isToday ? 'text-brand' : 'text-fg')}>
+                    {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </span>
+                  {isToday && <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand">Today</span>}
+                </div>
+                <div className="divide-y divide-border/50">
+                  {MEAL_TYPES.map(type => {
+                    const plan = planMap.get(cellKey(dStr, type));
+                    return (
+                      <div key={type}
+                        className={cn('flex items-center gap-3 px-3 py-2.5', !plan && 'cursor-pointer hover:bg-elevated/30')}
+                        onClick={() => !plan && setAddCell({ date: dStr, type })}>
+                        <span className="text-base">{MEAL_ICONS[type]}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] font-semibold uppercase text-muted">{MEAL_LABELS[type]}</div>
+                          {plan ? (
+                            <div className="text-sm font-medium">{plan.meal?.name ?? 'Meal'}</div>
+                          ) : (
+                            <div className="text-xs text-muted">Tap to add</div>
+                          )}
+                        </div>
+                        {plan ? (
+                          <button onClick={(e) => { e.stopPropagation(); removePlan(plan.id); }}
+                            className="rounded-full p-1 text-muted hover:text-danger transition">
+                            <XIcon className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <Plus className="h-4 w-4 text-muted" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         {/* Recommended Recipes */}
         <div className="flex-shrink-0 border-t border-border px-5 py-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-semibold">Recommended Recipes</h2>
             <button className="text-xs text-brand hover:underline">View all recipes →</button>
           </div>
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
             {RECIPE_SUGGESTIONS.map((r) => (
               <div key={r.name} className="group cursor-pointer rounded-xl border border-border bg-surface/40 p-3 transition hover:bg-elevated/40">
                 <div className="mb-2 flex h-16 items-center justify-center rounded-lg bg-elevated text-3xl">{r.emoji}</div>
@@ -243,9 +291,9 @@ export function MealsModule() {
       </div>
 
       {/* Right sidebar */}
-      <div className="hidden w-64 flex-shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-surface/20 p-4 lg:flex">
+      <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
         {/* Shopping List */}
-        <div className="rounded-xl border border-border bg-surface/40 p-4">
+        <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold">Shopping List</p>
             <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand">14 items</span>
@@ -254,9 +302,9 @@ export function MealsModule() {
             {['Chicken Breast', 'Salmon Fillets', 'Eggs', 'Avocados', 'Spinach', 'Tomatoes', 'Bananas', 'Greek Yogurt'].map((item, i) => (
               <label key={item} className="flex items-center gap-2 cursor-pointer group">
                 <div className={cn('flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border', [2, 3, 6].includes(i) ? 'bg-brand border-brand' : 'border-border group-hover:border-brand/50')}>
-                  {[2, 3, 6].includes(i) && <Check className="h-2.5 w-2.5 text-white" />}
+                  {[2, 3, 6].includes(i) && <Check className="h-2.5 w-2.5 text-brand-fg" />}
                 </div>
-                <span className={cn('text-xs', [2, 3, 6].includes(i) ? 'text-muted line-through' : 'text-foreground')}>{item}</span>
+                <span className={cn('text-xs', [2, 3, 6].includes(i) ? 'text-muted line-through' : 'text-fg')}>{item}</span>
               </label>
             ))}
           </div>
@@ -264,7 +312,7 @@ export function MealsModule() {
         </div>
 
         {/* Nutrition Summary */}
-        <div className="rounded-xl border border-border bg-surface/40 p-4">
+        <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold">Nutrition Summary</p>
             <span className="text-[10px] text-muted">This Week</span>
@@ -292,7 +340,7 @@ export function MealsModule() {
         </div>
 
         {/* Meal Ideas */}
-        <div className="rounded-xl border border-border bg-surface/40 p-4">
+        <div className="sidebar-card">
           <p className="mb-3 text-sm font-semibold">Meal Ideas For You</p>
           <div className="space-y-2">
             {MEAL_IDEAS.map(idea => (
@@ -368,10 +416,10 @@ function NewMealModal({ familyId, userId, onClose, onSaved }: { familyId: string
           {(id) => <Select id={id} name="meal_type">{MEAL_TYPES.map(t => <option key={t} value={t}>{MEAL_LABELS[t]}</option>)}</Select>}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-elevated transition">Cancel</button>
-          <button type="submit" disabled={loading} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition disabled:opacity-60">
+          <Button variant="ghost" type="button" onClick={onClose} size="sm">Cancel</Button>
+          <Button type="submit" disabled={loading} loading={loading} size="sm">
             {loading ? 'Saving…' : 'Add Meal'}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>

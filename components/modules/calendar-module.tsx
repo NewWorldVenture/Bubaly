@@ -9,6 +9,8 @@ import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/app/page-header';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { eventSchema, fieldErrors } from '@/lib/validation';
 import { cn } from '@/lib/utils/cn';
@@ -33,7 +35,7 @@ const CATEGORY_DOT: Record<string, string> = {
   birthday: 'bg-pink-400', holiday: 'bg-teal-400', other: 'bg-muted',
 };
 
-const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am–9pm
+const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am-9pm
 const HOUR_HEIGHT = 64; // px per hour
 
 function weekStart(offset = 0): Date {
@@ -103,7 +105,7 @@ function MiniCalendar({ current, onSelect }: { current: Date; onSelect: (d: Date
               className={cn('rounded py-1 text-xs transition hover:bg-elevated',
                 isSelected && 'bg-brand text-white hover:bg-brand',
                 isToday && !isSelected && 'font-bold text-brand',
-                !isSelected && !isToday && 'text-foreground',
+                !isSelected && !isToday && 'text-fg',
               )}>
               {d.getDate()}
             </button>
@@ -122,6 +124,10 @@ export function CalendarModule() {
   const [view, setView] = useState<'week' | 'month' | 'agenda'>('week');
   const [gcalConnected, setGcalConnected] = useState<boolean | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [mobileDayIndex, setMobileDayIndex] = useState(() => {
+    const now = new Date();
+    return (now.getDay() + 6) % 7; // 0=Mon
+  });
   const { success, error: toastError } = useToast();
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -221,72 +227,84 @@ export function CalendarModule() {
   const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
   const nowTop = (nowMins - 6 * 60) * (HOUR_HEIGHT / 60);
 
+  // Mobile day data
+  const mobileDay = days[mobileDayIndex];
+  const mobileDayStr = mobileDay?.toISOString().slice(0, 10) ?? '';
+  const mobileDayTimed = timedByDay.get(mobileDayStr) ?? [];
+  const mobileDayAllDay = allDayByDay.get(mobileDayStr) ?? [];
+
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   const dateLabel = `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
   return (
-    <div className="flex h-full min-h-0 gap-0">
+    <div className="module-with-sidebar">
       {/* Main calendar area */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="module-main">
         {/* Top bar */}
-        <div className="flex flex-shrink-0 flex-col gap-3 border-b border-border px-5 py-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">Calendar</h1>
+        <div className="module-page flex-shrink-0 border-b border-border">
+          <PageHeader
+            title="Calendar"
+            action={
+              <div className="flex items-center gap-2">
+                {gcalConnected === false && (
+                  <a href="/api/google/calendar/auth" className="btn-inline">
+                    <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58Z" fill="#EA4335"/></svg>
+                    Connect Google
+                  </a>
+                )}
+                {gcalConnected && (
+                  <button onClick={syncGoogle} disabled={syncing} className="btn-inline">
+                    <RefreshCw className={cn('h-3 w-3', syncing && 'animate-spin')} />
+                    {syncing ? 'Syncing...' : 'Sync'}
+                  </button>
+                )}
+                <Button size="sm" onClick={() => setOpen(true)}>
+                  <Plus className="h-4 w-4" /> Add Event
+                </Button>
+              </div>
+            }
+          />
+
+          {/* Nav + view switcher row */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2">
+              <button onClick={() => { setWeekOffset(0); }} className="btn-inline">Today</button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setWeekOffset(w => w - 1)} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronLeft className="h-4 w-4" /></button>
+                <button onClick={() => setWeekOffset(w => w + 1)} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronRight className="h-4 w-4" /></button>
+              </div>
+              <span className="text-sm font-semibold">{dateLabel}</span>
+            </div>
+
             <div className="ml-auto flex items-center gap-2">
-              {gcalConnected === false && (
-                <a href="/api/google/calendar/auth" className="flex items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 py-1.5 text-xs font-medium hover:bg-elevated transition">
-                  <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58Z" fill="#EA4335"/></svg>
-                  Connect Google
-                </a>
-              )}
-              {gcalConnected && (
-                <button onClick={syncGoogle} disabled={syncing} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 py-1.5 text-xs font-medium hover:bg-elevated transition disabled:opacity-50">
-                  <RefreshCw className={cn('h-3 w-3', syncing && 'animate-spin')} />
-                  {syncing ? 'Syncing…' : 'Sync'}
-                </button>
-              )}
-              <button onClick={() => setOpen(true)} className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition">
-                <Plus className="h-4 w-4" /> Add Event
+              <div className="tab-bar">
+                {(['week', 'month', 'agenda'] as const).map(v => (
+                  <button key={v} onClick={() => setView(v)}
+                    className={cn('tab-item capitalize', view === v ? 'tab-item-active' : 'tab-item-inactive')}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+
+              <button className="btn-inline">
+                <Filter className="h-3.5 w-3.5" /> Filters
               </button>
             </div>
           </div>
 
-          {/* Nav + view switcher row */}
-          <div className="flex items-center gap-3">
-            <button onClick={() => { setWeekOffset(0); }} className="rounded-lg border border-border bg-surface/60 px-3 py-1.5 text-xs font-medium hover:bg-elevated transition">Today</button>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setWeekOffset(w => w - 1)} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronLeft className="h-4 w-4" /></button>
-              <button onClick={() => setWeekOffset(w => w + 1)} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronRight className="h-4 w-4" /></button>
-            </div>
-            <span className="text-sm font-semibold">{dateLabel}</span>
-
-            <div className="ml-auto flex items-center gap-1 rounded-lg border border-border bg-surface/40 p-0.5">
-              {(['week', 'month', 'agenda'] as const).map(v => (
-                <button key={v} onClick={() => setView(v)}
-                  className={cn('rounded-md px-3 py-1 text-xs font-medium capitalize transition', view === v ? 'bg-brand text-white' : 'text-muted hover:text-foreground')}>
-                  {v}
-                </button>
-              ))}
-            </div>
-
-            <button className="flex items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 py-1.5 text-xs font-medium hover:bg-elevated transition">
-              <Filter className="h-3.5 w-3.5" /> Filters
-            </button>
-          </div>
-
           {/* Member filter pills */}
-          <div className="flex items-center gap-2">
+          <div className="mt-3 flex items-center gap-2 overflow-x-auto scrollbar-none">
             <button onClick={() => setFilterMember('all')}
-              className={cn('flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition',
-                filterMember === 'all' ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:text-foreground')}>
+              className={cn('flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition',
+                filterMember === 'all' ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
               <div className={cn('h-1.5 w-1.5 rounded-full', filterMember === 'all' ? 'bg-brand' : 'bg-muted')} /> All
             </button>
             {members.map(m => (
               <button key={m.id} onClick={() => setFilterMember(m.id === filterMember ? 'all' : m.id)}
-                className={cn('flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition',
-                  filterMember === m.id ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:text-foreground')}>
+                className={cn('flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition',
+                  filterMember === m.id ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
                 <Avatar name={m.display_name} color={m.color} size={18} />
                 {m.display_name}
               </button>
@@ -294,8 +312,70 @@ export function CalendarModule() {
           </div>
         </div>
 
-        {/* Week grid */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* ===== MOBILE DAY VIEW (below md) ===== */}
+        <div className="flex flex-1 flex-col overflow-y-auto md:hidden">
+          {/* Mobile day selector */}
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <button onClick={() => setMobileDayIndex(i => (i - 1 + 7) % 7)} className="rounded-lg p-1.5 hover:bg-elevated transition">
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div className="text-center">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+                {mobileDay.toLocaleDateString('en-US', { weekday: 'long' })}
+              </div>
+              <div className={cn('text-lg font-bold', mobileDayStr === todayStr ? 'text-brand' : 'text-fg')}>
+                {mobileDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </div>
+            </div>
+            <button onClick={() => setMobileDayIndex(i => (i + 1) % 7)} className="rounded-lg p-1.5 hover:bg-elevated transition">
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Mobile day events */}
+          <div className="flex-1 space-y-1 p-4">
+            {/* All-day events */}
+            {mobileDayAllDay.map(e => (
+              <div key={e.id} className={cn('rounded-lg border p-3', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">All Day</div>
+                <div className="text-sm font-semibold">{e.title}</div>
+                {e.assignee_id && memberById.get(e.assignee_id) && (
+                  <div className="mt-1 flex items-center gap-1.5 text-xs opacity-70">
+                    <Avatar name={memberById.get(e.assignee_id)!.display_name} color={memberById.get(e.assignee_id)!.color} size={14} />
+                    {memberById.get(e.assignee_id)!.display_name}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Timed events */}
+            {mobileDayTimed.length === 0 && mobileDayAllDay.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted">No events this day</p>
+            )}
+            {mobileDayTimed.map(e => {
+              const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
+              return (
+                <div key={e.id} className={cn('rounded-lg border p-3', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold">
+                      {new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                      {e.ends_at && ` – ${new Date(e.ends_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`}
+                    </span>
+                    {member && <Avatar name={member.display_name} color={member.color} size={18} />}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold">{e.title}</div>
+                  {member && <div className="mt-0.5 text-xs opacity-70">{member.display_name}</div>}
+                  {e.location && (
+                    <div className="mt-1 flex items-center gap-1 text-xs opacity-70"><MapPin className="h-3 w-3" />{e.location}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ===== DESKTOP WEEK GRID (md+) ===== */}
+        <div className="hidden min-h-0 flex-1 flex-col overflow-hidden md:flex">
           {/* Day headers */}
           <div className="flex flex-shrink-0 border-b border-border">
             <div className="w-14 flex-shrink-0" />
@@ -307,7 +387,7 @@ export function CalendarModule() {
                   <span className={cn('text-[10px] font-semibold uppercase tracking-wide', isToday ? 'text-brand' : 'text-muted')}>
                     {d.toLocaleDateString('en-US', { weekday: 'short' })}
                   </span>
-                  <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold', isToday ? 'bg-brand text-white' : 'text-foreground')}>
+                  <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold', isToday ? 'bg-brand text-white' : 'text-fg')}>
                     {d.getDate()}
                   </span>
                   {/* All-day events */}
@@ -384,13 +464,15 @@ export function CalendarModule() {
       </div>
 
       {/* Right sidebar */}
-      <div className="hidden w-64 flex-shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-surface/20 p-4 lg:flex">
-        <MiniCalendar current={monday} onSelect={(d) => {
-          const offset = Math.round((d.getTime() - weekStart(0).getTime()) / (7 * 86400000));
-          setWeekOffset(offset);
-        }} />
+      <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
+        <div className="sidebar-card">
+          <MiniCalendar current={monday} onSelect={(d) => {
+            const offset = Math.round((d.getTime() - weekStart(0).getTime()) / (7 * 86400000));
+            setWeekOffset(offset);
+          }} />
+        </div>
 
-        <div>
+        <div className="sidebar-card">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-muted uppercase tracking-wide">Upcoming</span>
             <span className="text-[10px] text-muted">Next 7 days</span>
@@ -487,16 +569,16 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
           </Field>
         </div>
         <Field label="Location">
-          {(id) => <Input id={id} name="location" placeholder="Home, School…" />}
+          {(id) => <Input id={id} name="location" placeholder="Home, School..." />}
         </Field>
         <Field label="Notes">
-          {(id) => <Textarea id={id} name="description" placeholder="Optional details…" />}
+          {(id) => <Textarea id={id} name="description" placeholder="Optional details..." />}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-elevated transition">Cancel</button>
-          <button type="submit" disabled={loading} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition disabled:opacity-60">
-            {loading ? 'Saving…' : 'Add Event'}
-          </button>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button type="submit" size="sm" loading={loading}>
+            {loading ? 'Saving...' : 'Add Event'}
+          </Button>
         </div>
       </form>
     </Modal>

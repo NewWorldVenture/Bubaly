@@ -61,7 +61,7 @@ export function NotificationsModule() {
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   return (
-    <div className="space-y-6">
+    <div className="module-page">
       <PageHeader
         title="Notifications"
         description="Stay in the loop on everything happening with your family."

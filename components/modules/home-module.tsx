@@ -69,7 +69,7 @@ export function HomeModule() {
   if (tasksError) return <ErrorState message={tasksError} onRetry={refreshTasks} />;
 
   return (
-    <div className="space-y-6">
+    <div className="module-page">
       <PageHeader
         title="Home & Maintenance"
         description="Track appliances, assets, and maintenance tasks."
@@ -122,7 +122,7 @@ export function HomeModule() {
         {assets.length === 0 ? (
           <EmptyState icon={Package} title="No assets tracked" description="Add appliances and items to track warranties and maintenance." />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
             {assets.map((a) => (
               <div key={a.id} className="flex items-start gap-3 rounded-xl border border-border bg-surface/40 p-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10">

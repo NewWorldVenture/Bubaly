@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useMemo, useState } from 'react';
 import { ChevronRight, Download, File, FileText, Filter, FolderLock, MoreHorizontal, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
@@ -10,6 +10,8 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -19,7 +21,7 @@ const TABS = ['Overview', 'My Documents', 'Shared with Me', 'Trash'] as const;
 type Tab = (typeof TABS)[number];
 const CATEGORIES = ['id', 'medical', 'financial', 'insurance', 'school', 'legal', 'vehicle', 'property', 'other'] as const;
 const CAT_META: Record<string, { label: string; icon: string; color: string; bg: string }> = {
-  id: { label: 'ID Documents', icon: '🪪', color: 'text-violet-300', bg: 'bg-violet-500/15' },
+  id: { label: 'ID Documents', icon: '🪪', color: 'text-brand', bg: 'bg-violet-500/15' },
   medical: { label: 'Medical Records', icon: '🏥', color: 'text-rose-300', bg: 'bg-rose-500/15' },
   financial: { label: 'Financial', icon: '💰', color: 'text-emerald-300', bg: 'bg-emerald-500/15' },
   insurance: { label: 'Insurance', icon: '🛡️', color: 'text-blue-300', bg: 'bg-blue-500/15' },
@@ -27,7 +29,7 @@ const CAT_META: Record<string, { label: string; icon: string; color: string; bg:
   legal: { label: 'Legal', icon: '⚖️', color: 'text-yellow-300', bg: 'bg-yellow-500/15' },
   vehicle: { label: 'Vehicle', icon: '🚗', color: 'text-cyan-300', bg: 'bg-cyan-500/15' },
   property: { label: 'Property', icon: '🏠', color: 'text-indigo-300', bg: 'bg-indigo-500/15' },
-  other: { label: 'Other', icon: '📄', color: 'text-white/60', bg: 'bg-white/10' },
+  other: { label: 'Other', icon: '📄', color: 'text-muted', bg: 'bg-surface/40' },
 };
 
 function fmtSize(bytes: number | null): string {
@@ -124,57 +126,58 @@ export function DocumentsModule() {
   const displayDocs = recentDocs.length > 0 ? recentDocs : (RECENT_FALLBACK as unknown as Document[]);
 
   return (
-    <div className="flex gap-6 xl:gap-8">
-      <div className="min-w-0 flex-1 space-y-5">
-        <div className="flex items-start justify-between">
-          <div><h1 className="text-2xl font-bold">Documents</h1><p className="mt-1 text-sm text-white/55">Store, organize, and access important family documents.</p></div>
-          <button onClick={() => setOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-4 py-2.5 text-sm font-bold shadow-glow"><Plus className="h-4 w-4" /> Upload Document</button>
-        </div>
-        <div className="flex items-center justify-between border-b border-white/8">
-          <div className="flex">{TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={cn('px-4 py-3 text-sm font-medium transition', tab === t ? 'border-b-2 border-violet-400 text-white' : 'text-white/50 hover:text-white/80')}>{t}</button>)}</div>
+    <div className="module-with-sidebar">
+      <div className="module-main space-y-5">
+        <PageHeader
+          title="Documents"
+          description="Store, organize, and access important family documents."
+          action={<Button onClick={() => setOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Upload Document</Button>}
+        />
+        <div className="flex items-center justify-between border-b border-border">
+          <div className="tab-bar">{TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>)}</div>
           <div className="flex gap-2 pb-1">
-            <button className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/55"><Filter className="h-3 w-3" /> Filter</button>
-            <button className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/55"><MoreHorizontal className="h-3 w-3" /> More</button>
+            <button className="btn-inline"><Filter className="h-3 w-3" /> Filter</button>
+            <button className="btn-inline"><MoreHorizontal className="h-3 w-3" /> More</button>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid-stats gap-3">
           {[
-            { icon: FileText, label: 'Total Documents', value: Math.max(totalDocs, 24), sub: 'Across all folders', bg: 'bg-violet-600/20 text-violet-300' },
+            { icon: FileText, label: 'Total Documents', value: Math.max(totalDocs, 24), sub: 'Across all folders', bg: 'bg-brand/15 text-brand' },
             { icon: FolderLock, label: 'Folders', value: Math.max(folders, CATEGORIES.length), sub: 'Document categories', bg: 'bg-blue-600/20 text-blue-300' },
             { icon: FileText, label: 'Shared', value: Math.max(Math.floor(totalDocs * 0.3), 8), sub: 'With family members', bg: 'bg-emerald-600/20 text-emerald-300' },
             { icon: Upload, label: 'Storage Used', value: totalBytes > 0 ? fmtSize(totalBytes) : '1.2 GB', sub: 'of 5 GB', bg: 'bg-orange-600/20 text-orange-300' },
           ].map(({ icon: Icon, label, value, sub, bg }) => (
-            <div key={label} className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+            <div key={label} className="rounded-2xl border border-border bg-surface/40 p-4">
               <div className={cn('mb-3 grid h-10 w-10 place-items-center rounded-xl', bg)}><Icon className="h-5 w-5" /></div>
-              <p className="text-2xl font-black">{value}</p><p className="text-sm font-semibold">{label}</p><p className="text-xs text-white/40">{sub}</p>
+              <p className="text-2xl font-black">{value}</p><p className="text-sm font-semibold">{label}</p><p className="text-xs text-muted">{sub}</p>
             </div>
           ))}
         </div>
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">My Folders</h2><button className="text-xs font-semibold text-violet-300">View all →</button></div>
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">My Folders</h2><button className="text-xs font-semibold text-brand">View all &rarr;</button></div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {CATEGORIES.map((cat) => {
               const meta = CAT_META[cat] ?? CAT_META.other;
               const count = grouped.get(cat)?.length ?? 0;
               return (
-                <div key={cat} className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-white/8 bg-white/[0.02] p-4 text-center transition hover:border-white/15 hover:bg-white/[0.04]">
+                <div key={cat} className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-border bg-surface/20 p-4 text-center transition hover:border-border hover:bg-surface/40">
                   <div className={cn('grid h-12 w-12 place-items-center rounded-xl text-2xl', meta.bg)}>{meta.icon}</div>
                   <p className="text-xs font-semibold leading-tight">{meta.label}</p>
-                  <p className="text-xs text-white/40">{count > 0 ? `${count} file${count !== 1 ? 's' : ''}` : 'Empty'}</p>
+                  <p className="text-xs text-muted">{count > 0 ? `${count} file${count !== 1 ? 's' : ''}` : 'Empty'}</p>
                 </div>
               );
             })}
           </div>
         </div>
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03]">
+        <div className="rounded-2xl border border-border bg-surface/40">
           <div className="flex items-center justify-between p-5">
             <h2 className="font-semibold">Recent Documents</h2>
-            <button className="flex items-center gap-1 text-xs font-semibold text-violet-300">View all <ChevronRight className="h-3.5 w-3.5" /></button>
+            <button className="flex items-center gap-1 text-xs font-semibold text-brand">View all <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           {displayDocs.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="table-responsive">
               <table className="w-full text-sm">
-                <thead><tr className="border-t border-white/8 text-xs text-white/40">
+                <thead><tr className="border-t border-border text-xs text-muted">
                   <th className="px-5 py-3 text-left font-medium">Name</th>
                   <th className="px-4 py-3 text-left font-medium">Member</th>
                   <th className="px-4 py-3 text-left font-medium">Category</th>
@@ -182,12 +185,12 @@ export function DocumentsModule() {
                   <th className="px-4 py-3 text-left font-medium">Date Added</th>
                   <th className="w-20 px-4 py-3" />
                 </tr></thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className="divide-y divide-border/50">
                   {displayDocs.map((doc) => {
                     const member = doc.member_id ? memberById.get(doc.member_id) : undefined;
                     const cat = CAT_META[doc.category ?? 'other'] ?? CAT_META.other;
                     return (
-                      <tr key={doc.id} className="hover:bg-white/[0.02]">
+                      <tr key={doc.id} className="hover:bg-surface/20">
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-3">
                             <span className="text-xl">{mimeIcon(doc.mime_type)}</span>
@@ -195,15 +198,15 @@ export function DocumentsModule() {
                           </div>
                         </td>
                         <td className="px-4 py-3.5">
-                          {member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={24} /><span className="text-xs">{member.display_name.split(' ')[0]}</span></div> : <span className="text-white/30 text-xs">Family</span>}
+                          {member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={24} /><span className="text-xs">{member.display_name.split(' ')[0]}</span></div> : <span className="text-muted/60 text-xs">Family</span>}
                         </td>
                         <td className="px-4 py-3.5"><span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold', cat.bg, cat.color)}>{cat.icon} {cat.label}</span></td>
-                        <td className="px-4 py-3.5 text-xs text-white/60">{fmtSize(doc.size_bytes)}</td>
-                        <td className="px-4 py-3.5 text-xs text-white/60">{fmtDate(doc.created_at)}</td>
+                        <td className="px-4 py-3.5 text-xs text-muted">{fmtSize(doc.size_bytes)}</td>
+                        <td className="px-4 py-3.5 text-xs text-muted">{fmtDate(doc.created_at)}</td>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-1">
-                            <button className="grid h-7 w-7 place-items-center rounded-lg text-white/30 hover:bg-white/[0.04] hover:text-white/70"><Download className="h-3.5 w-3.5" /></button>
-                            <button onClick={() => remove(doc.id)} className="grid h-7 w-7 place-items-center rounded-lg text-white/30 hover:bg-red-500/10 hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                            <button className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-surface/40 hover:text-fg"><Download className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => remove(doc.id)} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-red-500/10 hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
                           </div>
                         </td>
                       </tr>
@@ -214,16 +217,16 @@ export function DocumentsModule() {
             </div>
           ) : (
             <div className="p-12 text-center">
-              <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-white/[0.04]"><File className="h-8 w-8 text-white/30" /></div>
-              <p className="font-semibold text-white/60">No documents yet</p>
-              <p className="mt-1 text-sm text-white/35">Upload your first document to get started.</p>
-              <button onClick={() => setOpen(true)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-5 py-2.5 text-sm font-bold"><Plus className="h-4 w-4" /> Upload Document</button>
+              <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-surface/40"><File className="h-8 w-8 text-muted/60" /></div>
+              <p className="font-semibold text-muted">No documents yet</p>
+              <p className="mt-1 text-sm text-muted/60">Upload your first document to get started.</p>
+              <Button onClick={() => setOpen(true)} className="btn-cta mt-5"><Plus className="h-4 w-4" /> Upload Document</Button>
             </div>
           )}
         </div>
       </div>
-      <aside className="hidden w-72 shrink-0 space-y-5 xl:block">
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
+      <aside className="module-sidebar hidden lg:flex lg:flex-col gap-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <h2 className="mb-4 font-semibold">Storage Usage</h2>
           <div className="flex items-center gap-4">
             <div className="relative h-24 w-24 shrink-0">
@@ -233,12 +236,12 @@ export function DocumentsModule() {
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-lg font-black">{usedPct.toFixed(0)}%</span>
-                <span className="text-[9px] text-white/40">Used</span>
+                <span className="text-[9px] text-muted">Used</span>
               </div>
             </div>
             <div className="space-y-2 flex-1">
-              <div><p className="text-sm font-bold">{totalBytes > 0 ? fmtSize(totalBytes) : '1.2 GB'}</p><p className="text-xs text-white/40">Used</p></div>
-              <div><p className="text-sm font-bold">{totalBytes > 0 ? fmtSize(STORAGE_LIMIT - totalBytes) : '3.8 GB'}</p><p className="text-xs text-white/40">Free</p></div>
+              <div><p className="text-sm font-bold">{totalBytes > 0 ? fmtSize(totalBytes) : '1.2 GB'}</p><p className="text-xs text-muted">Used</p></div>
+              <div><p className="text-sm font-bold">{totalBytes > 0 ? fmtSize(STORAGE_LIMIT - totalBytes) : '3.8 GB'}</p><p className="text-xs text-muted">Free</p></div>
             </div>
           </div>
           <div className="mt-4 space-y-2">
@@ -247,14 +250,14 @@ export function DocumentsModule() {
               return (
                 <div key={cat} className="flex items-center gap-2 text-xs">
                   <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }} />
-                  <span className="flex-1 text-white/60">{meta.label}</span>
+                  <span className="flex-1 text-muted">{meta.label}</span>
                   <span className="font-semibold">{fmtSize(bytes)}</span>
                 </div>
               );
             })}
           </div>
         </div>
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <h2 className="mb-4 font-semibold">Quick Actions</h2>
           <div className="space-y-2">
             {[
@@ -263,13 +266,13 @@ export function DocumentsModule() {
               { icon: Download, label: 'Export All Documents', act: () => {} },
               { icon: Sparkles, label: 'AI Document Summary', act: () => {} },
             ].map(({ icon: Icon, label, act }) => (
-              <button key={label} onClick={act} className="flex w-full items-center gap-3 rounded-xl border border-white/8 px-4 py-2.5 text-sm hover:border-white/15">
-                <Icon className="h-4 w-4 text-white/40" />{label}
+              <button key={label} onClick={act} className="flex w-full items-center gap-3 rounded-xl border border-border px-4 py-2.5 text-sm hover:border-border">
+                <Icon className="h-4 w-4 text-muted" />{label}
               </button>
             ))}
           </div>
         </div>
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Recent Activity</h2></div>
           <div className="space-y-3">
             {displayDocs.slice(0, 4).map((doc) => {
@@ -279,31 +282,31 @@ export function DocumentsModule() {
               return (
                 <div key={doc.id} className="flex items-start gap-3">
                   <div className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg text-base', meta.bg)}>{meta.icon}</div>
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{doc.title}</p><p className="text-xs text-white/40">{meta.label} · {ago}</p></div>
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{doc.title}</p><p className="text-xs text-muted">{meta.label} · {ago}</p></div>
                 </div>
               );
             })}
           </div>
         </div>
-        <div className="rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-violet-600/20"><Sparkles className="h-6 w-6 text-violet-300" /></div>
+        <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand" /></div>
           <h3 className="font-bold">AI Document Assistant</h3>
-          <p className="mt-2 text-xs leading-5 text-white/55">Summarize, extract key info, and get insights from any document.</p>
-          <button className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 py-2.5 text-sm font-bold shadow-glow">Ask AI</button>
+          <p className="mt-2 text-xs leading-5 text-muted">Summarize, extract key info, and get insights from any document.</p>
+          <Button onClick={() => {}} className="btn-cta mt-4 w-full">Ask AI</Button>
         </div>
       </aside>
       <Modal open={open} title="Upload Document" onClose={() => setOpen(false)}>
         <div className="space-y-4">
-          <div className="rounded-xl border-2 border-dashed border-white/15 p-8 text-center">
-            <Upload className="mx-auto mb-3 h-8 w-8 text-white/30" />
-            <p className="text-sm font-semibold text-white/60">Drag & drop file here</p>
-            <p className="mt-1 text-xs text-white/35">PDF, JPG, PNG, DOCX up to 50MB</p>
-            <button className="mt-4 rounded-lg border border-white/15 px-4 py-2 text-xs font-semibold">Browse Files</button>
+          <div className="rounded-xl border-2 border-dashed border-border p-8 text-center">
+            <Upload className="mx-auto mb-3 h-8 w-8 text-muted/60" />
+            <p className="text-sm font-semibold text-muted">Drag & drop file here</p>
+            <p className="mt-1 text-xs text-muted/60">PDF, JPG, PNG, DOCX up to 50MB</p>
+            <button className="mt-4 rounded-lg border border-border px-4 py-2 text-xs font-semibold">Browse Files</button>
           </div>
           <Field label="Document Name">{(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Passport - Emma" />}</Field>
           <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>{CATEGORIES.map((c) => <option key={c} value={c}>{CAT_META[c]?.label ?? c}</option>)}</Select>}</Field>
           <Field label="Member">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Family (shared)</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <button onClick={save} disabled={saving || !form.title} className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 py-3 text-sm font-bold disabled:opacity-40">{saving ? 'Saving…' : 'Add Document'}</button>
+          <Button onClick={save} disabled={saving || !form.title} loading={saving} className="w-full">{saving ? 'Saving...' : 'Add Document'}</Button>
         </div>
       </Modal>
     </div>

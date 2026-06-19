@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp, MoreHorizontal, Search, SlidersHorizontal, ShoppingBag, Check, X as XIcon } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp, MoreHorizontal, Search, SlidersHorizontal, ShoppingBag, Check } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { PageHeader } from '@/components/app/page-header';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -128,46 +130,46 @@ export function GroceryModule() {
   })).filter(s => s.value > 0);
 
   return (
-    <div className="flex h-full min-h-0 gap-0">
+    <div className="module-with-sidebar">
       {/* Main */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="module-main overflow-y-auto">
         {/* Header */}
         <div className="flex-shrink-0 border-b border-border px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div>
-              <h1 className="text-2xl font-bold">Groceries</h1>
-              <p className="mt-0.5 text-sm text-muted">Stay organized and never forget an item.</p>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <button className="flex items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm font-medium hover:bg-elevated transition">
-                <SlidersHorizontal className="h-4 w-4" /> Reorder
-              </button>
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-surface/60 px-3 py-2">
-                <Search className="h-4 w-4 text-muted" />
-                <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search groceries…" className="bg-transparent text-sm outline-none w-36 placeholder:text-muted" />
+          <PageHeader
+            title="Groceries"
+            description="Stay organized and never forget an item."
+            action={
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm">
+                  <SlidersHorizontal className="h-4 w-4" /> Reorder
+                </Button>
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-surface/60 px-3 py-2">
+                  <Search className="h-4 w-4 text-muted" />
+                  <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search groceries…" className="bg-transparent text-sm outline-none w-28 sm:w-36 placeholder:text-muted" />
+                </div>
+                <Button size="sm" onClick={() => document.getElementById('quick-add-input')?.focus()}>
+                  <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Add Item</span>
+                </Button>
               </div>
-              <button onClick={() => document.getElementById('quick-add-input')?.focus()} className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition">
-                <Plus className="h-4 w-4" /> Add Item
-              </button>
-            </div>
-          </div>
+            }
+          />
 
           {/* Tabs */}
-          <div className="mt-4 flex items-center gap-1">
+          <div className="tab-bar mt-4">
             {([['all', 'All Items'], ['mine', 'My Items'], ['store', 'By Store']] as const).map(([key, label]) => (
               <button key={key} onClick={() => setTab(key)}
-                className={cn('rounded-lg px-3 py-1.5 text-xs font-medium transition', tab === key ? 'bg-brand/20 text-brand' : 'text-muted hover:text-foreground hover:bg-elevated')}>
+                className={cn('tab-item', tab === key ? 'tab-item-active' : 'tab-item-inactive')}>
                 {label}
               </button>
             ))}
             <div className="ml-auto flex items-center gap-2">
               <button className="text-xs text-brand hover:underline">Share List</button>
-              <button className="rounded-lg border border-border bg-surface/60 px-3 py-1.5 text-xs font-medium hover:bg-elevated transition">More</button>
+              <Button variant="outline" size="sm">More</Button>
             </div>
           </div>
 
           {/* Stats */}
-          <div className="mt-4 grid grid-cols-4 gap-3">
+          <div className="grid-stats mt-4">
             {[
               { label: 'Total Items', value: items.length, icon: '🛒', color: 'text-brand' },
               { label: 'Completed', value: checked, icon: '✅', color: 'text-green-400' },
@@ -206,7 +208,7 @@ export function GroceryModule() {
                   <span className="text-sm font-semibold">{cat}</span>
                   <span className="text-xs text-muted">{catItems.length} item{catItems.length !== 1 ? 's' : ''}</span>
                   <div className="ml-auto flex items-center gap-3">
-                    <span className="text-xs text-muted">Est. —</span>
+                    <span className="hidden text-xs text-muted sm:inline">Est. —</span>
                     {isCollapsed ? <ChevronDown className="h-4 w-4 text-muted" /> : <ChevronUp className="h-4 w-4 text-muted" />}
                   </div>
                 </button>
@@ -220,13 +222,13 @@ export function GroceryModule() {
                         <button onClick={() => toggleItem(item)}
                           className={cn('flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border transition',
                             item.is_checked ? 'bg-brand border-brand' : 'border-border hover:border-brand/50')}>
-                          {item.is_checked && <Check className="h-3 w-3 text-white" />}
+                          {item.is_checked && <Check className="h-3 w-3 text-brand-fg" />}
                         </button>
                         <span className={cn('flex-1 text-sm font-medium', item.is_checked && 'line-through text-muted')}>{item.name}</span>
                         {item.quantity && <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-semibold text-brand">{item.quantity}</span>}
                         <div className="ml-auto flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
                           <button onClick={() => deleteItem(item.id)} className="rounded p-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
-                          <button className="rounded p-1 text-muted hover:text-foreground"><MoreHorizontal className="h-3.5 w-3.5" /></button>
+                          <button className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-3.5 w-3.5" /></button>
                         </div>
                       </div>
                     ))}
@@ -237,28 +239,30 @@ export function GroceryModule() {
           })}
 
           {/* Quick add */}
-          <form onSubmit={addItem} className="flex items-center gap-2">
+          <form onSubmit={addItem} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
             <select value={addingCategory} onChange={e => setAddingCategory(e.target.value)}
               className="rounded-lg border border-border bg-surface/60 px-2 py-2 text-xs text-muted focus:outline-none">
               {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <input id="quick-add-input" value={addingItem} onChange={e => setAddingItem(e.target.value)}
               placeholder="+ Add item…"
-              className="flex-1 rounded-lg border border-dashed border-border bg-transparent px-3 py-2 text-sm placeholder:text-muted focus:border-brand/50 focus:outline-none transition" />
+              className="min-w-0 flex-1 rounded-lg border border-dashed border-border bg-transparent px-3 py-2 text-sm placeholder:text-muted focus:border-brand/50 focus:outline-none transition" />
             {addingItem && (
-              <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-brand/90 transition">Add</button>
+              <Button type="submit" size="sm">Add</Button>
             )}
           </form>
 
           {/* Buy Online section */}
           <div className="rounded-xl border border-border bg-surface/30 p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/20 text-xl">🛒</div>
-              <div>
-                <p className="text-sm font-semibold">Buy Online &amp; Pickup</p>
-                <p className="text-xs text-muted">Shop from your favorite stores and pick up when it&apos;s convenient for you.</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand/20 text-xl">🛒</div>
+                <div>
+                  <p className="text-sm font-semibold">Buy Online &amp; Pickup</p>
+                  <p className="text-xs text-muted">Shop from your favorite stores and pick up when it&apos;s convenient for you.</p>
+                </div>
               </div>
-              <div className="ml-auto flex items-center gap-3">
+              <div className="ml-0 flex items-center gap-3 sm:ml-auto">
                 {[{ name: 'Walmart', emoji: '🏪', label: 'Pickup today' }, { name: 'Kroger', emoji: '🏬', label: 'Pickup tomorrow' }, { name: 'Target', emoji: '🎯', label: 'Pickup today' }].map(s => (
                   <div key={s.name} className="flex flex-col items-center gap-0.5">
                     <span className="text-xl">{s.emoji}</span>
@@ -266,7 +270,7 @@ export function GroceryModule() {
                     <span className="text-[8px] text-muted">{s.label}</span>
                   </div>
                 ))}
-                <button className="rounded-lg border border-border bg-surface/60 px-3 py-1.5 text-xs font-medium hover:bg-elevated transition">View Stores</button>
+                <Button variant="outline" size="sm">View Stores</Button>
               </div>
             </div>
           </div>
@@ -274,9 +278,9 @@ export function GroceryModule() {
       </div>
 
       {/* Right sidebar */}
-      <div className="hidden w-64 flex-shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-surface/20 p-4 lg:flex">
+      <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
         {/* Shopping Summary donut */}
-        <div className="rounded-xl border border-border bg-surface/40 p-4">
+        <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold">Shopping Summary</p>
             <span className="text-[10px] text-muted">This Week</span>
@@ -295,7 +299,7 @@ export function GroceryModule() {
         </div>
 
         {/* My Lists */}
-        <div className="rounded-xl border border-border bg-surface/40 p-4">
+        <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold">My Lists</p>
             <button className="flex items-center gap-1 text-xs text-brand hover:underline"><Plus className="h-3 w-3" /> New List</button>
@@ -303,7 +307,7 @@ export function GroceryModule() {
           <div className="space-y-1.5">
             {MY_LISTS_MOCK.map(l => (
               <div key={l.name} className={cn('flex items-center gap-2.5 rounded-lg border px-3 py-2', l.active ? 'border-brand/40 bg-brand/10' : 'border-border/50 bg-surface/60 hover:bg-elevated cursor-pointer transition')}>
-                <div className={cn('flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-xs', l.active ? 'bg-brand text-white' : 'bg-elevated text-muted')}>
+                <div className={cn('flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-xs', l.active ? 'bg-brand text-brand-fg' : 'bg-elevated text-muted')}>
                   {l.active ? '📋' : '📄'}
                 </div>
                 <div className="min-w-0">
@@ -318,7 +322,7 @@ export function GroceryModule() {
         </div>
 
         {/* Smart Suggestions */}
-        <div className="rounded-xl border border-border bg-surface/40 p-4">
+        <div className="sidebar-card">
           <div className="mb-1 text-sm font-semibold">Smart Suggestions</div>
           <div className="mb-3 text-[10px] text-muted">Based on your meals &amp; history</div>
           <div className="space-y-2">

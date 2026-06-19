@@ -3,14 +3,27 @@
 @tailwind utilities;
 
 /* ============================================================
-   FamilyOS theme tokens. Dark is the default (set on <html>);
+   FamilyOS design tokens. Dark is the default (set on <html>);
    .light overrides for the user-toggleable light theme.
    ============================================================ */
 :root {
-  /* Self-hosted system stack — no build-time font fetch, installs instantly.
-     Inter is used first when present on the device. */
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.75rem;
+
+  --sidebar-width: 280px;
+  --topbar-height: 72px;
+  --mobile-tab-height: 72px;
+
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 :root,
@@ -24,13 +37,16 @@
   --brand: 124 93 255;
   --brand-fg: 255 255 255;
   --brand-soft: 56 52 110;
-  --accent: 244 153 110;  /* warm coral */
+  --accent: 244 153 110;
   --success: 74 201 155;
   --warning: 240 191 95;
   --danger: 245 113 113;
   --glass: 255 255 255;
   --glass-alpha: 0.04;
   --glass-border: 0.10;
+
+  --shell-bg: 5 12 21;
+  --shell-border: 255 255 255 / 0.08;
 }
 
 .light {
@@ -50,6 +66,9 @@
   --glass: 16 22 40;
   --glass-alpha: 0.03;
   --glass-border: 0.08;
+
+  --shell-bg: 250 251 254;
+  --shell-border: 0 0 0 / 0.06;
 }
 
 * {
@@ -68,6 +87,8 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   min-height: 100dvh;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
 }
 
 /* Ambient brand wash behind the app. */
@@ -127,6 +148,91 @@ body::before {
     @apply rounded-full border border-violet-300/70 bg-gradient-to-br from-cyan-300 via-violet-500 to-fuchsia-500;
     box-shadow: 0 0 20px rgb(124 93 255 / 0.78), inset 0 0 12px rgb(255 255 255 / 0.35);
   }
+
+  /* Responsive container — constrains content width with consistent padding */
+  .page-container {
+    @apply mx-auto w-full max-w-[1480px] px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Touch-friendly minimum tap target */
+  .touch-target {
+    @apply relative;
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Responsive table wrapper — horizontal scroll on mobile */
+  .table-responsive {
+    @apply -mx-4 overflow-x-auto sm:mx-0 sm:overflow-visible;
+  }
+
+  /* Stack helper: horizontal on desktop, vertical on mobile */
+  .responsive-stack {
+    @apply flex flex-col gap-3 sm:flex-row sm:items-center;
+  }
+
+  /* Module page wrapper — consistent spacing for all dashboard pages */
+  .module-page {
+    @apply space-y-5 sm:space-y-6;
+  }
+
+  /* Responsive grid utilities */
+  .grid-cards {
+    @apply grid gap-3 grid-cols-1 xs:grid-cols-2 lg:grid-cols-3;
+  }
+  .grid-stats {
+    @apply grid gap-3 grid-cols-2 md:grid-cols-4;
+  }
+
+  /* Sidebar layout for modules with right sidebars */
+  .module-with-sidebar {
+    @apply flex flex-col lg:flex-row lg:gap-0;
+  }
+  .module-main {
+    @apply flex min-w-0 flex-1 flex-col;
+  }
+  .module-sidebar {
+    @apply border-t border-border bg-surface/20 p-4 lg:w-72 lg:flex-shrink-0 lg:border-l lg:border-t-0 lg:overflow-y-auto;
+  }
+
+  /* CTA button — the gradient call-to-action used across modules */
+  .btn-cta {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-fg shadow-glow transition hover:opacity-90 active:scale-[0.98] focus-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none;
+  }
+
+  /* Inline action button — small pill-shaped action in lists */
+  .btn-inline {
+    @apply flex items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 py-1.5 text-xs font-medium transition hover:bg-elevated focus-ring;
+  }
+
+  /* Sidebar card — used in module right sidebars */
+  .sidebar-card {
+    @apply rounded-xl border border-border bg-surface/40 p-4;
+  }
+
+  /* List item row — consistent row styling for module lists */
+  .list-row {
+    @apply flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5 transition hover:bg-elevated/30;
+  }
+
+  /* Stat card — consistent stat/metric display */
+  .stat-card {
+    @apply flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-4 py-3;
+  }
+
+  /* Tab bar — horizontal tabs used in modules */
+  .tab-bar {
+    @apply flex items-center gap-1 overflow-x-auto scrollbar-none;
+  }
+  .tab-item {
+    @apply shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition;
+  }
+  .tab-item-active {
+    @apply bg-brand/20 text-brand;
+  }
+  .tab-item-inactive {
+    @apply text-muted hover:bg-elevated hover:text-fg;
+  }
 }
 
 /* Respect reduced-motion preferences. */
@@ -148,3 +254,30 @@ body::before {
   border: 2px solid rgb(var(--bg));
 }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Safe area padding for notched devices */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .safe-bottom {
+    padding-bottom: calc(var(--safe-bottom) + 0.5rem);
+  }
+  .safe-top {
+    padding-top: var(--safe-top);
+  }
+}
+
+/* Touch device optimizations */
+@media (pointer: coarse) {
+  .coarse\:min-h-11 { min-height: 2.75rem; }
+  .coarse\:min-h-12 { min-height: 3rem; }
+  .coarse\:py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+  .coarse\:gap-4 { gap: 1rem; }
+}
