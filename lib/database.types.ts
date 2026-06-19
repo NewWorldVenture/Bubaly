@@ -7,7 +7,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type MemberRole = 'parent' | 'adult' | 'teen' | 'child' | 'caregiver' | 'guest';
 export type InviteStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'revoked';
-export type TaskStatus = 'todo' | 'in_progress' | 'submitted' | 'approved' | 'rejected';
+export type TaskStatus = 'todo' | 'in_progress' | 'submitted' | 'done' | 'approved' | 'rejected';
 export type Priority = 'low' | 'medium' | 'high';
 export type EventCategory =
   | 'general' | 'school' | 'sports' | 'appointment' | 'medication'
