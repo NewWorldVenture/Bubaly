@@ -8,9 +8,22 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next({ request: req });
+  const path = req.nextUrl.pathname;
+  const isPublic = PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    if (isPublic) return res;
+    const url = req.nextUrl.clone();
+    url.pathname = '/login';
+    url.searchParams.set('redirect', path);
+    return NextResponse.redirect(url);
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll: () => req.cookies.getAll(),
@@ -21,8 +34,6 @@ export async function middleware(req: NextRequest) {
     },
   );
   const { data: { user } } = await supabase.auth.getUser();
-  const path = req.nextUrl.pathname;
-  const isPublic = PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
   if (!user && !isPublic) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';

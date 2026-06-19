@@ -15,13 +15,13 @@
 
 :root,
 .dark {
-  --bg: 9 12 20;          /* deep slate */
-  --surface: 16 20 32;
-  --elevated: 24 30 46;
-  --border: 42 50 72;
+  --bg: 3 9 15;
+  --surface: 9 16 26;
+  --elevated: 18 26 40;
+  --border: 35 45 62;
   --fg: 237 240 247;
   --muted: 148 160 184;
-  --brand: 124 109 255;   /* indigo-violet */
+  --brand: 124 93 255;
   --brand-fg: 255 255 255;
   --brand-soft: 56 52 110;
   --accent: 244 153 110;  /* warm coral */
@@ -99,7 +99,33 @@ body::before {
   }
   .gradient-text {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, rgb(var(--brand)), rgb(var(--accent)));
+    background-image: linear-gradient(135deg, #4f8cff, #9a4dff 62%, #d7d7df);
+  }
+  .gradient-text-violet {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #5b95ff 5%, #9b4dff 58%, #c5b5ff 100%);
+  }
+  .showcase-card {
+    @apply rounded-2xl border border-white/10 bg-white/[0.045] shadow-glass;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 20px 60px rgb(0 0 0 / 0.24);
+  }
+  .showcase-panel {
+    @apply rounded-3xl border border-white/10 bg-[#08111c]/85;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045), 0 24px 80px rgb(0 0 0 / 0.28);
+  }
+  .soft-grid-bg {
+    background:
+      radial-gradient(42rem 30rem at 77% 4%, rgb(124 77 255 / 0.24), transparent 66%),
+      radial-gradient(34rem 26rem at 20% 2%, rgb(49 133 255 / 0.10), transparent 64%),
+      linear-gradient(180deg, #050a12 0%, #030911 100%);
+  }
+  .icon-orb {
+    @apply inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.055];
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 0 32px rgb(124 93 255 / 0.18);
+  }
+  .glow-dot {
+    @apply rounded-full border border-violet-300/70 bg-gradient-to-br from-cyan-300 via-violet-500 to-fuchsia-500;
+    box-shadow: 0 0 20px rgb(124 93 255 / 0.78), inset 0 0 12px rgb(255 255 255 / 0.35);
   }
 }
 

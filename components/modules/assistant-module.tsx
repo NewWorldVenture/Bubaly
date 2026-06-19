@@ -28,6 +28,19 @@ const schedule = [
   ['4:30 PM', 'Soccer Practice'],
 ] as const;
 
+const glanceItems = [
+  [CalendarDays, '5', 'Events Today'],
+  [CheckCircle2, '3', 'Tasks Due'],
+  [Sparkles, '1', 'Medication Reminder'],
+  [CloudSun, '72F', 'Partly Cloudy'],
+] as const;
+
+const suggestionItems = [
+  ['Emma has a science project due tomorrow. Want me to help create a study plan?', Sparkles],
+  ['You usually grocery shop on Sundays. Should I prepare the list?', ShoppingCart],
+  ['It looks like the HVAC filter needs to be changed soon.', HomeIcon],
+] as const;
+
 export function AssistantModule() {
   return (
     <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_330px]">
@@ -65,7 +78,7 @@ export function AssistantModule() {
 
         <div className="space-y-8">
           <AssistantMessage>
-            <p className="font-semibold">Good morning, Sarah. Here's what's on the agenda for today.</p>
+            <p className="font-semibold">Good morning, Sarah. Here&apos;s what&apos;s on the agenda for today.</p>
             <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.035] p-5">
               <div className="flex items-center justify-between text-sm">
                 <span className="font-bold text-violet-300">3 events today</span>
@@ -95,9 +108,9 @@ export function AssistantModule() {
           <UserBubble text="Plan dinners for the week that my kids will actually eat." time="9:15 AM" />
 
           <AssistantMessage>
-            <p className="font-semibold">Sure. Here's a kid-friendly dinner plan for this week based on your family's favorites.</p>
+            <p className="font-semibold">Sure. Here&apos;s a kid-friendly dinner plan for this week based on your family&apos;s favorites.</p>
             <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.035] p-5">
-              <h3 className="font-bold">This Week's Dinner Plan</h3>
+              <h3 className="font-bold">This Week&apos;s Dinner Plan</h3>
               <div className="mt-4 space-y-3 text-sm">
                 {[
                   ['Mon', 'Chicken Tacos with Rice'],
@@ -124,7 +137,7 @@ export function AssistantModule() {
           <UserBubble text="Add soccer practice every Tuesday at 6pm." time="9:16 AM" />
 
           <AssistantMessage>
-            <p className="font-semibold text-white/88">All set. I've added Soccer Practice every Tuesday at 6:00 PM to the calendar.</p>
+            <p className="font-semibold text-white/88">All set. I&apos;ve added Soccer Practice every Tuesday at 6:00 PM to the calendar.</p>
             <button className="mt-5 rounded-full border border-violet-400/45 px-5 py-2.5 text-sm font-bold text-violet-300">Open Calendar</button>
           </AssistantMessage>
 
@@ -135,12 +148,7 @@ export function AssistantModule() {
 
       <aside className="space-y-6">
         <SideCard title="At a Glance">
-          {[
-            [CalendarDays, '5', 'Events Today'],
-            [CheckCircle2, '3', 'Tasks Due'],
-            [Sparkles, '1', 'Medication Reminder'],
-            [CloudSun, '72F', 'Partly Cloudy'],
-          ].map(([Icon, value, label]) => (
+          {glanceItems.map(([Icon, value, label]) => (
             <div key={String(label)} className="flex items-center gap-4 py-2">
               <Icon className="h-7 w-7 text-white/85" />
               <div>
@@ -171,11 +179,7 @@ export function AssistantModule() {
         </SideCard>
 
         <SideCard title="Smart Suggestions">
-          {[
-            ['Emma has a science project due tomorrow. Want me to help create a study plan?', Sparkles],
-            ['You usually grocery shop on Sundays. Should I prepare the list?', ShoppingCart],
-            ['It looks like the HVAC filter needs to be changed soon.', HomeIcon],
-          ].map(([text, Icon]) => (
+          {suggestionItems.map(([text, Icon]) => (
             <div key={String(text)} className="flex gap-4 py-3">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500/12">
                 <Icon className="h-5 w-5 text-violet-300" />
@@ -199,7 +203,7 @@ export function AssistantModule() {
         <SideCard title="Try saying something like...">
           {['What do we have going on this week?', 'Create a grocery list from our meal plan', 'Remind me to order camp forms', "What are my kids' activities today?"].map((prompt) => (
             <button key={prompt} className="mt-2 block w-full rounded-full border border-white/10 bg-white/[0.035] px-4 py-2.5 text-left text-xs text-white/82">
-              "{prompt}"
+              {`"${prompt}"`}
             </button>
           ))}
         </SideCard>

@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Calendar, CheckSquare, UtensilsCrossed, ShoppingCart,
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
-  Target, Sparkles, Bell, Settings, CreditCard, type LucideIcon,
+  Sparkles, Settings, CreditCard, UsersRound, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -9,32 +9,30 @@ export type NavItem = { href: string; label: string; icon: LucideIcon };
 /** Marketing top-nav. */
 export const MARKETING_NAV = [
   { href: '/features', label: 'Features' },
-  { href: '/how-it-works', label: 'How it works' },
+  { href: '/how-it-works', label: 'How It Works' },
+  { href: '/ai', label: 'AI Assistant' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/security', label: 'Security' },
-  { href: '/ai', label: 'AI Assistant' },
-  { href: '/mobile', label: 'Mobile' },
-  { href: '/faq', label: 'FAQ' },
+  { href: '/blog', label: 'Blog' },
 ] as const;
 
 /** Authenticated app sidebar / mobile tab navigation. */
 export const APP_NAV: NavItem[] = [
+  { href: '/dashboard/assistant', label: 'AI Assistant', icon: Sparkles },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
-  { href: '/dashboard/chores', label: 'Chores', icon: CheckSquare },
+  { href: '/dashboard/chores', label: 'Tasks & Chores', icon: CheckSquare },
   { href: '/dashboard/meals', label: 'Meals', icon: UtensilsCrossed },
-  { href: '/dashboard/grocery', label: 'Grocery', icon: ShoppingCart },
+  { href: '/dashboard/grocery', label: 'Groceries', icon: ShoppingCart },
   { href: '/dashboard/school', label: 'School', icon: GraduationCap },
   { href: '/dashboard/sports', label: 'Sports', icon: Trophy },
   { href: '/dashboard/health', label: 'Health', icon: HeartPulse },
-  { href: '/dashboard/home', label: 'Home', icon: Home },
   { href: '/dashboard/documents', label: 'Documents', icon: FolderLock },
+  { href: '/dashboard/home', label: 'Home', icon: Home },
   { href: '/dashboard/notes', label: 'Notes', icon: StickyNote },
-  { href: '/dashboard/goals', label: 'Goals', icon: Target },
-  { href: '/dashboard/assistant', label: 'AI Assistant', icon: Sparkles },
-  { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
+  { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
+  { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
-  { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
 ];
 
 /** Bottom tab bar on mobile web — the 5 highest-frequency destinations. */

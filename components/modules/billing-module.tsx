@@ -112,7 +112,7 @@ export function BillingModule() {
 
       {/* Feature list */}
       <Card>
-        <h2 className="mb-4 text-base font-semibold">What's included</h2>
+        <h2 className="mb-4 text-base font-semibold">What&apos;s included</h2>
         <ul className="space-y-2">
           {[
             'Unlimited family members',
