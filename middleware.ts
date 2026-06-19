@@ -1,6 +1,6 @@
 // middleware.ts — refreshes the Supabase session and guards protected routes.
 import { type NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
 const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/ai', '/mobile', '/faq', '/blog', '/contact', '/login', '/signup', '/auth'];
@@ -13,8 +13,9 @@ export async function middleware(req: NextRequest) {
     {
       cookies: {
         getAll: () => req.cookies.getAll(),
-        setAll: (toSet) => toSet.forEach(({ name, value, options }) =>
-          res.cookies.set(name, value, options)),
+        setAll: (toSet: { name: string; value: string; options: CookieOptions }[]) =>
+          toSet.forEach(({ name, value, options }) =>
+            res.cookies.set(name, value, options)),
       },
     },
   );

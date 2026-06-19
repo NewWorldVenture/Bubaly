@@ -1,0 +1,4 @@
+{
+  "extends": "next/core-web-vitals",
+  "ignorePatterns": ["mobile/**", "supabase/**", "node_modules/**", ".next/**"]
+}

@@ -1,68 +1,227 @@
 // lib/database.types.ts
-// Curated subset covering tables used by the current code. Regenerate the COMPLETE,
-// always-accurate set with:
-//   npx supabase gen types typescript --local > lib/database.types.ts
-// (or --project-id <ref> against the hosted project)
+// Hand-authored to exactly match supabase/migrations. This is the typed source of
+// truth for every Supabase query in the web + mobile apps. To regenerate against a
+// live project instead: `npm run db:types` (supabase gen types typescript).
 
-type Timestamps = { created_at: string; updated_at: string };
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-export type Database = {
+export type MemberRole = 'parent' | 'adult' | 'teen' | 'child' | 'caregiver' | 'guest';
+export type InviteStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'revoked';
+export type TaskStatus = 'todo' | 'in_progress' | 'submitted' | 'approved' | 'rejected';
+export type Priority = 'low' | 'medium' | 'high';
+export type EventCategory =
+  | 'general' | 'school' | 'sports' | 'appointment' | 'medication'
+  | 'maintenance' | 'birthday' | 'holiday' | 'other';
+export type RecurrenceFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type NotificationType =
+  | 'chore_due' | 'medication_due' | 'calendar_event' | 'school_event' | 'sports_event'
+  | 'maintenance_task' | 'grocery_reminder' | 'document_expiry' | 'family_invite' | 'system';
+export type SubscriptionStatus =
+  | 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid';
+export type ThemePref = 'dark' | 'light' | 'system';
+export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
+
+type Stamps = { created_at: string; updated_at: string };
+
+/** Helper to assemble a Tables entry from its Row + the insertable/updatable shapes.
+ *  `Relationships: []` satisfies postgrest-js's GenericTable constraint (we don't rely
+ *  on typed embedded joins; queries select columns explicitly). */
+type T<Row, Insert, Update> = { Row: Row; Insert: Insert; Update: Update; Relationships: [] };
+
+export interface Database {
   public: {
     Tables: {
-      profiles: {
-        Row: { id: string; email: string | null; full_name: string | null; display_name: string | null; avatar_url: string | null } & Timestamps;
-        Insert: { id: string; email?: string | null; full_name?: string | null };
-        Update: Partial<{ full_name: string | null; display_name: string | null; avatar_url: string | null }>;
-      };
-      families: {
-        Row: { id: string; name: string; timezone: string; created_by: string | null } & Timestamps;
-        Insert: { name: string; timezone?: string; created_by?: string | null };
-        Update: Partial<{ name: string; timezone: string }>;
-      };
-      family_members: {
-        Row: { id: string; family_id: string; user_id: string | null; role: string; display_name: string; color: string | null; is_active: boolean } & Timestamps;
-        Insert: { family_id: string; user_id?: string | null; role?: string; display_name: string };
-        Update: Partial<{ role: string; display_name: string; is_active: boolean }>;
-      };
-      calendar_events: {
-        Row: { id: string; family_id: string; title: string; category: string; starts_at: string; ends_at: string | null; all_day: boolean; created_by: string | null } & Timestamps;
-        Insert: { family_id: string; title: string; starts_at: string; ends_at?: string | null; category?: string; created_by?: string | null };
-        Update: Partial<{ title: string; starts_at: string; ends_at: string | null; category: string }>;
-      };
-      chores: {
-        Row: { id: string; family_id: string; title: string; points: number; due_at: string | null; created_by: string | null } & Timestamps;
-        Insert: { family_id: string; title: string; points?: number; due_at?: string | null; created_by?: string | null };
-        Update: Partial<{ title: string; points: number; due_at: string | null }>;
-      };
-      reminders: {
-        Row: { id: string; family_id: string; title: string; remind_at: string; recurrence: string; is_done: boolean; created_by: string | null } & Timestamps;
-        Insert: { family_id: string; title: string; remind_at: string; recurrence?: string; created_by?: string | null };
-        Update: Partial<{ title: string; remind_at: string; is_done: boolean }>;
-      };
-      grocery_lists: {
-        Row: { id: string; family_id: string; name: string; is_archived: boolean } & Timestamps;
-        Insert: { family_id: string; name?: string };
-        Update: Partial<{ name: string; is_archived: boolean }>;
-      };
-      grocery_items: {
-        Row: { id: string; family_id: string; list_id: string; name: string; quantity: string | null; is_checked: boolean; created_by: string | null } & Timestamps;
-        Insert: { family_id: string; list_id: string; name: string; quantity?: string | null; created_by?: string | null };
-        Update: Partial<{ name: string; quantity: string | null; is_checked: boolean }>;
-      };
-      meals: {
-        Row: { id: string; family_id: string; name: string; meal_type: string; ingredients: unknown; created_by: string | null } & Timestamps;
-        Insert: { family_id: string; name: string; meal_type?: string; created_by?: string | null };
-        Update: Partial<{ name: string; meal_type: string }>;
-      };
-      meal_plans: {
-        Row: { id: string; family_id: string; meal_id: string | null; plan_date: string; meal_type: string; created_by: string | null } & Timestamps;
-        Insert: { family_id: string; meal_id?: string | null; plan_date: string; meal_type?: string; created_by?: string | null };
-        Update: Partial<{ plan_date: string; meal_type: string }>;
-      };
+      profiles: T<
+        { id: string; email: string | null; full_name: string | null; display_name: string | null; avatar_url: string | null; date_of_birth: string | null; phone: string | null } & Stamps,
+        { id: string; email?: string | null; full_name?: string | null; display_name?: string | null; avatar_url?: string | null; date_of_birth?: string | null; phone?: string | null },
+        Partial<{ email: string | null; full_name: string | null; display_name: string | null; avatar_url: string | null; date_of_birth: string | null; phone: string | null }>
+      >;
+      families: T<
+        { id: string; name: string; avatar_url: string | null; timezone: string; created_by: string | null } & Stamps,
+        { id?: string; name: string; avatar_url?: string | null; timezone?: string; created_by?: string | null },
+        Partial<{ name: string; avatar_url: string | null; timezone: string }>
+      >;
+      family_members: T<
+        { id: string; family_id: string; user_id: string | null; role: MemberRole; display_name: string; color: string | null; birthday: string | null; is_active: boolean } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; role?: MemberRole; display_name: string; color?: string | null; birthday?: string | null; is_active?: boolean },
+        Partial<{ role: MemberRole; display_name: string; color: string | null; birthday: string | null; is_active: boolean }>
+      >;
+      roles: T<
+        { role: MemberRole; label: string; description: string | null },
+        { role: MemberRole; label: string; description?: string | null },
+        Partial<{ label: string; description: string | null }>
+      >;
+      permissions: T<
+        { id: string; role: MemberRole; resource: string; can_create: boolean; can_read: boolean; can_update: boolean; can_delete: boolean },
+        { id?: string; role: MemberRole; resource: string; can_create?: boolean; can_read?: boolean; can_update?: boolean; can_delete?: boolean },
+        Partial<{ can_create: boolean; can_read: boolean; can_update: boolean; can_delete: boolean }>
+      >;
+      invites: T<
+        { id: string; family_id: string; email: string; role: MemberRole; token: string; status: InviteStatus; invited_by: string | null; expires_at: string; accepted_by: string | null } & Stamps,
+        { id?: string; family_id: string; email: string; role?: MemberRole; token?: string; status?: InviteStatus; invited_by?: string | null; expires_at?: string },
+        Partial<{ status: InviteStatus; role: MemberRole; accepted_by: string | null }>
+      >;
+      calendar_events: T<
+        { id: string; family_id: string; title: string; description: string | null; location: string | null; category: EventCategory; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; description?: string | null; location?: string | null; category?: EventCategory; starts_at: string; ends_at?: string | null; all_day?: boolean; recurrence?: RecurrenceFreq; recurrence_until?: string | null; assignee_id?: string | null; created_by?: string | null },
+        Partial<{ title: string; description: string | null; location: string | null; category: EventCategory; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null }>
+      >;
+      school_events: T<
+        { id: string; family_id: string; member_id: string | null; school_name: string | null; title: string; event_type: string | null; starts_at: string; ends_at: string | null; notes: string | null; source: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; school_name?: string | null; title: string; event_type?: string | null; starts_at: string; ends_at?: string | null; notes?: string | null; source?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; school_name: string | null; title: string; event_type: string | null; starts_at: string; ends_at: string | null; notes: string | null }>
+      >;
+      sports_events: T<
+        { id: string; family_id: string; member_id: string | null; sport: string | null; team: string | null; title: string; event_type: string | null; location: string | null; starts_at: string; ends_at: string | null; recurrence: RecurrenceFreq; recurrence_until: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; sport?: string | null; team?: string | null; title: string; event_type?: string | null; location?: string | null; starts_at: string; ends_at?: string | null; recurrence?: RecurrenceFreq; recurrence_until?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; sport: string | null; team: string | null; title: string; event_type: string | null; location: string | null; starts_at: string; ends_at: string | null; recurrence: RecurrenceFreq }>
+      >;
+      appointments: T<
+        { id: string; family_id: string; member_id: string | null; title: string; provider: string | null; location: string | null; starts_at: string; ends_at: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; provider?: string | null; location?: string | null; starts_at: string; ends_at?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; title: string; provider: string | null; location: string | null; starts_at: string; ends_at: string | null; notes: string | null }>
+      >;
+      chores: T<
+        { id: string; family_id: string; title: string; description: string | null; points: number; priority: Priority; recurrence: RecurrenceFreq; due_at: string | null; requires_approval: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; description?: string | null; points?: number; priority?: Priority; recurrence?: RecurrenceFreq; due_at?: string | null; requires_approval?: boolean; created_by?: string | null },
+        Partial<{ title: string; description: string | null; points: number; priority: Priority; recurrence: RecurrenceFreq; due_at: string | null; requires_approval: boolean }>
+      >;
+      chore_assignments: T<
+        { id: string; family_id: string; chore_id: string; member_id: string; status: TaskStatus; due_at: string | null; submitted_at: string | null; approved_at: string | null; approved_by: string | null; points_awarded: number | null } & Stamps,
+        { id?: string; family_id: string; chore_id: string; member_id: string; status?: TaskStatus; due_at?: string | null },
+        Partial<{ status: TaskStatus; due_at: string | null; submitted_at: string | null; approved_at: string | null; approved_by: string | null; points_awarded: number | null }>
+      >;
+      rewards: T<
+        { id: string; family_id: string; title: string; description: string | null; cost_points: number; redeemed_by: string | null; redeemed_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; description?: string | null; cost_points?: number; created_by?: string | null },
+        Partial<{ title: string; description: string | null; cost_points: number; redeemed_by: string | null; redeemed_at: string | null }>
+      >;
+      meals: T<
+        { id: string; family_id: string; name: string; meal_type: MealType; recipe_url: string | null; ingredients: Json; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; meal_type?: MealType; recipe_url?: string | null; ingredients?: Json; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; meal_type: MealType; recipe_url: string | null; ingredients: Json; notes: string | null }>
+      >;
+      meal_plans: T<
+        { id: string; family_id: string; meal_id: string | null; plan_date: string; meal_type: MealType; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; meal_id?: string | null; plan_date: string; meal_type?: MealType; created_by?: string | null },
+        Partial<{ meal_id: string | null; plan_date: string; meal_type: MealType }>
+      >;
+      grocery_lists: T<
+        { id: string; family_id: string; name: string; is_archived: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name?: string; is_archived?: boolean; created_by?: string | null },
+        Partial<{ name: string; is_archived: boolean }>
+      >;
+      grocery_items: T<
+        { id: string; family_id: string; list_id: string; name: string; quantity: string | null; category: string | null; is_checked: boolean; source_meal_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; list_id: string; name: string; quantity?: string | null; category?: string | null; is_checked?: boolean; source_meal_id?: string | null; created_by?: string | null },
+        Partial<{ name: string; quantity: string | null; category: string | null; is_checked: boolean }>
+      >;
+      medications: T<
+        { id: string; family_id: string; member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; name: string; dosage?: string | null; instructions?: string | null; is_active?: boolean; created_by?: string | null },
+        Partial<{ member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean }>
+      >;
+      medication_schedules: T<
+        { id: string; family_id: string; medication_id: string; time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null } & Stamps,
+        { id?: string; family_id: string; medication_id: string; time_of_day: string; days_of_week?: number[]; starts_on?: string; ends_on?: string | null },
+        Partial<{ time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null }>
+      >;
+      home_assets: T<
+        { id: string; family_id: string; name: string; category: string | null; location: string | null; brand: string | null; model: string | null; purchased_on: string | null; warranty_until: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; category?: string | null; location?: string | null; brand?: string | null; model?: string | null; purchased_on?: string | null; warranty_until?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; category: string | null; location: string | null; brand: string | null; model: string | null; purchased_on: string | null; warranty_until: string | null; notes: string | null }>
+      >;
+      maintenance_tasks: T<
+        { id: string; family_id: string; asset_id: string | null; title: string; description: string | null; status: TaskStatus; priority: Priority; recurrence: RecurrenceFreq; interval_days: number | null; due_at: string | null; completed_at: string | null; assignee_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; asset_id?: string | null; title: string; description?: string | null; status?: TaskStatus; priority?: Priority; recurrence?: RecurrenceFreq; interval_days?: number | null; due_at?: string | null; assignee_id?: string | null; created_by?: string | null },
+        Partial<{ asset_id: string | null; title: string; description: string | null; status: TaskStatus; priority: Priority; recurrence: RecurrenceFreq; interval_days: number | null; due_at: string | null; completed_at: string | null; assignee_id: string | null }>
+      >;
+      documents: T<
+        { id: string; family_id: string; title: string; category: string | null; storage_path: string; mime_type: string | null; size_bytes: number | null; expires_at: string | null; member_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; category?: string | null; storage_path: string; mime_type?: string | null; size_bytes?: number | null; expires_at?: string | null; member_id?: string | null; created_by?: string | null },
+        Partial<{ title: string; category: string | null; expires_at: string | null; member_id: string | null }>
+      >;
+      notes: T<
+        { id: string; family_id: string; title: string | null; body: string; is_pinned: boolean; checklist: Json | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title?: string | null; body?: string; is_pinned?: boolean; checklist?: Json | null; created_by?: string | null },
+        Partial<{ title: string | null; body: string; is_pinned: boolean; checklist: Json | null }>
+      >;
+      goals: T<
+        { id: string; family_id: string; title: string; description: string | null; target_date: string | null; progress: number; is_complete: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; description?: string | null; target_date?: string | null; progress?: number; is_complete?: boolean; created_by?: string | null },
+        Partial<{ title: string; description: string | null; target_date: string | null; progress: number; is_complete: boolean }>
+      >;
+      reminders: T<
+        { id: string; family_id: string; title: string; notes: string | null; remind_at: string; recurrence: RecurrenceFreq; is_done: boolean; member_id: string | null; related_type: string | null; related_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; notes?: string | null; remind_at: string; recurrence?: RecurrenceFreq; is_done?: boolean; member_id?: string | null; related_type?: string | null; related_id?: string | null; created_by?: string | null },
+        Partial<{ title: string; notes: string | null; remind_at: string; recurrence: RecurrenceFreq; is_done: boolean }>
+      >;
+      notifications: T<
+        { id: string; family_id: string; user_id: string | null; type: NotificationType; title: string; body: string | null; related_type: string | null; related_id: string | null; is_read: boolean; send_at: string; sent_at: string | null; created_at: string },
+        { id?: string; family_id: string; user_id?: string | null; type: NotificationType; title: string; body?: string | null; related_type?: string | null; related_id?: string | null; is_read?: boolean; send_at?: string; sent_at?: string | null },
+        Partial<{ is_read: boolean; sent_at: string | null }>
+      >;
+      ai_conversations: T<
+        { id: string; family_id: string; user_id: string | null; title: string; provider: string; model: string | null } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; title?: string; provider?: string; model?: string | null },
+        Partial<{ title: string; model: string | null }>
+      >;
+      ai_messages: T<
+        { id: string; family_id: string; conversation_id: string; role: AiRole; content: string; tool_calls: Json | null; tool_results: Json | null; created_at: string },
+        { id?: string; family_id: string; conversation_id: string; role: AiRole; content?: string; tool_calls?: Json | null; tool_results?: Json | null },
+        Partial<{ content: string; tool_calls: Json | null; tool_results: Json | null }>
+      >;
+      audit_logs: T<
+        { id: string; family_id: string | null; actor_id: string | null; action: string; resource: string; resource_id: string | null; metadata: Json | null; created_at: string },
+        { id?: string; family_id?: string | null; actor_id?: string | null; action: string; resource: string; resource_id?: string | null; metadata?: Json | null },
+        Partial<{ metadata: Json | null }>
+      >;
+      billing_customers: T<
+        { id: string; family_id: string; provider: string; customer_ref: string | null } & Stamps,
+        { id?: string; family_id: string; provider?: string; customer_ref?: string | null },
+        Partial<{ provider: string; customer_ref: string | null }>
+      >;
+      subscriptions: T<
+        { id: string; family_id: string; billing_customer_id: string | null; plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; seats: number } & Stamps,
+        { id?: string; family_id: string; billing_customer_id?: string | null; plan?: string; status?: SubscriptionStatus; provider_ref?: string | null; current_period_end?: string | null; seats?: number },
+        Partial<{ plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; seats: number }>
+      >;
+      user_preferences: T<
+        { user_id: string; theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; notification_prefs: Json } & Stamps,
+        { user_id: string; theme?: ThemePref; push_enabled?: boolean; email_enabled?: boolean; expo_push_token?: string | null; active_family_id?: string | null; notification_prefs?: Json },
+        Partial<{ theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; notification_prefs: Json }>
+      >;
     };
+    Views: { [_ in never]: never };
+    CompositeTypes: { [_ in never]: never };
     Functions: {
       accept_invite: { Args: { p_token: string }; Returns: string };
       grocery_from_meal_plan: { Args: { p_family_id: string; p_from: string; p_to: string; p_list_id?: string }; Returns: string };
+      is_family_member: { Args: { p_family_id: string }; Returns: boolean };
+      can_manage_family: { Args: { p_family_id: string }; Returns: boolean };
+      is_family_admin: { Args: { p_family_id: string }; Returns: boolean };
+    };
+    Enums: {
+      member_role: MemberRole;
+      invite_status: InviteStatus;
+      task_status: TaskStatus;
+      priority: Priority;
+      event_category: EventCategory;
+      recurrence_freq: RecurrenceFreq;
+      meal_type: MealType;
+      notification_type: NotificationType;
+      subscription_status: SubscriptionStatus;
+      theme_pref: ThemePref;
+      ai_role: AiRole;
     };
   };
-};
+}
+
+/** Convenience row-type aliases used throughout the app. */
+export type Tables<K extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][K]['Row'];
+export type Insertable<K extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][K]['Insert'];
+export type Updatable<K extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][K]['Update'];

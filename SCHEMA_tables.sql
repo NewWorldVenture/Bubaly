@@ -1,3 +1,69 @@
+-- FamilyOS :: 0001 + 0002 single-file schema
+-- Run this whole file in Supabase SQL Editor.
+-- Includes required extensions, enum types, then all FamilyOS tables/indexes.
+
+-- Required for gen_random_uuid() / gen_random_bytes()
+create extension if not exists pgcrypto with schema public;
+
+-- ============================================================
+-- ENUM TYPES
+-- ============================================================
+
+do $$ begin
+  create type public.member_role as enum ('adult', 'parent', 'teen', 'child', 'caregiver');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.invite_status as enum ('pending', 'accepted', 'expired', 'revoked');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.event_category as enum ('general', 'school', 'sports', 'medical', 'family', 'work');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.recurrence_freq as enum ('none', 'daily', 'weekly', 'monthly', 'yearly');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.priority as enum ('low', 'medium', 'high', 'urgent');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.task_status as enum ('todo', 'in_progress', 'done', 'approved', 'rejected');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.meal_type as enum ('breakfast', 'lunch', 'dinner', 'snack');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.notification_type as enum ('reminder', 'chore', 'calendar', 'invite', 'system', 'billing');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.ai_role as enum ('user', 'assistant', 'system', 'tool');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.subscription_status as enum ('trialing', 'active', 'past_due', 'canceled', 'incomplete');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.theme_pref as enum ('light', 'dark', 'system');
+exception when duplicate_object then null;
+end $$;
+
 -- FamilyOS :: 0002 tables
 -- Convention: every household-scoped table carries family_id (uuid) for RLS isolation,
 -- created_by (uuid -> auth.users), and created_at/updated_at timestamptz.

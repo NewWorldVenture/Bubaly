@@ -1,5 +1,5 @@
 // lib/supabase/server.ts — server client bound to the request cookies (RLS as the user)
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createClient as createAdmin } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
@@ -12,7 +12,7 @@ export async function createServer() {
     {
       cookies: {
         getAll: () => cookieStore.getAll(),
-        setAll: (toSet) => {
+        setAll: (toSet: { name: string; value: string; options: CookieOptions }[]) => {
           try {
             toSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options),

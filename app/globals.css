@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   FamilyOS theme tokens. Dark is the default (set on <html>);
+   .light overrides for the user-toggleable light theme.
+   ============================================================ */
+:root {
+  /* Self-hosted system stack — no build-time font fetch, installs instantly.
+     Inter is used first when present on the device. */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
+}
+
+:root,
+.dark {
+  --bg: 9 12 20;          /* deep slate */
+  --surface: 16 20 32;
+  --elevated: 24 30 46;
+  --border: 42 50 72;
+  --fg: 237 240 247;
+  --muted: 148 160 184;
+  --brand: 124 109 255;   /* indigo-violet */
+  --brand-fg: 255 255 255;
+  --brand-soft: 56 52 110;
+  --accent: 244 153 110;  /* warm coral */
+  --success: 74 201 155;
+  --warning: 240 191 95;
+  --danger: 245 113 113;
+  --glass: 255 255 255;
+  --glass-alpha: 0.04;
+  --glass-border: 0.10;
+}
+
+.light {
+  --bg: 245 247 252;
+  --surface: 255 255 255;
+  --elevated: 255 255 255;
+  --border: 222 228 240;
+  --fg: 23 28 42;
+  --muted: 96 108 134;
+  --brand: 99 91 230;
+  --brand-fg: 255 255 255;
+  --brand-soft: 226 224 252;
+  --accent: 233 122 74;
+  --success: 31 165 122;
+  --warning: 197 142 24;
+  --danger: 213 70 70;
+  --glass: 16 22 40;
+  --glass-alpha: 0.03;
+  --glass-border: 0.08;
+}
+
+* {
+  border-color: rgb(var(--border));
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: rgb(var(--bg));
+  color: rgb(var(--fg));
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100dvh;
+}
+
+/* Ambient brand wash behind the app. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 60rem at 80% -10%, rgb(var(--brand) / 0.16), transparent 60%),
+    radial-gradient(50rem 50rem at -10% 110%, rgb(var(--accent) / 0.10), transparent 55%);
+}
+
+@layer components {
+  /* Glassmorphism surface — the core visual primitive. */
+  .glass {
+    background-color: rgb(var(--glass) / var(--glass-alpha));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgb(var(--glass) / var(--glass-border));
+  }
+  .glass-card {
+    @apply glass rounded-2xl shadow-glass;
+    background-color: rgb(var(--surface) / 0.72);
+  }
+  .focus-ring {
+    @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-bg;
+  }
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, rgb(var(--brand)), rgb(var(--accent)));
+  }
+}
+
+/* Respect reduced-motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Thin, themed scrollbars. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--border));
+  border-radius: 999px;
+  border: 2px solid rgb(var(--bg));
+}
+::-webkit-scrollbar-track { background: transparent; }
