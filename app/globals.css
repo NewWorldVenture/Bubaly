@@ -41,12 +41,25 @@
   --success: 74 201 155;
   --warning: 240 191 95;
   --danger: 245 113 113;
+  --info: 96 165 250;
   --glass: 255 255 255;
   --glass-alpha: 0.04;
   --glass-border: 0.10;
 
   --shell-bg: 5 12 21;
   --shell-border: 255 255 255 / 0.08;
+
+  /* Scrim behind modals/drawers — kept dark in both themes (a dimming layer). */
+  --overlay: 0 0 0;
+  --overlay-alpha: 0.6;
+  /* Marketing brand canvas + showcase surfaces (dark by design). */
+  --canvas-top: #050a12;
+  --canvas-bottom: #030911;
+  --canvas-fg: 237 240 247;
+  --canvas-muted: 255 255 255 / 0.7;
+  --showcase-bg: 255 255 255;
+  --showcase-alpha: 0.045;
+  --showcase-border: 255 255 255 / 0.10;
 }
 
 .light {
@@ -63,12 +76,25 @@
   --success: 31 165 122;
   --warning: 197 142 24;
   --danger: 213 70 70;
+  --info: 37 99 235;
   --glass: 16 22 40;
   --glass-alpha: 0.03;
   --glass-border: 0.08;
 
   --shell-bg: 250 251 254;
   --shell-border: 0 0 0 / 0.06;
+
+  /* Modal scrim — slightly lighter in light mode. */
+  --overlay: 15 23 42;
+  --overlay-alpha: 0.45;
+  /* Marketing canvas flips to a soft light surface; copy uses dark ink. */
+  --canvas-top: #eef2fb;
+  --canvas-bottom: #f5f7fc;
+  --canvas-fg: 23 28 42;
+  --canvas-muted: 23 28 42 / 0.66;
+  --showcase-bg: 16 22 40;
+  --showcase-alpha: 0.04;
+  --showcase-border: 16 22 40 / 0.10;
 }
 
 * {
@@ -127,23 +153,35 @@ body::before {
     background-image: linear-gradient(135deg, #5b95ff 5%, #9b4dff 58%, #c5b5ff 100%);
   }
   .showcase-card {
-    @apply rounded-2xl border border-white/10 bg-white/[0.045] shadow-glass;
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 20px 60px rgb(0 0 0 / 0.24);
+    @apply rounded-2xl shadow-glass;
+    background-color: rgb(var(--showcase-bg) / var(--showcase-alpha));
+    border: 1px solid rgb(var(--showcase-border));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 20px 60px rgb(0 0 0 / 0.18);
   }
   .showcase-panel {
-    @apply rounded-3xl border border-white/10 bg-[#08111c]/85;
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045), 0 24px 80px rgb(0 0 0 / 0.28);
+    @apply rounded-3xl;
+    background-color: rgb(var(--surface) / 0.85);
+    border: 1px solid rgb(var(--showcase-border));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045), 0 24px 80px rgb(0 0 0 / 0.24);
   }
   .soft-grid-bg {
+    color: rgb(var(--canvas-fg));
     background:
-      radial-gradient(42rem 30rem at 77% 4%, rgb(124 77 255 / 0.24), transparent 66%),
+      radial-gradient(42rem 30rem at 77% 4%, rgb(124 77 255 / 0.18), transparent 66%),
       radial-gradient(34rem 26rem at 20% 2%, rgb(49 133 255 / 0.10), transparent 64%),
-      linear-gradient(180deg, #050a12 0%, #030911 100%);
+      linear-gradient(180deg, var(--canvas-top) 0%, var(--canvas-bottom) 100%);
   }
   .icon-orb {
-    @apply inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.055];
+    @apply inline-flex items-center justify-center rounded-full;
+    background-color: rgb(var(--showcase-bg) / 0.06);
+    border: 1px solid rgb(var(--showcase-border));
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 0 32px rgb(124 93 255 / 0.18);
   }
+  /* Marketing copy colors — flip with the theme via canvas tokens. */
+  .text-canvas { color: rgb(var(--canvas-fg)); }
+  .text-canvas-muted { color: rgb(var(--canvas-muted)); }
+  /* Modal/drawer dimming scrim — token-driven, dark in both themes. */
+  .overlay-scrim { background-color: rgb(var(--overlay) / var(--overlay-alpha)); }
   .glow-dot {
     @apply rounded-full border border-violet-300/70 bg-gradient-to-br from-cyan-300 via-violet-500 to-fuchsia-500;
     box-shadow: 0 0 20px rgb(124 93 255 / 0.78), inset 0 0 12px rgb(255 255 255 / 0.35);
