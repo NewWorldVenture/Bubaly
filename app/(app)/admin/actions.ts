@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { isSuperAdmin, getUser } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
-import { getResend, FROM_EMAIL, APP_URL } from '@/lib/email';
+import { sendReactEmail, APP_URL } from '@/lib/email';
 import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
 import type { MemberRole } from '@/lib/constants/roles';
@@ -123,9 +123,7 @@ export async function adminResendInviteAction(inviteId: string): Promise<Result>
     ? (await supabase.from('profiles').select('full_name, email').eq('id', invite.invited_by).maybeSingle()).data
     : null;
 
-  const resend = getResend();
-  await resend.emails.send({
-    from: FROM_EMAIL,
+  const { ok } = await sendReactEmail({
     to: invite.email,
     subject: `Reminder: you’re invited to join ${family?.name ?? 'a family'} on FamilyOS`,
     react: React.createElement(InviteEmail, {
@@ -135,6 +133,7 @@ export async function adminResendInviteAction(inviteId: string): Promise<Result>
       role: invite.role,
     }),
   });
+  if (!ok) return { ok: false, error: 'Could not send the invite email' };
 
   await adminAuditLog({ familyId: invite.family_id, action: 'resend', resource: 'invites', resourceId: inviteId, metadata: { email: invite.email } });
   revalidatePath('/admin/users');

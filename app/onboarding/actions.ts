@@ -3,6 +3,7 @@
 import { createServer } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
 import { sendEmail } from '@/lib/server/email';
+import { APP_URL } from '@/lib/email';
 import { createFamilySchema, inviteSchema } from '@/lib/validation';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
@@ -94,7 +95,7 @@ export async function inviteMemberAction(input: {
     .single();
   if (error || !invite) return { ok: false, error: error?.message ?? 'Could not create invite' };
 
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? '';
+  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? APP_URL;
   const link = `${origin}/join?token=${invite.token}`;
   await sendEmail({
     to: parsed.data.email,
