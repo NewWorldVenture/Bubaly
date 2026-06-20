@@ -280,6 +280,46 @@ export interface Database {
         { email: string; created_at?: string },
         Partial<{ email: string }>
       >;
+      // ── Support tickets (admin console only) ──────────────────────────────
+      support_tickets: T<
+        {
+          id: string; ticket_number: string; subject: string; description: string | null;
+          category: string; priority: string; status: string;
+          requester_id: string | null; requester_name: string | null; requester_email: string;
+          assigned_agent_id: string | null; assigned_agent_name: string | null;
+          family_id: string | null; tags: string[]; resolution_note: string | null;
+          created_at: string; updated_at: string; resolved_at: string | null; closed_at: string | null;
+        },
+        {
+          id?: string; ticket_number: string; subject: string; description?: string | null;
+          category?: string; priority?: string; status?: string;
+          requester_id?: string | null; requester_name?: string | null; requester_email: string;
+          assigned_agent_id?: string | null; assigned_agent_name?: string | null;
+          family_id?: string | null; tags?: string[]; resolution_note?: string | null;
+        },
+        Partial<{
+          subject: string; description: string | null; category: string; priority: string; status: string;
+          assigned_agent_id: string | null; assigned_agent_name: string | null;
+          tags: string[]; resolution_note: string | null; resolved_at: string | null; closed_at: string | null;
+        }>
+      >;
+      // ── Admin users (admin console roles & management) ────────────────────
+      admin_users: T<
+        {
+          id: string; user_id: string | null; email: string; full_name: string | null;
+          avatar_url: string | null; admin_role: string; permissions: string[];
+          status: string; last_active_at: string | null; joined_at: string; created_at: string;
+        },
+        {
+          id?: string; user_id?: string | null; email: string; full_name?: string | null;
+          avatar_url?: string | null; admin_role?: string; permissions?: string[];
+          status?: string; last_active_at?: string | null; joined_at?: string;
+        },
+        Partial<{
+          full_name: string | null; avatar_url: string | null; admin_role: string;
+          permissions: string[]; status: string; last_active_at: string | null;
+        }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

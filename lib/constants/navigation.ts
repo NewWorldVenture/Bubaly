@@ -2,7 +2,8 @@ import {
   LayoutDashboard, Calendar, CheckSquare, UtensilsCrossed, ShoppingCart,
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
-  FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, type LucideIcon,
+  FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, TicketCheck,
+  UserCog, ClipboardList, DatabaseBackup, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -50,8 +51,11 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/system', label: 'System Overview', icon: Activity },
   { href: '/admin/content', label: 'Content Management', icon: FolderKanban },
   { href: '/admin/security', label: 'Security', icon: ShieldCheck },
-  { href: '/admin/integrations', label: 'Integrations', icon: Plug },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
+  { href: '/admin/integrations', label: 'Integrations', icon: Plug },
+  { href: '/admin/audit-logs', label: 'Audit Logs', icon: ClipboardList },
+  { href: '/admin/support-tickets', label: 'Support Tickets', icon: TicketCheck },
+  { href: '/admin/admins', label: 'Admin', icon: UserCog },
 ];
 
 /** Bottom tab bar on mobile web — the 5 highest-frequency destinations. */
