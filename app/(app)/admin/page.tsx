@@ -42,28 +42,26 @@ export default async function AdminDashboardPage() {
 
   const [
     { count: familyCount },
-    { count: userCount },
     { count: activeMemberCount },
     { count: activeSubCount },
     { data: families },
     { data: activeMembers },
     { data: subscriptions },
     { data: docs },
-    { data: newProfiles },
+    { data: newMembers },
     { data: recentLogs },
     { data: tickets },
     dbHealth,
     storageHealth,
   ] = await Promise.all([
     supabase.from('families').select('id', { count: 'exact', head: true }),
-    supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
     supabase.from('families').select('id, name, created_at').order('created_at', { ascending: false }),
-    supabase.from('family_members').select('family_id').eq('is_active', true),
-    supabase.from('subscriptions').select('plan, status, created_at'),
+    supabase.from('family_members').select('family_id, created_at').eq('is_active', true),
+    supabase.from('subscriptions').select('family_id, plan, status, created_at'),
     supabase.from('documents').select('size_bytes'),
-    supabase.from('profiles').select('created_at').gte('created_at', thirtyDaysAgo),
+    supabase.from('family_members').select('created_at').eq('is_active', true).gte('created_at', thirtyDaysAgo),
     supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, created_at')
       .order('created_at', { ascending: false }).limit(8),
     supabase.from('support_tickets').select('status'),
@@ -72,10 +70,14 @@ export default async function AdminDashboardPage() {
   ]);
 
   // ── Stat cards ──
+  // "Users" here means the real population of the product — family members,
+  // including account-less ones — not just rows in `profiles` (people who've
+  // created a login). Counting profiles alone understates active families.
+  const userCount = activeMemberCount;
   const newFamiliesThisMonth = (families ?? []).filter((f) => f.created_at >= monthStart).length;
   const activeSubs = (subscriptions ?? []).filter((s) => s.status === 'active');
   const monthlyRevenueCents = activeSubs.reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
-  const newUsersThisMonth = (newProfiles ?? []).filter((p) => p.created_at >= monthStart).length;
+  const newUsersThisMonth = (newMembers ?? []).filter((p) => p.created_at >= monthStart).length;
 
   // ── System status (real probes + configuration readiness) ──
   const statuses = [
@@ -89,10 +91,10 @@ export default async function AdminDashboardPage() {
   const operational = statuses.filter((s) => s.ok).length;
   const healthPct = Math.round((operational / statuses.length) * 100);
 
-  // ── User growth sparkline (last 30 days, daily new profiles) ──
+  // ── User growth sparkline (last 30 days, daily new members) ──
   const growthByDay = Array.from({ length: 30 }, (_, i) => {
     const dayStart = now - (29 - i) * MS_DAY;
-    return (newProfiles ?? []).filter((p) => {
+    return (newMembers ?? []).filter((p) => {
       const t = new Date(p.created_at).getTime();
       return t >= dayStart && t < dayStart + MS_DAY;
     }).length;
@@ -112,15 +114,26 @@ export default async function AdminDashboardPage() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 
-  // ── Subscription overview (by plan) ──
+  // ── Plan distribution across every family (not just paid subscriptions) ──
+  // Each family resolves to its active subscription's plan, defaulting to Free
+  // when it has no subscription row — so the donut reflects the real install
+  // base instead of collapsing to "no subscriptions" when nobody's paid yet.
   const planColors: Record<string, string> = {
-    'FamilyOS Family': '#7c5dff',
-    'FamilyOS Family (Annual)': '#22c55e',
+    'FamilyOS Free': '#64748b',
     Free: '#64748b',
+    'Family Basic': '#7c5dff',
+    'Family Basic (Annual)': '#6d28d9',
+    'Family+': '#22c55e',
+    'Family+ (Annual)': '#16a34a',
   };
+  const activeSubByFamily = new Map(activeSubs.map((s) => [s.family_id, s.plan]));
   const planBuckets = new Map<string, number>();
-  for (const s of activeSubs) planBuckets.set(planLabel(s.plan), (planBuckets.get(planLabel(s.plan)) ?? 0) + 1);
+  for (const f of families ?? []) {
+    const label = planLabel(activeSubByFamily.get(f.id) ?? 'free');
+    planBuckets.set(label, (planBuckets.get(label) ?? 0) + 1);
+  }
   const subSegments = [...planBuckets.entries()].map(([label, value]) => ({ label, value, color: planColors[label] ?? '#64748b' }));
+  const totalFamiliesForDonut = (families ?? []).length;
 
   // ── Revenue overview (last 6 months of new MRR) ──
   const months = Array.from({ length: 6 }, (_, i) => {
@@ -269,12 +282,12 @@ export default async function AdminDashboardPage() {
       {/* Bottom row: overviews + quick actions */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <h2 className="mb-3 text-base font-semibold">Subscription Overview</h2>
+          <h2 className="mb-3 text-base font-semibold">Plan Distribution</h2>
           {subSegments.length === 0 ? (
-            <EmptyState icon={CreditCard} title="No active subscriptions" />
+            <EmptyState icon={CreditCard} title="No families yet" />
           ) : (
             <div className="flex items-center gap-4">
-              <Donut segments={subSegments} total={activeSubs.length} />
+              <Donut segments={subSegments} total={totalFamiliesForDonut} />
               <ul className="space-y-1.5 text-xs">
                 {subSegments.map((s) => (
                   <li key={s.label} className="flex items-center gap-2">
