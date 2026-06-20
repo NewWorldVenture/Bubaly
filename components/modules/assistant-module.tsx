@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  CalendarDays, CheckCircle2, CloudSun, Gift, ListChecks, Mic,
+  CalendarDays, CheckCircle2, Bell, Pill, ListChecks, Mic,
   Plus, PlusCircle, School, Send, ShoppingCart, Sparkles, UtensilsCrossed,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 
 const CHIPS = [
@@ -58,8 +59,8 @@ export function AssistantModule() {
   const [glance, setGlance] = useState<GlanceItem[]>([
     { icon: CalendarDays, value: '—', label: 'Events Today' },
     { icon: CheckCircle2, value: '—', label: 'Tasks Due' },
-    { icon: Gift, value: '1', label: 'Medication Reminder' },
-    { icon: CloudSun, value: '72°F', label: 'Partly Cloudy' },
+    { icon: Bell, value: '—', label: 'Reminders Due' },
+    { icon: Pill, value: '—', label: 'Active Meds' },
   ]);
   const [upcoming, setUpcoming] = useState<UpcomingEvent[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
@@ -76,25 +77,29 @@ export function AssistantModule() {
     const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
 
     Promise.all([
-      supabase.from('calendar_events').select('id, title, starts_at, all_day')
+      supabase.from('calendar_events').select('id, title, starts_at, all_day, created_at')
         .eq('family_id', family.id).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()),
       supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id).in('status', ['todo', 'in_progress']),
       supabase.from('calendar_events').select('id, title, starts_at, all_day')
         .eq('family_id', family.id).gte('starts_at', end.toISOString()).lte('starts_at', in14.toISOString())
         .order('starts_at').limit(4),
-    ]).then(([{ data: todayEvts }, { count: openChores }, { data: upEvts }]) => {
+      supabase.from('reminders').select('id', { count: 'exact', head: true })
+        .eq('family_id', family.id).eq('is_done', false).lte('remind_at', end.toISOString()),
+      supabase.from('medications').select('id', { count: 'exact', head: true })
+        .eq('family_id', family.id).eq('is_active', true),
+    ]).then(([{ data: todayEvts }, { count: openChores }, { data: upEvts }, { count: remindersDue }, { count: activeMeds }]) => {
       setGlance([
         { icon: CalendarDays, value: String(todayEvts?.length ?? 0), label: 'Events Today' },
         { icon: CheckCircle2, value: String(openChores ?? 0), label: 'Tasks Due' },
-        { icon: Gift, value: '1', label: 'Medication Reminder' },
-        { icon: CloudSun, value: '72°F', label: 'Partly Cloudy' },
+        { icon: Bell, value: String(remindersDue ?? 0), label: 'Reminders Due' },
+        { icon: Pill, value: String(activeMeds ?? 0), label: 'Active Meds' },
       ]);
       setUpcoming(upEvts ?? []);
       setActivity((todayEvts ?? []).slice(0, 3).map((e, i) => ({
         icon: CalendarDays,
         text: `${e.title} added to calendar`,
-        time: ['9:16 AM', '9:15 AM', 'Yesterday'][i] ?? 'Recently',
+        time: fmtRelative(e.created_at),
         color: ['text-emerald-400', 'text-orange-400', 'text-violet-400'][i] ?? 'text-violet-400',
       })));
     });
@@ -106,10 +111,12 @@ export function AssistantModule() {
 
   // Show initial greeting message
   useEffect(() => {
+    const h = new Date().getHours();
+    const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
     setMessages([{
       id: 'init',
       role: 'assistant',
-      content: `Good morning, ${firstName}! Here's what's on the agenda for today. Ask me anything about your family's schedule, meals, chores, or anything else!`,
+      content: `${greeting}, ${firstName}! Here's what's on the agenda for today. Ask me anything about your family's schedule, meals, chores, or anything else!`,
     }]);
   }, [firstName]);
 
@@ -263,23 +270,21 @@ export function AssistantModule() {
           )}
         </SideCard>
 
-        {/* Smart Suggestions */}
-        <SideCard title="Smart Suggestions">
+        {/* Try asking */}
+        <SideCard title="Try Asking">
           {[
-            { icon: Sparkles, text: 'Emma has a science project due tomorrow. Want me to help create a study plan?' },
-            { icon: ShoppingCart, text: 'You usually grocery shop on Sundays. Should I prepare the list?' },
-            { icon: Gift, text: 'It looks like the HVAC filter needs to be changed soon.' },
+            { icon: CalendarDays, text: "What's on our schedule today?" },
+            { icon: UtensilsCrossed, text: 'Plan dinners for this week' },
+            { icon: ShoppingCart, text: 'Build a grocery list from our meal plan' },
+            { icon: ListChecks, text: 'What chores are due this week?' },
           ].map(({ icon: Icon, text }) => (
-            <button key={text} onClick={() => void send(text.split('?')[0] + '?')} className="flex gap-3 py-2.5 text-left hover:opacity-80 transition">
+            <button key={text} onClick={() => void send(text)} className="flex gap-3 py-2.5 text-left hover:opacity-80 transition">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10">
                 <Icon className="h-4 w-4 text-brand" />
               </span>
               <p className="text-xs leading-5 text-fg/80">{text}</p>
             </button>
           ))}
-          <button className="mt-2 w-full rounded-full border border-brand/40 py-2.5 text-xs font-bold text-brand hover:border-brand">
-            View All Suggestions
-          </button>
         </SideCard>
 
         {/* Recent Activity */}

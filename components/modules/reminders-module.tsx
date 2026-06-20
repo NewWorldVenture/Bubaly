@@ -60,7 +60,7 @@ function isOverdue(r: Reminder) {
   return new Date(r.remind_at) < new Date();
 }
 
-// ── AI suggestion templates ───────────────────────────────────
+// ── Quick-add reminder templates (common household reminders) ──
 const AI_SUGGESTIONS = [
   { title: 'Prescription refill', kind: 'medication', priority: 'high', notes: 'Check the pharmacy portal or call ahead.' },
   { title: 'Pay monthly bills', kind: 'bill', priority: 'medium', notes: 'Review credit card, utilities, and insurance.' },
@@ -145,7 +145,7 @@ export function RemindersModule() {
         action={
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setShowSuggestions(!showSuggestions)}>
-              <Sparkles className="h-4 w-4 text-brand" /> AI Suggestions
+              <Sparkles className="h-4 w-4 text-brand" /> Quick Add
             </Button>
             <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> New Reminder</Button>
           </div>
@@ -186,7 +186,7 @@ export function RemindersModule() {
         <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
           <div className="mb-3 flex items-center justify-between">
             <p className="flex items-center gap-2 text-sm font-bold">
-              <Sparkles className="h-4 w-4 text-brand" /> AI Suggested Reminders
+              <Sparkles className="h-4 w-4 text-brand" /> Common Reminders
             </p>
             <button onClick={() => setShowSuggestions(false)}><X className="h-4 w-4 text-muted" /></button>
           </div>
