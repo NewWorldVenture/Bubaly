@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   CAPABILITIES, PROVIDER_LABELS, type SyncProvider, type SyncItemKind,
 } from '@/lib/sync/capabilities';
+import { GoogleControls } from '@/components/sync/google-controls';
 
 export const metadata: Metadata = { title: 'Sync provider' };
 export const dynamic = 'force-dynamic';
@@ -24,12 +25,13 @@ const KINDS: { key: SyncItemKind; label: string }[] = [
 // flows that require credentials/registration we don't yet have wired.
 const SETUP: Record<SyncProvider, { steps: string[]; connectHref?: string; docsHref: string; authKind: string }> = {
   google: {
-    authKind: 'OAuth 2.0',
-    connectHref: '/api/google/calendar/auth',
+    authKind: 'OAuth 2.0 (offline)',
+    connectHref: '/api/sync/google/auth',
     docsHref: 'https://developers.google.com/calendar',
     steps: [
-      'Click Connect Google to grant calendar (and Tasks) access via OAuth.',
-      'Choose which calendars to import and set the sync direction.',
+      'Click Connect Google to grant Calendar + Tasks access (offline, two-way).',
+      'Your primary Google calendar and default Tasks list sync both directions.',
+      'Use “Sync now” to run a sync; conflicts surface for manual review.',
       'Notes: Google Keep has no public API — notes stay internal or export to a Google Doc.',
     ],
   },
@@ -64,10 +66,32 @@ const SETUP: Record<SyncProvider, { steps: string[]; connectHref?: string; docsH
   internal: { authKind: 'native', docsHref: '#', steps: [] },
 };
 
-export default async function SyncProviderPage({ params }: { params: Promise<{ provider: string }> }) {
+const STATUS_MSG: Record<string, { tone: 'success' | 'danger'; text: string }> = {
+  'connected=1': { tone: 'success', text: 'Account connected. Run “Sync now” to pull and push your data.' },
+  'disconnected=1': { tone: 'success', text: 'Account disconnected and access revoked.' },
+  'error=not_configured': { tone: 'danger', text: 'Google OAuth is not configured on the server (missing client credentials).' },
+  'error=no_encryption_key': { tone: 'danger', text: 'SYNC_TOKEN_KEY is not set, so tokens cannot be stored securely. Connection blocked.' },
+  'error=state_mismatch': { tone: 'danger', text: 'Security check failed (state mismatch). Please try connecting again.' },
+  'error=denied': { tone: 'danger', text: 'Authorization was cancelled or denied.' },
+  'error=connect_failed': { tone: 'danger', text: 'Could not complete the connection. Please try again.' },
+};
+
+export default async function SyncProviderPage({
+  params, searchParams,
+}: {
+  params: Promise<{ provider: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const { provider: raw } = await params;
+  const sp = await searchParams;
   const provider = raw as SyncProvider;
   if (!VALID.includes(provider)) notFound();
+
+  const statusKey = Object.keys(STATUS_MSG).find((k) => {
+    const [key, val] = k.split('=');
+    return sp[key] === val;
+  });
+  const banner = statusKey ? STATUS_MSG[statusKey] : null;
 
   const ctx = await requireUserContext();
   const supabase = await createServer();
@@ -94,6 +118,22 @@ export default async function SyncProviderPage({ params }: { params: Promise<{ p
         </div>
         {account ? <Badge tone="success">Connected · {account.sync_status}</Badge> : <Badge tone="neutral">Not connected</Badge>}
       </div>
+
+      {banner && (
+        <div className={`rounded-xl border p-3 text-sm ${banner.tone === 'success' ? 'border-success/25 bg-success/10 text-success' : 'border-danger/25 bg-danger/10 text-danger'}`}>
+          {banner.text}
+        </div>
+      )}
+
+      {provider === 'google' && account && (
+        <Card>
+          <h2 className="mb-3 text-base font-semibold">Sync</h2>
+          {account.last_synced_at && (
+            <p className="mb-3 text-xs text-muted">Last synced {new Date(account.last_synced_at).toLocaleString()}</p>
+          )}
+          <GoogleControls />
+        </Card>
+      )}
 
       <Card>
         <h2 className="mb-3 text-base font-semibold">Capabilities</h2>
