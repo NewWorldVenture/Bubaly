@@ -149,6 +149,25 @@ body::before {
     box-shadow: 0 0 20px rgb(124 93 255 / 0.78), inset 0 0 12px rgb(255 255 255 / 0.35);
   }
 
+  .assistant-message-enter {
+    animation: assistant-message-enter 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .hero-phone-float {
+    animation: hero-phone-float 7s ease-in-out infinite;
+  }
+
+  .device-art {
+    transform: translateY(0) scale(1);
+    transition: transform 320ms ease, filter 320ms ease;
+    filter: drop-shadow(0 18px 25px rgb(0 0 0 / 0.32));
+  }
+
+  .device-card:hover .device-art {
+    transform: translateY(-7px) scale(1.025);
+    filter: drop-shadow(0 24px 34px rgb(93 75 255 / 0.18));
+  }
+
   /* Responsive container — constrains content width with consistent padding */
   .page-container {
     @apply mx-auto w-full max-w-[1480px] px-4 sm:px-6 lg:px-8;
@@ -233,6 +252,16 @@ body::before {
   .tab-item-inactive {
     @apply text-muted hover:bg-elevated hover:text-fg;
   }
+}
+
+@keyframes assistant-message-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes hero-phone-float {
+  0%, 100% { transform: translateY(0) rotate(3deg); }
+  50% { transform: translateY(-10px) rotate(2deg); }
 }
 
 /* Respect reduced-motion preferences. */
