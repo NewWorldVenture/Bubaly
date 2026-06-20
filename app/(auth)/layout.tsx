@@ -4,7 +4,7 @@ import { ThemeToggle } from '@/components/theme/theme-toggle';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="soft-grid-bg flex min-h-dvh flex-col">
       <header className="flex items-center justify-between px-5 py-5 sm:px-8">
         <Logo />
         <ThemeToggle />
