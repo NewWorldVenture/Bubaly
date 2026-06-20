@@ -339,8 +339,8 @@ export interface Database {
       // ── Admin console (migration 0015) ──────────────────────
       app_settings: T<
         { key: string; value: Json; updated_by: string | null; updated_at: string },
-        { key: string; value?: Json; updated_by?: string | null },
-        Partial<{ value: Json; updated_by: string | null }>
+        { key: string; value?: Json; updated_by?: string | null; updated_at?: string },
+        Partial<{ value: Json; updated_by: string | null; updated_at: string }>
       >;
       system_backups: T<
         { id: string; label: string; kind: string; status: string; size_bytes: number; location: string | null; row_counts: Json; created_by: string | null; created_at: string; metadata: Json },
