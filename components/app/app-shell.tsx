@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
+import { useTheme } from '@/components/theme/use-theme';
+import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { ChevronDown, Check, Gift, LogOut, Mic, Moon, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, Sparkles, SunMedium } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
@@ -120,6 +122,14 @@ function UserMenu() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { theme, setTheme } = useTheme();
+  const [themeMounted, setThemeMounted] = useState(false);
+  useEffect(() => setThemeMounted(true), []);
+  const resolvedTheme = !themeMounted
+    ? 'dark'
+    : theme === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+      : theme;
 
   return (
     <div className="min-h-dvh bg-bg text-fg lg:flex">
@@ -181,10 +191,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
           <div className="grid grid-cols-2 rounded-xl border border-border bg-surface/40 p-1 text-sm">
-            <button className="flex items-center justify-center gap-2 rounded-lg bg-brand/15 py-2.5 font-semibold text-brand">
+            <button
+              type="button"
+              onClick={() => setTheme('dark')}
+              aria-pressed={resolvedTheme === 'dark'}
+              className={cn(
+                'flex items-center justify-center gap-2 rounded-lg py-2.5 transition',
+                resolvedTheme === 'dark' ? 'bg-brand/15 font-semibold text-brand' : 'text-muted hover:text-fg',
+              )}
+            >
               <Moon className="h-4 w-4" /> Dark
             </button>
-            <button className="flex items-center justify-center gap-2 rounded-lg py-2.5 text-muted">
+            <button
+              type="button"
+              onClick={() => setTheme('light')}
+              aria-pressed={resolvedTheme === 'light'}
+              className={cn(
+                'flex items-center justify-center gap-2 rounded-lg py-2.5 transition',
+                resolvedTheme === 'light' ? 'bg-brand/15 font-semibold text-brand' : 'text-muted hover:text-fg',
+              )}
+            >
               <SunMedium className="h-4 w-4" /> Light
             </button>
           </div>
@@ -206,6 +232,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/dashboard/notifications" className="hidden h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg md:inline-flex">
             <Gift className="h-5 w-5" />
           </Link>
+          <ThemeToggle className="h-10 w-10 lg:hidden" />
           <NotificationBell />
           <UserMenu />
         </header>

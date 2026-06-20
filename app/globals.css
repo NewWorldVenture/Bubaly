@@ -143,9 +143,9 @@ body::before {
   }
   .soft-grid-bg {
     background:
-      radial-gradient(46rem 32rem at 78% -2%, rgb(122 104 255 / 0.26), transparent 64%),
-      radial-gradient(38rem 30rem at 12% 4%, rgb(74 200 255 / 0.13), transparent 62%),
-      linear-gradient(180deg, #070a11 0%, #05070d 100%);
+      radial-gradient(46rem 32rem at 78% -2%, rgb(var(--brand) / 0.22), transparent 64%),
+      radial-gradient(38rem 30rem at 12% 4%, rgb(var(--accent) / 0.13), transparent 62%),
+      rgb(var(--bg));
   }
   .icon-orb {
     @apply inline-flex items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.05];
@@ -241,6 +241,95 @@ body::before {
     @apply text-muted hover:bg-elevated hover:text-fg;
   }
 }
+
+/* ============================================================
+   Dark "island": a self-contained dark scope used by surfaces that are
+   intentionally always dark (the marketing site has no theme toggle).
+   It re-declares the dark tokens locally, so even in light mode every
+   token-based AND white-remapped color inside it resolves to the dark
+   palette — no per-element opt-outs needed.
+   ============================================================ */
+.theme-dark-island {
+  --bg: 6 8 13;
+  --surface: 12 16 24;
+  --elevated: 19 24 36;
+  --border: 33 39 54;
+  --fg: 245 247 252;
+  --muted: 146 156 179;
+  --brand: 122 104 255;
+  --brand-fg: 255 255 255;
+  --brand-soft: 44 42 96;
+  --accent: 74 200 255;
+  --success: 56 214 160;
+  --warning: 245 197 100;
+  --danger: 250 110 110;
+  --glass: 255 255 255;
+  --glass-alpha: 0.035;
+  --glass-border: 0.09;
+  color-scheme: dark;
+}
+
+/* ============================================================
+   Light-mode compatibility layer.
+   The product is authored dark-first with many hardcoded white / white-
+   alpha utilities (text on dark surfaces, subtle overlays and borders).
+   In light mode we remap those to the foreground ink token so every
+   surface stays legible. We use rgb(var(--fg) / x), so inside a
+   .theme-dark-island (where --fg is re-set to near-white) they resolve
+   back to white automatically — keeping intentionally-dark areas intact.
+   ============================================================ */
+.light .text-white { color: rgb(var(--fg)); }
+.light .text-white\/90 { color: rgb(var(--fg) / 0.92); }
+.light .text-white\/85 { color: rgb(var(--fg) / 0.88); }
+.light .text-white\/80 { color: rgb(var(--fg) / 0.85); }
+.light .text-white\/78 { color: rgb(var(--fg) / 0.82); }
+.light .text-white\/76 { color: rgb(var(--fg) / 0.8); }
+.light .text-white\/75 { color: rgb(var(--fg) / 0.8); }
+.light .text-white\/72 { color: rgb(var(--fg) / 0.78); }
+.light .text-white\/70 { color: rgb(var(--fg) / 0.75); }
+.light .text-white\/68 { color: rgb(var(--fg) / 0.72); }
+.light .text-white\/65 { color: rgb(var(--fg) / 0.7); }
+.light .text-white\/62 { color: rgb(var(--fg) / 0.68); }
+.light .text-white\/60 { color: rgb(var(--fg) / 0.66); }
+.light .text-white\/55 { color: rgb(var(--fg) / 0.62); }
+.light .text-white\/50 { color: rgb(var(--fg) / 0.58); }
+.light .text-white\/45 { color: rgb(var(--fg) / 0.55); }
+.light .text-white\/42 { color: rgb(var(--fg) / 0.52); }
+.light .text-white\/40 { color: rgb(var(--fg) / 0.5); }
+.light .text-white\/35 { color: rgb(var(--fg) / 0.48); }
+.light .text-white\/30 { color: rgb(var(--fg) / 0.42); }
+.light .text-white\/25 { color: rgb(var(--fg) / 0.38); }
+.light .text-white\/20 { color: rgb(var(--fg) / 0.34); }
+
+.light .bg-white\/5 { background-color: rgb(var(--fg) / 0.05); }
+.light .bg-white\/10 { background-color: rgb(var(--fg) / 0.08); }
+.light .bg-white\/20 { background-color: rgb(var(--fg) / 0.12); }
+.light .bg-white\/30 { background-color: rgb(var(--fg) / 0.16); }
+.light .bg-white\/\[0\.02\] { background-color: rgb(var(--fg) / 0.03); }
+.light .bg-white\/\[0\.025\] { background-color: rgb(var(--fg) / 0.035); }
+.light .bg-white\/\[0\.03\] { background-color: rgb(var(--fg) / 0.04); }
+.light .bg-white\/\[0\.035\] { background-color: rgb(var(--fg) / 0.045); }
+.light .bg-white\/\[0\.04\] { background-color: rgb(var(--fg) / 0.05); }
+.light .bg-white\/\[0\.045\] { background-color: rgb(var(--fg) / 0.055); }
+.light .bg-white\/\[0\.05\] { background-color: rgb(var(--fg) / 0.06); }
+.light .bg-white\/\[0\.055\] { background-color: rgb(var(--fg) / 0.065); }
+.light .bg-white\/\[0\.06\] { background-color: rgb(var(--fg) / 0.07); }
+.light .bg-white\/\[0\.07\] { background-color: rgb(var(--fg) / 0.08); }
+.light .bg-white\/\[0\.08\] { background-color: rgb(var(--fg) / 0.09); }
+
+.light .border-white\/5 { border-color: rgb(var(--fg) / 0.08); }
+.light .border-white\/8 { border-color: rgb(var(--fg) / 0.1); }
+.light .border-white\/10 { border-color: rgb(var(--fg) / 0.12); }
+.light .border-white\/15 { border-color: rgb(var(--fg) / 0.16); }
+.light .border-white\/20 { border-color: rgb(var(--fg) / 0.2); }
+.light .border-white\/\[0\.06\] { border-color: rgb(var(--fg) / 0.09); }
+.light .border-white\/\[0\.07\] { border-color: rgb(var(--fg) / 0.1); }
+.light .border-white\/\[0\.08\] { border-color: rgb(var(--fg) / 0.11); }
+.light .border-white\/\[0\.09\] { border-color: rgb(var(--fg) / 0.12); }
+.light .border-white\/\[0\.10\] { border-color: rgb(var(--fg) / 0.13); }
+
+.light .from-white\/5 { --tw-gradient-from: rgb(var(--fg) / 0.05) var(--tw-gradient-from-position); --tw-gradient-to: rgb(var(--fg) / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+.light .to-white\/\[0\.02\] { --tw-gradient-to: rgb(var(--fg) / 0.03) var(--tw-gradient-to-position); }
 
 /* Respect reduced-motion preferences. */
 @media (prefers-reduced-motion: reduce) {

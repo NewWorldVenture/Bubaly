@@ -64,7 +64,7 @@ export default async function KitchenDisplayPage() {
   });
 
   return (
-    <div className="min-h-dvh bg-[#050c15] p-6 text-white lg:p-10">
+    <div className="theme-dark-island min-h-dvh bg-[#050c15] p-6 text-white lg:p-10">
       <AutoRefresh seconds={60} />
 
       {/* Header */}
