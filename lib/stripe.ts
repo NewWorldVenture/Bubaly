@@ -16,8 +16,14 @@ export function getStripe() {
 }
 
 export const STRIPE_PLANS = {
-  family_monthly: process.env.STRIPE_PRICE_FAMILY_MONTHLY ?? '',
-  family_annual: process.env.STRIPE_PRICE_FAMILY_ANNUAL ?? '',
+  basic_monthly: process.env.STRIPE_PRICE_BASIC_MONTHLY ?? process.env.STRIPE_PRICE_FAMILY_MONTHLY ?? '',
+  basic_annual: process.env.STRIPE_PRICE_BASIC_ANNUAL ?? process.env.STRIPE_PRICE_FAMILY_ANNUAL ?? '',
+  plus_monthly: process.env.STRIPE_PRICE_PLUS_MONTHLY ?? '',
+  plus_annual: process.env.STRIPE_PRICE_PLUS_ANNUAL ?? '',
+  // Legacy keys — kept so any older client/links keep working. They resolve to
+  // the Basic price (the former single "Family" plan is now Family Basic).
+  family_monthly: process.env.STRIPE_PRICE_FAMILY_MONTHLY ?? process.env.STRIPE_PRICE_BASIC_MONTHLY ?? '',
+  family_annual: process.env.STRIPE_PRICE_FAMILY_ANNUAL ?? process.env.STRIPE_PRICE_BASIC_ANNUAL ?? '',
 } as const;
 
 export type StripePlan = keyof typeof STRIPE_PLANS;
