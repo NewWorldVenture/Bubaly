@@ -23,7 +23,7 @@ import { AssistantConversation } from '@/components/marketing/homepage-interacti
 import { cn } from '@/lib/utils/cn';
 
 export function PageWrap({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('soft-grid-bg min-h-dvh text-white', className)}>{children}</div>;
+  return <div className={cn('soft-grid-bg min-h-dvh overflow-x-clip text-white', className)}>{children}</div>;
 }
 
 export function Container({ children, className }: { children: React.ReactNode; className?: string }) {
