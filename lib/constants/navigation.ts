@@ -5,7 +5,7 @@ import {
   FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, TicketCheck,
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
-  DollarSign, HardDrive, type LucideIcon,
+  DollarSign, HardDrive, RefreshCw, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -83,6 +83,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     layout: 'grid',
     items: [
       { href: '/dashboard/billing', label: 'Finances', icon: CreditCard, minLevel: 0 },
+      { href: '/dashboard/sync', label: 'Calendar Sync', icon: RefreshCw, minLevel: 0 },
       { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound, minLevel: 0 },
     ],
   },
@@ -103,6 +104,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
   { href: '/admin/billing', label: 'Billing & Payments', icon: DollarSign },
   { href: '/admin/integrations', label: 'Integrations', icon: Plug },
+  { href: '/admin/sync', label: 'Sync Platform', icon: RefreshCw },
   { href: '/admin/backup', label: 'Backup & Restore', icon: HardDrive },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: ClipboardList },
   { href: '/admin/support-tickets', label: 'Support Tickets', icon: TicketCheck },

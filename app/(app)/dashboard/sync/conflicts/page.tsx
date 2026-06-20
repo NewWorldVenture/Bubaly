@@ -1,0 +1,75 @@
+import type { Metadata } from 'next';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { requireUserContext } from '@/lib/supabase/auth';
+import { createServer } from '@/lib/supabase/server';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { PROVIDER_LABELS, type SyncProvider } from '@/lib/sync/capabilities';
+
+export const metadata: Metadata = { title: 'Sync conflicts' };
+export const dynamic = 'force-dynamic';
+
+const KIND_LABEL: Record<string, string> = {
+  both_edited: 'Edited in both places',
+  deleted_vs_edited: 'Deleted on one side, edited on the other',
+  time_changed: 'Time changed in both places',
+  completed_vs_edited: 'Completed on one side, edited on the other',
+};
+
+export default async function SyncConflictsPage() {
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+  const { data: conflicts } = await supabase
+    .from('sync_conflicts')
+    .select('id, provider, item_type, conflict_kind, status, created_at')
+    .eq('family_id', ctx.active.familyId)
+    .eq('status', 'open')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  const rows = conflicts ?? [];
+
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Conflicts</h1>
+        <p className="mt-1 text-sm text-muted">When the same item changes in two places, we pause and ask you which version wins.</p>
+      </div>
+
+      {rows.length === 0 ? (
+        <Card>
+          <div className="flex items-center gap-3 py-6">
+            <CheckCircle2 className="h-6 w-6 text-success" />
+            <div>
+              <p className="font-medium">No open conflicts</p>
+              <p className="text-sm text-muted">Everything is in sync. Conflicts will appear here for manual review.</p>
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((c) => (
+            <Card key={c.id}>
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium capitalize">{c.item_type}</p>
+                    <Badge tone="neutral">{PROVIDER_LABELS[(c.provider as SyncProvider)] ?? c.provider}</Badge>
+                    <Badge tone="warning">{c.status}</Badge>
+                  </div>
+                  <p className="mt-0.5 text-sm text-muted">{KIND_LABEL[c.conflict_kind] ?? c.conflict_kind}</p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-1.5">
+                  <Badge tone="brand">Keep ours</Badge>
+                  <Badge tone="accent">Keep theirs</Badge>
+                  <Badge tone="neutral">Keep both</Badge>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
