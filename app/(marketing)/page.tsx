@@ -31,57 +31,57 @@ export default async function HomePage() {
   return (
     <PageWrap>
       {/* ── Hero ── */}
-      <Container className="max-w-[1180px] pb-0 pt-10 sm:pt-14 lg:pt-8">
-        <section className="grid items-center gap-12 lg:min-h-[690px] lg:grid-cols-[1.08fr_.92fr] lg:gap-10">
+      <Container className="max-w-[1440px] px-5 pb-0 pt-10 sm:px-8 sm:pt-12 lg:px-10 lg:pt-5">
+        <section className="grid items-center gap-12 lg:min-h-[650px] lg:grid-cols-[1.05fr_.95fr] lg:gap-8">
 
           {/* Left */}
           <div className="order-1 text-center lg:text-left">
             <Pill icon={Sparkles}>AI-Powered Family Command Center</Pill>
 
-            <h1 className="mt-6 text-[clamp(3rem,11vw,4.25rem)] font-black leading-[1.02] tracking-[-0.04em] lg:text-[4.65rem]">
+            <h1 className="mt-6 text-[clamp(3rem,11vw,4.1rem)] font-extrabold leading-[1.03] tracking-[-0.038em] lg:text-[4.25rem]">
               Everything your<br />
               family needs.<br />
               <GradientText>In one place.</GradientText>
             </h1>
 
-            <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-white/70 sm:text-lg sm:leading-8 lg:mx-0">
+            <p className="mx-auto mt-5 max-w-[520px] text-[15px] leading-6 text-white/70 sm:text-base sm:leading-7 lg:mx-0">
               FamilyOS is your AI-powered Operating System for family life. Stay organized, connected, and ahead of what matters most.
             </p>
 
-            <div className="mt-8 flex flex-col items-stretch gap-3 xs:flex-row xs:items-center xs:justify-center lg:justify-start">
+            <div className="mt-7 flex flex-col items-stretch gap-3 xs:flex-row xs:items-center xs:justify-center lg:justify-start">
               <PrimaryLink href="/signup">Start Free Trial</PrimaryLink>
               <WatchDemoLink href="/how-it-works">Watch Demo</WatchDemoLink>
             </div>
-            <div className="mt-8 flex justify-center lg:justify-start">
+            <div className="mt-6 flex justify-center lg:justify-start">
               <PlatformBadges />
             </div>
 
-            <div className="mt-8 flex justify-center lg:justify-start">
+            <div className="mt-6 flex justify-center lg:justify-start">
               <SocialProofLine text={familiesHeadline(families)} />
             </div>
           </div>
 
           {/* Right — phone mockup */}
           <div className="order-2 flex justify-center overflow-hidden py-4 lg:justify-end lg:overflow-visible lg:py-0">
-            <HeroPhoneMockup className="w-full max-w-[300px] sm:max-w-[340px] lg:max-w-[350px]" />
+            <HeroPhoneMockup className="w-full max-w-[278px] sm:max-w-[306px] lg:max-w-[320px]" />
           </div>
         </section>
       </Container>
 
       {/* ── Tagline divider ── */}
-      <div className="mt-16 border-y border-white/8 bg-white/[0.018] py-7 text-center lg:mt-4">
-        <p className="text-xl font-semibold text-white/80 sm:text-2xl">
+      <div className="mt-12 border-y border-white/[0.06] bg-white/[0.012] py-5 text-center lg:mt-2">
+        <p className="text-lg font-semibold text-white/80 sm:text-xl">
           Your entire family, perfectly organized
         </p>
       </div>
 
       {/* ── Feature rail ── */}
-      <Container className="max-w-[1180px] pb-5 pt-12 sm:pt-14">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-9 sm:grid-cols-3 lg:grid-cols-6 lg:gap-5">
+      <Container className="max-w-[1440px] px-5 pb-4 pt-10 sm:px-8 sm:pt-12 lg:px-10">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-6 lg:gap-5">
           {FEATURE_RAIL.map(({ icon, title, body, tone }) => (
             <div key={title} className="group flex flex-col items-center text-center">
-              <IconOrb icon={icon} tone={tone} className="transition group-hover:scale-110" />
-              <h3 className="mt-4 text-sm font-bold">{title}</h3>
+              <IconOrb icon={icon} tone={tone} className="h-14 w-14 transition group-hover:scale-105 [&>svg]:h-6 [&>svg]:w-6" />
+              <h3 className="mt-3 text-xs font-semibold">{title}</h3>
               <p className="mx-auto mt-2 max-w-[160px] text-xs leading-5 text-white/55">{body}</p>
             </div>
           ))}
@@ -89,17 +89,17 @@ export default async function HomePage() {
       </Container>
 
       {/* ── AI Family Assistant ── */}
-      <Container className="max-w-[1180px] pb-4 pt-10">
+      <Container className="max-w-[1440px] px-5 pb-3 pt-8 sm:px-8 lg:px-10">
         <FamilyAiPanel />
       </Container>
 
       {/* ── Testimonials ── */}
-      <Container className="max-w-[1180px] pb-4 pt-5">
+      <Container className="max-w-[1440px] px-5 pb-3 pt-4 sm:px-8 lg:px-10">
         <TestimonialBand />
       </Container>
 
       {/* ── Device showcase ── */}
-      <Container className="max-w-[1180px] pb-16 pt-0 sm:pb-20">
+      <Container className="max-w-[1440px] px-5 pb-12 pt-0 sm:px-8 sm:pb-16 lg:px-10">
         <DeviceShowcase />
       </Container>
 

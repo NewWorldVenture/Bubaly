@@ -1,21 +1,29 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import {
+  Apple,
   Bell,
+  Bot,
   CalendarDays,
   Check,
   CheckCircle2,
   CheckSquare2,
   Circle,
+  CloudSun,
   Folder,
   GraduationCap,
   Heart,
   Home,
   Mail,
+  Monitor,
   PlayCircle,
   Shield,
   ShoppingCart,
   Sparkles,
+  Star,
+  Tablet,
+  TriangleAlert,
+  Tv,
   UtensilsCrossed,
   type LucideIcon,
 } from 'lucide-react';
@@ -23,7 +31,7 @@ import { AssistantConversation } from '@/components/marketing/homepage-interacti
 import { cn } from '@/lib/utils/cn';
 
 export function PageWrap({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('soft-grid-bg min-h-dvh overflow-x-clip text-canvas', className)}>{children}</div>;
+  return <div className={cn('homepage-reference-bg min-h-dvh overflow-x-clip text-white', className)}>{children}</div>;
 }
 
 export function Container({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -55,7 +63,7 @@ export function PrimaryLink({ href, children }: { href: string; children: React.
   return (
     <Link
       href={href}
-      className="inline-flex h-14 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-8 text-base font-bold text-white shadow-glow transition hover:scale-[1.02] hover:brightness-110"
+      className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-violet-600 px-7 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 hover:brightness-110"
     >
       {children}
     </Link>
@@ -66,7 +74,7 @@ export function WatchDemoLink({ href, children }: { href: string; children: Reac
   return (
     <Link
       href={href}
-      className="inline-flex h-14 items-center justify-center gap-2.5 rounded-xl border border-white/18 bg-white/[0.025] px-8 text-base font-bold text-white transition hover:bg-white/[0.07]"
+      className="inline-flex h-12 items-center justify-center gap-2.5 rounded-lg border border-white/15 bg-white/[0.025] px-7 text-sm font-semibold text-white transition hover:bg-white/[0.07]"
     >
       <PlayCircle className="h-5 w-5 fill-white/20" />
       {children}
@@ -110,20 +118,37 @@ export function IconOrb({
   );
 }
 
+const FACE_POSITIONS = ['54% 34%', '67% 38%', '79% 31%', '91% 40%', '72% 36%'] as const;
+
+function FaceAvatar({ index, className }: { index: number; className?: string }) {
+  return (
+    <span
+      className={cn('block overflow-hidden rounded-full bg-[#111b28] bg-no-repeat', className)}
+      style={{
+        backgroundImage: "url('/images/family-ai-lifestyle.png')",
+        backgroundPosition: FACE_POSITIONS[index % FACE_POSITIONS.length],
+        backgroundSize: '620% auto',
+      }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function Rating({ className }: { className?: string }) {
+  return (
+    <div className={cn('flex items-center gap-0.5 text-amber-400', className)} aria-label="5 out of 5 stars">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <Star key={index} className="h-3.5 w-3.5 fill-current" />
+      ))}
+    </div>
+  );
+}
+
 export function AvatarStack() {
-  const people = ['SJ', 'DM', 'AL', 'PK', 'CJ'];
   return (
     <div className="flex -space-x-2">
-      {people.map((person, index) => (
-        <span
-          key={person}
-          className={cn(
-            'grid h-10 w-10 place-items-center rounded-full border-2 border-[#07101a] text-xs font-bold text-white',
-            ['bg-rose-300', 'bg-amber-300', 'bg-cyan-300', 'bg-emerald-300', 'bg-violet-300'][index],
-          )}
-        >
-          {person}
-        </span>
+      {FACE_POSITIONS.map((_, index) => (
+        <FaceAvatar key={index} index={index} className="h-9 w-9 border-2 border-[#07101a]" />
       ))}
     </div>
   );
@@ -131,27 +156,30 @@ export function AvatarStack() {
 
 export function SocialProofLine({ text = 'Loved by families everywhere' }: { text?: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-4">
+    <div className="inline-flex items-center gap-3 rounded-sm border border-white/[0.035] bg-[#07111b]/90 px-3 py-2.5 shadow-[0_12px_30px_rgba(0,0,0,0.22)]">
       <AvatarStack />
-      <p className="text-sm text-white/80">{text}</p>
+      <div>
+        <Rating />
+        <p className="mt-1 text-[11px] text-white/60">{text}</p>
+      </div>
     </div>
   );
 }
 
 export function PlatformBadges() {
   const platforms = [
-    { icon: '🍎', label: 'iOS' },
-    { icon: '🤖', label: 'Android' },
-    { icon: '🖥️', label: 'Web' },
-    { icon: '📱', label: 'Tablet' },
-    { icon: '📺', label: 'TV' },
+    { icon: Apple, label: 'iOS' },
+    { icon: Bot, label: 'Android' },
+    { icon: Monitor, label: 'Web' },
+    { icon: Tablet, label: 'Tablet' },
+    { icon: Tv, label: 'TV' },
   ];
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <span className="text-xs text-white/45">Available on</span>
-      {platforms.map(({ icon, label }) => (
-        <span key={label} className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/70">
-          <span>{icon}</span>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+      <span className="w-full text-[10px] text-white/40">Available on</span>
+      {platforms.map(({ icon: Icon, label }) => (
+        <span key={label} className="flex items-center gap-1.5 text-[10px] text-white/55">
+          <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
           {label}
         </span>
       ))}
@@ -161,40 +189,42 @@ export function PlatformBadges() {
 
 export function HeroPhoneMockup({ className }: { className?: string }) {
   const schedule = [
-    { time: '8:00 AM', title: 'Dentist Appointment', person: 'Emma', color: 'bg-rose-400' },
-    { time: '9:30 AM', title: 'Dad Flight to Chicago', person: 'Mike', color: 'bg-blue-400' },
-    { time: '3:00 PM', title: 'Jackson Soccer Practice', person: 'Jackson', color: 'bg-emerald-400' },
-    { time: '5:00 PM', title: 'Grocery Pickup', person: 'H-E-B', color: 'bg-orange-400' },
-    { time: '7:00 PM', title: 'Family Dinner', person: 'The Johnsons', color: 'bg-violet-400' },
+    { time: '8:00 AM', title: 'Dentist Appointment', person: 'Emma', avatar: 3, color: 'bg-rose-400' },
+    { time: '9:30 AM', title: 'Dad Flight to Chicago', person: 'Mike', avatar: 0, color: 'bg-blue-400' },
+    { time: '3:00 PM', title: 'Jackson Soccer Practice', person: 'Jackson', avatar: 1, color: 'bg-emerald-400' },
+    { time: '5:00 PM', title: 'Grocery Pickup', person: 'H-E-B', avatar: 2, color: 'bg-orange-400' },
+    { time: '7:00 PM', title: 'Family Dinner', person: 'The Johnsons', avatar: 4, color: 'bg-violet-400' },
   ];
 
   return (
     <div className={cn('dark relative mx-auto isolate', className)}>
-      <div className="pointer-events-none absolute -inset-12 -z-20 rounded-full bg-violet-600/20 blur-3xl" />
-      <div className="pointer-events-none absolute -right-28 top-[22%] -z-10 h-72 w-72 rounded-full border-[3px] border-violet-500/75 shadow-[0_0_55px_rgba(124,77,255,0.72),inset_0_0_55px_rgba(124,77,255,0.28)] sm:-right-40 sm:h-96 sm:w-96" />
+      <div className="pointer-events-none absolute -inset-16 -z-20 rounded-full bg-violet-600/25 blur-[70px]" />
+      <div className="pointer-events-none absolute -right-36 top-[24%] -z-10 h-80 w-80 rounded-full border-[3px] border-violet-500/85 shadow-[0_0_65px_rgba(124,77,255,0.82),inset_0_0_65px_rgba(124,77,255,0.3)] sm:-right-48 sm:h-[430px] sm:w-[430px]" />
 
       {/* Phone shell */}
-      <div className="hero-phone-float relative mx-auto w-[286px] rotate-[3deg] rounded-[3rem] border-[7px] border-neutral-700 bg-black shadow-[0_40px_80px_rgba(0,0,0,0.9),inset_0_0_0_1px_rgba(255,255,255,0.22)] sm:w-[320px]">
+      <div className="hero-phone-float relative mx-auto w-[278px] rounded-[3.2rem] bg-[linear-gradient(145deg,#8b8d90_0%,#34363a_24%,#111317_58%,#77797c_100%)] p-[6px] shadow-[0_46px_90px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.15)] sm:w-[306px]">
+        <span className="absolute -left-[9px] top-28 h-16 w-1.5 rounded-l bg-[#4f5155]" />
+        <span className="absolute -right-[9px] top-40 h-20 w-1.5 rounded-r bg-[#4f5155]" />
         {/* Screen */}
-        <div className="overflow-hidden rounded-[2.4rem] bg-[#090f1a]">
+        <div className="flex min-h-[570px] flex-col overflow-hidden rounded-[2.8rem] bg-[#080e18] sm:min-h-[620px]">
           {/* Status bar */}
           <div className="flex items-center justify-between px-6 pt-4 pb-2">
             <span className="text-[11px] font-semibold text-white">9:41</span>
-            <div className="h-4 w-20 rounded-full bg-black" />
+            <div className="h-5 w-20 rounded-full bg-black" />
             <div className="flex items-center gap-1">
               <span className="text-[10px] text-white/60">●●●</span>
             </div>
           </div>
 
-          <div className="px-5 pb-5">
+          <div className="flex flex-1 flex-col px-5 pb-4">
             {/* Greeting */}
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[15px] font-bold text-white">Good Morning, Sarah! 👋</p>
+                <p className="text-[14px] font-bold text-white">Good Morning, Sarah! <span className="text-amber-300">☀</span></p>
                 <p className="text-[10px] text-white/45">Thursday, May 16</p>
               </div>
-              <div className="relative">
-                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-violet-400 to-blue-500" />
+              <div className="relative shrink-0">
+                <FaceAvatar index={2} className="h-9 w-9 border border-white/20" />
                 <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#090f1a] bg-emerald-400" />
               </div>
             </div>
@@ -211,12 +241,13 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
             {/* Stats row */}
             <div className="mt-3 grid grid-cols-4 gap-1.5">
               {[
-                { value: '5', label: 'Events Today', color: 'text-violet-400' },
-                { value: '3', label: 'Tasks Due', color: 'text-emerald-400' },
-                { value: '2', label: 'Conflicts', color: 'text-rose-400' },
-                { value: '72°', label: 'Party Cloudy', color: 'text-blue-400' },
-              ].map(({ value, label, color }) => (
-                <div key={label} className="rounded-lg border border-white/6 bg-white/[0.035] p-2 text-center">
+                { icon: CalendarDays, value: '5', label: 'Events Today', color: 'text-violet-400' },
+                { icon: CheckSquare2, value: '3', label: 'Tasks Due', color: 'text-emerald-400' },
+                { icon: TriangleAlert, value: '2', label: 'Conflicts', color: 'text-rose-400' },
+                { icon: CloudSun, value: '72°', label: 'Partly Cloudy', color: 'text-blue-400' },
+              ].map(({ icon: Icon, value, label, color }) => (
+                <div key={label} className="rounded-lg border border-white/[0.07] bg-white/[0.035] px-1 py-2 text-center">
+                  <Icon className={cn('mx-auto mb-1 h-3.5 w-3.5', color)} />
                   <p className={cn('text-[13px] font-bold', color)}>{value}</p>
                   <p className="mt-0.5 text-[8px] leading-tight text-white/45">{label}</p>
                 </div>
@@ -224,15 +255,15 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
             </div>
 
             {/* Today's Schedule */}
-            <div className="mt-3">
+            <div className="mt-4 flex-1">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-[11px] font-bold text-white">Today&apos;s Schedule</p>
                 <span className="text-[9px] text-violet-400">View all</span>
               </div>
-              <div className="space-y-2">
-                {schedule.map(({ time, title, person, color }) => (
+              <div className="space-y-3.5">
+                {schedule.map(({ time, title, person, avatar, color }) => (
                   <div key={title} className="flex items-center gap-2.5">
-                    <span className={cn('h-6 w-6 shrink-0 rounded-full', color)} />
+                    <span className={cn('shrink-0 rounded-full p-[2px]', color)}><FaceAvatar index={avatar} className="h-6 w-6" /></span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[10px] font-semibold text-white">{title}</p>
                       <p className="text-[9px] text-white/45">{person}</p>
@@ -244,14 +275,14 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
             </div>
 
             {/* Bottom nav */}
-            <div className="mt-4 flex items-center justify-around border-t border-white/8 pt-3">
-              <Home className="h-5 w-5 text-violet-400" />
-              <CalendarDays className="h-5 w-5 text-white/35" />
+            <div className="mt-auto flex items-end justify-around border-t border-white/8 pt-3 text-[7px] text-white/35">
+              <span className="flex flex-col items-center gap-1 text-violet-400"><Home className="h-4 w-4" />Home</span>
+              <span className="flex flex-col items-center gap-1"><CalendarDays className="h-4 w-4" />Calendar</span>
               <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 text-white">
                 <span className="text-lg font-bold leading-none">+</span>
               </span>
-              <CheckSquare2 className="h-5 w-5 text-white/35" />
-              <Circle className="h-5 w-5 text-white/35" />
+              <span className="flex flex-col items-center gap-1"><CheckSquare2 className="h-4 w-4" />Tasks</span>
+              <span className="flex flex-col items-center gap-1"><Circle className="h-4 w-4" />More</span>
             </div>
           </div>
         </div>
@@ -449,22 +480,24 @@ export function FamilyAiPanel() {
 }
 
 export function TestimonialBand({ compact = false }: { compact?: boolean }) {
-  const benefits = [
-    ['One calm home base', 'Calendar, chores, meals, school, health, and documents live together — not scattered across a dozen apps and group chats.'],
-    ['An assistant that acts', 'Ask in plain language and FamilyOS plans meals, builds grocery lists, and schedules events — then writes them straight to your family data.'],
-    ['Private by design', 'Row-level security isolates every family, documents live in private storage, and the assistant can never read another household.'],
+  const testimonials = [
+    ['Jessica M.', 'Mom of 3', 'FamilyOS has simplified our chaos. We are more organized and actually enjoy family time again!'],
+    ['David T.', 'Dad of 2', 'The AI assistant is a game changer. It knows what we need before we even think about it.'],
+    ['Amanda R.', 'Mom of 4', 'Finally, one place for everything our family needs. Beautiful, easy, and so helpful.'],
   ];
   return (
-    <section className={cn('showcase-panel p-8 lg:p-12', compact && 'p-6 lg:p-8')}>
-      <div className="grid gap-7 lg:grid-cols-[280px_1fr]">
-        <h2 className="text-4xl font-bold leading-tight">
-          Built for the way <GradientText>families actually live</GradientText>
+    <section className={cn('showcase-panel p-6 sm:p-8 lg:p-9', compact && 'p-6 lg:p-8')}>
+      <div className="grid gap-7 lg:grid-cols-[270px_1fr]">
+        <h2 className="text-3xl font-bold leading-tight sm:text-[2rem]">
+          Trusted by thousands of <GradientText>happy families</GradientText>
         </h2>
-        <div className="grid gap-5 md:grid-cols-3">
-          {benefits.map(([title, body]) => (
-            <article key={title} className="showcase-card rounded-xl p-6">
-              <h3 className="text-base font-bold">{title}</h3>
-              <p className="mt-3 text-sm leading-6 text-white/88">{body}</p>
+        <div className="grid gap-4 md:grid-cols-3">
+          {testimonials.map(([name, role, quote]) => (
+            <article key={name} className="showcase-card rounded-xl p-5">
+              <Rating />
+              <p className="mt-3 text-xs leading-5 text-white/78">&ldquo;{quote}&rdquo;</p>
+              <p className="mt-4 text-xs font-semibold text-white/90">— {name}</p>
+              <p className="mt-0.5 text-[10px] text-white/45">{role}</p>
             </article>
           ))}
         </div>
@@ -477,8 +510,8 @@ export function DeviceShowcase() {
   const devices = ['iPhone', 'Android', 'iPad', 'Web App', 'Apple Watch', 'Smart Display'] as const;
 
   return (
-    <section className="py-12 sm:py-16">
-      <h2 className="mb-9 text-center text-2xl font-bold sm:text-3xl">
+    <section className="py-10 sm:py-12">
+      <h2 className="mb-8 text-center text-xl font-semibold sm:text-2xl">
         One seamless experience across all your devices
       </h2>
 
@@ -493,7 +526,7 @@ export function DeviceShowcase() {
       </div>
 
       {/* Security badges */}
-      <div className="mt-12 grid gap-5 border-t border-white/8 pt-8 sm:grid-cols-3">
+      <div className="mt-10 grid gap-5 pt-2 sm:grid-cols-3">
         {[
           { icon: Shield, text: 'Bank-level security' },
           { icon: Shield, text: 'End-to-end encrypted' },
@@ -506,10 +539,15 @@ export function DeviceShowcase() {
         ))}
       </div>
 
-      <div className="mt-8 rounded-2xl border border-white/5 bg-white/[0.025] px-5 py-7">
-        <p className="text-center text-sm text-white/70">
-          Row-level security on every table · Private document storage · You stay in control of your data
-        </p>
+      <div className="mt-8 rounded-xl border border-white/[0.045] bg-white/[0.025] px-5 py-6">
+        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-lg font-black text-white/62 sm:gap-x-14 sm:text-xl">
+          <span className="font-serif">Forbes</span>
+          <span><span className="mr-1 text-emerald-400">TC</span>TechCrunch</span>
+          <span className="text-sm leading-none">GOOD<br />MORNING<br />AMERICA</span>
+          <span className="font-serif">Parents</span>
+          <span>yahoo!</span>
+          <span className="text-base">● USA TODAY</span>
+        </div>
       </div>
     </section>
   );
