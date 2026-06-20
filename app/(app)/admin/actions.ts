@@ -223,6 +223,15 @@ export async function adminSendPasswordResetAction(email: string): Promise<Resul
   return { ok: true };
 }
 
+/** Purges the cached admin pages so every metric re-reads from Supabase. */
+export async function adminClearCacheAction(): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+  revalidatePath('/admin', 'layout');
+  await adminAuditLog({ familyId: null, action: 'clear_cache', resource: 'system' });
+  return { ok: true };
+}
+
 const TICKET_STATUSES = ['open', 'pending', 'resolved', 'closed'] as const;
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
 
