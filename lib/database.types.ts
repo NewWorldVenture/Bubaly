@@ -27,8 +27,21 @@ export type MetricType = 'steps' | 'sleep_hours' | 'heart_rate' | 'calories' | '
 export type GameResult = 'win' | 'loss' | 'tie';
 export type GradeType = 'test' | 'quiz' | 'homework' | 'project' | 'final' | 'participation' | 'other';
 export type ThemePref = 'dark' | 'light' | 'system';
+export type DashboardView = 'personal' | 'family';
 export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
 export type RecordKind = 'medical' | 'dental';
+
+// Sync platform enums (migration 0018)
+export type SyncProviderEnum = 'google' | 'microsoft' | 'apple' | 'amazon' | 'internal';
+export type SyncDirection = 'import' | 'export' | 'two_way' | 'manual' | 'disabled';
+export type SyncStatusEnum =
+  | 'pending' | 'syncing' | 'synced' | 'error' | 'conflict' | 'disabled' | 'unsupported';
+export type SyncItemType = 'calendar' | 'event' | 'reminder_list' | 'reminder' | 'note' | 'note_folder';
+export type SyncConflictStatus = 'open' | 'resolved' | 'ignored';
+export type SyncConflictResolutionEnum =
+  | 'keep_local' | 'keep_remote' | 'merge' | 'duplicate' | 'manual';
+export type SyncJobStatus =
+  | 'queued' | 'running' | 'succeeded' | 'failed' | 'dead_letter' | 'cancelled';
 
 type Stamps = { created_at: string; updated_at: string };
 
@@ -270,9 +283,9 @@ export interface Database {
         Partial<{ opponent: string; our_score: number; their_score: number; date: string; result: GameResult; notes: string | null }>
       >;
       user_preferences: T<
-        { user_id: string; theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; notification_prefs: Json } & Stamps,
-        { user_id: string; theme?: ThemePref; push_enabled?: boolean; email_enabled?: boolean; expo_push_token?: string | null; active_family_id?: string | null; notification_prefs?: Json },
-        Partial<{ theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; notification_prefs: Json }>
+        { user_id: string; theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; default_dashboard: DashboardView; notification_prefs: Json } & Stamps,
+        { user_id: string; theme?: ThemePref; push_enabled?: boolean; email_enabled?: boolean; expo_push_token?: string | null; active_family_id?: string | null; default_dashboard?: DashboardView; notification_prefs?: Json },
+        Partial<{ theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; default_dashboard: DashboardView; notification_prefs: Json }>
       >;
       // ── Site-wide super admin allowlist (email-keyed; readable only via is_super_admin()) ──
       super_admins: T<
@@ -285,10 +298,201 @@ export interface Database {
         { id?: string; slug: string; title: string; excerpt?: string; author?: string; published_at?: string; reading_minutes?: number; tags?: string[]; category: string; featured?: boolean; accent_color?: string | null; body?: Json; published?: boolean },
         Partial<{ slug: string; title: string; excerpt: string; author: string; published_at: string; reading_minutes: number; tags: string[]; category: string; featured: boolean; accent_color: string | null; body: Json; published: boolean }>
       >;
+      // ── Support tickets (admin console only — full schema) ────────────────
       support_tickets: T<
-        { id: string; name: string; email: string; subject: string; message: string; status: string; source: string } & Stamps,
-        { id?: string; name?: string; email: string; subject?: string; message?: string; status?: string; source?: string },
-        Partial<{ name: string; email: string; subject: string; message: string; status: string; source: string }>
+        {
+          id: string; ticket_number: string; subject: string; description: string | null;
+          category: string; priority: string; status: string;
+          requester_id: string | null; requester_name: string | null; requester_email: string;
+          assigned_agent_id: string | null; assigned_agent_name: string | null;
+          family_id: string | null; tags: string[]; resolution_note: string | null;
+          created_at: string; updated_at: string; resolved_at: string | null; closed_at: string | null;
+        },
+        {
+          id?: string; ticket_number: string; subject: string; description?: string | null;
+          category?: string; priority?: string; status?: string;
+          requester_id?: string | null; requester_name?: string | null; requester_email: string;
+          assigned_agent_id?: string | null; assigned_agent_name?: string | null;
+          family_id?: string | null; tags?: string[]; resolution_note?: string | null;
+        },
+        Partial<{
+          subject: string; description: string | null; category: string; priority: string; status: string;
+          assigned_agent_id: string | null; assigned_agent_name: string | null;
+          tags: string[]; resolution_note: string | null; resolved_at: string | null; closed_at: string | null;
+        }>
+      >;
+      // ── Admin users (admin console roles & management) ────────────────────
+      admin_users: T<
+        {
+          id: string; user_id: string | null; email: string; full_name: string | null;
+          avatar_url: string | null; admin_role: string; permissions: string[];
+          status: string; last_active_at: string | null; joined_at: string; created_at: string;
+        },
+        {
+          id?: string; user_id?: string | null; email: string; full_name?: string | null;
+          avatar_url?: string | null; admin_role?: string; permissions?: string[];
+          status?: string; last_active_at?: string | null; joined_at?: string;
+        },
+        Partial<{
+          full_name: string | null; avatar_url: string | null; admin_role: string;
+          permissions: string[]; status: string; last_active_at: string | null;
+        }>
+      >;
+      // ── Core Platform (0014) ──────────────────────────────────
+      family_conversations: T<
+        { id: string; family_id: string; name: string | null; kind: string; avatar_emoji: string | null; member_ids: string[]; participant_ids: string[]; created_by: string | null; last_message_at: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name?: string | null; kind?: string; avatar_emoji?: string | null; member_ids?: string[]; participant_ids?: string[]; created_by?: string | null },
+        Partial<{ name: string | null; avatar_emoji: string | null; member_ids: string[]; participant_ids: string[]; last_message_at: string | null }>
+      >;
+      family_messages: T<
+        { id: string; conversation_id: string; family_id: string; sender_id: string | null; sender_name: string | null; sender_avatar: string | null; content: string | null; kind: string; attachment_url: string | null; attachment_name: string | null; attachment_mime: string | null; reply_to_id: string | null; reactions: Json; read_by: string[]; is_pinned: boolean; deleted_at: string | null; created_at: string },
+        { id?: string; conversation_id: string; family_id: string; sender_id?: string | null; sender_name?: string | null; sender_avatar?: string | null; content?: string | null; kind?: string; attachment_url?: string | null; attachment_name?: string | null; attachment_mime?: string | null; reply_to_id?: string | null; reactions?: Json; read_by?: string[] },
+        Partial<{ content: string | null; reactions: Json; read_by: string[]; is_pinned: boolean; deleted_at: string | null }>
+      >;
+      family_albums: T<
+        { id: string; family_id: string; name: string; description: string | null; cover_url: string | null; kind: string; is_shared: boolean; photo_count: number; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name: string; description?: string | null; cover_url?: string | null; kind?: string; is_shared?: boolean; created_by?: string | null },
+        Partial<{ name: string; description: string | null; cover_url: string | null; kind: string; is_shared: boolean; photo_count: number }>
+      >;
+      family_photos: T<
+        { id: string; family_id: string; album_id: string | null; uploaded_by: string | null; storage_path: string; url: string | null; thumbnail_url: string | null; caption: string | null; taken_at: string | null; width: number | null; height: number | null; size_bytes: number | null; tags: string[]; member_tags: string[]; is_favorite: boolean; metadata: Json; created_at: string },
+        { id?: string; family_id: string; album_id?: string | null; uploaded_by?: string | null; storage_path: string; url?: string | null; thumbnail_url?: string | null; caption?: string | null; taken_at?: string | null; width?: number | null; height?: number | null; size_bytes?: number | null; tags?: string[]; member_tags?: string[] },
+        Partial<{ album_id: string | null; caption: string | null; tags: string[]; member_tags: string[]; is_favorite: boolean; url: string | null }>
+      >;
+      family_contacts: T<
+        { id: string; family_id: string; name: string; relationship: string | null; category: string; phone: string | null; phone_alt: string | null; email: string | null; address: string | null; notes: string | null; photo_url: string | null; is_emergency: boolean; birthday_month: number | null; birthday_day: number | null; tags: string[]; linked_member_id: string | null; specialty: string | null; organization: string | null; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name: string; relationship?: string | null; category?: string; phone?: string | null; phone_alt?: string | null; email?: string | null; address?: string | null; notes?: string | null; photo_url?: string | null; is_emergency?: boolean; birthday_month?: number | null; birthday_day?: number | null; specialty?: string | null; organization?: string | null; created_by?: string | null },
+        Partial<{ name: string; relationship: string | null; category: string; phone: string | null; phone_alt: string | null; email: string | null; address: string | null; notes: string | null; is_emergency: boolean; birthday_month: number | null; birthday_day: number | null; specialty: string | null; organization: string | null; updated_at: string }>
+      >;
+      family_reminders: T<
+        { id: string; family_id: string; created_by: string | null; assigned_to_id: string | null; member_id: string | null; title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; recurrence_time: string | null; recurrence_days: number[] | null; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; ai_suggested: boolean; tags: string[]; created_at: string; updated_at: string },
+        { id?: string; family_id: string; created_by?: string | null; assigned_to_id?: string | null; member_id?: string | null; title: string; notes?: string | null; kind?: string; remind_at?: string | null; location_name?: string | null; recurrence?: string; priority?: string; status?: string; ai_suggested?: boolean },
+        Partial<{ title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; assigned_to_id: string | null; member_id: string | null; updated_at: string }>
+      >;
+      family_recipes: T<
+        { id: string; family_id: string; name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; is_public: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; ai_generated: boolean; estimated_cost_cents: number | null; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name: string; description?: string | null; category?: string; cuisine?: string | null; servings?: number; prep_time_mins?: number | null; cook_time_mins?: number | null; difficulty?: string; ingredients?: Json; instructions?: Json; notes?: string | null; photo_url?: string | null; tags?: string[]; allergy_flags?: string[]; source_url?: string | null; created_by?: string | null },
+        Partial<{ name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; updated_at: string }>
+      >;
+      todo_lists: T<
+        { id: string; family_id: string; created_by: string | null; name: string; color: string; icon: string; is_shared: boolean; sort_order: number; archived_at: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; created_by?: string | null; name: string; color?: string; icon?: string; is_shared?: boolean; sort_order?: number },
+        Partial<{ name: string; color: string; icon: string; is_shared: boolean; sort_order: number; archived_at: string | null }>
+      >;
+      todo_items: T<
+        { id: string; family_id: string; list_id: string; created_by: string | null; assigned_to_id: string | null; title: string; notes: string | null; is_done: boolean; priority: string; due_date: string | null; tags: string[]; sort_order: number; completed_at: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; list_id: string; created_by?: string | null; assigned_to_id?: string | null; title: string; notes?: string | null; is_done?: boolean; priority?: string; due_date?: string | null; tags?: string[]; sort_order?: number },
+        Partial<{ title: string; notes: string | null; is_done: boolean; priority: string; due_date: string | null; tags: string[]; sort_order: number; completed_at: string | null; assigned_to_id: string | null }>
+      >;
+      sync_providers: T<
+        { provider: SyncProviderEnum; label: string; capabilities: Json; auth_kind: string; is_enabled: boolean; docs_url: string | null; notes: string | null } & Stamps,
+        { provider: SyncProviderEnum; label: string; capabilities?: Json; auth_kind?: string; is_enabled?: boolean; docs_url?: string | null; notes?: string | null },
+        Partial<{ label: string; capabilities: Json; auth_kind: string; is_enabled: boolean; docs_url: string | null; notes: string | null }>
+      >;
+      sync_accounts: T<
+        { id: string; user_id: string; family_id: string; provider: SyncProviderEnum; external_id: string | null; display_name: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; scopes: string[]; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; user_id: string; family_id: string; provider: SyncProviderEnum; external_id?: string | null; display_name?: string | null; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; scopes?: string[]; last_synced_at?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ display_name: string | null; external_id: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; scopes: string[]; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_connections: T<
+        { id: string; account_id: string; user_id: string; family_id: string; provider: SyncProviderEnum; external_id: string | null; item_types: SyncItemType[]; sync_direction: SyncDirection; sync_status: SyncStatusEnum; health: string; last_error: string | null; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; account_id: string; user_id: string; family_id: string; provider: SyncProviderEnum; external_id?: string | null; item_types?: SyncItemType[]; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; health?: string; last_error?: string | null; last_synced_at?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ item_types: SyncItemType[]; sync_direction: SyncDirection; sync_status: SyncStatusEnum; health: string; last_error: string | null; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_tokens: T<
+        { id: string; account_id: string; user_id: string; family_id: string | null; provider: SyncProviderEnum; external_id: string | null; access_token_enc: string | null; refresh_token_enc: string | null; token_type: string | null; scope: string | null; expires_at: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; account_id: string; user_id: string; family_id?: string | null; provider: SyncProviderEnum; external_id?: string | null; access_token_enc?: string | null; refresh_token_enc?: string | null; token_type?: string | null; scope?: string | null; expires_at?: string | null; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; metadata?: Json },
+        Partial<{ access_token_enc: string | null; refresh_token_enc: string | null; token_type: string | null; scope: string | null; expires_at: string | null; sync_status: SyncStatusEnum; last_synced_at: string | null; metadata: Json }>
+      >;
+      sync_calendars: T<
+        { id: string; user_id: string | null; family_id: string; account_id: string | null; provider: SyncProviderEnum; external_id: string | null; name: string; description: string | null; color: string | null; timezone: string; is_primary: boolean; is_owned_locally: boolean; feed_token: string | null; feed_enabled: boolean; sync_direction: SyncDirection; sync_status: SyncStatusEnum; sync_token: string | null; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; user_id?: string | null; family_id: string; account_id?: string | null; provider?: SyncProviderEnum; external_id?: string | null; name: string; description?: string | null; color?: string | null; timezone?: string; is_primary?: boolean; is_owned_locally?: boolean; feed_token?: string | null; feed_enabled?: boolean; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; sync_token?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ name: string; description: string | null; color: string | null; timezone: string; is_primary: boolean; feed_token: string | null; feed_enabled: boolean; sync_direction: SyncDirection; sync_status: SyncStatusEnum; sync_token: string | null; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_calendar_shares: T<
+        { id: string; calendar_id: string; user_id: string | null; family_id: string; provider: SyncProviderEnum; external_id: string | null; shared_with_member: string | null; shared_with_email: string | null; permission: string; sync_direction: SyncDirection; sync_status: SyncStatusEnum; revoked_at: string | null; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; calendar_id: string; user_id?: string | null; family_id: string; provider?: SyncProviderEnum; external_id?: string | null; shared_with_member?: string | null; shared_with_email?: string | null; permission?: string; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; created_by?: string | null; metadata?: Json },
+        Partial<{ permission: string; sync_direction: SyncDirection; sync_status: SyncStatusEnum; revoked_at: string | null; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_calendar_events: T<
+        { id: string; calendar_id: string; user_id: string | null; family_id: string; provider: SyncProviderEnum; external_id: string | null; uid: string | null; title: string; description: string | null; location: string | null; starts_at: string; ends_at: string | null; all_day: boolean; timezone: string; recurrence_rule: string | null; recurrence_id: string | null; color: string | null; reminders: Json; status: string; etag: string | null; deleted_at: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; content_hash: string | null; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; calendar_id: string; user_id?: string | null; family_id: string; provider?: SyncProviderEnum; external_id?: string | null; uid?: string | null; title: string; description?: string | null; location?: string | null; starts_at: string; ends_at?: string | null; all_day?: boolean; timezone?: string; recurrence_rule?: string | null; recurrence_id?: string | null; color?: string | null; reminders?: Json; status?: string; etag?: string | null; deleted_at?: string | null; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; content_hash?: string | null; last_synced_at?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ external_id: string | null; uid: string | null; title: string; description: string | null; location: string | null; starts_at: string; ends_at: string | null; all_day: boolean; timezone: string; recurrence_rule: string | null; color: string | null; reminders: Json; status: string; etag: string | null; deleted_at: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; content_hash: string | null; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_event_attendees: T<
+        { id: string; event_id: string; family_id: string; provider: SyncProviderEnum; external_id: string | null; member_id: string | null; email: string | null; display_name: string | null; response_status: string; is_organizer: boolean; sync_status: SyncStatusEnum; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; event_id: string; family_id: string; provider?: SyncProviderEnum; external_id?: string | null; member_id?: string | null; email?: string | null; display_name?: string | null; response_status?: string; is_organizer?: boolean; sync_status?: SyncStatusEnum; created_by?: string | null; metadata?: Json },
+        Partial<{ response_status: string; is_organizer: boolean; sync_status: SyncStatusEnum; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_reminder_lists: T<
+        { id: string; user_id: string | null; family_id: string; account_id: string | null; provider: SyncProviderEnum; external_id: string | null; name: string; color: string | null; is_owned_locally: boolean; sync_direction: SyncDirection; sync_status: SyncStatusEnum; sync_token: string | null; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; user_id?: string | null; family_id: string; account_id?: string | null; provider?: SyncProviderEnum; external_id?: string | null; name: string; color?: string | null; is_owned_locally?: boolean; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; sync_token?: string | null; created_by?: string | null; metadata?: Json },
+        Partial<{ name: string; color: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; sync_token: string | null; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_reminders: T<
+        { id: string; list_id: string; user_id: string | null; family_id: string; provider: SyncProviderEnum; external_id: string | null; title: string; notes: string | null; due_at: string | null; all_day: boolean; recurrence_rule: string | null; priority: string; is_completed: boolean; completed_at: string | null; assigned_member: string | null; reminders: Json; etag: string | null; deleted_at: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; content_hash: string | null; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; list_id: string; user_id?: string | null; family_id: string; provider?: SyncProviderEnum; external_id?: string | null; title: string; notes?: string | null; due_at?: string | null; all_day?: boolean; recurrence_rule?: string | null; priority?: string; is_completed?: boolean; completed_at?: string | null; assigned_member?: string | null; reminders?: Json; etag?: string | null; deleted_at?: string | null; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; content_hash?: string | null; last_synced_at?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ title: string; notes: string | null; due_at: string | null; all_day: boolean; recurrence_rule: string | null; priority: string; is_completed: boolean; completed_at: string | null; assigned_member: string | null; reminders: Json; etag: string | null; deleted_at: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; content_hash: string | null; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_note_folders: T<
+        { id: string; user_id: string | null; family_id: string; account_id: string | null; provider: SyncProviderEnum; external_id: string | null; name: string; parent_id: string | null; is_owned_locally: boolean; sync_direction: SyncDirection; sync_status: SyncStatusEnum; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; user_id?: string | null; family_id: string; account_id?: string | null; provider?: SyncProviderEnum; external_id?: string | null; name: string; parent_id?: string | null; is_owned_locally?: boolean; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; created_by?: string | null; metadata?: Json },
+        Partial<{ name: string; parent_id: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_notes: T<
+        { id: string; folder_id: string | null; user_id: string | null; family_id: string; provider: SyncProviderEnum; external_id: string | null; title: string; body_markdown: string | null; body_html: string | null; checklist: Json; tags: string[]; version: number; etag: string | null; deleted_at: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; content_hash: string | null; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; folder_id?: string | null; user_id?: string | null; family_id: string; provider?: SyncProviderEnum; external_id?: string | null; title?: string; body_markdown?: string | null; body_html?: string | null; checklist?: Json; tags?: string[]; version?: number; etag?: string | null; deleted_at?: string | null; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; content_hash?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ folder_id: string | null; title: string; body_markdown: string | null; body_html: string | null; checklist: Json; tags: string[]; version: number; etag: string | null; deleted_at: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; content_hash: string | null; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_external_mappings: T<
+        { id: string; user_id: string | null; family_id: string; account_id: string | null; provider: SyncProviderEnum; item_type: SyncItemType; local_id: string; external_id: string; external_etag: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; user_id?: string | null; family_id: string; account_id?: string | null; provider: SyncProviderEnum; item_type: SyncItemType; local_id: string; external_id: string; external_etag?: string | null; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; last_synced_at?: string | null; metadata?: Json },
+        Partial<{ external_etag: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_jobs: T<
+        { id: string; user_id: string | null; family_id: string; account_id: string | null; provider: SyncProviderEnum; external_id: string | null; item_type: SyncItemType | null; kind: string; sync_direction: SyncDirection; sync_status: SyncStatusEnum; status: SyncJobStatus; scheduled_for: string; attempts: number; max_attempts: number; next_attempt_at: string | null; idempotency_key: string | null; last_error: string | null; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; user_id?: string | null; family_id: string; account_id?: string | null; provider: SyncProviderEnum; external_id?: string | null; item_type?: SyncItemType | null; kind?: string; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; status?: SyncJobStatus; scheduled_for?: string; attempts?: number; max_attempts?: number; next_attempt_at?: string | null; idempotency_key?: string | null; metadata?: Json },
+        Partial<{ status: SyncJobStatus; sync_status: SyncStatusEnum; scheduled_for: string; attempts: number; next_attempt_at: string | null; last_error: string | null; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_job_runs: T<
+        { id: string; job_id: string; user_id: string | null; family_id: string; provider: SyncProviderEnum; external_id: string | null; status: SyncJobStatus; sync_status: SyncStatusEnum; items_imported: number; items_exported: number; items_skipped: number; conflicts_found: number; started_at: string; finished_at: string | null; duration_ms: number | null; error: string | null; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; job_id: string; user_id?: string | null; family_id: string; provider: SyncProviderEnum; external_id?: string | null; status?: SyncJobStatus; sync_status?: SyncStatusEnum; items_imported?: number; items_exported?: number; items_skipped?: number; conflicts_found?: number; metadata?: Json },
+        Partial<{ status: SyncJobStatus; sync_status: SyncStatusEnum; items_imported: number; items_exported: number; items_skipped: number; conflicts_found: number; finished_at: string | null; duration_ms: number | null; error: string | null; last_synced_at: string | null; metadata: Json }>
+      >;
+      sync_webhook_events: T<
+        { id: string; family_id: string | null; account_id: string | null; provider: SyncProviderEnum; external_id: string | null; resource: string | null; payload: Json; signature_ok: boolean; processed: boolean; sync_status: SyncStatusEnum; received_at: string; processed_at: string | null; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id?: string | null; account_id?: string | null; provider: SyncProviderEnum; external_id?: string | null; resource?: string | null; payload?: Json; signature_ok?: boolean; processed?: boolean; sync_status?: SyncStatusEnum; metadata?: Json },
+        Partial<{ processed: boolean; signature_ok: boolean; sync_status: SyncStatusEnum; processed_at: string | null; last_synced_at: string | null; metadata: Json }>
+      >;
+      sync_change_logs: T<
+        { id: string; user_id: string | null; family_id: string; provider: SyncProviderEnum; external_id: string | null; item_type: SyncItemType; local_id: string | null; operation: string; origin: string; sync_direction: SyncDirection; sync_status: SyncStatusEnum; before: Json | null; after: Json | null; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; user_id?: string | null; family_id: string; provider?: SyncProviderEnum; external_id?: string | null; item_type: SyncItemType; local_id?: string | null; operation: string; origin?: string; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; before?: Json | null; after?: Json | null; metadata?: Json },
+        Partial<{ sync_status: SyncStatusEnum; last_synced_at: string | null; metadata: Json }>
+      >;
+      sync_provider_errors: T<
+        { id: string; family_id: string | null; account_id: string | null; provider: SyncProviderEnum; external_id: string | null; code: string | null; message_redacted: string | null; http_status: number | null; is_fatal: boolean; sync_status: SyncStatusEnum; occurred_at: string; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id?: string | null; account_id?: string | null; provider: SyncProviderEnum; external_id?: string | null; code?: string | null; message_redacted?: string | null; http_status?: number | null; is_fatal?: boolean; sync_status?: SyncStatusEnum; metadata?: Json },
+        Partial<{ is_fatal: boolean; sync_status: SyncStatusEnum; metadata: Json }>
+      >;
+      sync_conflicts: T<
+        { id: string; user_id: string | null; family_id: string; account_id: string | null; provider: SyncProviderEnum; external_id: string | null; item_type: SyncItemType; local_id: string | null; conflict_kind: string; local_snapshot: Json | null; remote_snapshot: Json | null; status: SyncConflictStatus; sync_direction: SyncDirection; sync_status: SyncStatusEnum; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; user_id?: string | null; family_id: string; account_id?: string | null; provider: SyncProviderEnum; external_id?: string | null; item_type: SyncItemType; local_id?: string | null; conflict_kind: string; local_snapshot?: Json | null; remote_snapshot?: Json | null; status?: SyncConflictStatus; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; metadata?: Json },
+        Partial<{ status: SyncConflictStatus; sync_status: SyncStatusEnum; local_snapshot: Json | null; remote_snapshot: Json | null; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      sync_conflict_resolutions: T<
+        { id: string; conflict_id: string; user_id: string | null; family_id: string; provider: SyncProviderEnum; external_id: string | null; resolution: SyncConflictResolutionEnum; resolved_by: string | null; sync_direction: SyncDirection; sync_status: SyncStatusEnum; result_snapshot: Json | null; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; conflict_id: string; user_id?: string | null; family_id: string; provider: SyncProviderEnum; external_id?: string | null; resolution: SyncConflictResolutionEnum; resolved_by?: string | null; sync_direction?: SyncDirection; sync_status?: SyncStatusEnum; result_snapshot?: Json | null; created_by?: string | null; metadata?: Json },
+        Partial<{ sync_status: SyncStatusEnum; result_snapshot: Json | null; last_synced_at: string | null; metadata: Json }>
+      >;
+      sync_audit_logs: T<
+        { id: string; user_id: string | null; family_id: string | null; provider: SyncProviderEnum | null; external_id: string | null; action: string; item_type: SyncItemType | null; target_id: string | null; sync_direction: SyncDirection | null; sync_status: SyncStatusEnum | null; ip_redacted: string | null; detail: Json; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; user_id?: string | null; family_id?: string | null; provider?: SyncProviderEnum | null; external_id?: string | null; action: string; item_type?: SyncItemType | null; target_id?: string | null; sync_direction?: SyncDirection | null; sync_status?: SyncStatusEnum | null; ip_redacted?: string | null; detail?: Json; created_by?: string | null; metadata?: Json },
+        Partial<{ detail: Json; metadata: Json }>
+      >;
+      sync_settings: T<
+        { family_id: string; user_id: string | null; provider: SyncProviderEnum | null; external_id: string | null; default_direction: SyncDirection; sync_interval_mins: number; auto_resolve: SyncConflictResolutionEnum | null; calendars_enabled: boolean; reminders_enabled: boolean; notes_enabled: boolean; sync_status: SyncStatusEnum; last_synced_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { family_id: string; user_id?: string | null; provider?: SyncProviderEnum | null; external_id?: string | null; default_direction?: SyncDirection; sync_interval_mins?: number; auto_resolve?: SyncConflictResolutionEnum | null; calendars_enabled?: boolean; reminders_enabled?: boolean; notes_enabled?: boolean; metadata?: Json },
+        Partial<{ default_direction: SyncDirection; sync_interval_mins: number; auto_resolve: SyncConflictResolutionEnum | null; calendars_enabled: boolean; reminders_enabled: boolean; notes_enabled: boolean; sync_status: SyncStatusEnum; last_synced_at: string | null; updated_by: string | null; metadata: Json }>
       >;
       // ── Marketing (admin-only) ──────────────────────────────
       marketing_segments: T<
@@ -413,6 +617,13 @@ export interface Database {
       theme_pref: ThemePref;
       ai_role: AiRole;
       record_kind: RecordKind;
+      sync_provider: SyncProviderEnum;
+      sync_direction: SyncDirection;
+      sync_status: SyncStatusEnum;
+      sync_item_type: SyncItemType;
+      sync_conflict_status: SyncConflictStatus;
+      sync_conflict_resolution: SyncConflictResolutionEnum;
+      sync_job_status: SyncJobStatus;
     };
   };
 }

@@ -70,7 +70,7 @@ const STRESS_CONFIG = {
 const URGENCY_CLASSES = {
   high:   'text-rose-400 bg-rose-500/10 border-rose-500/30',
   medium: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
-  low:    'text-slate-400 bg-slate-500/10 border-slate-500/30',
+  low:    'text-muted bg-slate-500/10 border-slate-500/30',
 };
 const MEMBER_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4'];
 
@@ -98,10 +98,10 @@ function CategoryBar({ label, score, icon }: OpsCategory) {
       <span className="text-base w-6 text-center">{icon}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-xs text-slate-400 truncate">{label}</span>
-          <span className="text-xs font-semibold text-white ml-2">{score}</span>
+          <span className="text-xs text-muted truncate">{label}</span>
+          <span className="text-xs font-semibold text-fg ml-2">{score}</span>
         </div>
-        <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-elevated rounded-full overflow-hidden">
           <div className={cn('h-full rounded-full transition-all duration-700', barColor)} style={{ width: `${score}%` }} />
         </div>
       </div>
@@ -119,15 +119,15 @@ function GenerateCTA({ onGenerate, loading, type }: { onGenerate: () => void; lo
   const { icon, title, desc } = cfg[type];
   return (
     <div className="flex flex-col items-center justify-center py-24 px-8 text-center">
-      <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-6">{icon}</div>
-      <h2 className="text-2xl font-bold text-white mb-3">{title}</h2>
-      <p className="text-slate-400 max-w-md mb-8">{desc}</p>
+      <div className="w-20 h-20 rounded-2xl bg-surface/50 border border-border flex items-center justify-center mb-6">{icon}</div>
+      <h2 className="text-2xl font-bold text-fg mb-3">{title}</h2>
+      <p className="text-muted max-w-md mb-8">{desc}</p>
       <Button onClick={onGenerate} disabled={loading}
         className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-8 py-3 rounded-xl font-semibold text-base h-auto gap-2">
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
         {loading ? 'Generating…' : `Generate ${title}`}
       </Button>
-      {loading && <p className="text-slate-500 text-sm mt-4">Analyzing your family data with AI…</p>}
+      {loading && <p className="text-muted text-sm mt-4">Analyzing your family data with AI…</p>}
     </div>
   );
 }
@@ -141,17 +141,17 @@ function MorningContent({ data }: { data: BriefingData }) {
     <div className="space-y-6">
       {/* Ops Score */}
       {ops && (
-        <div className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 p-6">
+        <div className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-border p-6">
           <div className="flex items-center gap-2 mb-5">
             <TrendingUp className="h-4 w-4 text-violet-400" />
-            <span className="text-sm font-semibold text-white uppercase tracking-wider">Family Operations Score</span>
+            <span className="text-sm font-semibold text-fg uppercase tracking-wider">Family Operations Score</span>
           </div>
           <div className="flex gap-8 items-center">
             <div className="relative flex-shrink-0">
               <ScoreRing score={ops.overall} size={110} />
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-bold text-white">{ops.overall}</span>
-                <span className="text-xs text-slate-400">/100</span>
+                <span className="text-3xl font-bold text-fg">{ops.overall}</span>
+                <span className="text-xs text-muted">/100</span>
               </div>
             </div>
             <div className="flex-1 space-y-3 min-w-0">
@@ -159,17 +159,17 @@ function MorningContent({ data }: { data: BriefingData }) {
             </div>
           </div>
           {(ops.stressReason || ops.recommendation) && (
-            <div className="mt-5 pt-5 border-t border-white/10 flex flex-col sm:flex-row gap-3">
+            <div className="mt-5 pt-5 border-t border-border flex flex-col sm:flex-row gap-3">
               {ops.stressReason && (
                 <div className={cn('flex-1 rounded-xl border px-4 py-3 text-sm', stress.bg)}>
                   <span className={cn('font-semibold', stress.color)}>{stress.label}: </span>
-                  <span className="text-slate-300">{ops.stressReason}</span>
+                  <span className="text-fg/80">{ops.stressReason}</span>
                 </div>
               )}
               {ops.recommendation && (
                 <div className="flex-1 rounded-xl border border-violet-500/20 bg-violet-500/10 px-4 py-3 text-sm">
                   <span className="font-semibold text-violet-400">AI Tip: </span>
-                  <span className="text-slate-300">{ops.recommendation}</span>
+                  <span className="text-fg/80">{ops.recommendation}</span>
                 </div>
               )}
             </div>
@@ -179,26 +179,26 @@ function MorningContent({ data }: { data: BriefingData }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Schedule timeline */}
-        <div className="lg:col-span-2 rounded-2xl bg-white/5 border border-white/10 p-5">
-          <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-5 flex items-center gap-2">
+        <div className="lg:col-span-2 rounded-2xl bg-surface/50 border border-border p-5">
+          <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-5 flex items-center gap-2">
             <Clock className="h-4 w-4 text-blue-400" /> Today&apos;s Schedule
           </h3>
           {data.schedule.length === 0 ? (
-            <p className="text-slate-500 text-sm py-8 text-center">No events scheduled — enjoy the open day!</p>
+            <p className="text-muted text-sm py-8 text-center">No events scheduled — enjoy the open day!</p>
           ) : (
             <div className="relative pl-5">
-              <div className="absolute left-1.5 top-2 bottom-2 w-px bg-white/10" />
+              <div className="absolute left-1.5 top-2 bottom-2 w-px bg-elevated" />
               <div className="space-y-5">
                 {data.schedule.map((item, i) => (
                   <div key={i} className="flex gap-4 items-start">
                     <div className="relative -left-[1.375rem] mt-1.5 flex-shrink-0">
                       <div className={cn('w-3 h-3 rounded-full border-2 border-slate-900', DOT_CLASSES[item.color] ?? 'bg-slate-400')} />
                     </div>
-                    <div className="flex-1 flex items-start justify-between gap-3 pb-5 border-b border-white/5 last:border-0 last:pb-0">
+                    <div className="flex-1 flex items-start justify-between gap-3 pb-5 border-b border-border last:border-0 last:pb-0">
                       <div>
-                        <div className="text-xs text-slate-500 mb-0.5">{item.time}</div>
-                        <div className="text-sm font-medium text-white">{item.emoji} {item.title}</div>
-                        {item.member && <div className="text-xs text-slate-400 mt-0.5">{item.member}</div>}
+                        <div className="text-xs text-muted mb-0.5">{item.time}</div>
+                        <div className="text-sm font-medium text-fg">{item.emoji} {item.title}</div>
+                        {item.member && <div className="text-xs text-muted mt-0.5">{item.member}</div>}
                       </div>
                       <span className={cn('text-xs px-2.5 py-0.5 rounded-full border flex-shrink-0 mt-0.5', COLOR_CLASSES[item.color] ?? COLOR_CLASSES.blue)}>
                         {item.member || 'Family'}
@@ -214,13 +214,13 @@ function MorningContent({ data }: { data: BriefingData }) {
         {/* Right sidebar */}
         <div className="space-y-4">
           {/* Family Summary */}
-          <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
-            <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+          <div className="rounded-2xl bg-surface/50 border border-border p-5">
+            <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-3 flex items-center gap-2">
               <Star className="h-4 w-4 text-amber-400" /> Summary
             </h3>
             <ul className="space-y-2.5">
               {(data.familySummary ?? []).map((item, i) => (
-                <li key={i} className="flex gap-2 text-sm text-slate-300">
+                <li key={i} className="flex gap-2 text-sm text-fg/80">
                   <span className="text-violet-400 flex-shrink-0 mt-0.5">•</span>
                   <span>{item}</span>
                 </li>
@@ -230,8 +230,8 @@ function MorningContent({ data }: { data: BriefingData }) {
 
           {/* Reminders */}
           {data.reminders.length > 0 && (
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
-              <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Reminders</h3>
+            <div className="rounded-2xl bg-surface/50 border border-border p-5">
+              <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-3">Reminders</h3>
               <div className="space-y-2">
                 {data.reminders.map((r, i) => (
                   <div key={i} className={cn('text-xs rounded-lg border px-3 py-2', URGENCY_CLASSES[r.urgency])}>
@@ -266,18 +266,18 @@ function MorningContent({ data }: { data: BriefingData }) {
 
       {/* Kids Needs */}
       {data.kidsNeeds.length > 0 && (
-        <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
-          <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">🎒 What Kids Need Today</h3>
+        <div className="rounded-2xl bg-surface/50 border border-border p-5">
+          <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4">🎒 What Kids Need Today</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {data.kidsNeeds.map((kid, i) => (
-              <div key={i} className="rounded-xl bg-white/5 border border-white/10 p-4">
-                <div className="font-semibold text-white mb-2">
+              <div key={i} className="rounded-xl bg-surface/50 border border-border p-4">
+                <div className="font-semibold text-fg mb-2">
                   {kid.name}
-                  {kid.age != null && <span className="text-slate-400 text-xs ml-1">(Age {kid.age})</span>}
+                  {kid.age != null && <span className="text-muted text-xs ml-1">(Age {kid.age})</span>}
                 </div>
                 <ul className="space-y-1.5">
                   {kid.items.map((item, j) => (
-                    <li key={j} className="flex items-center gap-2 text-sm text-slate-300">
+                    <li key={j} className="flex items-center gap-2 text-sm text-fg/80">
                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0" />{item}
                     </li>
                   ))}
@@ -290,19 +290,19 @@ function MorningContent({ data }: { data: BriefingData }) {
 
       {/* Meals */}
       {data.meals.length > 0 && (
-        <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
-          <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">🍽️ Meals</h3>
+        <div className="rounded-2xl bg-surface/50 border border-border p-5">
+          <h3 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4">🍽️ Meals</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {data.meals.map((meal, i) => (
-              <div key={i} className={cn('rounded-xl border p-4', meal.status === 'planned' ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-white/5 border-white/10')}>
-                <div className="text-xs text-slate-400 mb-1">{meal.meal}</div>
-                <div className="font-medium text-white mb-2">
-                  {meal.name ?? <span className="text-slate-500 italic text-sm">Not planned</span>}
+              <div key={i} className={cn('rounded-xl border p-4', meal.status === 'planned' ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-surface/50 border-border')}>
+                <div className="text-xs text-muted mb-1">{meal.meal}</div>
+                <div className="font-medium text-fg mb-2">
+                  {meal.name ?? <span className="text-muted italic text-sm">Not planned</span>}
                 </div>
                 {meal.missing && meal.missing.length > 0 && (
                   <div>
                     <div className="text-xs text-amber-400 mb-1">Need to buy:</div>
-                    {meal.missing.map((m, j) => <div key={j} className="text-xs text-slate-400">• {m}</div>)}
+                    {meal.missing.map((m, j) => <div key={j} className="text-xs text-muted">• {m}</div>)}
                   </div>
                 )}
               </div>
@@ -325,7 +325,7 @@ function EveningContent({ data }: { data: BriefingData }) {
             <CheckCircle2 className="h-4 w-4" /> Completed Today
           </h3>
           {(data.completed ?? []).length === 0 ? (
-            <p className="text-slate-500 text-sm py-4">Nothing logged yet</p>
+            <p className="text-muted text-sm py-4">Nothing logged yet</p>
           ) : (
             <ul className="space-y-2">
               {(data.completed ?? []).map((item, i) => (
@@ -341,7 +341,7 @@ function EveningContent({ data }: { data: BriefingData }) {
             <AlertTriangle className="h-4 w-4" /> Still Outstanding
           </h3>
           {(data.outstanding ?? []).length === 0 ? (
-            <p className="text-slate-500 text-sm py-4">All clear!</p>
+            <p className="text-muted text-sm py-4">All clear!</p>
           ) : (
             <ul className="space-y-2">
               {(data.outstanding ?? []).map((item, i) => (
@@ -360,7 +360,7 @@ function EveningContent({ data }: { data: BriefingData }) {
           </h3>
           <ul className="space-y-1.5">
             {(data.tomorrowPreview.notes ?? []).map((note, i) => (
-              <li key={i} className="text-sm text-slate-300 flex gap-2">
+              <li key={i} className="text-sm text-fg/80 flex gap-2">
                 <span className="text-indigo-400">→</span>{note}
               </li>
             ))}
@@ -379,11 +379,11 @@ function WeeklyContent({ data }: { data: BriefingData }) {
       {(data.weeklyHighlights ?? []).length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {(data.weeklyHighlights ?? []).map((section, i) => (
-            <div key={i} className="rounded-2xl bg-white/5 border border-white/10 p-5">
-              <h3 className="font-semibold text-white mb-3">{section.emoji} {section.category}</h3>
+            <div key={i} className="rounded-2xl bg-surface/50 border border-border p-5">
+              <h3 className="font-semibold text-fg mb-3">{section.emoji} {section.category}</h3>
               <ul className="space-y-1.5">
                 {section.items.map((item, j) => (
-                  <li key={j} className="text-sm text-slate-300 flex gap-2">
+                  <li key={j} className="text-sm text-fg/80 flex gap-2">
                     <span className="text-violet-400 flex-shrink-0">•</span>{item}
                   </li>
                 ))}
@@ -446,18 +446,18 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
   return (
     <div className="fixed inset-0 z-50 bg-[#07070d] flex flex-col overflow-hidden">
       {/* Header bar */}
-      <div className="flex items-center justify-between px-8 py-4 border-b border-white/[0.08]">
+      <div className="flex items-center justify-between px-8 py-4 border-b border-border">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center">
-            <Sparkles className="h-4 w-4 text-white" />
+            <Sparkles className="h-4 w-4 text-fg" />
           </div>
-          <span className="font-semibold text-white text-lg">FamilyOS</span>
+          <span className="font-semibold text-fg text-lg">FamilyOS</span>
         </div>
         <div className="text-center">
-          <div className="text-4xl font-bold text-white tabular-nums tracking-tight">{clockStr}</div>
-          <div className="text-sm text-slate-400 mt-0.5">{dayStr}</div>
+          <div className="text-4xl font-bold text-fg tabular-nums tracking-tight">{clockStr}</div>
+          <div className="text-sm text-muted mt-0.5">{dayStr}</div>
         </div>
-        <button onClick={onExit} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm px-3 py-2 rounded-lg hover:bg-white/5">
+        <button onClick={onExit} className="flex items-center gap-2 text-muted hover:text-fg transition-colors text-sm px-3 py-2 rounded-lg hover:bg-surface/50">
           <X className="h-4 w-4" /> Exit Kitchen Mode
         </button>
       </div>
@@ -465,22 +465,22 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
       {/* Main grid */}
       <div className="flex-1 grid grid-cols-2 overflow-hidden">
         {/* Left: Who is Where */}
-        <div className="border-r border-white/[0.08] p-8 overflow-y-auto">
-          <h2 className="text-xs font-bold text-slate-600 uppercase tracking-widest mb-6">Who&apos;s Where Now</h2>
+        <div className="border-r border-border p-8 overflow-y-auto">
+          <h2 className="text-xs font-bold text-muted uppercase tracking-widest mb-6">Who&apos;s Where Now</h2>
           <div className="space-y-3">
             {members.map((m, i) => {
               const status = memberStatus(m.id);
               const hex = MEMBER_COLORS[i % MEMBER_COLORS.length];
               return (
-                <div key={m.id} className={cn('rounded-2xl p-5 border transition-all', status.active ? 'border-white/20 bg-white/[0.04]' : 'border-white/[0.06] bg-white/[0.02]')}>
+                <div key={m.id} className={cn('rounded-2xl p-5 border transition-all', status.active ? 'border-border bg-surface/40' : 'border-border bg-surface/30')}>
                   <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold text-white flex-shrink-0"
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold text-fg flex-shrink-0"
                       style={{ backgroundColor: hex + '22', border: `2px solid ${hex}44` }}>
                       {m.display_name.charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-white text-lg leading-tight">{m.display_name}</div>
-                      <div className={cn('text-sm mt-1 truncate', status.active ? 'text-emerald-400' : status.next ? 'text-amber-400' : 'text-slate-500')}>
+                      <div className="font-semibold text-fg text-lg leading-tight">{m.display_name}</div>
+                      <div className={cn('text-sm mt-1 truncate', status.active ? 'text-emerald-400' : status.next ? 'text-amber-400' : 'text-muted')}>
                         {status.label}
                       </div>
                     </div>
@@ -495,23 +495,23 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
         {/* Right: Coming Up + Don't Forget */}
         <div className="flex flex-col overflow-hidden">
           <div className="flex-1 p-8 overflow-y-auto">
-            <h2 className="text-xs font-bold text-slate-600 uppercase tracking-widest mb-6">Coming Up Today</h2>
+            <h2 className="text-xs font-bold text-muted uppercase tracking-widest mb-6">Coming Up Today</h2>
             {upcoming.length === 0 ? (
-              <p className="text-slate-600 text-xl font-medium">Nothing more scheduled today</p>
+              <p className="text-muted text-xl font-medium">Nothing more scheduled today</p>
             ) : (
               <div className="space-y-3">
                 {upcoming.map((e, i) => {
                   const t = new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
                   return (
-                    <div key={i} className="flex items-center gap-5 rounded-2xl bg-white/[0.03] border border-white/[0.08] p-5">
+                    <div key={i} className="flex items-center gap-5 rounded-2xl bg-surface/40 border border-border p-5">
                       <div className="text-right min-w-[72px] flex-shrink-0">
-                        <div className="text-2xl font-bold text-white tabular-nums">{t.split(':')[0] + ':' + t.split(':')[1].split(' ')[0]}</div>
-                        <div className="text-xs text-slate-500 uppercase">{t.split(' ')[1]}</div>
+                        <div className="text-2xl font-bold text-fg tabular-nums">{t.split(':')[0] + ':' + t.split(':')[1].split(' ')[0]}</div>
+                        <div className="text-xs text-muted uppercase">{t.split(' ')[1]}</div>
                       </div>
-                      <div className="w-px h-12 bg-white/10" />
+                      <div className="w-px h-12 bg-elevated" />
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-white text-lg leading-tight truncate">{e.title}</div>
-                        {e.location && <div className="text-sm text-slate-400 mt-1">📍 {e.location}</div>}
+                        <div className="font-semibold text-fg text-lg leading-tight truncate">{e.title}</div>
+                        {e.location && <div className="text-sm text-muted mt-1">📍 {e.location}</div>}
                       </div>
                     </div>
                   );
@@ -642,20 +642,20 @@ export function BriefingModule() {
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-fg flex items-center gap-2">
             <Sparkles className="h-6 w-6 text-violet-400" /> AI Daily Briefing
           </h1>
-          <p className="text-slate-400 text-sm mt-1">Your family&apos;s Chief of Staff</p>
+          <p className="text-muted text-sm mt-1">Your family&apos;s Chief of Staff</p>
         </div>
         {currentBriefing && (
           <div className="flex items-center gap-3">
             {generatedAt[tab] && (
-              <span className="text-xs text-slate-500">Generated {fmtTime(generatedAt[tab]!)}</span>
+              <span className="text-xs text-muted">Generated {fmtTime(generatedAt[tab]!)}</span>
             )}
             <Button variant="outline" size="sm"
               onClick={() => generate(tab as Exclude<TabType, 'kitchen'>)}
               disabled={loading}
-              className="border-white/10 hover:bg-white/10 text-slate-300 gap-1.5">
+              className="border-border hover:bg-elevated text-fg/80 gap-1.5">
               <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
             </Button>
           </div>
@@ -663,12 +663,12 @@ export function BriefingModule() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-white/5 rounded-xl p-1 border border-white/10 w-fit flex-wrap">
+      <div className="flex gap-1 bg-surface/50 rounded-xl p-1 border border-border w-fit flex-wrap">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={cn(
               'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap',
-              tab === t.id ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5',
+              tab === t.id ? 'bg-violet-600 text-white shadow-lg' : 'text-muted hover:text-white hover:bg-surface/50',
             )}>
             {t.icon}{t.label}
           </button>
@@ -689,8 +689,8 @@ export function BriefingModule() {
           <div className="rounded-2xl bg-gradient-to-r from-violet-900/60 to-indigo-900/60 border border-violet-500/20 p-6 mb-6">
             <div className="flex items-start justify-between">
               <div>
-                <div className="text-2xl font-bold text-white mb-1">{greetingEmoji} {currentBriefing.greeting}</div>
-                <div className="text-slate-300 text-sm">{currentBriefing.subtitle}</div>
+                <div className="text-2xl font-bold text-fg mb-1">{greetingEmoji} {currentBriefing.greeting}</div>
+                <div className="text-fg/80 text-sm">{currentBriefing.subtitle}</div>
               </div>
               <LayoutGrid className="h-8 w-8 text-violet-400/30 flex-shrink-0 mt-1" />
             </div>

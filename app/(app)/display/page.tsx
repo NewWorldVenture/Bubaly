@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Calendar, CheckCircle2, ShoppingCart, UtensilsCrossed, Cake, X } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requirePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtTime } from '@/lib/utils/format';
@@ -13,8 +13,9 @@ export const dynamic = 'force-dynamic';
 
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
 
+// Kitchen Display Mode is a Family Basic feature.
 export default async function KitchenDisplayPage() {
-  const ctx = await requireUserContext();
+  const ctx = await requirePlanLevel(1);
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
@@ -64,7 +65,7 @@ export default async function KitchenDisplayPage() {
   });
 
   return (
-    <div className="min-h-dvh bg-[#050c15] p-6 text-white lg:p-10">
+    <div className="min-h-dvh bg-bg p-6 text-fg lg:p-10">
       <AutoRefresh seconds={60} />
 
       {/* Header */}
@@ -74,13 +75,13 @@ export default async function KitchenDisplayPage() {
           <h1 className="mt-1 text-4xl font-black lg:text-5xl">{ctx.active.family.name}</h1>
           <div className="mt-3 flex -space-x-2">
             {(members ?? []).slice(0, 8).map((m) => (
-              <Avatar key={m.id} name={m.display_name} color={m.color} size={36} className="ring-2 ring-[#050c15]" />
+              <Avatar key={m.id} name={m.display_name} color={m.color} size={36} className="ring-2 ring-bg" />
             ))}
           </div>
         </div>
         <div className="flex items-center gap-4">
           <DisplayClock />
-          <Link href="/dashboard" title="Exit display" className="grid h-10 w-10 place-items-center rounded-full border border-white/15 text-white/50 transition hover:text-white">
+          <Link href="/dashboard" title="Exit display" className="grid h-10 w-10 place-items-center rounded-full border border-border text-muted transition hover:text-fg">
             <X className="h-5 w-5" />
           </Link>
         </div>
@@ -95,7 +96,7 @@ export default async function KitchenDisplayPage() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         {/* Today's schedule — wide */}
-        <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 lg:col-span-2">
+        <section className="rounded-3xl border border-border bg-surface/40 p-6 lg:col-span-2">
           <div className="mb-5 flex items-center gap-3">
             <Calendar className="h-7 w-7 text-violet-300" />
             <h2 className="text-2xl font-bold">Today&apos;s Schedule</h2>
@@ -105,13 +106,13 @@ export default async function KitchenDisplayPage() {
               {events.map((e) => {
                 const who = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
                 return (
-                  <li key={e.id} className="flex items-center gap-4 rounded-2xl bg-white/[0.04] px-5 py-4">
+                  <li key={e.id} className="flex items-center gap-4 rounded-2xl bg-surface/40 px-5 py-4">
                     <span className="w-24 shrink-0 text-xl font-bold tabular-nums text-violet-200">
                       {e.all_day ? 'All day' : fmtTime(e.starts_at)}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xl font-semibold">{e.title}</p>
-                      {e.location && <p className="truncate text-sm text-white/50">{e.location}</p>}
+                      {e.location && <p className="truncate text-sm text-muted">{e.location}</p>}
                     </div>
                     {who && <Avatar name={who.display_name} color={who.color} size={40} />}
                   </li>
@@ -120,8 +121,8 @@ export default async function KitchenDisplayPage() {
             </ul>
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <Calendar className="h-12 w-12 text-white/15" />
-              <p className="mt-3 text-xl text-white/40">Nothing scheduled today</p>
+              <Calendar className="h-12 w-12 text-muted/40" />
+              <p className="mt-3 text-xl text-muted">Nothing scheduled today</p>
             </div>
           )}
         </section>
@@ -129,7 +130,7 @@ export default async function KitchenDisplayPage() {
         {/* Right column */}
         <div className="space-y-6">
           {/* Chores today */}
-          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+          <section className="rounded-3xl border border-border bg-surface/40 p-6">
             <div className="mb-4 flex items-center gap-3">
               <CheckCircle2 className="h-6 w-6 text-emerald-300" />
               <h2 className="text-xl font-bold">Chores Today</h2>
@@ -140,20 +141,20 @@ export default async function KitchenDisplayPage() {
                   const who = memberById.get(c.member_id);
                   return (
                     <li key={c.id} className="flex items-center gap-3">
-                      <span className={`h-3 w-3 shrink-0 rounded-full ${c.status === 'submitted' ? 'bg-amber-400' : 'bg-white/25'}`} />
+                      <span className={`h-3 w-3 shrink-0 rounded-full ${c.status === 'submitted' ? 'bg-amber-400' : 'bg-elevated'}`} />
                       <span className="min-w-0 flex-1 truncate text-lg">{choreTitle.get(c.chore_id) ?? 'Chore'}</span>
-                      {who && <span className="shrink-0 text-sm text-white/50">{who.display_name.split(' ')[0]}</span>}
+                      {who && <span className="shrink-0 text-sm text-muted">{who.display_name.split(' ')[0]}</span>}
                     </li>
                   );
                 })}
               </ul>
             ) : (
-              <p className="py-6 text-center text-lg text-white/40">All done! 🎉</p>
+              <p className="py-6 text-center text-lg text-muted">All done! 🎉</p>
             )}
           </section>
 
           {/* Tonight's meal */}
-          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+          <section className="rounded-3xl border border-border bg-surface/40 p-6">
             <div className="mb-4 flex items-center gap-3">
               <UtensilsCrossed className="h-6 w-6 text-amber-300" />
               <h2 className="text-xl font-bold">On the Menu</h2>
@@ -163,24 +164,24 @@ export default async function KitchenDisplayPage() {
                 {todaysMeals.map((m) => (
                   <li key={m.type} className="flex items-center gap-3 text-lg">
                     <span className="text-2xl">{MEAL_EMOJIS[m.type] ?? '🍽️'}</span>
-                    <span className="capitalize text-white/50">{m.type}:</span>
+                    <span className="capitalize text-muted">{m.type}:</span>
                     <span className="font-semibold">{m.name}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="py-4 text-center text-lg text-white/40">No meals planned</p>
+              <p className="py-4 text-center text-lg text-muted">No meals planned</p>
             )}
           </section>
 
           {/* Grocery count */}
-          <section className="flex items-center gap-4 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+          <section className="flex items-center gap-4 rounded-3xl border border-border bg-surface/40 p-6">
             <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-blue-500/15">
               <ShoppingCart className="h-7 w-7 text-blue-300" />
             </div>
             <div>
               <p className="text-3xl font-black">{groceryCount ?? 0}</p>
-              <p className="text-white/50">items on the grocery list</p>
+              <p className="text-muted">items on the grocery list</p>
             </div>
           </section>
         </div>

@@ -14,8 +14,13 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
 
   // Map price → plan slug
   const plan =
-    priceId === process.env.STRIPE_PRICE_FAMILY_MONTHLY ? 'family' :
-    priceId === process.env.STRIPE_PRICE_FAMILY_ANNUAL ? 'family_annual' :
+    priceId === process.env.STRIPE_PRICE_PLUS_MONTHLY   ? 'plus' :
+    priceId === process.env.STRIPE_PRICE_PLUS_ANNUAL    ? 'plus_annual' :
+    priceId === process.env.STRIPE_PRICE_BASIC_MONTHLY  ? 'basic' :
+    priceId === process.env.STRIPE_PRICE_BASIC_ANNUAL   ? 'basic_annual' :
+    // Legacy price IDs (backward-compat with existing subscriptions)
+    priceId === process.env.STRIPE_PRICE_FAMILY_MONTHLY ? 'basic' :
+    priceId === process.env.STRIPE_PRICE_FAMILY_ANNUAL  ? 'basic_annual' :
     'free';
 
   // Resolve billing_customer_id

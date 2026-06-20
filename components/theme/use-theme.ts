@@ -1,17 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { DEFAULT_THEME, THEME_KEY, isTheme, nextTheme, resolveTheme, type Theme } from './theme-core';
 
-export type Theme = 'dark' | 'light' | 'system';
-const KEY = 'familyos-theme';
+export type { Theme } from './theme-core';
 
-function systemTheme(): 'dark' | 'light' {
-  if (typeof window === 'undefined') return 'dark';
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+function prefersLight(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(prefers-color-scheme: light)').matches;
 }
 
 function apply(theme: Theme) {
-  const resolved = theme === 'system' ? systemTheme() : theme;
+  const resolved = resolveTheme(theme, prefersLight());
   const root = document.documentElement;
   root.classList.remove('light', 'dark');
   root.classList.add(resolved);
@@ -19,15 +19,15 @@ function apply(theme: Theme) {
 }
 
 /**
- * Theme controller. Persists choice to localStorage and (optionally) syncs to
- * Supabase user_preferences via the caller. Defaults to dark.
+ * Theme controller. Persists choice to localStorage and applies it to <html>.
+ * Defaults to dark; 'system' tracks the OS preference live.
  */
 export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>('dark');
+  const [theme, setThemeState] = useState<Theme>(DEFAULT_THEME);
 
   useEffect(() => {
-    const stored = (localStorage.getItem(KEY) as Theme | null) ?? 'dark';
-    setThemeState(stored);
+    const stored = localStorage.getItem(THEME_KEY);
+    setThemeState(isTheme(stored) ? stored : DEFAULT_THEME);
   }, []);
 
   // Keep 'system' in sync with OS changes.
@@ -40,14 +40,13 @@ export function useTheme() {
   }, [theme]);
 
   const setTheme = useCallback((next: Theme) => {
-    localStorage.setItem(KEY, next);
+    localStorage.setItem(THEME_KEY, next);
     apply(next);
     setThemeState(next);
   }, []);
 
   const toggle = useCallback(() => {
-    const resolved = theme === 'system' ? systemTheme() : theme;
-    setTheme(resolved === 'dark' ? 'light' : 'dark');
+    setTheme(nextTheme(resolveTheme(theme, prefersLight())));
   }, [theme, setTheme]);
 
   return { theme, setTheme, toggle };

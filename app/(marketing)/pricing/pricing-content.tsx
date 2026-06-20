@@ -2,182 +2,233 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, Crown, Shield } from 'lucide-react';
+import { Check, Zap, Crown, Sparkles } from 'lucide-react';
 import {
   Container,
   GradientText,
-  IconOrb,
   PageWrap,
   TrustStrip,
 } from '@/components/marketing/visual-mocks';
 import { cn } from '@/lib/utils/cn';
 import { familiesNote } from '@/lib/marketing/format';
-import { FAMILY_MONTHLY_CENTS, FAMILY_ANNUAL_CENTS } from '@/lib/constants/plans';
+import {
+  BASIC_MONTHLY_CENTS,
+  BASIC_ANNUAL_CENTS,
+  PLUS_MONTHLY_CENTS,
+  PLUS_ANNUAL_CENTS,
+} from '@/lib/constants/plans';
 
-type BillingPeriod = 'monthly' | 'yearly';
+type Period = 'monthly' | 'yearly';
 
-const fmtUsd = (cents: number) =>
-  (cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`);
+const fmt = (cents: number) =>
+  cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
 
-// One real, purchasable plan — the same product wired to Stripe checkout.
-const MONTHLY_DISPLAY = fmtUsd(FAMILY_MONTHLY_CENTS); // $9.99
-const ANNUAL_PER_MONTH = fmtUsd(Math.round(FAMILY_ANNUAL_CENTS / 12)); // ~$8.00
-const ANNUAL_TOTAL = fmtUsd(FAMILY_ANNUAL_CENTS); // $95.99
-const ANNUAL_SAVINGS_PCT = Math.round(
-  (1 - FAMILY_ANNUAL_CENTS / (FAMILY_MONTHLY_CENTS * 12)) * 100,
-);
+const basicSavings = Math.round((1 - BASIC_ANNUAL_CENTS / (BASIC_MONTHLY_CENTS * 12)) * 100);
+const plusSavings  = Math.round((1 - PLUS_ANNUAL_CENTS  / (PLUS_MONTHLY_CENTS  * 12)) * 100);
 
-const FAMILY_FEATURES = [
-  'Unlimited family members + caregivers',
-  'Shared calendar, chores & grocery lists',
-  'Meal planning & auto grocery lists',
-  'Health, home & document vault',
-  'Unlimited AI assistant',
-  'Push & email notifications',
-  '100 GB private document storage',
+// ── Feature lists ──────────────────────────────────────────────────────────
+const FREE_FEATURES = [
+  { section: 'Family Organization', items: ['Shared family calendar', 'Shared shopping lists', 'Shared to-do lists', 'Shared recipes', 'Family messenger', 'Family contact book'] },
+  { section: 'Family Members',      items: ['Up to 5 family members'] },
+  { section: 'Platforms',           items: ['Web', 'iPhone', 'Android', 'iPad'] },
+  { section: 'Basic Features',      items: ['Calendar sync', 'Basic reminders', 'Shared notes', 'Shared photos', 'Shared documents'] },
+  { section: 'AI',                  items: ['10 AI requests/month'] },
 ];
 
-const INCLUDED = [
-  'Secure & private (row-level isolation)',
-  'Real-time sync across devices',
-  'Works on web + installable PWA',
-  'Ad-free, your data is never sold',
-  'Encrypted at rest and in transit',
-  'Cancel anytime — no contracts',
+const BASIC_FEATURES = [
+  { section: 'Unlimited Family Members', items: ['Parents', 'Kids', 'Grandparents', 'Caregivers'] },
+  { section: 'Family Hub',               items: ['Chores', 'Rewards', 'Meal planning', 'Grocery planning', 'School hub', 'Sports hub'] },
+  { section: 'Unlimited Storage',        items: ['Photos', 'Videos', 'Documents'] },
+  { section: 'Kitchen Display Mode',     items: ['iPad', 'Android tablet', 'Browser', 'Smart display'] },
+  { section: 'AI Features (Unlimited)', items: ['AI Daily Briefing', 'AI Meal Planning', 'AI Grocery Builder', 'AI Schedule Assistant'] },
+  { section: 'Smart Imports',            items: ['Upload school flyers, PDFs, screenshots, photos', 'AI auto-creates calendar events, tasks & reminders'] },
 ];
 
+const PLUS_FEATURES = [
+  { section: 'AI Concierge', items: ['"What\'s happening today?"', '"What do the kids need?"', '"What forms are due?"', '"What\'s for dinner?"', '"Who can pick up Jackson?"'] },
+  { section: 'AI School Assistant',  items: ['School emails', 'Permission slips', 'Assignments', 'Deadlines'] },
+  { section: 'AI Sports Assistant',  items: ['Team schedules', 'Schedule changes', 'Game updates', 'Practice reminders'] },
+  { section: 'AI Family Briefings',  items: ['Morning & evening daily briefing', 'Weekly: upcoming conflicts, school deadlines, financial reminders'] },
+  { section: 'AI Family Command Center', items: ['Family readiness score', 'Schedule conflict detection', 'Family stress prediction', 'Transportation planning', 'Missing item detection'] },
+  { section: 'Family Digital Twin',  items: ['Learns family preferences, routines, habits & activities', 'Proactively makes recommendations'] },
+];
+
+// ── Plan card ──────────────────────────────────────────────────────────────
+function PlanCard({
+  name, goal, icon, price, priceSub, cta, ctaHref, featured, featureSections, prelude, badge,
+}: {
+  name: string;
+  goal: string;
+  icon: React.ReactNode;
+  price: string;
+  priceSub: string;
+  cta: string;
+  ctaHref: string;
+  featured?: boolean;
+  badge?: string;
+  prelude?: string;
+  featureSections: { section: string; items: string[] }[];
+}) {
+  return (
+    <article className={cn(
+      'relative flex flex-col rounded-2xl p-7',
+      featured
+        ? 'showcase-card border-violet-400/80 shadow-glow ring-1 ring-violet-400/40'
+        : 'border border-white/10 bg-white/[0.04]',
+    )}>
+      {badge && (
+        <span className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-violet-600 px-4 py-1 text-[11px] font-black tracking-wide">
+          {badge}
+        </span>
+      )}
+      <div className="flex items-center gap-3">
+        {icon}
+        <h2 className="text-xl font-black">{name}</h2>
+      </div>
+      <p className="mt-2 text-sm text-white/60">{goal}</p>
+
+      <div className="mt-5 flex items-end gap-1">
+        <span className="text-4xl font-black">{price}</span>
+        {price !== 'Free' && <span className="pb-1.5 text-white/60">/mo</span>}
+      </div>
+      <p className="mt-1 min-h-[18px] text-xs text-white/50">{priceSub}</p>
+
+      <Link
+        href={ctaHref}
+        className={cn(
+          'mt-5 inline-flex h-12 items-center justify-center rounded-xl text-sm font-bold transition',
+          featured
+            ? 'bg-gradient-to-r from-blue-500 to-violet-600 text-white shadow-glow hover:opacity-90'
+            : 'border border-white/20 text-white hover:bg-white/10',
+        )}
+      >
+        {cta}
+      </Link>
+
+      <div className="mt-6 space-y-4 border-t border-white/10 pt-6">
+        {prelude && <p className="text-xs font-semibold text-white/50 uppercase tracking-wider">{prelude}</p>}
+        {featureSections.map((fs) => (
+          <div key={fs.section}>
+            <p className="mb-1.5 text-xs font-bold text-white/70">{fs.section}</p>
+            <ul className="space-y-1.5">
+              {fs.items.map((item) => (
+                <li key={item} className="flex items-start gap-2 text-sm text-white/80">
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────
 export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }) {
-  const [billing, setBilling] = useState<BillingPeriod>('yearly');
-  const yearly = billing === 'yearly';
+  const [period, setPeriod] = useState<Period>('yearly');
+  const yearly = period === 'yearly';
+
+  const basicPrice    = yearly ? fmt(Math.round(BASIC_ANNUAL_CENTS / 12)) : fmt(BASIC_MONTHLY_CENTS);
+  const basicPriceSub = yearly ? `billed ${fmt(BASIC_ANNUAL_CENTS)}/yr · save ${basicSavings}%` : 'billed monthly';
+  const plusPrice     = yearly ? fmt(Math.round(PLUS_ANNUAL_CENTS / 12))  : fmt(PLUS_MONTHLY_CENTS);
+  const plusPriceSub  = yearly ? `billed ${fmt(PLUS_ANNUAL_CENTS)}/yr · save ${plusSavings}%`  : 'billed monthly';
 
   return (
     <PageWrap>
-      <Container className="pb-14 pt-10 lg:pb-16">
-        <section className="mx-auto max-w-4xl text-center">
+      <Container className="pb-16 pt-10">
+        {/* Hero */}
+        <section className="mx-auto max-w-3xl text-center">
           <h1 className="text-5xl font-black leading-[1.08] sm:text-6xl">
-            Simple pricing for <br />
-            <GradientText>happier families.</GradientText>
+            FamilyOS Pricing
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-white/72">
-            One plan with everything included. Upgrade, downgrade, or cancel anytime. No long-term contracts.
+          <p className="mx-auto mt-5 max-w-xl text-lg text-white/65">
+            Start free. Upgrade when your family is ready.
           </p>
-          <div className="mt-6 inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
+
+          {/* Billing toggle */}
+          <div className="mt-7 inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
             <button
-              type="button"
-              onClick={() => setBilling('monthly')}
-              aria-pressed={billing === 'monthly'}
-              className={cn(
-                'rounded-full px-6 py-2 font-bold transition',
-                billing === 'monthly' ? 'bg-violet-600 text-white' : 'text-white/70',
-              )}
+              onClick={() => setPeriod('monthly')}
+              className={cn('rounded-full px-6 py-2 font-bold transition', period === 'monthly' ? 'bg-violet-600 text-white' : 'text-white/65 hover:text-white')}
             >
               Monthly
             </button>
             <button
-              type="button"
-              onClick={() => setBilling('yearly')}
-              aria-pressed={billing === 'yearly'}
-              className={cn(
-                'rounded-full px-6 py-2 font-bold transition',
-                billing === 'yearly' ? 'bg-violet-600 text-white' : 'text-white/70',
-              )}
+              onClick={() => setPeriod('yearly')}
+              className={cn('rounded-full px-6 py-2 font-bold transition', period === 'yearly' ? 'bg-violet-600 text-white' : 'text-white/65 hover:text-white')}
             >
               Yearly
             </button>
-            <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-300">
-              Save {ANNUAL_SAVINGS_PCT}%
-            </span>
+            {yearly && (
+              <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-300">
+                Save up to {basicSavings}%
+              </span>
+            )}
           </div>
         </section>
 
-        <section className="mt-9 flex justify-center">
-          <article className="showcase-card relative flex w-full max-w-md flex-col rounded-2xl border-violet-400/80 p-8 shadow-glow">
-            <span className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-violet-600 px-4 py-1 text-[11px] font-black">
-              EVERYTHING INCLUDED
-            </span>
-            <Crown className="h-10 w-10 text-yellow-400" />
-            <h2 className="mt-5 text-2xl font-black">FamilyOS Family</h2>
-            <p className="mt-3 text-sm leading-6 text-white/76">
-              The complete AI-powered family operating system for your whole household.
-            </p>
-            <div className="mt-5 flex items-end gap-1">
-              <span className="text-5xl font-black">{yearly ? ANNUAL_PER_MONTH : MONTHLY_DISPLAY}</span>
-              <span className="pb-2 text-white/72">/month</span>
-            </div>
-            <p className="mt-2 text-xs text-white/60">
-              {yearly ? `billed annually at ${ANNUAL_TOTAL}/yr` : 'billed monthly'}
-            </p>
-            <ul className="mt-7 flex-1 space-y-3 text-sm">
-              {FAMILY_FEATURES.map((feature) => (
-                <li key={feature} className="flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-yellow-400" />
-                  <span>{feature}</span>
-                </li>
-              ))}
-            </ul>
-            <Link
-              href={`/signup?billing=${yearly ? 'annual' : 'monthly'}`}
-              className="mt-8 inline-flex h-14 items-center justify-center rounded-xl border-none bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-base font-black text-white shadow-glow"
-            >
-              Get Started
-            </Link>
-            <p className="mt-3 text-center text-xs text-white/55">
-              Choose monthly or annual billing at checkout.
-            </p>
-          </article>
+        {/* Plan cards — 3 columns */}
+        <section className="mt-10 grid gap-5 lg:grid-cols-3">
+          <PlanCard
+            name="FamilyOS Free"
+            goal="Become the default family organizer."
+            icon={<Zap className="h-7 w-7 text-white/60" />}
+            price="Free"
+            priceSub="No credit card required"
+            cta="Get started free"
+            ctaHref="/signup"
+            featureSections={FREE_FEATURES}
+          />
+
+          <PlanCard
+            name="Family Basic"
+            goal="The best family organizer on earth."
+            icon={<Crown className="h-7 w-7 text-yellow-400" />}
+            price={basicPrice}
+            priceSub={basicPriceSub}
+            cta="Start Family Basic"
+            ctaHref={`/signup?plan=basic&billing=${period}`}
+            featured
+            badge="MOST POPULAR"
+            prelude="Everything in Free, plus:"
+            featureSections={BASIC_FEATURES}
+          />
+
+          <PlanCard
+            name="Family+"
+            goal="The Family Chief of Staff."
+            icon={<Sparkles className="h-7 w-7 text-violet-400" />}
+            price={plusPrice}
+            priceSub={plusPriceSub}
+            cta="Start Family+"
+            ctaHref={`/signup?plan=plus&billing=${period}`}
+            prelude="Everything in Family Basic, plus:"
+            featureSections={PLUS_FEATURES}
+          />
         </section>
 
-        <section className="showcase-panel mt-8 p-8">
-          <h2 className="text-xl font-bold">Always included</h2>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {INCLUDED.map((item) => (
-              <div key={item} className="flex items-center gap-3 text-sm">
-                <Shield className="h-5 w-5 shrink-0 text-white/70" />
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="showcase-card mt-7 flex flex-col gap-6 rounded-2xl p-7 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-6">
-            <IconOrb icon={Shield} className="h-16 w-16 rounded-xl" />
+        {/* Smart Imports callout */}
+        <section className="showcase-panel mt-8 p-7">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
+            <div className="shrink-0 text-3xl">📸</div>
             <div>
-              <h2 className="text-lg font-bold">Cancel anytime</h2>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-white/68">
-                Manage or cancel your subscription whenever you like from your billing settings.
-                No contracts, no cancellation fees.
+              <h2 className="font-bold">Smart Imports — the feature most competitors don&apos;t offer well</h2>
+              <p className="mt-1 text-sm text-white/65">
+                Snap a school flyer, upload a PDF, or share a screenshot. FamilyOS AI automatically creates calendar events, tasks, and reminders — no manual entry.
               </p>
             </div>
-          </div>
-          <Link href="/faq" className="inline-flex h-12 items-center justify-center rounded-xl border border-violet-400/50 px-8 text-sm font-bold text-violet-200">
-            Learn More
-          </Link>
-        </section>
-
-        <section className="mt-10">
-          <h2 className="text-center text-3xl font-bold">
-            Everything your family needs, <GradientText>in one plan</GradientText>
-          </h2>
-          <div className="mt-7 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-            {[
-              ['One home base', 'Calendar, chores, meals, school, and health together instead of scattered across apps.'],
-              ['AI that takes action', 'Plan meals, build grocery lists, and schedule events from a single plain-language request.'],
-              ['Scan & capture', 'Turn school flyers and documents into calendar events and reminders automatically.'],
-              ['Private by design', 'Row-level security and private storage keep every household fully isolated.'],
-            ].map(([title, body]) => (
-              <article key={title} className="showcase-card rounded-xl p-6">
-                <h3 className="text-base font-bold">{title}</h3>
-                <p className="mt-3 min-h-[82px] text-sm leading-6 text-white/82">{body}</p>
-              </article>
-            ))}
           </div>
         </section>
 
         <TrustStrip familiesNote={familiesNote(familiesCount)} />
 
-        <p className="border-t border-white/8 pt-7 text-center text-sm text-white/60">
-          Questions? We&apos;re here to help. Visit our <a className="text-violet-300" href="/faq">Help Center</a> or <a className="text-violet-300" href="/contact">Contact Support</a>
+        <p className="border-t border-white/8 pt-7 text-center text-sm text-white/55">
+          Questions? Visit our{' '}
+          <a className="text-violet-300 hover:underline" href="/faq">Help Center</a>
+          {' '}or{' '}
+          <a className="text-violet-300 hover:underline" href="/contact">Contact Support</a>
         </p>
       </Container>
     </PageWrap>

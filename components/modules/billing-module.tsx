@@ -688,7 +688,7 @@ export function BillingModule() {
                     <p className="text-sm font-semibold truncate">{tx.name}</p>
                     <p className="text-xs text-muted">{tx.category} · {fmtDate(tx.date)}</p>
                   </div>
-                  <p className={cn('text-sm font-bold shrink-0', tx.type === 'income' ? 'text-emerald-400' : 'text-white')}>
+                  <p className={cn('text-sm font-bold shrink-0', tx.type === 'income' ? 'text-emerald-400' : 'text-fg')}>
                     {tx.type === 'income' ? '+' : '-'}{fmtCurrency(Math.abs(tx.amount))}
                   </p>
                 </div>
@@ -782,7 +782,7 @@ export function BillingModule() {
                 <p className="text-sm font-semibold truncate">{tx.name}</p>
                 <p className="text-xs text-muted">{tx.category} · {fmtDate(tx.date)}</p>
               </div>
-              <p className={cn('text-sm font-bold shrink-0', tx.type === 'income' ? 'text-emerald-400' : 'text-white')}>
+              <p className={cn('text-sm font-bold shrink-0', tx.type === 'income' ? 'text-emerald-400' : 'text-fg')}>
                 {tx.type === 'income' ? '+' : '-'}{fmtCurrency(Math.abs(tx.amount))}
               </p>
               <button onClick={() => deleteTransaction(tx.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">

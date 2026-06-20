@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getResend, FROM_EMAIL } from '@/lib/email';
+import { sendReactEmail } from '@/lib/email';
 import { WelcomeEmail } from '@/lib/emails/welcome';
 import * as React from 'react';
 
@@ -16,13 +16,12 @@ export async function POST(req: NextRequest) {
     const { email, name } = await req.json() as { email: string; name: string };
     if (!email || !name) return NextResponse.json({ error: 'Missing params' }, { status: 400 });
 
-    const resend = getResend();
-    await resend.emails.send({
-      from: FROM_EMAIL,
+    const { ok } = await sendReactEmail({
       to: email,
       subject: 'Welcome to FamilyOS 🎉',
       react: React.createElement(WelcomeEmail, { name }),
     });
+    if (!ok) return NextResponse.json({ error: 'Failed to send welcome email' }, { status: 502 });
 
     return NextResponse.json({ sent: true });
   } catch (err) {

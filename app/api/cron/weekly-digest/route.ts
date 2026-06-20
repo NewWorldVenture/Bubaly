@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getResend, FROM_EMAIL } from '@/lib/email';
+import { sendReactEmail } from '@/lib/email';
 import { WeeklyDigestEmail } from '@/lib/emails/weekly-digest';
 import * as React from 'react';
 
@@ -13,7 +13,6 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const resend = getResend();
 
   const weekStart = new Date().toISOString();
   const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -53,24 +52,19 @@ export async function GET(req: NextRequest) {
     const adminEmail = emailByUserId.get(adminMember.user_id);
     if (!adminEmail) continue;
 
-    try {
-      await resend.emails.send({
-        from: FROM_EMAIL,
-        to: adminEmail,
-        subject: `${family.name} — your week ahead`,
-        react: React.createElement(WeeklyDigestEmail, {
-          familyName: family.name,
-          adminName: adminMember.display_name,
-          events: (events ?? []).map((e) => ({ title: e.title, date: e.starts_at.slice(0, 10) })),
-          openChores: chores?.length ?? 0,
-          mealsPlanned: meals?.length ?? 0,
-          memberCount: members?.length ?? 0,
-        }),
-      });
-      sent++;
-    } catch (err) {
-      console.error(`Weekly digest failed for family ${family.id}:`, err);
-    }
+    const { ok } = await sendReactEmail({
+      to: adminEmail,
+      subject: `${family.name} — your week ahead`,
+      react: React.createElement(WeeklyDigestEmail, {
+        familyName: family.name,
+        adminName: adminMember.display_name,
+        events: (events ?? []).map((e) => ({ title: e.title, date: e.starts_at.slice(0, 10) })),
+        openChores: chores?.length ?? 0,
+        mealsPlanned: meals?.length ?? 0,
+        memberCount: members?.length ?? 0,
+      }),
+    });
+    if (ok) sent++;
   }
 
   return NextResponse.json({ sent });

@@ -3,6 +3,7 @@
 import { Moon, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTheme } from './use-theme';
+import { resolveTheme } from './theme-core';
 import { cn } from '@/lib/utils/cn';
 
 export function ThemeToggle({ className }: { className?: string }) {
@@ -10,13 +11,10 @@ export function ThemeToggle({ className }: { className?: string }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const resolved =
-    theme === 'system'
-      ? typeof window !== 'undefined' &&
-        window.matchMedia('(prefers-color-scheme: light)').matches
-        ? 'light'
-        : 'dark'
-      : theme;
+  const prefersLight =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-color-scheme: light)').matches;
+  const resolved = resolveTheme(theme, prefersLight);
 
   return (
     <button

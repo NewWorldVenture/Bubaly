@@ -1,6 +1,7 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import {
-  ArrowRight,
+  Bell,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -13,14 +14,16 @@ import {
   Mail,
   PlayCircle,
   Shield,
+  ShoppingCart,
   Sparkles,
   UtensilsCrossed,
   type LucideIcon,
 } from 'lucide-react';
+import { AssistantConversation } from '@/components/marketing/homepage-interactions';
 import { cn } from '@/lib/utils/cn';
 
 export function PageWrap({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('soft-grid-bg min-h-dvh text-white', className)}>{children}</div>;
+  return <div className={cn('soft-grid-bg min-h-dvh overflow-x-clip text-canvas', className)}>{children}</div>;
 }
 
 export function Container({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -41,8 +44,8 @@ export function Pill({
   className?: string;
 }) {
   return (
-    <span className={cn('inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-4 py-2 text-sm font-semibold text-white/90', className)}>
-      <Icon className="h-4 w-4 text-blue-400" />
+    <span className={cn('inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white/90', className)}>
+      <Icon className="h-3.5 w-3.5 text-blue-400" />
       {children}
     </span>
   );
@@ -52,10 +55,21 @@ export function PrimaryLink({ href, children }: { href: string; children: React.
   return (
     <Link
       href={href}
-      className="inline-flex h-14 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-7 text-base font-bold text-white shadow-glow transition hover:scale-[1.01]"
+      className="inline-flex h-14 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-8 text-base font-bold text-white shadow-glow transition hover:scale-[1.02] hover:brightness-110"
     >
       {children}
-      <ArrowRight className="h-5 w-5" />
+    </Link>
+  );
+}
+
+export function WatchDemoLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex h-14 items-center justify-center gap-2.5 rounded-xl border border-white/18 bg-white/[0.025] px-8 text-base font-bold text-white transition hover:bg-white/[0.07]"
+    >
+      <PlayCircle className="h-5 w-5 fill-white/20" />
+      {children}
     </Link>
   );
 }
@@ -104,7 +118,7 @@ export function AvatarStack() {
         <span
           key={person}
           className={cn(
-            'grid h-11 w-11 place-items-center rounded-full border-2 border-[#07101a] text-xs font-bold text-white',
+            'grid h-10 w-10 place-items-center rounded-full border-2 border-[#07101a] text-xs font-bold text-white',
             ['bg-rose-300', 'bg-amber-300', 'bg-cyan-300', 'bg-emerald-300', 'bg-violet-300'][index],
           )}
         >
@@ -124,6 +138,128 @@ export function SocialProofLine({ text = 'Loved by families everywhere' }: { tex
   );
 }
 
+export function PlatformBadges() {
+  const platforms = [
+    { icon: '🍎', label: 'iOS' },
+    { icon: '🤖', label: 'Android' },
+    { icon: '🖥️', label: 'Web' },
+    { icon: '📱', label: 'Tablet' },
+    { icon: '📺', label: 'TV' },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <span className="text-xs text-white/45">Available on</span>
+      {platforms.map(({ icon, label }) => (
+        <span key={label} className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/70">
+          <span>{icon}</span>
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function HeroPhoneMockup({ className }: { className?: string }) {
+  const schedule = [
+    { time: '8:00 AM', title: 'Dentist Appointment', person: 'Emma', color: 'bg-rose-400' },
+    { time: '9:30 AM', title: 'Dad Flight to Chicago', person: 'Mike', color: 'bg-blue-400' },
+    { time: '3:00 PM', title: 'Jackson Soccer Practice', person: 'Jackson', color: 'bg-emerald-400' },
+    { time: '5:00 PM', title: 'Grocery Pickup', person: 'H-E-B', color: 'bg-orange-400' },
+    { time: '7:00 PM', title: 'Family Dinner', person: 'The Johnsons', color: 'bg-violet-400' },
+  ];
+
+  return (
+    <div className={cn('dark relative mx-auto isolate', className)}>
+      <div className="pointer-events-none absolute -inset-12 -z-20 rounded-full bg-violet-600/20 blur-3xl" />
+      <div className="pointer-events-none absolute -right-28 top-[22%] -z-10 h-72 w-72 rounded-full border-[3px] border-violet-500/75 shadow-[0_0_55px_rgba(124,77,255,0.72),inset_0_0_55px_rgba(124,77,255,0.28)] sm:-right-40 sm:h-96 sm:w-96" />
+
+      {/* Phone shell */}
+      <div className="hero-phone-float relative mx-auto w-[286px] rotate-[3deg] rounded-[3rem] border-[7px] border-neutral-700 bg-black shadow-[0_40px_80px_rgba(0,0,0,0.9),inset_0_0_0_1px_rgba(255,255,255,0.22)] sm:w-[320px]">
+        {/* Screen */}
+        <div className="overflow-hidden rounded-[2.4rem] bg-[#090f1a]">
+          {/* Status bar */}
+          <div className="flex items-center justify-between px-6 pt-4 pb-2">
+            <span className="text-[11px] font-semibold text-white">9:41</span>
+            <div className="h-4 w-20 rounded-full bg-black" />
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-white/60">●●●</span>
+            </div>
+          </div>
+
+          <div className="px-5 pb-5">
+            {/* Greeting */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[15px] font-bold text-white">Good Morning, Sarah! 👋</p>
+                <p className="text-[10px] text-white/45">Thursday, May 16</p>
+              </div>
+              <div className="relative">
+                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-violet-400 to-blue-500" />
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#090f1a] bg-emerald-400" />
+              </div>
+            </div>
+
+            {/* AI Daily Briefing badge */}
+            <div className="mt-3 flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.045] px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-violet-400" />
+                <span className="text-[11px] font-semibold text-white">AI Daily Briefing</span>
+              </div>
+              <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[9px] font-bold text-white">New</span>
+            </div>
+
+            {/* Stats row */}
+            <div className="mt-3 grid grid-cols-4 gap-1.5">
+              {[
+                { value: '5', label: 'Events Today', color: 'text-violet-400' },
+                { value: '3', label: 'Tasks Due', color: 'text-emerald-400' },
+                { value: '2', label: 'Conflicts', color: 'text-rose-400' },
+                { value: '72°', label: 'Party Cloudy', color: 'text-blue-400' },
+              ].map(({ value, label, color }) => (
+                <div key={label} className="rounded-lg border border-white/6 bg-white/[0.035] p-2 text-center">
+                  <p className={cn('text-[13px] font-bold', color)}>{value}</p>
+                  <p className="mt-0.5 text-[8px] leading-tight text-white/45">{label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Today's Schedule */}
+            <div className="mt-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-[11px] font-bold text-white">Today&apos;s Schedule</p>
+                <span className="text-[9px] text-violet-400">View all</span>
+              </div>
+              <div className="space-y-2">
+                {schedule.map(({ time, title, person, color }) => (
+                  <div key={title} className="flex items-center gap-2.5">
+                    <span className={cn('h-6 w-6 shrink-0 rounded-full', color)} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[10px] font-semibold text-white">{title}</p>
+                      <p className="text-[9px] text-white/45">{person}</p>
+                    </div>
+                    <span className="shrink-0 text-[9px] text-white/40">{time}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Bottom nav */}
+            <div className="mt-4 flex items-center justify-around border-t border-white/8 pt-3">
+              <Home className="h-5 w-5 text-violet-400" />
+              <CalendarDays className="h-5 w-5 text-white/35" />
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 text-white">
+                <span className="text-lg font-bold leading-none">+</span>
+              </span>
+              <CheckSquare2 className="h-5 w-5 text-white/35" />
+              <Circle className="h-5 w-5 text-white/35" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ProductMockup() {
   const schedule = [
     ['8:00 AM', 'School Drop-off'],
@@ -135,7 +271,7 @@ export function ProductMockup() {
   const meals = ['Honey Garlic Chicken', 'Taco Tuesday', 'Salmon & Veggies'];
 
   return (
-    <div className="relative mx-auto w-full max-w-[760px] pt-8 lg:pt-0">
+    <div className="dark relative mx-auto w-full max-w-[760px] pt-8 lg:pt-0">
       <div className="showcase-card relative ml-auto w-[88%] rounded-[2rem] border-neutral-700/80 bg-[#080d14] p-4 shadow-2xl">
         <div className="h-[10px] rounded-t-[1.5rem] border border-white/10 bg-black/50" />
         <div className="mt-3 grid min-h-[460px] grid-cols-[120px_1fr] gap-4 rounded-2xl bg-[#0b121d] p-4">
@@ -217,7 +353,7 @@ export function ProductMockup() {
 export function PhoneMockup({ className }: { className?: string }) {
   const items = ['School Drop-off', 'Math Meeting', 'Soccer Practice', 'Family Dinner'];
   return (
-    <div className={cn('rounded-[2rem] border-[6px] border-neutral-800 bg-black p-2 shadow-2xl', className)}>
+    <div className={cn('dark rounded-[2rem] border-[6px] border-neutral-800 bg-black p-2 shadow-2xl', className)}>
       <div className="rounded-[1.45rem] bg-[#09111d] p-4">
         <div className="mb-5 flex items-center justify-between text-[10px] font-bold">
           <span>9:41</span>
@@ -274,46 +410,38 @@ export function MiniPanel({
 
 export function FamilyAiPanel() {
   return (
-    <section className="showcase-panel overflow-hidden p-8 lg:p-12">
-      <div className="grid gap-8 lg:grid-cols-[300px_1fr]">
-        <div>
-          <h2 className="text-4xl font-bold leading-tight">
+    <section className="showcase-panel overflow-hidden p-5 sm:p-8 lg:p-9">
+      <div className="grid items-stretch gap-8 lg:grid-cols-[300px_1fr] lg:gap-8">
+        <div className="flex flex-col justify-center lg:px-2">
+          <h2 className="text-3xl font-bold leading-tight sm:text-4xl">
             Your <GradientText>AI Family</GradientText> Assistant
           </h2>
-          <p className="mt-6 text-lg leading-8 text-white/72">
+          <p className="mt-5 text-base leading-7 text-white/72 sm:text-lg sm:leading-8">
             Your built-in family assistant helps you plan, organize, and stay ahead of what matters most.
           </p>
-          <ul className="mt-8 space-y-3 text-sm text-white/86">
+          <ul className="mt-6 space-y-3 text-sm text-white/86">
             {['Create schedules instantly', 'Plan meals and generate grocery lists', 'Get reminders and helpful suggestions', 'Answers tailored to your family'].map((item) => (
               <li key={item} className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-violet-400" /> {item}
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-violet-400" /> {item}
               </li>
             ))}
           </ul>
-          <Link href="/ai" className="mt-8 inline-flex rounded-lg bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-3 text-sm font-bold">
+          <Link href="/ai" className="mt-7 inline-flex w-fit rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-7 py-3.5 text-sm font-bold shadow-glow transition hover:-translate-y-0.5 hover:brightness-110">
             Try the AI Assistant
           </Link>
         </div>
-        <div className="relative min-h-[360px] overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_80%_35%,rgba(245,145,77,0.20),transparent_30%),linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]">
-          <div className="absolute inset-0 bg-gradient-to-r from-[#08111c] via-[#08111c]/65 to-transparent" />
-          <div className="absolute bottom-0 right-0 flex h-[82%] w-[70%] items-end justify-center gap-3 opacity-95">
-            {['h-56 w-36 bg-blue-900/60', 'h-72 w-44 bg-amber-900/55', 'h-48 w-32 bg-emerald-900/55', 'h-52 w-32 bg-rose-900/55'].map((shape, index) => (
-              <div key={shape} className={cn('rounded-t-full border border-white/10', shape)}>
-                <div className="mx-auto mt-5 h-16 w-16 rounded-full bg-gradient-to-br from-amber-200 to-rose-300" />
-                {index === 1 && <div className="mx-auto mt-6 h-20 w-28 rounded-xl bg-black/35" />}
-              </div>
-            ))}
-          </div>
-          <div className="absolute left-12 top-16 rounded-xl bg-white/[0.07] px-5 py-3 text-sm backdrop-blur">What&apos;s happening this week?</div>
-          <div className="absolute left-20 top-36 max-w-[250px] rounded-xl bg-white/[0.08] p-5 text-sm leading-6 backdrop-blur">
-            You have 6 events this week. Soccer practice on Tue & Thu, Math test on Friday, and Family dinner on Sunday.
-          </div>
-          <div className="absolute left-44 top-72 rounded-xl bg-white/[0.08] px-5 py-3 text-sm backdrop-blur">Plan dinners for the week</div>
-          <div className="absolute left-20 bottom-8 max-w-[245px] rounded-xl bg-white/[0.08] p-5 text-sm leading-6 backdrop-blur">
-            Here&apos;s your meal plan: Honey Garlic Chicken, Tacos, Salmon & Veggies, Pasta Primavera, Homemade Pizza.
-          </div>
-          <span className="glow-dot absolute left-4 top-40 h-8 w-8" />
-          <span className="glow-dot absolute left-4 bottom-20 h-8 w-8" />
+        <div className="dark relative min-h-[420px] overflow-hidden rounded-2xl border border-white/10 bg-[#080e18] sm:min-h-[450px]">
+          <Image
+            src="/images/family-ai-lifestyle.png"
+            alt="A family enjoying time together with FamilyOS"
+            fill
+            priority
+            sizes="(max-width: 1024px) 100vw, 760px"
+            className="object-cover object-[62%_center] lg:object-center"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#06101d] via-transparent to-black/10 lg:bg-gradient-to-r lg:from-[#07111e] lg:via-[#07111e]/70 lg:to-transparent" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_35%,transparent_0%,rgba(3,9,17,0.08)_44%,rgba(3,9,17,0.55)_100%)]" />
+          <AssistantConversation />
         </div>
       </div>
     </section>
@@ -321,8 +449,6 @@ export function FamilyAiPanel() {
 }
 
 export function TestimonialBand({ compact = false }: { compact?: boolean }) {
-  // Honest, benefit-driven copy — no fabricated quotes, names, ratings, or press
-  // mentions. Real customer testimonials can be wired here when they exist.
   const benefits = [
     ['One calm home base', 'Calendar, chores, meals, school, health, and documents live together — not scattered across a dozen apps and group chats.'],
     ['An assistant that acts', 'Ask in plain language and FamilyOS plans meals, builds grocery lists, and schedules events — then writes them straight to your family data.'],
@@ -343,12 +469,135 @@ export function TestimonialBand({ compact = false }: { compact?: boolean }) {
           ))}
         </div>
       </div>
-      <div className="mt-10 border-t border-white/8 pt-8 text-center">
-        <p className="text-sm text-white/70">
+    </section>
+  );
+}
+
+export function DeviceShowcase() {
+  const devices = ['iPhone', 'Android', 'iPad', 'Web App', 'Apple Watch', 'Smart Display'] as const;
+
+  return (
+    <section className="py-12 sm:py-16">
+      <h2 className="mb-9 text-center text-2xl font-bold sm:text-3xl">
+        One seamless experience across all your devices
+      </h2>
+
+      {/* Device grid */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 lg:gap-5">
+        {devices.map((device) => (
+          <div key={device} className="device-card group flex flex-col items-center gap-3">
+            <div className="dark"><DeviceArtwork device={device} /></div>
+            <span className="text-sm font-medium text-white/75 transition group-hover:text-white">{device}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Security badges */}
+      <div className="mt-12 grid gap-5 border-t border-white/8 pt-8 sm:grid-cols-3">
+        {[
+          { icon: Shield, text: 'Bank-level security' },
+          { icon: Shield, text: 'End-to-end encrypted' },
+          { icon: Heart, text: 'Your data, your family' },
+        ].map(({ icon: Icon, text }) => (
+          <div key={text} className="flex items-center justify-center gap-2 text-sm text-white/65">
+            <Icon className="h-5 w-5 text-emerald-400" />
+            {text}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-8 rounded-2xl border border-white/5 bg-white/[0.025] px-5 py-7">
+        <p className="text-center text-sm text-white/70">
           Row-level security on every table · Private document storage · You stay in control of your data
         </p>
       </div>
     </section>
+  );
+}
+
+type DeviceName = 'iPhone' | 'Android' | 'iPad' | 'Web App' | 'Apple Watch' | 'Smart Display';
+
+function MiniAppScreen({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={cn('h-full w-full overflow-hidden rounded-[inherit] bg-[#09111d] p-2', compact && 'p-1.5')}>
+      <div className="flex items-center justify-between">
+        <span className={cn('font-bold text-white', compact ? 'text-[4px]' : 'text-[6px]')}>FamilyOS</span>
+        <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-1">
+        {[CalendarDays, CheckSquare2, ShoppingCart].map((Icon, index) => (
+          <span key={index} className="grid aspect-square place-items-center rounded-sm bg-white/[0.07]">
+            <Icon className={cn(index === 0 ? 'text-violet-400' : index === 1 ? 'text-emerald-400' : 'text-orange-400', compact ? 'h-2 w-2' : 'h-3 w-3')} />
+          </span>
+        ))}
+      </div>
+      <div className="mt-2 space-y-1">
+        {[55, 82, 68].map((width, index) => (
+          <span key={width} className="flex items-center gap-1 rounded-sm bg-white/[0.045] p-1">
+            <span className={cn('rounded-full', index === 0 ? 'bg-blue-400' : index === 1 ? 'bg-rose-400' : 'bg-emerald-400', compact ? 'h-1 w-1' : 'h-1.5 w-1.5')} />
+            <span className="h-0.5 rounded-full bg-white/30" style={{ width: `${width}%` }} />
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DeviceArtwork({ device }: { device: DeviceName }) {
+  if (device === 'iPhone' || device === 'Android') {
+    return (
+      <div className={cn('device-art relative h-32 w-[70px] rounded-[17px] border-[4px] border-[#333742] bg-black p-1 shadow-2xl sm:h-36 sm:w-[78px]', device === 'Android' && 'rounded-[13px]')}>
+        <MiniAppScreen />
+        <span className={cn('absolute left-1/2 top-1.5 -translate-x-1/2 bg-black', device === 'iPhone' ? 'h-2 w-7 rounded-full' : 'h-2 w-2 rounded-full')} />
+      </div>
+    );
+  }
+
+  if (device === 'iPad') {
+    return (
+      <div className="device-art h-28 w-[132px] rounded-xl border-[5px] border-[#333742] bg-black p-1.5 shadow-2xl sm:h-32 sm:w-[148px]">
+        <MiniAppScreen />
+      </div>
+    );
+  }
+
+  if (device === 'Web App') {
+    return (
+      <div className="device-art flex h-32 w-full max-w-[160px] flex-col justify-center sm:h-36">
+        <div className="h-[92px] rounded-lg border-[4px] border-[#333742] bg-black p-1 shadow-2xl sm:h-[104px]">
+          <MiniAppScreen compact />
+        </div>
+        <div className="mx-auto h-3 w-8 bg-[#333742]" />
+        <div className="mx-auto h-1.5 w-16 rounded-full bg-[#454a57]" />
+      </div>
+    );
+  }
+
+  if (device === 'Apple Watch') {
+    return (
+      <div className="device-art flex h-32 flex-col items-center justify-center sm:h-36">
+        <div className="h-8 w-9 rounded-t-lg bg-[#353943]" />
+        <div className="relative h-[66px] w-[62px] rounded-[17px] border-[4px] border-[#454a55] bg-black p-1.5 shadow-2xl">
+          <div className="grid h-full place-items-center rounded-xl bg-[#0b1320]">
+            <Bell className="h-5 w-5 text-violet-400" />
+            <span className="absolute bottom-2 text-[6px] font-bold text-white">9:41</span>
+          </div>
+        </div>
+        <div className="h-8 w-9 rounded-b-lg bg-[#353943]" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="device-art flex h-32 w-full max-w-[160px] flex-col items-center justify-center sm:h-36">
+      <div className="relative h-[92px] w-full overflow-hidden rounded-xl border-[5px] border-[#333742] bg-black shadow-2xl sm:h-[104px]">
+        <Image src="/images/family-ai-lifestyle.png" alt="FamilyOS smart display" fill sizes="160px" className="object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/65 to-transparent" />
+        <span className="absolute bottom-2 left-2 text-[7px] font-bold text-white">Good evening, family</span>
+      </div>
+      <div className="h-3 w-8 bg-[#333742]" />
+      <div className="h-1.5 w-16 rounded-full bg-[#454a57]" />
+    </div>
   );
 }
 

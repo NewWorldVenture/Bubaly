@@ -41,12 +41,25 @@
   --success: 74 201 155;
   --warning: 240 191 95;
   --danger: 245 113 113;
+  --info: 96 165 250;
   --glass: 255 255 255;
   --glass-alpha: 0.04;
   --glass-border: 0.10;
 
   --shell-bg: 5 12 21;
   --shell-border: 255 255 255 / 0.08;
+
+  /* Scrim behind modals/drawers — kept dark in both themes (a dimming layer). */
+  --overlay: 0 0 0;
+  --overlay-alpha: 0.6;
+  /* Marketing brand canvas + showcase surfaces (dark by design). */
+  --canvas-top: #050a12;
+  --canvas-bottom: #030911;
+  --canvas-fg: 237 240 247;
+  --canvas-muted: 255 255 255 / 0.7;
+  --showcase-bg: 255 255 255;
+  --showcase-alpha: 0.045;
+  --showcase-border: 255 255 255 / 0.10;
 }
 
 .light {
@@ -63,12 +76,25 @@
   --success: 31 165 122;
   --warning: 197 142 24;
   --danger: 213 70 70;
+  --info: 37 99 235;
   --glass: 16 22 40;
   --glass-alpha: 0.03;
   --glass-border: 0.08;
 
   --shell-bg: 250 251 254;
   --shell-border: 0 0 0 / 0.06;
+
+  /* Modal scrim — slightly lighter in light mode. */
+  --overlay: 15 23 42;
+  --overlay-alpha: 0.45;
+  /* Marketing canvas flips to a soft light surface; copy uses dark ink. */
+  --canvas-top: #eef2fb;
+  --canvas-bottom: #f5f7fc;
+  --canvas-fg: 23 28 42;
+  --canvas-muted: 23 28 42 / 0.66;
+  --showcase-bg: 16 22 40;
+  --showcase-alpha: 0.04;
+  --showcase-border: 16 22 40 / 0.10;
 }
 
 * {
@@ -127,26 +153,57 @@ body::before {
     background-image: linear-gradient(135deg, #5b95ff 5%, #9b4dff 58%, #c5b5ff 100%);
   }
   .showcase-card {
-    @apply rounded-2xl border border-white/10 bg-white/[0.045] shadow-glass;
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 20px 60px rgb(0 0 0 / 0.24);
+    @apply rounded-2xl shadow-glass;
+    background-color: rgb(var(--showcase-bg) / var(--showcase-alpha));
+    border: 1px solid rgb(var(--showcase-border));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 20px 60px rgb(0 0 0 / 0.18);
   }
   .showcase-panel {
-    @apply rounded-3xl border border-white/10 bg-[#08111c]/85;
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045), 0 24px 80px rgb(0 0 0 / 0.28);
+    @apply rounded-3xl;
+    background-color: rgb(var(--surface) / 0.85);
+    border: 1px solid rgb(var(--showcase-border));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045), 0 24px 80px rgb(0 0 0 / 0.24);
   }
   .soft-grid-bg {
+    color: rgb(var(--canvas-fg));
     background:
-      radial-gradient(42rem 30rem at 77% 4%, rgb(124 77 255 / 0.24), transparent 66%),
+      radial-gradient(42rem 30rem at 77% 4%, rgb(124 77 255 / 0.18), transparent 66%),
       radial-gradient(34rem 26rem at 20% 2%, rgb(49 133 255 / 0.10), transparent 64%),
-      linear-gradient(180deg, #050a12 0%, #030911 100%);
+      linear-gradient(180deg, var(--canvas-top) 0%, var(--canvas-bottom) 100%);
   }
   .icon-orb {
-    @apply inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.055];
+    @apply inline-flex items-center justify-center rounded-full;
+    background-color: rgb(var(--showcase-bg) / 0.06);
+    border: 1px solid rgb(var(--showcase-border));
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 0 32px rgb(124 93 255 / 0.18);
   }
+  /* Marketing copy colors — flip with the theme via canvas tokens. */
+  .text-canvas { color: rgb(var(--canvas-fg)); }
+  .text-canvas-muted { color: rgb(var(--canvas-muted)); }
+  /* Modal/drawer dimming scrim — token-driven, dark in both themes. */
+  .overlay-scrim { background-color: rgb(var(--overlay) / var(--overlay-alpha)); }
   .glow-dot {
     @apply rounded-full border border-violet-300/70 bg-gradient-to-br from-cyan-300 via-violet-500 to-fuchsia-500;
     box-shadow: 0 0 20px rgb(124 93 255 / 0.78), inset 0 0 12px rgb(255 255 255 / 0.35);
+  }
+
+  .assistant-message-enter {
+    animation: assistant-message-enter 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .hero-phone-float {
+    animation: hero-phone-float 7s ease-in-out infinite;
+  }
+
+  .device-art {
+    transform: translateY(0) scale(1);
+    transition: transform 320ms ease, filter 320ms ease;
+    filter: drop-shadow(0 18px 25px rgb(0 0 0 / 0.32));
+  }
+
+  .device-card:hover .device-art {
+    transform: translateY(-7px) scale(1.025);
+    filter: drop-shadow(0 24px 34px rgb(93 75 255 / 0.18));
   }
 
   /* Responsive container — constrains content width with consistent padding */
@@ -235,6 +292,16 @@ body::before {
   }
 }
 
+@keyframes assistant-message-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes hero-phone-float {
+  0%, 100% { transform: translateY(0) rotate(3deg); }
+  50% { transform: translateY(-10px) rotate(2deg); }
+}
+
 /* Respect reduced-motion preferences. */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -307,3 +374,65 @@ body::before {
   .print-sheet .print-page { color: #000 !important; background: #fff !important; }
   @page { margin: 0.5in; }
 }
+
+/* ============================================================
+   Light-mode compatibility for marketing + any dark-authored surface.
+   Marketing copy/chrome uses hardcoded white / white-alpha utilities.
+   Remap them to the canvas foreground token, which flips with the theme
+   (dark ink in light mode, near-white in dark). Device mockups opt back
+   to dark by wrapping in `.dark` — there --canvas-fg is near-white, so
+   these same rules resolve to white automatically and screens stay dark.
+   ============================================================ */
+.light .text-white { color: rgb(var(--canvas-fg)); }
+.light .text-white\/95 { color: rgb(var(--canvas-fg) / 0.95); }
+.light .text-white\/90 { color: rgb(var(--canvas-fg) / 0.9); }
+.light .text-white\/88 { color: rgb(var(--canvas-fg) / 0.88); }
+.light .text-white\/86 { color: rgb(var(--canvas-fg) / 0.86); }
+.light .text-white\/85 { color: rgb(var(--canvas-fg) / 0.85); }
+.light .text-white\/80 { color: rgb(var(--canvas-fg) / 0.8); }
+.light .text-white\/78 { color: rgb(var(--canvas-fg) / 0.78); }
+.light .text-white\/76 { color: rgb(var(--canvas-fg) / 0.76); }
+.light .text-white\/75 { color: rgb(var(--canvas-fg) / 0.74); }
+.light .text-white\/72 { color: rgb(var(--canvas-fg) / 0.72); }
+.light .text-white\/70 { color: rgb(var(--canvas-fg) / 0.7); }
+.light .text-white\/68 { color: rgb(var(--canvas-fg) / 0.68); }
+.light .text-white\/66 { color: rgb(var(--canvas-fg) / 0.66); }
+.light .text-white\/65 { color: rgb(var(--canvas-fg) / 0.66); }
+.light .text-white\/62 { color: rgb(var(--canvas-fg) / 0.64); }
+.light .text-white\/60 { color: rgb(var(--canvas-fg) / 0.62); }
+.light .text-white\/55 { color: rgb(var(--canvas-fg) / 0.58); }
+.light .text-white\/50 { color: rgb(var(--canvas-fg) / 0.54); }
+.light .text-white\/48 { color: rgb(var(--canvas-fg) / 0.52); }
+.light .text-white\/45 { color: rgb(var(--canvas-fg) / 0.5); }
+.light .text-white\/42 { color: rgb(var(--canvas-fg) / 0.48); }
+.light .text-white\/40 { color: rgb(var(--canvas-fg) / 0.46); }
+.light .text-white\/35 { color: rgb(var(--canvas-fg) / 0.42); }
+.light .text-white\/30 { color: rgb(var(--canvas-fg) / 0.38); }
+.light .text-white\/25 { color: rgb(var(--canvas-fg) / 0.34); }
+.light .text-white\/20 { color: rgb(var(--canvas-fg) / 0.3); }
+
+.light .bg-white\/5 { background-color: rgb(var(--canvas-fg) / 0.05); }
+.light .bg-white\/10 { background-color: rgb(var(--canvas-fg) / 0.08); }
+.light .bg-white\/20 { background-color: rgb(var(--canvas-fg) / 0.12); }
+.light .bg-white\/30 { background-color: rgb(var(--canvas-fg) / 0.16); }
+.light .bg-white\/\[0\.02\] { background-color: rgb(var(--canvas-fg) / 0.03); }
+.light .bg-white\/\[0\.025\] { background-color: rgb(var(--canvas-fg) / 0.035); }
+.light .bg-white\/\[0\.03\] { background-color: rgb(var(--canvas-fg) / 0.04); }
+.light .bg-white\/\[0\.035\] { background-color: rgb(var(--canvas-fg) / 0.045); }
+.light .bg-white\/\[0\.04\] { background-color: rgb(var(--canvas-fg) / 0.05); }
+.light .bg-white\/\[0\.045\] { background-color: rgb(var(--canvas-fg) / 0.055); }
+.light .bg-white\/\[0\.05\] { background-color: rgb(var(--canvas-fg) / 0.06); }
+.light .bg-white\/\[0\.06\] { background-color: rgb(var(--canvas-fg) / 0.07); }
+.light .bg-white\/\[0\.07\] { background-color: rgb(var(--canvas-fg) / 0.08); }
+.light .bg-white\/\[0\.08\] { background-color: rgb(var(--canvas-fg) / 0.09); }
+
+.light .border-white\/5 { border-color: rgb(var(--canvas-fg) / 0.08); }
+.light .border-white\/8 { border-color: rgb(var(--canvas-fg) / 0.1); }
+.light .border-white\/10 { border-color: rgb(var(--canvas-fg) / 0.12); }
+.light .border-white\/15 { border-color: rgb(var(--canvas-fg) / 0.16); }
+.light .border-white\/18 { border-color: rgb(var(--canvas-fg) / 0.18); }
+.light .border-white\/20 { border-color: rgb(var(--canvas-fg) / 0.2); }
+.light .border-white\/\[0\.06\] { border-color: rgb(var(--canvas-fg) / 0.09); }
+.light .border-white\/\[0\.07\] { border-color: rgb(var(--canvas-fg) / 0.1); }
+.light .border-white\/\[0\.08\] { border-color: rgb(var(--canvas-fg) / 0.11); }
+.light .border-white\/\[0\.10\] { border-color: rgb(var(--canvas-fg) / 0.13); }

@@ -336,7 +336,7 @@ export function SchoolModule() {
                       <th className="px-4 py-3 text-left font-medium">Due Date</th>
                       <th className="w-8 px-4 py-3" />
                     </tr></thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-border">
                       {(tab === 'Assignments' ? assignments : assignments.slice(0, 5)).map((e) => {
                         const due = fmtDue(e.starts_at);
                         const member = e.member_id ? memberById.get(e.member_id) : undefined;
@@ -421,7 +421,7 @@ export function SchoolModule() {
                     <th className="px-4 py-3 text-left font-medium">Score</th>
                     <th className="px-4 py-3 text-left font-medium">Date</th>
                   </tr></thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className="divide-y divide-border">
                     {grades.map((g) => {
                       const member = memberById.get(g.member_id);
                       const pct = g.score != null && g.max_score ? (g.score / g.max_score) * 100 : null;
@@ -529,7 +529,7 @@ export function SchoolModule() {
                 const d = new Date(e.starts_at);
                 return (
                   <div key={e.id} className="flex items-start gap-3">
-                    <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-lg text-center text-white', ACCENT[i % ACCENT.length])}>
+                    <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
                       <div><p className="text-[9px] font-bold uppercase">{d.toLocaleDateString('en-US', { month: 'short' })}</p><p className="text-sm font-black leading-none">{d.getDate()}</p></div>
                     </div>
                     <div>

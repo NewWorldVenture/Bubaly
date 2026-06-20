@@ -1,16 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useState, useTransition } from 'react';
-import { ChevronDown, Check, Gift, LogOut, Mic, Moon, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, Sparkles, SunMedium } from 'lucide-react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useEffect, useState, useTransition } from 'react';
+import { ChevronDown, Check, Gift, Lock, LogOut, Mic, Moon, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, Sparkles, SunMedium } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
-import { APP_NAV, MOBILE_TABS } from '@/lib/constants/navigation';
+import { APP_NAV_GROUPS, MOBILE_TABS, type NavItem } from '@/lib/constants/navigation';
 import { ROLE_LABELS } from '@/lib/constants/roles';
+import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { cn } from '@/lib/utils/cn';
+import { useTheme } from '@/components/theme/use-theme';
 import { useApp } from './app-context';
 import { NotificationBell } from './notification-bell';
+import { UpgradeModal } from './upgrade-modal';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
 
 function isActive(pathname: string, href: string) {
@@ -76,9 +79,16 @@ function FamilySwitcher() {
 }
 
 function UserMenu() {
-  const { userEmail, selfMember, isSuperAdmin } = useApp();
+  const { userEmail, selfMember, isSuperAdmin, role, defaultDashboard } = useApp();
   const [open, setOpen] = useState(false);
   const name = selfMember?.display_name ?? userEmail ?? 'You';
+
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // Which dashboard the user is currently looking at (only meaningful on /dashboard).
+  const onDashboard = pathname === '/dashboard';
+  const viewParam = searchParams.get('view');
+  const currentView: DashboardView = isDashboardView(viewParam) ? viewParam : defaultDashboard;
 
   return (
     <div className="relative">
@@ -92,11 +102,32 @@ function UserMenu() {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl glass-card p-1 shadow-glass animate-fade-in">
+          <div className="absolute right-0 top-full z-20 mt-2 w-60 rounded-xl glass-card p-1 shadow-glass animate-fade-in">
             <div className="px-3 py-2">
               <p className="truncate text-sm font-medium">{name}</p>
               <p className="truncate text-xs text-muted">{userEmail}</p>
             </div>
+            <div className="my-1 h-px bg-border" />
+            <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Dashboard</p>
+            {DASHBOARD_VIEWS.map((view) => {
+              const Icon = dashboardIcon[view];
+              const active = onDashboard && currentView === view;
+              return (
+                <Link
+                  key={view}
+                  href={view === defaultDashboard ? '/dashboard' : `/dashboard?view=${view}`}
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated"
+                >
+                  <Icon className="h-4 w-4 text-muted" />
+                  <span className="flex-1 truncate">{dashboardLabel(view, role)}</span>
+                  {view === defaultDashboard && (
+                    <span className="text-[10px] font-semibold uppercase text-muted">Default</span>
+                  )}
+                  {active && <Check className="h-4 w-4 text-brand" />}
+                </Link>
+              );
+            })}
             <div className="my-1 h-px bg-border" />
             {isSuperAdmin && (
               <Link href="/admin" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-brand hover:bg-elevated">
@@ -106,6 +137,12 @@ function UserMenu() {
             <Link href="/dashboard/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
               <SettingsIcon className="h-4 w-4" /> Settings
             </Link>
+            <div className="my-1 h-px bg-border" />
+            <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Theme</p>
+            <div className="px-2 pb-1">
+              <ThemeSwitch />
+            </div>
+            <div className="my-1 h-px bg-border" />
             <form action="/auth/signout" method="post">
               <button type="submit" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated">
                 <LogOut className="h-4 w-4" /> Sign out
@@ -118,8 +155,152 @@ function UserMenu() {
   );
 }
 
+/** The two dashboards (personal + family Command Center), rendered role-aware
+ *  at the top of the sidebar with view-aware active highlighting. */
+function SidebarDashboardLinks() {
+  const { role, defaultDashboard } = useApp();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const onDashboard = pathname === '/dashboard';
+  const viewParam = searchParams.get('view');
+  const currentView: DashboardView = isDashboardView(viewParam) ? viewParam : defaultDashboard;
+
+  return (
+    <>
+      {DASHBOARD_VIEWS.map((view) => {
+        const Icon = dashboardIcon[view];
+        const active = onDashboard && currentView === view;
+        return (
+          <Link
+            key={view}
+            href={view === defaultDashboard ? '/dashboard' : `/dashboard?view=${view}`}
+            className={cn(
+              'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition xl:px-4 xl:py-3 xl:text-base',
+              active ? 'bg-brand/15 text-brand shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg',
+            )}
+          >
+            <Icon className="h-5 w-5 shrink-0" />
+            {dashboardLabel(view, role)}
+          </Link>
+        );
+      })}
+    </>
+  );
+}
+
+/** A single sidebar destination. Free items navigate; items above the family's
+ *  plan render greyed-out with a lock and open the upgrade prompt on click. */
+function NavEntry({ item, variant, onLocked }: {
+  item: NavItem; variant: 'list' | 'grid'; onLocked: (item: NavItem) => void;
+}) {
+  const pathname = usePathname();
+  const { planLevel } = useApp();
+  const locked = (item.minLevel ?? 0) > planLevel;
+  const active = !locked && isActive(pathname, item.href);
+
+  const base = variant === 'grid'
+    ? 'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition'
+    : 'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition xl:px-4 xl:py-3 xl:text-base';
+
+  if (locked) {
+    return (
+      <button
+        type="button"
+        onClick={() => onLocked(item)}
+        title={`${item.label} — upgrade to unlock`}
+        className={cn(base, 'text-muted/45 hover:bg-elevated/60 hover:text-muted')}
+      >
+        <item.icon className="h-5 w-5 shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
+        <Lock className="h-3.5 w-3.5 shrink-0 opacity-70" />
+      </button>
+    );
+  }
+
+  return (
+    <Link
+      href={item.href}
+      className={cn(base, active ? 'bg-brand/15 text-brand shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg')}
+    >
+      <item.icon className="h-5 w-5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+    </Link>
+  );
+}
+
+/** Grouped, plan-gated sidebar navigation. */
+function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
+  return (
+    <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4 xl:px-4">
+      {APP_NAV_GROUPS.map((group) => (
+        <div key={group.title} className="space-y-1">
+          <p className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted/70">
+            {group.title}
+          </p>
+          {group.title === 'Suggested' && <SidebarDashboardLinks />}
+          {group.layout === 'grid' ? (
+            <div className="grid grid-cols-2 gap-1">
+              {group.items.map((item) => (
+                <NavEntry key={item.href} item={item} variant="grid" onLocked={onLocked} />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-0.5">
+              {group.items.map((item) => (
+                <NavEntry key={item.href} item={item} variant="list" onLocked={onLocked} />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+/** Dark/Light segmented control for the sidebar footer. */
+function ThemeSwitch() {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const resolved = !mounted
+    ? null
+    : theme === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+      : theme;
+
+  return (
+    <div className="grid grid-cols-2 rounded-xl border border-border bg-surface/40 p-1 text-sm">
+      <button
+        type="button"
+        onClick={() => setTheme('dark')}
+        aria-pressed={resolved === 'dark'}
+        className={cn(
+          'flex items-center justify-center gap-2 rounded-lg py-2.5 transition',
+          resolved === 'dark' ? 'bg-brand/15 font-semibold text-brand' : 'text-muted hover:text-fg',
+        )}
+      >
+        <Moon className="h-4 w-4" /> Dark
+      </button>
+      <button
+        type="button"
+        onClick={() => setTheme('light')}
+        aria-pressed={resolved === 'light'}
+        className={cn(
+          'flex items-center justify-center gap-2 rounded-lg py-2.5 transition',
+          resolved === 'light' ? 'bg-brand/15 font-semibold text-brand' : 'text-muted hover:text-fg',
+        )}
+      >
+        <SunMedium className="h-4 w-4" /> Light
+      </button>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { planLevel } = useApp();
+  const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
 
   return (
     <div className="min-h-dvh bg-bg text-fg lg:flex">
@@ -128,24 +309,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="px-5 py-5 xl:px-7 xl:py-7">
           <Logo href="/dashboard" markVariant="home" />
         </div>
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4 xl:px-4">
-          {APP_NAV.map((item) => {
-            const active = isActive(pathname, item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition xl:px-4 xl:py-3 xl:text-base',
-                  active ? 'bg-brand/15 text-brand shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg',
-                )}
-              >
-                <item.icon className="h-5 w-5 shrink-0" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+        <SidebarNav onLocked={setUpgradeFor} />
         <div className="space-y-4 px-3 pb-4 xl:px-4 xl:pb-5">
           <FamilySwitcher />
           <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4 text-center xl:p-5">
@@ -160,14 +324,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Learn More
             </Link>
           </div>
-          <div className="grid grid-cols-2 rounded-xl border border-border bg-surface/40 p-1 text-sm">
-            <button className="flex items-center justify-center gap-2 rounded-lg bg-brand/15 py-2.5 font-semibold text-brand">
-              <Moon className="h-4 w-4" /> Dark
-            </button>
-            <button className="flex items-center justify-center gap-2 rounded-lg py-2.5 text-muted">
-              <SunMedium className="h-4 w-4" /> Light
-            </button>
-          </div>
+          <ThemeSwitch />
         </div>
       </aside>
 
@@ -199,23 +356,37 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/90 backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex max-w-lg items-stretch justify-around">
           {MOBILE_TABS.map((item) => {
-            const active = isActive(pathname, item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex flex-1 flex-col items-center gap-0.5 pb-1 pt-2 text-[11px] font-medium transition',
-                  active ? 'text-brand' : 'text-muted',
-                )}
-              >
+            const locked = (item.minLevel ?? 0) > planLevel;
+            const active = !locked && isActive(pathname, item.href);
+            const className = cn(
+              'relative flex flex-1 flex-col items-center gap-0.5 pb-1 pt-2 text-[11px] font-medium transition',
+              locked ? 'text-muted/45' : active ? 'text-brand' : 'text-muted',
+            );
+            const inner = (
+              <>
                 <item.icon className={cn('h-6 w-6', active && 'scale-110')} />
                 {item.label}
+                {locked && <Lock className="absolute right-1/2 top-1.5 h-3 w-3 translate-x-3" />}
+              </>
+            );
+            return locked ? (
+              <button key={item.href} type="button" onClick={() => setUpgradeFor(item)} className={className}>
+                {inner}
+              </button>
+            ) : (
+              <Link key={item.href} href={item.href} className={className}>
+                {inner}
               </Link>
             );
           })}
         </div>
       </nav>
+
+      <UpgradeModal
+        open={upgradeFor !== null}
+        onClose={() => setUpgradeFor(null)}
+        featureLabel={upgradeFor?.label}
+      />
     </div>
   );
 }

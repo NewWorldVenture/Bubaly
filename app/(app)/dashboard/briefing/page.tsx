@@ -1,7 +1,10 @@
-﻿import { BriefingModule } from '@/components/modules/briefing-module';
+import type { Metadata } from 'next';
+import { requirePlanLevel } from '@/lib/supabase/auth';
+import { BriefingModule } from '@/components/modules/briefing-module';
 
-export const metadata = { title: 'Daily Briefing | FamilyOS' };
+export const metadata: Metadata = { title: 'Daily Briefing | FamilyOS' };
 
-export default function BriefingPage() {
+export default async function BriefingPage() {
+  await requirePlanLevel(1);
   return <BriefingModule />;
 }

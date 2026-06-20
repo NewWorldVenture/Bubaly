@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getResend, FROM_EMAIL } from '@/lib/email';
+import { sendReactEmail } from '@/lib/email';
 import { ChoreReminderEmail } from '@/lib/emails/chore-reminder';
 import * as React from 'react';
 
@@ -13,7 +13,6 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const resend = getResend();
 
   const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -88,17 +87,12 @@ export async function GET(req: NextRequest) {
   for (const [, { userId, memberName, familyName, chores }] of byMember) {
     const email = emailByUserId.get(userId);
     if (!email) continue;
-    try {
-      await resend.emails.send({
-        from: FROM_EMAIL,
-        to: email,
-        subject: `${chores.length} chore${chores.length !== 1 ? 's' : ''} coming up this week`,
-        react: React.createElement(ChoreReminderEmail, { memberName, familyName, chores }),
-      });
-      sent++;
-    } catch (err) {
-      console.error(`Chore reminder failed for ${userId}:`, err);
-    }
+    const { ok } = await sendReactEmail({
+      to: email,
+      subject: `${chores.length} chore${chores.length !== 1 ? 's' : ''} coming up this week`,
+      react: React.createElement(ChoreReminderEmail, { memberName, familyName, chores }),
+    });
+    if (ok) sent++;
   }
 
   return NextResponse.json({ sent });

@@ -2,6 +2,7 @@
 import { redirect } from 'next/navigation';
 import { createServer } from './server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
+import { planLevel } from '@/lib/constants/plans';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 
@@ -95,5 +96,30 @@ export async function requireUserContext(): Promise<UserContext> {
   const ctx = await getUserContext();
   if (!ctx) redirect('/login');
   if ('needsFamily' in ctx) redirect('/onboarding');
+  return ctx;
+}
+
+/**
+ * Guard for plan-gated pages. Calls requireUserContext, then checks the
+ * family subscription plan. If the plan level is below `minLevel`, redirects
+ * to /dashboard/billing with an `upgrade=1` query param.
+ *
+ * minLevel: 0 = free (any), 1 = basic+, 2 = plus+
+ */
+export async function requirePlanLevel(minLevel: 1 | 2): Promise<UserContext> {
+  const ctx = await requireUserContext();
+
+  const supabase = await createServer();
+  const { data: sub } = await supabase
+    .from('subscriptions')
+    .select('plan, status')
+    .eq('family_id', ctx.active.familyId)
+    .in('status', ['active', 'trialing'])
+    .maybeSingle();
+
+  const level = planLevel(sub?.plan ?? null);
+  if (level < minLevel) {
+    redirect('/dashboard/billing?upgrade=1');
+  }
   return ctx;
 }
