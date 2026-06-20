@@ -5,7 +5,8 @@ import {
   FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, TicketCheck,
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
-  DollarSign, HardDrive, RefreshCw, Gauge, type LucideIcon,
+  DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet,
+  Zap, Network, ShieldAlert, BookHeart, Import, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -86,6 +87,28 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/billing', label: 'Finances', icon: CreditCard, minLevel: 0 },
       { href: '/dashboard/sync', label: 'Calendar Sync', icon: RefreshCw, minLevel: 0 },
       { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound, minLevel: 0 },
+      { href: '/dashboard/migrate', label: 'Switch to FamilyOS', icon: Import, minLevel: 0 },
+    ],
+  },
+  {
+    // The differentiated Family AI Operating System surfaces (Family+ tier).
+    title: 'Family AI OS',
+    layout: 'grid',
+    items: [
+      { href: '/dashboard/family-operations', label: 'Operations', icon: Command, minLevel: 2 },
+      { href: '/dashboard/autonomous-family-management', label: 'Autonomous AI', icon: Bot, minLevel: 2 },
+      { href: '/dashboard/family-ai-assistant', label: 'AI Assistant', icon: Sparkles, minLevel: 2 },
+      { href: '/dashboard/family-digital-twin', label: 'Digital Twin', icon: Brain, minLevel: 2 },
+      { href: '/dashboard/family-cfo', label: 'Family CFO', icon: Wallet, minLevel: 2 },
+      { href: '/dashboard/family-coo', label: 'Family COO', icon: ClipboardList, minLevel: 2 },
+      { href: '/dashboard/family-health', label: 'Health Coordinator', icon: HeartPulse, minLevel: 2 },
+      { href: '/dashboard/family-school', label: 'School Hub', icon: GraduationCap, minLevel: 2 },
+      { href: '/dashboard/family-sports', label: 'Sports Hub', icon: Trophy, minLevel: 2 },
+      { href: '/dashboard/family-memory', label: 'Memory Brain', icon: BookHeart, minLevel: 2 },
+      { href: '/dashboard/family-emergency', label: 'Emergency Hub', icon: ShieldAlert, minLevel: 2 },
+      { href: '/dashboard/family-stress', label: 'Stress Prediction', icon: Gauge, minLevel: 2 },
+      { href: '/dashboard/family-automation', label: 'Life Automation', icon: Zap, minLevel: 2 },
+      { href: '/dashboard/family-knowledge-graph', label: 'Knowledge Graph', icon: Network, minLevel: 2 },
     ],
   },
 ];
