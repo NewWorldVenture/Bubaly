@@ -10,9 +10,8 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils/cn';
-import {
-  saveAdminSettings, resetAdminSettings, type AdminSettings,
-} from '@/app/(app)/admin/settings/actions';
+import { saveAdminSettings, resetAdminSettings } from '@/app/(app)/admin/settings/actions';
+import type { AdminSettings } from '@/lib/admin/settings';
 import { adminClearCacheAction } from '@/app/(app)/admin/actions';
 
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
