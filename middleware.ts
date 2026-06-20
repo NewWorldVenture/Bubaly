@@ -4,7 +4,10 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
 const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/ai', '/mobile', '/faq', '/blog', '/contact', '/login', '/signup', '/auth',
-  '/join', '/offline'];
+  '/join', '/offline',
+  // Public iCalendar feeds: subscribed to by Apple Calendar / Outlook / Alexa
+  // with no login — the unguessable feed token IS the authorization.
+  '/api/sync/feeds'];
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next({ request: req });
