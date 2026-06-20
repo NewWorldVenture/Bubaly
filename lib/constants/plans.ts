@@ -64,6 +64,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/reminders':0,
   '/dashboard/settings': 0,
   '/dashboard/billing':  0,
+  '/dashboard/assistant':0,  // metered AI (10 requests/mo on Free)
   // Basic routes
   '/dashboard/chores':        1,
   '/dashboard/meals':         1,
@@ -76,9 +77,9 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/goals':         1,
   '/dashboard/notifications': 1,
   '/dashboard/briefing':      1,
-  '/dashboard/assistant':     1,
   '/dashboard/inbox':         1,
   '/dashboard/scan':          1,
+  '/display':                 1,  // Kitchen Display Mode
   // Plus routes
   // (currently the AI enhancements live within existing modules; reserve prefix for future)
 };

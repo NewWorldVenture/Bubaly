@@ -13,19 +13,40 @@ import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { ROLE_LABELS, INVITABLE_ROLES, isAdmin } from '@/lib/constants/roles';
+import {
+  DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, DASHBOARD_DESCRIPTIONS, type DashboardView,
+} from '@/lib/constants/dashboards';
+import { setDefaultDashboardAction } from '@/app/(app)/actions';
+import { cn } from '@/lib/utils/cn';
 import { CalendarSyncPanel } from '@/components/dashboard/calendar-sync-panel';
 import type { Tables } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/database.types';
 
 export function SettingsModule() {
-  const { family, members, role, userId, userEmail } = useApp();
+  const { family, members, role, userId, userEmail, defaultDashboard } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [savingFamily, setSavingFamily] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [dashboardView, setDashboardView] = useState<DashboardView>(defaultDashboard);
+  const [savingDashboard, setSavingDashboard] = useState(false);
 
   const selfMember = members.find((m) => m.user_id === userId);
+
+  async function chooseDashboard(view: DashboardView) {
+    if (view === dashboardView || savingDashboard) return;
+    const previous = dashboardView;
+    setDashboardView(view);
+    setSavingDashboard(true);
+    const res = await setDefaultDashboardAction(view);
+    setSavingDashboard(false);
+    if (!res.ok) {
+      setDashboardView(previous);
+      return toastError(res.error ?? 'Could not update dashboard');
+    }
+    success('Default dashboard updated');
+  }
 
   async function saveProfile(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -86,6 +107,43 @@ export function SettingsModule() {
             <Button type="submit" loading={savingProfile}>Save profile</Button>
           </div>
         </form>
+      </Card>
+
+      {/* Default dashboard */}
+      <Card>
+        <h2 className="mb-1 text-base font-semibold">Default dashboard</h2>
+        <p className="mb-4 text-sm text-muted">
+          Choose which dashboard opens by default. You can always switch from the account menu.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {DASHBOARD_VIEWS.map((view) => {
+            const Icon = dashboardIcon[view];
+            const selected = dashboardView === view;
+            return (
+              <button
+                key={view}
+                type="button"
+                onClick={() => chooseDashboard(view)}
+                disabled={savingDashboard}
+                className={cn(
+                  'flex items-start gap-3 rounded-xl border p-4 text-left transition disabled:opacity-60',
+                  selected ? 'border-brand bg-brand/10' : 'border-border bg-surface/40 hover:bg-elevated',
+                )}
+              >
+                <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl', selected ? 'bg-brand text-brand-fg' : 'bg-elevated text-muted')}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold">{dashboardLabel(view, role)}</p>
+                    {selected && <Check className="h-4 w-4 text-brand" />}
+                  </div>
+                  <p className="mt-0.5 text-xs leading-5 text-muted">{DASHBOARD_DESCRIPTIONS[view]}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </Card>
 
       {/* Family */}

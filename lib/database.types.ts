@@ -27,6 +27,7 @@ export type MetricType = 'steps' | 'sleep_hours' | 'heart_rate' | 'calories' | '
 export type GameResult = 'win' | 'loss' | 'tie';
 export type GradeType = 'test' | 'quiz' | 'homework' | 'project' | 'final' | 'participation' | 'other';
 export type ThemePref = 'dark' | 'light' | 'system';
+export type DashboardView = 'personal' | 'family';
 export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
 export type RecordKind = 'medical' | 'dental';
 
@@ -270,9 +271,9 @@ export interface Database {
         Partial<{ opponent: string; our_score: number; their_score: number; date: string; result: GameResult; notes: string | null }>
       >;
       user_preferences: T<
-        { user_id: string; theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; notification_prefs: Json } & Stamps,
-        { user_id: string; theme?: ThemePref; push_enabled?: boolean; email_enabled?: boolean; expo_push_token?: string | null; active_family_id?: string | null; notification_prefs?: Json },
-        Partial<{ theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; notification_prefs: Json }>
+        { user_id: string; theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; default_dashboard: DashboardView; notification_prefs: Json } & Stamps,
+        { user_id: string; theme?: ThemePref; push_enabled?: boolean; email_enabled?: boolean; expo_push_token?: string | null; active_family_id?: string | null; default_dashboard?: DashboardView; notification_prefs?: Json },
+        Partial<{ theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; default_dashboard: DashboardView; notification_prefs: Json }>
       >;
       // ── Site-wide super admin allowlist (email-keyed; readable only via is_super_admin()) ──
       super_admins: T<

@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Logo } from '@/components/brand/logo';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { MARKETING_NAV } from '@/lib/constants/navigation';
 import { cn } from '@/lib/utils/cn';
 
@@ -37,6 +38,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <ThemeToggle className="h-9 w-9" />
           <Link href="/login" className="hidden h-9 items-center px-3 text-xs font-medium text-white/85 transition hover:text-white sm:inline-flex">
             Log in
           </Link>

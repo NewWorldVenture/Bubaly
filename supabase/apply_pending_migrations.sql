@@ -240,3 +240,15 @@ ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
 -- Done! Contact-form submissions now land in support_tickets.
 -- ============================================================
 
+
+-- ─────────────────────────────────────────────────────────
+-- migration: 0016_dashboard_preference
+-- ─────────────────────────────────────────────────────────
+-- Per-user default dashboard preference.
+-- 'personal' = the member's role-specific dashboard (the default).
+-- 'family'   = the shared Family Dashboard / Command Center overview.
+
+ALTER TABLE public.user_preferences
+  ADD COLUMN IF NOT EXISTS default_dashboard text NOT NULL DEFAULT 'personal'
+    CHECK (default_dashboard IN ('personal', 'family'));
+

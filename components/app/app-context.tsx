@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { Tables } from '@/lib/database.types';
+import type { Tables, DashboardView } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/constants/roles';
 
 export type FamilyOption = { familyId: string; name: string };
@@ -16,6 +16,10 @@ export type AppContextValue = {
   families: FamilyOption[];
   /** Site-wide Super Administrator — independent of any family role. */
   isSuperAdmin: boolean;
+  /** The user's chosen default dashboard (personal vs. family Command Center). */
+  defaultDashboard: DashboardView;
+  /** Active family's subscription level: 0 = Free, 1 = Family Basic, 2 = Family+. */
+  planLevel: number;
   members: Tables<'family_members'>[];
   /** The current user's member row in the active family (if they have one). */
   selfMember: Tables<'family_members'> | null;

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Calendar, CheckCircle2, ShoppingCart, UtensilsCrossed, Cake, X } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requirePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtTime } from '@/lib/utils/format';
@@ -13,8 +13,9 @@ export const dynamic = 'force-dynamic';
 
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
 
+// Kitchen Display Mode is a Family Basic feature.
 export default async function KitchenDisplayPage() {
-  const ctx = await requireUserContext();
+  const ctx = await requirePlanLevel(1);
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
