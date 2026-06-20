@@ -6,7 +6,7 @@ import { useState, useTransition } from 'react';
 import { ChevronDown, Check, Gift, LogOut, Mic, Moon, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, Sparkles, SunMedium } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
-import { APP_NAV, MOBILE_TABS } from '@/lib/constants/navigation';
+import { APP_NAV, MOBILE_TABS, FAMILY_OS_NAV } from '@/lib/constants/navigation';
 import { ROLE_LABELS } from '@/lib/constants/roles';
 import { cn } from '@/lib/utils/cn';
 import { useApp } from './app-context';
@@ -130,6 +130,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4 xl:px-4">
           {APP_NAV.map((item) => {
+            const active = isActive(pathname, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition xl:px-4 xl:py-3 xl:text-base',
+                  active ? 'bg-brand/15 text-brand shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg',
+                )}
+              >
+                <item.icon className="h-5 w-5 shrink-0" />
+                {item.label}
+              </Link>
+            );
+          })}
+
+          <p className="px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-wider text-muted/70 xl:px-4">
+            Family AI OS
+          </p>
+          {FAMILY_OS_NAV.map((item) => {
             const active = isActive(pathname, item.href);
             return (
               <Link

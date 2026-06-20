@@ -3,10 +3,30 @@ import {
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
   FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, LifeBuoy,
-  ScrollText, Inbox, ScanLine, Monitor, Megaphone, type LucideIcon,
+  ScrollText, Inbox, ScanLine, Monitor, Megaphone, Bot, Brain, Wallet,
+  ClipboardList, Gauge, Zap, Network, ShieldAlert, BookHeart, Command,
+  type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
+
+/** Family AI Operating System modules — the differentiated command surfaces. */
+export const FAMILY_OS_NAV: NavItem[] = [
+  { href: '/dashboard/family-operations', label: 'Operations', icon: Command },
+  { href: '/dashboard/autonomous-family-management', label: 'Autonomous AI', icon: Bot },
+  { href: '/dashboard/family-ai-assistant', label: 'AI Assistant', icon: Sparkles },
+  { href: '/dashboard/family-digital-twin', label: 'Digital Twin', icon: Brain },
+  { href: '/dashboard/family-cfo', label: 'Family CFO', icon: Wallet },
+  { href: '/dashboard/family-coo', label: 'Family COO', icon: ClipboardList },
+  { href: '/dashboard/family-health', label: 'Health Coordinator', icon: HeartPulse },
+  { href: '/dashboard/family-school', label: 'School Hub', icon: GraduationCap },
+  { href: '/dashboard/family-sports', label: 'Sports Hub', icon: Trophy },
+  { href: '/dashboard/family-memory', label: 'Memory Brain', icon: BookHeart },
+  { href: '/dashboard/family-emergency', label: 'Emergency Hub', icon: ShieldAlert },
+  { href: '/dashboard/family-stress', label: 'Stress Prediction', icon: Gauge },
+  { href: '/dashboard/family-automation', label: 'Life Automation', icon: Zap },
+  { href: '/dashboard/family-knowledge-graph', label: 'Knowledge Graph', icon: Network },
+];
 
 /** Marketing top-nav. */
 export const MARKETING_NAV = [

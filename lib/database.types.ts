@@ -336,6 +336,72 @@ export interface Database {
         { id?: string; actor_id?: string | null; actor_email?: string | null; action: string; resource: string; resource_id?: string | null; metadata?: Json },
         Partial<{ metadata: Json }>
       >;
+      // ── Family OS modules (migration 0014) ──────────────────
+      family_routines: T<
+        { id: string; family_id: string; member_id: string | null; title: string; description: string | null; category: string | null; time_of_day: string | null; days_of_week: number[]; status: string; metadata: Json; created_by: string | null; updated_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; description?: string | null; category?: string | null; time_of_day?: string | null; days_of_week?: number[]; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null },
+        Partial<{ member_id: string | null; title: string; description: string | null; category: string | null; time_of_day: string | null; days_of_week: number[]; status: string; metadata: Json; updated_by: string | null; deleted_at: string | null }>
+      >;
+      family_digital_twin_profiles: T<
+        { id: string; family_id: string; member_id: string; preferences: Json; responsibilities: Json; strengths: string | null; notes: string | null; ai_insights: string | null; stress_baseline: number; status: string; metadata: Json; created_by: string | null; updated_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; preferences?: Json; responsibilities?: Json; strengths?: string | null; notes?: string | null; ai_insights?: string | null; stress_baseline?: number; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null },
+        Partial<{ preferences: Json; responsibilities: Json; strengths: string | null; notes: string | null; ai_insights: string | null; stress_baseline: number; status: string; metadata: Json; updated_by: string | null }>
+      >;
+      family_ai_recommendations: T<
+        { id: string; family_id: string; member_id: string | null; category: string; title: string; body: string | null; priority: string; cta_href: string | null; source: string | null; status: string; metadata: Json; created_by: string | null; updated_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; category?: string; title: string; body?: string | null; priority?: string; cta_href?: string | null; source?: string | null; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null },
+        Partial<{ member_id: string | null; category: string; title: string; body: string | null; priority: string; cta_href: string | null; source: string | null; status: string; metadata: Json; updated_by: string | null }>
+      >;
+      family_stress_signals: T<
+        { id: string; family_id: string; member_id: string | null; signal_type: string; weight: number; source: string | null; occurred_on: string; notes: string | null; status: string; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; signal_type: string; weight?: number; source?: string | null; occurred_on?: string; notes?: string | null; status?: string; metadata?: Json; created_by?: string | null },
+        Partial<{ member_id: string | null; signal_type: string; weight: number; source: string | null; occurred_on: string; notes: string | null; status: string; metadata: Json }>
+      >;
+      family_stress_predictions: T<
+        { id: string; family_id: string; for_date: string; score: number; level: string; factors: Json; suggestions: Json; status: string; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; for_date?: string; score?: number; level?: string; factors?: Json; suggestions?: Json; status?: string; metadata?: Json; created_by?: string | null },
+        Partial<{ for_date: string; score: number; level: string; factors: Json; suggestions: Json; status: string; metadata: Json }>
+      >;
+      family_automation_rules: T<
+        { id: string; family_id: string; name: string; trigger_type: string; trigger_config: Json; action_type: string; action_config: Json; is_enabled: boolean; requires_approval: boolean; last_run_at: string | null; status: string; metadata: Json; created_by: string | null; updated_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; trigger_type: string; trigger_config?: Json; action_type: string; action_config?: Json; is_enabled?: boolean; requires_approval?: boolean; last_run_at?: string | null; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null },
+        Partial<{ name: string; trigger_type: string; trigger_config: Json; action_type: string; action_config: Json; is_enabled: boolean; requires_approval: boolean; last_run_at: string | null; status: string; metadata: Json; updated_by: string | null }>
+      >;
+      family_automation_runs: T<
+        { id: string; family_id: string; rule_id: string | null; trigger_type: string | null; status: string; summary: string | null; result: Json; approved_by: string | null; approved_at: string | null; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; rule_id?: string | null; trigger_type?: string | null; status?: string; summary?: string | null; result?: Json; approved_by?: string | null; approved_at?: string | null; metadata?: Json; created_by?: string | null },
+        Partial<{ status: string; summary: string | null; result: Json; approved_by: string | null; approved_at: string | null; metadata: Json }>
+      >;
+      family_knowledge_nodes: T<
+        { id: string; family_id: string; member_id: string | null; node_type: string; label: string; ref_table: string | null; ref_id: string | null; weight: number; status: string; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; node_type: string; label: string; ref_table?: string | null; ref_id?: string | null; weight?: number; status?: string; metadata?: Json; created_by?: string | null },
+        Partial<{ member_id: string | null; node_type: string; label: string; ref_table: string | null; ref_id: string | null; weight: number; status: string; metadata: Json }>
+      >;
+      family_knowledge_edges: T<
+        { id: string; family_id: string; source_id: string; target_id: string; relation: string; weight: number; status: string; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; source_id: string; target_id: string; relation?: string; weight?: number; status?: string; metadata?: Json; created_by?: string | null },
+        Partial<{ relation: string; weight: number; status: string; metadata: Json }>
+      >;
+      family_emergency_contacts: T<
+        { id: string; family_id: string; member_id: string | null; name: string; relationship: string | null; phone: string | null; alt_phone: string | null; email: string | null; address: string | null; is_primary: boolean; can_pickup: boolean; priority: number; notes: string | null; status: string; metadata: Json; created_by: string | null; updated_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; name: string; relationship?: string | null; phone?: string | null; alt_phone?: string | null; email?: string | null; address?: string | null; is_primary?: boolean; can_pickup?: boolean; priority?: number; notes?: string | null; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null },
+        Partial<{ member_id: string | null; name: string; relationship: string | null; phone: string | null; alt_phone: string | null; email: string | null; address: string | null; is_primary: boolean; can_pickup: boolean; priority: number; notes: string | null; status: string; metadata: Json; updated_by: string | null }>
+      >;
+      family_emergency_plans: T<
+        { id: string; family_id: string; title: string; plan_type: string | null; content: string | null; safe_location: string | null; instructions: string | null; is_active: boolean; status: string; metadata: Json; created_by: string | null; updated_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; plan_type?: string | null; content?: string | null; safe_location?: string | null; instructions?: string | null; is_active?: boolean; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null },
+        Partial<{ title: string; plan_type: string | null; content: string | null; safe_location: string | null; instructions: string | null; is_active: boolean; status: string; metadata: Json; updated_by: string | null }>
+      >;
+      family_memories: T<
+        { id: string; family_id: string; member_id: string | null; title: string; body: string | null; kind: string; memory_date: string; media_path: string | null; tags: string[]; is_favorite: boolean; status: string; metadata: Json; created_by: string | null; updated_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; body?: string | null; kind?: string; memory_date?: string; media_path?: string | null; tags?: string[]; is_favorite?: boolean; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null },
+        Partial<{ member_id: string | null; title: string; body: string | null; kind: string; memory_date: string; media_path: string | null; tags: string[]; is_favorite: boolean; status: string; metadata: Json; updated_by: string | null; deleted_at: string | null }>
+      >;
+      family_milestones: T<
+        { id: string; family_id: string; member_id: string | null; title: string; description: string | null; milestone_date: string; category: string | null; status: string; metadata: Json; created_by: string | null; updated_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; description?: string | null; milestone_date?: string; category?: string | null; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null },
+        Partial<{ member_id: string | null; title: string; description: string | null; milestone_date: string; category: string | null; status: string; metadata: Json; updated_by: string | null }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
