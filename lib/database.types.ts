@@ -285,6 +285,11 @@ export interface Database {
         { id?: string; slug: string; title: string; excerpt?: string; author?: string; published_at?: string; reading_minutes?: number; tags?: string[]; category: string; featured?: boolean; accent_color?: string | null; body?: Json; published?: boolean },
         Partial<{ slug: string; title: string; excerpt: string; author: string; published_at: string; reading_minutes: number; tags: string[]; category: string; featured: boolean; accent_color: string | null; body: Json; published: boolean }>
       >;
+      support_tickets: T<
+        { id: string; name: string; email: string; subject: string; message: string; status: string; source: string } & Stamps,
+        { id?: string; name?: string; email: string; subject?: string; message?: string; status?: string; source?: string },
+        Partial<{ name: string; email: string; subject: string; message: string; status: string; source: string }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
