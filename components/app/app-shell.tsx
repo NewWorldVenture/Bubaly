@@ -225,11 +225,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex flex-1 flex-col items-center gap-0.5 pb-1 pt-2 text-[11px] font-medium transition',
-                  active ? 'text-brand' : 'text-muted',
+                  'group flex flex-1 flex-col items-center gap-1 pb-1 pt-2.5 text-[11px] font-medium transition-colors duration-200',
+                  active ? 'text-brand' : 'text-muted hover:text-fg',
                 )}
               >
-                <item.icon className={cn('h-6 w-6', active && 'scale-110')} />
+                <span className={cn(
+                  'grid h-8 w-12 place-items-center rounded-full transition-all duration-200',
+                  active ? 'bg-brand/15' : 'group-active:bg-elevated',
+                )}>
+                  <item.icon className={cn('h-5 w-5 transition-transform duration-200', active && 'scale-110')} />
+                </span>
                 {item.label}
               </Link>
             );

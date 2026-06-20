@@ -93,7 +93,7 @@ export function QuickAdd({
       <div className="grid gap-3 sm:grid-cols-2">
         {fields.map((f) => {
           const id = `${table}-${f.name}`;
-          const base = 'w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-brand';
+          const base = 'w-full rounded-2xl border border-border bg-bg px-3.5 py-2.5 text-sm outline-none transition focus:border-brand/60';
           return (
             <label key={f.name} htmlFor={id} className={cn('flex flex-col gap-1 text-xs text-muted', f.type === 'textarea' && 'sm:col-span-2')}>
               <span>{f.label}{f.required && <span className="text-danger"> *</span>}</span>
