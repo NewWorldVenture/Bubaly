@@ -7,11 +7,11 @@ type Size = 'sm' | 'md' | 'lg' | 'icon';
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    'bg-brand text-brand-fg hover:opacity-90 shadow-glow disabled:shadow-none',
+    'bg-brand text-brand-fg hover:brightness-110 shadow-glow disabled:shadow-none',
   secondary: 'bg-elevated text-fg hover:bg-elevated/70 border border-border',
   outline: 'bg-transparent text-fg border border-border hover:bg-elevated',
   ghost: 'bg-transparent text-fg hover:bg-elevated',
-  danger: 'bg-danger text-white hover:opacity-90',
+  danger: 'bg-danger text-white hover:brightness-110',
 };
 
 const SIZES: Record<Size, string> = {
@@ -34,7 +34,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex select-none items-center justify-center rounded-xl font-medium transition active:scale-[0.98] focus-ring disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex select-none items-center justify-center rounded-2xl font-medium transition-all duration-200 active:scale-[0.98] focus-ring disabled:cursor-not-allowed disabled:opacity-50',
         VARIANTS[variant],
         SIZES[size],
         className,

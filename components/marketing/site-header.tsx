@@ -14,7 +14,7 @@ export function SiteHeader() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/[0.045] bg-[#030911]/92 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#06080d]/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-[1180px] items-center justify-between gap-4 px-5 sm:px-8">
         <Logo />
 
@@ -24,13 +24,13 @@ export function SiteHeader() {
               key={item.href}
               href={item.href}
               className={cn(
-                'relative inline-flex h-full items-center text-xs font-medium text-white/90 transition hover:text-white',
-                pathname === item.href && 'text-violet-400',
+                'relative inline-flex h-full items-center text-[13px] font-medium text-white/75 transition hover:text-white',
+                pathname === item.href && 'text-white',
               )}
             >
               {item.label}
               {pathname === item.href && (
-                <span className="absolute inset-x-0 bottom-0 h-px rounded-full bg-violet-500" />
+                <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-gradient-to-r from-[#7a68ff] to-[#4ac8ff]" />
               )}
             </Link>
           ))}
@@ -40,7 +40,7 @@ export function SiteHeader() {
           <Link href="/login" className="hidden h-9 items-center px-3 text-xs font-medium text-white/85 transition hover:text-white sm:inline-flex">
             Log in
           </Link>
-          <Link href="/signup" className="hidden h-9 items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110 sm:inline-flex">
+          <Link href="/signup" className="hidden h-9 items-center rounded-full bg-gradient-to-r from-[#7a68ff] to-[#4ac8ff] px-5 text-xs font-semibold text-white shadow-[0_8px_28px_-8px_rgba(122,104,255,0.7)] transition hover:brightness-110 sm:inline-flex">
             Get Started Free
           </Link>
           <button
@@ -55,7 +55,7 @@ export function SiteHeader() {
       </div>
 
       {open && (
-        <div className="border-t border-white/10 bg-[#060b12]/96 px-4 py-4 lg:hidden">
+        <div className="animate-fade-in border-t border-white/10 bg-[#06080d]/96 px-4 py-4 backdrop-blur-xl lg:hidden">
           <nav className="flex flex-col gap-1">
             {MARKETING_NAV.map((item) => (
               <Link
@@ -63,8 +63,8 @@ export function SiteHeader() {
                 href={item.href}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  'rounded-lg px-3 py-3 text-base text-white hover:bg-white/8',
-                  pathname === item.href && 'bg-violet-500/15 text-violet-300',
+                  'rounded-xl px-3 py-3 text-base text-white/90 transition hover:bg-white/[0.06]',
+                  pathname === item.href && 'bg-brand/15 text-white',
                 )}
               >
                 {item.label}
