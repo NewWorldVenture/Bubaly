@@ -90,7 +90,7 @@ DELETE FROM public.calendar_events             WHERE family_id IN (SELECT id FRO
 INSERT INTO public.calendar_events (family_id, title, category, starts_at, ends_at, all_day)
 SELECT f.id,
   (ARRAY['Dentist','Soccer practice','Parent-teacher night','Family dinner','Piano lesson','Birthday party','Doctor checkup','School play','Swim meet','Game night'])[1+(n%10)] || ' #' || n,
-  (ARRAY['appointment','sports','school','general','general','birthday','appointment','school','sports','general'])[1+(n%10)]::public.event_category,
+  (enum_range(NULL::public.event_category))[1+(n % array_length(enum_range(NULL::public.event_category),1))],
   date_trunc('day', now()) + ((n-50) || ' days')::interval + interval '17 hours',
   date_trunc('day', now()) + ((n-50) || ' days')::interval + interval '18 hours',
   (n % 7 = 0)
@@ -101,8 +101,8 @@ INSERT INTO public.chores (family_id, title, points, priority, recurrence, due_a
 SELECT f.id,
   (ARRAY['Take out trash','Load dishwasher','Walk the dog','Make bed','Vacuum living room','Clean bathroom','Mow lawn','Fold laundry','Set the table','Feed the cat'])[1+(n%10)] || ' #' || n,
   (ARRAY[5,10,15,5,20,25,30,10,5,5])[1+(n%10)],
-  (ARRAY['low','medium','high'])[1+(n%3)]::public.priority,
-  (ARRAY['daily','weekly','none'])[1+(n%3)]::public.recurrence_freq,
+  (enum_range(NULL::public.priority))[1+(n % array_length(enum_range(NULL::public.priority),1))],
+  (enum_range(NULL::public.recurrence_freq))[1+(n % array_length(enum_range(NULL::public.recurrence_freq),1))],
   now() + ((n-30) || ' days')::interval,
   (n % 4 = 0)
 FROM _seed_fams f, generate_series(1,100) n;
@@ -111,7 +111,7 @@ FROM _seed_fams f, generate_series(1,100) n;
 INSERT INTO public.chore_assignments (family_id, chore_id, member_id, status, due_at)
 SELECT c.family_id, c.id,
   (SELECT id FROM public.family_members m WHERE m.family_id = c.family_id AND m.role IN ('child','teen') ORDER BY random() LIMIT 1),
-  (ARRAY['todo','in_progress','submitted','approved'])[1+(abs(hashtext(c.id::text)) % 4)]::public.task_status,
+  (enum_range(NULL::public.task_status))[1+(abs(hashtext(c.id::text)) % array_length(enum_range(NULL::public.task_status),1))],
   c.due_at
 FROM public.chores c WHERE c.family_id IN (SELECT id FROM _seed_fams);
 
@@ -126,7 +126,7 @@ FROM _seed_fams f, generate_series(1,100) n;
 INSERT INTO public.meals (family_id, name, meal_type, ingredients)
 SELECT f.id,
   (ARRAY['Taco Tuesday','Spaghetti Bolognese','Grilled chicken & veg','Veggie stir-fry','Homemade pizza','Salmon & rice','Chili','Pancake breakfast','Caesar salad','Beef stew'])[1+(n%10)] || ' #' || n,
-  (ARRAY['breakfast','lunch','dinner','snack'])[1+(n%4)]::public.meal_type,
+  (enum_range(NULL::public.meal_type))[1+(n % array_length(enum_range(NULL::public.meal_type),1))],
   '[{"name":"onion","qty":"1"},{"name":"garlic","qty":"2 cloves"},{"name":"olive oil","qty":"2 tbsp"}]'::jsonb
 FROM _seed_fams f, generate_series(1,100) n;
 
@@ -135,7 +135,7 @@ INSERT INTO public.meal_plans (family_id, meal_id, plan_date, meal_type)
 SELECT f.id,
   (SELECT id FROM public.meals m WHERE m.family_id = f.id ORDER BY random() LIMIT 1),
   (current_date - 50 + n)::date,
-  (ARRAY['breakfast','lunch','dinner','snack'])[1+(n%4)]::public.meal_type
+  (enum_range(NULL::public.meal_type))[1+(n % array_length(enum_range(NULL::public.meal_type),1))]
 FROM _seed_fams f, generate_series(1,100) n;
 
 -- grocery_lists (100/family) + grocery_items (>=500 via 5 items each)
@@ -165,13 +165,13 @@ INSERT INTO public.reminders (family_id, title, notes, remind_at, recurrence, is
 SELECT f.id,
   (ARRAY['Pay electric bill','Refill prescription','RSVP to party','Sign permission slip','Renew library books','Schedule oil change','Water the plants','Call grandma','Submit timesheet','Buy birthday gift'])[1+(n%10)] || ' #' || n,
   'Auto-seeded reminder', now() + ((n-30) || ' days')::interval,
-  (ARRAY['none','weekly','monthly'])[1+(n%3)]::public.recurrence_freq, (n % 6 = 0)
+  (enum_range(NULL::public.recurrence_freq))[1+(n % array_length(enum_range(NULL::public.recurrence_freq),1))], (n % 6 = 0)
 FROM _seed_fams f, generate_series(1,100) n;
 
 -- notifications
 INSERT INTO public.notifications (family_id, type, title, body, is_read, send_at)
 SELECT f.id,
-  (ARRAY['chore_due','medication_due','calendar_event','school_event','sports_event','maintenance_task','grocery_reminder','document_expiry','family_invite','system'])[1+(n%10)]::public.notification_type,
+  (enum_range(NULL::public.notification_type))[1+(n % array_length(enum_range(NULL::public.notification_type),1))],
   'Notification #' || n, 'Auto-seeded notification body.', (n % 3 = 0),
   now() - ((n) || ' hours')::interval
 FROM _seed_fams f, generate_series(1,100) n;
@@ -206,16 +206,16 @@ INSERT INTO public.maintenance_tasks (family_id, asset_id, title, priority, recu
 SELECT f.id,
   (SELECT id FROM public.home_assets a WHERE a.family_id = f.id ORDER BY random() LIMIT 1),
   (ARRAY['Change HVAC filter','Flush water heater','Clean fridge coils','Test smoke detectors','Clean gutters'])[1+(n%5)] || ' #' || n,
-  (ARRAY['low','medium','high'])[1+(n%3)]::public.priority, 'monthly'::public.recurrence_freq,
+  (enum_range(NULL::public.priority))[1+(n % array_length(enum_range(NULL::public.priority),1))], 'monthly'::public.recurrence_freq,
   (ARRAY[90,365,180,180,365])[1+(n%5)], now() + ((n*3) || ' days')::interval,
-  (ARRAY['todo','in_progress','submitted'])[1+(n%3)]::public.task_status
+  (enum_range(NULL::public.task_status))[1+(n % array_length(enum_range(NULL::public.task_status),1))]
 FROM _seed_fams f, generate_series(1,100) n;
 
 -- financial_accounts
 INSERT INTO public.financial_accounts (family_id, name, type, institution, last_four, balance, currency)
 SELECT f.id,
   (ARRAY['Everyday Checking','Family Savings','Rewards Card','Brokerage','401k'])[1+(n%5)] || ' #' || n,
-  (ARRAY['checking','savings','credit','investment','retirement'])[1+(n%5)]::public.account_type,
+  (enum_range(NULL::public.account_type))[1+(n % array_length(enum_range(NULL::public.account_type),1))],
   (ARRAY['Chase','Ally','Amex','Fidelity','Vanguard'])[1+(n%5)],
   lpad((n*7 % 10000)::text, 4, '0'), round((random()*20000)::numeric, 2), 'USD'
 FROM _seed_fams f, generate_series(1,100) n;
@@ -237,7 +237,7 @@ INSERT INTO public.budgets (family_id, category, amount, period)
 SELECT f.id,
   (ARRAY['Food','Transport','Dining','Utilities','Entertainment','Health','Apparel','Education','Childcare','Misc'])[1+(n%10)] || ' #' || n,
   round((random()*800 + 100)::numeric, 2),
-  (ARRAY['weekly','monthly','yearly'])[1+(n%3)]::public.budget_period
+  (enum_range(NULL::public.budget_period))[1+(n % array_length(enum_range(NULL::public.budget_period),1))]
 FROM _seed_fams f, generate_series(1,100) n;
 
 -- bills
@@ -246,7 +246,7 @@ SELECT f.id,
   (ARRAY['Electric','Water','Internet','Mortgage','Car Insurance','Phone','Streaming','Gym','Trash','Daycare'])[1+(n%10)] || ' #' || n,
   round((random()*400 + 20)::numeric, 2), (current_date - 30 + (n % 90))::date,
   (n % 2 = 0), 'monthly',
-  (ARRAY['upcoming','paid','overdue'])[1+(n%3)]::public.bill_status,
+  (enum_range(NULL::public.bill_status))[1+(n % array_length(enum_range(NULL::public.bill_status),1))],
   (ARRAY['Utilities','Housing','Insurance','Subscription','Childcare'])[1+(n%5)]
 FROM _seed_fams f, generate_series(1,100) n;
 
@@ -333,7 +333,7 @@ CREATE TEMP TABLE _seed_members ON COMMIT DROP AS
 -- health_metrics
 INSERT INTO public.health_metrics (family_id, member_id, type, value, unit, recorded_at)
 SELECT sm.family_id, sm.id,
-  (ARRAY['steps','sleep_hours','heart_rate','calories','active_minutes','distance','weight','water_cups'])[1+(g%8)]::public.metric_type,
+  (enum_range(NULL::public.metric_type))[1+(g % array_length(enum_range(NULL::public.metric_type),1))],
   round((random()*100 + 1)::numeric, 2),
   (ARRAY['count','hours','bpm','kcal','min','mi','lb','cups'])[1+(g%8)],
   now() - ((g) || ' days')::interval
@@ -362,7 +362,7 @@ SELECT sm.family_id, sm.id,
   (ARRAY['Math','Science','English','History','Art'])[1+(g%5)],
   'Assessment #' || g,
   (ARRAY['A','A-','B+','B','C'])[1+(g%5)],
-  (ARRAY['test','quiz','homework','project','final'])[1+(g%5)]::public.grade_type,
+  (enum_range(NULL::public.grade_type))[1+(g % array_length(enum_range(NULL::public.grade_type),1))],
   round((random()*40 + 60)::numeric, 1), 100, (current_date - (g*3))::date
 FROM _seed_members sm, generate_series(1,20) g;
 
