@@ -585,6 +585,11 @@ export interface Database {
         { id?: string; form_id: string; email?: string | null; data?: Json; source?: string | null },
         Partial<{ email: string | null; data: Json; source: string | null }>
       >;
+      marketing_suppressions: T<
+        { email: string; reason: string; campaign_id: string | null; created_at: string },
+        { email: string; reason?: string; campaign_id?: string | null },
+        Partial<{ reason: string; campaign_id: string | null }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
