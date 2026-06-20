@@ -4,7 +4,7 @@ import {
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
   FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, TicketCheck,
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
-  MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, type LucideIcon,
+  MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -42,6 +42,7 @@ export const APP_NAV: NavItem[] = [
   { href: '/dashboard/contacts', label: 'Contacts', icon: Users },
   { href: '/dashboard/reminders', label: 'Reminders', icon: Bell },
   { href: '/dashboard/recipes', label: 'Recipes', icon: ChefHat },
+  { href: '/dashboard/todos', label: 'To-Do Lists', icon: ListChecks },
   { href: '/dashboard/notes', label: 'Notes', icon: StickyNote },
   { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
   { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound },
