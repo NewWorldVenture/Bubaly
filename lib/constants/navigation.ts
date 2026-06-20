@@ -5,7 +5,7 @@ import {
   FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, TicketCheck,
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
-  DollarSign, HardDrive, RefreshCw, type LucideIcon,
+  DollarSign, HardDrive, RefreshCw, Gauge, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -41,6 +41,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     layout: 'list',
     items: [
       { href: '/dashboard/briefing', label: 'Daily Briefing', icon: Sun, minLevel: 1 },
+      { href: '/dashboard/command-center', label: 'Command Center', icon: Gauge, minLevel: 2 },
       { href: '/dashboard/assistant', label: 'AI Assistant', icon: Sparkles, minLevel: 0 },
       { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, minLevel: 0 },
       { href: '/dashboard/chores', label: 'Tasks & Chores', icon: CheckSquare, minLevel: 1 },
