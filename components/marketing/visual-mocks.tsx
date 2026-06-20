@@ -14,7 +14,6 @@ import {
   PlayCircle,
   Shield,
   Sparkles,
-  Star,
   UtensilsCrossed,
   type LucideIcon,
 } from 'lucide-react';
@@ -97,16 +96,6 @@ export function IconOrb({
   );
 }
 
-export function Rating({ className }: { className?: string }) {
-  return (
-    <div className={cn('flex items-center gap-1 text-yellow-400', className)}>
-      {Array.from({ length: 5 }).map((_, index) => (
-        <Star key={index} className="h-4 w-4 fill-current" />
-      ))}
-    </div>
-  );
-}
-
 export function AvatarStack() {
   const people = ['SJ', 'DM', 'AL', 'PK', 'CJ'];
   return (
@@ -126,14 +115,11 @@ export function AvatarStack() {
   );
 }
 
-export function SocialProofLine({ text = 'Loved by 10,000+ families' }: { text?: string }) {
+export function SocialProofLine({ text = 'Loved by families everywhere' }: { text?: string }) {
   return (
     <div className="flex flex-wrap items-center gap-4">
       <AvatarStack />
-      <div>
-        <Rating />
-        <p className="mt-1 text-sm text-white/80">{text}</p>
-      </div>
+      <p className="text-sm text-white/80">{text}</p>
     </div>
   );
 }
@@ -335,41 +321,38 @@ export function FamilyAiPanel() {
 }
 
 export function TestimonialBand({ compact = false }: { compact?: boolean }) {
-  const testimonials = [
-    ['Jessica M.', 'Mom of 3', 'FamilyOS has simplified our chaos. We are more organized and actually enjoy family time again.'],
-    ['David T.', 'Dad of 2', 'The AI assistant is a game changer. It knows what we need before we even think about it.'],
-    ['Amanda R.', 'Mom of 4', 'Finally, one place for everything our family needs. Beautiful, easy, and so helpful.'],
+  // Honest, benefit-driven copy — no fabricated quotes, names, ratings, or press
+  // mentions. Real customer testimonials can be wired here when they exist.
+  const benefits = [
+    ['One calm home base', 'Calendar, chores, meals, school, health, and documents live together — not scattered across a dozen apps and group chats.'],
+    ['An assistant that acts', 'Ask in plain language and FamilyOS plans meals, builds grocery lists, and schedules events — then writes them straight to your family data.'],
+    ['Private by design', 'Row-level security isolates every family, documents live in private storage, and the assistant can never read another household.'],
   ];
   return (
     <section className={cn('showcase-panel p-8 lg:p-12', compact && 'p-6 lg:p-8')}>
       <div className="grid gap-7 lg:grid-cols-[280px_1fr]">
         <h2 className="text-4xl font-bold leading-tight">
-          Trusted by thousands of <GradientText>happy families</GradientText>
+          Built for the way <GradientText>families actually live</GradientText>
         </h2>
         <div className="grid gap-5 md:grid-cols-3">
-          {testimonials.map(([name, role, quote]) => (
-            <article key={name} className="showcase-card rounded-xl p-6">
-              <Rating />
-              <p className="mt-4 text-sm leading-6 text-white/88">&quot;{quote}&quot;</p>
-              <p className="mt-5 text-sm font-bold">- {name}</p>
-              <p className="text-xs text-white/60">{role}</p>
+          {benefits.map(([title, body]) => (
+            <article key={title} className="showcase-card rounded-xl p-6">
+              <h3 className="text-base font-bold">{title}</h3>
+              <p className="mt-3 text-sm leading-6 text-white/88">{body}</p>
             </article>
           ))}
         </div>
       </div>
       <div className="mt-10 border-t border-white/8 pt-8 text-center">
-        <p className="text-xs text-white/60">As seen in</p>
-        <div className="mt-6 grid grid-cols-2 items-center gap-6 text-2xl font-black text-white/86 sm:grid-cols-3 lg:grid-cols-6">
-          {['Forbes', 'TechCrunch', 'Good Morning America', 'Parents', 'yahoo!', 'USA TODAY'].map((logo) => (
-            <span key={logo}>{logo}</span>
-          ))}
-        </div>
+        <p className="text-sm text-white/70">
+          Row-level security on every table · Private document storage · You stay in control of your data
+        </p>
       </div>
     </section>
   );
 }
 
-export function TrustStrip({ familiesNote = '10,000+ families and growing' }: { familiesNote?: string }) {
+export function TrustStrip({ familiesNote = 'A growing community of families' }: { familiesNote?: string }) {
   const items = [
     [Shield, 'Secure & Private', 'Your data is always protected'],
     [Home, 'Works Everywhere', 'Web, iOS, Android, and more'],

@@ -14,11 +14,10 @@ import {
   GradientText,
   IconOrb,
   PageWrap,
-  Rating,
   TrustStrip,
 } from '@/components/marketing/visual-mocks';
 import { cn } from '@/lib/utils/cn';
-import { formatFamilies, familiesNote } from '@/lib/marketing/format';
+import { familiesNote } from '@/lib/marketing/format';
 
 const PLANS = [
   {
@@ -155,19 +154,18 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
 
         <section className="mt-10">
           <h2 className="text-center text-3xl font-bold">
-            {familiesCount > 0 ? (
-              <>Loved by <GradientText>{formatFamilies(familiesCount)}</GradientText> families</>
-            ) : (
-              <>Loved by <GradientText>families</GradientText> everywhere</>
-            )}
+            Everything your family needs, <GradientText>in one plan</GradientText>
           </h2>
           <div className="mt-7 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-            {['FamilyOS has become the heart of our family.', 'The AI Assistant saves me hours every week.', 'Finally, an app that brings everything together in one place.', 'The school flyer scanner is a game changer.'].map((quote, index) => (
-              <article key={quote} className="showcase-card rounded-xl p-6">
-                <Rating />
-                <p className="mt-4 min-h-[82px] text-sm leading-6 text-white/82">&quot;{quote}&quot;</p>
-                <p className="mt-4 text-sm font-bold">{['Sarah J.', 'Michael T.', 'Jessica L.', 'David R.'][index]}</p>
-                <p className="text-xs text-white/55">{['Mom of 3', 'Dad of 2', 'Mom of 4', 'Dad of 3'][index]}</p>
+            {[
+              ['One home base', 'Calendar, chores, meals, school, and health together instead of scattered across apps.'],
+              ['AI that takes action', 'Plan meals, build grocery lists, and schedule events from a single plain-language request.'],
+              ['Scan & capture', 'Turn school flyers and documents into calendar events and reminders automatically.'],
+              ['Private by design', 'Row-level security and private storage keep every household fully isolated.'],
+            ].map(([title, body]) => (
+              <article key={title} className="showcase-card rounded-xl p-6">
+                <h3 className="text-base font-bold">{title}</h3>
+                <p className="mt-3 min-h-[82px] text-sm leading-6 text-white/82">{body}</p>
               </article>
             ))}
           </div>
