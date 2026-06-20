@@ -28,7 +28,7 @@ export default async function MarketingDashboard() {
     supabase.from('marketing_segments').select('id', { count: 'exact', head: true }).eq('status', 'active'),
     supabase.from('marketing_campaigns').select('id', { count: 'exact', head: true }).in('status', ['active', 'scheduled']),
     supabase.from('marketing_email_campaigns').select('recipients, opens, clicks, status'),
-    supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('source', 'contact'),
+    supabase.from('support_tickets').select('id', { count: 'exact', head: true }).contains('tags', ['contact-form']),
     supabase.from('marketing_seo_pages').select('id', { count: 'exact', head: true }),
     supabase.from('marketing_aeo_questions').select('status'),
   ]);

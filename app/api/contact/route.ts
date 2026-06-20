@@ -36,7 +36,17 @@ export async function POST(req: Request) {
   try {
     await createServiceClient()
       .from('support_tickets')
-      .insert({ name, email, subject: `Contact from ${name}`, message, source: 'contact', status: 'open' });
+      .insert({
+        ticket_number: `WEB-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        subject: `Contact from ${name}`,
+        description: message,
+        category: 'general',
+        priority: 'medium',
+        status: 'open',
+        requester_name: name,
+        requester_email: email,
+        tags: ['contact-form'],
+      });
   } catch {
     /* non-fatal: the email below is the primary path */
   }

@@ -30,7 +30,7 @@ export default async function AdminSupportPage({ searchParams }: Params) {
   const statusFilter = sp.status ?? '';
   const filtered = rows.filter((t) => {
     if (statusFilter && t.status !== statusFilter) return false;
-    if (q && !`${t.name} ${t.email} ${t.subject} ${t.message}`.toLowerCase().includes(q)) return false;
+    if (q && !`${t.requester_name ?? ''} ${t.requester_email} ${t.subject} ${t.description ?? ''}`.toLowerCase().includes(q)) return false;
     return true;
   });
 
@@ -69,14 +69,14 @@ export default async function AdminSupportPage({ searchParams }: Params) {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-medium">{t.subject || 'Contact message'}</p>
-                    <p className="text-xs text-muted">{t.name || 'Anonymous'} · {t.email} · {fmtDate(t.created_at, 'MMM d, yyyy h:mm a')}</p>
+                    <p className="text-xs text-muted">{t.requester_name || 'Anonymous'} · {t.requester_email} · {fmtDate(t.created_at, 'MMM d, yyyy h:mm a')}</p>
                   </div>
                   <TicketStatusControl ticketId={t.id} status={t.status as TicketStatus} />
                 </div>
-                <p className="mt-2 whitespace-pre-wrap break-words text-sm text-muted">{t.message}</p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm text-muted">{t.description}</p>
                 <div className="mt-2 flex items-center gap-2">
-                  <a href={`mailto:${t.email}?subject=Re: ${encodeURIComponent(t.subject || 'Your message to FamilyOS')}`} className="text-xs font-medium text-brand hover:underline">Reply by email →</a>
-                  <span className="text-xs text-muted">· via {t.source}</span>
+                  <a href={`mailto:${t.requester_email}?subject=Re: ${encodeURIComponent(t.subject || 'Your message to FamilyOS')}`} className="text-xs font-medium text-brand hover:underline">Reply by email →</a>
+                  <span className="text-xs text-muted">· via {t.tags.includes('contact-form') ? 'contact form' : t.category}</span>
                 </div>
               </li>
             ))}
