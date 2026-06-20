@@ -33,6 +33,34 @@ function timeGroup(iso: string): string {
   return fmtDate(iso, 'MMMM d, yyyy');
 }
 
+type ConvInsert = {
+  family_id: string; name: string | null; kind: string;
+  avatar_emoji: string | null; created_by: string;
+  member_ids: string[]; participant_ids: string[];
+};
+
+/**
+ * Insert a conversation, tolerating databases where the participant_ids column
+ * hasn't been migrated yet (0017): on a schema error we retry without it so the
+ * flow keeps working, just without account-less-member tracking.
+ */
+async function createConversation(payload: ConvInsert) {
+  const supabase = createClient();
+  let res = await supabase.from('family_conversations').insert(payload).select('*').single();
+  if (res.error && /participant_ids|schema cache|column/i.test(res.error.message)) {
+    const legacy: Omit<ConvInsert, 'participant_ids'> = {
+      family_id: payload.family_id,
+      name: payload.name,
+      kind: payload.kind,
+      avatar_emoji: payload.avatar_emoji,
+      created_by: payload.created_by,
+      member_ids: payload.member_ids,
+    };
+    res = await supabase.from('family_conversations').insert(legacy).select('*').single();
+  }
+  return res;
+}
+
 export function MessagesModule() {
   const { familyId, userId, members, selfMember } = useApp();
   const { error: toastError } = useToast();
@@ -87,13 +115,14 @@ export function MessagesModule() {
         .eq('kind', 'group')
         .limit(1);
       if (!data?.length) {
-        await supabase.from('family_conversations').insert({
+        await createConversation({
           family_id: familyId,
           name: 'Family Chat',
           kind: 'group',
           avatar_emoji: '👨‍👩‍👧‍👦',
           created_by: userId,
           member_ids: members.map((m) => m.user_id).filter(Boolean) as string[],
+          participant_ids: members.map((m) => m.id),
         });
         void loadConversations();
       }
@@ -260,6 +289,15 @@ export function MessagesModule() {
     return acc;
   }, []);
 
+  // Resolve the active conversation's roster by family_member id (preferred) or
+  // legacy user_id, so account-less members appear as full participants.
+  const activeParticipants: Tables<'family_members'>[] = !activeConv
+    ? []
+    : (activeConv.participant_ids?.length
+        ? activeConv.participant_ids.map((id) => members.find((m) => m.id === id))
+        : (activeConv.member_ids ?? []).map((uid) => members.find((m) => m.user_id === uid))
+      ).filter(Boolean) as Tables<'family_members'>[];
+
   if (loadingConvs) return <LoadingBlock />;
 
   return (
@@ -347,12 +385,15 @@ export function MessagesModule() {
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/20 text-base">
                 {activeConv.avatar_emoji ?? '💬'}
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-bold">{activeConv.name ?? 'Direct Message'}</p>
-                <p className="text-[11px] text-muted">
-                  {activeConv.kind === 'group'
-                    ? `${activeConv.member_ids?.length ?? members.length} members`
-                    : 'Direct message'}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold">{activeConv.name ?? 'Direct Message'}</p>
+                <p className="truncate text-[11px] text-muted">
+                  {activeConv.kind !== 'group'
+                    ? 'Direct message'
+                    : activeParticipants.length > 0
+                      ? activeParticipants.map((m) => m.display_name.split(' ')[0]).slice(0, 4).join(', ') +
+                        (activeParticipants.length > 4 ? ` +${activeParticipants.length - 4}` : '')
+                      : `${activeConv.participant_ids?.length || activeConv.member_ids?.length || members.length} members`}
                 </p>
               </div>
               <button className="rounded-lg p-1.5 text-muted hover:text-fg"><Search className="h-4 w-4" /></button>
@@ -676,21 +717,30 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
   async function create() {
     if (selected.size === 0 || loading) return;
     setLoading(true);
-    const supabase = createClient();
 
-    const participantUserIds = [
+    const selfMemberId = members.find((m) => m.user_id === userId)?.id;
+    // member_ids = account holders (user_ids), for read/access logic.
+    const memberIds = [...new Set([
       userId,
       ...selectedMembers.map((m) => m.user_id).filter(Boolean) as string[],
-    ];
-    const memberIds = [...new Set(participantUserIds)];
+    ])];
+    // participant_ids = the full roster by family_member id (incl. account-less).
+    const participantIds = [...new Set([
+      ...(selfMemberId ? [selfMemberId] : []),
+      ...selectedMembers.map((m) => m.id),
+    ])];
     const isDirect = selectedMembers.length === 1;
 
-    // Reuse an existing 1:1 DM instead of creating a duplicate.
+    // Reuse an existing 1:1 DM instead of creating a duplicate. Match on the
+    // participant roster when available, falling back to legacy user-id sets.
     if (isDirect) {
-      const target = [...memberIds].sort().join(',');
-      const existing = conversations.find(
-        (c) => c.kind === 'direct' && [...(c.member_ids ?? [])].sort().join(',') === target,
-      );
+      const targetP = [...participantIds].sort().join(',');
+      const targetU = [...memberIds].sort().join(',');
+      const existing = conversations.find((c) => {
+        if (c.kind !== 'direct') return false;
+        if (c.participant_ids?.length) return [...c.participant_ids].sort().join(',') === targetP;
+        return [...(c.member_ids ?? [])].sort().join(',') === targetU;
+      });
       if (existing) { setLoading(false); onCreated(existing); return; }
     }
 
@@ -699,14 +749,15 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
       : [myName, ...selectedMembers.map((m) => m.display_name.split(' ')[0])].slice(0, 3).join(', ') +
         (selectedMembers.length > 2 ? ` +${selectedMembers.length - 2}` : ''));
 
-    const { data, error } = await supabase.from('family_conversations').insert({
+    const { data, error } = await createConversation({
       family_id: familyId,
       name: convName,
       kind: isDirect ? 'direct' : 'group',
       avatar_emoji: isDirect ? null : emoji,
       created_by: userId,
       member_ids: memberIds,
-    }).select('*').single();
+      participant_ids: participantIds,
+    });
 
     setLoading(false);
     if (error || !data) { toastError(error?.message ?? 'Could not create conversation'); return; }
