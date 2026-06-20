@@ -6,7 +6,6 @@ import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Logo } from '@/components/brand/logo';
 import { Button } from '@/components/ui/button';
-import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { MARKETING_NAV } from '@/lib/constants/navigation';
 import { cn } from '@/lib/utils/cn';
 
@@ -15,17 +14,17 @@ export function SiteHeader() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-bg/85 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-[1180px] items-center justify-between gap-4 px-5 sm:px-8">
-        <Logo />
+    <header className="dark sticky top-0 z-50 border-b border-white/[0.045] bg-[#030911]/95 text-white backdrop-blur-xl">
+      <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-4 px-5 sm:px-8 lg:px-10">
+        <Logo className="[&>span:first-child]:h-6 [&>span:first-child]:w-7 [&>span:last-child]:text-[20px]" />
 
-        <nav className="hidden h-full items-center gap-[30px] lg:flex">
+        <nav className="hidden h-full items-center gap-7 lg:flex">
           {MARKETING_NAV.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                'relative inline-flex h-full items-center text-xs font-medium text-white/90 transition hover:text-white',
+                'relative inline-flex h-full items-center text-[10px] font-medium text-white/72 transition hover:text-white',
                 pathname === item.href && 'text-violet-400',
               )}
             >
@@ -38,11 +37,10 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <ThemeToggle className="h-9 w-9" />
-          <Link href="/login" className="hidden h-9 items-center px-3 text-xs font-medium text-white/85 transition hover:text-white sm:inline-flex">
+          <Link href="/login" className="hidden h-8 items-center px-3 text-[10px] font-medium text-white/72 transition hover:text-white sm:inline-flex">
             Log in
           </Link>
-          <Link href="/signup" className="hidden h-9 items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110 sm:inline-flex">
+          <Link href="/signup" className="hidden h-8 items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-[10px] font-semibold text-white shadow-glow transition hover:brightness-110 sm:inline-flex">
             Get Started Free
           </Link>
           <button
@@ -57,7 +55,7 @@ export function SiteHeader() {
       </div>
 
       {open && (
-        <div className="border-t border-border bg-bg/95 px-4 py-4 backdrop-blur-xl lg:hidden">
+        <div className="border-t border-white/10 bg-[#030911]/98 px-4 py-4 backdrop-blur-xl lg:hidden">
           <nav className="flex flex-col gap-1">
             {MARKETING_NAV.map((item) => (
               <Link
@@ -65,7 +63,7 @@ export function SiteHeader() {
                 href={item.href}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  'rounded-lg px-3 py-3 text-base text-canvas hover:bg-elevated',
+                  'rounded-lg px-3 py-3 text-base text-white hover:bg-white/[0.06]',
                   pathname === item.href && 'bg-violet-500/15 text-violet-300',
                 )}
               >
