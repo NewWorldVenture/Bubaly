@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
-  ArrowRight, Cake, Calendar, CheckCircle2, ChevronRight,
+  Cake, Calendar, CheckCircle2, ChevronRight,
   ListChecks, Plus, ShoppingCart, Sparkles, Users,
-  Wand2, ScanLine, Monitor, Sun,
+  Wand2, ScanLine, Monitor, Sun, Bell, MessageCircle,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -67,6 +67,8 @@ export default async function DashboardPage() {
     { data: dueTasks },
     { count: doneCount },
     { count: totalCount },
+    { data: overdueReminders },
+    { count: unreadMessages },
   ] = await Promise.all([
     supabase.from('calendar_events').select('*').eq('family_id', familyId)
       .gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).order('starts_at').limit(8),
@@ -92,6 +94,10 @@ export default async function DashboardPage() {
       .eq('family_id', familyId).eq('status', 'done'),
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId),
+    supabase.from('family_reminders').select('id, title, remind_at').eq('family_id', familyId)
+      .not('status', 'in', '(done,dismissed)').lt('remind_at', start.toISOString()).order('remind_at').limit(3),
+    supabase.from('family_messages').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).not('read_by', 'cs', `{${ctx.active.member.user_id}}`),
   ]);
 
   // Resolve real chore titles for the "Tasks Due" list (no embedded join in types).
@@ -132,6 +138,12 @@ export default async function DashboardPage() {
   if (birthdayCount > 0) {
     suggestions.push({ icon: Cake, text: `${birthdayCount} ${birthdayCount === 1 ? 'birthday is' : 'birthdays are'} coming up this week.`, cta: 'View members' });
   }
+  if ((overdueReminders?.length ?? 0) > 0) {
+    suggestions.push({ icon: Bell, text: `${overdueReminders!.length} ${overdueReminders!.length === 1 ? 'reminder is' : 'reminders are'} overdue.`, cta: 'Check reminders' });
+  }
+  if ((unreadMessages ?? 0) > 0) {
+    suggestions.push({ icon: MessageCircle, text: `You have ${unreadMessages} unread ${(unreadMessages ?? 0) === 1 ? 'message' : 'messages'} from your family.`, cta: 'Open messages' });
+  }
 
   // Week meal map — just show meal_type per slot (no join needed)
   type MealRow = { plan_date: string; meal_type: string; meal_id: string | null };
@@ -155,11 +167,13 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <StatCard href="/dashboard/calendar" label="Events Today" value={todayEvents?.length ?? 0} icon={Calendar} bg="bg-violet-600" linkLabel="View calendar" />
-        <StatCard href="/dashboard/chores" label="Tasks Due" value={openChores ?? 0} icon={CheckCircle2} bg="bg-emerald-600" linkLabel="View tasks" />
-        <StatCard href="/dashboard/chores" label="Chores Due" value={dueTodayCount ?? 0} icon={ListChecks} bg="bg-orange-500" linkLabel="View chores" />
-        <StatCard href="/dashboard/settings#members" label="Birthdays" value={birthdayCount} icon={Cake} bg="bg-rose-500" linkLabel="View all" />
+        <StatCard href="/dashboard/chores" label="Open Tasks" value={openChores ?? 0} icon={CheckCircle2} bg="bg-emerald-600" linkLabel="View tasks" />
+        <StatCard href="/dashboard/chores" label="Due Today" value={dueTodayCount ?? 0} icon={ListChecks} bg="bg-orange-500" linkLabel="View chores" />
+        <StatCard href="/dashboard/settings#members" label="Birthdays Soon" value={birthdayCount} icon={Cake} bg="bg-rose-500" linkLabel="View all" />
+        <StatCard href="/dashboard/reminders" label="Overdue Alerts" value={overdueReminders?.length ?? 0} icon={Bell} bg="bg-amber-500" linkLabel="View reminders" />
+        <StatCard href="/dashboard/messages" label="Unread Messages" value={unreadMessages ?? 0} icon={MessageCircle} bg="bg-blue-600" linkLabel="Open messages" />
       </div>
 
       {/* AI tools */}

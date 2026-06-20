@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { GroceryModule } from '@/components/modules/grocery-module';
+import { ShoppingModule } from '@/components/modules/shopping-module';
 
-export const metadata: Metadata = { title: 'Grocery' };
+export const metadata: Metadata = { title: 'Shopping' };
 
 export default function GroceryPage() {
-  return <GroceryModule />;
+  return <ShoppingModule />;
 }
