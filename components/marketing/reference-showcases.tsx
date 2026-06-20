@@ -47,7 +47,7 @@ type Tone = keyof typeof tones;
 
 function ReferencePage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="reference-page min-h-screen overflow-hidden bg-[#020811] text-white">
+    <div className="dark reference-page min-h-screen overflow-hidden bg-[#020811] text-white">
       {children}
     </div>
   );
