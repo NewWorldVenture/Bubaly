@@ -41,8 +41,8 @@ export function Pill({
   className?: string;
 }) {
   return (
-    <span className={cn('inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-4 py-2 text-sm font-semibold text-white/90', className)}>
-      <Icon className="h-4 w-4 text-blue-400" />
+    <span className={cn('inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white/85 backdrop-blur', className)}>
+      <Icon className="h-4 w-4 text-cyan-300" />
       {children}
     </span>
   );
@@ -52,10 +52,10 @@ export function PrimaryLink({ href, children }: { href: string; children: React.
   return (
     <Link
       href={href}
-      className="inline-flex h-14 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-7 text-base font-bold text-white shadow-glow transition hover:scale-[1.01]"
+      className="group inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#7a68ff] to-[#4ac8ff] px-7 text-base font-semibold text-white shadow-[0_10px_40px_-8px_rgba(122,104,255,0.65)] transition hover:brightness-110 active:scale-[0.99]"
     >
       {children}
-      <ArrowRight className="h-5 w-5" />
+      <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-0.5" />
     </Link>
   );
 }
@@ -64,7 +64,7 @@ export function OutlineLink({ href, children }: { href: string; children: React.
   return (
     <Link
       href={href}
-      className="inline-flex h-14 items-center justify-center gap-2 rounded-xl border border-white/18 bg-white/[0.025] px-7 text-base font-bold text-white transition hover:bg-white/[0.07]"
+      className="inline-flex h-14 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/[0.03] px-7 text-base font-semibold text-white/90 backdrop-blur transition hover:bg-white/[0.07]"
     >
       <PlayCircle className="h-5 w-5" />
       {children}

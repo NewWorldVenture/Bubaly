@@ -28,25 +28,25 @@
 
 :root,
 .dark {
-  --bg: 3 9 15;
-  --surface: 9 16 26;
-  --elevated: 18 26 40;
-  --border: 35 45 62;
-  --fg: 237 240 247;
-  --muted: 148 160 184;
-  --brand: 124 93 255;
+  --bg: 6 8 13;
+  --surface: 12 16 24;
+  --elevated: 19 24 36;
+  --border: 33 39 54;
+  --fg: 245 247 252;
+  --muted: 146 156 179;
+  --brand: 122 104 255;
   --brand-fg: 255 255 255;
-  --brand-soft: 56 52 110;
-  --accent: 244 153 110;
-  --success: 74 201 155;
-  --warning: 240 191 95;
-  --danger: 245 113 113;
+  --brand-soft: 44 42 96;
+  --accent: 74 200 255;
+  --success: 56 214 160;
+  --warning: 245 197 100;
+  --danger: 250 110 110;
   --glass: 255 255 255;
-  --glass-alpha: 0.04;
-  --glass-border: 0.10;
+  --glass-alpha: 0.035;
+  --glass-border: 0.09;
 
-  --shell-bg: 5 12 21;
-  --shell-border: 255 255 255 / 0.08;
+  --shell-bg: 7 10 18;
+  --shell-border: 255 255 255 / 0.07;
 }
 
 .light {
@@ -86,12 +86,18 @@ body {
   font-feature-settings: 'cv11', 'ss01';
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  letter-spacing: -0.011em;
   min-height: 100dvh;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
 
-/* Ambient brand wash behind the app. */
+/* Tighter optical tracking on display type for an Apple-grade headline feel. */
+h1, h2, h3, .tracking-display {
+  letter-spacing: -0.022em;
+}
+
+/* Ambient brand wash behind the app — a calm violet→cyan aurora. */
 body::before {
   content: '';
   position: fixed;
@@ -99,8 +105,8 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(60rem 60rem at 80% -10%, rgb(var(--brand) / 0.16), transparent 60%),
-    radial-gradient(50rem 50rem at -10% 110%, rgb(var(--accent) / 0.10), transparent 55%);
+    radial-gradient(72rem 72rem at 80% -14%, rgb(var(--brand) / 0.18), transparent 60%),
+    radial-gradient(56rem 56rem at -10% 112%, rgb(var(--accent) / 0.10), transparent 56%);
 }
 
 @layer components {
@@ -112,41 +118,42 @@ body::before {
     border: 1px solid rgb(var(--glass) / var(--glass-border));
   }
   .glass-card {
-    @apply glass rounded-2xl shadow-glass;
-    background-color: rgb(var(--surface) / 0.72);
+    @apply glass rounded-3xl shadow-glass;
+    background-color: rgb(var(--surface) / 0.7);
   }
   .focus-ring {
     @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-bg;
   }
   .gradient-text {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, #4f8cff, #9a4dff 62%, #d7d7df);
+    background-image: linear-gradient(120deg, #5ad7ff 0%, #8a6bff 52%, #eef0f8 100%);
   }
   .gradient-text-violet {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, #5b95ff 5%, #9b4dff 58%, #c5b5ff 100%);
+    background-image: linear-gradient(120deg, #5ad7ff 0%, #8a6bff 54%, #d9d2ff 100%);
   }
   .showcase-card {
-    @apply rounded-2xl border border-white/10 bg-white/[0.045] shadow-glass;
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 20px 60px rgb(0 0 0 / 0.24);
+    @apply rounded-3xl border border-white/[0.08] bg-white/[0.04];
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 24px 70px -24px rgb(0 0 0 / 0.55);
   }
   .showcase-panel {
-    @apply rounded-3xl border border-white/10 bg-[#08111c]/85;
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045), 0 24px 80px rgb(0 0 0 / 0.28);
+    @apply rounded-[1.75rem] border border-white/[0.08];
+    background: linear-gradient(180deg, rgb(14 18 28 / 0.92), rgb(9 12 20 / 0.92));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 32px 90px -28px rgb(0 0 0 / 0.6);
   }
   .soft-grid-bg {
     background:
-      radial-gradient(42rem 30rem at 77% 4%, rgb(124 77 255 / 0.24), transparent 66%),
-      radial-gradient(34rem 26rem at 20% 2%, rgb(49 133 255 / 0.10), transparent 64%),
-      linear-gradient(180deg, #050a12 0%, #030911 100%);
+      radial-gradient(46rem 32rem at 78% -2%, rgb(122 104 255 / 0.26), transparent 64%),
+      radial-gradient(38rem 30rem at 12% 4%, rgb(74 200 255 / 0.13), transparent 62%),
+      linear-gradient(180deg, #070a11 0%, #05070d 100%);
   }
   .icon-orb {
-    @apply inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.055];
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 0 32px rgb(124 93 255 / 0.18);
+    @apply inline-flex items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.05];
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 0 36px rgb(122 104 255 / 0.2);
   }
   .glow-dot {
-    @apply rounded-full border border-violet-300/70 bg-gradient-to-br from-cyan-300 via-violet-500 to-fuchsia-500;
-    box-shadow: 0 0 20px rgb(124 93 255 / 0.78), inset 0 0 12px rgb(255 255 255 / 0.35);
+    @apply rounded-full border border-cyan-200/70 bg-gradient-to-br from-cyan-300 via-violet-500 to-fuchsia-500;
+    box-shadow: 0 0 24px rgb(122 104 255 / 0.8), inset 0 0 12px rgb(255 255 255 / 0.38);
   }
 
   /* Responsive container — constrains content width with consistent padding */
@@ -197,7 +204,7 @@ body::before {
 
   /* CTA button — the gradient call-to-action used across modules */
   .btn-cta {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-fg shadow-glow transition hover:opacity-90 active:scale-[0.98] focus-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-2xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-fg shadow-glow transition hover:brightness-110 active:scale-[0.98] focus-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none;
   }
 
   /* Inline action button — small pill-shaped action in lists */

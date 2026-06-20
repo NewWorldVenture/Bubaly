@@ -28,22 +28,22 @@ export default async function HomePage() {
   const { families } = await getPublicStats();
   return (
     <PageWrap>
-      <Container className="pb-16 pt-16 lg:pb-20 lg:pt-20">
-        <section className="grid items-center gap-12 lg:grid-cols-[0.9fr_1.1fr]">
+      <Container className="pb-16 pt-14 sm:pt-16 lg:pb-24 lg:pt-24">
+        <section className="grid items-center gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:gap-16">
           <div>
-            <Pill icon={CalendarDays}>Your family. Organized. Connected. Stress-free.</Pill>
-            <h1 className="mt-7 max-w-2xl text-5xl font-black leading-[1.08] sm:text-6xl lg:text-7xl">
+            <Pill icon={CalendarDays}>The operating system for family life</Pill>
+            <h1 className="mt-6 max-w-2xl text-[2.6rem] font-bold leading-[1.05] sm:text-6xl lg:text-7xl">
               Run your family like a <GradientText>calm, connected</GradientText> team.
             </h1>
-            <p className="mt-7 max-w-xl text-lg leading-8 text-white/78">
-              FamilyOS is the all-in-one family operating system that brings schedules, chores, meals,
-              school, health, and more into one simple, beautiful app.
+            <p className="mt-6 max-w-xl text-base leading-7 text-white/65 sm:text-lg sm:leading-8">
+              One beautiful place for schedules, chores, meals, school, health, and an AI assistant
+              that actually does the work — so the whole household stays effortlessly in sync.
             </p>
-            <div className="mt-9 flex flex-col gap-4 sm:flex-row">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
               <PrimaryLink href="/signup">Get Started Free</PrimaryLink>
               <OutlineLink href="/how-it-works">See How It Works</OutlineLink>
             </div>
-            <div className="mt-10">
+            <div className="mt-9">
               <SocialProofLine text={familiesHeadline(families)} />
             </div>
           </div>
