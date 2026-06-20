@@ -21,8 +21,11 @@ import {
   SocialProofLine,
   TestimonialBand,
 } from '@/components/marketing/visual-mocks';
+import { getPublicStats } from '@/lib/marketing/stats';
+import { familiesHeadline } from '@/lib/marketing/format';
 
-export default function HomePage() {
+export default async function HomePage() {
+  const { families } = await getPublicStats();
   return (
     <PageWrap>
       <Container className="pb-16 pt-16 lg:pb-20 lg:pt-20">
@@ -41,7 +44,7 @@ export default function HomePage() {
               <OutlineLink href="/how-it-works">See How It Works</OutlineLink>
             </div>
             <div className="mt-10">
-              <SocialProofLine />
+              <SocialProofLine text={familiesHeadline(families)} />
             </div>
           </div>
           <ProductMockup />

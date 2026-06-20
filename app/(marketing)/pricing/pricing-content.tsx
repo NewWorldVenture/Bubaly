@@ -18,6 +18,7 @@ import {
   TrustStrip,
 } from '@/components/marketing/visual-mocks';
 import { cn } from '@/lib/utils/cn';
+import { formatFamilies, familiesNote } from '@/lib/marketing/format';
 
 const PLANS = [
   {
@@ -59,7 +60,7 @@ const INCLUDED = ['Secure & Private', 'Real-time Sync', 'Mobile & Web Access', '
 
 type BillingPeriod = 'monthly' | 'yearly';
 
-export function PricingContent() {
+export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }) {
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
 
   return (
@@ -154,7 +155,11 @@ export function PricingContent() {
 
         <section className="mt-10">
           <h2 className="text-center text-3xl font-bold">
-            Loved by <GradientText>10,000+</GradientText> families
+            {familiesCount > 0 ? (
+              <>Loved by <GradientText>{formatFamilies(familiesCount)}</GradientText> families</>
+            ) : (
+              <>Loved by <GradientText>families</GradientText> everywhere</>
+            )}
           </h2>
           <div className="mt-7 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
             {['FamilyOS has become the heart of our family.', 'The AI Assistant saves me hours every week.', 'Finally, an app that brings everything together in one place.', 'The school flyer scanner is a game changer.'].map((quote, index) => (
@@ -168,7 +173,7 @@ export function PricingContent() {
           </div>
         </section>
 
-        <TrustStrip />
+        <TrustStrip familiesNote={familiesNote(familiesCount)} />
 
         <p className="border-t border-white/8 pt-7 text-center text-sm text-white/60">
           Questions? We&apos;re here to help. Visit our <a className="text-violet-300" href="/faq">Help Center</a> or <a className="text-violet-300" href="/contact">Contact Support</a>

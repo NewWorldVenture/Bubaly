@@ -280,6 +280,11 @@ export interface Database {
         { email: string; created_at?: string },
         Partial<{ email: string }>
       >;
+      blog_posts: T<
+        { id: string; slug: string; title: string; excerpt: string; author: string; published_at: string; reading_minutes: number; tags: string[]; category: string; featured: boolean; accent_color: string | null; body: Json; published: boolean } & Stamps,
+        { id?: string; slug: string; title: string; excerpt?: string; author?: string; published_at?: string; reading_minutes?: number; tags?: string[]; category: string; featured?: boolean; accent_color?: string | null; body?: Json; published?: boolean },
+        Partial<{ slug: string; title: string; excerpt: string; author: string; published_at: string; reading_minutes: number; tags: string[]; category: string; featured: boolean; accent_color: string | null; body: Json; published: boolean }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
@@ -290,6 +295,7 @@ export interface Database {
       can_manage_family: { Args: { p_family_id: string }; Returns: boolean };
       is_family_admin: { Args: { p_family_id: string }; Returns: boolean };
       is_super_admin: { Args: Record<string, never>; Returns: boolean };
+      public_stats: { Args: Record<string, never>; Returns: { families: number; members: number; tasks_completed: number }[] };
     };
     Enums: {
       member_role: MemberRole;

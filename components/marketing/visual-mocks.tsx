@@ -369,12 +369,12 @@ export function TestimonialBand({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function TrustStrip() {
+export function TrustStrip({ familiesNote = '10,000+ families and growing' }: { familiesNote?: string }) {
   const items = [
     [Shield, 'Secure & Private', 'Your data is always protected'],
     [Home, 'Works Everywhere', 'Web, iOS, Android, and more'],
     [Sparkles, 'Real-time Sync', 'Changes sync instantly across devices'],
-    [Heart, 'Loved by Families', '10,000+ families and growing'],
+    [Heart, 'Loved by Families', familiesNote],
   ] as const;
   return (
     <div className="grid gap-6 border-t border-white/8 py-9 sm:grid-cols-2 lg:grid-cols-4">

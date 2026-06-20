@@ -10,6 +10,10 @@ export const metadata: Metadata = {
   description: 'Tips, stories & insights for modern families from the FamilyOS team.',
 };
 
+// Re-read published posts from Supabase at most hourly so content edits surface
+// without a redeploy.
+export const revalidate = 3600;
+
 const CATEGORY_COLORS: Record<BlogCategory, string> = {
   'Parenting': 'bg-violet-500/15 text-violet-300 border-violet-400/20',
   'Organization': 'bg-blue-500/15 text-blue-300 border-blue-400/20',
@@ -41,9 +45,8 @@ const POPULAR = [
 
 const POPULAR_DATES = ['May 8, 2024', 'May 6, 2024', 'May 5, 2024', 'May 3, 2024'];
 
-export default function BlogPage() {
-  const allPosts = getAllPosts();
-  const featured = getFeaturedPost();
+export default async function BlogPage() {
+  const [allPosts, featured] = await Promise.all([getAllPosts(), getFeaturedPost()]);
   const latest = allPosts.filter((p) => !p.featured).slice(0, 6);
 
   return (
