@@ -144,6 +144,103 @@ export async function addAeoQuestion(formData: FormData) {
   revalidatePath('/admin/marketing/aeo');
 }
 
+export async function createSmsDraft(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const message = str(formData.get('message'));
+  if (!message) return;
+  const { data } = await supabase.from('marketing_sms_campaigns').insert({
+    message, segment_id: str(formData.get('segment_id')) || null, status: 'draft', created_by: actorId,
+  }).select('id').single();
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_sms_campaign', resourceId: data?.id ?? null });
+  revalidatePath('/admin/marketing/sms');
+}
+
+export async function createSocialPost(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const content = str(formData.get('content'));
+  if (!content) return;
+  const { data } = await supabase.from('marketing_social_posts').insert({
+    content, platform: str(formData.get('platform')) || 'instagram', link: str(formData.get('link')) || null,
+    scheduled_at: str(formData.get('scheduled_at')) || null, status: str(formData.get('scheduled_at')) ? 'scheduled' : 'draft', created_by: actorId,
+  }).select('id').single();
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_social_post', resourceId: data?.id ?? null });
+  revalidatePath('/admin/marketing/social');
+}
+
+export async function createAdCampaign(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const name = str(formData.get('name'));
+  if (!name) return;
+  const budgetDollars = Number(formData.get('budgetDollars') || 0);
+  const { data } = await supabase.from('marketing_ad_campaigns').insert({
+    name, platform: str(formData.get('platform')) || 'meta', objective: str(formData.get('objective')) || null,
+    budget_cents: budgetDollars > 0 ? Math.round(budgetDollars * 100) : 0, status: 'planned', created_by: actorId,
+  }).select('id').single();
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_ad_campaign', resourceId: data?.id ?? null, metadata: { name } });
+  revalidatePath('/admin/marketing/ads');
+}
+
+export async function createAutomation(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const name = str(formData.get('name'));
+  if (!name) return;
+  const actions = formData.getAll('actions').map(String);
+  const { data } = await supabase.from('marketing_automation_workflows').insert({
+    name, trigger: str(formData.get('trigger')) || 'customer_created',
+    steps: actions.map((a, i) => ({ order: i + 1, action: a })) as never,
+    status: 'draft', created_by: actorId,
+  }).select('id').single();
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_automation_workflow', resourceId: data?.id ?? null, metadata: { name } });
+  revalidatePath('/admin/marketing/automation');
+}
+
+export async function setAutomationStatus(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const id = str(formData.get('id'));
+  const status = str(formData.get('status'));
+  if (!id || !status) return;
+  await supabase.from('marketing_automation_workflows').update({ status, updated_by: actorId }).eq('id', id);
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: `status:${status}`, resource: 'marketing_automation_workflow', resourceId: id });
+  revalidatePath('/admin/marketing/automation');
+}
+
+export async function createFunnel(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const name = str(formData.get('name'));
+  if (!name) return;
+  const steps = str(formData.get('steps')).split('\n').map((s) => s.trim()).filter(Boolean);
+  const { data } = await supabase.from('marketing_funnels').insert({
+    name, steps: steps.map((label, i) => ({ order: i + 1, label })) as never, created_by: actorId,
+  }).select('id').single();
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_funnel', resourceId: data?.id ?? null, metadata: { name } });
+  revalidatePath('/admin/marketing/funnels');
+}
+
+export async function createLandingPage(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const title = str(formData.get('title'));
+  const slug = str(formData.get('slug')).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
+  if (!title || !slug) return;
+  const { data } = await supabase.from('marketing_landing_pages').insert({
+    title, slug, headline: str(formData.get('headline')) || null, subhead: str(formData.get('subhead')) || null,
+    body: str(formData.get('body')) || null, status: 'draft', created_by: actorId,
+  }).select('id').single();
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_landing_page', resourceId: data?.id ?? null, metadata: { slug } });
+  revalidatePath('/admin/marketing/landing-pages');
+}
+
+export async function createForm(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const name = str(formData.get('name'));
+  if (!name) return;
+  const fields = str(formData.get('fields')).split(',').map((s) => s.trim()).filter(Boolean);
+  const { data } = await supabase.from('marketing_forms').insert({
+    name, fields: fields.map((label) => ({ label, key: label.toLowerCase().replace(/\s+/g, '_') })) as never, created_by: actorId,
+  }).select('id').single();
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_form', resourceId: data?.id ?? null, metadata: { name } });
+  revalidatePath('/admin/marketing/forms');
+}
+
 export async function saveSetting(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const key = str(formData.get('key'));

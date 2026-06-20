@@ -3,10 +3,18 @@ import { Megaphone } from 'lucide-react';
 
 const SUBNAV = [
   ['/admin/marketing', 'Dashboard'],
+  ['/admin/marketing/assistant', 'AI Assistant'],
   ['/admin/marketing/customers', 'Customers'],
   ['/admin/marketing/segments', 'Segments'],
   ['/admin/marketing/campaigns', 'Campaigns'],
   ['/admin/marketing/email', 'Email'],
+  ['/admin/marketing/sms', 'SMS'],
+  ['/admin/marketing/social', 'Social'],
+  ['/admin/marketing/ads', 'Ads'],
+  ['/admin/marketing/automation', 'Automation'],
+  ['/admin/marketing/funnels', 'Funnels'],
+  ['/admin/marketing/landing-pages', 'Landing Pages'],
+  ['/admin/marketing/forms', 'Forms'],
   ['/admin/marketing/content', 'Content'],
   ['/admin/marketing/seo', 'SEO'],
   ['/admin/marketing/aeo', 'AEO'],
