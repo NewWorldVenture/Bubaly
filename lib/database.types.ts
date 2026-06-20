@@ -371,6 +371,42 @@ export interface Database {
         { id?: string; actor_id?: string | null; actor_email?: string | null; action: string; resource: string; resource_id?: string | null; metadata?: Json },
         Partial<{ metadata: Json }>
       >;
+      // ── Core Platform (0014) ──────────────────────────────────
+      family_conversations: T<
+        { id: string; family_id: string; name: string | null; kind: string; avatar_emoji: string | null; member_ids: string[]; created_by: string | null; last_message_at: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name?: string | null; kind?: string; avatar_emoji?: string | null; member_ids?: string[]; created_by?: string | null },
+        Partial<{ name: string | null; avatar_emoji: string | null; member_ids: string[]; last_message_at: string | null }>
+      >;
+      family_messages: T<
+        { id: string; conversation_id: string; family_id: string; sender_id: string | null; sender_name: string | null; sender_avatar: string | null; content: string | null; kind: string; attachment_url: string | null; attachment_name: string | null; attachment_mime: string | null; reply_to_id: string | null; reactions: Json; read_by: string[]; is_pinned: boolean; deleted_at: string | null; created_at: string },
+        { id?: string; conversation_id: string; family_id: string; sender_id?: string | null; sender_name?: string | null; sender_avatar?: string | null; content?: string | null; kind?: string; attachment_url?: string | null; attachment_name?: string | null; attachment_mime?: string | null; reply_to_id?: string | null; reactions?: Json; read_by?: string[] },
+        Partial<{ content: string | null; reactions: Json; read_by: string[]; is_pinned: boolean; deleted_at: string | null }>
+      >;
+      family_albums: T<
+        { id: string; family_id: string; name: string; description: string | null; cover_url: string | null; kind: string; is_shared: boolean; photo_count: number; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name: string; description?: string | null; cover_url?: string | null; kind?: string; is_shared?: boolean; created_by?: string | null },
+        Partial<{ name: string; description: string | null; cover_url: string | null; kind: string; is_shared: boolean; photo_count: number }>
+      >;
+      family_photos: T<
+        { id: string; family_id: string; album_id: string | null; uploaded_by: string | null; storage_path: string; url: string | null; thumbnail_url: string | null; caption: string | null; taken_at: string | null; width: number | null; height: number | null; size_bytes: number | null; tags: string[]; member_tags: string[]; is_favorite: boolean; metadata: Json; created_at: string },
+        { id?: string; family_id: string; album_id?: string | null; uploaded_by?: string | null; storage_path: string; url?: string | null; thumbnail_url?: string | null; caption?: string | null; taken_at?: string | null; width?: number | null; height?: number | null; size_bytes?: number | null; tags?: string[]; member_tags?: string[] },
+        Partial<{ album_id: string | null; caption: string | null; tags: string[]; member_tags: string[]; is_favorite: boolean; url: string | null }>
+      >;
+      family_contacts: T<
+        { id: string; family_id: string; name: string; relationship: string | null; category: string; phone: string | null; phone_alt: string | null; email: string | null; address: string | null; notes: string | null; photo_url: string | null; is_emergency: boolean; birthday_month: number | null; birthday_day: number | null; tags: string[]; linked_member_id: string | null; specialty: string | null; organization: string | null; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name: string; relationship?: string | null; category?: string; phone?: string | null; phone_alt?: string | null; email?: string | null; address?: string | null; notes?: string | null; photo_url?: string | null; is_emergency?: boolean; birthday_month?: number | null; birthday_day?: number | null; specialty?: string | null; organization?: string | null; created_by?: string | null },
+        Partial<{ name: string; relationship: string | null; category: string; phone: string | null; phone_alt: string | null; email: string | null; address: string | null; notes: string | null; is_emergency: boolean; birthday_month: number | null; birthday_day: number | null; specialty: string | null; organization: string | null; updated_at: string }>
+      >;
+      family_reminders: T<
+        { id: string; family_id: string; created_by: string | null; assigned_to_id: string | null; member_id: string | null; title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; recurrence_time: string | null; recurrence_days: number[] | null; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; ai_suggested: boolean; tags: string[]; created_at: string; updated_at: string },
+        { id?: string; family_id: string; created_by?: string | null; assigned_to_id?: string | null; member_id?: string | null; title: string; notes?: string | null; kind?: string; remind_at?: string | null; location_name?: string | null; recurrence?: string; priority?: string; status?: string; ai_suggested?: boolean },
+        Partial<{ title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; assigned_to_id: string | null; member_id: string | null; updated_at: string }>
+      >;
+      family_recipes: T<
+        { id: string; family_id: string; name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; is_public: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; ai_generated: boolean; estimated_cost_cents: number | null; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name: string; description?: string | null; category?: string; cuisine?: string | null; servings?: number; prep_time_mins?: number | null; cook_time_mins?: number | null; difficulty?: string; ingredients?: Json; instructions?: Json; notes?: string | null; photo_url?: string | null; tags?: string[]; allergy_flags?: string[]; source_url?: string | null; created_by?: string | null },
+        Partial<{ name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; updated_at: string }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

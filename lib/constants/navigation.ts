@@ -3,7 +3,8 @@ import {
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
   FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, TicketCheck,
-  UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone, type LucideIcon,
+  UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
+  MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -36,6 +37,11 @@ export const APP_NAV: NavItem[] = [
   { href: '/dashboard/dental', label: 'Dental', icon: Smile },
   { href: '/dashboard/documents', label: 'Documents', icon: FolderLock },
   { href: '/dashboard/home', label: 'Home & Maintenance', icon: Home },
+  { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle },
+  { href: '/dashboard/photos', label: 'Photos', icon: ImageGallery },
+  { href: '/dashboard/contacts', label: 'Contacts', icon: Users },
+  { href: '/dashboard/reminders', label: 'Reminders', icon: Bell },
+  { href: '/dashboard/recipes', label: 'Recipes', icon: ChefHat },
   { href: '/dashboard/notes', label: 'Notes', icon: StickyNote },
   { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
   { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound },
