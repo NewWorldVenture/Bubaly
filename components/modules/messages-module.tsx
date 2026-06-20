@@ -3,20 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   MessageCircle, Plus, Send, Smile, Paperclip, Reply, Pin, Trash2,
-  MoreHorizontal, Check, CheckCheck, ArrowLeft, Users, Search,
-  Volume2, Image as ImageIcon, ThumbsUp, Heart, Laugh, AlertCircle, Star,
+  MoreHorizontal, Check, CheckCheck, ArrowLeft, Users, Search, X, Camera,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
-import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
-import { Input, Field } from '@/components/ui/input';
+import { Input } from '@/components/ui/input';
+import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { ROLE_LABELS } from '@/lib/constants/roles';
 import { fmtRelative, fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
-import type { Tables } from '@/lib/database.types';
+import type { Tables, MemberRole } from '@/lib/database.types';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -350,7 +350,9 @@ export function MessagesModule() {
               <div className="flex-1">
                 <p className="text-sm font-bold">{activeConv.name ?? 'Direct Message'}</p>
                 <p className="text-[11px] text-muted">
-                  {activeConv.kind === 'group' ? `${members.length} members` : 'Direct message'}
+                  {activeConv.kind === 'group'
+                    ? `${activeConv.member_ids?.length ?? members.length} members`
+                    : 'Direct message'}
                 </p>
               </div>
               <button className="rounded-lg p-1.5 text-muted hover:text-fg"><Search className="h-4 w-4" /></button>
@@ -582,12 +584,13 @@ export function MessagesModule() {
         )}
       </div>
 
-      {/* New Conversation Modal */}
+      {/* New Conversation */}
       {newConvOpen && (
-        <NewConversationModal
+        <NewConversation
           familyId={familyId}
           userId={userId}
           members={members}
+          conversations={conversations}
           myName={myName}
           onClose={() => setNewConvOpen(false)}
           onCreated={(conv) => {
@@ -602,98 +605,301 @@ export function MessagesModule() {
   );
 }
 
-function NewConversationModal({ familyId, userId, members, myName, onClose, onCreated }: {
+// ── New Conversation (multi-select, smart groups, two-step) ──────────────────
+
+type Member = Tables<'family_members'>;
+
+const CONV_EMOJIS = ['💬', '👨‍👩‍👧‍👦', '🏠', '📅', '🎉', '🛒', '📚', '⚽', '🎮', '🏖️', '❤️', '🍕'];
+
+/** Smart, role-derived groups for one-tap multi-select. */
+const SMART_GROUPS: { key: string; label: string; emoji: string; roles: MemberRole[] | null }[] = [
+  { key: 'everyone', label: 'Everyone', emoji: '👨‍👩‍👧‍👦', roles: null },
+  { key: 'parents', label: 'Parents', emoji: '🧑‍🤝‍🧑', roles: ['parent', 'adult'] },
+  { key: 'kids', label: 'Kids', emoji: '🧒', roles: ['teen', 'child'] },
+  { key: 'household', label: 'Household', emoji: '🏠', roles: ['parent', 'adult', 'teen', 'child'] },
+];
+
+type Step = 'people' | 'details';
+type Tab = 'suggested' | 'contacts' | 'groups';
+
+function NewConversation({ familyId, userId, members, conversations, myName, onClose, onCreated }: {
   familyId: string; userId: string;
-  members: Tables<'family_members'>[];
+  members: Member[];
+  conversations: Conversation[];
   myName: string;
   onClose: () => void;
   onCreated: (conv: Conversation) => void;
 }) {
   const { error: toastError } = useToast();
+  const [step, setStep] = useState<Step>('people');
+  const [tab, setTab] = useState<Tab>('suggested');
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set()); // family_member.id
   const [name, setName] = useState('');
-  const [kind, setKind] = useState<'group' | 'direct'>('group');
   const [emoji, setEmoji] = useState('💬');
   const [loading, setLoading] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<string>('');
-  const otherMembers = members.filter((m) => m.user_id !== userId);
 
-  async function create(e: React.FormEvent) {
-    e.preventDefault();
+  const others = members.filter((m) => m.is_active && m.user_id !== userId);
+  const byId = new Map(members.map((m) => [m.id, m]));
+  const selectedMembers = [...selected].map((id) => byId.get(id)).filter(Boolean) as Member[];
+
+  const groupMembers = useCallback(
+    (roles: MemberRole[] | null) => (roles ? others.filter((m) => roles.includes(m.role)) : others),
+    [others],
+  );
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleGroup(roles: MemberRole[] | null) {
+    const ids = groupMembers(roles).map((m) => m.id);
+    const allOn = ids.length > 0 && ids.every((id) => selected.has(id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allOn) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  const q = search.trim().toLowerCase();
+  const peopleList = (tab === 'contacts'
+    ? [...others].sort((a, b) => a.display_name.localeCompare(b.display_name))
+    : others
+  ).filter((m) => !q || m.display_name.toLowerCase().includes(q));
+
+  async function create() {
+    if (selected.size === 0 || loading) return;
     setLoading(true);
     const supabase = createClient();
-    const convName = kind === 'direct'
-      ? (otherMembers.find((m) => m.user_id === selectedMember)?.display_name ?? 'Direct Message')
-      : name.trim() || 'Group Chat';
+
+    const participantUserIds = [
+      userId,
+      ...selectedMembers.map((m) => m.user_id).filter(Boolean) as string[],
+    ];
+    const memberIds = [...new Set(participantUserIds)];
+    const isDirect = selectedMembers.length === 1;
+
+    // Reuse an existing 1:1 DM instead of creating a duplicate.
+    if (isDirect) {
+      const target = [...memberIds].sort().join(',');
+      const existing = conversations.find(
+        (c) => c.kind === 'direct' && [...(c.member_ids ?? [])].sort().join(',') === target,
+      );
+      if (existing) { setLoading(false); onCreated(existing); return; }
+    }
+
+    const convName = name.trim() || (isDirect
+      ? selectedMembers[0].display_name
+      : [myName, ...selectedMembers.map((m) => m.display_name.split(' ')[0])].slice(0, 3).join(', ') +
+        (selectedMembers.length > 2 ? ` +${selectedMembers.length - 2}` : ''));
+
     const { data, error } = await supabase.from('family_conversations').insert({
       family_id: familyId,
       name: convName,
-      kind,
-      avatar_emoji: emoji,
+      kind: isDirect ? 'direct' : 'group',
+      avatar_emoji: isDirect ? null : emoji,
       created_by: userId,
-      member_ids: kind === 'direct'
-        ? [userId, selectedMember].filter(Boolean)
-        : members.map((m) => m.user_id).filter(Boolean) as string[],
+      member_ids: memberIds,
     }).select('*').single();
+
     setLoading(false);
-    if (error) { toastError(error.message); return; }
+    if (error || !data) { toastError(error?.message ?? 'Could not create conversation'); return; }
     onCreated(data);
   }
 
   return (
-    <Modal open onClose={onClose} title="New Conversation">
-      <form onSubmit={create} className="space-y-4">
-        <Field label="Type">
-          {() => (
-            <div className="flex gap-2">
-              {(['group', 'direct'] as const).map((k) => (
-                <button key={k} type="button" onClick={() => setKind(k)}
-                  className={cn(
-                    'flex-1 rounded-xl border py-2 text-sm font-medium transition',
-                    kind === k ? 'border-brand/60 bg-brand/10 text-brand' : 'border-border hover:bg-elevated',
-                  )}>
-                  {k === 'group' ? '👨‍👩‍👧‍👦 Group' : '💬 Direct'}
-                </button>
+    <Modal
+      open
+      onClose={onClose}
+      title="New Conversation"
+      description={step === 'people' ? 'Start a conversation with the people who matter most.' : 'Name it and pick an icon (optional).'}
+      className="max-w-2xl"
+    >
+      {step === 'people' ? (
+        <div className="space-y-4">
+          {/* To: chips + search */}
+          <div className="rounded-xl border border-border bg-surface/40 p-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="pl-1 text-xs font-semibold text-muted">To:</span>
+              {selectedMembers.map((m) => (
+                <span key={m.id} className="flex items-center gap-1.5 rounded-full bg-brand/15 py-1 pl-1 pr-2 text-xs font-medium text-brand">
+                  <Avatar name={m.display_name} color={m.color} size={18} />
+                  {m.display_name.split(' ')[0]}
+                  <button onClick={() => toggle(m.id)} aria-label={`Remove ${m.display_name}`} className="rounded-full hover:text-fg">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
               ))}
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={selectedMembers.length ? 'Add more…' : 'Search people or groups…'}
+                className="min-w-[8rem] flex-1 bg-transparent px-1 py-1 text-sm outline-none placeholder:text-muted"
+              />
             </div>
-          )}
-        </Field>
+          </div>
 
-        {kind === 'group' ? (
-          <Field label="Group name">
-            {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Family Chat, Movie Night Planning…" />}
-          </Field>
-        ) : (
-          <Field label="Member">
-            {(id) => (
-              <select id={id} value={selectedMember} onChange={(e) => setSelectedMember(e.target.value)} required
-                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
-                <option value="">Choose a family member…</option>
-                {otherMembers.map((m) => (
-                  <option key={m.id} value={m.user_id ?? ''}>{m.display_name}</option>
-                ))}
-              </select>
+          {/* Tabs */}
+          <div className="flex gap-1 border-b border-border">
+            {(['suggested', 'contacts', 'groups'] as const).map((t) => (
+              <button key={t} onClick={() => setTab(t)}
+                className={cn(
+                  'relative px-3 py-2 text-sm font-medium capitalize transition',
+                  tab === t ? 'text-brand' : 'text-muted hover:text-fg',
+                )}>
+                {t}
+                {tab === t && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand" />}
+              </button>
+            ))}
+          </div>
+
+          {/* Body */}
+          <div className="max-h-[42vh] overflow-y-auto pr-1">
+            {tab === 'groups' ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {SMART_GROUPS.map((g) => {
+                  const gm = groupMembers(g.roles);
+                  const on = gm.length > 0 && gm.every((m) => selected.has(m.id));
+                  return (
+                    <button key={g.key} onClick={() => toggleGroup(g.roles)} disabled={gm.length === 0}
+                      className={cn(
+                        'flex items-center gap-3 rounded-xl border p-3 text-left transition disabled:opacity-40',
+                        on ? 'border-brand bg-brand/10' : 'border-border bg-surface/40 hover:bg-elevated',
+                      )}>
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-elevated text-lg">{g.emoji}</div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{g.label}</p>
+                        <p className="truncate text-xs text-muted">
+                          {gm.length === 0 ? 'No members' : gm.map((m) => m.display_name.split(' ')[0]).join(', ')}
+                        </p>
+                      </div>
+                      <SelectDot on={on} />
+                    </button>
+                  );
+                })}
+              </div>
+            ) : peopleList.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted">
+                {others.length === 0 ? 'Invite family members in Settings to start chatting.' : 'No people match your search.'}
+              </p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {peopleList.map((m) => {
+                  const on = selected.has(m.id);
+                  return (
+                    <button key={m.id} onClick={() => toggle(m.id)}
+                      className={cn(
+                        'flex items-center gap-3 rounded-xl border p-2.5 text-left transition',
+                        on ? 'border-brand bg-brand/10' : 'border-border bg-surface/40 hover:bg-elevated',
+                      )}>
+                      <Avatar name={m.display_name} color={m.color} size={38} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{m.display_name}</p>
+                        <p className="truncate text-xs text-muted">{ROLE_LABELS[m.role]}</p>
+                      </div>
+                      <SelectDot on={on} />
+                    </button>
+                  );
+                })}
+              </div>
             )}
-          </Field>
-        )}
+          </div>
 
-        <Field label="Icon">
-          {() => (
-            <div className="flex flex-wrap gap-2">
-              {['💬', '👨‍👩‍👧‍👦', '🏠', '📅', '🎉', '🛒', '📚', '⚽', '🎮', '🏖️'].map((e) => (
-                <button key={e} type="button" onClick={() => setEmoji(e)}
-                  className={cn('rounded-xl p-2 text-lg transition hover:bg-elevated', emoji === e && 'bg-brand/15 ring-2 ring-brand/40')}>
-                  {e}
-                </button>
-              ))}
+          {/* Footer */}
+          <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+            <p className="text-xs text-muted">
+              {selected.size === 0 ? 'Select at least one person' : `${selected.size} selected`}
+            </p>
+            <Button onClick={() => setStep('details')} disabled={selected.size === 0}>
+              Next {selected.size > 0 && `(${selected.size})`}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {/* Icon + name */}
+          <div className="flex items-center gap-3">
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-brand/15 text-2xl">{emoji}</div>
+            <div className="flex-1">
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={selectedMembers.length === 1 ? selectedMembers[0].display_name : 'Conversation name (optional)'}
+                autoFocus
+              />
+            </div>
+          </div>
+
+          {/* Icon picker (skip for 1:1 DMs) */}
+          {selectedMembers.length > 1 && (
+            <div>
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted">
+                <Camera className="h-3.5 w-3.5" /> Choose an icon
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {CONV_EMOJIS.map((e) => (
+                  <button key={e} type="button" onClick={() => setEmoji(e)}
+                    className={cn('rounded-xl p-2 text-lg transition hover:bg-elevated', emoji === e && 'bg-brand/15 ring-2 ring-brand/40')}>
+                    {e}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
-        </Field>
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={loading}>Create</Button>
+          {/* Members */}
+          <div>
+            <p className="mb-2 text-xs font-semibold text-muted">Members ({selectedMembers.length + 1})</p>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2">
+                <Avatar name={myName} size={32} />
+                <p className="flex-1 truncate text-sm font-medium">{myName}</p>
+                <span className="text-xs text-muted">You</span>
+              </div>
+              {selectedMembers.map((m) => (
+                <div key={m.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2">
+                  <Avatar name={m.display_name} color={m.color} size={32} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{m.display_name}</p>
+                    <p className="truncate text-xs text-muted">{ROLE_LABELS[m.role]}</p>
+                  </div>
+                  <button onClick={() => toggle(m.id)} aria-label={`Remove ${m.display_name}`} className="rounded-lg p-1.5 text-muted hover:text-danger">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+            <Button variant="ghost" onClick={() => setStep('people')}>
+              <ArrowLeft className="h-4 w-4" /> Back
+            </Button>
+            <Button onClick={create} loading={loading} disabled={selectedMembers.length === 0}>
+              {selectedMembers.length === 1 ? 'Start chatting' : 'Create'}
+            </Button>
+          </div>
         </div>
-      </form>
+      )}
     </Modal>
+  );
+}
+
+/** The +/✓ select toggle used in the people grid. */
+function SelectDot({ on }: { on: boolean }) {
+  return (
+    <span className={cn(
+      'grid h-6 w-6 shrink-0 place-items-center rounded-full border transition',
+      on ? 'border-brand bg-brand text-brand-fg' : 'border-border text-muted',
+    )}>
+      {on ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+    </span>
   );
 }
