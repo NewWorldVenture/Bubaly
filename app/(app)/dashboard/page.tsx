@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {
   ArrowRight, Cake, Calendar, CheckCircle2, ChevronRight,
   ListChecks, Plus, ShoppingCart, Sparkles, Users,
+  Wand2, ScanLine, Monitor, Sun,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -159,6 +160,27 @@ export default async function DashboardPage() {
         <StatCard href="/dashboard/chores" label="Tasks Due" value={openChores ?? 0} icon={CheckCircle2} bg="bg-emerald-600" linkLabel="View tasks" />
         <StatCard href="/dashboard/chores" label="Chores Due" value={dueTodayCount ?? 0} icon={ListChecks} bg="bg-orange-500" linkLabel="View chores" />
         <StatCard href="/dashboard/settings#members" label="Birthdays" value={birthdayCount} icon={Cake} bg="bg-rose-500" linkLabel="View all" />
+      </div>
+
+      {/* AI tools */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {[
+          { href: '/dashboard/inbox', label: 'Magic Import', desc: 'Paste anything → organized', icon: Wand2, bg: 'bg-violet-600' },
+          { href: '/dashboard/scan', label: 'Scan Flyer', desc: 'Photo → calendar', icon: ScanLine, bg: 'bg-blue-600' },
+          { href: '/dashboard/briefing', label: 'Daily Briefing', desc: "Today at a glance", icon: Sun, bg: 'bg-amber-500' },
+          { href: '/dashboard/assistant', label: 'AI Assistant', desc: 'Ask anything', icon: Sparkles, bg: 'bg-emerald-600' },
+          { href: '/display', label: 'Kitchen Display', desc: 'Full-screen kiosk', icon: Monitor, bg: 'bg-rose-500' },
+        ].map((t) => (
+          <Link key={t.href} href={t.href} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated">
+            <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl', t.bg)}>
+              <t.icon className="h-5 w-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{t.label}</p>
+              <p className="truncate text-xs text-muted">{t.desc}</p>
+            </div>
+          </Link>
+        ))}
       </div>
 
       {/* Row 2: Schedule | Upcoming | AI widget */}
