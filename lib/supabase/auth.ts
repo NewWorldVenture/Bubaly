@@ -1,6 +1,7 @@
 // Server-side auth + active-family resolution. Used by every protected page/layout.
 import { redirect } from 'next/navigation';
 import { createServer } from './server';
+import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 
@@ -33,6 +34,9 @@ export async function isSuperAdmin(): Promise<boolean> {
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return false;
+  // Code/env allowlist first — works even if the super_admins migration (0008)
+  // hasn't been applied to this database yet.
+  if (isSuperAdminEmail(auth.user.email)) return true;
   const { data } = await supabase.rpc('is_super_admin');
   return data === true;
 }

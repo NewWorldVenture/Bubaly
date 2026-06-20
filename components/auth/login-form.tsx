@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { signInSchema, fieldErrors } from '@/lib/validation';
 import { GoogleIcon } from '@/components/auth/google-icon';
+import { resolveLandingPathAction } from '@/app/(auth)/actions';
 
 export function LoginForm() {
   const router = useRouter();
@@ -34,11 +35,9 @@ export function LoginForm() {
       const { error } = await supabase.auth.signInWithPassword(parsed.data);
       if (error) throw error;
       const redirectParam = params.get('redirect');
-      let destination = redirectParam || '/dashboard';
-      if (!redirectParam) {
-        const { data: isAdmin } = await supabase.rpc('is_super_admin');
-        if (isAdmin) destination = '/admin';
-      }
+      // Resolve server-side so super admins (DB seed OR env/code allowlist)
+      // land on the admin console even before migration 0008 is applied.
+      const destination = redirectParam || (await resolveLandingPathAction());
       router.push(destination);
       router.refresh();
     } catch (err) {
