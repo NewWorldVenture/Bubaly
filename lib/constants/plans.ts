@@ -1,64 +1,76 @@
-// Subscription plans. priceId maps to your Stripe price; wire in the billing webhook.
+// Subscription plans — the SINGLE source of truth for plan slugs, display names,
+// and prices. Slugs MUST match what the Stripe webhook writes (see
+// app/api/webhooks/stripe/route.ts): 'free', 'family', 'family_annual'.
+//
+// The product is one paid "Family" plan, billed monthly or annually. Real Stripe
+// price IDs live in env (STRIPE_PRICE_FAMILY_MONTHLY / _ANNUAL) and are resolved
+// in lib/stripe.ts. Keep prices here in sync with the Stripe dashboard.
+
+export type PlanId = 'free' | 'family' | 'family_annual';
+
 export type Plan = {
-  id: 'free' | 'family' | 'family_plus';
+  id: PlanId;
   name: string;
-  priceMonthly: number; // cents
+  /** Monthly-equivalent price in cents — used for MRR math across admin. */
+  priceMonthly: number;
   tagline: string;
   seats: number | 'Unlimited';
   features: string[];
   featured?: boolean;
-  priceId?: string; // Stripe price id (set via env in production)
 };
+
+// Authoritative prices (cents). Update alongside the Stripe price objects.
+export const FAMILY_MONTHLY_CENTS = 999; // $9.99 / month
+export const FAMILY_ANNUAL_CENTS = 9599; // $95.99 / year (~$8.00/mo)
+
+const FAMILY_FEATURES = [
+  'Unlimited family members + caregivers',
+  'Shared calendar, chores & grocery lists',
+  'Meal planning & auto grocery lists',
+  'Health, home & document vault',
+  'Unlimited AI assistant',
+  'Push & email notifications',
+  '100 GB document storage',
+];
 
 export const PLANS: Plan[] = [
   {
     id: 'free',
-    name: 'Starter',
+    name: 'Free',
     priceMonthly: 0,
-    tagline: 'For families just getting organized.',
-    seats: 4,
+    tagline: 'Basic family coordination for up to 2 members.',
+    seats: 2,
     features: [
       'Shared calendar & reminders',
       'Chores & grocery lists',
-      'Up to 4 members',
-      '50 AI assistant messages / month',
-      '1 GB document storage',
+      'Up to 2 members',
     ],
   },
   {
     id: 'family',
-    name: 'Family',
-    priceMonthly: 900,
-    tagline: 'Everything a busy household needs.',
-    seats: 8,
+    name: 'FamilyOS Family',
+    priceMonthly: FAMILY_MONTHLY_CENTS,
+    tagline: 'Everything your family needs, billed monthly.',
+    seats: 'Unlimited',
     featured: true,
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_FAMILY,
-    features: [
-      'Everything in Starter',
-      'Up to 8 members + caregivers',
-      'Meal planning & auto grocery lists',
-      'Health, home & document vault',
-      'Unlimited AI assistant',
-      'Push & email notifications',
-      '20 GB document storage',
-    ],
+    features: FAMILY_FEATURES,
   },
   {
-    id: 'family_plus',
-    name: 'Family Plus',
-    priceMonthly: 1900,
-    tagline: 'For large or multi-generational homes.',
+    id: 'family_annual',
+    name: 'FamilyOS Family (Annual)',
+    priceMonthly: Math.round(FAMILY_ANNUAL_CENTS / 12),
+    tagline: 'The Family plan billed yearly — save ~20%.',
     seats: 'Unlimited',
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_FAMILY_PLUS,
-    features: [
-      'Everything in Family',
-      'Unlimited members',
-      'Priority AI & faster models',
-      'Advanced audit log & exports',
-      '100 GB document storage',
-      'Priority support',
-    ],
+    features: FAMILY_FEATURES,
   },
 ];
 
 export const planById = (id: string) => PLANS.find((p) => p.id === id);
+
+/** Monthly-equivalent cents for any plan slug the webhook may write. */
+export const planMonthlyCents = (id: string | null): number =>
+  planById(id ?? '')?.priceMonthly ?? 0;
+
+/** Human label for any plan slug, falling back to the raw slug. */
+export const planName = (id: string | null): string =>
+  planById(id ?? '')?.name ?? (id || 'Free');

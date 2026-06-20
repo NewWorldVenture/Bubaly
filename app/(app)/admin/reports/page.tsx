@@ -5,24 +5,14 @@ import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney } from '@/lib/utils/format';
+import { planMonthlyCents, planName } from '@/lib/constants/plans';
 
 export const metadata: Metadata = { title: 'Reports & Analytics', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 const MS_DAY = 86_400_000;
 
-function planMonthlyCents(plan: string | null): number {
-  const p = (plan ?? '').toLowerCase();
-  if (p.includes('plus')) return 1900;
-  if (p.startsWith('family')) return 900;
-  return 0;
-}
-function planLabel(plan: string | null): string {
-  const p = (plan ?? '').toLowerCase();
-  if (p.includes('plus')) return 'Family Plus';
-  if (p.startsWith('family')) return 'Family';
-  return 'Starter';
-}
+const planLabel = (plan: string | null): string => planName(plan);
 function fmtBytes(bytes: number): string {
   if (bytes <= 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
@@ -78,7 +68,11 @@ export default async function AdminReportsPage() {
   const maxUser = Math.max(...userGrowth.map((m) => m.value), 1);
   const maxRevenue = Math.max(...revenueTrend.map((m) => m.value), 1);
 
-  const planColors: Record<string, string> = { Family: '#7c5dff', 'Family Plus': '#22c55e', Starter: '#64748b' };
+  const planColors: Record<string, string> = {
+    'FamilyOS Family': '#7c5dff',
+    'FamilyOS Family (Annual)': '#22c55e',
+    Free: '#64748b',
+  };
   const planBuckets = new Map<string, number>();
   for (const s of activeSubs) planBuckets.set(planLabel(s.plan), (planBuckets.get(planLabel(s.plan)) ?? 0) + 1);
   const subSegments = [...planBuckets.entries()].map(([label, value]) => ({ label, value, color: planColors[label] ?? '#64748b' }));
