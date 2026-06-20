@@ -215,7 +215,7 @@ export function SportsModule() {
                     <th className="px-4 py-3 text-left font-medium">Type</th>
                     <th className="w-8 px-4 py-3" />
                   </tr></thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className="divide-y divide-border">
                     {upcoming.map((e) => {
                       const d = new Date(e.starts_at);
                       const member = e.member_id ? memberById.get(e.member_id) : undefined;
@@ -354,7 +354,7 @@ export function SportsModule() {
           ) : (
             <table className="w-full text-xs">
               <thead><tr className="text-muted"><th className="pb-2 text-left">#</th><th className="pb-2 text-left">Team</th><th className="pb-2 text-right">W</th><th className="pb-2 text-right">L</th><th className="pb-2 text-right">T</th><th className="pb-2 text-right">PCT</th></tr></thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-border">
                 {standings.map((s, i) => (
                   <tr key={s.teamId} className="font-medium">
                     <td className="py-2 text-muted">{i + 1}</td>

@@ -136,7 +136,7 @@ export function ContactsModule() {
             {emergencyContacts.map((c) => (
               <button key={c.id} onClick={() => setSelected(c)}
                 className="flex items-center gap-3 rounded-xl border border-danger/20 bg-danger/5 px-3 py-2 text-left hover:bg-danger/10 transition">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white"
+                <div className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-fg"
                   style={{ background: avatarColor(c.name) }}>
                   {initials(c.name)}
                 </div>
@@ -184,7 +184,7 @@ export function ContactsModule() {
                       isSelected ? 'bg-brand/8' : 'hover:bg-elevated/30',
                     )}>
                     {/* Avatar */}
-                    <div className="relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                    <div className="relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-fg"
                       style={{ background: avatarColor(contact.name) }}>
                       {initials(contact.name)}
                       {contact.is_emergency && (
@@ -237,7 +237,7 @@ export function ContactsModule() {
               {/* Header */}
               <div className="mb-5 flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl text-lg font-bold text-white"
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl text-lg font-bold text-fg"
                     style={{ background: avatarColor(selected.name) }}>
                     {initials(selected.name)}
                   </div>

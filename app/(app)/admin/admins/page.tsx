@@ -32,7 +32,7 @@ const ROLE_META: Record<string, { label: string; color: string; donutColor: stri
   content_manager:     { label: 'Content Manager',     color: 'text-emerald-400 bg-emerald-500/15', donutColor: '#34d399', badge: 'success' },
   billing_manager:     { label: 'Billing Manager',     color: 'text-yellow-400 bg-yellow-500/15', donutColor: '#fbbf24', badge: 'warning' },
   moderator:           { label: 'Moderator',           color: 'text-orange-400 bg-orange-500/15', donutColor: '#fb923c', badge: 'warning' },
-  viewer:              { label: 'Viewer',              color: 'text-slate-400  bg-slate-500/15',  donutColor: '#94a3b8', badge: 'neutral' },
+  viewer:              { label: 'Viewer',              color: 'text-muted  bg-slate-500/15',  donutColor: '#94a3b8', badge: 'neutral' },
 };
 
 const ROLE_PERMISSIONS: Record<string, { resource: string; read: boolean; write: boolean; delete: boolean }[]> = {
@@ -473,7 +473,7 @@ function AvatarInitials({ name, size = 32 }: { name: string; size?: number }) {
   const color = colors[name.charCodeAt(0) % colors.length];
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white ${color}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-full font-bold text-fg ${color}`}
       style={{ width: size, height: size, fontSize: size * 0.35 }}
     >
       {initials || '?'}

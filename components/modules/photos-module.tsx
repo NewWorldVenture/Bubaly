@@ -327,13 +327,13 @@ export function PhotosModule() {
           {/* Nav */}
           {lightboxIdx > 0 && (
             <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i ?? 0) - 1); }}
-              className="absolute left-4 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition">
+              className="absolute left-4 flex h-12 w-12 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
               <ChevronLeft className="h-6 w-6" />
             </button>
           )}
           {lightboxIdx < photos.length - 1 && (
             <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i ?? 0) + 1); }}
-              className="absolute right-4 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition">
+              className="absolute right-4 flex h-12 w-12 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
               <ChevronRight className="h-6 w-6" />
             </button>
           )}
@@ -350,11 +350,11 @@ export function PhotosModule() {
               <div className="ml-auto flex gap-2">
                 <a href={photos[lightboxIdx].url ?? '#'} download target="_blank" rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="rounded-lg bg-white/10 p-2 hover:bg-white/20 transition">
+                  className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
                   <Download className="h-4 w-4" />
                 </a>
                 <button onClick={() => toggleFavorite(photos[lightboxIdx])}
-                  className="rounded-lg bg-white/10 p-2 hover:bg-white/20 transition">
+                  className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
                   <Heart className={cn('h-4 w-4', photos[lightboxIdx].is_favorite && 'fill-red-400 text-red-400')} />
                 </button>
                 <button onClick={() => { if (confirm('Delete this photo?')) deletePhoto(photos[lightboxIdx]); }}
@@ -367,7 +367,7 @@ export function PhotosModule() {
 
           {/* Close */}
           <button onClick={() => setLightboxIdx(null)}
-            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition">
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
             <X className="h-5 w-5" />
           </button>
         </div>

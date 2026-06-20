@@ -253,7 +253,7 @@ export function ShoppingModule() {
                               <button onClick={() => toggleItem(item)}
                                 className={cn('flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition',
                                   item.is_checked ? 'border-success bg-success' : 'border-border hover:border-success/50')}>
-                                {item.is_checked && <Check className="h-3 w-3 text-white" />}
+                                {item.is_checked && <Check className="h-3 w-3 text-fg" />}
                               </button>
                               <span className={cn('flex-1 text-sm', item.is_checked && 'line-through text-muted')}>
                                 {item.name}

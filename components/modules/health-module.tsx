@@ -572,7 +572,7 @@ export function HealthModule() {
                 const member = a.member_id ? memberById.get(a.member_id) : undefined;
                 return (
                   <div key={a.id} className="flex items-start gap-3">
-                    <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-lg text-center text-white', ACCENT[i % ACCENT.length])}>
+                    <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
                       <div>
                         <p className="text-[9px] font-bold uppercase">{d.toLocaleDateString('en-US', { month: 'short' })}</p>
                         <p className="text-sm font-black leading-none">{d.getDate()}</p>

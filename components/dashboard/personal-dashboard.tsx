@@ -28,7 +28,7 @@ function StatCard({ href, label, value, icon: Icon, bg }: {
   return (
     <Link href={href} className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-5 transition hover:bg-elevated">
       <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', bg)}>
-        <Icon className="h-5 w-5 text-white" />
+        <Icon className="h-5 w-5 text-fg" />
       </div>
       <div className="min-w-0">
         <p className="text-2xl font-bold leading-none">{value}</p>
@@ -303,7 +303,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
                     <li key={rw.id} className="flex items-center gap-3 rounded-xl bg-surface/40 p-3">
                       <Star className={cn('h-4 w-4', affordable ? 'text-amber-400' : 'text-muted/40')} />
                       <p className="min-w-0 flex-1 truncate text-sm">{rw.title}</p>
-                      <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold', affordable ? 'bg-emerald-500/15 text-emerald-400' : 'bg-white/5 text-muted')}>
+                      <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold', affordable ? 'bg-emerald-500/15 text-emerald-400' : 'bg-surface/50 text-muted')}>
                         {rw.cost_points} pts
                       </span>
                     </li>
@@ -326,7 +326,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
                   const d = new Date(e.starts_at);
                   return (
                     <li key={e.id} className="flex items-center gap-3">
-                      <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-lg text-center text-white', ACCENT[i % ACCENT.length])}>
+                      <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
                         <div>
                           <p className="text-[9px] font-bold uppercase">{d.toLocaleDateString('en-US', { month: 'short' })}</p>
                           <p className="text-base font-black leading-none">{d.getDate()}</p>
@@ -360,7 +360,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
         ].map((t) => (
           <Link key={t.label} href={t.href} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated">
             <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl', t.bg)}>
-              <t.icon className="h-5 w-5 text-white" />
+              <t.icon className="h-5 w-5 text-fg" />
             </div>
             <p className="min-w-0 truncate text-sm font-semibold">{t.label}</p>
             <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-muted" />

@@ -240,7 +240,7 @@ export function TodosModule() {
                       <button onClick={() => toggleItem(item)}
                         className={cn('mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition',
                           item.is_done ? 'border-success bg-success' : `border-border hover:border-success/50`)}>
-                        {item.is_done && <Check className="h-3 w-3 text-white" />}
+                        {item.is_done && <Check className="h-3 w-3 text-fg" />}
                       </button>
 
                       <div className="flex-1 min-w-0">

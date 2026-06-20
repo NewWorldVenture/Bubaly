@@ -246,7 +246,7 @@ export function AssistantModule() {
             const d = new Date(e.starts_at);
             return (
               <div key={e.id} className="flex items-center gap-3 py-2.5">
-                <span className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-full text-white', ACCENT_COLORS[i % ACCENT_COLORS.length])}>
+                <span className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-full text-fg', ACCENT_COLORS[i % ACCENT_COLORS.length])}>
                   <CalendarDays className="h-5 w-5" />
                 </span>
                 <div>

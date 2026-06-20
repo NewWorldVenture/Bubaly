@@ -35,7 +35,7 @@ function StatCard({ href, label, value, icon: Icon, bg, linkLabel }: {
     <Link href={href} className="flex flex-col rounded-2xl border border-border bg-surface/40 p-5 transition hover:bg-elevated">
       <div className="flex items-center gap-3">
         <div className={cn('grid h-11 w-11 place-items-center rounded-xl', bg)}>
-          <Icon className="h-5 w-5 text-white" />
+          <Icon className="h-5 w-5 text-fg" />
         </div>
         <div>
           <p className="text-2xl font-bold leading-none">{value}</p>
@@ -182,7 +182,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         ].map((t) => (
           <Link key={t.href} href={t.href} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated">
             <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl', t.bg)}>
-              <t.icon className="h-5 w-5 text-white" />
+              <t.icon className="h-5 w-5 text-fg" />
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{t.label}</p>
@@ -214,7 +214,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
                   </div>
                   <div className="flex -space-x-1.5">
                     {(members ?? []).slice(0, 2).map((m) => (
-                      <Avatar key={m.id} name={m.display_name} color={m.color} size={22} className="ring-1 ring-[#050c15]" />
+                      <Avatar key={m.id} name={m.display_name} color={m.color} size={22} className="ring-1 ring-bg" />
                     ))}
                   </div>
                 </li>
@@ -226,7 +226,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               <p className="mt-2 text-sm text-muted/60">Nothing scheduled today</p>
             </div>
           )}
-          <Link href="/dashboard/calendar" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-white/60">
+          <Link href="/dashboard/calendar" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
             View full calendar <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
@@ -243,7 +243,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
                 const d = new Date(e.starts_at);
                 return (
                   <li key={e.id} className="flex items-center gap-3">
-                    <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-lg text-center text-white', ACCENT[i % ACCENT.length])}>
+                    <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
                       <div>
                         <p className="text-[9px] font-bold uppercase">{d.toLocaleDateString('en-US', { month: 'short' })}</p>
                         <p className="text-base font-black leading-none">{d.getDate()}</p>
@@ -263,7 +263,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               <p className="mt-2 text-sm text-muted/60">No upcoming events</p>
             </div>
           )}
-          <Link href="/dashboard/calendar" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-white/60">
+          <Link href="/dashboard/calendar" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
             View full calendar <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
@@ -276,7 +276,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               <h2 className="font-semibold">AI Assistant</h2>
             </div>
           </div>
-          <p className="mb-4 text-sm text-white/60">
+          <p className="mb-4 text-sm text-fg/70">
             {suggestions.length > 0 ? 'Here are some suggestions for your family:' : 'Everything looks on track. Ask the assistant anything.'}
           </p>
           {suggestions.length > 0 && (
@@ -325,7 +325,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             );
           })}
         </div>
-        <Link href="/dashboard/grocery" className="mt-4 flex items-center gap-2 text-xs text-muted hover:text-white/60">
+        <Link href="/dashboard/grocery" className="mt-4 flex items-center gap-2 text-xs text-muted hover:text-fg/80">
           <ShoppingCart className="h-3.5 w-3.5" /> Add to grocery list
         </Link>
       </div>
@@ -359,7 +359,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               {[
                 { color: 'bg-violet-500', label: 'Completed', val: done },
                 { color: 'bg-yellow-400', label: 'In Progress', val: Math.max(0, total - done - (openChores ?? 0)) },
-                { color: 'bg-white/20', label: 'Remaining', val: openChores ?? 0 },
+                { color: 'bg-elevated', label: 'Remaining', val: openChores ?? 0 },
               ].map(({ color, label, val }) => (
                 <div key={label} className="flex items-center gap-3">
                   <div className={cn('h-3 w-3 rounded-full', color)} />
@@ -371,7 +371,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               ))}
             </div>
           </div>
-          <Link href="/dashboard/chores" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-white/60">
+          <Link href="/dashboard/chores" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
             View chores <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
@@ -388,7 +388,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             <ul className="space-y-2.5">
               {groceryItems.map((item) => (
                 <li key={item.id} className="flex items-center gap-3 text-sm">
-                  <div className="h-4 w-4 rounded border border-white/20" />
+                  <div className="h-4 w-4 rounded border border-border" />
                   <span>{item.name}</span>
                 </li>
               ))}
@@ -400,7 +400,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               <Link href="/dashboard/grocery" className="mt-2 text-xs font-semibold text-brand">Add items →</Link>
             </div>
           )}
-          <Link href="/dashboard/grocery" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-white/60">
+          <Link href="/dashboard/grocery" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
             View full list <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
@@ -431,7 +431,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
                       </p>
                     </div>
                     {member && (
-                      <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold text-white', ACCENT[0])}>
+                      <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold text-fg', ACCENT[0])}>
                         {member.display_name.split(' ')[0]}
                       </span>
                     )}
@@ -445,7 +445,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               <p className="mt-2 text-sm text-muted/60">All caught up!</p>
             </div>
           )}
-          <Link href="/dashboard/chores" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-white/60">
+          <Link href="/dashboard/chores" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
             View all tasks <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
