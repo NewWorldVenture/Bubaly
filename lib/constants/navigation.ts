@@ -4,7 +4,8 @@ import {
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
   FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, TicketCheck,
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
-  MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks, type LucideIcon,
+  MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
+  DollarSign, HardDrive, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -63,9 +64,12 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/content', label: 'Content Management', icon: FolderKanban },
   { href: '/admin/security', label: 'Security', icon: ShieldCheck },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
+  { href: '/admin/billing', label: 'Billing & Payments', icon: DollarSign },
   { href: '/admin/integrations', label: 'Integrations', icon: Plug },
+  { href: '/admin/backup', label: 'Backup & Restore', icon: HardDrive },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: ClipboardList },
   { href: '/admin/support-tickets', label: 'Support Tickets', icon: TicketCheck },
+  { href: '/admin/settings', label: 'Settings', icon: Settings },
   { href: '/admin/admins', label: 'Admin', icon: UserCog },
 ];
 
