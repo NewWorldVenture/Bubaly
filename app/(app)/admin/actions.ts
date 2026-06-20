@@ -186,3 +186,57 @@ export async function adminDeleteDocumentAction(documentId: string, storagePath:
   revalidatePath('/admin/content');
   return { ok: true };
 }
+
+/** Bans or unbans an auth account. Banning blocks sign-in until reversed; you can't ban yourself. */
+export async function adminSetUserBanAction(userId: string, banned: boolean): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+
+  const me = await getUser();
+  if (me?.id === userId) return { ok: false, error: 'You can’t ban your own account' };
+
+  const supabase = createServiceClient();
+  // 'none' lifts a ban; a long duration is an effectively-indefinite ban (reversible).
+  const { error } = await supabase.auth.admin.updateUserById(userId, { ban_duration: banned ? '876000h' : 'none' });
+  if (error) return { ok: false, error: error.message };
+
+  await adminAuditLog({ familyId: null, action: banned ? 'ban' : 'unban', resource: 'users', resourceId: userId });
+  revalidatePath('/admin/security');
+  return { ok: true };
+}
+
+/** Sends a password-reset email to an existing account (e.g. to help a locked-out user). */
+export async function adminSendPasswordResetAction(email: string): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+
+  const parsedEmail = emailSchema.safeParse(email);
+  if (!parsedEmail.success) return { ok: false, error: 'Enter a valid email address' };
+
+  const supabase = createServiceClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(parsedEmail.data, {
+    redirectTo: `${APP_URL}/login`,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  await adminAuditLog({ familyId: null, action: 'password_reset', resource: 'users', metadata: { email: parsedEmail.data } });
+  return { ok: true };
+}
+
+const TICKET_STATUSES = ['open', 'pending', 'resolved', 'closed'] as const;
+export type TicketStatus = (typeof TICKET_STATUSES)[number];
+
+/** Moves a support ticket through its lifecycle (open → pending → resolved/closed). */
+export async function adminUpdateTicketStatusAction(ticketId: string, status: TicketStatus): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+  if (!TICKET_STATUSES.includes(status)) return { ok: false, error: 'Invalid status' };
+
+  const supabase = createServiceClient();
+  const { error } = await supabase.from('support_tickets').update({ status }).eq('id', ticketId);
+  if (error) return { ok: false, error: error.message };
+
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'support_tickets', resourceId: ticketId, metadata: { status } });
+  revalidatePath('/admin/support');
+  return { ok: true };
+}

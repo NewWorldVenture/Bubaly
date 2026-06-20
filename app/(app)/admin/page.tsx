@@ -204,7 +204,7 @@ export default async function AdminDashboardPage() {
           <Card>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-base font-semibold"><Activity className="h-4 w-4 text-muted" /> Recent Activities</h2>
-              <Link href="/admin/security" className="text-xs font-medium text-brand hover:underline">View all</Link>
+              <Link href="/admin/audit" className="text-xs font-medium text-brand hover:underline">View all</Link>
             </div>
             {!recentLogs || recentLogs.length === 0 ? (
               <EmptyState icon={Activity} title="No activity recorded yet" />
@@ -305,6 +305,7 @@ export default async function AdminDashboardPage() {
         <Card>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-base font-semibold"><LifeBuoy className="h-4 w-4 text-muted" /> Support Overview</h2>
+            <Link href="/admin/support" className="text-xs font-medium text-brand hover:underline">View all</Link>
           </div>
           <ul className="space-y-2.5">
             {[
