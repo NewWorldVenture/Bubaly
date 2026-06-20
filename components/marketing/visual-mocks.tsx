@@ -12,19 +12,11 @@ import {
   Heart,
   Home,
   Mail,
-  Monitor,
   PlayCircle,
   Shield,
   ShoppingCart,
-  Smartphone,
   Sparkles,
-<<<<<<< HEAD
-  Star,
-  Tablet,
-=======
->>>>>>> 65e79433155fd892cc6bfc26dcfb1c35f8b2332f
   UtensilsCrossed,
-  Watch,
   type LucideIcon,
 } from 'lucide-react';
 import { AssistantConversation } from '@/components/marketing/homepage-interactions';
@@ -118,19 +110,6 @@ export function IconOrb({
   );
 }
 
-<<<<<<< HEAD
-export function Rating({ className }: { className?: string }) {
-  return (
-    <div className={cn('flex items-center gap-0.5 text-yellow-400', className)}>
-      {Array.from({ length: 5 }).map((_, index) => (
-        <Star key={index} className="h-4 w-4 fill-current" />
-      ))}
-    </div>
-  );
-}
-
-=======
->>>>>>> 65e79433155fd892cc6bfc26dcfb1c35f8b2332f
 export function AvatarStack() {
   const people = ['SJ', 'DM', 'AL', 'PK', 'CJ'];
   return (
@@ -154,11 +133,7 @@ export function SocialProofLine({ text = 'Loved by families everywhere' }: { tex
   return (
     <div className="flex flex-wrap items-center gap-4">
       <AvatarStack />
-<<<<<<< HEAD
-      <div>
-        <Rating />
-        <p className="mt-0.5 text-sm text-white/75">{text}</p>
-      </div>
+      <p className="text-sm text-white/80">{text}</p>
     </div>
   );
 }
@@ -281,9 +256,6 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
           </div>
         </div>
       </div>
-=======
-      <p className="text-sm text-white/80">{text}</p>
->>>>>>> 65e79433155fd892cc6bfc26dcfb1c35f8b2332f
     </div>
   );
 }
@@ -477,28 +449,6 @@ export function FamilyAiPanel() {
 }
 
 export function TestimonialBand({ compact = false }: { compact?: boolean }) {
-<<<<<<< HEAD
-  const testimonials = [
-    ['Jessica M.', 'Mom of 3', '"FamilyOS has simplified our chaos. We\'re more organized and actually enjoy family time again!"'],
-    ['David T.', 'Dad of 2', '"The AI assistant is a game changer. It knows what we need before we even think about it."'],
-    ['Amanda R.', 'Mom of 4', '"Finally, one place for everything our family needs. Beautiful, easy, and so helpful."'],
-  ];
-  return (
-    <section className={cn('showcase-panel p-5 sm:p-8 lg:p-10', compact && 'p-6 lg:p-8')}>
-      <div className="grid gap-8 lg:grid-cols-[320px_1fr]">
-        <h2 className="text-3xl font-bold leading-tight sm:text-4xl">
-          Trusted by thousands of <GradientText>happy families</GradientText>
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {testimonials.map(([name, role, quote]) => (
-            <article key={name} className="showcase-card rounded-xl p-6">
-              <Rating />
-              <p className="mt-4 text-sm leading-7 text-white/85">{quote}</p>
-              <p className="mt-5 text-sm font-bold">— {name}</p>
-              <p className="text-xs text-white/55">{role}</p>
-=======
-  // Honest, benefit-driven copy — no fabricated quotes, names, ratings, or press
-  // mentions. Real customer testimonials can be wired here when they exist.
   const benefits = [
     ['One calm home base', 'Calendar, chores, meals, school, health, and documents live together — not scattered across a dozen apps and group chats.'],
     ['An assistant that acts', 'Ask in plain language and FamilyOS plans meals, builds grocery lists, and schedules events — then writes them straight to your family data.'],
@@ -515,12 +465,10 @@ export function TestimonialBand({ compact = false }: { compact?: boolean }) {
             <article key={title} className="showcase-card rounded-xl p-6">
               <h3 className="text-base font-bold">{title}</h3>
               <p className="mt-3 text-sm leading-6 text-white/88">{body}</p>
->>>>>>> 65e79433155fd892cc6bfc26dcfb1c35f8b2332f
             </article>
           ))}
         </div>
       </div>
-<<<<<<< HEAD
     </section>
   );
 }
@@ -558,25 +506,15 @@ export function DeviceShowcase() {
         ))}
       </div>
 
-      {/* Media logos */}
       <div className="mt-8 rounded-2xl border border-white/5 bg-white/[0.025] px-5 py-7">
-        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-5 text-lg font-black text-white/60 sm:gap-x-12 sm:text-xl">
-          {['Forbes', 'TechCrunch', 'Good Morning America', 'Parents', 'yahoo!', 'USA TODAY'].map((logo) => (
-            <span key={logo} className="transition hover:text-white/80">{logo}</span>
-          ))}
-        </div>
-=======
-      <div className="mt-10 border-t border-white/8 pt-8 text-center">
-        <p className="text-sm text-white/70">
+        <p className="text-center text-sm text-white/70">
           Row-level security on every table · Private document storage · You stay in control of your data
         </p>
->>>>>>> 65e79433155fd892cc6bfc26dcfb1c35f8b2332f
       </div>
     </section>
   );
 }
 
-<<<<<<< HEAD
 type DeviceName = 'iPhone' | 'Android' | 'iPad' | 'Web App' | 'Apple Watch' | 'Smart Display';
 
 function MiniAppScreen({ compact = false }: { compact?: boolean }) {
@@ -663,10 +601,7 @@ function DeviceArtwork({ device }: { device: DeviceName }) {
   );
 }
 
-export function TrustStrip() {
-=======
 export function TrustStrip({ familiesNote = 'A growing community of families' }: { familiesNote?: string }) {
->>>>>>> 65e79433155fd892cc6bfc26dcfb1c35f8b2332f
   const items = [
     [Shield, 'Secure & Private', 'Your data is always protected'],
     [Home, 'Works Everywhere', 'Web, iOS, Android, and more'],

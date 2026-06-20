@@ -52,18 +52,12 @@ export default async function HomePage() {
               <PrimaryLink href="/signup">Start Free Trial</PrimaryLink>
               <WatchDemoLink href="/how-it-works">Watch Demo</WatchDemoLink>
             </div>
-<<<<<<< HEAD
-
             <div className="mt-8 flex justify-center lg:justify-start">
               <PlatformBadges />
             </div>
 
             <div className="mt-8 flex justify-center lg:justify-start">
-              <SocialProofLine />
-=======
-            <div className="mt-10">
               <SocialProofLine text={familiesHeadline(families)} />
->>>>>>> 65e79433155fd892cc6bfc26dcfb1c35f8b2332f
             </div>
           </div>
 
