@@ -23,7 +23,7 @@ import { AssistantConversation } from '@/components/marketing/homepage-interacti
 import { cn } from '@/lib/utils/cn';
 
 export function PageWrap({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('soft-grid-bg min-h-dvh overflow-x-clip text-white', className)}>{children}</div>;
+  return <div className={cn('soft-grid-bg min-h-dvh overflow-x-clip text-canvas', className)}>{children}</div>;
 }
 
 export function Container({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -169,7 +169,7 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
   ];
 
   return (
-    <div className={cn('relative mx-auto isolate', className)}>
+    <div className={cn('dark relative mx-auto isolate', className)}>
       <div className="pointer-events-none absolute -inset-12 -z-20 rounded-full bg-violet-600/20 blur-3xl" />
       <div className="pointer-events-none absolute -right-28 top-[22%] -z-10 h-72 w-72 rounded-full border-[3px] border-violet-500/75 shadow-[0_0_55px_rgba(124,77,255,0.72),inset_0_0_55px_rgba(124,77,255,0.28)] sm:-right-40 sm:h-96 sm:w-96" />
 
@@ -271,7 +271,7 @@ export function ProductMockup() {
   const meals = ['Honey Garlic Chicken', 'Taco Tuesday', 'Salmon & Veggies'];
 
   return (
-    <div className="relative mx-auto w-full max-w-[760px] pt-8 lg:pt-0">
+    <div className="dark relative mx-auto w-full max-w-[760px] pt-8 lg:pt-0">
       <div className="showcase-card relative ml-auto w-[88%] rounded-[2rem] border-neutral-700/80 bg-[#080d14] p-4 shadow-2xl">
         <div className="h-[10px] rounded-t-[1.5rem] border border-white/10 bg-black/50" />
         <div className="mt-3 grid min-h-[460px] grid-cols-[120px_1fr] gap-4 rounded-2xl bg-[#0b121d] p-4">
@@ -353,7 +353,7 @@ export function ProductMockup() {
 export function PhoneMockup({ className }: { className?: string }) {
   const items = ['School Drop-off', 'Math Meeting', 'Soccer Practice', 'Family Dinner'];
   return (
-    <div className={cn('rounded-[2rem] border-[6px] border-neutral-800 bg-black p-2 shadow-2xl', className)}>
+    <div className={cn('dark rounded-[2rem] border-[6px] border-neutral-800 bg-black p-2 shadow-2xl', className)}>
       <div className="rounded-[1.45rem] bg-[#09111d] p-4">
         <div className="mb-5 flex items-center justify-between text-[10px] font-bold">
           <span>9:41</span>
@@ -430,7 +430,7 @@ export function FamilyAiPanel() {
             Try the AI Assistant
           </Link>
         </div>
-        <div className="relative min-h-[420px] overflow-hidden rounded-2xl border border-white/10 bg-[#080e18] sm:min-h-[450px]">
+        <div className="dark relative min-h-[420px] overflow-hidden rounded-2xl border border-white/10 bg-[#080e18] sm:min-h-[450px]">
           <Image
             src="/images/family-ai-lifestyle.png"
             alt="A family enjoying time together with FamilyOS"
@@ -486,7 +486,7 @@ export function DeviceShowcase() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 lg:gap-5">
         {devices.map((device) => (
           <div key={device} className="device-card group flex flex-col items-center gap-3">
-            <DeviceArtwork device={device} />
+            <div className="dark"><DeviceArtwork device={device} /></div>
             <span className="text-sm font-medium text-white/75 transition group-hover:text-white">{device}</span>
           </div>
         ))}
