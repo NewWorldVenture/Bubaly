@@ -33,15 +33,18 @@ describe('plan pricing source of truth', () => {
   });
 
   it('resolves human labels for every real slug and falls back safely', () => {
-    expect(planName('family')).toBe('FamilyOS Family');
-    expect(planName('family_annual')).toBe('FamilyOS Family (Annual)');
-    expect(planName('free')).toBe('Free');
+    expect(planName('basic')).toBe('Family Basic');
+    expect(planName('plus')).toBe('Family+');
+    expect(planName('family')).toBe('Family Basic'); // legacy alias for basic
+    expect(planName('free')).toBe('FamilyOS Free');
     expect(planName(null)).toBe('Free');
     expect(planName('mystery')).toBe('mystery');
   });
 
-  it('only exposes plans whose slugs the webhook can write', () => {
-    expect(planById('family_plus')).toBeUndefined(); // removed legacy tier
-    expect(planById('plus')).toBeUndefined();
+  it('exposes the current tiers and rejects unknown slugs', () => {
+    expect(planById('basic')).toBeDefined();
+    expect(planById('plus')).toBeDefined();
+    expect(planById('family')).toBeDefined(); // legacy alias resolves to basic
+    expect(planById('family_plus')).toBeUndefined(); // never a real tier
   });
 });
