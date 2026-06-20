@@ -7,7 +7,11 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/join', '/offline',
   // Public iCalendar feeds: subscribed to by Apple Calendar / Outlook / Alexa
   // with no login — the unguessable feed token IS the authorization.
-  '/api/sync/feeds'];
+  '/api/sync/feeds',
+  // Provider webhooks (signature-verified) and the signed unsubscribe link must
+  // be reachable without a session.
+  '/api/webhooks',
+  '/api/marketing/unsubscribe'];
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next({ request: req });

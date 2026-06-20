@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createEmailDraft } from '../actions';
+import { SendCampaignButton } from '@/components/admin/send-campaign-button';
 
 export const metadata: Metadata = { title: 'Marketing · Email', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -45,12 +46,14 @@ export default async function EmailPage() {
                   {e.preview_text && <p className="mt-0.5 truncate text-sm text-muted">{e.preview_text}</p>}
                   <p className="mt-1 text-xs text-muted">Created {fmtDate(e.created_at)}</p>
                 </div>
-                {e.status === 'sent' && (
+                {e.status === 'sent' ? (
                   <div className="shrink-0 text-right text-xs text-muted">
                     <p className="font-semibold text-fg">{e.recipients}</p> sent
                     <p className="mt-1">{e.opens} opens · {e.clicks} clicks</p>
                   </div>
-                )}
+                ) : (e.status === 'draft' || e.status === 'failed') && providerReady ? (
+                  <SendCampaignButton id={e.id} />
+                ) : null}
               </Card>
             ))
           )}
