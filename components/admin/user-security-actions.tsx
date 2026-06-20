@@ -41,7 +41,7 @@ export function UserSecurityActions({ userId, email, banned }: { userId: string;
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-xl glass-card p-1 shadow-glass animate-fade-in">
+          <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             <button onClick={sendReset} disabled={busy} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-elevated disabled:opacity-50">
               <KeyRound className="h-4 w-4" /> Send password reset
             </button>

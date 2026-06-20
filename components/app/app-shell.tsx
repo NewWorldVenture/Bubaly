@@ -52,7 +52,7 @@ function FamilySwitcher() {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl glass-card p-1 shadow-glass animate-fade-in">
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             {families.map((f) => (
               <button
                 key={f.familyId}
@@ -102,7 +102,7 @@ function UserMenu() {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-2 w-60 rounded-xl glass-card p-1 shadow-glass animate-fade-in">
+          <div className="absolute right-0 top-full z-20 mt-2 w-60 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             <div className="px-3 py-2">
               <p className="truncate text-sm font-medium">{name}</p>
               <p className="truncate text-xs text-muted">{userEmail}</p>
