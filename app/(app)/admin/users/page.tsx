@@ -12,6 +12,7 @@ import { UsersToolbar } from '@/components/admin/users-toolbar';
 import { InviteRowActions } from '@/components/admin/invite-row-actions';
 import { MemberRowActions } from '@/components/admin/member-row-actions';
 import { RoleDonut } from '@/components/admin/role-donut';
+import { AlertTriangle } from 'lucide-react';
 import type { Tables } from '@/lib/database.types';
 
 export const metadata: Metadata = { title: 'Users & Families', robots: { index: false } };
@@ -32,24 +33,43 @@ type Params = {
   }>;
 };
 
+// A "person" in the admin console is a family member — the real population of
+// the product. Members may be account-less (no login: `user_id` is null), so we
+// build the list from `family_members` and enrich with the linked profile when
+// one exists. Keying off `profiles` alone would hide everyone without a login.
 type EnrichedUser = {
-  profile: Tables<'profiles'>;
-  primaryFamily: Tables<'families'> | null;
-  role: MemberRole | null;
+  member: Tables<'family_members'>;
+  profile: Tables<'profiles'> | null;
+  family: Tables<'families'> | null;
+  role: MemberRole;
   plan: string | null;
-  status: 'active' | 'inactive' | 'no_family';
-  membershipCount: number;
+  hasAccount: boolean;
+  name: string;
+  email: string | null;
+  joinedAt: string;
 };
 
 export default async function AdminUsersPage({ searchParams }: Params) {
   const sp = await searchParams;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'all';
+
+  // Surface the most common production-config failure up front: without the
+  // service-role key, every query below 401s and the page would otherwise show
+  // a misleading wall of zeros instead of telling the admin what's wrong.
+  const loadErrors: string[] = [];
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    loadErrors.push('SUPABASE_SERVICE_ROLE_KEY is not set on this deployment — the admin console can’t read from Supabase. Add it in your Vercel project’s Environment Variables and redeploy.');
+  }
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    loadErrors.push('NEXT_PUBLIC_SUPABASE_URL is not set on this deployment.');
+  }
+
   const supabase = createServiceClient();
 
   // Admin-scale dataset: load everything once and enrich/filter/paginate in memory.
   // At real scale this would move to a dedicated aggregating view or RPC — flagged
   // here rather than hidden, since this is the one place in the app doing that.
-  const [{ data: profiles }, { data: members }, { data: families }, { data: subscriptions }, { data: invites }, { data: roles }, { data: permissions }] =
+  const [profilesRes, membersRes, familiesRes, subscriptionsRes, invitesRes, rolesRes, permissionsRes] =
     await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('family_members').select('*').eq('is_active', true).order('created_at'),
@@ -60,30 +80,46 @@ export default async function AdminUsersPage({ searchParams }: Params) {
       supabase.from('permissions').select('*'),
     ]);
 
+  // Any query that errored (bad/missing key, unapplied migration, RLS) is reported
+  // explicitly rather than silently collapsing to an empty result set.
+  for (const [label, res] of [
+    ['profiles', profilesRes], ['family_members', membersRes], ['families', familiesRes],
+    ['subscriptions', subscriptionsRes], ['invites', invitesRes], ['roles', rolesRes], ['permissions', permissionsRes],
+  ] as const) {
+    if (res.error) loadErrors.push(`Could not load “${label}”: ${res.error.message}`);
+  }
+
+  const profiles = profilesRes.data;
+  const members = membersRes.data;
+  const families = familiesRes.data;
+  const subscriptions = subscriptionsRes.data;
+  const invites = invitesRes.data;
+  const roles = rolesRes.data;
+  const permissions = permissionsRes.data;
+
   const familyById = new Map((families ?? []).map((f) => [f.id, f]));
   const subByFamily = new Map((subscriptions ?? []).map((s) => [s.family_id, s]));
+  const profileByUserId = new Map((profiles ?? []).map((p) => [p.id, p]));
   const memberCountByFamily = new Map<string, number>();
   for (const m of members ?? []) memberCountByFamily.set(m.family_id, (memberCountByFamily.get(m.family_id) ?? 0) + 1);
 
-  const membershipsByUser = new Map<string, Tables<'family_members'>[]>();
-  for (const m of members ?? []) {
-    if (!m.user_id) continue;
-    if (!membershipsByUser.has(m.user_id)) membershipsByUser.set(m.user_id, []);
-    membershipsByUser.get(m.user_id)!.push(m);
-  }
-
-  const enriched: EnrichedUser[] = (profiles ?? []).map((profile) => {
-    const memberships = membershipsByUser.get(profile.id) ?? [];
-    const primary = memberships[0] ?? null;
-    const primaryFamily = primary ? familyById.get(primary.family_id) ?? null : null;
-    const plan = primary ? subByFamily.get(primary.family_id)?.plan ?? 'free' : null;
+  // One row per family member (the real people). Members linked to a login
+  // account are enriched with the profile's name/email/avatar; account-less
+  // members fall back to their member record.
+  const enriched: EnrichedUser[] = (members ?? []).map((member) => {
+    const profile = member.user_id ? profileByUserId.get(member.user_id) ?? null : null;
+    const family = familyById.get(member.family_id) ?? null;
+    const sub = subByFamily.get(member.family_id);
     return {
+      member,
       profile,
-      primaryFamily,
-      role: (primary?.role as MemberRole) ?? null,
-      plan,
-      status: memberships.length === 0 ? 'no_family' : 'active',
-      membershipCount: memberships.length,
+      family,
+      role: member.role,
+      plan: sub?.plan ?? 'free',
+      hasAccount: !!profile,
+      name: profile?.full_name || member.display_name,
+      email: profile?.email ?? null,
+      joinedAt: member.created_at,
     };
   });
 
@@ -91,9 +127,9 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const totalUsers = enriched.length;
-  const activeUsers = enriched.filter((u) => u.status === 'active').length;
-  const newThisMonth = enriched.filter((u) => new Date(u.profile.created_at) >= monthStart).length;
-  const noFamilyUsers = enriched.filter((u) => u.status === 'no_family').length;
+  const activeUsers = enriched.filter((u) => u.hasAccount).length;
+  const newThisMonth = enriched.filter((u) => new Date(u.joinedAt) >= monthStart).length;
+  const noAccountUsers = enriched.filter((u) => !u.hasAccount).length;
   const adminCount = enriched.filter((u) => u.role === 'parent').length;
 
   const roleCounts = new Map<MemberRole, number>();
@@ -108,11 +144,12 @@ export default async function AdminUsersPage({ searchParams }: Params) {
 
   const filtered = enriched.filter((u) => {
     if (q) {
-      const hay = `${u.profile.full_name ?? ''} ${u.profile.email ?? ''} ${u.primaryFamily?.name ?? ''}`.toLowerCase();
+      const hay = `${u.name} ${u.email ?? ''} ${u.member.display_name} ${u.family?.name ?? ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     if (roleFilter && u.role !== roleFilter) return false;
-    if (statusFilter && u.status !== statusFilter) return false;
+    if (statusFilter === 'active' && !u.hasAccount) return false;
+    if (statusFilter === 'no_account' && u.hasAccount) return false;
     if (planFilter && u.plan !== planFilter) return false;
     return true;
   });
@@ -132,10 +169,24 @@ export default async function AdminUsersPage({ searchParams }: Params) {
           <p className="mt-1 text-sm text-muted">Manage all users, families, and their access levels.</p>
         </div>
         <UsersToolbar families={(families ?? []).map((f) => ({ id: f.id, name: f.name }))} exportRows={pageRows.map((u) => ({
-          name: u.profile.full_name ?? '', email: u.profile.email ?? '', family: u.primaryFamily?.name ?? '',
-          role: u.role ?? '', plan: u.plan ?? '', status: u.status, joined: u.profile.created_at,
+          name: u.name, email: u.email ?? '', family: u.family?.name ?? '',
+          role: u.role ?? '', plan: u.plan ?? '', status: u.hasAccount ? 'active' : 'no_account', joined: u.joinedAt,
         }))} />
       </div>
+
+      {loadErrors.length > 0 && (
+        <div className="rounded-xl border border-danger/30 bg-danger/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
+            <div>
+              <p className="text-sm font-semibold text-danger">Some data couldn’t be loaded from Supabase</p>
+              <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-danger/90">
+                {loadErrors.map((err, i) => <li key={i}>{err}</li>)}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="tab-bar border-b border-border pb-px">
         {TABS.map((t) => (
@@ -149,11 +200,11 @@ export default async function AdminUsersPage({ searchParams }: Params) {
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-5">
             <div className="grid-stats">
-              <StatCard icon={UsersRound} label="Total Users" value={totalUsers} tone="bg-brand/10 text-brand" />
-              <StatCard icon={UserCheck} label="Active Users" value={activeUsers} tone="bg-success/10 text-success" />
+              <StatCard icon={UsersRound} label="Total Members" value={totalUsers} tone="bg-brand/10 text-brand" />
+              <StatCard icon={UserCheck} label="With Account" value={activeUsers} tone="bg-success/10 text-success" />
               <StatCard icon={UserPlus} label="New This Month" value={newThisMonth} tone="bg-accent/10 text-accent" />
-              <StatCard icon={UserX} label="No Family" value={noFamilyUsers} tone="bg-warning/10 text-warning" />
-              <StatCard icon={ShieldCheck} label="Admins" value={adminCount} tone="bg-danger/10 text-danger" />
+              <StatCard icon={UserX} label="No Account" value={noAccountUsers} tone="bg-warning/10 text-warning" />
+              <StatCard icon={ShieldCheck} label="Parents" value={adminCount} tone="bg-danger/10 text-danger" />
             </div>
 
             <Card>
@@ -165,8 +216,8 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                 ]} />
                 <FilterSelect name="status" defaultValue={statusFilter} options={[
                   { value: '', label: 'All Statuses' },
-                  { value: 'active', label: 'Active' },
-                  { value: 'no_family', label: 'No family' },
+                  { value: 'active', label: 'Has account' },
+                  { value: 'no_account', label: 'No account' },
                 ]} />
                 <FilterSelect name="plan" defaultValue={planFilter} options={[
                   { value: '', label: 'All Plans' },
@@ -175,7 +226,15 @@ export default async function AdminUsersPage({ searchParams }: Params) {
               </FilterForm>
 
               {pageRows.length === 0 ? (
-                <EmptyState icon={UsersRound} title="No users match these filters" />
+                totalUsers === 0 && loadErrors.length === 0 ? (
+                  <EmptyState
+                    icon={UsersRound}
+                    title="No members yet"
+                    description="When families add members — or you add a user with “Add User” above — they’ll appear here. The console is reading live from Supabase."
+                  />
+                ) : (
+                  <EmptyState icon={UsersRound} title="No members match these filters" />
+                )
               ) : (
                 <div className="table-responsive mt-4">
                   <table className="w-full text-sm">
@@ -192,25 +251,20 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                     </thead>
                     <tbody className="divide-y divide-border/60">
                       {pageRows.map((u) => (
-                        <tr key={u.profile.id}>
+                        <tr key={u.member.id}>
                           <td className="px-3 py-2.5">
-                            <p className="font-medium">{u.profile.full_name || '—'}</p>
-                            <p className="text-xs text-muted">{u.profile.email}</p>
+                            <p className="font-medium">{u.name || '—'}</p>
+                            <p className="text-xs text-muted">{u.email ?? <span className="italic">No login account</span>}</p>
                           </td>
-                          <td className="px-3 py-2.5 text-muted">
-                            {u.primaryFamily ? u.primaryFamily.name : '—'}
-                            {u.membershipCount > 1 && <span className="ml-1 text-xs">+{u.membershipCount - 1} more</span>}
-                          </td>
+                          <td className="px-3 py-2.5 text-muted">{u.family ? u.family.name : '—'}</td>
                           <td className="px-3 py-2.5">{u.role ? <Badge tone="brand">{ROLE_LABELS[u.role]}</Badge> : '—'}</td>
                           <td className="px-3 py-2.5 text-muted">{u.plan ? PLANS.find((p) => p.id === u.plan)?.name ?? u.plan : '—'}</td>
                           <td className="px-3 py-2.5">
-                            <Badge tone={u.status === 'active' ? 'success' : 'neutral'}>{u.status === 'active' ? 'Active' : 'No family'}</Badge>
+                            <Badge tone={u.hasAccount ? 'success' : 'neutral'}>{u.hasAccount ? 'Active' : 'No account'}</Badge>
                           </td>
-                          <td className="px-3 py-2.5 text-muted">{fmtDate(u.profile.created_at, 'MMM d, yyyy')}</td>
+                          <td className="px-3 py-2.5 text-muted">{fmtDate(u.joinedAt, 'MMM d, yyyy')}</td>
                           <td className="px-3 py-2.5">
-                            {membershipsByUser.get(u.profile.id)?.[0] && (
-                              <MemberRowActions memberId={membershipsByUser.get(u.profile.id)![0].id} />
-                            )}
+                            <MemberRowActions memberId={u.member.id} />
                           </td>
                         </tr>
                       ))}
@@ -220,7 +274,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
               )}
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
-                <span>Showing {pageRows.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to {(pageSafe - 1) * PAGE_SIZE + pageRows.length} of {filtered.length} users</span>
+                <span>Showing {pageRows.length === 0 ? 0 : (pageSafe - 1) * PAGE_SIZE + 1} to {(pageSafe - 1) * PAGE_SIZE + pageRows.length} of {filtered.length} members</span>
                 <div className="flex gap-1">
                   {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 7).map((p) => (
                     <a key={p} href={`/admin/users?${new URLSearchParams({ ...hiddenDefined, page: String(p) }).toString()}`}
