@@ -1,10 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { ChevronRight, Download, File, FileText, Filter, FolderLock, MoreHorizontal, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { Download, File, FileText, FolderLock, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -17,8 +19,6 @@ import type { Tables } from '@/lib/database.types';
 
 type Document = Tables<'documents'>;
 
-const TABS = ['Overview', 'My Documents', 'Shared with Me', 'Trash'] as const;
-type Tab = (typeof TABS)[number];
 const CATEGORIES = ['id', 'medical', 'financial', 'insurance', 'school', 'legal', 'vehicle', 'property', 'other'] as const;
 const CAT_META: Record<string, { label: string; icon: string; color: string; bg: string }> = {
   id: { label: 'ID Documents', icon: '🪪', color: 'text-brand', bg: 'bg-violet-500/15' },
@@ -36,7 +36,8 @@ function fmtSize(bytes: number | null): string {
   if (!bytes) return '—';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1048576).toFixed(1)} MB`;
+  if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
+  return `${(bytes / 1073741824).toFixed(1)} GB`;
 }
 
 function fmtDate(iso: string): string {
@@ -54,10 +55,11 @@ function mimeIcon(mime: string | null): string {
 export function DocumentsModule() {
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
-  const [tab, setTab] = useState<Tab>('Overview');
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ title: '', category: 'other', member_id: '' });
+  const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data, loading, error, refresh } = useRealtimeQuery<Document>({
     table: 'documents', familyId, deps: [familyId],
@@ -81,36 +83,66 @@ export function DocumentsModule() {
   const totalBytes = useMemo(() => data.reduce((s, d) => s + (d.size_bytes ?? 0), 0), [data]);
 
   const STORAGE_LIMIT = 5 * 1024 * 1024 * 1024;
-  const usedPct = totalBytes > 0 ? Math.min((totalBytes / STORAGE_LIMIT) * 100, 100) : 24;
+  const usedPct = totalBytes > 0 ? Math.min((totalBytes / STORAGE_LIMIT) * 100, 100) : 0;
   const circ = 251.2;
+  const sharedCount = useMemo(() => data.filter((d) => !d.member_id).length, [data]);
+  const storageUsedLabel = totalBytes > 0 ? fmtSize(totalBytes) : '0 MB';
+  const storageFreeLabel = fmtSize(STORAGE_LIMIT - totalBytes);
 
-  // Per-category byte breakdown for sidebar (static example if no real data)
+  // Real per-category byte breakdown for the sidebar (top 5 by size).
   const catBytesDisplay: [string, number][] = useMemo(() => {
-    if (data.length > 0) {
-      const map: Record<string, number> = {};
-      for (const d of data) { const c = d.category ?? 'other'; map[c] = (map[c] ?? 0) + (d.size_bytes ?? 0); }
-      return Object.entries(map).slice(0, 5);
-    }
-    return [['id', 380 * 1024 * 1024], ['medical', 240 * 1024 * 1024], ['financial', 120 * 1024 * 1024], ['insurance', 80 * 1024 * 1024], ['school', 60 * 1024 * 1024]];
+    const map: Record<string, number> = {};
+    for (const d of data) { const c = d.category ?? 'other'; map[c] = (map[c] ?? 0) + (d.size_bytes ?? 0); }
+    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
   }, [data]);
 
   const DONUT_COLORS = ['#7c5dff', '#60a5fa', '#34d399', '#fbbf24', '#f87171'];
 
-  async function remove(id: string) {
+  async function remove(doc: Document) {
     const sb = createClient();
-    const { error: err } = await sb.from('documents').delete().eq('id', id);
+    // Remove the underlying storage object first so we never orphan files.
+    if (doc.storage_path) await removeFamilyDocument(sb, doc.storage_path);
+    const { error: err } = await sb.from('documents').delete().eq('id', doc.id);
     if (err) { toastError(err.message); return; }
     success('Document removed'); refresh();
   }
 
-  async function save() {
-    if (!form.title) return; setSaving(true);
+  async function download(doc: Document) {
+    if (!doc.storage_path) { toastError('No file attached to this document'); return; }
     const sb = createClient();
-    // storage_path is required — use placeholder path (real implementation would upload file first)
-    const { error: err } = await sb.from('documents').insert({ family_id: familyId, title: form.title, category: form.category, member_id: form.member_id || null, created_by: userId, storage_path: `families/${familyId}/docs/${Date.now()}-${form.title}` });
+    const { url, error: err } = await getDocumentSignedUrl(sb, doc.storage_path);
+    if (err || !url) { toastError(err ?? 'Could not open document'); return; }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  function pickFile(f: File | null) {
+    setFile(f);
+    if (f && !form.title) {
+      setForm((prev) => ({ ...prev, title: f.name.replace(/\.[^.]+$/, '') }));
+    }
+  }
+
+  async function save() {
+    if (!form.title || !file) { toastError('Choose a file and name it'); return; }
+    setSaving(true);
+    const sb = createClient();
+    // 1) Upload the real file into the private family folder of the documents bucket.
+    const { path, error: upErr } = await uploadFamilyDocument(sb, { familyId, folder: form.category, file });
+    if (upErr || !path) { setSaving(false); toastError(upErr ?? 'Upload failed'); return; }
+    // 2) Record it with the real storage path, size, and mime type.
+    const { error: err } = await sb.from('documents').insert({
+      family_id: familyId, title: form.title, category: form.category,
+      member_id: form.member_id || null, created_by: userId,
+      storage_path: path, size_bytes: file.size, mime_type: file.type || null,
+    });
     setSaving(false);
-    if (err) { toastError('Failed to save'); return; }
-    success('Document added!'); setOpen(false); setForm({ title: '', category: 'other', member_id: '' }); refresh();
+    if (err) {
+      // Roll back the uploaded object so we don't leave an orphan on a failed insert.
+      await removeFamilyDocument(sb, path);
+      toastError('Failed to save document'); return;
+    }
+    success('Document uploaded!');
+    setOpen(false); setForm({ title: '', category: 'other', member_id: '' }); setFile(null); refresh();
   }
 
   if (loading) return <LoadingBlock />;
@@ -126,19 +158,12 @@ export function DocumentsModule() {
           description="Store, organize, and access important family documents."
           action={<Button onClick={() => setOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Upload Document</Button>}
         />
-        <div className="flex items-center justify-between border-b border-border">
-          <div className="tab-bar">{TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>)}</div>
-          <div className="flex gap-2 pb-1">
-            <button className="btn-inline"><Filter className="h-3 w-3" /> Filter</button>
-            <button className="btn-inline"><MoreHorizontal className="h-3 w-3" /> More</button>
-          </div>
-        </div>
         <div className="grid-stats gap-3">
           {[
-            { icon: FileText, label: 'Total Documents', value: Math.max(totalDocs, 24), sub: 'Across all folders', bg: 'bg-brand/15 text-brand' },
-            { icon: FolderLock, label: 'Folders', value: Math.max(folders, CATEGORIES.length), sub: 'Document categories', bg: 'bg-blue-600/20 text-blue-300' },
-            { icon: FileText, label: 'Shared', value: Math.max(Math.floor(totalDocs * 0.3), 8), sub: 'With family members', bg: 'bg-emerald-600/20 text-emerald-300' },
-            { icon: Upload, label: 'Storage Used', value: totalBytes > 0 ? fmtSize(totalBytes) : '1.2 GB', sub: 'of 5 GB', bg: 'bg-orange-600/20 text-orange-300' },
+            { icon: FileText, label: 'Total Documents', value: totalDocs, sub: 'Across all folders', bg: 'bg-brand/15 text-brand' },
+            { icon: FolderLock, label: 'Folders', value: folders, sub: 'Categories in use', bg: 'bg-blue-600/20 text-blue-300' },
+            { icon: FileText, label: 'Shared', value: sharedCount, sub: 'Visible to all members', bg: 'bg-emerald-600/20 text-emerald-300' },
+            { icon: Upload, label: 'Storage Used', value: storageUsedLabel, sub: 'of 5 GB', bg: 'bg-orange-600/20 text-orange-300' },
           ].map(({ icon: Icon, label, value, sub, bg }) => (
             <div key={label} className="rounded-2xl border border-border bg-surface/40 p-4">
               <div className={cn('mb-3 grid h-10 w-10 place-items-center rounded-xl', bg)}><Icon className="h-5 w-5" /></div>
@@ -147,7 +172,7 @@ export function DocumentsModule() {
           ))}
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">My Folders</h2><button className="text-xs font-semibold text-brand">View all &rarr;</button></div>
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">My Folders</h2></div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {CATEGORIES.map((cat) => {
               const meta = CAT_META[cat] ?? CAT_META.other;
@@ -165,7 +190,7 @@ export function DocumentsModule() {
         <div className="rounded-2xl border border-border bg-surface/40">
           <div className="flex items-center justify-between p-5">
             <h2 className="font-semibold">Recent Documents</h2>
-            <button className="flex items-center gap-1 text-xs font-semibold text-brand">View all <ChevronRight className="h-3.5 w-3.5" /></button>
+            {totalDocs > displayDocs.length && <span className="text-xs text-muted">Showing {displayDocs.length} of {totalDocs}</span>}
           </div>
           {displayDocs.length > 0 ? (
             <div className="table-responsive">
@@ -198,8 +223,8 @@ export function DocumentsModule() {
                         <td className="px-4 py-3.5 text-xs text-muted">{fmtDate(doc.created_at)}</td>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-1">
-                            <button className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-surface/40 hover:text-fg"><Download className="h-3.5 w-3.5" /></button>
-                            <button onClick={() => remove(doc.id)} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-red-500/10 hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => download(doc)} title="Download" className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-surface/40 hover:text-fg"><Download className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => remove(doc)} title="Delete" className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-red-500/10 hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
                           </div>
                         </td>
                       </tr>
@@ -233,8 +258,8 @@ export function DocumentsModule() {
               </div>
             </div>
             <div className="space-y-2 flex-1">
-              <div><p className="text-sm font-bold">{totalBytes > 0 ? fmtSize(totalBytes) : '1.2 GB'}</p><p className="text-xs text-muted">Used</p></div>
-              <div><p className="text-sm font-bold">{totalBytes > 0 ? fmtSize(STORAGE_LIMIT - totalBytes) : '3.8 GB'}</p><p className="text-xs text-muted">Free</p></div>
+              <div><p className="text-sm font-bold">{storageUsedLabel}</p><p className="text-xs text-muted">Used</p></div>
+              <div><p className="text-sm font-bold">{storageFreeLabel}</p><p className="text-xs text-muted">Free</p></div>
             </div>
           </div>
           <div className="mt-4 space-y-2">
@@ -253,16 +278,12 @@ export function DocumentsModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <h2 className="mb-4 font-semibold">Quick Actions</h2>
           <div className="space-y-2">
-            {[
-              { icon: Upload, label: 'Upload Document', act: () => setOpen(true) },
-              { icon: FolderLock, label: 'Create New Folder', act: () => {} },
-              { icon: Download, label: 'Export All Documents', act: () => {} },
-              { icon: Sparkles, label: 'AI Document Summary', act: () => {} },
-            ].map(({ icon: Icon, label, act }) => (
-              <button key={label} onClick={act} className="flex w-full items-center gap-3 rounded-xl border border-border px-4 py-2.5 text-sm hover:border-border">
-                <Icon className="h-4 w-4 text-muted" />{label}
-              </button>
-            ))}
+            <button onClick={() => setOpen(true)} className="flex w-full items-center gap-3 rounded-xl border border-border px-4 py-2.5 text-sm hover:border-border">
+              <Upload className="h-4 w-4 text-muted" />Upload Document
+            </button>
+            <Link href="/dashboard/assistant" className="flex w-full items-center gap-3 rounded-xl border border-border px-4 py-2.5 text-sm hover:border-border">
+              <Sparkles className="h-4 w-4 text-muted" />Ask the AI assistant
+            </Link>
           </div>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
@@ -285,21 +306,41 @@ export function DocumentsModule() {
           <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand" /></div>
           <h3 className="font-bold">AI Document Assistant</h3>
           <p className="mt-2 text-xs leading-5 text-muted">Summarize, extract key info, and get insights from any document.</p>
-          <Button onClick={() => {}} className="btn-cta mt-4 w-full">Ask AI</Button>
+          <Link href="/dashboard/assistant" className="btn-cta mt-4 inline-flex w-full items-center justify-center">Ask AI</Link>
         </div>
       </aside>
-      <Modal open={open} title="Upload Document" onClose={() => setOpen(false)}>
+      <Modal open={open} title="Upload Document" onClose={() => { setOpen(false); setFile(null); }}>
         <div className="space-y-4">
-          <div className="rounded-xl border-2 border-dashed border-border p-8 text-center">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+          />
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); pickFile(e.dataTransfer.files?.[0] ?? null); }}
+            className="cursor-pointer rounded-xl border-2 border-dashed border-border p-8 text-center transition hover:border-brand/50"
+          >
             <Upload className="mx-auto mb-3 h-8 w-8 text-muted/60" />
-            <p className="text-sm font-semibold text-muted">Drag & drop file here</p>
-            <p className="mt-1 text-xs text-muted/60">PDF, JPG, PNG, DOCX up to 50MB</p>
-            <button className="mt-4 rounded-lg border border-border px-4 py-2 text-xs font-semibold">Browse Files</button>
+            {file ? (
+              <>
+                <p className="text-sm font-semibold">{file.name}</p>
+                <p className="mt-1 text-xs text-muted/60">{fmtSize(file.size)} · click to change</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-muted">Drag &amp; drop a file here</p>
+                <p className="mt-1 text-xs text-muted/60">PDF, JPG, PNG, DOCX up to 25 MB</p>
+                <span className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-xs font-semibold">Browse Files</span>
+              </>
+            )}
           </div>
           <Field label="Document Name">{(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Passport - Emma" />}</Field>
           <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>{CATEGORIES.map((c) => <option key={c} value={c}>{CAT_META[c]?.label ?? c}</option>)}</Select>}</Field>
           <Field label="Member">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Family (shared)</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Button onClick={save} disabled={saving || !form.title} loading={saving} className="w-full">{saving ? 'Saving...' : 'Add Document'}</Button>
+          <Button onClick={save} disabled={saving || !form.title || !file} loading={saving} className="w-full">{saving ? 'Uploading…' : 'Upload Document'}</Button>
         </div>
       </Modal>
     </div>
