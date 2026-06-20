@@ -133,7 +133,7 @@ export function AdminShell({
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl glass-card p-1 shadow-glass animate-fade-in">
+                <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
                   <Link href="/dashboard/briefing" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
                     <LayoutDashboard className="h-4 w-4" /> Go to Parent Dashboard
                   </Link>

@@ -27,7 +27,7 @@ export function TicketRowActions({ ticketId, status }: { ticketId: string; statu
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl glass-card p-1 shadow-glass animate-fade-in">
+          <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             {status !== 'resolved' && status !== 'closed' && (
               <button
                 onClick={() => act(resolveTicketAction)}

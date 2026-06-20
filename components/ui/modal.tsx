@@ -46,7 +46,7 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          'relative z-10 w-full max-w-lg glass-card max-h-[85dvh] sm:max-h-[92dvh] overflow-y-auto rounded-b-none rounded-t-3xl p-4 sm:p-6 animate-slide-up sm:animate-fade-in sm:rounded-3xl',
+          'relative z-10 w-full max-w-lg popover-surface max-h-[85dvh] sm:max-h-[92dvh] overflow-y-auto rounded-b-none rounded-t-3xl p-4 sm:p-6 animate-slide-up sm:animate-fade-in sm:rounded-3xl',
           className,
         )}
       >
