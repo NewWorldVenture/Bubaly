@@ -355,7 +355,7 @@ export function RecipesModule() {
             {/* Notes */}
             {viewing.notes && (
               <div className="mb-5 rounded-xl bg-warning/10 p-4 text-sm">
-                <p className="font-semibold text-warning mb-1">Chef's Notes</p>
+                <p className="font-semibold text-warning mb-1">Chef&apos;s Notes</p>
                 <p className="text-muted">{viewing.notes}</p>
               </div>
             )}
@@ -439,10 +439,9 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
     if (!payload.name) return toastError('Recipe name is required');
     setLoading(true);
     const supabase = createClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = recipe
-      ? await supabase.from('family_recipes').update({ ...payload } as any).eq('id', recipe.id)
-      : await supabase.from('family_recipes').insert({ ...payload, family_id: familyId, created_by: userId } as any);
+      ? await supabase.from('family_recipes').update(payload as never).eq('id', recipe.id)
+      : await supabase.from('family_recipes').insert({ ...payload, family_id: familyId, created_by: userId } as never);
     setLoading(false);
     if (error) { toastError(error.message); return; }
     success(recipe ? 'Recipe updated' : 'Recipe added');
