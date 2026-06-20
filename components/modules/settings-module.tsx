@@ -13,6 +13,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { ROLE_LABELS, INVITABLE_ROLES, isAdmin } from '@/lib/constants/roles';
+import { CalendarSyncPanel } from '@/components/dashboard/calendar-sync-panel';
 import type { Tables } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/database.types';
 
@@ -131,6 +132,11 @@ export function SettingsModule() {
             </li>
           ))}
         </ul>
+      </Card>
+
+      {/* Calendar Sync */}
+      <Card>
+        <CalendarSyncPanel />
       </Card>
 
       {inviteOpen && (
