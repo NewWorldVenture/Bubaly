@@ -33,6 +33,7 @@ import { Input, Field, Select } from '@/components/ui/input';
 import { PageHeader } from '@/components/app/page-header';
 import { fmtDate } from '@/lib/utils/format';
 import { isAdmin } from '@/lib/constants/roles';
+import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
 
@@ -54,17 +55,85 @@ const STATUS_CONFIG: Record<SubscriptionStatus, { label: string; tone: 'success'
   unpaid: { label: 'Unpaid', tone: 'danger', icon: <AlertCircle className="h-4 w-4" /> },
 };
 const PLAN_LABELS: Record<string, { name: string; description: string; price: string }> = {
-  free: { name: 'Free', description: 'Basic family coordination for up to 2 members.', price: '$0/mo' },
-  family: { name: 'FamilyOS Family', description: 'Everything you need — unlimited members, AI assistant, and all modules.', price: '$9.99/mo' },
-  family_annual: { name: 'FamilyOS Family (Annual)', description: 'Save 20% with an annual subscription.', price: '$95.99/yr' },
+  free: { name: 'FamilyOS Free', description: 'The default family organizer for up to 5 members.', price: '$0/mo' },
+  basic: { name: 'Family Basic', description: 'Everything a busy household needs — unlimited members, chores, meals, and unlimited AI.', price: '$9.99/mo' },
+  basic_annual: { name: 'Family Basic (Annual)', description: 'The Family Basic plan billed yearly.', price: '$99.99/yr' },
+  plus: { name: 'Family+', description: 'The AI Family Chief of Staff — concierge, briefings, and command center.', price: '$24.99/mo' },
+  plus_annual: { name: 'Family+ (Annual)', description: 'The Family+ plan billed yearly.', price: '$249.99/yr' },
+  // Legacy slugs map to Basic.
+  family: { name: 'Family Basic', description: 'Everything a busy household needs.', price: '$9.99/mo' },
+  family_annual: { name: 'Family Basic (Annual)', description: 'Family Basic billed yearly.', price: '$99.99/yr' },
 };
-async function startCheckout(plan: 'family_monthly' | 'family_annual') {
+
+type CheckoutPlan = 'basic_monthly' | 'basic_annual' | 'plus_monthly' | 'plus_annual';
+async function startCheckout(plan: CheckoutPlan) {
   const res = await fetch('/api/billing/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }) });
   const json = await res.json(); if (json.url) window.location.href = json.url;
 }
 async function openPortal() {
   const res = await fetch('/api/billing/portal', { method: 'POST' });
   const json = await res.json(); if (json.url) window.location.href = json.url;
+}
+
+const fmtUsd = (cents: number) => (cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`);
+const basicSave = Math.round((1 - BASIC_ANNUAL_CENTS / (BASIC_MONTHLY_CENTS * 12)) * 100);
+const plusSave = Math.round((1 - PLUS_ANNUAL_CENTS / (PLUS_MONTHLY_CENTS * 12)) * 100);
+
+/** Real, purchasable plan selector (Basic + Plus) with a monthly/annual toggle. */
+function UpgradePlans() {
+  const [annual, setAnnual] = useState(true);
+  const [pending, startTransition] = useTransition();
+
+  const tiers = [
+    {
+      name: 'Family Basic', featured: false,
+      perMonth: annual ? Math.round(BASIC_ANNUAL_CENTS / 12) : BASIC_MONTHLY_CENTS,
+      sub: annual ? `${fmtUsd(BASIC_ANNUAL_CENTS)}/yr · save ${basicSave}%` : 'billed monthly',
+      plan: (annual ? 'basic_annual' : 'basic_monthly') as CheckoutPlan,
+      features: ['Unlimited members', 'Chores, meals & grocery planning', 'School & sports hubs', 'Unlimited AI assistant', 'Smart Imports & Kitchen Display'],
+    },
+    {
+      name: 'Family+', featured: true,
+      perMonth: annual ? Math.round(PLUS_ANNUAL_CENTS / 12) : PLUS_MONTHLY_CENTS,
+      sub: annual ? `${fmtUsd(PLUS_ANNUAL_CENTS)}/yr · save ${plusSave}%` : 'billed monthly',
+      plan: (annual ? 'plus_annual' : 'plus_monthly') as CheckoutPlan,
+      features: ['Everything in Basic', 'AI Concierge & daily briefings', 'AI School & Sports assistant', 'Family Command Center', 'Priority support'],
+    },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="inline-flex items-center gap-1 rounded-full border border-border bg-surface/60 p-1 text-xs">
+          <button onClick={() => setAnnual(false)} className={cn('rounded-full px-3 py-1 font-semibold transition', !annual ? 'bg-brand text-white' : 'text-muted')}>Monthly</button>
+          <button onClick={() => setAnnual(true)} className={cn('rounded-full px-3 py-1 font-semibold transition', annual ? 'bg-brand text-white' : 'text-muted')}>Yearly</button>
+        </div>
+        {annual && <Badge tone="success">Save up to {Math.max(basicSave, plusSave)}%</Badge>}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {tiers.map((t) => (
+          <div key={t.name} className={cn('rounded-xl border p-4', t.featured ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40')}>
+            <div className="flex items-center justify-between">
+              <p className="font-semibold">{t.name}</p>
+              {t.featured && <Badge tone="brand">Most popular</Badge>}
+            </div>
+            <p className="mt-1 text-2xl font-bold">{fmtUsd(t.perMonth)}<span className="text-sm font-normal text-muted">/mo</span></p>
+            <p className="text-xs text-muted">{t.sub}</p>
+            <Button className="mt-3 w-full" loading={pending} onClick={() => startTransition(() => void startCheckout(t.plan))}>
+              Choose {t.name}
+            </Button>
+            <ul className="mt-3 space-y-1.5">
+              {t.features.map((f) => (
+                <li key={f} className="flex items-start gap-2 text-xs text-muted">
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />{f}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ── Tabs ────────────────────────────────────────────────────────────────────
@@ -1053,18 +1122,7 @@ export function BillingModule() {
                 </div>
               </div>
               {(!subscription || status === 'trialing' || status === 'canceled') && admin && (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-border bg-surface/40 p-4">
-                    <p className="font-semibold">Monthly</p>
-                    <p className="mt-1 text-2xl font-bold">$9.99<span className="text-sm font-normal text-muted">/mo</span></p>
-                    <Button className="mt-3 w-full" loading={pending} onClick={() => startTransition(() => void startCheckout('family_monthly'))}>Get started</Button>
-                  </div>
-                  <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
-                    <div className="flex items-center justify-between"><p className="font-semibold">Annual</p><Badge tone="success">Save 20%</Badge></div>
-                    <p className="mt-1 text-2xl font-bold">$7.99<span className="text-sm font-normal text-muted">/mo</span></p>
-                    <Button className="mt-3 w-full" loading={pending} onClick={() => startTransition(() => void startCheckout('family_annual'))}>Get annual</Button>
-                  </div>
-                </div>
+                <UpgradePlans />
               )}
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                 {['Unlimited family members', 'AI family assistant', 'All modules', 'Real-time sync', 'Document vault', 'Meal planning', 'School & sports', 'Priority support'].map((f) => (
