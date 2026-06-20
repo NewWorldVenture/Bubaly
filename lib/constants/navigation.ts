@@ -2,7 +2,8 @@ import {
   LayoutDashboard, Calendar, CheckSquare, UtensilsCrossed, ShoppingCart,
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
-  FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, type LucideIcon,
+  FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, LifeBuoy,
+  ScrollText, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -50,6 +51,8 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/system', label: 'System Overview', icon: Activity },
   { href: '/admin/content', label: 'Content Management', icon: FolderKanban },
   { href: '/admin/security', label: 'Security', icon: ShieldCheck },
+  { href: '/admin/support', label: 'Support Tickets', icon: LifeBuoy },
+  { href: '/admin/audit', label: 'Audit Logs', icon: ScrollText },
   { href: '/admin/integrations', label: 'Integrations', icon: Plug },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
 ];

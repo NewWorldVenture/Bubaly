@@ -3,7 +3,9 @@ import { ShieldCheck, Mail, UserX, Clock, Activity, Lock, KeyRound, EyeOff, File
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Avatar } from '@/components/ui/avatar';
 import { EmptyState } from '@/components/ui/states';
+import { UserSecurityActions } from '@/components/admin/user-security-actions';
 import { fmtDate } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'Security', robots: { index: false } };
@@ -40,6 +42,19 @@ export default async function AdminSecurityPage() {
   const unconfirmedCount = users.length - confirmedCount;
   const neverSignedIn = users.filter((u) => !u.last_sign_in_at).length;
   const bannedCount = users.filter((u) => u.banned_until && new Date(u.banned_until) > new Date()).length;
+
+  const now = new Date();
+  const recentAccounts = [...users]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 10)
+    .map((u) => ({
+      id: u.id,
+      email: u.email ?? null,
+      confirmed: Boolean(u.email_confirmed_at),
+      lastSignIn: u.last_sign_in_at ?? null,
+      banned: Boolean(u.banned_until && new Date(u.banned_until) > now),
+      createdAt: u.created_at,
+    }));
 
   const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
   const actorIds = [...new Set((auditLogs ?? []).map((l) => l.actor_id).filter((x): x is string => !!x))];
@@ -101,6 +116,48 @@ export default async function AdminSecurityPage() {
           </div>
         </Card>
       </div>
+
+      <Card>
+        <h2 className="mb-1 text-base font-semibold">Accounts</h2>
+        <p className="mb-4 text-sm text-muted">The most recent sign-ups — reset a password or ban an account that needs intervention.</p>
+        {recentAccounts.length === 0 ? (
+          <EmptyState icon={UserX} title="No accounts yet" />
+        ) : (
+          <div className="table-responsive">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-muted">
+                  <th className="px-3 py-2 font-medium">Account</th>
+                  <th className="px-3 py-2 font-medium">Email</th>
+                  <th className="px-3 py-2 font-medium">Last sign-in</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {recentAccounts.map((u) => (
+                  <tr key={u.id}>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <Avatar name={u.email || '?'} size={24} />
+                        <span className="text-muted">{fmtDate(u.createdAt, 'MMM d, yyyy')}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 font-medium">{u.email ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-muted">{u.lastSignIn ? fmtDate(u.lastSignIn, 'MMM d, yyyy') : 'Never'}</td>
+                    <td className="px-3 py-2.5">
+                      {u.banned ? <Badge tone="danger">Banned</Badge> : u.confirmed ? <Badge tone="success">Confirmed</Badge> : <Badge tone="warning">Unconfirmed</Badge>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <UserSecurityActions userId={u.id} email={u.email} banned={u.banned} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <Card>
         <div className="mb-4 flex items-center gap-2">
