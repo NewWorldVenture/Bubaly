@@ -23,8 +23,11 @@ import {
   TestimonialBand,
   WatchDemoLink,
 } from '@/components/marketing/visual-mocks';
+import { getPublicStats } from '@/lib/marketing/stats';
+import { familiesHeadline } from '@/lib/marketing/format';
 
-export default function HomePage() {
+export default async function HomePage() {
+  const { families } = await getPublicStats();
   return (
     <PageWrap>
       {/* ── Hero ── */}
@@ -49,6 +52,7 @@ export default function HomePage() {
               <PrimaryLink href="/signup">Start Free Trial</PrimaryLink>
               <WatchDemoLink href="/how-it-works">Watch Demo</WatchDemoLink>
             </div>
+<<<<<<< HEAD
 
             <div className="mt-8 flex justify-center lg:justify-start">
               <PlatformBadges />
@@ -56,6 +60,10 @@ export default function HomePage() {
 
             <div className="mt-8 flex justify-center lg:justify-start">
               <SocialProofLine />
+=======
+            <div className="mt-10">
+              <SocialProofLine text={familiesHeadline(families)} />
+>>>>>>> 65e79433155fd892cc6bfc26dcfb1c35f8b2332f
             </div>
           </div>
 

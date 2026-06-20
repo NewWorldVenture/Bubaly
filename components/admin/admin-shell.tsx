@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { Bell, ChevronDown, LogOut, Search, ShieldCheck, Users } from 'lucide-react';
+import { Bell, ChevronDown, Home, LayoutDashboard, LogOut, Search, ShieldCheck } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { Avatar } from '@/components/ui/avatar';
@@ -76,9 +76,14 @@ export function AdminShell({
           })}
         </nav>
         <div className="space-y-3 px-3 pb-4">
-          <Link href="/dashboard" className="flex items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
-            <Users className="h-3.5 w-3.5" /> Switch to Parent Role
-          </Link>
+          <div className="space-y-1.5">
+            <Link href="/dashboard/briefing" className="flex items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
+              <LayoutDashboard className="h-3.5 w-3.5" /> Go to Parent Dashboard
+            </Link>
+            <Link href="/dashboard" className="flex items-center gap-1.5 px-1 text-xs text-muted hover:text-fg">
+              <Home className="h-3.5 w-3.5" /> Go to Family Dashboard
+            </Link>
+          </div>
           <AdminProfile name={adminName} email={adminEmail} />
         </div>
       </aside>
@@ -128,10 +133,14 @@ export function AdminShell({
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-full z-20 mt-2 w-48 rounded-xl glass-card p-1 shadow-glass animate-fade-in">
-                  <Link href="/dashboard" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
-                    <Users className="h-4 w-4" /> Switch to Parent Role
+                <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl glass-card p-1 shadow-glass animate-fade-in">
+                  <Link href="/dashboard/briefing" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
+                    <LayoutDashboard className="h-4 w-4" /> Go to Parent Dashboard
                   </Link>
+                  <Link href="/dashboard" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
+                    <Home className="h-4 w-4" /> Go to Family Dashboard
+                  </Link>
+                  <div className="my-1 h-px bg-border" />
                   <form action="/auth/signout" method="post">
                     <button type="submit" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated">
                       <LogOut className="h-4 w-4" /> Sign out

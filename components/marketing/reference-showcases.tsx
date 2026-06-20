@@ -32,6 +32,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { getPublicStats } from '@/lib/marketing/stats';
+import { familiesNote, familiesLoveLine } from '@/lib/marketing/format';
 
 const tones = {
   violet: 'border-violet-500/20 bg-violet-500/10 text-violet-400',
@@ -367,12 +369,13 @@ function AssistantChat() {
   );
 }
 
-function TrustStrip() {
+async function TrustStrip() {
+  const { families } = await getPublicStats();
   const items = [
     [ShieldCheck, 'Secure & Private', 'Your data is always\nprotected'],
     [Smartphone, 'Works Everywhere', 'Web, iOS, Android,\nand more'],
     [Cloud, 'Real-time Sync', 'Changes sync instantly\nacross all devices'],
-    [Heart, 'Loved by Families', '10,000+ families\nand growing'],
+    [Heart, 'Loved by Families', familiesNote(families)],
   ] as const;
   return (
     <section className="mx-0 mt-[18px] grid gap-6 border-t border-white/[0.06] px-7 py-6 sm:mx-[14px] sm:grid-cols-2 lg:grid-cols-4">
@@ -451,11 +454,12 @@ export function HowItWorksReferencePage() {
   );
 }
 
-function SocialProof() {
+async function SocialProof() {
+  const { families } = await getPublicStats();
   return (
     <div className="mt-[19px] flex items-center gap-3">
       <div className="flex -space-x-2">{[0, 1, 2, 3, 4].map((index) => <TinyAvatar key={index} index={index} className="h-9 w-9 border-2 border-[#07101a]" />)}</div>
-      <div><div className="flex gap-1 text-amber-400">{Array.from({ length: 5 }).map((_, i) => <Star key={i} className="h-3 w-3 fill-current" />)}</div><p className="mt-1 text-[11px] text-white/70">10,000+ families love FamilyOS</p></div>
+      <div><div className="flex gap-1 text-amber-400">{Array.from({ length: 5 }).map((_, i) => <Star key={i} className="h-3 w-3 fill-current" />)}</div><p className="mt-1 text-[11px] text-white/70">{familiesLoveLine(families)}</p></div>
     </div>
   );
 }

@@ -280,7 +280,12 @@ export interface Database {
         { email: string; created_at?: string },
         Partial<{ email: string }>
       >;
-      // ── Support tickets (admin console only) ──────────────────────────────
+      blog_posts: T<
+        { id: string; slug: string; title: string; excerpt: string; author: string; published_at: string; reading_minutes: number; tags: string[]; category: string; featured: boolean; accent_color: string | null; body: Json; published: boolean } & Stamps,
+        { id?: string; slug: string; title: string; excerpt?: string; author?: string; published_at?: string; reading_minutes?: number; tags?: string[]; category: string; featured?: boolean; accent_color?: string | null; body?: Json; published?: boolean },
+        Partial<{ slug: string; title: string; excerpt: string; author: string; published_at: string; reading_minutes: number; tags: string[]; category: string; featured: boolean; accent_color: string | null; body: Json; published: boolean }>
+      >;
+      // ── Support tickets (admin console only — full schema) ────────────────
       support_tickets: T<
         {
           id: string; ticket_number: string; subject: string; description: string | null;
@@ -320,6 +325,52 @@ export interface Database {
           permissions: string[]; status: string; last_active_at: string | null;
         }>
       >;
+      // ── Marketing (admin-only) ──────────────────────────────
+      marketing_segments: T<
+        { id: string; name: string; description: string | null; kind: string; rules: Json; member_keys: string[]; status: string; metadata: Json; created_by: string | null; updated_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; name: string; description?: string | null; kind?: string; rules?: Json; member_keys?: string[]; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; description: string | null; kind: string; rules: Json; member_keys: string[]; status: string; metadata: Json; updated_by: string | null; deleted_at: string | null }>
+      >;
+      marketing_campaigns: T<
+        { id: string; name: string; objective: string | null; channel: string; type: string; status: string; segment_id: string | null; budget_cents: number; starts_at: string | null; ends_at: string | null; notes: string | null; kpis: Json; metadata: Json; created_by: string | null; updated_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; name: string; objective?: string | null; channel?: string; type?: string; status?: string; segment_id?: string | null; budget_cents?: number; starts_at?: string | null; ends_at?: string | null; notes?: string | null; kpis?: Json; metadata?: Json; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; objective: string | null; channel: string; type: string; status: string; segment_id: string | null; budget_cents: number; starts_at: string | null; ends_at: string | null; notes: string | null; kpis: Json; metadata: Json; updated_by: string | null; deleted_at: string | null }>
+      >;
+      marketing_email_campaigns: T<
+        { id: string; campaign_id: string | null; segment_id: string | null; subject: string; preview_text: string | null; body_html: string; from_name: string | null; status: string; scheduled_at: string | null; sent_at: string | null; recipients: number; opens: number; clicks: number; bounces: number; unsubscribes: number; provider_ref: string | null; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; campaign_id?: string | null; segment_id?: string | null; subject?: string; preview_text?: string | null; body_html?: string; from_name?: string | null; status?: string; scheduled_at?: string | null; sent_at?: string | null; recipients?: number; opens?: number; clicks?: number; bounces?: number; unsubscribes?: number; provider_ref?: string | null; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ subject: string; preview_text: string | null; body_html: string; from_name: string | null; status: string; scheduled_at: string | null; sent_at: string | null; recipients: number; opens: number; clicks: number; bounces: number; unsubscribes: number; provider_ref: string | null; metadata: Json }>
+      >;
+      marketing_content_items: T<
+        { id: string; campaign_id: string | null; title: string; kind: string; channel: string | null; brief: string | null; body: string | null; status: string; publish_at: string | null; metadata: Json; created_by: string | null; updated_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; campaign_id?: string | null; title: string; kind?: string; channel?: string | null; brief?: string | null; body?: string | null; status?: string; publish_at?: string | null; metadata?: Json; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null },
+        Partial<{ campaign_id: string | null; title: string; kind: string; channel: string | null; brief: string | null; body: string | null; status: string; publish_at: string | null; metadata: Json; updated_by: string | null; deleted_at: string | null }>
+      >;
+      marketing_seo_pages: T<
+        { id: string; path: string; title: string | null; meta_description: string | null; issues: Json; score: number | null; status: string; last_audited_at: string | null; metadata: Json } & Stamps,
+        { id?: string; path: string; title?: string | null; meta_description?: string | null; issues?: Json; score?: number | null; status?: string; last_audited_at?: string | null; metadata?: Json },
+        Partial<{ title: string | null; meta_description: string | null; issues: Json; score: number | null; status: string; last_audited_at: string | null; metadata: Json }>
+      >;
+      marketing_seo_keywords: T<
+        { id: string; keyword: string; intent: string | null; target_path: string | null; source: string; status: string; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; keyword: string; intent?: string | null; target_path?: string | null; source?: string; status?: string; metadata?: Json; created_by?: string | null },
+        Partial<{ keyword: string; intent: string | null; target_path: string | null; source: string; status: string; metadata: Json }>
+      >;
+      marketing_aeo_questions: T<
+        { id: string; question: string; answer: string | null; entity: string | null; source_path: string | null; pattern: string | null; status: string; clarity_score: number | null; last_reviewed: string | null; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; question: string; answer?: string | null; entity?: string | null; source_path?: string | null; pattern?: string | null; status?: string; clarity_score?: number | null; last_reviewed?: string | null; metadata?: Json; created_by?: string | null },
+        Partial<{ question: string; answer: string | null; entity: string | null; source_path: string | null; pattern: string | null; status: string; clarity_score: number | null; last_reviewed: string | null; metadata: Json }>
+      >;
+      marketing_settings: T<
+        { key: string; value: Json; updated_by: string | null; updated_at: string },
+        { key: string; value?: Json; updated_by?: string | null },
+        Partial<{ value: Json; updated_by: string | null }>
+      >;
+      marketing_audit_logs: T<
+        { id: string; actor_id: string | null; actor_email: string | null; action: string; resource: string; resource_id: string | null; metadata: Json; created_at: string },
+        { id?: string; actor_id?: string | null; actor_email?: string | null; action: string; resource: string; resource_id?: string | null; metadata?: Json },
+        Partial<{ metadata: Json }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
@@ -330,6 +381,7 @@ export interface Database {
       can_manage_family: { Args: { p_family_id: string }; Returns: boolean };
       is_family_admin: { Args: { p_family_id: string }; Returns: boolean };
       is_super_admin: { Args: Record<string, never>; Returns: boolean };
+      public_stats: { Args: Record<string, never>; Returns: { families: number; members: number; tasks_completed: number }[] };
     };
     Enums: {
       member_role: MemberRole;

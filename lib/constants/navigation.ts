@@ -3,7 +3,7 @@ import {
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
   FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, TicketCheck,
-  UserCog, ClipboardList, DatabaseBackup, type LucideIcon,
+  UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -21,6 +21,8 @@ export const MARKETING_NAV = [
 /** Authenticated app sidebar / mobile tab navigation. */
 export const APP_NAV: NavItem[] = [
   { href: '/dashboard/briefing', label: 'Daily Briefing', icon: Sun },
+  { href: '/dashboard/inbox', label: 'Magic Import', icon: Inbox },
+  { href: '/dashboard/scan', label: 'Scan Flyer', icon: ScanLine },
   { href: '/dashboard/assistant', label: 'AI Assistant', icon: Sparkles },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
@@ -37,6 +39,7 @@ export const APP_NAV: NavItem[] = [
   { href: '/dashboard/notes', label: 'Notes', icon: StickyNote },
   { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
   { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound },
+  { href: '/display', label: 'Kitchen Display', icon: Monitor },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -47,6 +50,7 @@ export const APP_NAV: NavItem[] = [
 export const ADMIN_NAV: NavItem[] = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Users & Families', icon: UsersRound },
+  { href: '/admin/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
   { href: '/admin/system', label: 'System Overview', icon: Activity },
   { href: '/admin/content', label: 'Content Management', icon: FolderKanban },

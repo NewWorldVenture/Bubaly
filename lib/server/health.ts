@@ -58,3 +58,11 @@ export function checkEmail(): HealthCheck {
     detail: configured ? 'API key configured' : 'RESEND_API_KEY not configured',
   };
 }
+
+export function checkAI(): HealthCheck {
+  const configured = Boolean(process.env.ANTHROPIC_API_KEY);
+  return {
+    name: 'AI Processing', ok: configured, latencyMs: null,
+    detail: configured ? 'API key configured' : 'ANTHROPIC_API_KEY not configured',
+  };
+}
