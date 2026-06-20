@@ -3,7 +3,7 @@ import {
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
   FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, LifeBuoy,
-  ScrollText, Inbox, ScanLine, Monitor, type LucideIcon,
+  ScrollText, Inbox, ScanLine, Monitor, Megaphone, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -50,6 +50,7 @@ export const APP_NAV: NavItem[] = [
 export const ADMIN_NAV: NavItem[] = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Users & Families', icon: UsersRound },
+  { href: '/admin/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
   { href: '/admin/system', label: 'System Overview', icon: Activity },
   { href: '/admin/content', label: 'Content Management', icon: FolderKanban },
