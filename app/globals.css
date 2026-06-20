@@ -374,3 +374,65 @@ body::before {
   .print-sheet .print-page { color: #000 !important; background: #fff !important; }
   @page { margin: 0.5in; }
 }
+
+/* ============================================================
+   Light-mode compatibility for marketing + any dark-authored surface.
+   Marketing copy/chrome uses hardcoded white / white-alpha utilities.
+   Remap them to the canvas foreground token, which flips with the theme
+   (dark ink in light mode, near-white in dark). Device mockups opt back
+   to dark by wrapping in `.dark` — there --canvas-fg is near-white, so
+   these same rules resolve to white automatically and screens stay dark.
+   ============================================================ */
+.light .text-white { color: rgb(var(--canvas-fg)); }
+.light .text-white\/95 { color: rgb(var(--canvas-fg) / 0.95); }
+.light .text-white\/90 { color: rgb(var(--canvas-fg) / 0.9); }
+.light .text-white\/88 { color: rgb(var(--canvas-fg) / 0.88); }
+.light .text-white\/86 { color: rgb(var(--canvas-fg) / 0.86); }
+.light .text-white\/85 { color: rgb(var(--canvas-fg) / 0.85); }
+.light .text-white\/80 { color: rgb(var(--canvas-fg) / 0.8); }
+.light .text-white\/78 { color: rgb(var(--canvas-fg) / 0.78); }
+.light .text-white\/76 { color: rgb(var(--canvas-fg) / 0.76); }
+.light .text-white\/75 { color: rgb(var(--canvas-fg) / 0.74); }
+.light .text-white\/72 { color: rgb(var(--canvas-fg) / 0.72); }
+.light .text-white\/70 { color: rgb(var(--canvas-fg) / 0.7); }
+.light .text-white\/68 { color: rgb(var(--canvas-fg) / 0.68); }
+.light .text-white\/66 { color: rgb(var(--canvas-fg) / 0.66); }
+.light .text-white\/65 { color: rgb(var(--canvas-fg) / 0.66); }
+.light .text-white\/62 { color: rgb(var(--canvas-fg) / 0.64); }
+.light .text-white\/60 { color: rgb(var(--canvas-fg) / 0.62); }
+.light .text-white\/55 { color: rgb(var(--canvas-fg) / 0.58); }
+.light .text-white\/50 { color: rgb(var(--canvas-fg) / 0.54); }
+.light .text-white\/48 { color: rgb(var(--canvas-fg) / 0.52); }
+.light .text-white\/45 { color: rgb(var(--canvas-fg) / 0.5); }
+.light .text-white\/42 { color: rgb(var(--canvas-fg) / 0.48); }
+.light .text-white\/40 { color: rgb(var(--canvas-fg) / 0.46); }
+.light .text-white\/35 { color: rgb(var(--canvas-fg) / 0.42); }
+.light .text-white\/30 { color: rgb(var(--canvas-fg) / 0.38); }
+.light .text-white\/25 { color: rgb(var(--canvas-fg) / 0.34); }
+.light .text-white\/20 { color: rgb(var(--canvas-fg) / 0.3); }
+
+.light .bg-white\/5 { background-color: rgb(var(--canvas-fg) / 0.05); }
+.light .bg-white\/10 { background-color: rgb(var(--canvas-fg) / 0.08); }
+.light .bg-white\/20 { background-color: rgb(var(--canvas-fg) / 0.12); }
+.light .bg-white\/30 { background-color: rgb(var(--canvas-fg) / 0.16); }
+.light .bg-white\/\[0\.02\] { background-color: rgb(var(--canvas-fg) / 0.03); }
+.light .bg-white\/\[0\.025\] { background-color: rgb(var(--canvas-fg) / 0.035); }
+.light .bg-white\/\[0\.03\] { background-color: rgb(var(--canvas-fg) / 0.04); }
+.light .bg-white\/\[0\.035\] { background-color: rgb(var(--canvas-fg) / 0.045); }
+.light .bg-white\/\[0\.04\] { background-color: rgb(var(--canvas-fg) / 0.05); }
+.light .bg-white\/\[0\.045\] { background-color: rgb(var(--canvas-fg) / 0.055); }
+.light .bg-white\/\[0\.05\] { background-color: rgb(var(--canvas-fg) / 0.06); }
+.light .bg-white\/\[0\.06\] { background-color: rgb(var(--canvas-fg) / 0.07); }
+.light .bg-white\/\[0\.07\] { background-color: rgb(var(--canvas-fg) / 0.08); }
+.light .bg-white\/\[0\.08\] { background-color: rgb(var(--canvas-fg) / 0.09); }
+
+.light .border-white\/5 { border-color: rgb(var(--canvas-fg) / 0.08); }
+.light .border-white\/8 { border-color: rgb(var(--canvas-fg) / 0.1); }
+.light .border-white\/10 { border-color: rgb(var(--canvas-fg) / 0.12); }
+.light .border-white\/15 { border-color: rgb(var(--canvas-fg) / 0.16); }
+.light .border-white\/18 { border-color: rgb(var(--canvas-fg) / 0.18); }
+.light .border-white\/20 { border-color: rgb(var(--canvas-fg) / 0.2); }
+.light .border-white\/\[0\.06\] { border-color: rgb(var(--canvas-fg) / 0.09); }
+.light .border-white\/\[0\.07\] { border-color: rgb(var(--canvas-fg) / 0.1); }
+.light .border-white\/\[0\.08\] { border-color: rgb(var(--canvas-fg) / 0.11); }
+.light .border-white\/\[0\.10\] { border-color: rgb(var(--canvas-fg) / 0.13); }
