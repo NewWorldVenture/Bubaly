@@ -15,14 +15,36 @@ const REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 const CAL_BASE = 'https://www.googleapis.com/calendar/v3';
 const TASKS_BASE = 'https://tasks.googleapis.com/tasks/v1';
 
-// Full calendar + tasks read/write. These are "sensitive" scopes: in a Testing
-// OAuth app only added test users can consent; production use needs verification.
-export const GOOGLE_SYNC_SCOPES = [
-  'https://www.googleapis.com/auth/calendar',
-  'https://www.googleapis.com/auth/tasks',
-  'openid',
-  'email',
-].join(' ');
+// Default scopes if none are configured via env. calendar.events (read/write
+// events) + calendar.readonly (read the calendar list) + tasks. These are
+// "sensitive" scopes: in a Testing OAuth app only added test users can consent.
+const DEFAULT_SCOPES =
+  'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks';
+
+// Credentials + config. A dedicated sync client (GOOGLE_SYNC_*) is preferred;
+// falls back to the legacy GOOGLE_* pair so a single-client setup still works.
+export function googleSyncClientId(): string {
+  return process.env.GOOGLE_SYNC_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID ?? '';
+}
+export function googleSyncClientSecret(): string {
+  return process.env.GOOGLE_SYNC_CLIENT_SECRET ?? process.env.GOOGLE_CLIENT_SECRET ?? '';
+}
+export function isGoogleSyncConfigured(): boolean {
+  return !!(googleSyncClientId() && googleSyncClientSecret());
+}
+/** Redirect URI must be identical in the auth request and the token exchange. */
+export function googleSyncRedirectUri(origin: string): string {
+  return process.env.GOOGLE_SYNC_REDIRECT_URI ?? `${origin}/api/sync/google/callback`;
+}
+/** Scopes assembled from env (calendar + readonly + tasks), plus identity. */
+export function googleSyncScopes(): string {
+  const configured = [
+    process.env.GOOGLE_SYNC_CALENDAR_SCOPES,
+    process.env.GOOGLE_SYNC_CALENDAR_READONLY_SCOPE,
+    process.env.GOOGLE_SYNC_TASKS_SCOPES,
+  ].filter(Boolean).join(' ').trim();
+  return `${configured || DEFAULT_SCOPES} openid email`.trim();
+}
 
 export type OAuthTokens = {
   accessToken: string;
@@ -44,10 +66,10 @@ export class GoogleApiError extends Error {
 // ---------------------------------------------------------------------------
 export function googleAuthUrl(redirectUri: string, state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID!,
+    client_id: googleSyncClientId(),
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: GOOGLE_SYNC_SCOPES,
+    scope: googleSyncScopes(),
     access_type: 'offline',
     include_granted_scopes: 'true',
     prompt: 'consent', // force a refresh_token even on re-consent
@@ -62,8 +84,8 @@ export async function exchangeCode(code: string, redirectUri: string): Promise<O
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       code,
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      client_id: googleSyncClientId(),
+      client_secret: googleSyncClientSecret(),
       redirect_uri: redirectUri,
       grant_type: 'authorization_code',
     }),
@@ -84,8 +106,8 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      client_id: googleSyncClientId(),
+      client_secret: googleSyncClientSecret(),
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
     }),
