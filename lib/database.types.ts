@@ -336,6 +336,51 @@ export interface Database {
         { id?: string; actor_id?: string | null; actor_email?: string | null; action: string; resource: string; resource_id?: string | null; metadata?: Json },
         Partial<{ metadata: Json }>
       >;
+      marketing_sms_campaigns: T<
+        { id: string; campaign_id: string | null; segment_id: string | null; message: string; status: string; scheduled_at: string | null; sent_at: string | null; recipients: number; delivered: number; replies: number; opt_outs: number; provider_ref: string | null; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; campaign_id?: string | null; segment_id?: string | null; message?: string; status?: string; scheduled_at?: string | null; sent_at?: string | null; recipients?: number; delivered?: number; replies?: number; opt_outs?: number; provider_ref?: string | null; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ message: string; status: string; scheduled_at: string | null; sent_at: string | null; recipients: number; delivered: number; replies: number; opt_outs: number; metadata: Json }>
+      >;
+      marketing_social_posts: T<
+        { id: string; campaign_id: string | null; platform: string; content: string; link: string | null; status: string; scheduled_at: string | null; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; campaign_id?: string | null; platform?: string; content?: string; link?: string | null; status?: string; scheduled_at?: string | null; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ platform: string; content: string; link: string | null; status: string; scheduled_at: string | null; metadata: Json }>
+      >;
+      marketing_ad_campaigns: T<
+        { id: string; campaign_id: string | null; platform: string; name: string; objective: string | null; budget_cents: number; spend_cents: number; impressions: number; clicks: number; conversions: number; utm: Json; status: string; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; campaign_id?: string | null; platform?: string; name: string; objective?: string | null; budget_cents?: number; spend_cents?: number; impressions?: number; clicks?: number; conversions?: number; utm?: Json; status?: string; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ platform: string; name: string; objective: string | null; budget_cents: number; spend_cents: number; impressions: number; clicks: number; conversions: number; utm: Json; status: string; metadata: Json }>
+      >;
+      marketing_automation_workflows: T<
+        { id: string; name: string; trigger: string; steps: Json; status: string; run_count: number; metadata: Json; created_by: string | null; updated_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; name: string; trigger?: string; steps?: Json; status?: string; run_count?: number; metadata?: Json; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; trigger: string; steps: Json; status: string; run_count: number; metadata: Json; updated_by: string | null; deleted_at: string | null }>
+      >;
+      marketing_automation_runs: T<
+        { id: string; workflow_id: string; status: string; subject_key: string | null; metadata: Json; created_at: string },
+        { id?: string; workflow_id: string; status?: string; subject_key?: string | null; metadata?: Json },
+        Partial<{ status: string; metadata: Json }>
+      >;
+      marketing_funnels: T<
+        { id: string; name: string; steps: Json; status: string; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; name: string; steps?: Json; status?: string; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; steps: Json; status: string; metadata: Json; deleted_at: string | null }>
+      >;
+      marketing_landing_pages: T<
+        { id: string; campaign_id: string | null; slug: string; title: string; headline: string | null; subhead: string | null; body: string | null; status: string; published: boolean; views: number; conversions: number; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; campaign_id?: string | null; slug: string; title: string; headline?: string | null; subhead?: string | null; body?: string | null; status?: string; published?: boolean; views?: number; conversions?: number; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ slug: string; title: string; headline: string | null; subhead: string | null; body: string | null; status: string; published: boolean; views: number; conversions: number; metadata: Json }>
+      >;
+      marketing_forms: T<
+        { id: string; campaign_id: string | null; name: string; fields: Json; status: string; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; campaign_id?: string | null; name: string; fields?: Json; status?: string; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; fields: Json; status: string; metadata: Json; deleted_at: string | null }>
+      >;
+      marketing_form_submissions: T<
+        { id: string; form_id: string; email: string | null; data: Json; source: string | null; created_at: string },
+        { id?: string; form_id: string; email?: string | null; data?: Json; source?: string | null },
+        Partial<{ email: string | null; data: Json; source: string | null }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
