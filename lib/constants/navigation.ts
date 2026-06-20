@@ -5,7 +5,7 @@ import {
   FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, LifeBuoy,
   ScrollText, Inbox, ScanLine, Monitor, Megaphone, Bot, Brain, Wallet,
   ClipboardList, Gauge, Zap, Network, ShieldAlert, BookHeart, Command,
-  DatabaseBackup, type LucideIcon,
+  DatabaseBackup, Import, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -42,6 +42,7 @@ export const MARKETING_NAV = [
 export const APP_NAV: NavItem[] = [
   { href: '/dashboard/briefing', label: 'Daily Briefing', icon: Sun },
   { href: '/dashboard/inbox', label: 'Magic Import', icon: Inbox },
+  { href: '/dashboard/migrate', label: 'Switch to FamilyOS', icon: Import },
   { href: '/dashboard/scan', label: 'Scan Flyer', icon: ScanLine },
   { href: '/dashboard/assistant', label: 'AI Assistant', icon: Sparkles },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
