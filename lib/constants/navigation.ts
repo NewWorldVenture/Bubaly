@@ -3,7 +3,7 @@ import {
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
   FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, LifeBuoy,
-  ScrollText, type LucideIcon,
+  ScrollText, Inbox, ScanLine, Monitor, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -21,6 +21,8 @@ export const MARKETING_NAV = [
 /** Authenticated app sidebar / mobile tab navigation. */
 export const APP_NAV: NavItem[] = [
   { href: '/dashboard/briefing', label: 'Daily Briefing', icon: Sun },
+  { href: '/dashboard/inbox', label: 'Magic Import', icon: Inbox },
+  { href: '/dashboard/scan', label: 'Scan Flyer', icon: ScanLine },
   { href: '/dashboard/assistant', label: 'AI Assistant', icon: Sparkles },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
@@ -37,6 +39,7 @@ export const APP_NAV: NavItem[] = [
   { href: '/dashboard/notes', label: 'Notes', icon: StickyNote },
   { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
   { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound },
+  { href: '/display', label: 'Kitchen Display', icon: Monitor },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 

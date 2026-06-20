@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {
   ArrowRight, Cake, Calendar, CheckCircle2, ChevronRight,
   ListChecks, Plus, ShoppingCart, Sparkles, Users,
+  Wand2, ScanLine, Monitor, Sun,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -93,6 +94,13 @@ export default async function DashboardPage() {
       .eq('family_id', familyId),
   ]);
 
+  // Resolve real chore titles for the "Tasks Due" list (no embedded join in types).
+  const dueChoreIds = [...new Set((dueTasks ?? []).map((t) => t.chore_id))];
+  const { data: dueChores } = dueChoreIds.length
+    ? await supabase.from('chores').select('id, title').in('id', dueChoreIds)
+    : { data: [] as { id: string; title: string }[] };
+  const choreTitleById = new Map((dueChores ?? []).map((c) => [c.id, c.title]));
+
   // Birthdays in next 7 days
   const todayMMDD = start.toISOString().slice(5, 10);
   const in7MMDD = in7.toISOString().slice(5, 10);
@@ -109,6 +117,21 @@ export default async function DashboardPage() {
 
   const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening';
   const firstName = (ctx.active.member.display_name || 'there').split(' ')[0];
+
+  // Suggestions derived from real family data — never fabricated.
+  const suggestions: { icon: typeof Calendar; text: string; cta: string }[] = [];
+  if ((openChores ?? 0) > 0) {
+    suggestions.push({ icon: CheckCircle2, text: `You have ${openChores} open ${openChores === 1 ? 'task' : 'tasks'} to wrap up.`, cta: 'View tasks' });
+  }
+  if ((weekPlans?.length ?? 0) > 0 && (groceryItems?.length ?? 0) === 0) {
+    suggestions.push({ icon: ShoppingCart, text: 'Your week has meals planned but the grocery list is empty.', cta: 'Build list' });
+  }
+  if ((upcomingEvents?.length ?? 0) > 0) {
+    suggestions.push({ icon: Calendar, text: `${upcomingEvents!.length} ${upcomingEvents!.length === 1 ? 'event is' : 'events are'} coming up in the next two weeks.`, cta: 'View calendar' });
+  }
+  if (birthdayCount > 0) {
+    suggestions.push({ icon: Cake, text: `${birthdayCount} ${birthdayCount === 1 ? 'birthday is' : 'birthdays are'} coming up this week.`, cta: 'View members' });
+  }
 
   // Week meal map — just show meal_type per slot (no join needed)
   type MealRow = { plan_date: string; meal_type: string; meal_id: string | null };
@@ -129,16 +152,6 @@ export default async function DashboardPage() {
           </h1>
           <p className="mt-1 text-sm text-muted">Here&apos;s what&apos;s happening with your family today.</p>
         </div>
-        <div className="hidden shrink-0 items-center gap-3 rounded-2xl border border-border bg-white/[0.03] px-4 py-3 sm:flex">
-          <span className="text-3xl">⛅</span>
-          <div>
-            <p className="text-xl font-bold">72°F</p>
-            <p className="text-xs text-muted">Partly Cloudy</p>
-          </div>
-          <div className="border-l border-border pl-3 text-xs text-muted">
-            <p>H 74°</p><p>L 58°</p>
-          </div>
-        </div>
       </div>
 
       {/* Stat cards */}
@@ -147,6 +160,27 @@ export default async function DashboardPage() {
         <StatCard href="/dashboard/chores" label="Tasks Due" value={openChores ?? 0} icon={CheckCircle2} bg="bg-emerald-600" linkLabel="View tasks" />
         <StatCard href="/dashboard/chores" label="Chores Due" value={dueTodayCount ?? 0} icon={ListChecks} bg="bg-orange-500" linkLabel="View chores" />
         <StatCard href="/dashboard/settings#members" label="Birthdays" value={birthdayCount} icon={Cake} bg="bg-rose-500" linkLabel="View all" />
+      </div>
+
+      {/* AI tools */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {[
+          { href: '/dashboard/inbox', label: 'Magic Import', desc: 'Paste anything → organized', icon: Wand2, bg: 'bg-violet-600' },
+          { href: '/dashboard/scan', label: 'Scan Flyer', desc: 'Photo → calendar', icon: ScanLine, bg: 'bg-blue-600' },
+          { href: '/dashboard/briefing', label: 'Daily Briefing', desc: "Today at a glance", icon: Sun, bg: 'bg-amber-500' },
+          { href: '/dashboard/assistant', label: 'AI Assistant', desc: 'Ask anything', icon: Sparkles, bg: 'bg-emerald-600' },
+          { href: '/display', label: 'Kitchen Display', desc: 'Full-screen kiosk', icon: Monitor, bg: 'bg-rose-500' },
+        ].map((t) => (
+          <Link key={t.href} href={t.href} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated">
+            <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl', t.bg)}>
+              <t.icon className="h-5 w-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{t.label}</p>
+              <p className="truncate text-xs text-muted">{t.desc}</p>
+            </div>
+          </Link>
+        ))}
       </div>
 
       {/* Row 2: Schedule | Upcoming | AI widget */}
@@ -233,24 +267,24 @@ export default async function DashboardPage() {
               <h2 className="font-semibold">AI Assistant</h2>
             </div>
           </div>
-          <p className="mb-4 text-sm text-white/60">Here are some suggestions for your family:</p>
-          <div className="space-y-2.5">
-            {[
-              { icon: Calendar, text: 'You have events that might conflict this week.', cta: 'View conflicts' },
-              { icon: ShoppingCart, text: 'Add items to your grocery list based on your meal plan.', cta: 'View list' },
-              { icon: CheckCircle2, text: `You have ${openChores ?? 0} tasks due this week.`, cta: 'View tasks' },
-            ].map(({ icon: Icon, text, cta }) => (
-              <div key={text} className="flex gap-3 rounded-xl bg-surface/40 p-3">
-                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-violet-500/15">
-                  <Icon className="h-4 w-4 text-brand" />
+          <p className="mb-4 text-sm text-white/60">
+            {suggestions.length > 0 ? 'Here are some suggestions for your family:' : 'Everything looks on track. Ask the assistant anything.'}
+          </p>
+          {suggestions.length > 0 && (
+            <div className="space-y-2.5">
+              {suggestions.map(({ icon: Icon, text, cta }) => (
+                <div key={text} className="flex gap-3 rounded-xl bg-surface/40 p-3">
+                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-violet-500/15">
+                    <Icon className="h-4 w-4 text-brand" />
+                  </div>
+                  <div>
+                    <p className="text-xs leading-5 text-fg/80">{text}</p>
+                    <p className="text-xs font-semibold text-brand">{cta} →</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs leading-5 text-fg/80">{text}</p>
-                  <p className="text-xs font-semibold text-brand">{cta} →</p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
           <Link href="/dashboard/assistant" className="mt-4 flex h-10 w-full items-center justify-center rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 text-sm font-bold shadow-glow">
             Ask Anything
           </Link>
@@ -377,11 +411,12 @@ export default async function DashboardPage() {
                 const isToday = t.due_at ? t.due_at.slice(0, 10) === start.toISOString().slice(0, 10) : false;
                 const daysUntil = t.due_at ? Math.ceil((new Date(t.due_at).getTime() - start.getTime()) / 86400000) : null;
                 const member = (members ?? []).find((m) => m.id === t.member_id);
+                const choreTitle = choreTitleById.get(t.chore_id) ?? 'Task';
                 return (
                   <li key={t.id} className="flex items-center gap-3">
                     <div className="h-4 w-4 shrink-0 rounded-full border-2 border-border" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">Task</p>
+                      <p className="truncate text-sm font-medium">{choreTitle}</p>
                       <p className={cn('text-xs', isToday ? 'font-semibold text-orange-400' : 'text-muted')}>
                         {isToday ? 'Due Today' : daysUntil != null ? `Due in ${daysUntil} days` : 'No due date'}
                       </p>

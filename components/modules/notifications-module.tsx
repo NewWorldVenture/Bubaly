@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Bell, CheckCheck, Trash2 } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, Radar } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -19,8 +19,26 @@ type Notification = Tables<'notifications'>;
 
 export function NotificationsModule() {
   const { familyId, userId } = useApp();
-  const { error: toastError } = useToast();
+  const { success, error: toastError } = useToast();
   const [markingAll, setMarkingAll] = useState(false);
+  const [scanning, setScanning] = useState(false);
+
+  async function scan() {
+    setScanning(true);
+    try {
+      const res = await fetch('/api/notifications/generate', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) { toastError(json.error ?? 'Could not scan.'); return; }
+      success(json.created > 0
+        ? `Added ${json.created} new notification${json.created === 1 ? '' : 's'}.`
+        : "You're all caught up — nothing new.");
+      void refresh();
+    } catch {
+      toastError('Network error. Please try again.');
+    } finally {
+      setScanning(false);
+    }
+  }
 
   const { data, loading, error, refresh } = useRealtimeQuery<Notification>({
     table: 'notifications',
@@ -64,11 +82,18 @@ export function NotificationsModule() {
     <div className="module-page">
       <PageHeader
         title="Notifications"
-        description="Stay in the loop on everything happening with your family."
-        action={unread.length > 0 && (
-          <Button variant="ghost" loading={markingAll} onClick={markAllRead}>
-            <CheckCheck className="h-4 w-4" /> Mark all read
-          </Button>
+        description="Who needs to know what — surfaced from your family's upcoming schedule, chores, and reminders."
+        action={(
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" loading={scanning} onClick={scan}>
+              <Radar className="h-4 w-4" /> Scan for updates
+            </Button>
+            {unread.length > 0 && (
+              <Button variant="ghost" loading={markingAll} onClick={markAllRead}>
+                <CheckCheck className="h-4 w-4" /> Mark all read
+              </Button>
+            )}
+          </div>
         )}
       />
 
