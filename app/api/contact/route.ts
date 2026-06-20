@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { contactSchema, fieldErrors } from '@/lib/validation';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { sendEmail } from '@/lib/server/email';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
@@ -29,6 +30,16 @@ export async function POST(req: Request) {
 
   const { name, email, message } = parsed.data;
   const to = process.env.CONTACT_INBOX ?? 'hello@familyos.app';
+
+  // Persist as a support ticket so it surfaces in the admin console even if
+  // email delivery is unavailable. Best-effort: never block the user on it.
+  try {
+    await createServiceClient()
+      .from('support_tickets')
+      .insert({ name, email, subject: `Contact from ${name}`, message, source: 'contact', status: 'open' });
+  } catch {
+    /* non-fatal: the email below is the primary path */
+  }
 
   const result = await sendEmail({
     to,

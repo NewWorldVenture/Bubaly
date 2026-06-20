@@ -9,13 +9,18 @@ import { fmtDate } from '@/lib/utils/format';
 
 type Params = { params: Promise<{ slug: string }> };
 
-export function generateStaticParams() {
-  return getAllPosts().map((p) => ({ slug: p.slug }));
+// New posts (added to Supabase after build) render on demand; existing pages
+// re-validate hourly so edits surface without a redeploy.
+export const revalidate = 3600;
+export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  return (await getAllPosts()).map((p) => ({ slug: p.slug }));
 }
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
-  const post = getPost(slug);
+  const post = await getPost(slug);
   if (!post) return { title: 'Post not found' };
   return {
     title: post.title,
@@ -26,7 +31,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function BlogPostPage({ params }: Params) {
   const { slug } = await params;
-  const post = getPost(slug);
+  const post = await getPost(slug);
   if (!post) notFound();
 
   return (
