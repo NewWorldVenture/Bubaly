@@ -49,6 +49,80 @@ export function Donut({ segments, total }: { segments: { value: number; color: s
   );
 }
 
+/** Thick donut with a center total + caption. Segments are absolute values. */
+export function BigDonut({
+  segments, centerTop, centerBottom, size = 168,
+}: {
+  segments: { value: number; color: string }[];
+  centerTop: string; centerBottom?: string; size?: number;
+}) {
+  const r = 56, sw = 18, c = 2 * Math.PI * r;
+  const total = segments.reduce((a, b) => a + b.value, 0) || 1;
+  let cum = 0;
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 144 144" className="h-full w-full">
+        <circle cx="72" cy="72" r={r} fill="none" stroke="currentColor" strokeWidth={sw} className="text-border" />
+        {segments.map((s, i) => {
+          if (!s.value) return null;
+          const dash = (s.value / total) * c;
+          const offset = c - cum * c / total;
+          cum += s.value;
+          return <circle key={i} cx="72" cy="72" r={r} fill="none" stroke={s.color} strokeWidth={sw}
+            strokeDasharray={`${dash} ${c - dash}`} strokeDashoffset={offset} transform="rotate(-90 72 72)" strokeLinecap="butt" />;
+        })}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        <span className="text-lg font-bold leading-none">{centerTop}</span>
+        {centerBottom && <span className="mt-1 text-[10px] text-muted">{centerBottom}</span>}
+      </div>
+    </div>
+  );
+}
+
+/** Filled area chart with y-axis ticks + x-axis labels. Server-rendered SVG. */
+export function AreaChartSVG({
+  points, money = false, height = 180,
+}: {
+  points: { label: string; value: number }[]; money?: boolean; height?: number;
+}) {
+  const w = 640, h = height, padL = 48, padB = 22, padT = 8;
+  const max = Math.max(...points.map((p) => p.value), 1);
+  const niceMax = Math.ceil(max / 4) * 4 || 4;
+  const innerW = w - padL - 8, innerH = h - padB - padT;
+  const step = points.length > 1 ? innerW / (points.length - 1) : 0;
+  const xy = points.map((p, i) => [padL + i * step, padT + innerH - (p.value / niceMax) * innerH] as const);
+  const line = xy.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const area = xy.length ? `${padL},${padT + innerH} ${line} ${(padL + (points.length - 1) * step).toFixed(1)},${padT + innerH}` : '';
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(niceMax * f));
+  const fmtY = (v: number) => money ? (v >= 1000 ? `$${Math.round(v / 1000)}K` : `$${v}`) : String(v);
+  const everyX = Math.max(1, Math.floor(points.length / 6));
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height }} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="area-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#7c5dff" stopOpacity="0.32" />
+          <stop offset="100%" stopColor="#7c5dff" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {ticks.map((t, i) => {
+        const y = padT + innerH - (t / niceMax) * innerH;
+        return (
+          <g key={i}>
+            <line x1={padL} y1={y} x2={w - 8} y2={y} stroke="currentColor" strokeWidth="1" className="text-border/50" />
+            <text x={padL - 8} y={y + 3} textAnchor="end" fontSize="9" className="fill-current text-muted">{fmtY(t)}</text>
+          </g>
+        );
+      })}
+      {area && <polygon points={area} fill="url(#area-grad)" />}
+      {line && <polyline points={line} fill="none" stroke="#8a6bff" strokeWidth="2" strokeLinejoin="round" />}
+      {points.map((p, i) => i % everyX === 0 ? (
+        <text key={i} x={padL + i * step} y={h - 6} textAnchor="middle" fontSize="9" className="fill-current text-muted">{p.label}</text>
+      ) : null)}
+    </svg>
+  );
+}
+
 /** Bar chart. When `money` is set, bar titles are formatted as currency. */
 export function Bars({ data, max, money = false }: { data: { label: string; value: number }[]; max: number; money?: boolean }) {
   return (

@@ -5,7 +5,7 @@ import {
   FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, LifeBuoy,
   ScrollText, Inbox, ScanLine, Monitor, Megaphone, Bot, Brain, Wallet,
   ClipboardList, Gauge, Zap, Network, ShieldAlert, BookHeart, Command,
-  type LucideIcon,
+  DatabaseBackup, type LucideIcon,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -70,15 +70,18 @@ export const APP_NAV: NavItem[] = [
 export const ADMIN_NAV: NavItem[] = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Users & Families', icon: UsersRound },
-  { href: '/admin/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
   { href: '/admin/system', label: 'System Overview', icon: Activity },
   { href: '/admin/content', label: 'Content Management', icon: FolderKanban },
   { href: '/admin/security', label: 'Security', icon: ShieldCheck },
-  { href: '/admin/support', label: 'Support Tickets', icon: LifeBuoy },
-  { href: '/admin/audit', label: 'Audit Logs', icon: ScrollText },
-  { href: '/admin/integrations', label: 'Integrations', icon: Plug },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
+  { href: '/admin/billing', label: 'Billing & Payments', icon: Wallet },
+  { href: '/admin/settings', label: 'Settings', icon: Settings },
+  { href: '/admin/integrations', label: 'Integrations', icon: Plug },
+  { href: '/admin/backup', label: 'Backup & Restore', icon: DatabaseBackup },
+  { href: '/admin/audit', label: 'Audit Logs', icon: ScrollText },
+  { href: '/admin/support', label: 'Support Tickets', icon: LifeBuoy },
+  { href: '/admin/marketing', label: 'Marketing', icon: Megaphone },
 ];
 
 /** Bottom tab bar on mobile web — the 5 highest-frequency destinations. */

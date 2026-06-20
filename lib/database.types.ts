@@ -336,6 +336,22 @@ export interface Database {
         { id?: string; actor_id?: string | null; actor_email?: string | null; action: string; resource: string; resource_id?: string | null; metadata?: Json },
         Partial<{ metadata: Json }>
       >;
+      // ── Admin console (migration 0015) ──────────────────────
+      app_settings: T<
+        { key: string; value: Json; updated_by: string | null; updated_at: string },
+        { key: string; value?: Json; updated_by?: string | null },
+        Partial<{ value: Json; updated_by: string | null }>
+      >;
+      system_backups: T<
+        { id: string; label: string; kind: string; status: string; size_bytes: number; location: string | null; row_counts: Json; created_by: string | null; created_at: string; metadata: Json },
+        { id?: string; label: string; kind?: string; status?: string; size_bytes?: number; location?: string | null; row_counts?: Json; created_by?: string | null; metadata?: Json },
+        Partial<{ label: string; kind: string; status: string; size_bytes: number; location: string | null; row_counts: Json; metadata: Json }>
+      >;
+      admin_integrations: T<
+        { id: string; key: string; name: string; description: string | null; category: string; status: string; config: Json; last_sync_at: string | null; created_by: string | null; updated_by: string | null } & Stamps,
+        { id?: string; key: string; name: string; description?: string | null; category?: string; status?: string; config?: Json; last_sync_at?: string | null; created_by?: string | null; updated_by?: string | null },
+        Partial<{ name: string; description: string | null; category: string; status: string; config: Json; last_sync_at: string | null; updated_by: string | null }>
+      >;
       // ── Family OS modules (migration 0014) ──────────────────
       family_routines: T<
         { id: string; family_id: string; member_id: string | null; title: string; description: string | null; category: string | null; time_of_day: string | null; days_of_week: number[]; status: string; metadata: Json; created_by: string | null; updated_by: string | null; deleted_at: string | null } & Stamps,
