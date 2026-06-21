@@ -43,6 +43,30 @@ export type SyncConflictResolutionEnum =
 export type SyncJobStatus =
   | 'queued' | 'running' | 'succeeded' | 'failed' | 'dead_letter' | 'cancelled';
 
+// Social command center enums (migration 0024)
+export type SocialPlatformEnum =
+  | 'x' | 'facebook' | 'instagram' | 'linkedin' | 'tiktok'
+  | 'youtube' | 'pinterest' | 'threads' | 'reddit';
+export type SocialAccountStatus =
+  | 'pending' | 'connected' | 'error' | 'expired' | 'disconnected' | 'revoked' | 'requires_setup';
+export type SocialPostKind =
+  | 'text' | 'image' | 'video' | 'audio' | 'short'
+  | 'carousel' | 'thread' | 'poll' | 'link' | 'announcement';
+export type SocialPostStatusEnum =
+  | 'draft' | 'scheduled' | 'publishing' | 'published'
+  | 'partially_published' | 'failed' | 'canceled';
+export type SocialTargetStatus =
+  | 'pending' | 'publishing' | 'published' | 'failed' | 'skipped' | 'canceled';
+export type SocialJobStatus =
+  | 'queued' | 'running' | 'succeeded' | 'failed' | 'dead_letter' | 'canceled';
+export type SocialApprovalStatus =
+  | 'not_required' | 'pending' | 'approved' | 'rejected' | 'changes_requested';
+export type SocialInboxStatus = 'open' | 'resolved' | 'ignored' | 'snoozed';
+export type SocialAssetKind = 'image' | 'video' | 'audio' | 'document' | 'thumbnail';
+export type SocialRoleEnum =
+  | 'owner' | 'admin' | 'marketing_manager' | 'social_manager'
+  | 'content_creator' | 'approver' | 'analyst' | 'read_only';
+
 type Stamps = { created_at: string; updated_at: string };
 
 /** Helper to assemble a Tables entry from its Row + the insertable/updatable shapes.
@@ -672,6 +696,133 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; title: string; description?: string | null; milestone_date?: string; category?: string | null; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null },
         Partial<{ member_id: string | null; title: string; description: string | null; milestone_date: string; category: string | null; status: string; metadata: Json; updated_by: string | null }>
       >;
+
+      // ---- Social command center (migration 0024) ----
+      social_providers: T<
+        { platform: SocialPlatformEnum; label: string; capabilities: Json; auth_method: string; is_enabled: boolean; needs_app_review: boolean; char_limit: number; docs_url: string | null; notes: string | null } & Stamps,
+        { platform: SocialPlatformEnum; label: string; capabilities?: Json; auth_method?: string; is_enabled?: boolean; needs_app_review?: boolean; char_limit?: number; docs_url?: string | null; notes?: string | null },
+        Partial<{ label: string; capabilities: Json; auth_method: string; is_enabled: boolean; needs_app_review: boolean; char_limit: number; docs_url: string | null; notes: string | null }>
+      >;
+      social_accounts: T<
+        { id: string; family_id: string; user_id: string; platform: SocialPlatformEnum; account_type: string | null; provider_account_id: string | null; handle: string | null; display_name: string | null; avatar_url: string | null; profile_url: string | null; status: SocialAccountStatus; health: string; scopes: string[]; last_synced_at: string | null; last_error: string | null; created_by: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; user_id: string; platform: SocialPlatformEnum; account_type?: string | null; provider_account_id?: string | null; handle?: string | null; display_name?: string | null; avatar_url?: string | null; profile_url?: string | null; status?: SocialAccountStatus; health?: string; scopes?: string[]; last_synced_at?: string | null; last_error?: string | null; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; metadata?: Json },
+        Partial<{ account_type: string | null; handle: string | null; display_name: string | null; avatar_url: string | null; profile_url: string | null; status: SocialAccountStatus; health: string; scopes: string[]; last_synced_at: string | null; last_error: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json }>
+      >;
+      social_account_tokens: T<
+        { id: string; account_id: string; family_id: string | null; platform: SocialPlatformEnum; provider_account_id: string | null; access_token_enc: string | null; refresh_token_enc: string | null; token_type: string | null; scope: string | null; expires_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; account_id: string; family_id?: string | null; platform: SocialPlatformEnum; provider_account_id?: string | null; access_token_enc?: string | null; refresh_token_enc?: string | null; token_type?: string | null; scope?: string | null; expires_at?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ access_token_enc: string | null; refresh_token_enc: string | null; token_type: string | null; scope: string | null; expires_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      social_feed_items: T<
+        { id: string; family_id: string; account_id: string; platform: SocialPlatformEnum; provider_object_id: string | null; author_name: string | null; author_handle: string | null; author_avatar_url: string | null; permalink_url: string | null; body: string | null; media_type: string | null; media: Json; metrics: Json; posted_at: string | null; fetched_at: string; status: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; account_id: string; platform: SocialPlatformEnum; provider_object_id?: string | null; author_name?: string | null; author_handle?: string | null; author_avatar_url?: string | null; permalink_url?: string | null; body?: string | null; media_type?: string | null; media?: Json; metrics?: Json; posted_at?: string | null; fetched_at?: string; status?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; metadata?: Json },
+        Partial<{ author_name: string | null; author_handle: string | null; permalink_url: string | null; body: string | null; media_type: string | null; media: Json; metrics: Json; posted_at: string | null; status: string; deleted_at: string | null; metadata: Json }>
+      >;
+      social_campaigns: T<
+        { id: string; family_id: string; user_id: string | null; name: string; description: string | null; status: string; goal: string | null; color: string | null; starts_on: string | null; ends_on: string | null; created_by: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; name: string; description?: string | null; status?: string; goal?: string | null; color?: string | null; starts_on?: string | null; ends_on?: string | null; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; metadata?: Json },
+        Partial<{ name: string; description: string | null; status: string; goal: string | null; color: string | null; starts_on: string | null; ends_on: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json }>
+      >;
+      social_posts: T<
+        { id: string; family_id: string; user_id: string | null; campaign_id: string | null; title: string | null; body: string; kind: SocialPostKind; status: SocialPostStatusEnum; link: string | null; scheduled_for: string | null; published_at: string | null; approval_status: SocialApprovalStatus; approved_by: string | null; approved_at: string | null; created_by: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; campaign_id?: string | null; title?: string | null; body?: string; kind?: SocialPostKind; status?: SocialPostStatusEnum; link?: string | null; scheduled_for?: string | null; published_at?: string | null; approval_status?: SocialApprovalStatus; approved_by?: string | null; approved_at?: string | null; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; metadata?: Json },
+        Partial<{ campaign_id: string | null; title: string | null; body: string; kind: SocialPostKind; status: SocialPostStatusEnum; link: string | null; scheduled_for: string | null; published_at: string | null; approval_status: SocialApprovalStatus; approved_by: string | null; approved_at: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json }>
+      >;
+      social_post_variants: T<
+        { id: string; post_id: string; family_id: string; platform: SocialPlatformEnum; body: string; hashtags: string[]; mentions: string[]; char_count: number; status: string; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; post_id: string; family_id: string; platform: SocialPlatformEnum; body?: string; hashtags?: string[]; mentions?: string[]; char_count?: number; status?: string; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ body: string; hashtags: string[]; mentions: string[]; char_count: number; status: string; updated_by: string | null; metadata: Json }>
+      >;
+      social_post_targets: T<
+        { id: string; post_id: string; family_id: string; account_id: string | null; platform: SocialPlatformEnum; status: SocialTargetStatus; provider_object_id: string | null; permalink_url: string | null; error: string | null; scheduled_for: string | null; published_at: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; post_id: string; family_id: string; account_id?: string | null; platform: SocialPlatformEnum; status?: SocialTargetStatus; provider_object_id?: string | null; permalink_url?: string | null; error?: string | null; scheduled_for?: string | null; published_at?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ account_id: string | null; status: SocialTargetStatus; provider_object_id: string | null; permalink_url: string | null; error: string | null; scheduled_for: string | null; published_at: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      social_media_library: T<
+        { id: string; family_id: string; user_id: string | null; kind: SocialAssetKind; title: string | null; url: string | null; storage_path: string | null; mime_type: string | null; width: number | null; height: number | null; duration_ms: number | null; size_bytes: number | null; alt_text: string | null; tags: string[]; source: string; status: string; usage_count: number; created_by: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; kind: SocialAssetKind; title?: string | null; url?: string | null; storage_path?: string | null; mime_type?: string | null; width?: number | null; height?: number | null; duration_ms?: number | null; size_bytes?: number | null; alt_text?: string | null; tags?: string[]; source?: string; status?: string; usage_count?: number; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; metadata?: Json },
+        Partial<{ title: string | null; url: string | null; storage_path: string | null; mime_type: string | null; alt_text: string | null; tags: string[]; source: string; status: string; usage_count: number; updated_by: string | null; deleted_at: string | null; metadata: Json }>
+      >;
+      social_post_assets: T<
+        { id: string; post_id: string; family_id: string; asset_id: string; platform: SocialPlatformEnum | null; position: number; role: string; created_by: string | null; metadata: Json } & Stamps,
+        { id?: string; post_id: string; family_id: string; asset_id: string; platform?: SocialPlatformEnum | null; position?: number; role?: string; created_by?: string | null; metadata?: Json },
+        Partial<{ platform: SocialPlatformEnum | null; position: number; role: string; metadata: Json }>
+      >;
+      social_schedules: T<
+        { id: string; post_id: string; family_id: string; scheduled_for: string; timezone: string; recurrence: string; status: string; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; post_id: string; family_id: string; scheduled_for: string; timezone?: string; recurrence?: string; status?: string; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ scheduled_for: string; timezone: string; recurrence: string; status: string; updated_by: string | null; metadata: Json }>
+      >;
+      social_publish_jobs: T<
+        { id: string; post_id: string; family_id: string; status: SocialJobStatus; scheduled_for: string; attempts: number; max_attempts: number; next_attempt_at: string | null; idempotency_key: string | null; last_error: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; post_id: string; family_id: string; status?: SocialJobStatus; scheduled_for?: string; attempts?: number; max_attempts?: number; next_attempt_at?: string | null; idempotency_key?: string | null; last_error?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ status: SocialJobStatus; scheduled_for: string; attempts: number; next_attempt_at: string | null; last_error: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      social_publish_results: T<
+        { id: string; job_id: string | null; target_id: string | null; post_id: string; family_id: string; account_id: string | null; platform: SocialPlatformEnum; status: SocialTargetStatus; provider_object_id: string | null; permalink_url: string | null; error_code: string | null; error_message: string | null; raw_response: Json; attempted_at: string; created_by: string | null; metadata: Json } & Stamps,
+        { id?: string; job_id?: string | null; target_id?: string | null; post_id: string; family_id: string; account_id?: string | null; platform: SocialPlatformEnum; status?: SocialTargetStatus; provider_object_id?: string | null; permalink_url?: string | null; error_code?: string | null; error_message?: string | null; raw_response?: Json; attempted_at?: string; created_by?: string | null; metadata?: Json },
+        Partial<{ status: SocialTargetStatus; provider_object_id: string | null; permalink_url: string | null; error_code: string | null; error_message: string | null; raw_response: Json; metadata: Json }>
+      >;
+      social_comments: T<
+        { id: string; family_id: string; account_id: string | null; platform: SocialPlatformEnum; provider_object_id: string | null; feed_item_id: string | null; parent_provider_id: string | null; kind: string; author_name: string | null; author_handle: string | null; body: string | null; permalink_url: string | null; status: SocialInboxStatus; assigned_to: string | null; posted_at: string | null; created_by: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; account_id?: string | null; platform: SocialPlatformEnum; provider_object_id?: string | null; feed_item_id?: string | null; parent_provider_id?: string | null; kind?: string; author_name?: string | null; author_handle?: string | null; body?: string | null; permalink_url?: string | null; status?: SocialInboxStatus; assigned_to?: string | null; posted_at?: string | null; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; metadata?: Json },
+        Partial<{ kind: string; body: string | null; status: SocialInboxStatus; assigned_to: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json }>
+      >;
+      social_messages: T<
+        { id: string; family_id: string; account_id: string | null; platform: SocialPlatformEnum; provider_object_id: string | null; thread_id: string | null; direction: string; author_name: string | null; author_handle: string | null; body: string | null; status: SocialInboxStatus; assigned_to: string | null; posted_at: string | null; created_by: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; account_id?: string | null; platform: SocialPlatformEnum; provider_object_id?: string | null; thread_id?: string | null; direction?: string; author_name?: string | null; author_handle?: string | null; body?: string | null; status?: SocialInboxStatus; assigned_to?: string | null; posted_at?: string | null; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; metadata?: Json },
+        Partial<{ direction: string; body: string | null; status: SocialInboxStatus; assigned_to: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json }>
+      >;
+      social_analytics_snapshots: T<
+        { id: string; family_id: string; account_id: string | null; post_id: string | null; platform: SocialPlatformEnum; captured_for: string; impressions: number; reach: number; likes: number; comments: number; shares: number; saves: number; clicks: number; views: number; watch_time_seconds: number; followers: number; engagement_rate: number; metrics: Json; created_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; account_id?: string | null; post_id?: string | null; platform: SocialPlatformEnum; captured_for?: string; impressions?: number; reach?: number; likes?: number; comments?: number; shares?: number; saves?: number; clicks?: number; views?: number; watch_time_seconds?: number; followers?: number; engagement_rate?: number; metrics?: Json; created_by?: string | null; metadata?: Json },
+        Partial<{ impressions: number; reach: number; likes: number; comments: number; shares: number; saves: number; clicks: number; views: number; watch_time_seconds: number; followers: number; engagement_rate: number; metrics: Json; metadata: Json }>
+      >;
+      social_ai_generations: T<
+        { id: string; family_id: string; user_id: string | null; post_id: string | null; kind: string; platform: SocialPlatformEnum | null; prompt: string | null; input: Json; output: Json; model: string | null; tokens: number; status: string; created_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; post_id?: string | null; kind: string; platform?: SocialPlatformEnum | null; prompt?: string | null; input?: Json; output?: Json; model?: string | null; tokens?: number; status?: string; created_by?: string | null; metadata?: Json },
+        Partial<{ post_id: string | null; output: Json; status: string; tokens: number; metadata: Json }>
+      >;
+      social_content_templates: T<
+        { id: string; family_id: string; user_id: string | null; name: string; kind: SocialPostKind; body: string; platforms: string[]; hashtags: string[]; status: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; name: string; kind?: SocialPostKind; body?: string; platforms?: string[]; hashtags?: string[]; status?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; metadata?: Json },
+        Partial<{ name: string; kind: SocialPostKind; body: string; platforms: string[]; hashtags: string[]; status: string; updated_by: string | null; deleted_at: string | null; metadata: Json }>
+      >;
+      social_calendar_items: T<
+        { id: string; family_id: string; post_id: string | null; campaign_id: string | null; title: string | null; platform: SocialPlatformEnum | null; scheduled_for: string; status: string; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; post_id?: string | null; campaign_id?: string | null; title?: string | null; platform?: SocialPlatformEnum | null; scheduled_for: string; status?: string; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ title: string | null; platform: SocialPlatformEnum | null; scheduled_for: string; status: string; updated_by: string | null; metadata: Json }>
+      >;
+      social_webhook_events: T<
+        { id: string; family_id: string | null; account_id: string | null; platform: SocialPlatformEnum; provider_object_id: string | null; event_type: string | null; payload: Json; signature_ok: boolean; processed: boolean; processed_at: string | null; received_at: string; metadata: Json } & Stamps,
+        { id?: string; family_id?: string | null; account_id?: string | null; platform: SocialPlatformEnum; provider_object_id?: string | null; event_type?: string | null; payload?: Json; signature_ok?: boolean; processed?: boolean; processed_at?: string | null; received_at?: string; metadata?: Json },
+        Partial<{ processed: boolean; signature_ok: boolean; processed_at: string | null; metadata: Json }>
+      >;
+      social_provider_errors: T<
+        { id: string; family_id: string | null; account_id: string | null; platform: SocialPlatformEnum; scope: string | null; error_code: string | null; error_message: string | null; context: Json; occurred_at: string; created_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id?: string | null; account_id?: string | null; platform: SocialPlatformEnum; scope?: string | null; error_code?: string | null; error_message?: string | null; context?: Json; occurred_at?: string; created_by?: string | null; metadata?: Json },
+        Partial<{ error_code: string | null; error_message: string | null; context: Json; metadata: Json }>
+      >;
+      social_usage_events: T<
+        { id: string; family_id: string; user_id: string | null; platform: SocialPlatformEnum | null; kind: string; quantity: number; unit: string; occurred_at: string; metadata: Json } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; platform?: SocialPlatformEnum | null; kind: string; quantity?: number; unit?: string; occurred_at?: string; metadata?: Json },
+        Partial<{ quantity: number; unit: string; metadata: Json }>
+      >;
+      social_audit_logs: T<
+        { id: string; family_id: string; actor_id: string | null; action: string; entity_type: string | null; entity_id: string | null; summary: string | null; before: Json | null; after: Json | null; ip: string | null; occurred_at: string; metadata: Json } & Stamps,
+        { id?: string; family_id: string; actor_id?: string | null; action: string; entity_type?: string | null; entity_id?: string | null; summary?: string | null; before?: Json | null; after?: Json | null; ip?: string | null; occurred_at?: string; metadata?: Json },
+        Partial<{ summary: string | null; metadata: Json }>
+      >;
+      social_settings: T<
+        { id: string; family_id: string; default_timezone: string; default_platforms: string[]; require_approval: boolean; auto_hashtags: boolean; signature: string | null; ai_tone: string; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; default_timezone?: string; default_platforms?: string[]; require_approval?: boolean; auto_hashtags?: boolean; signature?: string | null; ai_tone?: string; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ default_timezone: string; default_platforms: string[]; require_approval: boolean; auto_hashtags: boolean; signature: string | null; ai_tone: string; updated_by: string | null; metadata: Json }>
+      >;
+      social_access_permissions: T<
+        { id: string; family_id: string; user_id: string; member_id: string | null; social_role: SocialRoleEnum; status: string; granted_by: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; user_id: string; member_id?: string | null; social_role?: SocialRoleEnum; status?: string; granted_by?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ member_id: string | null; social_role: SocialRoleEnum; status: string; updated_by: string | null; metadata: Json }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
@@ -683,6 +834,8 @@ export interface Database {
       is_family_admin: { Args: { p_family_id: string }; Returns: boolean };
       is_super_admin: { Args: Record<string, never>; Returns: boolean };
       public_stats: { Args: Record<string, never>; Returns: { families: number; members: number; tasks_completed: number }[] };
+      social_role_for: { Args: { p_family_id: string }; Returns: SocialRoleEnum };
+      social_has_permission: { Args: { p_family_id: string; p_permission: string }; Returns: boolean };
     };
     Enums: {
       member_role: MemberRole;
@@ -711,6 +864,16 @@ export interface Database {
       sync_conflict_status: SyncConflictStatus;
       sync_conflict_resolution: SyncConflictResolutionEnum;
       sync_job_status: SyncJobStatus;
+      social_platform: SocialPlatformEnum;
+      social_account_status: SocialAccountStatus;
+      social_post_kind: SocialPostKind;
+      social_post_status: SocialPostStatusEnum;
+      social_target_status: SocialTargetStatus;
+      social_job_status: SocialJobStatus;
+      social_approval_status: SocialApprovalStatus;
+      social_inbox_status: SocialInboxStatus;
+      social_asset_kind: SocialAssetKind;
+      social_role: SocialRoleEnum;
     };
   };
 }
