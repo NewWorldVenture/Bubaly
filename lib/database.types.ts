@@ -30,6 +30,7 @@ export type ThemePref = 'dark' | 'light' | 'system';
 export type DashboardView = 'personal' | 'family';
 export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
 export type RecordKind = 'medical' | 'dental';
+export type DoseStatus = 'taken' | 'skipped' | 'missed';
 
 // Sync platform enums (migration 0018)
 export type SyncProviderEnum = 'google' | 'microsoft' | 'apple' | 'amazon' | 'internal';
@@ -147,6 +148,11 @@ export interface Database {
         { id: string; family_id: string; medication_id: string; time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null } & Stamps,
         { id?: string; family_id: string; medication_id: string; time_of_day: string; days_of_week?: number[]; starts_on?: string; ends_on?: string | null },
         Partial<{ time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null }>
+      >;
+      medication_doses: T<
+        { id: string; family_id: string; medication_id: string; schedule_id: string | null; member_id: string | null; scheduled_for: string; status: DoseStatus; taken_at: string | null; notes: string | null; logged_by: string | null } & Stamps,
+        { id?: string; family_id: string; medication_id: string; schedule_id?: string | null; member_id?: string | null; scheduled_for: string; status?: DoseStatus; taken_at?: string | null; notes?: string | null; logged_by?: string | null },
+        Partial<{ schedule_id: string | null; member_id: string | null; scheduled_for: string; status: DoseStatus; taken_at: string | null; notes: string | null }>
       >;
       health_providers: T<
         { id: string; family_id: string; member_id: string | null; kind: RecordKind; name: string; specialty: string | null; practice_name: string | null; phone: string | null; fax: string | null; email: string | null; address: string | null; is_primary: boolean; notes: string | null; created_by: string | null } & Stamps,
