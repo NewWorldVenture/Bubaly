@@ -1,7 +1,7 @@
 /* FamilyOS service worker — app-shell caching for offline-friendly PWA behavior.
    Network-first for navigation/API (always fresh family data when online),
    cache-first for static assets. */
-const CACHE = 'familyos-v1';
+const CACHE = 'familyos-v2';
 const APP_SHELL = ['/', '/dashboard', '/offline'];
 
 self.addEventListener('install', (event) => {
@@ -60,8 +60,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: '/icon.svg',
-      badge: '/icon.svg',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-96.png',
       data: data.url || '/dashboard',
     }),
   );

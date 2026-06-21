@@ -84,7 +84,7 @@ export default async function CommandCenterPage() {
   const scoreColor = score >= 85 ? '#22c55e' : score >= 60 ? '#fbbf24' : '#f87171';
 
   const issues: Issue[] = [];
-  for (const c of conflicts) issues.push({ icon: CalendarClock, severity: 'high', href: '/dashboard/calendar', text: `Schedule conflict: “${c.a.title}” overlaps “${c.b.title}” (${fmtTime(c.a.starts_at)})` });
+  for (const c of conflicts) issues.push({ icon: CalendarClock, severity: 'high', href: '/dashboard/conflicts', text: `Schedule conflict: “${c.a.title}” overlaps “${c.b.title}” (${fmtTime(c.a.starts_at)})` });
   if (overdue.length) issues.push({ icon: CheckCircle2, severity: 'high', href: '/dashboard/chores', text: `${overdue.length} overdue ${overdue.length === 1 ? 'chore' : 'chores'}` });
   if (unplannedDinners.length) issues.push({ icon: UtensilsCrossed, severity: 'medium', href: '/dashboard/meals', text: `${unplannedDinners.length} ${unplannedDinners.length === 1 ? 'day' : 'days'} this week without a planned dinner` });
   for (const d of expiringDocs ?? []) issues.push({ icon: FileWarning, severity: 'medium', href: '/dashboard/documents', text: `“${d.title}” expires ${d.expires_at ? fmtDate(d.expires_at) : 'soon'}` });

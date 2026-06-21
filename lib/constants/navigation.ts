@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet,
-  Zap, Network, ShieldAlert, BookHeart, Import, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -56,6 +56,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/dashboard/meals', label: 'Meals', icon: UtensilsCrossed, minLevel: 1 },
       { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle, minLevel: 0 },
+      { href: '/dashboard/social', label: 'Social Command', icon: Share2, minLevel: 1 },
       { href: '/dashboard/grocery', label: 'Groceries', icon: ShoppingCart, minLevel: 0 },
       { href: '/dashboard/reminders', label: 'Reminders', icon: Bell, minLevel: 0 },
       { href: '/dashboard/weather', label: 'Weather', icon: CloudSun, minLevel: 0 },
@@ -106,6 +107,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     layout: 'grid',
     items: [
       { href: '/dashboard/family-operations', label: 'Operations', icon: Command, minLevel: 2 },
+      { href: '/dashboard/conflicts', label: 'AI Conflict Resolution', icon: CalendarClock, minLevel: 2 },
       { href: '/dashboard/autonomous-family-management', label: 'Autonomous AI', icon: Bot, minLevel: 2 },
       { href: '/dashboard/family-ai-assistant', label: 'AI Assistant', icon: Sparkles, minLevel: 2 },
       { href: '/dashboard/family-digital-twin', label: 'Digital Twin', icon: Brain, minLevel: 2 },
@@ -139,6 +141,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/billing', label: 'Billing & Payments', icon: DollarSign },
   { href: '/admin/integrations', label: 'Integrations', icon: Plug },
   { href: '/admin/sync', label: 'Sync Platform', icon: RefreshCw },
+  { href: '/admin/social', label: 'Social Platform', icon: Share2 },
   { href: '/admin/backup', label: 'Backup & Restore', icon: HardDrive },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: ClipboardList },
   { href: '/admin/support-tickets', label: 'Support Tickets', icon: TicketCheck },
