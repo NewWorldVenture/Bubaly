@@ -32,21 +32,21 @@ const GROUPS = [
 
 export function SiteFooter() {
   return (
-    <footer className="dark border-t border-white/[0.055] bg-[#030911] text-white">
+    <footer className="border-t border-border/70 bg-bg text-fg transition-colors duration-300">
       <div className="mx-auto grid max-w-[1440px] grid-cols-2 gap-8 px-5 py-10 sm:px-8 md:grid-cols-4 lg:px-10">
         <div className="col-span-2 md:col-span-1">
           <Logo className="[&>span:first-child]:h-6 [&>span:first-child]:w-7 [&>span:last-child]:text-[18px]" />
-          <p className="mt-3 max-w-[220px] text-[11px] leading-5 text-white/42">
+          <p className="mt-3 max-w-[220px] text-[11px] leading-5 text-muted">
             Run your family like a calm, connected team.
           </p>
         </div>
         {GROUPS.map((g) => (
           <div key={g.title}>
-            <h4 className="text-[11px] font-semibold text-white/88">{g.title}</h4>
+            <h4 className="text-[11px] font-semibold text-fg">{g.title}</h4>
             <ul className="mt-3 space-y-2.5">
               {g.links.map((l) => (
                 <li key={l.href}>
-                  <Link href={l.href} className="text-[10px] text-white/42 transition hover:text-white">
+                  <Link href={l.href} className="text-[10px] text-muted transition hover:text-fg">
                     {l.label}
                   </Link>
                 </li>
