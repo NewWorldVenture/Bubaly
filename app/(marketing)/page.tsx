@@ -36,7 +36,7 @@ export default async function HomePage() {
 
           {/* Left */}
           <div className="order-1 text-center lg:text-left">
-            <Pill icon={Sparkles}>AI-Powered Family Command Center</Pill>
+            <Pill icon={Sparkles}>AI-Powered Family Command Center!!</Pill>
 
             <h1 className="mt-6 text-[clamp(3rem,11vw,4.1rem)] font-extrabold leading-[1.03] tracking-[-0.038em] lg:text-[4.25rem]">
               Everything your<br />
