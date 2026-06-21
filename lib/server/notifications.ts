@@ -6,6 +6,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, NotificationType } from '@/lib/database.types';
 import { renewalReminders, opportunityReminders } from '@/lib/notifications/deadline-reminders';
+import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
 
 type DB = SupabaseClient<Database>;
 
@@ -40,6 +41,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   const nowIso = now.toISOString();
   // Date-only (YYYY-MM-DD) bounds for the date columns on renewals/opportunities.
   const todayKey = nowIso.slice(0, 10);
+  const todayStartIso = `${todayKey}T00:00:00.000Z`;
   const renewalMaxKey = new Date(now.getTime() + 90 * 24 * HOUR).toISOString().slice(0, 10);
   const signupMaxKey = new Date(now.getTime() + 7 * 24 * HOUR).toISOString().slice(0, 10);
 
@@ -53,6 +55,9 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     { data: docs },
     { data: renewalsDue },
     { data: signupsDue },
+    { data: meds },
+    { data: medSchedules },
+    { data: medDoses },
   ] = await Promise.all([
     supabase.from('family_members').select('id, user_id, display_name, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
@@ -64,6 +69,10 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     // Renewals within ~90d (per-item reminder window applied in code) and open signups within 7d.
     supabase.from('renewals').select('id, title, expires_at, reminder_days, status').eq('family_id', familyId).eq('status', 'active').gte('expires_at', todayKey).lte('expires_at', renewalMaxKey),
     supabase.from('opportunities').select('id, title, deadline, status').eq('family_id', familyId).in('status', ['interested', 'waitlisted']).not('deadline', 'is', null).gte('deadline', todayKey).lte('deadline', signupMaxKey),
+    // Active meds + their schedules + today's logged doses → "dose due today" reminders.
+    supabase.from('medications').select('id, name, dosage, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
+    supabase.from('medication_schedules').select('id, medication_id, time_of_day, days_of_week, starts_on, ends_on').eq('family_id', familyId),
+    supabase.from('medication_doses').select('schedule_id, scheduled_for, status').eq('family_id', familyId).gte('scheduled_for', todayStartIso),
   ]);
 
   const userByMember = new Map((members ?? []).map((m) => [m.id, m.user_id]));
@@ -145,32 +154,64 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     candidates.push(row);
   }
 
-  if (candidates.length === 0) return 0;
+  // ── Generic items: dedup permanently against notifications for the same item.
+  let rows: NotificationRow[] = [];
+  if (candidates.length > 0) {
+    const relatedIds = [...new Set(candidates.map((c) => c.related_id))];
+    const { data: existing } = await supabase
+      .from('notifications')
+      .select('type, related_id, user_id')
+      .eq('family_id', familyId)
+      .in('related_id', relatedIds);
+    const seen = new Set((existing ?? []).map((e) => `${e.type}:${e.related_id}:${e.user_id ?? 'all'}`));
+    rows = candidates
+      .filter((c) => !seen.has(`${c.type}:${c.related_id}:${c.user_id ?? 'all'}`))
+      .slice(0, 100)
+      .map((c) => toRow(familyId, c));
+  }
 
-  // Dedup against notifications already created for these items.
-  const relatedIds = [...new Set(candidates.map((c) => c.related_id))];
-  const { data: existing } = await supabase
-    .from('notifications')
-    .select('type, related_id, user_id')
-    .eq('family_id', familyId)
-    .in('related_id', relatedIds);
-  const seen = new Set((existing ?? []).map((e) => `${e.type}:${e.related_id}:${e.user_id ?? 'all'}`));
+  // ── Medication doses recur daily, so they dedup against TODAY's medication_due
+  //    notifications only (related_id stays the medication's real uuid).
+  let medRows: NotificationRow[] = [];
+  const medReminders = medicationDueReminders(meds ?? [], medSchedules ?? [], medDoses ?? [], userByMember, managerLites, now);
+  if (medReminders.length > 0) {
+    const { data: existingMed } = await supabase
+      .from('notifications')
+      .select('related_id, user_id')
+      .eq('family_id', familyId)
+      .eq('type', 'medication_due')
+      .gte('created_at', todayStartIso);
+    const seenMed = new Set((existingMed ?? []).map((e) => `${e.related_id}:${e.user_id ?? 'all'}`));
+    medRows = medReminders
+      .filter((r) => !seenMed.has(`${r.related_id}:${r.user_id ?? 'all'}`))
+      .map((r) => toRow(familyId, r));
+  }
 
-  const rows = candidates
-    .filter((c) => !seen.has(`${c.type}:${c.related_id}:${c.user_id ?? 'all'}`))
-    .slice(0, 100)
-    .map((c) => ({
-      family_id: familyId,
-      user_id: c.user_id,
-      type: c.type,
-      title: c.title,
-      body: c.body,
-      related_type: c.related_type,
-      related_id: c.related_id,
-    }));
-
-  if (rows.length === 0) return 0;
-  const { error } = await supabase.from('notifications').insert(rows);
+  const allRows = [...rows, ...medRows].slice(0, 150);
+  if (allRows.length === 0) return 0;
+  const { error } = await supabase.from('notifications').insert(allRows);
   if (error) throw new Error(error.message);
-  return rows.length;
+  return allRows.length;
+}
+
+type NotificationRow = {
+  family_id: string;
+  user_id: string | null;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  related_type: string;
+  related_id: string;
+};
+
+function toRow(familyId: string, c: Candidate): NotificationRow {
+  return {
+    family_id: familyId,
+    user_id: c.user_id,
+    type: c.type,
+    title: c.title,
+    body: c.body,
+    related_type: c.related_type,
+    related_id: c.related_id,
+  };
 }
