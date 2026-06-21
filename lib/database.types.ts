@@ -973,6 +973,18 @@ export interface Database {
         { id?: string; family_id: string; user_id?: string | null; vehicle_id?: string | null; kind: string; input?: Json; output?: Json; model?: string | null; status?: string; created_by?: string | null; metadata?: Json },
         Partial<{ output: Json; status: string; metadata: Json }>
       >;
+
+      // ---- Surveys / NPS / CSAT / CES (migration 0040) ----
+      surveys: T<
+        { id: string; slug: string; name: string; type: string; question: string; scale_min: number; scale_max: number; low_label: string | null; high_label: string | null; follow_up_question: string | null; thank_you_message: string | null; status: string; audience: string | null; created_by: string | null; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; slug: string; name: string; type?: string; question: string; scale_min?: number; scale_max?: number; low_label?: string | null; high_label?: string | null; follow_up_question?: string | null; thank_you_message?: string | null; status?: string; audience?: string | null; created_by?: string | null; deleted_at?: string | null; metadata?: Json },
+        Partial<{ slug: string; name: string; type: string; question: string; scale_min: number; scale_max: number; low_label: string | null; high_label: string | null; follow_up_question: string | null; thank_you_message: string | null; status: string; audience: string | null; deleted_at: string | null; metadata: Json }>
+      >;
+      survey_responses: T<
+        { id: string; survey_id: string; score: number | null; comment: string | null; respondent_email: string | null; respondent_family_id: string | null; channel: string; user_agent: string | null; submitted_at: string; metadata: Json } & Stamps,
+        { id?: string; survey_id: string; score?: number | null; comment?: string | null; respondent_email?: string | null; respondent_family_id?: string | null; channel?: string; user_agent?: string | null; submitted_at?: string; metadata?: Json },
+        Partial<{ score: number | null; comment: string | null; respondent_email: string | null; channel: string; metadata: Json }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
