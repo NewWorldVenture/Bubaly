@@ -92,7 +92,7 @@ export function AdminShell({
         {/* Top bar */}
         <header className="sticky top-0 z-30 flex h-topbar items-center gap-3 border-b border-border/60 bg-bg/85 px-4 backdrop-blur-xl sm:gap-4 sm:px-6">
           <Link href="/admin" className="lg:hidden">
-            <LogoMark className="h-9 w-9 text-lg" />
+            <LogoMark className="h-9 w-16" />
           </Link>
           <span className="hidden items-center gap-1 rounded-full border border-brand/25 bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand sm:inline-flex">
             <ShieldCheck className="h-3.5 w-3.5" /> Super Admin

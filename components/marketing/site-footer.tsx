@@ -35,7 +35,7 @@ export function SiteFooter() {
     <footer className="border-t border-border/70 bg-bg text-fg transition-colors duration-300">
       <div className="mx-auto grid max-w-[1440px] grid-cols-2 gap-8 px-5 py-10 sm:px-8 md:grid-cols-4 lg:px-10">
         <div className="col-span-2 md:col-span-1">
-          <Logo className="[&>span:first-child]:h-6 [&>span:first-child]:w-7 [&>span:last-child]:text-[18px]" />
+          <Logo />
           <p className="mt-3 max-w-[220px] text-[11px] leading-5 text-muted">
             Run your family like a calm, connected team.
           </p>
