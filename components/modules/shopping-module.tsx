@@ -332,6 +332,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+    if (!familyId) { toastError('No active family — reload and try again.'); return; }
     setLoading(true);
     const supabase = createClient();
     const { data, error } = await supabase.from('grocery_lists').insert({
