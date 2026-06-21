@@ -7,6 +7,8 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/join', '/offline',
   // Public survey response pages (NPS/CSAT/CES) — respondents may be anonymous.
   '/s',
+  // Public reviews wall + submission page — no login required.
+  '/reviews',
   // Public iCalendar feeds: subscribed to by Apple Calendar / Outlook / Alexa
   // with no login — the unguessable feed token IS the authorization.
   '/api/sync/feeds',
