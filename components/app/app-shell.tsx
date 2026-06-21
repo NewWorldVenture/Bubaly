@@ -194,8 +194,9 @@ function NavEntry({ item, variant, onLocked }: {
   item: NavItem; variant: 'list' | 'grid'; onLocked: (item: NavItem) => void;
 }) {
   const pathname = usePathname();
-  const { planLevel } = useApp();
-  const locked = (item.minLevel ?? 0) > planLevel;
+  const { planLevel, isSuperAdmin } = useApp();
+  // Super admins are never plan-gated, so nothing is locked for them.
+  const locked = !isSuperAdmin && (item.minLevel ?? 0) > planLevel;
   const active = !locked && isActive(pathname, item.href);
 
   const base = variant === 'grid'
@@ -299,7 +300,7 @@ function ThemeSwitch() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { planLevel } = useApp();
+  const { planLevel, isSuperAdmin } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
 
   return (
@@ -356,7 +357,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/90 backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex max-w-lg items-stretch justify-around">
           {MOBILE_TABS.map((item) => {
-            const locked = (item.minLevel ?? 0) > planLevel;
+            const locked = !isSuperAdmin && (item.minLevel ?? 0) > planLevel;
             const active = !locked && isActive(pathname, item.href);
             const className = cn(
               'relative flex flex-1 flex-col items-center gap-0.5 pb-1 pt-2 text-[11px] font-medium transition',
