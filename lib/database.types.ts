@@ -31,6 +31,7 @@ export type DashboardView = 'personal' | 'family';
 export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
 export type RecordKind = 'medical' | 'dental';
 export type RideStatus = 'planned' | 'confirmed' | 'completed' | 'cancelled';
+export type DoseStatus = 'taken' | 'skipped' | 'missed';
 
 // Sync platform enums (migration 0018)
 export type SyncProviderEnum = 'google' | 'microsoft' | 'apple' | 'amazon' | 'internal';
@@ -148,6 +149,11 @@ export interface Database {
         { id: string; family_id: string; medication_id: string; time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null } & Stamps,
         { id?: string; family_id: string; medication_id: string; time_of_day: string; days_of_week?: number[]; starts_on?: string; ends_on?: string | null },
         Partial<{ time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null }>
+      >;
+      medication_doses: T<
+        { id: string; family_id: string; medication_id: string; schedule_id: string | null; member_id: string | null; scheduled_for: string; status: DoseStatus; taken_at: string | null; notes: string | null; logged_by: string | null } & Stamps,
+        { id?: string; family_id: string; medication_id: string; schedule_id?: string | null; member_id?: string | null; scheduled_for: string; status?: DoseStatus; taken_at?: string | null; notes?: string | null; logged_by?: string | null },
+        Partial<{ schedule_id: string | null; member_id: string | null; scheduled_for: string; status: DoseStatus; taken_at: string | null; notes: string | null }>
       >;
       rides: T<
         { id: string; family_id: string; title: string; ride_date: string; pickup_time: string | null; dropoff_time: string | null; pickup_location: string | null; dropoff_location: string | null; driver_id: string | null; rider_ids: string[]; status: RideStatus; notes: string | null; event_id: string | null; created_by: string | null } & Stamps,
