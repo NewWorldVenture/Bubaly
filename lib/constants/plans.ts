@@ -81,6 +81,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/medications':   1,
   '/dashboard/inbox':         1,
   '/dashboard/scan':          1,
+  '/dashboard/trips':         1,
   '/dashboard/rides':         1,
   '/display':                 1,  // Kitchen Display Mode
   // Plus routes
