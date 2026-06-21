@@ -17,7 +17,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-border/70 bg-bg/95 text-fg backdrop-blur-xl transition-colors duration-300">
       <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-4 px-5 sm:px-8 lg:px-10">
-        <Logo className="[&>span:first-child]:h-6 [&>span:first-child]:w-7 [&>span:last-child]:text-[20px]" />
+        <Logo className="[&>img]:h-11" />
 
         <nav className="hidden h-full items-center gap-7 lg:flex">
           {MARKETING_NAV.map((item) => (
