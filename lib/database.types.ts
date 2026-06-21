@@ -595,6 +595,11 @@ export interface Database {
         { id?: string; family_id: string; name: string; admin1?: string | null; country?: string | null; latitude: number; longitude: number; is_default?: boolean; sort_order?: number; created_by?: string | null },
         Partial<{ name: string; admin1: string | null; country: string | null; latitude: number; longitude: number; is_default: boolean; sort_order: number }>
       >;
+      display_layouts: T<
+        { id: string; family_id: string; tiles: Json; updated_by: string | null } & Stamps,
+        { id?: string; family_id: string; tiles?: Json; updated_by?: string | null },
+        Partial<{ tiles: Json; updated_by: string | null }>
+      >;
       // ── Admin console (migration 0015) ──────────────────────
       app_settings: T<
         { key: string; value: Json; updated_by: string | null; updated_at: string },
