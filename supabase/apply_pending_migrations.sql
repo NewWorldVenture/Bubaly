@@ -768,6 +768,8 @@ END $$;
 -- ============================================================
 
 
+
+
 -- ============================================================
 -- FAMILY OS :: features 0026–0033 (appended)
 -- Net-new modules: medications dose log, rides, reward redemptions,
@@ -994,18 +996,21 @@ CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.trip_items
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- ── RLS ────────────────────────────────────────────────────
-DO $$
-DECLARE t text;
-BEGIN
-  FOREACH t IN ARRAY ARRAY['trips', 'trip_items'] LOOP
-    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
-    EXECUTE format('DROP POLICY IF EXISTS "Members can manage %1$s" ON public.%1$I', t);
-    EXECUTE format(
-      'CREATE POLICY "Members can manage %1$s" ON public.%1$I FOR ALL TO authenticated USING (public.is_family_member(family_id)) WITH CHECK (public.is_family_member(family_id))',
-      t
-    );
-  END LOOP;
-END $$;
+-- Explicit per-table statements (no DO/format loop): the dollar-quoted
+-- format() placeholders confuse some SQL clients' statement parsers.
+ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members can manage trips" ON public.trips;
+CREATE POLICY "Members can manage trips" ON public.trips
+  FOR ALL TO authenticated
+  USING (public.is_family_member(family_id))
+  WITH CHECK (public.is_family_member(family_id));
+
+ALTER TABLE public.trip_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members can manage trip_items" ON public.trip_items;
+CREATE POLICY "Members can manage trip_items" ON public.trip_items
+  FOR ALL TO authenticated
+  USING (public.is_family_member(family_id))
+  WITH CHECK (public.is_family_member(family_id));
 
 
 -- ─────────────────────────────────────────────────────────
