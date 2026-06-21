@@ -181,11 +181,11 @@ body::before {
       linear-gradient(180deg, var(--canvas-top) 0%, var(--canvas-bottom) 100%);
   }
   .homepage-reference-bg {
-    color: #f7f8fb;
+    color: rgb(var(--canvas-fg));
     background:
       radial-gradient(36rem 34rem at 78% 10%, rgb(105 63 255 / 0.24), transparent 68%),
       radial-gradient(28rem 22rem at 6% 6%, rgb(26 94 170 / 0.08), transparent 70%),
-      linear-gradient(180deg, #02070d 0%, #04101a 58%, #020810 100%);
+      linear-gradient(180deg, var(--canvas-top) 0%, var(--canvas-bottom) 58%, var(--canvas-top) 100%);
   }
   .icon-orb {
     @apply inline-flex items-center justify-center rounded-full;

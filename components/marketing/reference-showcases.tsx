@@ -47,7 +47,7 @@ type Tone = keyof typeof tones;
 
 function ReferencePage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="dark reference-page min-h-screen overflow-hidden bg-[#020811] text-white">
+    <div className="reference-page soft-grid-bg min-h-screen overflow-hidden text-fg transition-colors duration-300">
       {children}
     </div>
   );
@@ -88,7 +88,7 @@ function SquareIcon({ icon: Icon, tone = 'violet', className }: { icon: LucideIc
 
 function PrimaryButton({ href = '/signup', children }: { href?: string; children: React.ReactNode }) {
   return (
-    <Link href={href} className="inline-flex h-12 items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-[#435df0] to-[#7834e9] px-6 text-[13px] font-semibold shadow-[0_10px_32px_rgba(91,61,236,.24)] transition hover:brightness-110">
+    <Link href={href} className="inline-flex h-12 items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-[#435df0] to-[#7834e9] px-6 text-[13px] font-semibold text-brand-fg shadow-[0_10px_32px_rgba(91,61,236,.24)] transition hover:brightness-110">
       {children}
     </Link>
   );
