@@ -678,6 +678,16 @@ export interface Database {
         { id?: string; family_id: string; tiles?: Json; updated_by?: string | null },
         Partial<{ tiles: Json; updated_by: string | null }>
       >;
+      referral_codes: T<
+        { id: string; family_id: string; code: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; code: string; created_by?: string | null },
+        Partial<{ code: string }>
+      >;
+      referrals: T<
+        { id: string; code: string; referrer_family_id: string; referred_family_id: string | null; referred_email: string | null; status: string; source: string | null; referrer_reward_cents: number; referred_reward_cents: number; signed_up_at: string; converted_at: string | null; rewarded_at: string | null; metadata: Json } & Stamps,
+        { id?: string; code: string; referrer_family_id: string; referred_family_id?: string | null; referred_email?: string | null; status?: string; source?: string | null; referrer_reward_cents?: number; referred_reward_cents?: number; signed_up_at?: string; converted_at?: string | null; rewarded_at?: string | null; metadata?: Json },
+        Partial<{ referred_family_id: string | null; referred_email: string | null; status: string; source: string | null; referrer_reward_cents: number; referred_reward_cents: number; converted_at: string | null; rewarded_at: string | null; metadata: Json }>
+      >;
       // ── Admin console (migration 0015) ──────────────────────
       app_settings: T<
         { key: string; value: Json; updated_by: string | null; updated_at: string },

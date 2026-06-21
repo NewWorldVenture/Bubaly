@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
+import { markReferralConverted } from '@/lib/referrals/server';
 import type Stripe from 'stripe';
 
 export const runtime = 'nodejs';
@@ -42,6 +43,12 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
     },
     { onConflict: 'family_id' },
   );
+
+  // Credit a pending referral when a referred family first becomes paid.
+  if (plan !== 'free' && (sub.status === 'active' || sub.status === 'trialing')) {
+    try { await markReferralConverted(supabase, familyId); }
+    catch (e) { console.error('[referral] conversion crediting failed', e); }
+  }
 }
 
 export async function POST(req: NextRequest) {
