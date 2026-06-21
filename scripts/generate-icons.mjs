@@ -1,44 +1,52 @@
 // scripts/generate-icons.mjs
-// Rasterizes the brand mark (public/icon.svg) into the PNG icon set required by
+// Rasterizes the Bubaly house mark into the PNG icon set required by
 // PWA install, iOS home screen, Android adaptive icons, and the native app
 // launchers. Run with: node scripts/generate-icons.mjs
 //
 // Maskable icons get extra padding (safe zone) so Android's adaptive mask never
-// clips the house mark. The solid background matches the app theme (#090c14).
+// clips the house mark. The neutral tile keeps the gradient legible everywhere.
 import sharp from 'sharp';
-import { readFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const svg = readFileSync(join(root, 'public/icon.svg'));
+const mark = readFileSync(join(root, 'public/brand/bubaly-mark.png'));
 const outDir = join(root, 'public/icons');
 mkdirSync(outDir, { recursive: true });
 
-const BG = '#090c14';
+const BG = '#ffffff';
 
-// Standard "any" purpose icons — full-bleed mark.
+async function composeIcon(size, inset = 0.08) {
+  const width = Math.round(size * (1 - inset * 2));
+  const height = Math.round(size * (1 - inset * 2));
+  const resizedMark = await sharp(mark)
+    .resize(width, height, {
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png()
+    .toBuffer();
+
+  return sharp({ create: { width: size, height: size, channels: 4, background: BG } })
+    .composite([{ input: resizedMark, gravity: 'center' }])
+    .png()
+    .toBuffer();
+}
+
+// Standard "any" purpose icons — compact mark on a neutral tile.
 const standard = [16, 32, 48, 72, 96, 144, 167, 180, 192, 256, 384, 512, 1024];
 // Maskable icons — mark inset to ~80% within an Android safe zone.
 const maskable = [192, 512];
 
 async function renderStandard(size) {
-  const png = await sharp(svg, { density: 384 })
-    .resize(size, size, { fit: 'contain', background: BG })
-    .flatten({ background: BG })
-    .png()
-    .toBuffer();
+  const png = await composeIcon(size, 0.06);
   await sharp(png).toFile(join(outDir, `icon-${size}.png`));
 }
 
 async function renderMaskable(size) {
-  const inner = Math.round(size * 0.8);
-  const pad = Math.round((size - inner) / 2);
-  const mark = await sharp(svg, { density: 384 }).resize(inner, inner, { fit: 'contain', background: BG }).png().toBuffer();
-  await sharp({ create: { width: size, height: size, channels: 4, background: BG } })
-    .composite([{ input: mark, top: pad, left: pad }])
-    .png()
-    .toFile(join(outDir, `maskable-${size}.png`));
+  const png = await composeIcon(size, 0.12);
+  await sharp(png).toFile(join(outDir, `maskable-${size}.png`));
 }
 
 const run = async () => {
@@ -47,6 +55,7 @@ const run = async () => {
   // Apple touch icon (180) + favicon (32) at conventional public paths.
   await sharp(join(outDir, 'icon-180.png')).toFile(join(root, 'public/apple-touch-icon.png'));
   await sharp(join(outDir, 'icon-32.png')).toFile(join(root, 'public/favicon-32.png'));
+  copyFileSync(join(outDir, 'icon-512.png'), join(root, 'app/icon.png'));
   console.log(`Generated ${standard.length + maskable.length + 2} icons in public/icons`);
 };
 

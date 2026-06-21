@@ -334,7 +334,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Top bar */}
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/60 bg-bg/85 px-3 backdrop-blur-xl sm:h-topbar sm:gap-5 sm:px-5 lg:px-7">
           <Link href="/dashboard" className="lg:hidden">
-            <LogoMark className="h-8 w-8 sm:h-9 sm:w-9" variant="home" />
+            <LogoMark className="h-8 w-14 sm:h-9 sm:w-16" variant="home" />
           </Link>
           <div className="flex-1" />
           <label className="hidden h-10 w-full max-w-[320px] items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 text-muted md:flex lg:max-w-[360px] xl:h-12 xl:gap-3 xl:px-4">
