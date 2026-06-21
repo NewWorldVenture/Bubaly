@@ -23,6 +23,16 @@ import type { Tables } from '@/lib/database.types';
 type Recipe = Tables<'family_recipes'>;
 
 interface Ingredient { name: string; quantity: string; unit: string; }
+
+/** Scale a recipe quantity by a serving multiplier. Non-numeric values (e.g.
+ *  "to taste") and bad data ("NaN") never render as "NaN" — numbers scale,
+ *  real words pass through, junk is dropped. */
+function scaleQuantity(quantity: string | null | undefined, multiplier: number): string {
+  if (!quantity) return '';
+  const n = parseFloat(quantity);
+  if (Number.isFinite(n)) return (n * multiplier).toFixed(1).replace(/\.0$/, '');
+  return /^\s*nan\s*$/i.test(quantity) ? '' : quantity.trim();
+}
 interface InstructionStep { step: number; text: string; }
 
 const CATEGORIES = [
@@ -59,6 +69,11 @@ export function RecipesModule() {
   const [viewing, setViewing] = useState<Recipe | null>(null);
   const [editing, setEditing] = useState<Recipe | null>(null);
   const [servingsOverride, setServingsOverride] = useState<number | null>(null);
+  // When adding a recipe to the grocery list but none exists yet, prompt to
+  // create + name one inline rather than failing.
+  const [groceryPrompt, setGroceryPrompt] = useState<Recipe | null>(null);
+  const [newListName, setNewListName] = useState('Groceries');
+  const [creatingList, setCreatingList] = useState(false);
 
   const { data: recipes, loading, refresh } = useRealtimeQuery<Recipe>({
     table: 'family_recipes', familyId, deps: [familyId],
@@ -107,22 +122,50 @@ export function RecipesModule() {
     setViewing(null);
   }
 
-  async function addToGrocery(recipe: Recipe) {
+  async function addItemsToList(recipe: Recipe, listId: string): Promise<boolean> {
     const supabase = createClient();
     const ingredients = (recipe.ingredients as unknown as Ingredient[]) ?? [];
-    const { data: list } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId).eq('is_archived', false).limit(1).single();
-    if (!list) { toastError('No grocery list found'); return; }
     const multiplier = (servingsOverride ?? recipe.servings) / recipe.servings;
-    const items = ingredients.map((ing) => ({
-      family_id: familyId,
-      list_id: list.id,
-      name: ing.name,
-      quantity: ing.quantity ? `${(parseFloat(ing.quantity) * multiplier).toFixed(1).replace(/\.0$/, '')} ${ing.unit ?? ''}`.trim() : null,
-      category: 'Pantry',
-      created_by: userId,
-    }));
-    await supabase.from('grocery_items').insert(items);
-    success(`${ingredients.length} ingredients added to your grocery list!`);
+    const items = ingredients.map((ing) => {
+      const qty = scaleQuantity(ing.quantity, multiplier);
+      return {
+        family_id: familyId,
+        list_id: listId,
+        name: ing.name,
+        quantity: qty ? `${qty} ${ing.unit ?? ''}`.trim() : null,
+        category: 'Pantry',
+        created_by: userId,
+      };
+    });
+    const { error } = await supabase.from('grocery_items').insert(items);
+    if (error) { toastError(error.message); return false; }
+    success(`${items.length} ingredients added to your grocery list!`);
+    return true;
+  }
+
+  async function addToGrocery(recipe: Recipe) {
+    const supabase = createClient();
+    const { data: list } = await supabase
+      .from('grocery_lists').select('id')
+      .eq('family_id', familyId).eq('is_archived', false)
+      .order('created_at').limit(1).maybeSingle();
+    if (!list) { setNewListName('Groceries'); setGroceryPrompt(recipe); return; } // offer to create one
+    await addItemsToList(recipe, list.id);
+  }
+
+  async function createListAndAdd() {
+    if (!groceryPrompt) return;
+    const name = newListName.trim() || 'Groceries';
+    setCreatingList(true);
+    const supabase = createClient();
+    const { data: created, error } = await supabase
+      .from('grocery_lists')
+      .insert({ family_id: familyId, name, created_by: userId })
+      .select('id').single();
+    if (error || !created) { setCreatingList(false); toastError(error?.message ?? 'Could not create list'); return; }
+    const ok = await addItemsToList(groceryPrompt, created.id);
+    setCreatingList(false);
+    if (ok) setGroceryPrompt(null);
   }
 
   const stats = {
@@ -325,7 +368,7 @@ export function RecipesModule() {
               <div className="space-y-2">
                 {((viewing.ingredients as unknown as Ingredient[]) ?? []).map((ing, i) => {
                   const multiplier = (servingsOverride ?? viewing.servings) / viewing.servings;
-                  const qty = ing.quantity ? (parseFloat(ing.quantity) * multiplier).toFixed(1).replace(/\.0$/, '') : '';
+                  const qty = scaleQuantity(ing.quantity, multiplier);
                   return (
                     <div key={i} className="flex items-center gap-3 rounded-xl bg-elevated/40 px-3 py-2.5 text-sm">
                       <span className="h-2 w-2 rounded-full bg-brand flex-shrink-0" />
@@ -385,6 +428,21 @@ export function RecipesModule() {
           onClose={() => { setAddOpen(false); setEditing(null); }}
           onSaved={() => { setAddOpen(false); setEditing(null); void refresh(); }}
         />
+      )}
+
+      {groceryPrompt && (
+        <Modal open onClose={() => setGroceryPrompt(null)} title="Create a grocery list">
+          <form onSubmit={(e) => { e.preventDefault(); void createListAndAdd(); }} className="space-y-4">
+            <p className="text-sm text-muted">You don&apos;t have a grocery list yet. Name one and we&apos;ll add the ingredients from <span className="font-medium text-fg">{groceryPrompt.name}</span> to it.</p>
+            <Field label="List name">
+              {(id) => <Input id={id} autoFocus value={newListName} onChange={(e) => setNewListName(e.target.value)} placeholder="Groceries" />}
+            </Field>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setGroceryPrompt(null)}>Cancel</Button>
+              <Button type="submit" loading={creatingList} disabled={!newListName.trim()}>Create &amp; add</Button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );
