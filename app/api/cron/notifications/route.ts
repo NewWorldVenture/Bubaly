@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { generateFamilyNotifications } from '@/lib/server/notifications';
+import { dispatchPendingPushes } from '@/lib/server/push';
 
 export const runtime = 'nodejs';
 
@@ -25,5 +26,13 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ families: families?.length ?? 0, created: total });
+  // Deliver pushes for any unsent notifications across all families.
+  let pushed = { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0 } };
+  try {
+    pushed = await dispatchPendingPushes(supabase);
+  } catch (e) {
+    console.error('Push dispatch failed:', e);
+  }
+
+  return NextResponse.json({ families: families?.length ?? 0, created: total, pushed });
 }

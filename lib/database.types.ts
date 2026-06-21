@@ -823,6 +823,13 @@ export interface Database {
         { id?: string; family_id: string; user_id: string; member_id?: string | null; social_role?: SocialRoleEnum; status?: string; granted_by?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
         Partial<{ member_id: string | null; social_role: SocialRoleEnum; status: string; updated_by: string | null; metadata: Json }>
       >;
+
+      // ---- Push devices (migration 0025) ----
+      push_devices: T<
+        { id: string; user_id: string; family_id: string | null; platform: string; provider: string; endpoint: string | null; p256dh: string | null; auth: string | null; token: string | null; device_key: string; user_agent: string | null; enabled: boolean; last_seen_at: string; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; user_id: string; family_id?: string | null; platform?: string; provider?: string; endpoint?: string | null; p256dh?: string | null; auth?: string | null; token?: string | null; device_key: string; user_agent?: string | null; enabled?: boolean; last_seen_at?: string; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ family_id: string | null; platform: string; provider: string; endpoint: string | null; p256dh: string | null; auth: string | null; token: string | null; user_agent: string | null; enabled: boolean; last_seen_at: string; updated_by: string | null; metadata: Json }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
