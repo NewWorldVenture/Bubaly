@@ -19,7 +19,7 @@ is covered by the iOS target (universal app).
 | Capacitor config | `capacitor.config.ts` |
 | Native init (status bar, splash, back button, deep links) | `components/native/native-bootstrap.tsx`, `lib/native/capacitor.ts` |
 | Push registration (web + native) | `components/native/push-registrar.tsx`, `components/native/enable-push-button.tsx`, `lib/push/web-client.ts` |
-| Push storage + delivery | `supabase/migrations/0025_push_devices.sql`, `app/api/push/{subscribe,unsubscribe}/route.ts`, `lib/server/push.ts` |
+| Push storage + delivery | `supabase/migrations/0035_push_devices.sql`, `app/api/push/{subscribe,unsubscribe}/route.ts`, `lib/server/push.ts` |
 | Push fan‑out wired into notifications | `app/api/cron/notifications/route.ts`, `app/api/notifications/generate/route.ts` |
 | PWA install assets | `app/manifest.ts`, `public/icons/*`, `public/apple-touch-icon.png`, `scripts/generate-icons.mjs` |
 | Service worker (offline + web push) | `public/sw.js` |
@@ -88,5 +88,5 @@ Apply the two new migrations with the rest:
 npm run db:push     # or: supabase db reset
 ```
 
-- `0024_social_command_center.sql` — Social Command Center
-- `0025_push_devices.sql` — push device registry (this feature)
+- `0034_social_command_center.sql` — Social Command Center
+- `0035_push_devices.sql` — push device registry (this feature)

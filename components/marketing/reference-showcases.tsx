@@ -47,7 +47,7 @@ type Tone = keyof typeof tones;
 
 function ReferencePage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="dark reference-page min-h-screen overflow-hidden bg-[#020811] text-white">
+    <div className="reference-page soft-grid-bg min-h-screen overflow-hidden text-fg transition-colors duration-300">
       {children}
     </div>
   );
@@ -88,7 +88,7 @@ function SquareIcon({ icon: Icon, tone = 'violet', className }: { icon: LucideIc
 
 function PrimaryButton({ href = '/signup', children }: { href?: string; children: React.ReactNode }) {
   return (
-    <Link href={href} className="inline-flex h-12 items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-[#435df0] to-[#7834e9] px-6 text-[13px] font-semibold shadow-[0_10px_32px_rgba(91,61,236,.24)] transition hover:brightness-110">
+    <Link href={href} className="inline-flex h-12 items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-[#435df0] to-[#7834e9] px-6 text-[13px] font-semibold text-brand-fg shadow-[0_10px_32px_rgba(91,61,236,.24)] transition hover:brightness-110">
       {children}
     </Link>
   );
@@ -136,7 +136,7 @@ function FeatureCard({
   row?: 1 | 2;
 }) {
   return (
-    <article className={cn('flex flex-col rounded-[14px] border border-white/[0.09] bg-[#08111c]/90 p-[13px] shadow-[inset_0_1px_0_rgba(255,255,255,.025),0_20px_50px_rgba(0,0,0,.2)]', row === 1 ? 'h-[374px]' : 'h-[350px]')}>
+    <article className={cn('dark flex flex-col rounded-[14px] border border-white/[0.09] bg-[#08111c]/90 p-[13px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.025),0_20px_50px_rgba(0,0,0,.2)]', row === 1 ? 'h-[374px]' : 'h-[350px]')}>
       <div className="flex items-center gap-2.5">
         <SquareIcon icon={icon} tone={tone} />
         <h3 className="text-[13px] font-semibold tracking-[-0.01em]">{title}</h3>
@@ -261,7 +261,7 @@ export function FeaturesReferencePage() {
           </FeatureCard>
         </section>
 
-        <section className="mx-0 mt-[18px] grid h-auto min-h-[105px] items-center gap-5 rounded-[13px] border border-white/[0.09] bg-[radial-gradient(circle_at_55%_0%,rgba(82,63,232,.15),transparent_46%),linear-gradient(110deg,rgba(89,48,189,.13),rgba(8,17,28,.9))] px-7 py-5 sm:mx-[14px] lg:flex lg:h-[109px] lg:py-3">
+        <section className="dark mx-0 mt-[18px] grid h-auto min-h-[105px] items-center gap-5 rounded-[13px] border border-white/[0.09] bg-[radial-gradient(circle_at_55%_0%,rgba(82,63,232,.15),transparent_46%),linear-gradient(110deg,rgba(89,48,189,.13),rgba(8,17,28,.9))] px-7 py-5 text-white sm:mx-[14px] lg:flex lg:h-[109px] lg:py-3">
           <div className="flex items-center gap-5 lg:min-w-0 lg:flex-1">
             <Sparkles className="hidden h-10 w-10 shrink-0 text-violet-400 sm:block" strokeWidth={1.7} />
             <div>
@@ -466,7 +466,7 @@ async function SocialProof() {
 
 function DetailedPhone() {
   return (
-    <div className="relative h-[443px] w-[216px] rounded-[35px] border-[3px] border-[#595959] bg-[#030507] p-[8px] shadow-[0_22px_70px_rgba(0,0,0,.52),inset_0_0_0_1px_#111]">
+    <div className="dark relative h-[443px] w-[216px] rounded-[35px] border-[3px] border-[#595959] bg-[#030507] p-[8px] text-white shadow-[0_22px_70px_rgba(0,0,0,.52),inset_0_0_0_1px_#111]">
       <div className="absolute left-1/2 top-[7px] z-10 h-[21px] w-[84px] -translate-x-1/2 rounded-full bg-black" />
       <div className="h-full overflow-hidden rounded-[27px] bg-[#07101a] px-[10px] pb-[10px] pt-[14px]">
         <div className="flex items-center justify-between px-1 text-[8px] font-semibold"><span>9:41</span><span>⌁ ▴ ▰</span></div>
@@ -489,7 +489,7 @@ function PhonePanel({ title, className, children }: { title: string; className?:
 
 function StepsPanel() {
   return (
-    <section id="steps" className="rounded-[15px] border border-white/[0.08] bg-[#06101a]/78 px-3 pb-3 pt-[5px] shadow-[inset_0_1px_0_rgba(255,255,255,.02)]">
+    <section id="steps" className="dark rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] px-3 pb-3 pt-[5px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.02)]">
       <div className="text-center"><h2 className="text-[27px] font-bold tracking-[-0.025em]">It works in 5 simple steps</h2><p className="mt-1 text-[12px] text-white/62">Powerful technology. Simple for families.</p></div>
       <div className="mt-[41px] grid gap-7 lg:grid-cols-5">
         {WORK_STEPS.map(([Icon, title, body], index) => (
@@ -515,7 +515,7 @@ function StepsPanel() {
 function MagicPanel() {
   const bullets = ['Snap a photo of a school flyer', 'AI extracts events, dates & details', 'Automatically adds to your calendar', 'Creates tasks, reminders & lists', 'Notifies the right people', 'Saves you hours every week'];
   return (
-    <section className="mt-[14px] grid gap-6 rounded-[15px] border border-white/[0.08] bg-[#06101a]/78 p-5 lg:h-[334px] lg:grid-cols-[274px_1fr]">
+    <section className="dark mt-[14px] grid gap-6 rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] p-5 text-white lg:h-[334px] lg:grid-cols-[274px_1fr]">
       <div>
         <h2 className="whitespace-nowrap text-[27px] font-bold tracking-[-0.03em]">The magic is in the <GradientText>AI</GradientText><Sparkles className="ml-0.5 inline h-5 w-5 text-violet-400" /></h2>
         <p className="mt-2 text-[14px] leading-6 text-white/68">FamilyOS turns scattered information into<br />organized action—automatically.</p>
@@ -564,7 +564,7 @@ function TestimonialsPanel() {
     ["The school email scanner\nfeature is pure genius. It's like\nhaving an assistant.", 'Priya K.', 'Mom of 2'],
   ];
   return (
-    <section className="relative mt-[21px] rounded-[15px] border border-white/[0.08] bg-[#06101a]/78 px-12 pb-3 pt-[6px]">
+    <section className="dark relative mt-[21px] rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] px-12 pb-3 pt-[6px] text-white">
       <h2 className="text-center text-[23px] font-bold tracking-[-0.025em]"><GradientText>Loved</GradientText> by families everywhere</h2>
       <button type="button" aria-label="Previous testimonial" className="absolute left-1 top-[98px] grid h-8 w-8 place-items-center rounded-full bg-violet-500/10 text-white/65"><ChevronLeft className="h-4 w-4" /></button>
       <button type="button" aria-label="Next testimonial" className="absolute right-1 top-[98px] grid h-8 w-8 place-items-center rounded-full bg-violet-500/10 text-white/65"><ChevronRight className="h-4 w-4" /></button>

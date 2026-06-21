@@ -30,6 +30,15 @@ export type ThemePref = 'dark' | 'light' | 'system';
 export type DashboardView = 'personal' | 'family';
 export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
 export type RecordKind = 'medical' | 'dental';
+export type RideStatus = 'planned' | 'confirmed' | 'completed' | 'cancelled';
+export type HomeworkStatus = 'assigned' | 'in_progress' | 'done' | 'submitted';
+export type RenewalStatus = 'active' | 'renewed' | 'expired' | 'cancelled';
+export type CareLogType = 'check_in' | 'visit' | 'call' | 'meal' | 'medication' | 'appointment' | 'incident' | 'note';
+export type OpportunityStatus = 'interested' | 'registered' | 'waitlisted' | 'passed' | 'missed';
+export type DoseStatus = 'taken' | 'skipped' | 'missed';
+export type TripStatus = 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
+export type TripItemKind = 'packing' | 'todo' | 'reservation' | 'document';
+export type RedemptionStatus = 'requested' | 'approved' | 'fulfilled' | 'rejected';
 
 // Sync platform enums (migration 0018)
 export type SyncProviderEnum = 'google' | 'microsoft' | 'apple' | 'amazon' | 'internal';
@@ -43,7 +52,7 @@ export type SyncConflictResolutionEnum =
 export type SyncJobStatus =
   | 'queued' | 'running' | 'succeeded' | 'failed' | 'dead_letter' | 'cancelled';
 
-// Social command center enums (migration 0024)
+// Social command center enums (migration 0034)
 export type SocialPlatformEnum =
   | 'x' | 'facebook' | 'instagram' | 'linkedin' | 'tiktok'
   | 'youtube' | 'pinterest' | 'threads' | 'reddit';
@@ -142,6 +151,11 @@ export interface Database {
         { id?: string; family_id: string; title: string; description?: string | null; cost_points?: number; created_by?: string | null },
         Partial<{ title: string; description: string | null; cost_points: number; redeemed_by: string | null; redeemed_at: string | null }>
       >;
+      reward_redemptions: T<
+        { id: string; family_id: string; reward_id: string | null; member_id: string; reward_title: string; cost_points: number; status: RedemptionStatus; note: string | null; decided_by: string | null; decided_at: string | null } & Stamps,
+        { id?: string; family_id: string; reward_id?: string | null; member_id: string; reward_title: string; cost_points?: number; status?: RedemptionStatus; note?: string | null; decided_by?: string | null; decided_at?: string | null },
+        Partial<{ reward_id: string | null; reward_title: string; cost_points: number; status: RedemptionStatus; note: string | null; decided_by: string | null; decided_at: string | null }>
+      >;
       meals: T<
         { id: string; family_id: string; name: string; meal_type: MealType; recipe_url: string | null; ingredients: Json; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name: string; meal_type?: MealType; recipe_url?: string | null; ingredients?: Json; notes?: string | null; created_by?: string | null },
@@ -171,6 +185,46 @@ export interface Database {
         { id: string; family_id: string; medication_id: string; time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null } & Stamps,
         { id?: string; family_id: string; medication_id: string; time_of_day: string; days_of_week?: number[]; starts_on?: string; ends_on?: string | null },
         Partial<{ time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null }>
+      >;
+      trips: T<
+        { id: string; family_id: string; name: string; destination: string | null; start_date: string | null; end_date: string | null; status: TripStatus; traveler_ids: string[]; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; destination?: string | null; start_date?: string | null; end_date?: string | null; status?: TripStatus; traveler_ids?: string[]; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; destination: string | null; start_date: string | null; end_date: string | null; status: TripStatus; traveler_ids: string[]; notes: string | null }>
+      >;
+      trip_items: T<
+        { id: string; family_id: string; trip_id: string; kind: TripItemKind; label: string; details: string | null; assignee_id: string | null; is_done: boolean; due_at: string | null; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; trip_id: string; kind?: TripItemKind; label: string; details?: string | null; assignee_id?: string | null; is_done?: boolean; due_at?: string | null; sort_order?: number; created_by?: string | null },
+        Partial<{ kind: TripItemKind; label: string; details: string | null; assignee_id: string | null; is_done: boolean; due_at: string | null; sort_order: number }>
+      >;
+      medication_doses: T<
+        { id: string; family_id: string; medication_id: string; schedule_id: string | null; member_id: string | null; scheduled_for: string; status: DoseStatus; taken_at: string | null; notes: string | null; logged_by: string | null } & Stamps,
+        { id?: string; family_id: string; medication_id: string; schedule_id?: string | null; member_id?: string | null; scheduled_for: string; status?: DoseStatus; taken_at?: string | null; notes?: string | null; logged_by?: string | null },
+        Partial<{ schedule_id: string | null; member_id: string | null; scheduled_for: string; status: DoseStatus; taken_at: string | null; notes: string | null }>
+      >;
+      rides: T<
+        { id: string; family_id: string; title: string; ride_date: string; pickup_time: string | null; dropoff_time: string | null; pickup_location: string | null; dropoff_location: string | null; driver_id: string | null; rider_ids: string[]; status: RideStatus; notes: string | null; event_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; ride_date: string; pickup_time?: string | null; dropoff_time?: string | null; pickup_location?: string | null; dropoff_location?: string | null; driver_id?: string | null; rider_ids?: string[]; status?: RideStatus; notes?: string | null; event_id?: string | null; created_by?: string | null },
+        Partial<{ title: string; ride_date: string; pickup_time: string | null; dropoff_time: string | null; pickup_location: string | null; dropoff_location: string | null; driver_id: string | null; rider_ids: string[]; status: RideStatus; notes: string | null; event_id: string | null }>
+      >;
+      homework_assignments: T<
+        { id: string; family_id: string; member_id: string | null; subject: string | null; title: string; details: string | null; due_at: string | null; status: HomeworkStatus; completed_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; subject?: string | null; title: string; details?: string | null; due_at?: string | null; status?: HomeworkStatus; completed_at?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; subject: string | null; title: string; details: string | null; due_at: string | null; status: HomeworkStatus; completed_at: string | null }>
+      >;
+      renewals: T<
+        { id: string; family_id: string; member_id: string | null; title: string; category: string | null; expires_at: string; reminder_days: number; cost: number | null; url: string | null; status: RenewalStatus; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; category?: string | null; expires_at: string; reminder_days?: number; cost?: number | null; url?: string | null; status?: RenewalStatus; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; title: string; category: string | null; expires_at: string; reminder_days: number; cost: number | null; url: string | null; status: RenewalStatus; notes: string | null }>
+      >;
+      care_log: T<
+        { id: string; family_id: string; member_id: string; log_type: CareLogType; occurred_at: string; wellbeing: number | null; note: string | null; logged_by: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; log_type?: CareLogType; occurred_at?: string; wellbeing?: number | null; note?: string | null; logged_by?: string | null; created_by?: string | null },
+        Partial<{ member_id: string; log_type: CareLogType; occurred_at: string; wellbeing: number | null; note: string | null; logged_by: string | null }>
+      >;
+      opportunities: T<
+        { id: string; family_id: string; member_id: string | null; title: string; category: string | null; url: string | null; cost: number | null; opens_at: string | null; deadline: string | null; status: OpportunityStatus; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; category?: string | null; url?: string | null; cost?: number | null; opens_at?: string | null; deadline?: string | null; status?: OpportunityStatus; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; title: string; category: string | null; url: string | null; cost: number | null; opens_at: string | null; deadline: string | null; status: OpportunityStatus; notes: string | null }>
       >;
       health_providers: T<
         { id: string; family_id: string; member_id: string | null; kind: RecordKind; name: string; specialty: string | null; practice_name: string | null; phone: string | null; fax: string | null; email: string | null; address: string | null; is_primary: boolean; notes: string | null; created_by: string | null } & Stamps,
@@ -614,6 +668,11 @@ export interface Database {
         { email: string; reason?: string; campaign_id?: string | null },
         Partial<{ reason: string; campaign_id: string | null }>
       >;
+      weather_locations: T<
+        { id: string; family_id: string; name: string; admin1: string | null; country: string | null; latitude: number; longitude: number; is_default: boolean; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; admin1?: string | null; country?: string | null; latitude: number; longitude: number; is_default?: boolean; sort_order?: number; created_by?: string | null },
+        Partial<{ name: string; admin1: string | null; country: string | null; latitude: number; longitude: number; is_default: boolean; sort_order: number }>
+      >;
       // ── Admin console (migration 0015) ──────────────────────
       app_settings: T<
         { key: string; value: Json; updated_by: string | null; updated_at: string },
@@ -697,7 +756,7 @@ export interface Database {
         Partial<{ member_id: string | null; title: string; description: string | null; milestone_date: string; category: string | null; status: string; metadata: Json; updated_by: string | null }>
       >;
 
-      // ---- Social command center (migration 0024) ----
+      // ---- Social command center (migration 0034) ----
       social_providers: T<
         { platform: SocialPlatformEnum; label: string; capabilities: Json; auth_method: string; is_enabled: boolean; needs_app_review: boolean; char_limit: number; docs_url: string | null; notes: string | null } & Stamps,
         { platform: SocialPlatformEnum; label: string; capabilities?: Json; auth_method?: string; is_enabled?: boolean; needs_app_review?: boolean; char_limit?: number; docs_url?: string | null; notes?: string | null },
@@ -824,7 +883,7 @@ export interface Database {
         Partial<{ member_id: string | null; social_role: SocialRoleEnum; status: string; updated_by: string | null; metadata: Json }>
       >;
 
-      // ---- Push devices (migration 0025) ----
+      // ---- Push devices (migration 0035) ----
       push_devices: T<
         { id: string; user_id: string; family_id: string | null; platform: string; provider: string; endpoint: string | null; p256dh: string | null; auth: string | null; token: string | null; device_key: string; user_agent: string | null; enabled: boolean; last_seen_at: string; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
         { id?: string; user_id: string; family_id?: string | null; platform?: string; provider?: string; endpoint?: string | null; p256dh?: string | null; auth?: string | null; token?: string | null; device_key: string; user_agent?: string | null; enabled?: boolean; last_seen_at?: string; created_by?: string | null; updated_by?: string | null; metadata?: Json },

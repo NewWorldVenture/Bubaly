@@ -672,3 +672,537 @@ ALTER TABLE public.marketing_suppressions ENABLE ROW LEVEL SECURITY;
 -- ============================================================
 -- Done! Suppressed addresses are excluded from all marketing sends.
 -- ============================================================
+
+
+-- ============================================================
+-- Weather saved locations (migration 0024) — appended to bundle. Idempotent.
+-- ============================================================
+-- ============================================================
+-- Migration 0024: Weather saved locations
+-- Per-family list of saved cities for the Weather feature. Live forecast data
+-- comes from a real-time weather API in the browser; only the user's chosen
+-- locations are persisted here. Family-scoped with the standard RLS model.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.weather_locations (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id   uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  name        text NOT NULL,
+  admin1      text,
+  country     text,
+  latitude    double precision NOT NULL,
+  longitude   double precision NOT NULL,
+  is_default  boolean NOT NULL DEFAULT false,
+  sort_order  integer NOT NULL DEFAULT 0,
+  created_by  uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  -- Avoid duplicate saved cities within a family (rounded to ~11m).
+  UNIQUE (family_id, latitude, longitude)
+);
+
+CREATE INDEX IF NOT EXISTS idx_weather_locations_family ON public.weather_locations (family_id, sort_order);
+
+DROP TRIGGER IF EXISTS trg_weather_locations_updated_at ON public.weather_locations;
+CREATE TRIGGER trg_weather_locations_updated_at
+  BEFORE UPDATE ON public.weather_locations
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ---------- RLS: family-scoped CRUD (matches 0004 pattern) ----------
+ALTER TABLE public.weather_locations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS weather_locations_select ON public.weather_locations;
+CREATE POLICY weather_locations_select ON public.weather_locations
+  FOR SELECT USING (public.is_family_member(family_id));
+DROP POLICY IF EXISTS weather_locations_insert ON public.weather_locations;
+CREATE POLICY weather_locations_insert ON public.weather_locations
+  FOR INSERT WITH CHECK (public.is_family_member(family_id));
+DROP POLICY IF EXISTS weather_locations_update ON public.weather_locations;
+CREATE POLICY weather_locations_update ON public.weather_locations
+  FOR UPDATE USING (public.is_family_member(family_id)) WITH CHECK (public.is_family_member(family_id));
+DROP POLICY IF EXISTS weather_locations_delete ON public.weather_locations;
+CREATE POLICY weather_locations_delete ON public.weather_locations
+  FOR DELETE USING (public.is_family_member(family_id));
+
+-- ============================================================
+-- Done! Families can save weather locations; forecasts are fetched live.
+-- ============================================================
+
+
+-- ============================================================
+-- Repair grocery_lists / grocery_items RLS (migration 0025). Idempotent.
+-- ============================================================
+-- ============================================================
+-- Migration 0025: Repair grocery_lists / grocery_items RLS
+-- Symptom: creating a shopping list fails with "new row violates row-level
+-- security policy for table grocery_lists". That happens when RLS is enabled on
+-- the table but the family-scoped INSERT policy isn't present (e.g. a DB set up
+-- from a partial bundle that ran the table alters but not 0004's policy block).
+--
+-- This re-asserts the standard family CRUD policies idempotently. It's a no-op
+-- on a correctly-migrated database and a fix on one that's missing them.
+-- ============================================================
+
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['grocery_lists', 'grocery_items'] LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+
+    EXECUTE format('DROP POLICY IF EXISTS %1$s_select ON public.%1$I', t);
+    EXECUTE format('CREATE POLICY %1$s_select ON public.%1$I FOR SELECT USING (public.is_family_member(family_id))', t);
+
+    EXECUTE format('DROP POLICY IF EXISTS %1$s_insert ON public.%1$I', t);
+    EXECUTE format('CREATE POLICY %1$s_insert ON public.%1$I FOR INSERT WITH CHECK (public.is_family_member(family_id))', t);
+
+    EXECUTE format('DROP POLICY IF EXISTS %1$s_update ON public.%1$I', t);
+    EXECUTE format('CREATE POLICY %1$s_update ON public.%1$I FOR UPDATE USING (public.is_family_member(family_id)) WITH CHECK (public.is_family_member(family_id))', t);
+
+    EXECUTE format('DROP POLICY IF EXISTS %1$s_delete ON public.%1$I', t);
+    EXECUTE format('CREATE POLICY %1$s_delete ON public.%1$I FOR DELETE USING (public.is_family_member(family_id))', t);
+  END LOOP;
+END $$;
+
+-- ============================================================
+-- Done! Family members can create/read/update/delete their shopping lists.
+-- ============================================================
+
+
+
+
+-- ============================================================
+-- FAMILY OS :: features 0026–0033 (appended)
+-- Net-new modules: medications dose log, rides, reward redemptions,
+-- trips, homework, signups/opportunities, care log, renewals.
+-- All idempotent (CREATE TABLE IF NOT EXISTS / enum guards /
+-- DROP POLICY IF EXISTS). Safe to run more than once.
+-- ============================================================
+
+
+-- ─────────────────────────────────────────────────────────
+-- migration: 0026_medication_doses
+-- ─────────────────────────────────────────────────────────
+-- ============================================================
+-- Migration 0026: Medication dose log (adherence tracking)
+-- Backs the Medication Tracker. `medications` and
+-- `medication_schedules` already exist (migration 0002); this adds a
+-- per-dose log so adherence can be measured over time instead of only
+-- tracking the last time a med was taken.
+-- ============================================================
+
+DO $$ BEGIN
+  CREATE TYPE dose_status AS ENUM ('taken', 'skipped', 'missed');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.medication_doses (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id     uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  medication_id uuid NOT NULL REFERENCES public.medications(id) ON DELETE CASCADE,
+  schedule_id   uuid REFERENCES public.medication_schedules(id) ON DELETE SET NULL,
+  member_id     uuid REFERENCES public.family_members(id) ON DELETE SET NULL,
+  -- The calendar day + scheduled time this dose belongs to. `scheduled_for`
+  -- is the canonical slot; a (schedule_id, scheduled_for) pair is unique so a
+  -- dose can be toggled idempotently from the UI.
+  scheduled_for timestamptz NOT NULL,
+  status        dose_status NOT NULL DEFAULT 'taken',
+  taken_at      timestamptz,
+  notes         text,
+  logged_by     uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_med_doses_family ON public.medication_doses(family_id);
+CREATE INDEX IF NOT EXISTS idx_med_doses_med ON public.medication_doses(medication_id);
+CREATE INDEX IF NOT EXISTS idx_med_doses_scheduled ON public.medication_doses(family_id, scheduled_for);
+-- One row per scheduled slot so "mark taken/skip" is an idempotent upsert.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_med_doses_slot
+  ON public.medication_doses(schedule_id, scheduled_for)
+  WHERE schedule_id IS NOT NULL;
+
+DROP TRIGGER IF EXISTS trg_set_updated_at ON public.medication_doses;
+CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.medication_doses
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ── RLS ────────────────────────────────────────────────────
+ALTER TABLE public.medication_doses ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members can manage medication_doses" ON public.medication_doses;
+CREATE POLICY "Members can manage medication_doses" ON public.medication_doses
+  FOR ALL TO authenticated
+  USING (public.is_family_member(family_id))
+  WITH CHECK (public.is_family_member(family_id));
+
+
+-- ─────────────────────────────────────────────────────────
+-- migration: 0027_rides
+-- ─────────────────────────────────────────────────────────
+-- ============================================================
+-- Migration 0027: Transportation / Carpool planner
+-- Backs the Rides Planner (Top-50 complaint #17 "coordinating rides
+-- → AI transportation planner"). Tracks who is driving whom, when, and
+-- to/from where — with an optional link to a calendar event.
+-- ============================================================
+
+DO $$ BEGIN
+  CREATE TYPE ride_status AS ENUM ('planned', 'confirmed', 'completed', 'cancelled');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.rides (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id        uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  title            text NOT NULL,
+  ride_date        date NOT NULL,
+  pickup_time      time,
+  dropoff_time     time,
+  pickup_location  text,
+  dropoff_location text,
+  -- Driver is a family member (or null when a ride still needs one).
+  driver_id        uuid REFERENCES public.family_members(id) ON DELETE SET NULL,
+  -- Riders are family members; kept as an array so a ride is a single row.
+  rider_ids        uuid[] NOT NULL DEFAULT '{}',
+  status           ride_status NOT NULL DEFAULT 'planned',
+  notes            text,
+  event_id         uuid REFERENCES public.calendar_events(id) ON DELETE SET NULL,
+  created_by       uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rides_family ON public.rides(family_id);
+CREATE INDEX IF NOT EXISTS idx_rides_date ON public.rides(family_id, ride_date);
+CREATE INDEX IF NOT EXISTS idx_rides_driver ON public.rides(driver_id);
+
+DROP TRIGGER IF EXISTS trg_set_updated_at ON public.rides;
+CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.rides
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ── RLS ────────────────────────────────────────────────────
+ALTER TABLE public.rides ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members can manage rides" ON public.rides;
+CREATE POLICY "Members can manage rides" ON public.rides
+  FOR ALL TO authenticated
+  USING (public.is_family_member(family_id))
+  WITH CHECK (public.is_family_member(family_id));
+
+
+-- ─────────────────────────────────────────────────────────
+-- migration: 0028_reward_redemptions
+-- ─────────────────────────────────────────────────────────
+-- ============================================================
+-- Migration 0028: Reward redemptions (allowance / points ledger)
+-- Backs the Rewards & Allowance center (Top-50 complaints #7 "kids don't
+-- do chores → gamification" and #21 "parents overloaded"). The existing
+-- `rewards` table (migration 0002) modelled a one-shot redeemable; this
+-- turns rewards into a reusable catalog and logs each redemption as a
+-- request that a parent approves, so points balances have real history.
+-- ============================================================
+
+DO $$ BEGIN
+  CREATE TYPE redemption_status AS ENUM ('requested', 'approved', 'fulfilled', 'rejected');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.reward_redemptions (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id    uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  reward_id    uuid REFERENCES public.rewards(id) ON DELETE SET NULL,
+  member_id    uuid NOT NULL REFERENCES public.family_members(id) ON DELETE CASCADE,
+  -- Snapshot of the reward's title + cost at redemption time so history
+  -- survives the reward being edited or deleted.
+  reward_title text NOT NULL,
+  cost_points  integer NOT NULL DEFAULT 0,
+  status       redemption_status NOT NULL DEFAULT 'requested',
+  note         text,
+  decided_by   uuid REFERENCES public.family_members(id) ON DELETE SET NULL,
+  decided_at   timestamptz,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_reward_redemptions_family ON public.reward_redemptions(family_id);
+CREATE INDEX IF NOT EXISTS idx_reward_redemptions_member ON public.reward_redemptions(member_id);
+CREATE INDEX IF NOT EXISTS idx_reward_redemptions_status ON public.reward_redemptions(family_id, status);
+
+DROP TRIGGER IF EXISTS trg_set_updated_at ON public.reward_redemptions;
+CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.reward_redemptions
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ── RLS ────────────────────────────────────────────────────
+ALTER TABLE public.reward_redemptions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members can manage reward_redemptions" ON public.reward_redemptions;
+CREATE POLICY "Members can manage reward_redemptions" ON public.reward_redemptions
+  FOR ALL TO authenticated
+  USING (public.is_family_member(family_id))
+  WITH CHECK (public.is_family_member(family_id));
+
+
+-- ─────────────────────────────────────────────────────────
+-- migration: 0029_trips
+-- ─────────────────────────────────────────────────────────
+-- ============================================================
+-- Migration 0029: Travel / Trip planner
+-- Backs the Trip Planner (Top-50 complaint #18 "vacation planning
+-- difficult → AI family trip planner"). A trip plus a checklist of items
+-- (packing, to-dos, reservations, documents) the family works through.
+-- ============================================================
+
+DO $$ BEGIN
+  CREATE TYPE trip_status AS ENUM ('planning', 'booked', 'active', 'completed', 'cancelled');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE trip_item_kind AS ENUM ('packing', 'todo', 'reservation', 'document');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.trips (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id    uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  name         text NOT NULL,
+  destination  text,
+  start_date   date,
+  end_date     date,
+  status       trip_status NOT NULL DEFAULT 'planning',
+  traveler_ids uuid[] NOT NULL DEFAULT '{}',
+  notes        text,
+  created_by   uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_trips_family ON public.trips(family_id);
+CREATE INDEX IF NOT EXISTS idx_trips_dates ON public.trips(family_id, start_date);
+
+CREATE TABLE IF NOT EXISTS public.trip_items (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id   uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  trip_id     uuid NOT NULL REFERENCES public.trips(id) ON DELETE CASCADE,
+  kind        trip_item_kind NOT NULL DEFAULT 'packing',
+  label       text NOT NULL,
+  details     text,
+  assignee_id uuid REFERENCES public.family_members(id) ON DELETE SET NULL,
+  is_done     boolean NOT NULL DEFAULT false,
+  due_at      timestamptz,
+  sort_order  integer NOT NULL DEFAULT 0,
+  created_by  uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_trip_items_family ON public.trip_items(family_id);
+CREATE INDEX IF NOT EXISTS idx_trip_items_trip ON public.trip_items(trip_id);
+
+DROP TRIGGER IF EXISTS trg_set_updated_at ON public.trips;
+CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.trips
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+DROP TRIGGER IF EXISTS trg_set_updated_at ON public.trip_items;
+CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.trip_items
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ── RLS ────────────────────────────────────────────────────
+-- Explicit per-table statements (no DO/format loop): the dollar-quoted
+-- format() placeholders confuse some SQL clients' statement parsers.
+ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members can manage trips" ON public.trips;
+CREATE POLICY "Members can manage trips" ON public.trips
+  FOR ALL TO authenticated
+  USING (public.is_family_member(family_id))
+  WITH CHECK (public.is_family_member(family_id));
+
+ALTER TABLE public.trip_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members can manage trip_items" ON public.trip_items;
+CREATE POLICY "Members can manage trip_items" ON public.trip_items
+  FOR ALL TO authenticated
+  USING (public.is_family_member(family_id))
+  WITH CHECK (public.is_family_member(family_id));
+
+
+-- ─────────────────────────────────────────────────────────
+-- migration: 0030_homework
+-- ─────────────────────────────────────────────────────────
+-- ============================================================
+-- Migration 0030: Homework tracker
+-- Backs the Homework Tracker (Top-50 complaint #16 "kids miss homework
+-- → AI student assistant"). Per-student assignments with subject, due
+-- date, and a simple status workflow.
+-- ============================================================
+
+DO $$ BEGIN
+  CREATE TYPE homework_status AS ENUM ('assigned', 'in_progress', 'done', 'submitted');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.homework_assignments (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id   uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  member_id   uuid REFERENCES public.family_members(id) ON DELETE SET NULL,
+  subject     text,
+  title       text NOT NULL,
+  details     text,
+  due_at      timestamptz,
+  status      homework_status NOT NULL DEFAULT 'assigned',
+  completed_at timestamptz,
+  created_by  uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_homework_family ON public.homework_assignments(family_id);
+CREATE INDEX IF NOT EXISTS idx_homework_member ON public.homework_assignments(member_id);
+CREATE INDEX IF NOT EXISTS idx_homework_due ON public.homework_assignments(family_id, due_at);
+
+DROP TRIGGER IF EXISTS trg_set_updated_at ON public.homework_assignments;
+CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.homework_assignments
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ── RLS ────────────────────────────────────────────────────
+ALTER TABLE public.homework_assignments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members can manage homework_assignments" ON public.homework_assignments;
+CREATE POLICY "Members can manage homework_assignments" ON public.homework_assignments
+  FOR ALL TO authenticated
+  USING (public.is_family_member(family_id))
+  WITH CHECK (public.is_family_member(family_id));
+
+
+-- ─────────────────────────────────────────────────────────
+-- migration: 0031_opportunities
+-- ─────────────────────────────────────────────────────────
+-- ============================================================
+-- Migration 0031: Registrations & Signups tracker
+-- Backs the Signups tracker (Top-50 complaints #27 "school
+-- registrations missed → AI registration monitoring" and #28 "camp
+-- signups fill up → AI opportunity alerts"). Time-boxed opportunities
+-- (camp/school/sports/activity registrations) with a deadline and a
+-- simple status workflow so nothing fills up or closes unnoticed.
+-- ============================================================
+
+DO $$ BEGIN
+  CREATE TYPE opportunity_status AS ENUM ('interested', 'registered', 'waitlisted', 'passed', 'missed');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.opportunities (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id   uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  member_id   uuid REFERENCES public.family_members(id) ON DELETE SET NULL,
+  title       text NOT NULL,
+  category    text,                 -- camp / school / sports / activity / class / other
+  url         text,
+  cost        numeric(10,2),
+  opens_at    date,                 -- registration opens
+  deadline    date,                 -- registration closes
+  status      opportunity_status NOT NULL DEFAULT 'interested',
+  notes       text,
+  created_by  uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_opportunities_family ON public.opportunities(family_id);
+CREATE INDEX IF NOT EXISTS idx_opportunities_deadline ON public.opportunities(family_id, deadline);
+CREATE INDEX IF NOT EXISTS idx_opportunities_member ON public.opportunities(member_id);
+
+DROP TRIGGER IF EXISTS trg_set_updated_at ON public.opportunities;
+CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.opportunities
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ── RLS ────────────────────────────────────────────────────
+ALTER TABLE public.opportunities ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members can manage opportunities" ON public.opportunities;
+CREATE POLICY "Members can manage opportunities" ON public.opportunities
+  FOR ALL TO authenticated
+  USING (public.is_family_member(family_id))
+  WITH CHECK (public.is_family_member(family_id));
+
+
+-- ─────────────────────────────────────────────────────────
+-- migration: 0032_care_log
+-- ─────────────────────────────────────────────────────────
+-- ============================================================
+-- Migration 0032: Caregiver / Elder care log
+-- Backs the Care Log (Top-50 complaint #25 "elder care difficult → AI
+-- caregiver dashboard"). A timeline of check-ins, visits, calls, and
+-- well-being notes for a family member who needs coordinated care, so
+-- the whole family can see who last checked in and how they're doing.
+-- ============================================================
+
+DO $$ BEGIN
+  CREATE TYPE care_log_type AS ENUM ('check_in', 'visit', 'call', 'meal', 'medication', 'appointment', 'incident', 'note');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.care_log (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id    uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  -- The person being cared for.
+  member_id    uuid NOT NULL REFERENCES public.family_members(id) ON DELETE CASCADE,
+  log_type     care_log_type NOT NULL DEFAULT 'check_in',
+  occurred_at  timestamptz NOT NULL DEFAULT now(),
+  -- Optional 1–5 well-being rating recorded at the time.
+  wellbeing    smallint CHECK (wellbeing BETWEEN 1 AND 5),
+  note         text,
+  -- The family member who performed/recorded the care.
+  logged_by    uuid REFERENCES public.family_members(id) ON DELETE SET NULL,
+  created_by   uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_care_log_family ON public.care_log(family_id);
+CREATE INDEX IF NOT EXISTS idx_care_log_member ON public.care_log(family_id, member_id, occurred_at DESC);
+
+DROP TRIGGER IF EXISTS trg_set_updated_at ON public.care_log;
+CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.care_log
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ── RLS ────────────────────────────────────────────────────
+ALTER TABLE public.care_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members can manage care_log" ON public.care_log;
+CREATE POLICY "Members can manage care_log" ON public.care_log
+  FOR ALL TO authenticated
+  USING (public.is_family_member(family_id))
+  WITH CHECK (public.is_family_member(family_id));
+
+
+-- ─────────────────────────────────────────────────────────
+-- migration: 0033_renewals
+-- ─────────────────────────────────────────────────────────
+-- ============================================================
+-- Migration 0033: Renewals & Expirations tracker
+-- Backs the Renewals tracker (Top-50 complaints #30 "household documents
+-- expire → AI expiration management" and #31 "appliance warranties
+-- forgotten → AI warranty manager"). Tracks anything that expires and
+-- needs renewing — IDs, licenses, registrations, warranties, insurance,
+-- subscriptions — each with its own reminder lead time.
+-- ============================================================
+
+DO $$ BEGIN
+  CREATE TYPE renewal_status AS ENUM ('active', 'renewed', 'expired', 'cancelled');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.renewals (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id     uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  member_id     uuid REFERENCES public.family_members(id) ON DELETE SET NULL,
+  title         text NOT NULL,
+  category      text,                 -- id / passport / license / registration / warranty / insurance / subscription / other
+  expires_at    date NOT NULL,
+  -- How many days before expiry this should start warning.
+  reminder_days integer NOT NULL DEFAULT 30,
+  cost          numeric(10,2),
+  url           text,
+  status        renewal_status NOT NULL DEFAULT 'active',
+  notes         text,
+  created_by    uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_renewals_family ON public.renewals(family_id);
+CREATE INDEX IF NOT EXISTS idx_renewals_expiry ON public.renewals(family_id, expires_at);
+CREATE INDEX IF NOT EXISTS idx_renewals_member ON public.renewals(member_id);
+
+DROP TRIGGER IF EXISTS trg_set_updated_at ON public.renewals;
+CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.renewals
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ── RLS ────────────────────────────────────────────────────
+ALTER TABLE public.renewals ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members can manage renewals" ON public.renewals;
+CREATE POLICY "Members can manage renewals" ON public.renewals
+  FOR ALL TO authenticated
+  USING (public.is_family_member(family_id))
+  WITH CHECK (public.is_family_member(family_id));

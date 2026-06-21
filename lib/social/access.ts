@@ -1,6 +1,6 @@
 // lib/social/access.ts
 // Server-side resolution of the caller's social role + permission guards. Mirrors
-// the SQL helper public.social_has_permission (migration 0024). Use these in
+// the SQL helper public.social_has_permission (migration 0034). Use these in
 // server actions / route handlers BEFORE any privileged write; RLS is the backstop.
 import 'server-only';
 import { createServer } from '@/lib/supabase/server';

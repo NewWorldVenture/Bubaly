@@ -56,7 +56,7 @@ export default function SecurityPage() {
       <Container className="pb-0 pt-16 lg:pt-20">
         <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-sm font-semibold text-violet-300">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-100 px-4 py-2 text-sm font-semibold text-violet-800 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-300">
               <Shield className="h-4 w-4" /> Security You Can Trust
             </div>
             <h1 className="text-5xl font-black leading-[1.06] sm:text-6xl">

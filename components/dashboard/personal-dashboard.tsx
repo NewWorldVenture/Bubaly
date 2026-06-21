@@ -8,6 +8,7 @@ import { isManager, ROLE_LABELS } from '@/lib/constants/roles';
 import { personalDashboardLabel } from '@/lib/constants/dashboards';
 import type { UserContext } from '@/lib/supabase/auth';
 import { Avatar } from '@/components/ui/avatar';
+import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 
@@ -149,12 +150,15 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
             </p>
           </div>
         </div>
-        <Link
-          href="/dashboard?view=family"
-          className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg"
-        >
-          <LayoutDashboard className="h-4 w-4" /> Family Dashboard
-        </Link>
+        <div className="flex items-center gap-3">
+          <DashboardWeather />
+          <Link
+            href="/dashboard?view=family"
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg"
+          >
+            <LayoutDashboard className="h-4 w-4" /> Family Dashboard
+          </Link>
+        </div>
       </div>
 
       {/* Stat cards — role aware */}

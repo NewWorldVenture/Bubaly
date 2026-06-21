@@ -52,7 +52,7 @@ function FamilySwitcher() {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl glass-card p-1 shadow-glass animate-fade-in">
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             {families.map((f) => (
               <button
                 key={f.familyId}
@@ -102,7 +102,7 @@ function UserMenu() {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-2 w-60 rounded-xl glass-card p-1 shadow-glass animate-fade-in">
+          <div className="absolute right-0 top-full z-20 mt-2 w-60 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             <div className="px-3 py-2">
               <p className="truncate text-sm font-medium">{name}</p>
               <p className="truncate text-xs text-muted">{userEmail}</p>
@@ -194,8 +194,9 @@ function NavEntry({ item, variant, onLocked }: {
   item: NavItem; variant: 'list' | 'grid'; onLocked: (item: NavItem) => void;
 }) {
   const pathname = usePathname();
-  const { planLevel } = useApp();
-  const locked = (item.minLevel ?? 0) > planLevel;
+  const { planLevel, isSuperAdmin } = useApp();
+  // Super admins are never plan-gated, so nothing is locked for them.
+  const locked = !isSuperAdmin && (item.minLevel ?? 0) > planLevel;
   const active = !locked && isActive(pathname, item.href);
 
   const base = variant === 'grid'
@@ -299,7 +300,7 @@ function ThemeSwitch() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { planLevel } = useApp();
+  const { planLevel, isSuperAdmin } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
 
   return (
@@ -356,7 +357,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/90 backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex max-w-lg items-stretch justify-around">
           {MOBILE_TABS.map((item) => {
-            const locked = (item.minLevel ?? 0) > planLevel;
+            const locked = !isSuperAdmin && (item.minLevel ?? 0) > planLevel;
             const active = !locked && isActive(pathname, item.href);
             const className = cn(
               'relative flex flex-1 flex-col items-center gap-0.5 pb-1 pt-2 text-[11px] font-medium transition',

@@ -8,6 +8,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import type { UserContext } from '@/lib/supabase/auth';
 import { Avatar } from '@/components/ui/avatar';
+import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 
@@ -159,6 +160,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           </h1>
           <p className="mt-1 text-sm text-muted">Here&apos;s what&apos;s happening with your family today.</p>
         </div>
+        <DashboardWeather />
       </div>
 
       {/* Stat cards */}

@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { fmtTime } from '@/lib/utils/format';
 import { DisplayClock } from '@/components/display/display-clock';
 import { AutoRefresh } from '@/components/display/auto-refresh';
+import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 
 export const metadata: Metadata = { title: 'Kitchen Display', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -80,6 +81,7 @@ export default async function KitchenDisplayPage() {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <DashboardWeather />
           <DisplayClock />
           <Link href="/dashboard" title="Exit display" className="grid h-10 w-10 place-items-center rounded-full border border-border text-muted transition hover:text-fg">
             <X className="h-5 w-5" />

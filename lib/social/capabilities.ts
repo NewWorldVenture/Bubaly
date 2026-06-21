@@ -3,7 +3,7 @@
 // The honest, single source of truth for what each social platform can ACTUALLY
 // do through its public API, and what it requires to go live. The UI reads this
 // to show real "Supported / Requires setup / Not supported" states instead of
-// pretending. The DB seed in 0024_social_command_center.sql mirrors this exactly
+// pretending. The DB seed in 0034_social_command_center.sql mirrors this exactly
 // (social_providers.capabilities). If you change one, change both.
 //
 // Ground rules encoded here (do NOT "upgrade" a flag without a real, shipping API
