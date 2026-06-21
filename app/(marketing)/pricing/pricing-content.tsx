@@ -162,7 +162,7 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
               Yearly
             </button>
             {yearly && (
-              <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-300">
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
                 Save up to {basicSavings}%
               </span>
             )}

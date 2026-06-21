@@ -15,12 +15,12 @@ export const metadata: Metadata = {
 export const revalidate = 3600;
 
 const CATEGORY_COLORS: Record<BlogCategory, string> = {
-  'Parenting': 'bg-violet-500/15 text-violet-300 border-violet-400/20',
-  'Organization': 'bg-blue-500/15 text-blue-300 border-blue-400/20',
-  'School & Activities': 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20',
-  'AI & Technology': 'bg-indigo-500/15 text-indigo-300 border-indigo-400/20',
-  'Wellness': 'bg-amber-500/15 text-amber-300 border-amber-400/20',
-  'Family Finances': 'bg-rose-500/15 text-rose-300 border-rose-400/20',
+  'Parenting': 'border-violet-200 bg-violet-100 text-violet-800 dark:border-violet-400/20 dark:bg-violet-500/15 dark:text-violet-300',
+  'Organization': 'border-blue-200 bg-blue-100 text-blue-800 dark:border-blue-400/20 dark:bg-blue-500/15 dark:text-blue-300',
+  'School & Activities': 'border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-500/15 dark:text-emerald-300',
+  'AI & Technology': 'border-indigo-200 bg-indigo-100 text-indigo-800 dark:border-indigo-400/20 dark:bg-indigo-500/15 dark:text-indigo-300',
+  'Wellness': 'border-amber-200 bg-amber-100 text-amber-900 dark:border-amber-400/20 dark:bg-amber-500/15 dark:text-amber-300',
+  'Family Finances': 'border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-400/20 dark:bg-rose-500/15 dark:text-rose-300',
 };
 
 const ACCENT_BG: Record<BlogCategory, string> = {
@@ -112,7 +112,7 @@ export default async function BlogPage() {
                 <h2 className="mb-5 text-lg font-bold">Featured Articles</h2>
                 <Link href={`/blog/${featured.slug}`} className="group block overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] transition hover:border-violet-400/30">
                   <div className={cn('flex h-48 items-end bg-gradient-to-br p-6', ACCENT_BG[featured.category] ?? 'from-violet-600/20 to-blue-900/10')}>
-                    <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/20 px-3 py-1 text-xs font-bold uppercase tracking-wider text-violet-200">
+                    <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-violet-800 dark:border-violet-400/30 dark:bg-violet-500/20 dark:text-violet-200">
                       Featured
                     </div>
                   </div>
