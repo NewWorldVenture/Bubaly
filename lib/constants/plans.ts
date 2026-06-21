@@ -81,7 +81,8 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/scan':          1,
   '/display':                 1,  // Kitchen Display Mode
   // Plus routes
-  '/dashboard/command-center': 2, // AI Family Command Center
+  '/dashboard/command-center':  2, // AI Family Command Center
+  '/dashboard/weekly-briefing': 2, // Weekly AI Briefing
 };
 
 // ── Legacy Plan type (kept for admin display) ────────────────────────────────

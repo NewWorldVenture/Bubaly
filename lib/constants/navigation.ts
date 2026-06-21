@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Calendar, CheckSquare, UtensilsCrossed, ShoppingCart,
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
-  FolderKanban, Plug, BarChart3, Sun, Stethoscope, Smile, TicketCheck,
+  FolderKanban, Plug, BarChart3, Sun, CalendarDays, Stethoscope, Smile, TicketCheck,
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet,
@@ -42,6 +42,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     layout: 'list',
     items: [
       { href: '/dashboard/briefing', label: 'Daily Briefing', icon: Sun, minLevel: 1 },
+      { href: '/dashboard/weekly-briefing', label: 'Weekly Briefing', icon: CalendarDays, minLevel: 2 },
       { href: '/dashboard/command-center', label: 'Command Center', icon: Gauge, minLevel: 2 },
       { href: '/dashboard/assistant', label: 'AI Assistant', icon: Sparkles, minLevel: 0 },
       { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, minLevel: 0 },
