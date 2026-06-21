@@ -30,6 +30,7 @@ export type ThemePref = 'dark' | 'light' | 'system';
 export type DashboardView = 'personal' | 'family';
 export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
 export type RecordKind = 'medical' | 'dental';
+export type RideStatus = 'planned' | 'confirmed' | 'completed' | 'cancelled';
 export type DoseStatus = 'taken' | 'skipped' | 'missed';
 export type RedemptionStatus = 'requested' | 'approved' | 'fulfilled' | 'rejected';
 
@@ -159,6 +160,11 @@ export interface Database {
         { id: string; family_id: string; medication_id: string; schedule_id: string | null; member_id: string | null; scheduled_for: string; status: DoseStatus; taken_at: string | null; notes: string | null; logged_by: string | null } & Stamps,
         { id?: string; family_id: string; medication_id: string; schedule_id?: string | null; member_id?: string | null; scheduled_for: string; status?: DoseStatus; taken_at?: string | null; notes?: string | null; logged_by?: string | null },
         Partial<{ schedule_id: string | null; member_id: string | null; scheduled_for: string; status: DoseStatus; taken_at: string | null; notes: string | null }>
+      >;
+      rides: T<
+        { id: string; family_id: string; title: string; ride_date: string; pickup_time: string | null; dropoff_time: string | null; pickup_location: string | null; dropoff_location: string | null; driver_id: string | null; rider_ids: string[]; status: RideStatus; notes: string | null; event_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; ride_date: string; pickup_time?: string | null; dropoff_time?: string | null; pickup_location?: string | null; dropoff_location?: string | null; driver_id?: string | null; rider_ids?: string[]; status?: RideStatus; notes?: string | null; event_id?: string | null; created_by?: string | null },
+        Partial<{ title: string; ride_date: string; pickup_time: string | null; dropoff_time: string | null; pickup_location: string | null; dropoff_location: string | null; driver_id: string | null; rider_ids: string[]; status: RideStatus; notes: string | null; event_id: string | null }>
       >;
       health_providers: T<
         { id: string; family_id: string; member_id: string | null; kind: RecordKind; name: string; specialty: string | null; practice_name: string | null; phone: string | null; fax: string | null; email: string | null; address: string | null; is_primary: boolean; notes: string | null; created_by: string | null } & Stamps,
