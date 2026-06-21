@@ -1,7 +1,7 @@
 /* Bubaly service worker — app-shell caching for offline-friendly PWA behavior.
    Network-first for navigation/API (always fresh family data when online),
    cache-first for static assets. */
-const CACHE = 'bubaly-v2';
+const CACHE = 'bubaly-v3';
 const APP_SHELL = ['/', '/dashboard', '/offline'];
 
 self.addEventListener('install', (event) => {
