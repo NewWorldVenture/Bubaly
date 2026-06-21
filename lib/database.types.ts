@@ -985,6 +985,18 @@ export interface Database {
         { id?: string; survey_id: string; score?: number | null; comment?: string | null; respondent_email?: string | null; respondent_family_id?: string | null; channel?: string; user_agent?: string | null; submitted_at?: string; metadata?: Json },
         Partial<{ score: number | null; comment: string | null; respondent_email: string | null; channel: string; metadata: Json }>
       >;
+
+      // ---- Reviews & Reputation (migration 0041) ----
+      reviews: T<
+        { id: string; rating: number; title: string | null; body: string | null; author_name: string | null; author_email: string | null; source: string; status: string; reply: string | null; replied_at: string | null; replied_by: string | null; family_id: string | null; survey_response_id: string | null; submitted_at: string; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; rating: number; title?: string | null; body?: string | null; author_name?: string | null; author_email?: string | null; source?: string; status?: string; reply?: string | null; replied_at?: string | null; replied_by?: string | null; family_id?: string | null; survey_response_id?: string | null; submitted_at?: string; deleted_at?: string | null; metadata?: Json },
+        Partial<{ rating: number; title: string | null; body: string | null; author_name: string | null; author_email: string | null; source: string; status: string; reply: string | null; replied_at: string | null; replied_by: string | null; deleted_at: string | null; metadata: Json }>
+      >;
+      reputation_settings: T<
+        { id: string; singleton: boolean; google_url: string | null; app_store_url: string | null; play_store_url: string | null; trustpilot_url: string | null; request_headline: string | null; request_message: string | null; thank_you_high: string | null; thank_you_low: string | null; min_public_rating: number; auto_approve_min: number | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; singleton?: boolean; google_url?: string | null; app_store_url?: string | null; play_store_url?: string | null; trustpilot_url?: string | null; request_headline?: string | null; request_message?: string | null; thank_you_high?: string | null; thank_you_low?: string | null; min_public_rating?: number; auto_approve_min?: number | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ google_url: string | null; app_store_url: string | null; play_store_url: string | null; trustpilot_url: string | null; request_headline: string | null; request_message: string | null; thank_you_high: string | null; thank_you_low: string | null; min_public_rating: number; auto_approve_min: number | null; updated_by: string | null; metadata: Json }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
