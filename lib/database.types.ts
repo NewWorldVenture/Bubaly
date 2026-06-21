@@ -272,9 +272,9 @@ export interface Database {
         Partial<{ title: string; notes: string | null; remind_at: string; recurrence: RecurrenceFreq; is_done: boolean }>
       >;
       notifications: T<
-        { id: string; family_id: string; user_id: string | null; type: NotificationType; title: string; body: string | null; related_type: string | null; related_id: string | null; is_read: boolean; send_at: string; sent_at: string | null; created_at: string },
-        { id?: string; family_id: string; user_id?: string | null; type: NotificationType; title: string; body?: string | null; related_type?: string | null; related_id?: string | null; is_read?: boolean; send_at?: string; sent_at?: string | null },
-        Partial<{ is_read: boolean; sent_at: string | null }>
+        { id: string; family_id: string; user_id: string | null; type: NotificationType; title: string; body: string | null; related_type: string | null; related_id: string | null; is_read: boolean; send_at: string; sent_at: string | null; pushed_at: string | null; created_at: string },
+        { id?: string; family_id: string; user_id?: string | null; type: NotificationType; title: string; body?: string | null; related_type?: string | null; related_id?: string | null; is_read?: boolean; send_at?: string; sent_at?: string | null; pushed_at?: string | null },
+        Partial<{ is_read: boolean; sent_at: string | null; pushed_at: string | null }>
       >;
       ai_conversations: T<
         { id: string; family_id: string; user_id: string | null; title: string; provider: string; model: string | null } & Stamps,
