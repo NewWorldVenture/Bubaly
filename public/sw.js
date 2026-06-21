@@ -1,6 +1,7 @@
 /* Bubaly service worker — app-shell caching for offline-friendly PWA behavior.
    Network-first for navigation/API (always fresh family data when online),
    cache-first for static assets. */
+// deploy: ship new Bubaly brand logo to production
 const CACHE = 'bubaly-v3';
 const APP_SHELL = ['/', '/dashboard', '/offline'];
 
