@@ -109,6 +109,10 @@ export async function requireUserContext(): Promise<UserContext> {
 export async function requirePlanLevel(minLevel: 1 | 2): Promise<UserContext> {
   const ctx = await requireUserContext();
 
+  // Super administrators are never plan-gated — they can access every page,
+  // regardless of their family's subscription. Everyone else is checked below.
+  if (await isSuperAdmin()) return ctx;
+
   const supabase = await createServer();
   const { data: sub } = await supabase
     .from('subscriptions')
