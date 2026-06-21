@@ -24,7 +24,7 @@ export default function AIPage() {
         <SectionHeading
           eyebrow="AI assistant"
           title="An AI chief of staff for your household"
-          description="Ask in plain language. FamilyOS takes real action in your family’s data — securely, within your family only."
+          description="Ask in plain language. Bubaly takes real action in your family’s data — securely, within your family only."
         />
       </Section>
       <Section className="pt-0">
@@ -44,11 +44,11 @@ export default function AIPage() {
           <p className="mt-2 text-sm text-muted">
             When you ask the assistant to add an event or build a list, it actually creates those
             records in your family’s database — then confirms what it did. Everything stays scoped to
-            your household by the same row-level security that protects the rest of FamilyOS.
+            your household by the same row-level security that protects the rest of Bubaly.
           </p>
           <h3 className="mt-6 text-lg font-semibold">Model-agnostic by design</h3>
           <p className="mt-2 text-sm text-muted">
-            FamilyOS uses a provider abstraction, so it can run on Claude, GPT, Gemini, or local
+            Bubaly uses a provider abstraction, so it can run on Claude, GPT, Gemini, or local
             models — and switch without changing how your family experiences it.
           </p>
         </div>

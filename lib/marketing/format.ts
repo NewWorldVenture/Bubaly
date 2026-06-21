@@ -21,7 +21,7 @@ export function familiesNote(n: number): string {
   return n <= 0 ? 'A growing community of families' : `${formatFamilies(n)} families and growing`;
 }
 
-/** e.g. "1,000+ families love FamilyOS" */
+/** e.g. "1,000+ families love Bubaly" */
 export function familiesLoveLine(n: number): string {
-  return n <= 0 ? 'Families love FamilyOS' : `${formatFamilies(n)} families love FamilyOS`;
+  return n <= 0 ? 'Families love Bubaly' : `${formatFamilies(n)} families love Bubaly`;
 }

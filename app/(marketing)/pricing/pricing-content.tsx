@@ -141,7 +141,7 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
         {/* Hero */}
         <section className="mx-auto max-w-3xl text-center">
           <h1 className="text-5xl font-black leading-[1.08] sm:text-6xl">
-            FamilyOS Pricing
+            Bubaly Pricing
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-white/65">
             Start free. Upgrade when your family is ready.
@@ -162,7 +162,7 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
               Yearly
             </button>
             {yearly && (
-              <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-300">
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
                 Save up to {basicSavings}%
               </span>
             )}
@@ -172,7 +172,7 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
         {/* Plan cards — 3 columns */}
         <section className="mt-10 grid gap-5 lg:grid-cols-3">
           <PlanCard
-            name="FamilyOS Free"
+            name="Bubaly Free"
             goal="Become the default family organizer."
             icon={<Zap className="h-7 w-7 text-white/60" />}
             price="Free"
@@ -216,7 +216,7 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
             <div>
               <h2 className="font-bold">Smart Imports — the feature most competitors don&apos;t offer well</h2>
               <p className="mt-1 text-sm text-white/65">
-                Snap a school flyer, upload a PDF, or share a screenshot. FamilyOS AI automatically creates calendar events, tasks, and reminders — no manual entry.
+                Snap a school flyer, upload a PDF, or share a screenshot. Bubaly AI automatically creates calendar events, tasks, and reminders — no manual entry.
               </p>
             </div>
           </div>

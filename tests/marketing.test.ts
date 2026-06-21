@@ -11,7 +11,7 @@ function cust(p: Partial<MarketingCustomer>): MarketingCustomer {
     ownerEmail: p.ownerEmail ?? 'a@b.com',
     memberCount: p.memberCount ?? 2,
     plan: p.plan ?? 'family',
-    planLabel: p.planLabel ?? 'FamilyOS Family',
+    planLabel: p.planLabel ?? 'Bubaly Family',
     status: p.status ?? 'active',
     lifecycle: p.lifecycle ?? 'active',
     estLtvCents: p.estLtvCents ?? 999,

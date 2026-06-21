@@ -74,7 +74,7 @@ export default async function MarketingDashboard() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">
-        Real-time view of your customer base, campaigns, and growth — built from live FamilyOS data.
+        Real-time view of your customer base, campaigns, and growth — built from live Bubaly data.
       </p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

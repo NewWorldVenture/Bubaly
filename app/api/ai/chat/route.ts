@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     const response = await anthropic.messages.create({
       model: process.env.AI_MODEL ?? 'claude-sonnet-4-6',
       max_tokens: 1024,
-      system: `You are a helpful family assistant for FamilyOS. You help families coordinate schedules, chores, meals, and more.
+      system: `You are a helpful family assistant for Bubaly. You help families coordinate schedules, chores, meals, and more.
 
 Current family context:
 ${familyContext}

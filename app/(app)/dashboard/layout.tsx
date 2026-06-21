@@ -5,6 +5,8 @@ import { planLevel as planLevelOf } from '@/lib/constants/plans';
 import { AppProvider } from '@/components/app/app-context';
 import { AppShell } from '@/components/app/app-shell';
 import { RegisterSW } from '@/components/pwa/register-sw';
+import { NativeBootstrap } from '@/components/native/native-bootstrap';
+import { PushRegistrar } from '@/components/native/push-registrar';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireUserContext();
@@ -53,6 +55,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     >
       <AppShell>{children}</AppShell>
       <RegisterSW />
+      <NativeBootstrap />
+      <PushRegistrar />
     </AppProvider>
   );
 }

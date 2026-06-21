@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
 
     // Fetch the ICS file
     const icsRes = await fetch(icsUrl, {
-      headers: { 'User-Agent': 'FamilyOS-Calendar-Sync/1.0' },
+      headers: { 'User-Agent': 'Bubaly-Calendar-Sync/1.0' },
       signal: AbortSignal.timeout(15_000),
     });
     if (!icsRes.ok) {

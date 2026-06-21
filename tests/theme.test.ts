@@ -15,7 +15,7 @@ describe('theme core', () => {
   it('defaults to dark and persists under a stable key', () => {
     expect(DEFAULT_THEME).toBe('dark');
     // Must match the key hard-coded in theme-script.tsx (no-flash loader).
-    expect(THEME_KEY).toBe('familyos-theme');
+    expect(THEME_KEY).toBe('bubaly-theme');
   });
 
   it('validates theme values', () => {

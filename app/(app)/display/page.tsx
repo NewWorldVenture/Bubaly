@@ -72,7 +72,7 @@ export default async function KitchenDisplayPage() {
       {/* Header */}
       <header className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-widest text-brand">FamilyOS</p>
+          <p className="text-sm font-semibold uppercase tracking-widest text-brand">Bubaly</p>
           <h1 className="mt-1 text-4xl font-black lg:text-5xl">{ctx.active.family.name}</h1>
           <div className="mt-3 flex -space-x-2">
             {(members ?? []).slice(0, 8).map((m) => (

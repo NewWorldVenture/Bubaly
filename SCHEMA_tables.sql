@@ -1,6 +1,6 @@
--- FamilyOS :: 0001 + 0002 single-file schema
+-- Bubaly :: 0001 + 0002 single-file schema
 -- Run this whole file in Supabase SQL Editor.
--- Includes required extensions, enum types, then all FamilyOS tables/indexes.
+-- Includes required extensions, enum types, then all Bubaly tables/indexes.
 
 -- Required for gen_random_uuid() / gen_random_bytes()
 create extension if not exists pgcrypto with schema public;
@@ -64,7 +64,7 @@ do $$ begin
 exception when duplicate_object then null;
 end $$;
 
--- FamilyOS :: 0002 tables
+-- Bubaly :: 0002 tables
 -- Convention: every household-scoped table carries family_id (uuid) for RLS isolation,
 -- created_by (uuid -> auth.users), and created_at/updated_at timestamptz.
 

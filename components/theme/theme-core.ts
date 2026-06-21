@@ -4,7 +4,7 @@
 export type Theme = 'dark' | 'light' | 'system';
 
 /** localStorage key. MUST match the key used in theme-script.tsx. */
-export const THEME_KEY = 'familyos-theme';
+export const THEME_KEY = 'bubaly-theme';
 
 /** Product default when nothing is stored. */
 export const DEFAULT_THEME: Theme = 'dark';

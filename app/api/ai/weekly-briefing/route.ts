@@ -121,7 +121,7 @@ UPCOMING REMINDERS:
 ${(reminders ?? []).map((r) => `- ${r.remind_at?.slice(0, 10) ?? 'soon'}: ${r.title}`).join('\n') || '- none'}
     `.trim();
 
-    const systemPrompt = `You are the FamilyOS AI Chief of Staff producing a WEEKLY family briefing for a Family+ subscriber. Look both backward (recap) and forward (the week ahead).
+    const systemPrompt = `You are the Bubaly AI Chief of Staff producing a WEEKLY family briefing for a Family+ subscriber. Look both backward (recap) and forward (the week ahead).
 
 IMPORTANT: Return ONLY valid JSON. No markdown, no code fences, no prose. Start with { and end with }.
 

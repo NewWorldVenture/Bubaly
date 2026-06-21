@@ -55,7 +55,7 @@ const STATUS_CONFIG: Record<SubscriptionStatus, { label: string; tone: 'success'
   unpaid: { label: 'Unpaid', tone: 'danger', icon: <AlertCircle className="h-4 w-4" /> },
 };
 const PLAN_LABELS: Record<string, { name: string; description: string; price: string }> = {
-  free: { name: 'FamilyOS Free', description: 'The default family organizer for up to 5 members.', price: '$0/mo' },
+  free: { name: 'Bubaly Free', description: 'The default family organizer for up to 5 members.', price: '$0/mo' },
   basic: { name: 'Family Basic', description: 'Everything a busy household needs — unlimited members, chores, meals, and unlimited AI.', price: '$9.99/mo' },
   basic_annual: { name: 'Family Basic (Annual)', description: 'The Family Basic plan billed yearly.', price: '$99.99/yr' },
   plus: { name: 'Family+', description: 'The AI Family Chief of Staff — concierge, briefings, and command center.', price: '$24.99/mo' },
@@ -1098,7 +1098,7 @@ export function BillingModule() {
         <div className="rounded-2xl border border-border bg-surface/30 p-5">
           <div className="mb-4 flex items-center gap-3">
             <CreditCard className="h-5 w-5 text-brand" />
-            <h2 className="font-semibold">FamilyOS Subscription</h2>
+            <h2 className="font-semibold">Bubaly Subscription</h2>
           </div>
           {subLoading ? <LoadingBlock /> : (
             <>

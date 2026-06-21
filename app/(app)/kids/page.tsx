@@ -5,7 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtTime } from '@/lib/utils/format';
 
-export const metadata: Metadata = { title: 'My FamilyOS' };
+export const metadata: Metadata = { title: 'My Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function KidsPage() {

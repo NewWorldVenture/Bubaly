@@ -1,6 +1,6 @@
 'use server';
 // lib/family/actions.ts
-// Secure, server-side write paths for the Family OS modules. Every action:
+// Secure, server-side write paths for the Bubaly modules. Every action:
 //   1. resolves the signed-in user + active family on the server (never trusts a
 //      client-supplied family_id),
 //   2. writes through the RLS-bound server client (is_family_member enforces

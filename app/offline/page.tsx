@@ -10,7 +10,7 @@ export default function OfflinePage() {
       </div>
       <h1 className="text-2xl font-semibold">You’re offline</h1>
       <p className="mt-2 max-w-sm text-sm text-muted">
-        FamilyOS will reconnect automatically. Recently viewed screens are still available.
+        Bubaly will reconnect automatically. Recently viewed screens are still available.
       </p>
     </div>
   );

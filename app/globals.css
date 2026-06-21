@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ============================================================
-   FamilyOS design tokens. Dark is the default (set on <html>);
+   Bubaly design tokens. Dark is the default (set on <html>);
    .light overrides for the user-toggleable light theme.
    ============================================================ */
 :root {

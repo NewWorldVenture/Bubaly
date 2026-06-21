@@ -21,7 +21,7 @@ async function suppress(email: string, token: string): Promise<NextResponse> {
     return page('Invalid link', 'This unsubscribe link is invalid or has expired.', false);
   }
   await createServiceClient().from('marketing_suppressions').upsert({ email: clean, reason: 'unsubscribe' });
-  return page('Unsubscribed', `${clean} will no longer receive marketing emails from FamilyOS. Account and transactional emails are unaffected.`, true);
+  return page('Unsubscribed', `${clean} will no longer receive marketing emails from Bubaly. Account and transactional emails are unaffected.`, true);
 }
 
 export async function GET(req: NextRequest) {
