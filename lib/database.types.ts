@@ -31,6 +31,7 @@ export type DashboardView = 'personal' | 'family';
 export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
 export type RecordKind = 'medical' | 'dental';
 export type RideStatus = 'planned' | 'confirmed' | 'completed' | 'cancelled';
+export type HomeworkStatus = 'assigned' | 'in_progress' | 'done' | 'submitted';
 export type DoseStatus = 'taken' | 'skipped' | 'missed';
 
 // Sync platform enums (migration 0018)
@@ -159,6 +160,11 @@ export interface Database {
         { id: string; family_id: string; title: string; ride_date: string; pickup_time: string | null; dropoff_time: string | null; pickup_location: string | null; dropoff_location: string | null; driver_id: string | null; rider_ids: string[]; status: RideStatus; notes: string | null; event_id: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; title: string; ride_date: string; pickup_time?: string | null; dropoff_time?: string | null; pickup_location?: string | null; dropoff_location?: string | null; driver_id?: string | null; rider_ids?: string[]; status?: RideStatus; notes?: string | null; event_id?: string | null; created_by?: string | null },
         Partial<{ title: string; ride_date: string; pickup_time: string | null; dropoff_time: string | null; pickup_location: string | null; dropoff_location: string | null; driver_id: string | null; rider_ids: string[]; status: RideStatus; notes: string | null; event_id: string | null }>
+      >;
+      homework_assignments: T<
+        { id: string; family_id: string; member_id: string | null; subject: string | null; title: string; details: string | null; due_at: string | null; status: HomeworkStatus; completed_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; subject?: string | null; title: string; details?: string | null; due_at?: string | null; status?: HomeworkStatus; completed_at?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; subject: string | null; title: string; details: string | null; due_at: string | null; status: HomeworkStatus; completed_at: string | null }>
       >;
       health_providers: T<
         { id: string; family_id: string; member_id: string | null; kind: RecordKind; name: string; specialty: string | null; practice_name: string | null; phone: string | null; fax: string | null; email: string | null; address: string | null; is_primary: boolean; notes: string | null; created_by: string | null } & Stamps,
