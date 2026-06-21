@@ -32,6 +32,7 @@ export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
 export type RecordKind = 'medical' | 'dental';
 export type RideStatus = 'planned' | 'confirmed' | 'completed' | 'cancelled';
 export type DoseStatus = 'taken' | 'skipped' | 'missed';
+export type RedemptionStatus = 'requested' | 'approved' | 'fulfilled' | 'rejected';
 
 // Sync platform enums (migration 0018)
 export type SyncProviderEnum = 'google' | 'microsoft' | 'apple' | 'amazon' | 'internal';
@@ -119,6 +120,11 @@ export interface Database {
         { id: string; family_id: string; title: string; description: string | null; cost_points: number; redeemed_by: string | null; redeemed_at: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; title: string; description?: string | null; cost_points?: number; created_by?: string | null },
         Partial<{ title: string; description: string | null; cost_points: number; redeemed_by: string | null; redeemed_at: string | null }>
+      >;
+      reward_redemptions: T<
+        { id: string; family_id: string; reward_id: string | null; member_id: string; reward_title: string; cost_points: number; status: RedemptionStatus; note: string | null; decided_by: string | null; decided_at: string | null } & Stamps,
+        { id?: string; family_id: string; reward_id?: string | null; member_id: string; reward_title: string; cost_points?: number; status?: RedemptionStatus; note?: string | null; decided_by?: string | null; decided_at?: string | null },
+        Partial<{ reward_id: string | null; reward_title: string; cost_points: number; status: RedemptionStatus; note: string | null; decided_by: string | null; decided_at: string | null }>
       >;
       meals: T<
         { id: string; family_id: string; name: string; meal_type: MealType; recipe_url: string | null; ingredients: Json; notes: string | null; created_by: string | null } & Stamps,
