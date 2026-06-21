@@ -69,8 +69,8 @@ export default async function AdminReportsPage() {
   const maxRevenue = Math.max(...revenueTrend.map((m) => m.value), 1);
 
   const planColors: Record<string, string> = {
-    'FamilyOS Family': '#7c5dff',
-    'FamilyOS Family (Annual)': '#22c55e',
+    'Bubaly Family': '#7c5dff',
+    'Bubaly Family (Annual)': '#22c55e',
     Free: '#64748b',
   };
   const planBuckets = new Map<string, number>();
@@ -100,7 +100,7 @@ export default async function AdminReportsPage() {
     <div className="module-page space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Reports &amp; Analytics</h1>
-        <p className="mt-1 text-sm text-muted">Growth, revenue, and engagement across every family on FamilyOS.</p>
+        <p className="mt-1 text-sm text-muted">Growth, revenue, and engagement across every family on Bubaly.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">

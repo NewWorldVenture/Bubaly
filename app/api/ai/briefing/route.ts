@@ -101,7 +101,7 @@ ${(appointments ?? []).map(a => {
 }).join('\n') || '- None'}
     `.trim();
 
-    const systemPrompt = `You are the FamilyOS AI Chief of Staff. Generate a ${type} family briefing as structured JSON.
+    const systemPrompt = `You are the Bubaly AI Chief of Staff. Generate a ${type} family briefing as structured JSON.
     
 IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanation. Start with { and end with }.
 

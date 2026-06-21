@@ -19,9 +19,9 @@ export type SyncItemKind = 'calendar' | 'reminder' | 'note';
 export type CapabilityMechanism = 'api' | 'caldav' | 'ics' | 'export' | 'none';
 
 export type Capability = {
-  /** Can we pull data FROM the provider INTO theagoras? */
+  /** Can we pull data FROM the provider INTO bubaly? */
   read: boolean;
-  /** Can we push data FROM theagoras TO the provider? */
+  /** Can we push data FROM bubaly TO the provider? */
   write: boolean;
   mechanism: CapabilityMechanism;
   /** Plain-language note shown in the UI when read/write is limited or off. */
@@ -47,7 +47,7 @@ export const CAPABILITIES: Record<SyncProvider, ProviderCapabilities> = {
       limitation: 'Syncs with Google Tasks. Reminder-specific fields map onto task due dates.',
     },
     note: NONE(
-      'Google Keep has no public API. Notes stay internal to theagoras, with optional one-way export to a Google Doc.',
+      'Google Keep has no public API. Notes stay internal to bubaly, with optional one-way export to a Google Doc.',
     ),
   },
   microsoft: {
@@ -73,14 +73,14 @@ export const CAPABILITIES: Record<SyncProvider, ProviderCapabilities> = {
       mechanism: 'caldav',
       limitation: 'Apple Reminders sync over CalDAV (VTODO) using an app-specific password.',
     },
-    note: NONE('Apple Notes has no public API. Notes stay internal to theagoras.'),
+    note: NONE('Apple Notes has no public API. Notes stay internal to bubaly.'),
   },
   amazon: {
     calendar: {
       read: false,
       write: true,
       mechanism: 'ics',
-      limitation: 'Alexa can subscribe to a published ICS feed (one-way, theagoras -> Alexa). There is no API to read an Amazon calendar back.',
+      limitation: 'Alexa can subscribe to a published ICS feed (one-way, bubaly -> Alexa). There is no API to read an Amazon calendar back.',
     },
     reminder: NONE(
       'Amazon has no public reminder-write API. Writing Alexa reminders requires a custom Alexa Skill with account linking (not yet enabled).',
@@ -131,5 +131,5 @@ export const PROVIDER_LABELS: Record<SyncProvider, string> = {
   microsoft: 'Microsoft / Outlook',
   apple: 'Apple',
   amazon: 'Amazon / Alexa',
-  internal: 'theagoras.com',
+  internal: 'bubaly.com',
 };

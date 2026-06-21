@@ -2,7 +2,7 @@
 // and prices. Slugs MUST match what the Stripe webhook writes.
 //
 // Three tiers:
-//   free          → FamilyOS Free (no charge)
+//   free          → Bubaly Free (no charge)
 //   basic / basic_annual  → Family Basic ($9.99/mo or ~$8.33/mo billed yearly)
 //   plus  / plus_annual   → Family+ ($24.99/mo or ~$20.83/mo billed yearly)
 //
@@ -38,7 +38,7 @@ export function planLevel(plan: string | null | undefined): number {
 }
 
 export const PLAN_NAMES: Record<string, string> = {
-  free: 'FamilyOS Free',
+  free: 'Bubaly Free',
   basic: 'Family Basic',
   basic_annual: 'Family Basic (Annual)',
   family: 'Family Basic',       // legacy
@@ -107,7 +107,7 @@ export type Plan = {
 export const PLANS: Plan[] = [
   {
     id: 'free',
-    name: 'FamilyOS Free',
+    name: 'Bubaly Free',
     priceMonthly: 0,
     tagline: 'The default family organizer.',
     seats: 5,

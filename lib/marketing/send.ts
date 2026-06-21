@@ -43,7 +43,7 @@ export async function resolveRecipients(
 
 function footer(appUrl: string, email: string): string {
   const url = unsubUrl(appUrl, email);
-  return `<hr style="margin-top:32px;border:none;border-top:1px solid #e5e7eb" /><p style="color:#9ca3af;font-size:12px;line-height:18px;margin-top:16px">You're receiving this because you have a FamilyOS account. <a href="${url}" style="color:#6b7280">Unsubscribe</a>.</p>`;
+  return `<hr style="margin-top:32px;border:none;border-top:1px solid #e5e7eb" /><p style="color:#9ca3af;font-size:12px;line-height:18px;margin-top:16px">You're receiving this because you have a Bubaly account. <a href="${url}" style="color:#6b7280">Unsubscribe</a>.</p>`;
 }
 
 type SendResult = { sent: number };

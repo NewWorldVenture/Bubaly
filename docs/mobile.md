@@ -1,12 +1,12 @@
-# FamilyOS Mobile (iOS, iPadOS, Android)
+# Bubaly Mobile (iOS, iPadOS, Android)
 
-FamilyOS ships to the App Store and Google Play as **native apps built with
+Bubaly ships to the App Store and Google Play as **native apps built with
 [Capacitor](https://capacitorjs.com)**, plus an installable **PWA**. The native
 shells wrap the same hosted, Supabase‑wired Next.js app — so there is **one
 codebase, one data layer, and zero feature drift** between web and mobile. iPad
 is covered by the iOS target (universal app).
 
-> Why a Capacitor shell over the hosted app (not a static export)? FamilyOS is a
+> Why a Capacitor shell over the hosted app (not a static export)? Bubaly is a
 > dynamic app: SSR, server actions, and Supabase auth over cookies. A static
 > export would break that wiring. The shell loads the live app and adds native
 > capabilities (push, status bar, splash, deep links, haptics) on top, keeping
@@ -44,14 +44,14 @@ npm run cap:add:android       # creates the android/ Studio project
 
 ```bash
 # Point the shell at production (default) or a LAN dev server:
-export CAP_SERVER_URL=https://www.theagoras.com   # or http://192.168.x.x:3000
+export CAP_SERVER_URL=https://www.bubaly.com   # or http://192.168.x.x:3000
 
 npm run cap:sync              # copy config + plugins into the native projects
 npm run cap:ios               # sync iOS and open Xcode  → run / archive
 npm run cap:android           # sync Android and open Studio → run / bundle
 ```
 
-In Xcode: set your Team + bundle id `com.theagoras.familyos`, then Product →
+In Xcode: set your Team + bundle id `com.bubaly.bubaly`, then Product →
 Archive → distribute to the App Store. In Android Studio: Build → Generate Signed
 Bundle (`.aab`) → upload to Play Console.
 

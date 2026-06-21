@@ -39,7 +39,7 @@ export function NativeBootstrap() {
           else App.exitApp().catch(() => {});
         });
 
-        // Deep links: open https://www.theagoras.com/<path> and supabase auth
+        // Deep links: open https://www.bubaly.com/<path> and supabase auth
         // callbacks inside the shell by routing to the path portion.
         const urlHandle = await App.addListener('appUrlOpen', ({ url }) => {
           try {

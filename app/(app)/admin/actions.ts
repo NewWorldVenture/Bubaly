@@ -125,7 +125,7 @@ export async function adminResendInviteAction(inviteId: string): Promise<Result>
 
   const { ok } = await sendReactEmail({
     to: invite.email,
-    subject: `Reminder: you’re invited to join ${family?.name ?? 'a family'} on FamilyOS`,
+    subject: `Reminder: you’re invited to join ${family?.name ?? 'a family'} on Bubaly`,
     react: React.createElement(InviteEmail, {
       familyName: family?.name ?? 'a family',
       inviterName: inviterName?.full_name || inviterName?.email || 'A family admin',

@@ -28,12 +28,12 @@ describe('marketing family-count formatters', () => {
   it('uses number-free, non-fabricated copy when count is zero', () => {
     expect(familiesHeadline(0)).toBe('Loved by families everywhere');
     expect(familiesNote(0)).toBe('A growing community of families');
-    expect(familiesLoveLine(0)).toBe('Families love FamilyOS');
+    expect(familiesLoveLine(0)).toBe('Families love Bubaly');
   });
 
   it('uses the real count when families exist', () => {
     expect(familiesHeadline(2500)).toBe('Loved by 2,000+ families');
     expect(familiesNote(42)).toBe('42 families and growing');
-    expect(familiesLoveLine(42)).toBe('42 families love FamilyOS');
+    expect(familiesLoveLine(42)).toBe('42 families love Bubaly');
   });
 });

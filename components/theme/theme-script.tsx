@@ -3,7 +3,7 @@
 const script = `
 (function () {
   try {
-    var stored = localStorage.getItem('familyos-theme') || 'dark';
+    var stored = localStorage.getItem('bubaly-theme') || 'dark';
     var system = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     var resolved = stored === 'system' ? system : stored;
     var root = document.documentElement;

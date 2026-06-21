@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils/cn';
 
 export const metadata: Metadata = {
   title: 'Blog',
-  description: 'Tips, stories & insights for modern families from the FamilyOS team.',
+  description: 'Tips, stories & insights for modern families from the Bubaly team.',
 };
 
 // Re-read published posts from Supabase at most hourly so content edits surface

@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   }
 
   const { name, email, message } = parsed.data;
-  const to = process.env.CONTACT_INBOX ?? 'hello@familyos.app';
+  const to = process.env.CONTACT_INBOX ?? 'hello@bubaly.com';
 
   // Persist as a support ticket so it surfaces in the admin console even if
   // email delivery is unavailable. Best-effort: never block the user on it.
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   const result = await sendEmail({
     to,
     replyTo: email,
-    subject: `New FamilyOS contact from ${name}`,
+    subject: `New Bubaly contact from ${name}`,
     html: `<p><strong>${name}</strong> (${email}) wrote:</p><p>${message.replace(/</g, '&lt;')}</p>`,
   });
 

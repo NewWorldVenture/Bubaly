@@ -451,7 +451,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
           <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center">
             <Sparkles className="h-4 w-4 text-fg" />
           </div>
-          <span className="font-semibold text-fg text-lg">FamilyOS</span>
+          <span className="font-semibold text-fg text-lg">Bubaly</span>
         </div>
         <div className="text-center">
           <div className="text-4xl font-bold text-fg tabular-nums tracking-tight">{clockStr}</div>

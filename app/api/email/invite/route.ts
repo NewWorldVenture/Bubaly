@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     const { ok } = await sendReactEmail({
       to: invite.email,
-      subject: `${inviterName} invited you to join ${familyName} on FamilyOS`,
+      subject: `${inviterName} invited you to join ${familyName} on Bubaly`,
       react: React.createElement(InviteEmail, {
         familyName,
         inviterName,

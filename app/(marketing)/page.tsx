@@ -45,7 +45,7 @@ export default async function HomePage() {
             </h1>
 
             <p className="mx-auto mt-5 max-w-[520px] text-[15px] leading-6 text-white/70 sm:text-base sm:leading-7 lg:mx-0">
-              FamilyOS is your AI-powered Operating System for family life. Stay organized, connected, and ahead of what matters most.
+              Bubaly is your AI-powered Operating System for family life. Stay organized, connected, and ahead of what matters most.
             </p>
 
             <div className="mt-7 flex flex-col items-stretch gap-3 xs:flex-row xs:items-center xs:justify-center lg:justify-start">
@@ -105,7 +105,7 @@ export default async function HomePage() {
 
       {/* Hidden SEO content */}
       <section className="sr-only">
-        <h2>FamilyOS modules</h2>
+        <h2>Bubaly modules</h2>
         <ul>
           {[CalendarDays, CheckSquare2, UtensilsCrossed, GraduationCap, Heart, Folder, Sparkles].map((Icon, index) => (
             <li key={index}>

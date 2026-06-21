@@ -689,7 +689,7 @@ export interface Database {
         { id?: string; key: string; name: string; description?: string | null; category?: string; status?: string; config?: Json; last_sync_at?: string | null; created_by?: string | null; updated_by?: string | null },
         Partial<{ name: string; description: string | null; category: string; status: string; config: Json; last_sync_at: string | null; updated_by: string | null }>
       >;
-      // ── Family OS modules (migration 0014) ──────────────────
+      // ── Bubaly modules (migration 0014) ──────────────────
       family_routines: T<
         { id: string; family_id: string; member_id: string | null; title: string; description: string | null; category: string | null; time_of_day: string | null; days_of_week: number[]; status: string; metadata: Json; created_by: string | null; updated_by: string | null; deleted_at: string | null } & Stamps,
         { id?: string; family_id: string; member_id?: string | null; title: string; description?: string | null; category?: string | null; time_of_day?: string | null; days_of_week?: number[]; status?: string; metadata?: Json; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null },

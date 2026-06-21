@@ -99,7 +99,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/billing', label: 'Finances', icon: CreditCard, minLevel: 0 },
       { href: '/dashboard/sync', label: 'Calendar Sync', icon: RefreshCw, minLevel: 0 },
       { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound, minLevel: 0 },
-      { href: '/dashboard/migrate', label: 'Switch to FamilyOS', icon: Import, minLevel: 0 },
+      { href: '/dashboard/migrate', label: 'Switch to Bubaly', icon: Import, minLevel: 0 },
     ],
   },
   {

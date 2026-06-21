@@ -119,7 +119,7 @@ export default async function AdminDashboardPage() {
   // when it has no subscription row — so the donut reflects the real install
   // base instead of collapsing to "no subscriptions" when nobody's paid yet.
   const planColors: Record<string, string> = {
-    'FamilyOS Free': '#64748b',
+    'Bubaly Free': '#64748b',
     Free: '#64748b',
     'Family Basic': '#7c5dff',
     'Family Basic (Annual)': '#6d28d9',
@@ -166,7 +166,7 @@ export default async function AdminDashboardPage() {
     <div className="module-page space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Admin Dashboard</h1>
-        <p className="mt-1 text-sm text-muted">Manage and monitor your FamilyOS system, users, and services.</p>
+        <p className="mt-1 text-sm text-muted">Manage and monitor your Bubaly system, users, and services.</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

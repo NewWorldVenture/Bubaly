@@ -26,7 +26,7 @@ export async function POST() {
   // Service client so dispatch can read this user's device rows + prune stale ones.
   const supabase = createServiceClient();
   const result = await sendPushToUser(supabase, user.id, {
-    title: 'FamilyOS test 🔔',
+    title: 'Bubaly test 🔔',
     body: 'If you can read this, push notifications are working on this device.',
     url: '/dashboard/notifications',
   });
