@@ -77,7 +77,7 @@ function PlanCard({
         : 'border border-white/10 bg-white/[0.04]',
     )}>
       {badge && (
-        <span className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-violet-600 px-4 py-1 text-[11px] font-black tracking-wide">
+        <span className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-violet-600 px-4 py-1 text-[11px] font-black tracking-wide text-brand-fg">
           {badge}
         </span>
       )}
@@ -98,7 +98,7 @@ function PlanCard({
         className={cn(
           'mt-5 inline-flex h-12 items-center justify-center rounded-xl text-sm font-bold transition',
           featured
-            ? 'bg-gradient-to-r from-blue-500 to-violet-600 text-white shadow-glow hover:opacity-90'
+            ? 'bg-gradient-to-r from-blue-500 to-violet-600 text-brand-fg shadow-glow hover:opacity-90'
             : 'border border-white/20 text-white hover:bg-white/10',
         )}
       >
@@ -141,7 +141,7 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
         {/* Hero */}
         <section className="mx-auto max-w-3xl text-center">
           <h1 className="text-5xl font-black leading-[1.08] sm:text-6xl">
-            FamilyOS Pricing
+            Bubaly Pricing
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-white/65">
             Start free. Upgrade when your family is ready.
@@ -151,18 +151,18 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
           <div className="mt-7 inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
             <button
               onClick={() => setPeriod('monthly')}
-              className={cn('rounded-full px-6 py-2 font-bold transition', period === 'monthly' ? 'bg-violet-600 text-white' : 'text-white/65 hover:text-white')}
+              className={cn('rounded-full px-6 py-2 font-bold transition', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
             >
               Monthly
             </button>
             <button
               onClick={() => setPeriod('yearly')}
-              className={cn('rounded-full px-6 py-2 font-bold transition', period === 'yearly' ? 'bg-violet-600 text-white' : 'text-white/65 hover:text-white')}
+              className={cn('rounded-full px-6 py-2 font-bold transition', period === 'yearly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
             >
               Yearly
             </button>
             {yearly && (
-              <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-300">
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
                 Save up to {basicSavings}%
               </span>
             )}
@@ -172,7 +172,7 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
         {/* Plan cards — 3 columns */}
         <section className="mt-10 grid gap-5 lg:grid-cols-3">
           <PlanCard
-            name="FamilyOS Free"
+            name="Bubaly Free"
             goal="Become the default family organizer."
             icon={<Zap className="h-7 w-7 text-white/60" />}
             price="Free"
@@ -216,7 +216,7 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
             <div>
               <h2 className="font-bold">Smart Imports — the feature most competitors don&apos;t offer well</h2>
               <p className="mt-1 text-sm text-white/65">
-                Snap a school flyer, upload a PDF, or share a screenshot. FamilyOS AI automatically creates calendar events, tasks, and reminders — no manual entry.
+                Snap a school flyer, upload a PDF, or share a screenshot. Bubaly AI automatically creates calendar events, tasks, and reminders — no manual entry.
               </p>
             </div>
           </div>

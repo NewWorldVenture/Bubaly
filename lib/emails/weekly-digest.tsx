@@ -19,7 +19,7 @@ export function WeeklyDigestEmail({
       <body style={{ fontFamily: 'system-ui, sans-serif', background: '#030914', color: '#edf0f7', maxWidth: 520, margin: '40px auto', padding: 32 }}>
         <div style={{ marginBottom: 32 }}>
           <span style={{ fontSize: 24, fontWeight: 800, background: 'linear-gradient(135deg,#7c5dff,#f4996e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            FamilyOS
+            Bubaly
           </span>
         </div>
 
@@ -58,12 +58,12 @@ export function WeeklyDigestEmail({
           href={`${APP_URL}/dashboard`}
           style={{ display: 'inline-block', background: 'linear-gradient(135deg,#7c5dff,#6355e6)', color: '#fff', fontWeight: 700, fontSize: 16, padding: '14px 28px', borderRadius: 12, textDecoration: 'none' }}
         >
-          Open FamilyOS &rarr;
+          Open Bubaly &rarr;
         </a>
 
         <hr style={{ borderColor: '#23364e', margin: '32px 0' }} />
         <p style={{ color: '#94a0b8', fontSize: 12 }}>
-          &copy; {today.getFullYear()} FamilyOS &middot; You&apos;re receiving this because you&apos;re a family admin.
+          &copy; {today.getFullYear()} Bubaly &middot; You&apos;re receiving this because you&apos;re a family admin.
         </p>
       </body>
     </html>

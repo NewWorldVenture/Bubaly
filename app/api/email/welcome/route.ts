@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
     const { ok } = await sendReactEmail({
       to: email,
-      subject: 'Welcome to FamilyOS 🎉',
+      subject: 'Welcome to Bubaly 🎉',
       react: React.createElement(WelcomeEmail, { name }),
     });
     if (!ok) return NextResponse.json({ error: 'Failed to send welcome email' }, { status: 502 });

@@ -56,7 +56,7 @@ export function Logo({
       <LogoMark className="h-8 w-9" variant={markVariant} />
       {showText && (
         <span className="text-[25px] font-bold tracking-[-0.03em]">
-          FamilyOS
+          Bubaly
         </span>
       )}
     </Link>

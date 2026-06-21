@@ -31,7 +31,7 @@ import { AssistantConversation } from '@/components/marketing/homepage-interacti
 import { cn } from '@/lib/utils/cn';
 
 export function PageWrap({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('homepage-reference-bg min-h-dvh overflow-x-clip text-white', className)}>{children}</div>;
+  return <div className={cn('homepage-reference-bg min-h-dvh overflow-x-clip text-fg transition-colors duration-300', className)}>{children}</div>;
 }
 
 export function Container({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -63,7 +63,7 @@ export function PrimaryLink({ href, children }: { href: string; children: React.
   return (
     <Link
       href={href}
-      className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-violet-600 px-7 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 hover:brightness-110"
+      className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-violet-600 px-7 text-sm font-semibold text-brand-fg shadow-glow transition hover:-translate-y-0.5 hover:brightness-110"
     >
       {children}
     </Link>
@@ -156,7 +156,7 @@ export function AvatarStack() {
 
 export function SocialProofLine({ text = 'Loved by families everywhere' }: { text?: string }) {
   return (
-    <div className="inline-flex items-center gap-3 rounded-sm border border-white/[0.035] bg-[#07111b]/90 px-3 py-2.5 shadow-[0_12px_30px_rgba(0,0,0,0.22)]">
+    <div className="dark inline-flex items-center gap-3 rounded-sm border border-white/[0.035] bg-[#07111b]/90 px-3 py-2.5 text-white shadow-[0_12px_30px_rgba(0,0,0,0.22)]">
       <AvatarStack />
       <div>
         <Rating />
@@ -278,7 +278,7 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
             <div className="mt-auto flex items-end justify-around border-t border-white/8 pt-3 text-[7px] text-white/35">
               <span className="flex flex-col items-center gap-1 text-violet-400"><Home className="h-4 w-4" />Home</span>
               <span className="flex flex-col items-center gap-1"><CalendarDays className="h-4 w-4" />Calendar</span>
-              <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 text-white">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 text-brand-fg">
                 <span className="text-lg font-bold leading-none">+</span>
               </span>
               <span className="flex flex-col items-center gap-1"><CheckSquare2 className="h-4 w-4" />Tasks</span>
@@ -308,7 +308,7 @@ export function ProductMockup() {
         <div className="mt-3 grid min-h-[460px] grid-cols-[120px_1fr] gap-4 rounded-2xl bg-[#0b121d] p-4">
           <aside className="space-y-2 border-r border-white/8 pr-3">
             <div className="mb-5 flex items-center gap-2 text-xs font-bold">
-              <Sparkles className="h-4 w-4 text-violet-400" /> FamilyOS
+              <Sparkles className="h-4 w-4 text-violet-400" /> Bubaly
             </div>
             {['Home', 'Calendar', 'Chores', 'Meals', 'School', 'Sports', 'Health', 'Documents', 'AI Assistant'].map((item, index) => (
               <div key={item} className={cn('rounded-lg px-3 py-2 text-[11px] text-white/65', index === 0 && 'bg-violet-600 text-white')}>
@@ -457,14 +457,14 @@ export function FamilyAiPanel() {
               </li>
             ))}
           </ul>
-          <Link href="/ai" className="mt-7 inline-flex w-fit rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-7 py-3.5 text-sm font-bold shadow-glow transition hover:-translate-y-0.5 hover:brightness-110">
+          <Link href="/ai" className="mt-7 inline-flex w-fit rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-7 py-3.5 text-sm font-bold text-brand-fg shadow-glow transition hover:-translate-y-0.5 hover:brightness-110">
             Try the AI Assistant
           </Link>
         </div>
         <div className="dark relative min-h-[420px] overflow-hidden rounded-2xl border border-white/10 bg-[#080e18] sm:min-h-[450px]">
           <Image
             src="/images/family-ai-lifestyle.png"
-            alt="A family enjoying time together with FamilyOS"
+            alt="A family enjoying time together with Bubaly"
             fill
             priority
             sizes="(max-width: 1024px) 100vw, 760px"
@@ -481,7 +481,7 @@ export function FamilyAiPanel() {
 
 export function TestimonialBand({ compact = false }: { compact?: boolean }) {
   const testimonials = [
-    ['Jessica M.', 'Mom of 3', 'FamilyOS has simplified our chaos. We are more organized and actually enjoy family time again!'],
+    ['Jessica M.', 'Mom of 3', 'Bubaly has simplified our chaos. We are more organized and actually enjoy family time again!'],
     ['David T.', 'Dad of 2', 'The AI assistant is a game changer. It knows what we need before we even think about it.'],
     ['Amanda R.', 'Mom of 4', 'Finally, one place for everything our family needs. Beautiful, easy, and so helpful.'],
   ];
@@ -559,7 +559,7 @@ function MiniAppScreen({ compact = false }: { compact?: boolean }) {
   return (
     <div className={cn('h-full w-full overflow-hidden rounded-[inherit] bg-[#09111d] p-2', compact && 'p-1.5')}>
       <div className="flex items-center justify-between">
-        <span className={cn('font-bold text-white', compact ? 'text-[4px]' : 'text-[6px]')}>FamilyOS</span>
+        <span className={cn('font-bold text-white', compact ? 'text-[4px]' : 'text-[6px]')}>Bubaly</span>
         <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
       </div>
       <div className="mt-2 grid grid-cols-3 gap-1">
@@ -629,7 +629,7 @@ function DeviceArtwork({ device }: { device: DeviceName }) {
   return (
     <div className="device-art flex h-32 w-full max-w-[160px] flex-col items-center justify-center sm:h-36">
       <div className="relative h-[92px] w-full overflow-hidden rounded-xl border-[5px] border-[#333742] bg-black shadow-2xl sm:h-[104px]">
-        <Image src="/images/family-ai-lifestyle.png" alt="FamilyOS smart display" fill sizes="160px" className="object-cover" />
+        <Image src="/images/family-ai-lifestyle.png" alt="Bubaly smart display" fill sizes="160px" className="object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/65 to-transparent" />
         <span className="absolute bottom-2 left-2 text-[7px] font-bold text-white">Good evening, family</span>
       </div>
@@ -727,7 +727,7 @@ export function SmallCtaBand() {
         <div>
           <h2 className="text-2xl font-bold">One app. Every part of your family life.</h2>
           <p className="mt-2 max-w-2xl text-white/68">
-            From daily routines to life&apos;s big moments, FamilyOS brings it all together so you can focus on what really matters.
+            From daily routines to life&apos;s big moments, Bubaly brings it all together so you can focus on what really matters.
           </p>
         </div>
       </div>
@@ -761,7 +761,7 @@ export const WORK_STEPS = [
   [Mail, 'Add or Forward Anything', 'Forward emails, snap photos of flyers, or add events, tasks, and lists.'],
   [Sparkles, 'AI Gets to Work', 'Our AI reads, understands, and organizes everything into the right places.'],
   [UsersIcon, 'Everyone Stays in Sync', 'Calendars, tasks, reminders, and updates are shared in real time.'],
-  [Check, 'Life Runs Smoother', 'FamilyOS helps you plan ahead, avoid chaos, and enjoy more time together.'],
+  [Check, 'Life Runs Smoother', 'Bubaly helps you plan ahead, avoid chaos, and enjoy more time together.'],
 ] as const;
 
 function UsersIcon({ className }: { className?: string }) {

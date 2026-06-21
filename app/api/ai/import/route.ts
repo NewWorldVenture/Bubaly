@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     if (text.length > 8000) return NextResponse.json({ error: 'That text is too long (8,000 char max).' }, { status: 400 });
 
     const now = new Date();
-    const system = `You are FamilyOS's Magic Import assistant. The user pastes raw text — forwarded emails, school notices, texts, flyers, or notes — and you extract EVERY actionable item.
+    const system = `You are Bubaly's Magic Import assistant. The user pastes raw text — forwarded emails, school notices, texts, flyers, or notes — and you extract EVERY actionable item.
 
 Today is ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} (${now.toISOString().slice(0, 10)}). The family is "${ctx.active.family.name}".
 

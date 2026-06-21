@@ -13,7 +13,7 @@ type Task =
 const TASKS: Record<Task, string> = {
   analyze: 'Analyze the customer base and growth. Summarize who the customers are, the biggest opportunities, and the top 3 risks. Be specific and reference the numbers provided.',
   campaign_plan: 'Produce a concrete marketing campaign plan: objective, target segment, channel mix, key messages, a 4-step schedule, and the 2-3 KPIs to watch. Ground it in the data provided.',
-  seo_plan: 'Produce an SEO plan for FamilyOS: priority topics/keywords (clearly labeled as suggestions), on-page recommendations for the existing pages, and a 30-day task list. Do not invent rankings, volumes, or backlinks.',
+  seo_plan: 'Produce an SEO plan for Bubaly: priority topics/keywords (clearly labeled as suggestions), on-page recommendations for the existing pages, and a 30-day task list. Do not invent rankings, volumes, or backlinks.',
   aeo_plan: 'Produce an Answer Engine Optimization plan: the top customer questions to answer, the entity/FAQ structure, and structured-answer recommendations for ChatGPT/Perplexity/AI Overviews. No invented AI-engine rankings.',
   content_calendar: 'Produce a 4-week content calendar (blog, social, email) with titles, formats, and the funnel stage each piece targets.',
   email_draft: 'Draft a marketing email: subject line, preview text, and a concise, warm body with one clear CTA. Tailor it to the audience implied by the request.',
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     ]);
 
     const context = [
-      `Product: FamilyOS — an AI family operating system (calendar, chores, meals, school, health, documents, AI assistant).`,
+      `Product: Bubaly — an AI family operating system (calendar, chores, meals, school, health, documents, AI assistant).`,
       `Pricing: one Family plan, $9.99/mo or $95.99/yr.`,
       `Customers: ${m.total} total, ${m.paying} paying, ${m.newThisMonth} new this month, ${m.lapsed} lapsed/churned.`,
       `Lifecycle: new ${m.byLifecycle.new}, active ${m.byLifecycle.active}, lapsed ${m.byLifecycle.lapsed}, churned ${m.byLifecycle.churned}, free ${m.byLifecycle.free}.`,
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
       `Existing campaigns: ${(campaigns ?? []).map((c) => `${c.name} (${c.channel}/${c.status})`).join(', ') || 'none'}.`,
     ].join('\n');
 
-    const system = `You are a world-class marketing strategist embedded in the FamilyOS admin. ${TASKS[task]}
+    const system = `You are a world-class marketing strategist embedded in the Bubaly admin. ${TASKS[task]}
 
 Use ONLY the real data provided as grounding. Never fabricate metrics, rankings, testimonials, or press. When you suggest keywords or audience sizes you cannot verify, label them clearly as estimates/suggestions. Respond in clean Markdown, concise and immediately usable.`;
 

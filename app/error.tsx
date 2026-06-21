@@ -12,7 +12,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     // Surfaced to the browser console and any attached logging service.
-    console.error('[FamilyOS] route error:', error);
+    console.error('[Bubaly] route error:', error);
   }, [error]);
 
   return (

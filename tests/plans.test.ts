@@ -36,7 +36,7 @@ describe('plan pricing source of truth', () => {
     expect(planName('basic')).toBe('Family Basic');
     expect(planName('plus')).toBe('Family+');
     expect(planName('family')).toBe('Family Basic'); // legacy alias for basic
-    expect(planName('free')).toBe('FamilyOS Free');
+    expect(planName('free')).toBe('Bubaly Free');
     expect(planName(null)).toBe('Free');
     expect(planName('mystery')).toBe('mystery');
   });

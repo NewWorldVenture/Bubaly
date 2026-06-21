@@ -194,7 +194,7 @@ export function CalendarSyncPanel() {
               )}
             </Field>
             <p className="text-xs text-muted">
-              Events will be imported into your FamilyOS calendar. Sync manually any time.
+              Events will be imported into your Bubaly calendar. Sync manually any time.
               <strong className="text-fg"> webcal://</strong> URLs are supported.
             </p>
             <div className="flex justify-end gap-2 pt-1">

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { generateICS, type IcsEvent } from '@/lib/sync/ics';
 
-// Public iCalendar feed for a single theagoras calendar.
+// Public iCalendar feed for a single bubaly calendar.
 //
 //   GET /api/sync/feeds/<feed_token>
 //
@@ -49,7 +49,7 @@ export async function GET(
     .limit(2000);
 
   const events: IcsEvent[] = (rows ?? []).map((e) => ({
-    uid: e.uid ?? `${e.id}@theagoras.com`,
+    uid: e.uid ?? `${e.id}@bubaly.com`,
     title: e.title,
     description: e.description,
     location: e.location,

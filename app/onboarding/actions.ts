@@ -99,8 +99,8 @@ export async function inviteMemberAction(input: {
   const link = `${origin}/join?token=${invite.token}`;
   await sendEmail({
     to: parsed.data.email,
-    subject: 'You’re invited to a family on FamilyOS',
-    html: `<p>You’ve been invited to join a family on FamilyOS.</p><p><a href="${link}">Accept your invite</a></p>`,
+    subject: 'You’re invited to a family on Bubaly',
+    html: `<p>You’ve been invited to join a family on Bubaly.</p><p><a href="${link}">Accept your invite</a></p>`,
   });
 
   await logAudit(supabase, {

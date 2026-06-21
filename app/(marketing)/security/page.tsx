@@ -56,7 +56,7 @@ export default function SecurityPage() {
       <Container className="pb-0 pt-16 lg:pt-20">
         <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-sm font-semibold text-violet-300">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-100 px-4 py-2 text-sm font-semibold text-violet-800 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-300">
               <Shield className="h-4 w-4" /> Security You Can Trust
             </div>
             <h1 className="text-5xl font-black leading-[1.06] sm:text-6xl">
@@ -64,7 +64,7 @@ export default function SecurityPage() {
               <span className="gradient-text-violet">is our top priority.</span>
             </h1>
             <p className="mt-6 text-lg leading-8 text-white/65">
-              FamilyOS is built with enterprise-grade security to keep your family&apos;s data safe, private, and secure.
+              Bubaly is built with enterprise-grade security to keep your family&apos;s data safe, private, and secure.
             </p>
             <div className="mt-10 grid grid-cols-2 gap-6 sm:grid-cols-4 lg:grid-cols-2">
               {PILLARS.map(({ icon: Icon, title, desc }) => (
@@ -146,7 +146,7 @@ export default function SecurityPage() {
           <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
             <div>
               <h2 className="text-2xl font-black sm:text-3xl">Certified. Compliant. Trusted.</h2>
-              <p className="mt-3 text-white/55">FamilyOS meets and exceeds the highest industry standards.</p>
+              <p className="mt-3 text-white/55">Bubaly meets and exceeds the highest industry standards.</p>
               <p className="mt-5 text-sm leading-7 text-white/65">
                 We are SOC 2 Type II compliant and adhere to strict data protection regulations including GDPR,
                 CCPA, and HIPAA (where applicable).
@@ -213,7 +213,7 @@ export default function SecurityPage() {
                   <span className="text-sm">{c}</span>
                 </div>
               ))}
-              <Link href="mailto:security@familyos.com" className="mt-4 flex items-center gap-1 text-sm font-semibold text-violet-300 hover:text-violet-200">
+              <Link href="mailto:security@bubaly.com" className="mt-4 flex items-center gap-1 text-sm font-semibold text-violet-300 hover:text-violet-200">
                 Contact our security team →
               </Link>
             </div>
@@ -227,7 +227,7 @@ export default function SecurityPage() {
           Your family&apos;s trust is at the heart of everything we do. If you ever have a question, we&apos;re here to help.
         </p>
         <p className="mt-1 text-center text-sm">
-          <a href="mailto:security@familyos.com" className="text-violet-300 hover:text-violet-200">security@familyos.com</a>
+          <a href="mailto:security@bubaly.com" className="text-violet-300 hover:text-violet-200">security@bubaly.com</a>
         </p>
       </div>
     </PageWrap>

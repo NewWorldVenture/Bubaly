@@ -21,7 +21,7 @@ function downloadCsv(rows: ExportRow[]) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `familyos-users-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `bubaly-users-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }

@@ -47,7 +47,7 @@ describe('date formatting', () => {
 describe('generateICS', () => {
   const events: IcsEvent[] = [
     {
-      uid: 'evt-1@theagoras.com',
+      uid: 'evt-1@bubaly.com',
       title: 'Soccer practice',
       location: 'Field A',
       startsAt: '2026-06-21T17:00:00.000Z',
@@ -55,7 +55,7 @@ describe('generateICS', () => {
       updatedAt: '2026-06-20T09:00:00.000Z',
     },
     {
-      uid: 'evt-2@theagoras.com',
+      uid: 'evt-2@bubaly.com',
       title: 'Family trip',
       startsAt: '2026-07-01T00:00:00.000Z',
       endsAt: '2026-07-05T00:00:00.000Z',
@@ -90,7 +90,7 @@ describe('generateICS', () => {
 describe('generate -> parse round trip', () => {
   it('recovers event fields from generated ICS', () => {
     const original: IcsEvent[] = [{
-      uid: 'rt-1@theagoras.com',
+      uid: 'rt-1@bubaly.com',
       title: 'Lunch, with the; team',
       description: 'line one\nline two',
       location: 'Cafe',
@@ -100,7 +100,7 @@ describe('generate -> parse round trip', () => {
     const ics = generateICS(original, { name: 'RT', dtstamp: DTSTAMP });
     const parsed = parseICS(ics);
     expect(parsed).toHaveLength(1);
-    expect(parsed[0].uid).toBe('rt-1@theagoras.com');
+    expect(parsed[0].uid).toBe('rt-1@bubaly.com');
     expect(parsed[0].title).toBe('Lunch, with the; team');
     expect(parsed[0].description).toBe('line one\nline two');
     expect(parsed[0].startsAt).toBe('2026-06-22T11:00:00.000Z');

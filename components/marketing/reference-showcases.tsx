@@ -47,7 +47,7 @@ type Tone = keyof typeof tones;
 
 function ReferencePage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="dark reference-page min-h-screen overflow-hidden bg-[#020811] text-white">
+    <div className="reference-page soft-grid-bg min-h-screen overflow-hidden text-fg transition-colors duration-300">
       {children}
     </div>
   );
@@ -88,7 +88,7 @@ function SquareIcon({ icon: Icon, tone = 'violet', className }: { icon: LucideIc
 
 function PrimaryButton({ href = '/signup', children }: { href?: string; children: React.ReactNode }) {
   return (
-    <Link href={href} className="inline-flex h-12 items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-[#435df0] to-[#7834e9] px-6 text-[13px] font-semibold shadow-[0_10px_32px_rgba(91,61,236,.24)] transition hover:brightness-110">
+    <Link href={href} className="inline-flex h-12 items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-[#435df0] to-[#7834e9] px-6 text-[13px] font-semibold text-brand-fg shadow-[0_10px_32px_rgba(91,61,236,.24)] transition hover:brightness-110">
       {children}
     </Link>
   );
@@ -136,7 +136,7 @@ function FeatureCard({
   row?: 1 | 2;
 }) {
   return (
-    <article className={cn('flex flex-col rounded-[14px] border border-white/[0.09] bg-[#08111c]/90 p-[13px] shadow-[inset_0_1px_0_rgba(255,255,255,.025),0_20px_50px_rgba(0,0,0,.2)]', row === 1 ? 'h-[374px]' : 'h-[350px]')}>
+    <article className={cn('dark flex flex-col rounded-[14px] border border-white/[0.09] bg-[#08111c]/90 p-[13px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.025),0_20px_50px_rgba(0,0,0,.2)]', row === 1 ? 'h-[374px]' : 'h-[350px]')}>
       <div className="flex items-center gap-2.5">
         <SquareIcon icon={icon} tone={tone} />
         <h3 className="text-[13px] font-semibold tracking-[-0.01em]">{title}</h3>
@@ -171,7 +171,7 @@ export function FeaturesReferencePage() {
             <GradientText>all in one intelligent place.</GradientText>
           </h1>
           <p className="mx-auto mt-3.5 max-w-[590px] text-[15px] leading-6 text-white/72">
-            FamilyOS combines powerful tools with AI intelligence to help your family
+            Bubaly combines powerful tools with AI intelligence to help your family
             <br className="hidden sm:block" /> stay organized, connected, and ahead of what matters most.
           </p>
         </section>
@@ -187,7 +187,7 @@ export function FeaturesReferencePage() {
 
         <section className="mt-4 border-t border-white/[0.07] pt-[14px] text-center">
           <h2 className="text-[27px] font-bold tracking-[-0.025em]">Powerful features. Peaceful families.</h2>
-          <p className="mt-1.5 text-[13px] text-white/65">Discover how FamilyOS makes everyday life easier.</p>
+          <p className="mt-1.5 text-[13px] text-white/65">Discover how Bubaly makes everyday life easier.</p>
         </section>
 
         <section className="mt-[18px] grid gap-[14px] px-0 sm:grid-cols-2 lg:grid-cols-4 lg:px-[14px]">
@@ -261,12 +261,12 @@ export function FeaturesReferencePage() {
           </FeatureCard>
         </section>
 
-        <section className="mx-0 mt-[18px] grid h-auto min-h-[105px] items-center gap-5 rounded-[13px] border border-white/[0.09] bg-[radial-gradient(circle_at_55%_0%,rgba(82,63,232,.15),transparent_46%),linear-gradient(110deg,rgba(89,48,189,.13),rgba(8,17,28,.9))] px-7 py-5 sm:mx-[14px] lg:flex lg:h-[109px] lg:py-3">
+        <section className="dark mx-0 mt-[18px] grid h-auto min-h-[105px] items-center gap-5 rounded-[13px] border border-white/[0.09] bg-[radial-gradient(circle_at_55%_0%,rgba(82,63,232,.15),transparent_46%),linear-gradient(110deg,rgba(89,48,189,.13),rgba(8,17,28,.9))] px-7 py-5 text-white sm:mx-[14px] lg:flex lg:h-[109px] lg:py-3">
           <div className="flex items-center gap-5 lg:min-w-0 lg:flex-1">
             <Sparkles className="hidden h-10 w-10 shrink-0 text-violet-400 sm:block" strokeWidth={1.7} />
             <div>
               <h2 className="text-[19px] font-semibold tracking-[-0.02em]">One app. Every part of your family life.</h2>
-              <p className="mt-1 text-[13px] leading-5 text-white/68">From daily routines to life&apos;s big moments, FamilyOS brings it all together<br className="hidden xl:block" /> so you can focus on what really matters.</p>
+              <p className="mt-1 text-[13px] leading-5 text-white/68">From daily routines to life&apos;s big moments, Bubaly brings it all together<br className="hidden xl:block" /> so you can focus on what really matters.</p>
             </div>
           </div>
           <PrimaryButton>Get Started Free</PrimaryButton>
@@ -385,7 +385,7 @@ async function TrustStrip() {
 }
 
 const FLOW_CARDS = [
-  [Mail, 'School Email Arrives', 'FamilyOS scans and\nunderstands the details.'],
+  [Mail, 'School Email Arrives', 'Bubaly scans and\nunderstands the details.'],
   [Sparkles, 'AI Extracts & Organizes', 'Events, deadlines, and\naction items are added\nto the right places.'],
   [CalendarDays, 'Everyone Stays In Sync', 'Your whole family is\nupdated automatically.'],
   [CheckCircle2, 'You Stay Ahead', 'AI reminds, suggests, and\nhelps you plan better.'],
@@ -396,7 +396,7 @@ const WORK_STEPS = [
   [Mail, 'Add or Forward Anything', 'Forward emails, snap photos\nof flyers, or add events, tasks,\nand lists.'],
   [Sparkles, 'AI Gets to Work', 'Our AI reads, understands, and\norganizes everything into the\nright places.'],
   [Users, 'Everyone Stays in Sync', 'Calendars, tasks, reminders,\nand updates are shared in\nreal time.'],
-  [CheckCircle2, 'Life Runs Smoother', 'FamilyOS helps you plan\nahead, avoid chaos, and\nenjoy more time together.'],
+  [CheckCircle2, 'Life Runs Smoother', 'Bubaly helps you plan\nahead, avoid chaos, and\nenjoy more time together.'],
 ] as const;
 
 export function HowItWorksReferencePage() {
@@ -407,11 +407,11 @@ export function HowItWorksReferencePage() {
           <div className="max-w-[414px] pt-[26px] lg:pl-[14px]">
             <Eyebrow>Simple. Smart. Life-changing.</Eyebrow>
             <h1 className="mt-3 text-[50px] font-extrabold leading-[1.05] tracking-[-0.04em] sm:text-[58px]">
-              How FamilyOS
+              How Bubaly
               <br />
               <GradientText>Works</GradientText>
             </h1>
-            <p className="mt-[16px] max-w-[390px] text-[16px] leading-[26px] text-white/78">FamilyOS is your family&apos;s AI-powered operating<br className="hidden sm:block" /> system. It brings everything together—and helps<br className="hidden sm:block" /> you stay ahead of what matters most.</p>
+            <p className="mt-[16px] max-w-[390px] text-[16px] leading-[26px] text-white/78">Bubaly is your family&apos;s AI-powered operating<br className="hidden sm:block" /> system. It brings everything together—and helps<br className="hidden sm:block" /> you stay ahead of what matters most.</p>
             <div className="mt-[20px] flex flex-wrap gap-[15px]">
               <PrimaryButton>Get Started Free <ArrowRight className="h-4 w-4" /></PrimaryButton>
               <OutlineButton href="#steps">See It in Action</OutlineButton>
@@ -466,7 +466,7 @@ async function SocialProof() {
 
 function DetailedPhone() {
   return (
-    <div className="relative h-[443px] w-[216px] rounded-[35px] border-[3px] border-[#595959] bg-[#030507] p-[8px] shadow-[0_22px_70px_rgba(0,0,0,.52),inset_0_0_0_1px_#111]">
+    <div className="dark relative h-[443px] w-[216px] rounded-[35px] border-[3px] border-[#595959] bg-[#030507] p-[8px] text-white shadow-[0_22px_70px_rgba(0,0,0,.52),inset_0_0_0_1px_#111]">
       <div className="absolute left-1/2 top-[7px] z-10 h-[21px] w-[84px] -translate-x-1/2 rounded-full bg-black" />
       <div className="h-full overflow-hidden rounded-[27px] bg-[#07101a] px-[10px] pb-[10px] pt-[14px]">
         <div className="flex items-center justify-between px-1 text-[8px] font-semibold"><span>9:41</span><span>⌁ ▴ ▰</span></div>
@@ -489,7 +489,7 @@ function PhonePanel({ title, className, children }: { title: string; className?:
 
 function StepsPanel() {
   return (
-    <section id="steps" className="rounded-[15px] border border-white/[0.08] bg-[#06101a]/78 px-3 pb-3 pt-[5px] shadow-[inset_0_1px_0_rgba(255,255,255,.02)]">
+    <section id="steps" className="dark rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] px-3 pb-3 pt-[5px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.02)]">
       <div className="text-center"><h2 className="text-[27px] font-bold tracking-[-0.025em]">It works in 5 simple steps</h2><p className="mt-1 text-[12px] text-white/62">Powerful technology. Simple for families.</p></div>
       <div className="mt-[41px] grid gap-7 lg:grid-cols-5">
         {WORK_STEPS.map(([Icon, title, body], index) => (
@@ -515,10 +515,10 @@ function StepsPanel() {
 function MagicPanel() {
   const bullets = ['Snap a photo of a school flyer', 'AI extracts events, dates & details', 'Automatically adds to your calendar', 'Creates tasks, reminders & lists', 'Notifies the right people', 'Saves you hours every week'];
   return (
-    <section className="mt-[14px] grid gap-6 rounded-[15px] border border-white/[0.08] bg-[#06101a]/78 p-5 lg:h-[334px] lg:grid-cols-[274px_1fr]">
+    <section className="dark mt-[14px] grid gap-6 rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] p-5 text-white lg:h-[334px] lg:grid-cols-[274px_1fr]">
       <div>
         <h2 className="whitespace-nowrap text-[27px] font-bold tracking-[-0.03em]">The magic is in the <GradientText>AI</GradientText><Sparkles className="ml-0.5 inline h-5 w-5 text-violet-400" /></h2>
-        <p className="mt-2 text-[14px] leading-6 text-white/68">FamilyOS turns scattered information into<br />organized action—automatically.</p>
+        <p className="mt-2 text-[14px] leading-6 text-white/68">Bubaly turns scattered information into<br />organized action—automatically.</p>
         <ul className="mt-4 space-y-2.5">{bullets.map((item) => <li key={item} className="flex items-center gap-2.5 text-[12px] text-white/73"><CheckCircle2 className="h-4 w-4 text-violet-400" />{item}</li>)}</ul>
       </div>
       <div className="grid items-start gap-3 sm:grid-cols-3 lg:grid-cols-[166px_28px_176px_28px_1fr]">
@@ -557,14 +557,14 @@ function MagicCalendar() {
 
 function TestimonialsPanel() {
   const testimonials = [
-    ["FamilyOS has completely\nchanged how we stay organized.\nI don't know how we lived\nwithout it!", 'Jessica M.', 'Mom of 3'],
+    ["Bubaly has completely\nchanged how we stay organized.\nI don't know how we lived\nwithout it!", 'Jessica M.', 'Mom of 3'],
     ['The AI saves me so much time.\nIt catches things I would\nnormally miss.', 'David T.', 'Dad of 2'],
     ['Finally, an app that actually\nbrings everything together in\none place.', 'Amanda R.', 'Mom of 4'],
     ['Our whole family is on the same\npage now. Less stress and more\ntime together.', 'Chris & Maria', 'Parents of 3'],
     ["The school email scanner\nfeature is pure genius. It's like\nhaving an assistant.", 'Priya K.', 'Mom of 2'],
   ];
   return (
-    <section className="relative mt-[21px] rounded-[15px] border border-white/[0.08] bg-[#06101a]/78 px-12 pb-3 pt-[6px]">
+    <section className="dark relative mt-[21px] rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] px-12 pb-3 pt-[6px] text-white">
       <h2 className="text-center text-[23px] font-bold tracking-[-0.025em]"><GradientText>Loved</GradientText> by families everywhere</h2>
       <button type="button" aria-label="Previous testimonial" className="absolute left-1 top-[98px] grid h-8 w-8 place-items-center rounded-full bg-violet-500/10 text-white/65"><ChevronLeft className="h-4 w-4" /></button>
       <button type="button" aria-label="Next testimonial" className="absolute right-1 top-[98px] grid h-8 w-8 place-items-center rounded-full bg-violet-500/10 text-white/65"><ChevronRight className="h-4 w-4" /></button>

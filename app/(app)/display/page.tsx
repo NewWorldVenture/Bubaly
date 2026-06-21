@@ -117,7 +117,7 @@ export default async function KitchenDisplayPage() {
 
       <header className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-widest text-brand">FamilyOS</p>
+          <p className="text-sm font-semibold uppercase tracking-widest text-brand">Bubaly</p>
           <h1 className="mt-1 text-4xl font-black lg:text-5xl">{ctx.active.family.name}</h1>
         </div>
         <Link href="/dashboard" title="Exit display" className="grid h-10 w-10 place-items-center rounded-full border border-border text-muted transition hover:text-fg">

@@ -61,7 +61,7 @@ export function detectConflict(s: SyncItemState): ConflictResult {
       conflict: true,
       kind: 'deleted_vs_edited',
       suggested: null,
-      reason: 'Deleted in theagoras but edited on the provider.',
+      reason: 'Deleted in bubaly but edited on the provider.',
     };
   }
   if (s.remoteDeleted && localChanged && !s.localDeleted) {
@@ -69,7 +69,7 @@ export function detectConflict(s: SyncItemState): ConflictResult {
       conflict: true,
       kind: 'deleted_vs_edited',
       suggested: null,
-      reason: 'Deleted on the provider but edited in theagoras.',
+      reason: 'Deleted on the provider but edited in bubaly.',
     };
   }
   // Both deleted -> converged, no conflict.
@@ -95,7 +95,7 @@ export function detectConflict(s: SyncItemState): ConflictResult {
       conflict: true,
       kind: 'both_edited',
       suggested: chooseByRecency(s),
-      reason: 'Edited in both theagoras and the provider since the last sync.',
+      reason: 'Edited in both bubaly and the provider since the last sync.',
     };
   }
 

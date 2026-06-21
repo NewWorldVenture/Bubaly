@@ -15,7 +15,7 @@ export function SiteHeader() {
   const pathname = usePathname();
 
   return (
-    <header className="dark sticky top-0 z-50 border-b border-white/[0.045] bg-[#030911]/95 text-white backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-border/70 bg-bg/95 text-fg backdrop-blur-xl transition-colors duration-300">
       <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-4 px-5 sm:px-8 lg:px-10">
         <Logo className="[&>span:first-child]:h-6 [&>span:first-child]:w-7 [&>span:last-child]:text-[20px]" />
 
@@ -25,7 +25,7 @@ export function SiteHeader() {
               key={item.href}
               href={item.href}
               className={cn(
-                'relative inline-flex h-full items-center text-[10px] font-medium text-white/72 transition hover:text-white',
+                'relative inline-flex h-full items-center text-[10px] font-medium text-muted transition hover:text-fg',
                 pathname === item.href && 'text-violet-400',
               )}
             >
@@ -38,15 +38,15 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <ThemeToggle className="h-8 w-8 border border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]" />
-          <Link href="/login" className="hidden h-8 items-center px-3 text-[10px] font-medium text-white/72 transition hover:text-white sm:inline-flex">
+          <ThemeToggle className="h-8 w-8 border border-border/80 bg-surface/70 text-fg hover:bg-elevated" />
+          <Link href="/login" className="hidden h-8 items-center px-3 text-[10px] font-medium text-muted transition hover:text-fg sm:inline-flex">
             Log in
           </Link>
-          <Link href="/signup" className="hidden h-8 items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-[10px] font-semibold text-white shadow-glow transition hover:brightness-110 sm:inline-flex">
+          <Link href="/signup" className="hidden h-8 items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-[10px] font-semibold text-brand-fg shadow-glow transition hover:brightness-110 sm:inline-flex">
             Get Started Free
           </Link>
           <button
-            className="rounded-lg p-2 text-white lg:hidden focus-ring"
+            className="rounded-lg p-2 text-fg lg:hidden focus-ring"
             onClick={() => setOpen((v) => !v)}
             aria-label="Toggle menu"
             aria-expanded={open}
@@ -57,7 +57,7 @@ export function SiteHeader() {
       </div>
 
       {open && (
-        <div className="border-t border-white/10 bg-[#030911]/98 px-4 py-4 backdrop-blur-xl lg:hidden">
+        <div className="border-t border-border/70 bg-bg/98 px-4 py-4 backdrop-blur-xl lg:hidden">
           <nav className="flex flex-col gap-1">
             {MARKETING_NAV.map((item) => (
               <Link
@@ -65,7 +65,7 @@ export function SiteHeader() {
                 href={item.href}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  'rounded-lg px-3 py-3 text-base text-white hover:bg-white/[0.06]',
+                  'rounded-lg px-3 py-3 text-base text-fg hover:bg-elevated/70',
                   pathname === item.href && 'bg-violet-500/15 text-violet-300',
                 )}
               >

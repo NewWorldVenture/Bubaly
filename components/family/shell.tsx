@@ -1,4 +1,4 @@
-// Presentational building blocks shared by every Family OS module page.
+// Presentational building blocks shared by every Bubaly module page.
 // Server-safe (no client hooks) so pages stay server components.
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';

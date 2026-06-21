@@ -5,7 +5,7 @@ import { ContactForm } from '@/components/marketing/contact-form';
 
 export const metadata: Metadata = {
   title: 'Contact',
-  description: 'Get in touch with the FamilyOS team. We’d love to hear from your family.',
+  description: 'Get in touch with the Bubaly team. We’d love to hear from your family.',
 };
 
 export default function ContactPage() {
@@ -15,7 +15,7 @@ export default function ContactPage() {
       <div className="mx-auto mt-12 grid max-w-4xl gap-8 lg:grid-cols-2">
         <div className="space-y-6">
           {[
-            { icon: Mail, title: 'Email us', body: 'hello@familyos.app — we reply within one business day.' },
+            { icon: Mail, title: 'Email us', body: 'hello@bubaly.com — we reply within one business day.' },
             { icon: MessageCircle, title: 'Support', body: 'Logged in? Use the in-app assistant or settings to reach support.' },
             { icon: Shield, title: 'Privacy', body: 'Your message is sent securely and never shared.' },
           ].map((i) => (
