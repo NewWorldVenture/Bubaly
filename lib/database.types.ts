@@ -32,6 +32,7 @@ export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
 export type RecordKind = 'medical' | 'dental';
 export type RideStatus = 'planned' | 'confirmed' | 'completed' | 'cancelled';
 export type HomeworkStatus = 'assigned' | 'in_progress' | 'done' | 'submitted';
+export type CareLogType = 'check_in' | 'visit' | 'call' | 'meal' | 'medication' | 'appointment' | 'incident' | 'note';
 export type DoseStatus = 'taken' | 'skipped' | 'missed';
 export type TripStatus = 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
 export type TripItemKind = 'packing' | 'todo' | 'reservation' | 'document';
@@ -183,6 +184,11 @@ export interface Database {
         { id: string; family_id: string; member_id: string | null; subject: string | null; title: string; details: string | null; due_at: string | null; status: HomeworkStatus; completed_at: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id?: string | null; subject?: string | null; title: string; details?: string | null; due_at?: string | null; status?: HomeworkStatus; completed_at?: string | null; created_by?: string | null },
         Partial<{ member_id: string | null; subject: string | null; title: string; details: string | null; due_at: string | null; status: HomeworkStatus; completed_at: string | null }>
+      >;
+      care_log: T<
+        { id: string; family_id: string; member_id: string; log_type: CareLogType; occurred_at: string; wellbeing: number | null; note: string | null; logged_by: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; log_type?: CareLogType; occurred_at?: string; wellbeing?: number | null; note?: string | null; logged_by?: string | null; created_by?: string | null },
+        Partial<{ member_id: string; log_type: CareLogType; occurred_at: string; wellbeing: number | null; note: string | null; logged_by: string | null }>
       >;
       health_providers: T<
         { id: string; family_id: string; member_id: string | null; kind: RecordKind; name: string; specialty: string | null; practice_name: string | null; phone: string | null; fax: string | null; email: string | null; address: string | null; is_primary: boolean; notes: string | null; created_by: string | null } & Stamps,
