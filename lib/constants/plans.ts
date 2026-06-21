@@ -77,6 +77,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/goals':         1,
   '/dashboard/notifications': 1,
   '/dashboard/briefing':      1,
+  '/dashboard/medications':   1,
   '/dashboard/inbox':         1,
   '/dashboard/scan':          1,
   '/display':                 1,  // Kitchen Display Mode
