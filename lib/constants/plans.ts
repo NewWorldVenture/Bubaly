@@ -75,6 +75,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/sports':        1,
   '/dashboard/health':        1,
   '/dashboard/home':          1,
+  '/dashboard/renewals':      1,
   '/dashboard/medical':       1,
   '/dashboard/dental':        1,
   '/dashboard/goals':         1,
