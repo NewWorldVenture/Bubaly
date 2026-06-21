@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bell, BellOff, BellRing, Loader2 } from 'lucide-react';
+import { Bell, BellOff, BellRing, Loader2, Send } from 'lucide-react';
 import { isNative } from '@/lib/native/capacitor';
 import {
   webPushSupported, subscribeWebPush, unsubscribeWebPush, VAPID_PUBLIC_KEY,
@@ -16,6 +16,30 @@ type State = 'idle' | 'busy' | 'on' | 'unsupported' | 'denied' | 'unconfigured';
  */
 export function EnablePushButton() {
   const [state, setState] = useState<State>('idle');
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState('');
+
+  async function sendTest() {
+    setTesting(true);
+    setTestMsg('');
+    try {
+      const res = await fetch('/api/push/test', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setTestMsg(data.error ?? 'Could not send test.');
+      } else if (data.result?.sent > 0) {
+        setTestMsg('Sent! Check this device for the notification.');
+      } else if (data.result?.skipped > 0) {
+        setTestMsg('No deliverable device yet — make sure push is enabled on this device.');
+      } else {
+        setTestMsg('No notification delivered (no active subscription found).');
+      }
+    } catch {
+      setTestMsg('Network error sending test.');
+    } finally {
+      setTesting(false);
+    }
+  }
 
   useEffect(() => {
     if (isNative()) { setState('on'); return; }
@@ -68,9 +92,17 @@ export function EnablePushButton() {
   }
   if (state === 'on') {
     return (
-      <button onClick={disable} className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-muted hover:text-fg">
-        <BellRing className="h-4 w-4 text-success" /> Push on — tap to turn off
-      </button>
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-2">
+          <button onClick={sendTest} disabled={testing} className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg disabled:opacity-60">
+            {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send test push
+          </button>
+          <button onClick={disable} className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-muted hover:text-fg">
+            <BellRing className="h-4 w-4 text-success" /> On — turn off
+          </button>
+        </div>
+        {testMsg && <p className="text-xs text-muted">{testMsg}</p>}
+      </div>
     );
   }
   return (
