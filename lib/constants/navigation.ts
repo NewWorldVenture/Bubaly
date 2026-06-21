@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet,
-  Zap, Network, ShieldAlert, BookHeart, Import, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, CloudSun, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -56,6 +56,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle, minLevel: 0 },
       { href: '/dashboard/grocery', label: 'Groceries', icon: ShoppingCart, minLevel: 0 },
       { href: '/dashboard/reminders', label: 'Reminders', icon: Bell, minLevel: 0 },
+      { href: '/dashboard/weather', label: 'Weather', icon: CloudSun, minLevel: 0 },
       { href: '/dashboard/recipes', label: 'Recipes', icon: ChefHat, minLevel: 0 },
       { href: '/dashboard/photos', label: 'Photos', icon: ImageGallery, minLevel: 0 },
       { href: '/dashboard/todos', label: 'To-Do Lists', icon: ListChecks, minLevel: 0 },
