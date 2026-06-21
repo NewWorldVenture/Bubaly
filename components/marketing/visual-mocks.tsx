@@ -156,7 +156,7 @@ export function AvatarStack() {
 
 export function SocialProofLine({ text = 'Loved by families everywhere' }: { text?: string }) {
   return (
-    <div className="inline-flex items-center gap-3 rounded-sm border border-white/[0.035] bg-[#07111b]/90 px-3 py-2.5 shadow-[0_12px_30px_rgba(0,0,0,0.22)]">
+    <div className="dark inline-flex items-center gap-3 rounded-sm border border-white/[0.035] bg-[#07111b]/90 px-3 py-2.5 text-white shadow-[0_12px_30px_rgba(0,0,0,0.22)]">
       <AvatarStack />
       <div>
         <Rating />
