@@ -30,6 +30,7 @@ export type ThemePref = 'dark' | 'light' | 'system';
 export type DashboardView = 'personal' | 'family';
 export type AiRole = 'user' | 'assistant' | 'system' | 'tool';
 export type RecordKind = 'medical' | 'dental';
+export type RideStatus = 'planned' | 'confirmed' | 'completed' | 'cancelled';
 
 // Sync platform enums (migration 0018)
 export type SyncProviderEnum = 'google' | 'microsoft' | 'apple' | 'amazon' | 'internal';
@@ -147,6 +148,11 @@ export interface Database {
         { id: string; family_id: string; medication_id: string; time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null } & Stamps,
         { id?: string; family_id: string; medication_id: string; time_of_day: string; days_of_week?: number[]; starts_on?: string; ends_on?: string | null },
         Partial<{ time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null }>
+      >;
+      rides: T<
+        { id: string; family_id: string; title: string; ride_date: string; pickup_time: string | null; dropoff_time: string | null; pickup_location: string | null; dropoff_location: string | null; driver_id: string | null; rider_ids: string[]; status: RideStatus; notes: string | null; event_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; ride_date: string; pickup_time?: string | null; dropoff_time?: string | null; pickup_location?: string | null; dropoff_location?: string | null; driver_id?: string | null; rider_ids?: string[]; status?: RideStatus; notes?: string | null; event_id?: string | null; created_by?: string | null },
+        Partial<{ title: string; ride_date: string; pickup_time: string | null; dropoff_time: string | null; pickup_location: string | null; dropoff_location: string | null; driver_id: string | null; rider_ids: string[]; status: RideStatus; notes: string | null; event_id: string | null }>
       >;
       health_providers: T<
         { id: string; family_id: string; member_id: string | null; kind: RecordKind; name: string; specialty: string | null; practice_name: string | null; phone: string | null; fax: string | null; email: string | null; address: string | null; is_primary: boolean; notes: string | null; created_by: string | null } & Stamps,
