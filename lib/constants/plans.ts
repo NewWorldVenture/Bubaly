@@ -67,6 +67,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/assistant':0,  // metered AI (10 requests/mo on Free)
   // Basic routes
   '/dashboard/chores':        1,
+  '/dashboard/rewards':       1,
   '/dashboard/meals':         1,
   '/dashboard/school':        1,
   '/dashboard/homework':      1,
@@ -81,6 +82,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/medications':   1,
   '/dashboard/inbox':         1,
   '/dashboard/scan':          1,
+  '/dashboard/trips':         1,
   '/dashboard/rides':         1,
   '/display':                 1,  // Kitchen Display Mode
   // Plus routes

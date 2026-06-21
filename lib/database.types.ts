@@ -33,6 +33,9 @@ export type RecordKind = 'medical' | 'dental';
 export type RideStatus = 'planned' | 'confirmed' | 'completed' | 'cancelled';
 export type HomeworkStatus = 'assigned' | 'in_progress' | 'done' | 'submitted';
 export type DoseStatus = 'taken' | 'skipped' | 'missed';
+export type TripStatus = 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
+export type TripItemKind = 'packing' | 'todo' | 'reservation' | 'document';
+export type RedemptionStatus = 'requested' | 'approved' | 'fulfilled' | 'rejected';
 
 // Sync platform enums (migration 0018)
 export type SyncProviderEnum = 'google' | 'microsoft' | 'apple' | 'amazon' | 'internal';
@@ -121,6 +124,11 @@ export interface Database {
         { id?: string; family_id: string; title: string; description?: string | null; cost_points?: number; created_by?: string | null },
         Partial<{ title: string; description: string | null; cost_points: number; redeemed_by: string | null; redeemed_at: string | null }>
       >;
+      reward_redemptions: T<
+        { id: string; family_id: string; reward_id: string | null; member_id: string; reward_title: string; cost_points: number; status: RedemptionStatus; note: string | null; decided_by: string | null; decided_at: string | null } & Stamps,
+        { id?: string; family_id: string; reward_id?: string | null; member_id: string; reward_title: string; cost_points?: number; status?: RedemptionStatus; note?: string | null; decided_by?: string | null; decided_at?: string | null },
+        Partial<{ reward_id: string | null; reward_title: string; cost_points: number; status: RedemptionStatus; note: string | null; decided_by: string | null; decided_at: string | null }>
+      >;
       meals: T<
         { id: string; family_id: string; name: string; meal_type: MealType; recipe_url: string | null; ingredients: Json; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name: string; meal_type?: MealType; recipe_url?: string | null; ingredients?: Json; notes?: string | null; created_by?: string | null },
@@ -150,6 +158,16 @@ export interface Database {
         { id: string; family_id: string; medication_id: string; time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null } & Stamps,
         { id?: string; family_id: string; medication_id: string; time_of_day: string; days_of_week?: number[]; starts_on?: string; ends_on?: string | null },
         Partial<{ time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null }>
+      >;
+      trips: T<
+        { id: string; family_id: string; name: string; destination: string | null; start_date: string | null; end_date: string | null; status: TripStatus; traveler_ids: string[]; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; destination?: string | null; start_date?: string | null; end_date?: string | null; status?: TripStatus; traveler_ids?: string[]; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; destination: string | null; start_date: string | null; end_date: string | null; status: TripStatus; traveler_ids: string[]; notes: string | null }>
+      >;
+      trip_items: T<
+        { id: string; family_id: string; trip_id: string; kind: TripItemKind; label: string; details: string | null; assignee_id: string | null; is_done: boolean; due_at: string | null; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; trip_id: string; kind?: TripItemKind; label: string; details?: string | null; assignee_id?: string | null; is_done?: boolean; due_at?: string | null; sort_order?: number; created_by?: string | null },
+        Partial<{ kind: TripItemKind; label: string; details: string | null; assignee_id: string | null; is_done: boolean; due_at: string | null; sort_order: number }>
       >;
       medication_doses: T<
         { id: string; family_id: string; medication_id: string; schedule_id: string | null; member_id: string | null; scheduled_for: string; status: DoseStatus; taken_at: string | null; notes: string | null; logged_by: string | null } & Stamps,
