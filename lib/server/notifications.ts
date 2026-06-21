@@ -5,6 +5,7 @@
 // notifications must be trustworthy, so this is rule-based, not AI-generated.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, NotificationType } from '@/lib/database.types';
+import { renewalReminders, opportunityReminders } from '@/lib/notifications/deadline-reminders';
 
 type DB = SupabaseClient<Database>;
 
@@ -37,6 +38,10 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   const in48 = new Date(now.getTime() + 48 * HOUR).toISOString();
   const in14d = new Date(now.getTime() + 14 * 24 * HOUR).toISOString();
   const nowIso = now.toISOString();
+  // Date-only (YYYY-MM-DD) bounds for the date columns on renewals/opportunities.
+  const todayKey = nowIso.slice(0, 10);
+  const renewalMaxKey = new Date(now.getTime() + 90 * 24 * HOUR).toISOString().slice(0, 10);
+  const signupMaxKey = new Date(now.getTime() + 7 * 24 * HOUR).toISOString().slice(0, 10);
 
   const [
     { data: members },
@@ -46,6 +51,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     { data: sports },
     { data: reminders },
     { data: docs },
+    { data: renewalsDue },
+    { data: signupsDue },
   ] = await Promise.all([
     supabase.from('family_members').select('id, user_id, display_name, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
@@ -54,10 +61,14 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     supabase.from('sports_events').select('id, title, starts_at, member_id, sport, location').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
     supabase.from('reminders').select('id, title, remind_at, member_id, is_done').eq('family_id', familyId).eq('is_done', false).gte('remind_at', nowIso).lte('remind_at', in24),
     supabase.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', nowIso).lte('expires_at', in14d),
+    // Renewals within ~90d (per-item reminder window applied in code) and open signups within 7d.
+    supabase.from('renewals').select('id, title, expires_at, reminder_days, status').eq('family_id', familyId).eq('status', 'active').gte('expires_at', todayKey).lte('expires_at', renewalMaxKey),
+    supabase.from('opportunities').select('id, title, deadline, status').eq('family_id', familyId).in('status', ['interested', 'waitlisted']).not('deadline', 'is', null).gte('deadline', todayKey).lte('deadline', signupMaxKey),
   ]);
 
   const userByMember = new Map((members ?? []).map((m) => [m.id, m.user_id]));
   const managers = (members ?? []).filter((m) => m.role === 'parent' || m.role === 'adult');
+  const managerLites = managers.map((m) => ({ id: m.id, user_id: m.user_id }));
 
   // Resolve chore titles.
   const choreIds = [...new Set((chores ?? []).map((c) => c.chore_id))];
@@ -123,6 +134,15 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
         candidates.push({ type: 'document_expiry', related_type: 'documents', related_id: `${d.id}:${m.id}`, user_id: m.user_id, title: `Document expiring: ${d.title}`, body: `Expires ${when}` });
       }
     }
+  }
+
+  // Renewals approaching their per-item reminder window, and signups whose
+  // registration deadline is within a week → alert managers (pure builders).
+  for (const row of renewalReminders(renewalsDue ?? [], managerLites, todayKey)) {
+    candidates.push(row);
+  }
+  for (const row of opportunityReminders(signupsDue ?? [], managerLites, todayKey)) {
+    candidates.push(row);
   }
 
   if (candidates.length === 0) return 0;
