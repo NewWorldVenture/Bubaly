@@ -141,6 +141,15 @@ body::before {
     @apply glass rounded-2xl shadow-glass;
     background-color: rgb(var(--surface) / 0.72);
   }
+  /* Solid surface for floating overlays — dropdown menus, popovers, toasts,
+     modals. Unlike .glass-card (translucent, for in-page cards), this is fully
+     opaque so menu items stay readable over any underlying content, in both
+     themes (--elevated is solid in dark and light). */
+  .popover-surface {
+    @apply rounded-xl shadow-glass;
+    background-color: rgb(var(--elevated));
+    border: 1px solid rgb(var(--border));
+  }
   .focus-ring {
     @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-bg;
   }
@@ -171,6 +180,13 @@ body::before {
       radial-gradient(34rem 26rem at 20% 2%, rgb(49 133 255 / 0.10), transparent 64%),
       linear-gradient(180deg, var(--canvas-top) 0%, var(--canvas-bottom) 100%);
   }
+  .homepage-reference-bg {
+    color: #f7f8fb;
+    background:
+      radial-gradient(36rem 34rem at 78% 10%, rgb(105 63 255 / 0.24), transparent 68%),
+      radial-gradient(28rem 22rem at 6% 6%, rgb(26 94 170 / 0.08), transparent 70%),
+      linear-gradient(180deg, #02070d 0%, #04101a 58%, #020810 100%);
+  }
   .icon-orb {
     @apply inline-flex items-center justify-center rounded-full;
     background-color: rgb(var(--showcase-bg) / 0.06);
@@ -193,6 +209,7 @@ body::before {
 
   .hero-phone-float {
     animation: hero-phone-float 7s ease-in-out infinite;
+    transform-origin: 50% 65%;
   }
 
   .device-art {
@@ -298,8 +315,8 @@ body::before {
 }
 
 @keyframes hero-phone-float {
-  0%, 100% { transform: translateY(0) rotate(3deg); }
-  50% { transform: translateY(-10px) rotate(2deg); }
+  0%, 100% { transform: perspective(1100px) translateY(0) rotateY(-7deg) rotateZ(3deg); }
+  50% { transform: perspective(1100px) translateY(-8px) rotateY(-5deg) rotateZ(2.5deg); }
 }
 
 /* Respect reduced-motion preferences. */

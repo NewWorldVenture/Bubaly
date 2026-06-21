@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
-import { exchangeCode, getGoogleUserEmail } from '@/lib/sync/providers/google';
+import { exchangeCode, getGoogleUserEmail, googleSyncRedirectUri } from '@/lib/sync/providers/google';
 import { connectAccount } from '@/lib/sync/accounts';
 import { hasEncryptionKey } from '@/lib/sync/crypto';
 
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { userId: string; familyId: string };
     if (state.userId !== ctx.user.id) return back('error=state_mismatch');
 
-    const redirectUri = `${origin}/api/sync/google/callback`;
+    const redirectUri = googleSyncRedirectUri(origin);
     const tokens = await exchangeCode(code, redirectUri);
     const email = await getGoogleUserEmail(tokens.accessToken);
 

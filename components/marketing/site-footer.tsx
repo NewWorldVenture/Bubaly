@@ -31,23 +31,22 @@ const GROUPS = [
 ];
 
 export function SiteFooter() {
-  const year = new Date().getFullYear();
   return (
-    <footer className="border-t border-border/60 bg-surface/30">
-      <div className="mx-auto grid max-w-7xl grid-cols-2 gap-8 px-4 py-12 sm:px-6 md:grid-cols-4 lg:px-8">
+    <footer className="dark border-t border-white/[0.055] bg-[#030911] text-white">
+      <div className="mx-auto grid max-w-[1440px] grid-cols-2 gap-8 px-5 py-10 sm:px-8 md:grid-cols-4 lg:px-10">
         <div className="col-span-2 md:col-span-1">
-          <Logo />
-          <p className="mt-3 max-w-xs text-sm text-muted">
+          <Logo className="[&>span:first-child]:h-6 [&>span:first-child]:w-7 [&>span:last-child]:text-[18px]" />
+          <p className="mt-3 max-w-[220px] text-[11px] leading-5 text-white/42">
             Run your family like a calm, connected team.
           </p>
         </div>
         {GROUPS.map((g) => (
           <div key={g.title}>
-            <h4 className="text-sm font-semibold">{g.title}</h4>
-            <ul className="mt-3 space-y-2">
+            <h4 className="text-[11px] font-semibold text-white/88">{g.title}</h4>
+            <ul className="mt-3 space-y-2.5">
               {g.links.map((l) => (
                 <li key={l.href}>
-                  <Link href={l.href} className="text-sm text-muted transition hover:text-fg">
+                  <Link href={l.href} className="text-[10px] text-white/42 transition hover:text-white">
                     {l.label}
                   </Link>
                 </li>
@@ -55,12 +54,6 @@ export function SiteFooter() {
             </ul>
           </div>
         ))}
-      </div>
-      <div className="border-t border-border/60 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 text-xs text-muted sm:flex-row">
-          <p>© {year} FamilyOS. All rights reserved.</p>
-          <p>Built with care for busy households.</p>
-        </div>
       </div>
     </footer>
   );
