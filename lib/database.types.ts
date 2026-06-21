@@ -33,6 +33,7 @@ export type RecordKind = 'medical' | 'dental';
 export type RideStatus = 'planned' | 'confirmed' | 'completed' | 'cancelled';
 export type HomeworkStatus = 'assigned' | 'in_progress' | 'done' | 'submitted';
 export type RenewalStatus = 'active' | 'renewed' | 'expired' | 'cancelled';
+export type CareLogType = 'check_in' | 'visit' | 'call' | 'meal' | 'medication' | 'appointment' | 'incident' | 'note';
 export type OpportunityStatus = 'interested' | 'registered' | 'waitlisted' | 'passed' | 'missed';
 export type DoseStatus = 'taken' | 'skipped' | 'missed';
 export type TripStatus = 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
@@ -190,6 +191,11 @@ export interface Database {
         { id: string; family_id: string; member_id: string | null; title: string; category: string | null; expires_at: string; reminder_days: number; cost: number | null; url: string | null; status: RenewalStatus; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id?: string | null; title: string; category?: string | null; expires_at: string; reminder_days?: number; cost?: number | null; url?: string | null; status?: RenewalStatus; notes?: string | null; created_by?: string | null },
         Partial<{ member_id: string | null; title: string; category: string | null; expires_at: string; reminder_days: number; cost: number | null; url: string | null; status: RenewalStatus; notes: string | null }>
+      >;
+      care_log: T<
+        { id: string; family_id: string; member_id: string; log_type: CareLogType; occurred_at: string; wellbeing: number | null; note: string | null; logged_by: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; log_type?: CareLogType; occurred_at?: string; wellbeing?: number | null; note?: string | null; logged_by?: string | null; created_by?: string | null },
+        Partial<{ member_id: string; log_type: CareLogType; occurred_at: string; wellbeing: number | null; note: string | null; logged_by: string | null }>
       >;
       opportunities: T<
         { id: string; family_id: string; member_id: string | null; title: string; category: string | null; url: string | null; cost: number | null; opens_at: string | null; deadline: string | null; status: OpportunityStatus; notes: string | null; created_by: string | null } & Stamps,

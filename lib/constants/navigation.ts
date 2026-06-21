@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet,
-  Zap, Network, ShieldAlert, BookHeart, Import, CloudSun, Car, Pill, Gift, Plane, BookOpen, CalendarClock, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -84,6 +84,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/scan', label: 'Scan Flyer', icon: ScanLine, minLevel: 1 },
       { href: '/dashboard/medical', label: 'Medical', icon: Stethoscope, minLevel: 1 },
       { href: '/dashboard/medications', label: 'Medications', icon: Pill, minLevel: 1 },
+      { href: '/dashboard/care', label: 'Care Log', icon: HeartHandshake, minLevel: 1 },
       { href: '/dashboard/inbox', label: 'Magic Import', icon: Inbox, minLevel: 1 },
       { href: '/dashboard/dental', label: 'Dental', icon: Smile, minLevel: 1 },
       { href: '/dashboard/settings', label: 'Settings', icon: Settings, minLevel: 0 },
