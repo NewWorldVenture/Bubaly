@@ -821,6 +821,21 @@ export interface Database {
         { id?: string; affiliate_id: string; referred_email?: string | null; family_id?: string | null; status?: string; amount_cents?: number; commission_cents?: number; converted_at?: string | null; paid_at?: string | null; created_at?: string },
         Partial<{ referred_email: string | null; family_id: string | null; status: string; amount_cents: number; commission_cents: number; converted_at: string | null; paid_at: string | null }>
       >;
+      competitors: T<
+        { id: string; name: string; domain: string | null; ranking: number | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; name: string; domain?: string | null; ranking?: number | null; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; domain: string | null; ranking: number | null; notes: string | null }>
+      >;
+      keyword_intel: T<
+        { id: string; keyword: string; search_volume: number; difficulty: number | null; our_rank: number | null; competitor_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; keyword: string; search_volume?: number; difficulty?: number | null; our_rank?: number | null; competitor_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ keyword: string; search_volume: number; difficulty: number | null; our_rank: number | null; competitor_id: string | null; notes: string | null }>
+      >;
+      backlinks: T<
+        { id: string; source_domain: string; target_url: string | null; authority: number | null; status: string; discovered_at: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; source_domain: string; target_url?: string | null; authority?: number | null; status?: string; discovered_at?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ source_domain: string; target_url: string | null; authority: number | null; status: string; discovered_at: string | null; notes: string | null }>
+      >;
       weather_locations: T<
         { id: string; family_id: string; name: string; admin1: string | null; country: string | null; latitude: number; longitude: number; is_default: boolean; sort_order: number; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name: string; admin1?: string | null; country?: string | null; latitude: number; longitude: number; is_default?: boolean; sort_order?: number; created_by?: string | null },

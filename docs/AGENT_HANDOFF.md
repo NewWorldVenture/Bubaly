@@ -385,14 +385,11 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
 Latest migration applied to prod: **0050** (verify with `select max(...)`/`\dt`).
-Next migration number: **0066**.
-(0050 dedup index applied; **0051 `checkout_sessions`** and main's
-**0052 `family_onboarding`**, **0053 `landing_metrics`**, **0054 `recipe_sources`**,
-**0055 `meal_votes`** are on main. This branch's marketing-platform migrations —
-**0056 `crm`** + **0057 `crm_quotes`** + **0058 `visitor_intelligence`** +
-**0059 `reputation`** + **0060 `marketing_assets`** + **0061 `marketing_videos`** +
-**0062 `personalization`** + **0063 `marketing_push`** + **0064 `exit_intent`** +
-**0065 `affiliates`** — still need applying to prod when this PR lands.)
+Next migration number: **0067**.
+(0050 dedup index applied; **0051–0055** on main. The marketing-platform pillars
+**0056 `crm`** … **0065 `affiliates`** merged to main via #95, plus
+**0066 `competitive_intel`** (Competitor/Keyword/Backlink) — all **0051–0066 still
+need applying to prod** (verify what's live first; migrations are idempotent).)
 
 > ✅ **Merge-ready: branch migrations renumbered to 0056–0065** (after main's max
 > 0055). If `main` gains new migrations before this merges, bump these again to
@@ -621,7 +618,18 @@ Exit-Intent Popups ✅ (`marketing_exit_intent`; fully wired — public popup on
 marketing site + resolve/track endpoints; A/B variants = next) · Affiliate
 Management ✅ (`affiliates` + `affiliate_referrals` with commission tracking +
 payout; NEXT: public `?via=CODE` capture + a partner dashboard).
-MEDIUM: Competitor Monitoring · Keyword Intelligence · Backlink Monitoring (extend SEO).
+MEDIUM: Competitor Monitoring ✅ · Keyword Intelligence ✅ · Backlink Monitoring ✅
+— shipped as Competitive Intelligence (mig `0066_competitive_intel.sql`:
+`competitors` + `keyword_intel` + `backlinks`; pure logic `lib/marketing/competitive.ts`
+— `normalizeDomain`, `keywordOpportunity` (volume×poor-rank), `summarizeBacklinks`,
+7 tests; page `/admin/marketing/competitive` with all 3 sections + add/delete;
+nav: Competitive). **Apply 0066 at merge.** NEXT: auto-import from Semrush/Ahrefs
+APIs instead of manual entry.
+ALL spec pillars are now built. Remaining work = the per-pillar "NEXT" wiring/glue
+items (public-site instrumentation): visitor `/api/mkt/track` calls + identity
+stitch (#54), public testimonials/case-studies (#55), asset picker (#56), video
+embed (#57), personalization surfaces (#59), push segment/click (#60), exit-intent
+A/B (#61), affiliate `?via=` capture (#62) — see each pillar's NEXT above.
 Each: new table(s) per the field lists in the spec, pure logic + tests, an admin
 page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branch.
 
