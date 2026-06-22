@@ -26,6 +26,7 @@ const SUBNAV = [
   ['/admin/marketing/reputation', 'Reputation'],
   ['/admin/marketing/funnels', 'Funnels'],
   ['/admin/marketing/landing-pages', 'Landing Pages'],
+  ['/admin/marketing/exit-intent', 'Exit-Intent'],
   ['/admin/marketing/forms', 'Forms'],
   ['/admin/marketing/content', 'Content'],
   ['/admin/marketing/personalization', 'Personalization'],

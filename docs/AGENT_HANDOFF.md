@@ -184,13 +184,13 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0062**.
+Latest migration applied to prod: **0050**. Next migration number: **0063**.
 (0050 dedup index applied; **0051 `checkout_sessions`**, **0052 `family_onboarding`**,
 **0053 `landing_metrics`** are on main. This branch's marketing-platform
 migrations — **0054 `crm`** + **0055 `crm_quotes`** + **0056 `visitor_intelligence`** +
 **0057 `reputation`** + **0058 `marketing_assets`** + **0059 `marketing_videos`** +
-**0060 `personalization`** + **0061 `marketing_push`** — still need applying to
-prod when this PR lands.)
+**0060 `personalization`** + **0061 `marketing_push`** + **0062 `exit_intent`** —
+still need applying to prod when this PR lands.)
 
 > ✅ **Merge-ready: branch migrations renumbered.** They previously collided with
 > main's `0052_family_onboarding`/`0053_landing_metrics`; the six branch
@@ -364,6 +364,24 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   `segment_id` column + 'segment' audience exist; resolve a segment's members →
   user_ids); (2) **click tracking** (append a tracked param to the url + an
   endpoint that bumps `clicked`); (3) a scheduled/cron send option.
+- **#61 Exit-Intent Popups** — mig `0062_exit_intent.sql`:
+  `marketing_exit_intent` (name, headline, body, cta_label/href, match jsonb,
+  trigger_config jsonb {mode mouseleave|scroll, delayMs, scrollPercent},
+  priority, status, impressions/conversions, soft-delete) + SECURITY DEFINER RPC
+  `bump_exit_intent(p_id, p_metric)` (service_role only). **Fully wired end-to-end.**
+  Pure logic `lib/marketing/exit-intent.ts` (reuses personalization `ruleMatches`;
+  `normalizeTrigger`, `resolveExitIntent`, `conversionRate`, `summarizeExitIntent`;
+  4 tests). Server resolver `exit-intent-server.ts`. **Public:** client
+  `components/marketing/exit-intent.tsx` (mounted in `app/(marketing)/layout.tsx`)
+  resolves via `POST /api/exit-intent/resolve` (UTM/path/returning ctx), arms
+  mouseleave/scroll trigger, shows once per visitor/week (localStorage), and
+  beacons impression/conversion → `POST /api/exit-intent/track` → RPC. Both
+  endpoints added to `middleware.ts` PUBLIC (`/api/exit-intent`). Admin
+  `/admin/marketing/exit-intent` (create offer + trigger + audience, stats,
+  pause/activate, delete). Nav: Exit-Intent. **Apply 0062 at merge.** NEXT:
+  (1) A/B-test offer variants via `assignVariant`; (2) richer triggers
+  (idle-time, scroll-velocity); (3) per-offer frequency cap beyond the global
+  weekly once.
 
 ### Already EXISTS in the app (don't rebuild — extend)
 Email (`/email`, `marketing_email_campaigns`) · Automation (`/automation`,
@@ -390,11 +408,12 @@ migration; rich editor + JSON-LD = next) · Personalization Engine ✅
 (`marketing_personalization_rules` + server resolver; surface instrumentation =
 next) · Push Notifications ✅ (`marketing_push_campaigns`; broadcast send reusing
 VAPID/FCM, honors suppressions; segment targeting + click tracking = next) ·
-Exit-Intent Popups (NEXT pillar — `marketing_exit_intent` {offer headline/body/
-cta, audience rules jsonb like Personalization, trigger config, impressions/
-conversions}; client trigger on the public site (mouseleave/scroll-velocity),
-shown once per visitor, A/B-instrumented) · Affiliate Management (distinct from
-referrals: affiliate_id, commission).
+Exit-Intent Popups ✅ (`marketing_exit_intent`; fully wired — public popup on the
+marketing site + resolve/track endpoints; A/B variants = next) · Affiliate
+Management (NEXT pillar — distinct from customer referrals: `affiliates`
+{partner, payout terms, status} + `affiliate_clicks` + `affiliate_conversions`
+with attribution windows + a payout ledger; public `?ref=` capture + a partner
+dashboard).
 MEDIUM: Competitor Monitoring · Keyword Intelligence · Backlink Monitoring (extend SEO).
 Each: new table(s) per the field lists in the spec, pure logic + tests, an admin
 page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branch.
@@ -403,7 +422,7 @@ page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branc
 1. `git checkout claude/marketing-platform` (create from main if missing), build the
    next pillar following the conventions above, commit to the branch (do NOT merge).
 2. Keep `tsc`/lint/build/vitest green each commit. New migration = next number
-   (**0062+**; this branch's marketing migrations are 0054–0061, renumbered to sit
+   (**0063+**; this branch's marketing migrations are 0054–0062, renumbered to sit
    after main's max). Note it must be applied to prod at merge time, and re-check
    it's still after main's highest migration just before merging.
 3. When the platform is "ready to come together," open the PR to main and apply all

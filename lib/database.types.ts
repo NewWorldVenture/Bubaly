@@ -781,6 +781,11 @@ export interface Database {
         { id?: string; title: string; provider?: string; video_id?: string | null; url?: string | null; storage_path?: string | null; poster_url?: string | null; captions_url?: string | null; transcript?: string | null; duration_seconds?: number | null; status?: string; tags?: string[]; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
         Partial<{ title: string; provider: string; video_id: string | null; url: string | null; storage_path: string | null; poster_url: string | null; captions_url: string | null; transcript: string | null; duration_seconds: number | null; status: string; tags: string[]; metadata: Json; deleted_at: string | null }>
       >;
+      marketing_exit_intent: T<
+        { id: string; name: string; headline: string; body: string | null; cta_label: string | null; cta_href: string | null; match: Json; trigger_config: Json; priority: number; status: string; impressions: number; conversions: number; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; name: string; headline: string; body?: string | null; cta_label?: string | null; cta_href?: string | null; match?: Json; trigger_config?: Json; priority?: number; status?: string; impressions?: number; conversions?: number; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; headline: string; body: string | null; cta_label: string | null; cta_href: string | null; match: Json; trigger_config: Json; priority: number; status: string; impressions: number; conversions: number; metadata: Json; deleted_at: string | null }>
+      >;
       marketing_push_campaigns: T<
         { id: string; title: string; body: string | null; url: string | null; segment_id: string | null; audience: string; status: string; recipients: number; sent: number; failed: number; skipped: number; clicked: number; sent_at: string | null; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
         { id?: string; title: string; body?: string | null; url?: string | null; segment_id?: string | null; audience?: string; status?: string; recipients?: number; sent?: number; failed?: number; skipped?: number; clicked?: number; sent_at?: string | null; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
@@ -1133,6 +1138,7 @@ export interface Database {
       public_stats: { Args: Record<string, never>; Returns: { families: number; members: number; tasks_completed: number }[] };
       social_role_for: { Args: { p_family_id: string }; Returns: SocialRoleEnum };
       social_has_permission: { Args: { p_family_id: string; p_permission: string }; Returns: boolean };
+      bump_exit_intent: { Args: { p_id: string; p_metric: string }; Returns: undefined };
     };
     Enums: {
       member_role: MemberRole;
