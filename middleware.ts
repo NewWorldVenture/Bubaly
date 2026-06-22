@@ -9,6 +9,8 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/s',
   // Public reviews wall + submission page — no login required.
   '/reviews',
+  // Public exit-intent offer resolve + metric beacon (anonymous visitors).
+  '/api/exit-intent',
   // Public marketing landing pages + their metric beacon.
   '/lp',
   '/api/lp/track',
