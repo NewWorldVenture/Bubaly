@@ -148,6 +148,12 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
   Add members); `/onboarding` page is a server component that prefills from
   `profiles`/auth. Pure name/phone helpers in `lib/onboarding/profile.ts` (tested);
   `onboardingProfileSchema` in `lib/validation.ts`.
+- #91 Editable account profile in Settings (NO migration): "Your profile" now edits
+  First/Last name + Contact phone (email read-only) via `updateMyProfileAction`
+  (`app/(app)/actions.ts`) — updates `profiles` + syncs `family_members.display_name`,
+  reusing the onboarding helpers. Settings module loads `profiles` client-side to
+  prefill. `profileUpdateSchema` in `lib/validation.ts`. Closes the loop on the
+  onboarding-captured contact info so it stays current.
 
 ## Lifecycle journeys / automation runner — added in #87
 - The `marketing_automation_workflows` admin UI already existed; #87 adds the **runner**

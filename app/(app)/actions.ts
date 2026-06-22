@@ -3,6 +3,34 @@
 import { revalidatePath } from 'next/cache';
 import { createServer } from '@/lib/supabase/server';
 import { isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
+import { profileUpdateSchema } from '@/lib/validation';
+import { joinName, normalizePhone } from '@/lib/onboarding/profile';
+
+/** Updates the signed-in user's account profile (name + contact phone). Keeps
+ *  their family_members display name in sync with the first name. */
+export async function updateMyProfileAction(input: {
+  firstName: string; lastName: string; phone: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const parsed = profileUpdateSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid details' };
+
+  const supabase = await createServer();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { ok: false, error: 'Not signed in' };
+
+  const { firstName, lastName, phone } = parsed.data;
+  const { error } = await supabase.from('profiles').update({
+    full_name: joinName(firstName, lastName),
+    display_name: firstName,
+    phone: normalizePhone(phone),
+  }).eq('id', auth.user.id);
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from('family_members').update({ display_name: firstName }).eq('user_id', auth.user.id);
+
+  revalidatePath('/dashboard', 'layout');
+  return { ok: true };
+}
 
 /** Switches the user's active family (used by the family switcher). */
 export async function setActiveFamilyAction(familyId: string): Promise<{ ok: boolean; error?: string }> {

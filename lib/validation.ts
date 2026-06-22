@@ -36,6 +36,15 @@ export const onboardingProfileSchema = z.object({
 });
 export type OnboardingProfileInput = z.infer<typeof onboardingProfileSchema>;
 
+// Editing your account profile later (Settings) — email stays managed by auth,
+// so only the name + contact phone are editable here.
+export const profileUpdateSchema = z.object({
+  firstName: z.string().trim().min(1, 'Enter your first name').max(60),
+  lastName: z.string().trim().min(1, 'Enter your last name').max(60),
+  phone: z.string().trim().min(7, 'Enter a valid phone number').max(30),
+});
+export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
+
 export const inviteSchema = z.object({
   email: emailSchema,
   role: z.enum(['adult', 'teen', 'caregiver', 'guest']),
