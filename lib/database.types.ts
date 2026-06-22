@@ -264,6 +264,11 @@ export interface Database {
         { id?: string; event_id: string; family_id: string; member_id: string; status?: string },
         Partial<{ status: string }>
       >;
+      family_dates: T<
+        { id: string; family_id: string; member_id: string | null; title: string; kind: string; event_date: string; notes: string | null; remind_days: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; kind?: string; event_date: string; notes?: string | null; remind_days?: number; created_by?: string | null },
+        Partial<{ member_id: string | null; title: string; kind: string; event_date: string; notes: string | null; remind_days: number }>
+      >;
       opportunities: T<
         { id: string; family_id: string; member_id: string | null; title: string; category: string | null; url: string | null; cost: number | null; opens_at: string | null; deadline: string | null; status: OpportunityStatus; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id?: string | null; title: string; category?: string | null; url?: string | null; cost?: number | null; opens_at?: string | null; deadline?: string | null; status?: OpportunityStatus; notes?: string | null; created_by?: string | null },
