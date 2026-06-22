@@ -133,6 +133,12 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
   to `lib/marketing/automation-steps.ts`; pure trigger registry/dedup in
   `lib/marketing/automation-triggers.ts`. Reserves the run row first
   (ON CONFLICT DO NOTHING) so redelivered webhooks can't double-send.
+- #89 Abandoned-checkout automation (mig 0051 `checkout_sessions`): the checkout
+  route records each opened Stripe session; the webhook marks it completed; a new
+  cron `/api/cron/checkout-abandoned` (every 6h) fires `checkout_abandoned` for
+  pending sessions past a 60-min grace (≤24h old) and marks them abandoned so it
+  never re-fires. Pure selection in `lib/billing/checkout-abandonment.ts` (tested).
+  This completes all event-driven triggers (the deferred one from #88).
 
 ## Lifecycle journeys / automation runner — added in #87
 - The `marketing_automation_workflows` admin UI already existed; #87 adds the **runner**
@@ -147,7 +153,8 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0049**. Next migration number: **0050**.
+Latest migration applied to prod: **0050**. Next migration number: **0052**.
+(0050 dedup index applied; **0051 `checkout_sessions` still needs applying** to prod.)
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,

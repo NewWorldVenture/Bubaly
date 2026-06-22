@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getStripe, STRIPE_PLANS, type StripePlan } from '@/lib/stripe';
 
 export async function POST(req: NextRequest) {
@@ -53,6 +53,21 @@ export async function POST(req: NextRequest) {
       },
       allow_promotion_codes: true,
     });
+
+    // Record the open checkout so the abandoned-checkout cron can follow up if
+    // it's never completed. Best-effort: never block returning the checkout URL.
+    try {
+      await createServiceClient().from('checkout_sessions').insert({
+        session_id: session.id,
+        family_id: familyId,
+        email: ctx.user.email ?? null,
+        name: ctx.active.family.name ?? null,
+        plan,
+        status: 'pending',
+      });
+    } catch {
+      /* non-fatal */
+    }
 
     return NextResponse.json({ url: session.url });
   } catch (err) {
