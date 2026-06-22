@@ -3,6 +3,8 @@ import { contactSchema, fieldErrors } from '@/lib/validation';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { sendEmail } from '@/lib/server/email';
 import { createServiceClient } from '@/lib/supabase/server';
+import { fireAutomationEvent } from '@/lib/marketing/automation-events';
+import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 
 export const runtime = 'nodejs';
 
@@ -33,11 +35,12 @@ export async function POST(req: Request) {
 
   // Persist as a support ticket so it surfaces in the admin console even if
   // email delivery is unavailable. Best-effort: never block the user on it.
+  const ticketNumber = `WEB-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   try {
     await createServiceClient()
       .from('support_tickets')
       .insert({
-        ticket_number: `WEB-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        ticket_number: ticketNumber,
         subject: `Contact from ${name}`,
         description: message,
         category: 'general',
@@ -49,6 +52,20 @@ export async function POST(req: Request) {
       });
   } catch {
     /* non-fatal: the email below is the primary path */
+  }
+
+  // Fire any event-driven "form_submitted" automation workflows in real time.
+  // Best-effort: never block the contact response on marketing automation.
+  try {
+    await fireAutomationEvent(createServiceClient(), {
+      trigger: 'form_submitted',
+      email,
+      name,
+      subjectKey: eventSubjectKey('form_submitted', [ticketNumber]),
+      context: { source: 'contact-form' },
+    });
+  } catch {
+    /* non-fatal */
   }
 
   const result = await sendEmail({

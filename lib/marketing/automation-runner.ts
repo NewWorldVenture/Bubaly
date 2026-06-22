@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { getResend, FROM_EMAIL, emailEnabled } from '@/lib/email';
+import { runSteps, type Step } from '@/lib/marketing/automation-steps';
 import { getMarketingCustomers, type MarketingCustomer } from '@/lib/marketing/customers';
 
 type DB = SupabaseClient<Database>;
@@ -34,36 +34,12 @@ export function subjectsForTrigger(trigger: string, customers: MarketingCustomer
   }
 }
 
-type Step = { action: string; subject?: string; body?: string };
-
 const DEFAULT_COPY: Record<string, { subject: string; body: string }> = {
   customer_created: { subject: 'Welcome to Bubaly 👋', body: 'Thanks for joining Bubaly! Here are three things to set up first: your family calendar, a shopping list, and an invite to your partner.' },
   customer_inactive: { subject: 'We miss your family at Bubaly', body: "It's been a little while — here's what's new, and a quick win to get back on track in 2 minutes." },
   payment_failed: { subject: 'Action needed: update your Bubaly billing', body: 'We had trouble processing your latest payment. Update your card to keep your Family plan active.' },
   high_value_detected: { subject: 'A thank-you from Bubaly', body: "You're one of our most engaged families — thank you! Reply if there's anything we can do for you." },
 };
-
-async function runSteps(trigger: string, steps: Step[], customer: MarketingCustomer): Promise<string[]> {
-  const done: string[] = [];
-  for (const step of steps) {
-    if (step.action === 'send_email' && customer.ownerEmail) {
-      const copy = DEFAULT_COPY[trigger] ?? { subject: 'A note from Bubaly', body: '' };
-      const subject = step.subject || copy.subject;
-      const html = `<p>Hi ${customer.name || 'there'},</p><p>${step.body || copy.body}</p><p>— The Bubaly Team</p>`;
-      if (emailEnabled()) {
-        const { error } = await getResend().emails.send({ from: FROM_EMAIL, to: customer.ownerEmail, subject, html });
-        done.push(error ? 'send_email:failed' : 'send_email');
-      } else {
-        done.push('send_email:skipped(no-key)');
-      }
-    } else {
-      // notify_admin / apply_tag / add_to_segment / update_lead_score etc. are
-      // recorded but not executed by the scheduled runner yet.
-      done.push(`${step.action}:recorded`);
-    }
-  }
-  return done;
-}
 
 export type AutomationRunSummary = { workflows: number; runs: number; emails: number };
 
@@ -98,9 +74,10 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
 
     const steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     let ran = 0;
+    const fallback = DEFAULT_COPY[flow.trigger] ?? { subject: 'A note from Bubaly', body: '' };
     for (const c of subjects) {
       if (seen.has(c.familyId)) continue;
-      const actions = await runSteps(flow.trigger, steps, c);
+      const actions = await runSteps(steps, { email: c.ownerEmail, name: c.name }, fallback);
       summary.emails += actions.filter((a) => a === 'send_email').length;
       await supabase.from('marketing_automation_runs').insert({
         workflow_id: flow.id, status: 'completed', subject_key: c.familyId,
