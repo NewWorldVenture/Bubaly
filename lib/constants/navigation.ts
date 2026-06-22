@@ -64,6 +64,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/recipes', label: 'Recipes', icon: ChefHat, minLevel: 0 },
       { href: '/dashboard/photos', label: 'Photos', icon: ImageGallery, minLevel: 0 },
       { href: '/dashboard/todos', label: 'To-Do Lists', icon: ListChecks, minLevel: 0 },
+      { href: '/dashboard/wishlists', label: 'Wish Lists', icon: Gift, minLevel: 0 },
       { href: '/dashboard/documents', label: 'Documents', icon: FolderLock, minLevel: 0 },
       { href: '/dashboard/notes', label: 'Notes', icon: StickyNote, minLevel: 0 },
       { href: '/dashboard/contacts', label: 'Contacts', icon: Users, minLevel: 0 },
