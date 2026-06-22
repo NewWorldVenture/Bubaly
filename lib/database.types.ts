@@ -259,6 +259,11 @@ export interface Database {
         { id?: string; announcement_id: string; family_id: string; member_id: string; read_at?: string },
         Partial<{ read_at: string }>
       >;
+      event_rsvps: T<
+        { id: string; event_id: string; family_id: string; member_id: string; status: string } & Stamps,
+        { id?: string; event_id: string; family_id: string; member_id: string; status?: string },
+        Partial<{ status: string }>
+      >;
       opportunities: T<
         { id: string; family_id: string; member_id: string | null; title: string; category: string | null; url: string | null; cost: number | null; opens_at: string | null; deadline: string | null; status: OpportunityStatus; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id?: string | null; title: string; category?: string | null; url?: string | null; cost?: number | null; opens_at?: string | null; deadline?: string | null; status?: OpportunityStatus; notes?: string | null; created_by?: string | null },
