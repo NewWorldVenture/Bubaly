@@ -5,6 +5,7 @@ const SUBNAV = [
   ['/admin/marketing', 'Dashboard'],
   ['/admin/marketing/assistant', 'AI Assistant'],
   ['/admin/marketing/customers', 'Customers'],
+  ['/admin/marketing/health', 'Customer Health'],
   ['/admin/marketing/segments', 'Segments'],
   ['/admin/marketing/campaigns', 'Campaigns'],
   ['/admin/marketing/email', 'Email'],
