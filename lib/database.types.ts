@@ -249,6 +249,16 @@ export interface Database {
         { id?: string; family_id: string; member_id: string; title: string; url?: string | null; price?: number | null; priority?: WishPriority; notes?: string | null; claimed_by?: string | null; claimed_at?: string | null; is_purchased?: boolean; created_by?: string | null },
         Partial<{ member_id: string; title: string; url: string | null; price: number | null; priority: WishPriority; notes: string | null; claimed_by: string | null; claimed_at: string | null; is_purchased: boolean }>
       >;
+      family_announcements: T<
+        { id: string; family_id: string; author_id: string | null; author_member_id: string | null; title: string; body: string | null; is_pinned: boolean } & Stamps,
+        { id?: string; family_id: string; author_id?: string | null; author_member_id?: string | null; title: string; body?: string | null; is_pinned?: boolean },
+        Partial<{ title: string; body: string | null; is_pinned: boolean; author_member_id: string | null }>
+      >;
+      announcement_reads: T<
+        { id: string; announcement_id: string; family_id: string; member_id: string; read_at: string },
+        { id?: string; announcement_id: string; family_id: string; member_id: string; read_at?: string },
+        Partial<{ read_at: string }>
+      >;
       opportunities: T<
         { id: string; family_id: string; member_id: string | null; title: string; category: string | null; url: string | null; cost: number | null; opens_at: string | null; deadline: string | null; status: OpportunityStatus; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id?: string | null; title: string; category?: string | null; url?: string | null; cost?: number | null; opens_at?: string | null; deadline?: string | null; status?: OpportunityStatus; notes?: string | null; created_by?: string | null },
