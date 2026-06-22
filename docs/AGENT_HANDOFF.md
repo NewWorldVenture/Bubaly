@@ -548,6 +548,33 @@ remains for any future builder: ship the public renderer/endpoint in the same PR
 as the authoring UI, or record it here as a wiring TODO so it isn't mistaken for
 complete.
 
+## Tier & Features admin (admin-controlled feature gating) — branch `claude/tier-features`
+Goal: one admin screen that sets every service's minimum tier (Off / Free / Basic /
+Plus) and flows those changes to the pricing page + in-app gating. **NO migration**
+(stored in `app_settings` key `feature_tiers`, like the AI config).
+- **Catalog** `lib/constants/feature-catalog.ts` — `FEATURE_CATALOG` (~60 services
+  with `{key,label,section,defaultTier,href}`); defaults mirror the published
+  Free/Basic/Plus comparison grid (the global default offering). 4 sections.
+- **Pure logic** `lib/features/tiers.ts` (11 tests): `FeatureTier` =
+  off|free|basic|plus, `tierToLevel` (free0/basic1/plus2/off-1), `resolveFeatureTiers`
+  (overrides over defaults, ignores unknown/invalid keys), `isFeatureAvailable`,
+  `featuresIncludedInPlan`, `featuresAtTier`, `overridesFromResolved`.
+- **Server** `lib/server/feature-tiers.ts`: `getFeatureOverrides` / `getResolvedFeatureTiers`
+  / `setFeatureTier` (clears override when set back to default) / `resetFeatureTiers`.
+- **Admin** `/admin/tier-features` (super-admin; `page.tsx` + `tier-features-client.tsx`
+  4-button toggle grid per service + `actions.ts` guarded by getUser+isSuperAdmin →
+  service client). Nav: ADMIN_NAV "Tier & Features". Each save revalidates
+  `/pricing` + `/dashboard` layout.
+- **Pricing wired LIVE**: `app/(marketing)/pricing/page.tsx` resolves the matrix and
+  passes `featureMatrix` to `PricingContent`, which renders a new "Every feature, by
+  plan" check-matrix table that reflects admin changes immediately (off = hidden).
+- **REMAINING (next step):** wire **in-app nav gating** to the same config. The
+  catalog rows carry `href`; build a server map `href → tierToLevel(resolvedTier)`
+  and have the sidebar (and `requirePlanLevel`/`ROUTE_PLAN_LEVEL`) consult it to
+  override the hardcoded `minLevel` in `lib/constants/navigation.ts`. Today the
+  admin control + pricing are live; nav still reads the static `minLevel`. (Verified:
+  tsc/lint clean · vitest 494 · build OK; `/admin/tier-features` + `/pricing` built.)
+
 ## Backlog (prioritized, each a clean PR)
 1. Event-driven automation triggers (form_submitted, email_opened/clicked,
    checkout_abandoned) — instrument app events to fire workflows in real time.
