@@ -781,6 +781,11 @@ export interface Database {
         { id?: string; title: string; provider?: string; video_id?: string | null; url?: string | null; storage_path?: string | null; poster_url?: string | null; captions_url?: string | null; transcript?: string | null; duration_seconds?: number | null; status?: string; tags?: string[]; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
         Partial<{ title: string; provider: string; video_id: string | null; url: string | null; storage_path: string | null; poster_url: string | null; captions_url: string | null; transcript: string | null; duration_seconds: number | null; status: string; tags: string[]; metadata: Json; deleted_at: string | null }>
       >;
+      marketing_push_campaigns: T<
+        { id: string; title: string; body: string | null; url: string | null; segment_id: string | null; audience: string; status: string; recipients: number; sent: number; failed: number; skipped: number; clicked: number; sent_at: string | null; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; title: string; body?: string | null; url?: string | null; segment_id?: string | null; audience?: string; status?: string; recipients?: number; sent?: number; failed?: number; skipped?: number; clicked?: number; sent_at?: string | null; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ title: string; body: string | null; url: string | null; segment_id: string | null; audience: string; status: string; recipients: number; sent: number; failed: number; skipped: number; clicked: number; sent_at: string | null; metadata: Json; deleted_at: string | null }>
+      >;
       marketing_personalization_rules: T<
         { id: string; name: string; slot: string; match: Json; variant: Json; priority: number; status: string; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
         { id?: string; name: string; slot: string; match?: Json; variant?: Json; priority?: number; status?: string; metadata?: Json; created_by?: string | null; deleted_at?: string | null },

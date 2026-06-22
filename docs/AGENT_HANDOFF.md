@@ -184,12 +184,13 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0061**.
+Latest migration applied to prod: **0050**. Next migration number: **0062**.
 (0050 dedup index applied; **0051 `checkout_sessions`**, **0052 `family_onboarding`**,
 **0053 `landing_metrics`** are on main. This branch's marketing-platform
 migrations — **0054 `crm`** + **0055 `crm_quotes`** + **0056 `visitor_intelligence`** +
 **0057 `reputation`** + **0058 `marketing_assets`** + **0059 `marketing_videos`** +
-**0060 `personalization`** — still need applying to prod when this PR lands.)
+**0060 `personalization`** + **0061 `marketing_push`** — still need applying to
+prod when this PR lands.)
 
 > ✅ **Merge-ready: branch migrations renumbered.** They previously collided with
 > main's `0052_family_onboarding`/`0053_landing_metrics`; the six branch
@@ -346,6 +347,23 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   `mkt_*` visitor cookie + UTM params from #54), render the variant, and fire an
   exposure to `/api/ab/track`. (Engine + admin are done; instrumentation is glue,
   mirroring the A/B pillar's remaining step.)
+- **#60 Marketing Push Notifications** — mig `0061_marketing_push.sql`:
+  `marketing_push_campaigns` (title, body, url, segment_id [future targeting],
+  audience, status [draft/sending/sent/failed], recipients/sent/failed/skipped/
+  clicked counts, sent_at, soft-delete). **Reuses** `lib/server/push.ts`
+  (`sendPushToUsers`, VAPID/FCM) + `push_devices` (mig 0035). Pure logic
+  `lib/marketing/push.ts` (`selectPushRecipients` dedupe + suppression filter,
+  `deliveryRate`, `canSendPush`, `summarizePush`; 5 tests). Page
+  `/admin/marketing/push` (create draft, Send broadcast, stats incl. opted-in
+  device count, honest "push not configured" banner when VAPID/FCM keys are
+  missing — sends still record but devices are skipped). Actions
+  `push/actions.ts`: `sendPushCampaignAction` reserves status='sending' (no
+  double-send), resolves opted-in `push_devices.user_id`, maps user→email via
+  `profiles`, excludes `marketing_suppressions` emails, fans out, records counts.
+  Nav: Push. **Apply 0061 at merge.** NEXT: (1) **segment targeting** (the
+  `segment_id` column + 'segment' audience exist; resolve a segment's members →
+  user_ids); (2) **click tracking** (append a tracked param to the url + an
+  endpoint that bumps `clicked`); (3) a scheduled/cron send option.
 
 ### Already EXISTS in the app (don't rebuild — extend)
 Email (`/email`, `marketing_email_campaigns`) · Automation (`/automation`,
@@ -370,10 +388,12 @@ Marketing ✅ (`marketing_videos`; admin/catalog done — public embed + JSON-LD
 next) · Blog Platform ✅ (content_items → blog_posts publish pipeline; no
 migration; rich editor + JSON-LD = next) · Personalization Engine ✅
 (`marketing_personalization_rules` + server resolver; surface instrumentation =
-next) · Push Notifications (NEXT pillar — marketing; reuse `lib/push`/VAPID:
-`marketing_push_campaigns` {title, body, url, segment_id, status, sent/clicked},
-send to opted-in `push_devices`, honor `marketing_suppressions`) · Exit-Intent
-Popups (popup_id, conversion_rate) · Affiliate Management (distinct from
+next) · Push Notifications ✅ (`marketing_push_campaigns`; broadcast send reusing
+VAPID/FCM, honors suppressions; segment targeting + click tracking = next) ·
+Exit-Intent Popups (NEXT pillar — `marketing_exit_intent` {offer headline/body/
+cta, audience rules jsonb like Personalization, trigger config, impressions/
+conversions}; client trigger on the public site (mouseleave/scroll-velocity),
+shown once per visitor, A/B-instrumented) · Affiliate Management (distinct from
 referrals: affiliate_id, commission).
 MEDIUM: Competitor Monitoring · Keyword Intelligence · Backlink Monitoring (extend SEO).
 Each: new table(s) per the field lists in the spec, pure logic + tests, an admin
@@ -383,7 +403,7 @@ page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branc
 1. `git checkout claude/marketing-platform` (create from main if missing), build the
    next pillar following the conventions above, commit to the branch (do NOT merge).
 2. Keep `tsc`/lint/build/vitest green each commit. New migration = next number
-   (**0061+**; this branch's marketing migrations are 0054–0060, renumbered to sit
+   (**0062+**; this branch's marketing migrations are 0054–0061, renumbered to sit
    after main's max). Note it must be applied to prod at merge time, and re-check
    it's still after main's highest migration just before merging.
 3. When the platform is "ready to come together," open the PR to main and apply all
