@@ -316,6 +316,20 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   pages (the consume side; admin/catalog is done); (2) **JSON-LD VideoObject**
   schema on pages that embed a published video (transcript → AEO/SEO);
   (3) auto-fetch **duration + poster** via the YouTube/Vimeo oEmbed API.
+- **#58 Blog Platform (publish pipeline)** — **NO migration** (bridges existing
+  `marketing_content_items` → existing `blog_posts`, mig 0010, which already
+  powers the public `/blog` + `/blog/[slug]`). Pure logic
+  `lib/marketing/blog-publish.ts` (`contentBodyToBlocks` plain-text→BlogBlock[],
+  `estimateReadingMinutes`, `deriveExcerpt`, `blogSlugify`, `normalizeCategory`,
+  `buildBlogPost`; 8 tests). Actions `content/actions.ts`: `updateContentAction`
+  (edit body + workflow status + `metadata.blog` {slug,category,author,excerpt,
+  featured,tags}), `publishContentToBlogAction` (upsert `blog_posts` keyed by
+  slug → marks the item `published`, stamps the slug back), `unpublishBlogPostAction`.
+  `/admin/marketing/content` now edits the body/blog-meta inline and has a
+  **Publish to blog** button; the published list links to the live post + can
+  Unpublish. NEXT: (1) a rich-text/markdown editor (today the body is plain text
+  with `#`/`**…**` → h2); (2) **JSON-LD Article** schema on `/blog/[slug]`;
+  (3) image/cover via the **Asset Library** picker.
 
 ### Already EXISTS in the app (don't rebuild — extend)
 Email (`/email`, `marketing_email_campaigns`) · Automation (`/automation`,
@@ -337,11 +351,14 @@ extend `marketing_segments`).
 HIGH: Testimonials ✅ + Case Studies ✅ (distinct from reviews) · Asset Library ✅
 (`marketing_assets` + private bucket; picker/thumbnails/backrefs = next) · Video
 Marketing ✅ (`marketing_videos`; admin/catalog done — public embed + JSON-LD =
-next) · Blog Platform (NEXT pillar — extend `marketing_content_items`: publish an
-approved content item to a public `/blog/[slug]` route, render body, JSON-LD
-Article) · Personalization Engine · Push Notifications (marketing; reuse
-`lib/push`) · Exit-Intent Popups (popup_id, conversion_rate) · Affiliate
-Management (distinct from referrals: affiliate_id, commission).
+next) · Blog Platform ✅ (content_items → blog_posts publish pipeline; no
+migration; rich editor + JSON-LD = next) · Personalization Engine (NEXT pillar —
+`marketing_personalization_rules`: audience-match jsonb like Segments, slot/key,
+content variant, priority; server resolves best-match per visitor/segment for
+hero/CTA/landing slots, record exposures via the A/B `/api/ab/track` plumbing) ·
+Push Notifications (marketing; reuse `lib/push`) · Exit-Intent Popups (popup_id,
+conversion_rate) · Affiliate Management (distinct from referrals: affiliate_id,
+commission).
 MEDIUM: Competitor Monitoring · Keyword Intelligence · Backlink Monitoring (extend SEO).
 Each: new table(s) per the field lists in the spec, pure logic + tests, an admin
 page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branch.
