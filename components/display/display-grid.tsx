@@ -151,7 +151,7 @@ function WidgetBody({ widget, data, memberById }: {
           style={fr?.imageUrl ? { backgroundImage: `url(${fr.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background: 'linear-gradient(135deg,#7c3aed33,#2563eb22)' }}>
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
           <div className="relative">
-            <p className="text-xs font-semibold uppercase tracking-widest text-white/70">{fr ? 'Featured Recipe' : 'FamilyOS'}</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-white/70">{fr ? 'Featured Recipe' : 'Bubaly'}</p>
             <p className="mt-1 text-4xl font-black text-white">{fr?.name ?? data.familyName}</p>
             {fr?.category && <p className="mt-1 text-sm text-white/70">{fr.category}</p>}
           </div>

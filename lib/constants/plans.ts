@@ -65,6 +65,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/settings': 0,
   '/dashboard/billing':  0,
   '/dashboard/assistant':0,  // metered AI (10 requests/mo on Free)
+  '/dashboard/social':   0,  // Social Command (page enforces requireUserContext)
   // Basic routes
   '/dashboard/chores':        1,
   '/dashboard/rewards':       1,
@@ -76,6 +77,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/sports':        1,
   '/dashboard/health':        1,
   '/dashboard/home':          1,
+  '/dashboard/auto':          1,
   '/dashboard/renewals':      1,
   '/dashboard/medical':       1,
   '/dashboard/care':          1,
@@ -92,6 +94,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   // Plus routes
   '/dashboard/command-center':  2, // AI Family Command Center
   '/dashboard/weekly-briefing': 2, // Weekly AI Briefing
+  '/dashboard/conflicts':       2, // AI Conflict Resolution
 };
 
 // ── Legacy Plan type (kept for admin display) ────────────────────────────────
