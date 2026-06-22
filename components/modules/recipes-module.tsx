@@ -12,6 +12,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
+import { RECIPE_AI_ACTIONS } from '@/lib/recipes/ai-actions';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -69,6 +70,7 @@ export function RecipesModule() {
   const [viewing, setViewing] = useState<Recipe | null>(null);
   const [editing, setEditing] = useState<Recipe | null>(null);
   const [servingsOverride, setServingsOverride] = useState<number | null>(null);
+  const [aiBusy, setAiBusy] = useState<string | null>(null);
   // When adding a recipe to the grocery list but none exists yet, prompt to
   // create + name one inline rather than failing.
   const [groceryPrompt, setGroceryPrompt] = useState<Recipe | null>(null);
@@ -103,6 +105,24 @@ export function RecipesModule() {
     const supabase = createClient();
     await supabase.from('family_recipes').update({ is_favorite: !r.is_favorite }).eq('id', r.id);
     void refresh();
+  }
+
+  async function remix(recipe: Recipe, actionId: string) {
+    setAiBusy(actionId);
+    try {
+      const res = await fetch('/api/recipes/transform', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipeId: recipe.id, actionId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Could not generate variant');
+      success('AI variant saved to your recipes');
+      setViewing(null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Could not generate variant');
+    } finally {
+      setAiBusy(null);
+    }
   }
 
   async function markMade(r: Recipe) {
@@ -361,6 +381,24 @@ export function RecipesModule() {
               <Button variant="outline" size="sm" className="ml-auto" onClick={() => addToGrocery(viewing)}>
                 <ShoppingCart className="h-4 w-4" /> Add to Grocery List
               </Button>
+            </div>
+
+            {/* AI Remix — saves a transformed variant to your recipes */}
+            <div className="mb-5 rounded-2xl border border-brand/25 bg-brand/5 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand" /> AI Remix</p>
+              <div className="flex flex-wrap gap-2">
+                {RECIPE_AI_ACTIONS.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => remix(viewing, a.id)}
+                    disabled={aiBusy !== null}
+                    className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-medium transition hover:border-brand/50 hover:bg-elevated disabled:opacity-50"
+                  >
+                    {aiBusy === a.id ? 'Working…' : a.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-muted">Creates a new variant in your recipes. AI amounts/nutrition are estimates — not medical advice.</p>
             </div>
 
             {/* Ingredients */}
