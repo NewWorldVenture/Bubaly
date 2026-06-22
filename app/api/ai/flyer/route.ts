@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { getAIConfig } from '@/lib/ai/settings';
 
 export const runtime = 'nodejs';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
@@ -99,8 +98,18 @@ Rules:
       ? { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data } }
       : { type: 'image' as const, source: { type: 'base64' as const, media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif', data } };
 
+    // Flyer parsing needs PDF/vision input, which is Anthropic-specific — use the
+    // admin-configured Anthropic key/model (Admin → AI Engine), with env fallback.
+    const aiConfig = await getAIConfig(createServiceClient());
+    const apiKey = aiConfig.anthropicKey ?? process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: 'Flyer scanning needs an Anthropic API key. Add one in Admin → AI Engine.' }, { status: 503 });
+    }
+    const model = aiConfig.provider === 'anthropic' && aiConfig.model ? aiConfig.model : 'claude-sonnet-4-6';
+    const anthropic = new Anthropic({ apiKey });
+
     const response = await anthropic.messages.create({
-      model: process.env.AI_MODEL ?? 'claude-sonnet-4-6',
+      model,
       max_tokens: 1500,
       messages: [{ role: 'user', content: [filePart, { type: 'text', text: prompt }] }],
     });
