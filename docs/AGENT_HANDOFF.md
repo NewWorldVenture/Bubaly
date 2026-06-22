@@ -184,18 +184,18 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0058**.
-(0050 dedup index applied; **0051 `checkout_sessions`** (on main, #89) and
-**0052 `crm`** + **0053 `crm_quotes`** + **0054 `visitor_intelligence`** + **0055 `reputation`** +
-**0056 `marketing_assets`** + **0057 `marketing_videos`** (on branch
-`claude/marketing-platform`, not yet merged) still need applying to prod when
-their PRs land.)
+Latest migration applied to prod: **0050**. Next migration number: **0060**.
+(0050 dedup index applied; **0051 `checkout_sessions`**, **0052 `family_onboarding`**,
+**0053 `landing_metrics`** are on main. This branch's marketing-platform
+migrations — **0054 `crm`** + **0055 `crm_quotes`** + **0056 `visitor_intelligence`** +
+**0057 `reputation`** + **0058 `marketing_assets`** + **0059 `marketing_videos`** —
+still need applying to prod when this PR lands.)
 
-> ⚠️ **Migration-number collision at merge time.** `main` has since merged its own
-> `0052_family_onboarding` and `0053_landing_metrics` (different files, same
-> numbers). When this long-lived branch finally merges, **renumber this branch's
-> 0052–0057 to the next free numbers on main** (and update the filenames + this
-> doc) before applying. The files are otherwise independent/idempotent.
+> ✅ **Merge-ready: branch migrations renumbered.** They previously collided with
+> main's `0052_family_onboarding`/`0053_landing_metrics`; the six branch
+> migrations were renumbered **0052–0057 → 0054–0059** (filenames + in-file
+> headers updated) so they slot cleanly after main's max (0053). If `main` gains
+> new migrations before this merges, bump these again to stay after main's max.
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -250,7 +250,7 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
 - Pure logic in `lib/marketing/<feature>.ts` + vitest tests.
 
 ### Built on this branch so far
-- **#52 CRM + Sales Pipeline (cornerstone)** — mig `0052_crm.sql`: `crm_contacts`
+- **#52 CRM + Sales Pipeline (cornerstone)** — mig `0054_crm.sql`: `crm_contacts`
   (first/last/email/phone/company, lead_status, lifecycle_stage, lead_source,
   family_id, owner_id) + `crm_deals` (contact_id, name, amount_cents, stage,
   close_date). Pure logic `lib/marketing/crm.ts` (stages, `dealsByStage`,
@@ -258,15 +258,15 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   10 tests). Pages `/admin/marketing/crm` (contacts + add form) and
   `/admin/marketing/pipeline` (stage board, add/advance/delete deals). Actions in
   `app/(app)/admin/marketing/crm/actions.ts`. Nav: CRM + Pipeline added to SUBNAV.
-  **Migration 0052 must be applied to prod when this branch merges.**
-- **#53 Proposals / Quotes** — mig `0053_crm_quotes.sql`: `crm_quotes` (contact_id,
+  **Migration 0054 must be applied to prod when this branch merges.**
+- **#53 Proposals / Quotes** — mig `0055_crm_quotes.sql`: `crm_quotes` (contact_id,
   deal_id, title, status [draft/sent/accepted/declined/expired], amount_cents,
   valid_until, sent_at, responded_at). Pure logic `lib/marketing/quotes.ts`
   (status lifecycle, `isExpired`/`effectiveStatus`, `summarizeQuotes`; 8 tests).
   Page `/admin/marketing/proposals` (stats, new-quote form, send/accept/decline/
-  delete). Actions `proposals/actions.ts`. Nav: Proposals. **Apply 0053 at merge.**
+  delete). Actions `proposals/actions.ts`. Nav: Proposals. **Apply 0055 at merge.**
 - **#54 Customer Intelligence (Visitor Tracking + Attribution + CDP-lite)** — mig
-  `0054_visitor_intelligence.sql`: `mkt_visitors` (anonymous_id CDP spine,
+  `0056_visitor_intelligence.sql`: `mkt_visitors` (anonymous_id CDP spine,
   contact_id stitch, session_count), `mkt_sessions` (source/medium/campaign,
   landing_path), `mkt_touchpoints` (kind touch|conversion). Ingest:
   `POST /api/mkt/track` (service-role; upserts visitor, records session +
@@ -274,19 +274,19 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   linear/position-based), `creditForVisitor`, `attributeConversions`,
   `conversionCount` (11 tests). Page `/admin/marketing/intelligence` (visitor/
   session/conversion stats, top channels bar, attribution-by-model grid). Nav:
-  Intelligence. **Apply 0054 at merge.** NEXT: wire `/api/mkt/track` calls into
+  Intelligence. **Apply 0056 at merge.** NEXT: wire `/api/mkt/track` calls into
   the marketing site (UTM capture on landing + a conversion call on signup), and
   stitch `contact_id` when a visitor identifies (set on signup/contact-form).
 - **#55 Reputation & Trust (Testimonials + Case Studies)** — mig
-  `0055_reputation.sql`: `testimonials` (author, quote, rating, is_published,
+  `0057_reputation.sql`: `testimonials` (author, quote, rating, is_published,
   sort_order) + `case_studies` (title, slug UNIQUE, industry, customer_name,
   summary, result_metric, is_published). Pure logic `lib/marketing/reputation.ts`
   (`slugify`, `publishedOnly`, `clampRating`; 5 tests). Page
   `/admin/marketing/reputation` (both sections: add/publish-toggle/delete). Actions
-  `reputation/actions.ts`. Nav: Reputation. **Apply 0055 at merge.** NEXT: render
+  `reputation/actions.ts`. Nav: Reputation. **Apply 0057 at merge.** NEXT: render
   published testimonials/case-studies on the public marketing site (read via
   service client in a server component, `publishedOnly`).
-- **#56 Asset Library (DAM)** — mig `0056_marketing_assets.sql`: `marketing_assets`
+- **#56 Asset Library (DAM)** — mig `0058_marketing_assets.sql`: `marketing_assets`
   (name, kind [image/video/document/brand], storage_path, mime_type, size_bytes,
   width/height, alt_text, tags text[], metadata, deleted_at) + a **private
   `marketing-assets` Storage bucket** (50 MB/file, NO storage.objects policies →
@@ -297,11 +297,11 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   previews + inline edit alt/tags + delete). Actions `assets/actions.ts`
   (`uploadAssetAction` uploads to the bucket then inserts, rolling back the
   orphaned object on insert failure; `deleteAssetAction` removes the file then
-  soft-deletes the row). Nav: Assets. **Apply 0056 at merge.** NEXT: (1) a
+  soft-deletes the row). Nav: Assets. **Apply 0058 at merge.** NEXT: (1) a
   reusable **asset picker** component for Email/Social/Content/Landing authoring;
   (2) image **dimensions + thumbnail** capture on upload (width/height columns
   exist, currently null); (3) **"where used" backrefs** so deletes warn.
-- **#57 Video Marketing** — mig `0057_marketing_videos.sql`: `marketing_videos`
+- **#57 Video Marketing** — mig `0059_marketing_videos.sql`: `marketing_videos`
   (title, provider [youtube/vimeo/upload], video_id, url, storage_path,
   poster_url, captions_url, transcript, duration_seconds, status [draft/
   published], tags[], metadata, soft-delete). Pure logic `lib/marketing/video.ts`
@@ -311,7 +311,7 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   with YouTube thumbnails, publish toggle, delete). Actions `video/actions.ts`
   (`saveVideoAction` parses the URL or resolves the asset's storage_path;
   `toggleVideoPublishAction`; `deleteVideoAction` soft-deletes — the underlying
-  asset stays in the library). Nav: Video. **Apply 0057 at merge.** NEXT:
+  asset stays in the library). Nav: Video. **Apply 0059 at merge.** NEXT:
   (1) public **embed component** that renders `embedUrl()` in content/landing
   pages (the consume side; admin/catalog is done); (2) **JSON-LD VideoObject**
   schema on pages that embed a published video (transcript → AEO/SEO);
@@ -350,7 +350,9 @@ page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branc
 1. `git checkout claude/marketing-platform` (create from main if missing), build the
    next pillar following the conventions above, commit to the branch (do NOT merge).
 2. Keep `tsc`/lint/build/vitest green each commit. New migration = next number
-   (0053+); note it must be applied to prod at merge time.
+   (**0060+**; this branch's marketing migrations are renumbered 0054–0059 to sit
+   after main's max). Note it must be applied to prod at merge time, and re-check
+   it's still after main's highest migration just before merging.
 3. When the platform is "ready to come together," open the PR to main and apply all
    its migrations. Until then it stays on the branch.
 

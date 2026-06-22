@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0052: CRM — contacts + sales pipeline (deals)
+-- Migration 0054: CRM — contacts + sales pipeline (deals)
 -- The cornerstone of the Bubaly marketing platform ("HubSpot competitor"): a
 -- single source of truth for people (contacts) and revenue (deals/pipeline).
 -- Business-wide marketing data → service-role only (RLS ENABLED, NO policies),
