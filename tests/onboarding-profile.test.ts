@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { splitFullName, joinName, normalizePhone, isLikelyPhone } from '@/lib/onboarding/profile';
+import { onboardingProfileSchema, profileUpdateSchema } from '@/lib/validation';
 
 describe('splitFullName', () => {
   it('splits first and last', () => {
@@ -52,5 +53,18 @@ describe('isLikelyPhone', () => {
     expect(isLikelyPhone('12345')).toBe(false);
     expect(isLikelyPhone('1234567890123456')).toBe(false);
     expect(isLikelyPhone('')).toBe(false);
+  });
+});
+
+describe('profile schemas', () => {
+  it('onboardingProfileSchema requires name, phone, email', () => {
+    expect(onboardingProfileSchema.safeParse({ firstName: 'A', lastName: 'B', phone: '5551234', email: 'a@b.com' }).success).toBe(true);
+    expect(onboardingProfileSchema.safeParse({ firstName: '', lastName: 'B', phone: '5551234', email: 'a@b.com' }).success).toBe(false);
+    expect(onboardingProfileSchema.safeParse({ firstName: 'A', lastName: 'B', phone: '12', email: 'a@b.com' }).success).toBe(false);
+    expect(onboardingProfileSchema.safeParse({ firstName: 'A', lastName: 'B', phone: '5551234', email: 'nope' }).success).toBe(false);
+  });
+  it('profileUpdateSchema requires name + phone (no email)', () => {
+    expect(profileUpdateSchema.safeParse({ firstName: 'A', lastName: 'B', phone: '5551234' }).success).toBe(true);
+    expect(profileUpdateSchema.safeParse({ firstName: 'A', lastName: '', phone: '5551234' }).success).toBe(false);
   });
 });
