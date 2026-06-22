@@ -190,6 +190,7 @@ export function RecipesModule() {
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
               {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
+            <a href="/dashboard/recipes/discover" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Search className="h-4 w-4" /> Discover</a>
             <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Recipe</Button>
           </div>
         }
