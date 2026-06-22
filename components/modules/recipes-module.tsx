@@ -71,6 +71,28 @@ export function RecipesModule() {
   const [editing, setEditing] = useState<Recipe | null>(null);
   const [servingsOverride, setServingsOverride] = useState<number | null>(null);
   const [aiBusy, setAiBusy] = useState<string | null>(null);
+  const [tonightOpen, setTonightOpen] = useState(false);
+  const [tonightConstraint, setTonightConstraint] = useState('');
+  const [tonightBusy, setTonightBusy] = useState(false);
+  const [tonightPicks, setTonightPicks] = useState<{ id: string; name: string; cuisine: string | null; reason: string }[] | null>(null);
+
+  async function suggestTonight() {
+    setTonightBusy(true);
+    setTonightPicks(null);
+    try {
+      const res = await fetch('/api/recipes/suggest', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ constraint: tonightConstraint }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Could not get suggestions');
+      setTonightPicks(json.picks ?? []);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Could not get suggestions');
+    } finally {
+      setTonightBusy(false);
+    }
+  }
   // When adding a recipe to the grocery list but none exists yet, prompt to
   // create + name one inline rather than failing.
   const [groceryPrompt, setGroceryPrompt] = useState<Recipe | null>(null);
@@ -210,6 +232,7 @@ export function RecipesModule() {
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
               {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
+            <button onClick={() => { setTonightOpen(true); setTonightPicks(null); }} className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-semibold text-brand hover:bg-brand/15"><Sparkles className="h-4 w-4" /> Tonight?</button>
             <a href="/dashboard/recipes/discover" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Search className="h-4 w-4" /> Discover</a>
             <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Recipe</Button>
           </div>
@@ -481,6 +504,43 @@ export function RecipesModule() {
               <Button type="submit" loading={creatingList} disabled={!newListName.trim()}>Create &amp; add</Button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {tonightOpen && (
+        <Modal open onClose={() => setTonightOpen(false)} title="What can we make tonight?">
+          <div className="space-y-4">
+            <p className="text-sm text-muted">We&apos;ll pick from your saved recipes. Optionally tell us what you have or need.</p>
+            <Input value={tonightConstraint} onChange={(e) => setTonightConstraint(e.target.value)}
+              placeholder="e.g. we have chicken & rice · quick · no dairy" />
+            <Button onClick={suggestTonight} loading={tonightBusy} className="w-full">
+              <Sparkles className="h-4 w-4" /> {tonightBusy ? 'Thinking…' : 'Suggest dinner'}
+            </Button>
+
+            {tonightPicks && tonightPicks.length === 0 && (
+              <p className="rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">
+                No matches yet — save a few recipes (try Discover) and ask again.
+              </p>
+            )}
+            {tonightPicks && tonightPicks.length > 0 && (
+              <ul className="space-y-2">
+                {tonightPicks.map((p) => {
+                  const recipe = (recipes ?? []).find((r) => r.id === p.id);
+                  return (
+                    <li key={p.id}>
+                      <button
+                        onClick={() => { if (recipe) { setViewing(recipe); setTonightOpen(false); } }}
+                        className="w-full rounded-xl border border-border bg-surface/40 p-3 text-left transition hover:border-brand/40"
+                      >
+                        <p className="text-sm font-semibold">{p.name}{p.cuisine ? <span className="ml-1 text-xs font-normal text-muted">· {p.cuisine}</span> : null}</p>
+                        <p className="mt-0.5 text-xs text-muted">{p.reason}</p>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </Modal>
       )}
     </div>

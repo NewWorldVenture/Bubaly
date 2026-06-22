@@ -1,7 +1,21 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Recipe AI Actions PR. Keep this updated as you ship.
+Last updated after the "What can we make tonight?" PR. Keep this updated as you ship.
+
+> **Session update (2026-06-22g) — FAMILY FOOD OS, PHASE 3: "What can we make tonight?"**
+> - **Shipped:** AI suggests dinner from the family's OWN saved vault (always cookable),
+>   with an optional free-text constraint ("we have chicken & rice", "quick", "no dairy").
+> - `lib/recipes/suggest.ts` (pure, 4 tests): `buildSuggestPrompt` (lists vault id/name/
+>   ingredients, JSON-only) + `parseSuggestions` (keeps only valid, de-duped vault ids).
+> - `POST /api/recipes/suggest { constraint? }` — auth + rate-limited; loads up to 80 vault
+>   recipes (favorites first), `resolveProvider().complete(maxTokens 600)`, returns picks
+>   that map back to real recipes. **No migration.**
+> - UI: "Tonight?" button in the recipes header → modal with constraint box + tappable
+>   picks that open the recipe (`recipes-module.tsx`).
+> - **NEXT (food OS):** pantry table + barcode (Open Food Facts) to power true
+>   "use what we have"; then meal voting → ratings → vault OCR → admin provider settings;
+>   tier-gate/meter AI (recipe transform + suggest are rate-limited only).
 
 > **Session update (2026-06-22f) — FAMILY FOOD OS, PHASE 2: AI Recipe Actions.**
 > - **Shipped:** transform any saved recipe into a new vault variant — healthier,
