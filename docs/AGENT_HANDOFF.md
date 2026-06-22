@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after PR #72. Keep this updated as you ship.
+Last updated after PR #74. Keep this updated as you ship.
 
 ## Product & stack
 - **Bubaly / FamilyOS** — a family operating system. Next.js 15 App Router + TS +
@@ -62,6 +62,7 @@ Last updated after PR #72. Keep this updated as you ship.
 
 ## Conventions
 - **Migrations**: `supabase/migrations/00NN_name.sql`. Next number after **0047**.
+  Next number after **0048**.
   Helpers available in DB: `public.is_family_member(family_id)`, `public.is_super_admin()`,
   `public.set_updated_at()` trigger fn, `gen_random_uuid()`.
 - **Family-scoped tables** (member data): RLS pattern —
@@ -106,13 +107,13 @@ npx vitest run tests/<your>.test.ts
 - #67 tier-aware UpgradeModal · #68 tier-aware billing deep-link
 - #69 Family Announcements (mig 0046) · #70 Event RSVP + event detail (mig 0047)
 - #71 Family Activity Feed (read-time, no schema) · #72 Quick Capture FAB
+- #73 this handoff doc · #74 Smart Birthday & Anniversary Center (mig 0048, `family_dates`)
 
 ## Backlog (prioritized, each a clean PR)
-1. **Smart Birthday/Anniversary Center** (Free) — auto reminders from member birthdays
-   + custom family dates. Likely needs a `family_dates` table (family-scoped RLS).
-2. **Family Readiness Snapshot** (Free) — simple computed score; teases Plus.
-3. **Family Memory Timeline** (Free) — milestones/trips/achievements.
-4. Marketing pillars still open from the earlier brief: Customer Health & Churn
+1. **Family Readiness Snapshot** (Free) — simple computed score from real activity
+   (events/chores/lists); teases Plus. Likely read-time, no schema.
+2. **Family Memory Timeline** (Free) — milestones/trips/achievements.
+3. Marketing pillars still open from the earlier brief: Customer Health & Churn
    scoring, A/B testing, Lead scoring, lifecycle journeys.
 5. Broader UX brief (Phases 3/4/5/9/11): mobile-first polish, theme-token audit,
    Family Command Center home, AI-native touches, performance.
