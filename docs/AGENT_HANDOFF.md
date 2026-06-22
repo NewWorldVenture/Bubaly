@@ -802,6 +802,16 @@ Plus) and flows those changes to the pricing page + in-app gating. **NO migratio
   from `useApp()` reflects the live subscription). Helper `tierLabelForLevel(level)`
   + `TIER_LABEL_BY_LEVEL` in `lib/constants/plans.ts` (tested in plans.test.ts).
 
+## Marketing admin subnav — grouped multi-row tabs
+The ~40 `/admin/marketing/*` surfaces were one long horizontal-scroll row. Now a
+**grouped, wrapping tab panel** (`app/(app)/admin/marketing/marketing-subnav.tsx`,
+client component using `usePathname` for active highlighting). Items are organized
+into labelled rows: Overview · CRM & Sales · Audience & Intelligence · Channels ·
+Growth · Content & SEO · Reputation & Loyalty. `flex-wrap` chips = no horizontal
+scroll, mobile-friendly (label stacks above chips < sm). `layout.tsx` just renders
+`<MarketingSubnav />`. **When adding a new marketing page, add its chip to the
+right GROUP in `marketing-subnav.tsx`** (the old flat SUBNAV array is gone).
+
 ## Backlog (prioritized, each a clean PR)
 1. Event-driven automation triggers (form_submitted, email_opened/clicked,
    checkout_abandoned) — instrument app events to fire workflows in real time.
