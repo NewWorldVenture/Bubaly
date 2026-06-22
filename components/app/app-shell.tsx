@@ -387,6 +387,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         open={upgradeFor !== null}
         onClose={() => setUpgradeFor(null)}
         featureLabel={upgradeFor?.label}
+        requiredLevel={upgradeFor?.minLevel ?? 1}
       />
     </div>
   );
