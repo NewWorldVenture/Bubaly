@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { getProvider } from '@/lib/ai/provider';
+import { resolveProvider } from '@/lib/ai/provider';
 import { TRADES } from '@/lib/home/maintenance';
 
 export const runtime = 'nodejs';
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
 
   let text: string;
   try {
-    const completion = await getProvider().complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
+    const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
     text = completion.text.trim();
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'AI request failed' }, { status: 503 });

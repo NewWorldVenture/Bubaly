@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { getProvider } from '@/lib/ai/provider';
+import { resolveProvider } from '@/lib/ai/provider';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   }
   void ctx;
 
-  const provider = getProvider();
+  const provider = await resolveProvider();
   const system =
     'You are a calm, practical family scheduling assistant. Two events overlap. ' +
     'Give exactly 3 short, concrete resolution options a busy parent could act on in seconds. ' +

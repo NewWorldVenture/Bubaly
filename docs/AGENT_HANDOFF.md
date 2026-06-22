@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after PR #78. Keep this updated as you ship.
+Last updated after PR #79. Keep this updated as you ship.
 
 ## Product & stack
 - **Bubaly / FamilyOS** — a family operating system. Next.js 15 App Router + TS +
@@ -111,8 +111,34 @@ npx vitest run tests/<your>.test.ts
 - #75 Family Readiness Snapshot (read-time, no schema; teases Plus)
 - #76 handoff refresh · #77 Family Memory Timeline (read-time: milestones+trips+photos)
 - #78 Customer Health & Churn scoring (admin marketing; read-time over MarketingCustomer)
+- #79 Configurable AI engine (Claude/Anthropic OR ChatGPT/OpenAI) + admin UI for keys
 
 Latest migration applied to prod: **0048**. Next migration number: **0049**.
+
+## AI engine (configurable provider) — added in #79
+- **Choose the AI engine + set API keys at `/admin/ai`** (super-admin only; linked from
+  Admin → Settings). Stores config in `app_settings` key `ai_provider`
+  `{ provider, model, anthropicKey, openaiKey }`. Keys are write-only (masked; blank
+  field keeps the existing key). No migration — reuses `app_settings` (service-role).
+- `lib/ai/provider.ts`: `AnthropicProvider` + `OpenAIProvider` (raw fetch, no SDK dep),
+  `providerFromConfig()`, `getProvider()` (env fallback), and **`resolveProvider()`**
+  (async; reads settings via service client → falls back to env).
+- `lib/ai/models.ts`: client-safe `AIEngine`, `AI_MODELS`, `AIConfigView` (DO NOT import
+  the `server-only` `lib/ai/settings.ts` from client components — that was a build break).
+- `lib/ai/settings.ts` (server-only): `getAIConfig` (real keys), `getAIConfigView`
+  (masked), `setAIConfig`.
+- **Wired through:** all `getProvider()` route callers were migrated to
+  `await resolveProvider()` (briefings, conflict, home AI, marketing AI, social, accident,
+  import) AND the main assistant `app/api/ai/chat/route.ts` (was using the Anthropic SDK
+  directly — now uses `resolveProvider()`).
+- **Still on Anthropic SDK / not yet routed through the provider** (follow-up if needed):
+  `app/api/ai/briefing/route.ts`, `app/api/ai/weekly-briefing/route.ts`,
+  `app/api/ai/flyer/route.ts` (verify with `grep -rln "@anthropic-ai/sdk" app lib`).
+  Migrate the same way — but note `flyer` uses image input, which the generic
+  `complete()` interface doesn't model yet, so it may need an interface extension.
+- To use ChatGPT: open `/admin/ai`, pick **ChatGPT (OpenAI)**, choose a model (gpt-4o…),
+  paste the OpenAI key, Save. Optional env fallbacks: `OPENAI_API_KEY`, `AI_PROVIDER=openai`,
+  `AI_MODEL`.
 
 ## Backlog (prioritized, each a clean PR)
 1. Remaining marketing pillars: **A/B testing**, **Lead scoring**, lifecycle journeys.

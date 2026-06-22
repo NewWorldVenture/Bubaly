@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import Anthropic from '@anthropic-ai/sdk';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { resolveProvider, type AIMessage } from '@/lib/ai/provider';
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,24 +35,21 @@ export async function POST(req: NextRequest) {
       `Open chores: ${chores?.length ?? 0}`,
     ].join('\n');
 
-    const messages: Anthropic.MessageParam[] = [
+    const messages: AIMessage[] = [
       ...((history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))),
-      { role: 'user', content: message },
+      { role: 'user' as const, content: message },
     ];
 
-    const response = await anthropic.messages.create({
-      model: process.env.AI_MODEL ?? 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      system: `You are a helpful family assistant for Bubaly. You help families coordinate schedules, chores, meals, and more.
+    const system = `You are a helpful family assistant for Bubaly. You help families coordinate schedules, chores, meals, and more.
 
 Current family context:
 ${familyContext}
 
-Be concise, warm, and practical. When asked to create or plan things, describe what you'd do clearly.`,
-      messages,
-    });
+Be concise, warm, and practical. When asked to create or plan things, describe what you'd do clearly.`;
 
-    const assistantContent = response.content[0].type === 'text' ? response.content[0].text : '';
+    const provider = await resolveProvider();
+    const completion = await provider.complete({ system, messages, tools: [] });
+    const assistantContent = completion.text;
 
     // Persist both messages
     await supabase.from('ai_messages').insert([
