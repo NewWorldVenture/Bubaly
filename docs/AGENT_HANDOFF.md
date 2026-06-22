@@ -184,11 +184,11 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0055**.
+Latest migration applied to prod: **0050**. Next migration number: **0056**.
 (0050 dedup index applied; **0051 `checkout_sessions`** (on main, #89) and
-**0052 `crm`** + **0053 `crm_quotes`** + **0054 `visitor_intelligence`** (on
-branch `claude/marketing-platform`, not yet merged) still need applying to prod
-when their PRs land.)
+**0052 `crm`** + **0053 `crm_quotes`** + **0054 `visitor_intelligence`** + **0055 `reputation`** (on branch
+`claude/marketing-platform`, not yet merged) still need applying to prod when
+their PRs land.)
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -270,6 +270,15 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   Intelligence. **Apply 0054 at merge.** NEXT: wire `/api/mkt/track` calls into
   the marketing site (UTM capture on landing + a conversion call on signup), and
   stitch `contact_id` when a visitor identifies (set on signup/contact-form).
+- **#55 Reputation & Trust (Testimonials + Case Studies)** — mig
+  `0055_reputation.sql`: `testimonials` (author, quote, rating, is_published,
+  sort_order) + `case_studies` (title, slug UNIQUE, industry, customer_name,
+  summary, result_metric, is_published). Pure logic `lib/marketing/reputation.ts`
+  (`slugify`, `publishedOnly`, `clampRating`; 5 tests). Page
+  `/admin/marketing/reputation` (both sections: add/publish-toggle/delete). Actions
+  `reputation/actions.ts`. Nav: Reputation. **Apply 0055 at merge.** NEXT: render
+  published testimonials/case-studies on the public marketing site (read via
+  service client in a server component, `publishedOnly`).
 
 ### Already EXISTS in the app (don't rebuild — extend)
 Email (`/email`, `marketing_email_campaigns`) · Automation (`/automation`,
@@ -288,7 +297,7 @@ CRITICAL: CRM ✅ · Sales Pipeline ✅ · Proposal/Quotes ✅ · Visitor Tracki
 identity stitching) · Attribution (touchpoints: touchpoint_id, source, campaign) ·
 Visitor Tracking (sessions, page_views, visitor_id) · Audience Segmentation (dynamic,
 extend `marketing_segments`).
-HIGH: Testimonials + Case Studies (distinct from reviews) · Asset Library (assets:
+HIGH: Testimonials ✅ + Case Studies ✅ (distinct from reviews) · Asset Library (assets:
 file_type, storage_url via Supabase Storage) · Video Marketing · Blog Platform
 (extend content) · Personalization Engine · Push Notifications (marketing; reuse
 `lib/push`) · Exit-Intent Popups (popup_id, conversion_rate) · Affiliate Management

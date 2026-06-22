@@ -22,6 +22,7 @@ const SUBNAV = [
   ['/admin/marketing/referrals', 'Referrals'],
   ['/admin/marketing/surveys', 'Surveys'],
   ['/admin/marketing/reviews', 'Reviews'],
+  ['/admin/marketing/reputation', 'Reputation'],
   ['/admin/marketing/funnels', 'Funnels'],
   ['/admin/marketing/landing-pages', 'Landing Pages'],
   ['/admin/marketing/forms', 'Forms'],
