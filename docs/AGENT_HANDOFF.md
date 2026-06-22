@@ -230,6 +230,129 @@ Latest migration applied to prod: **0050**. Next migration number: **0052**.
   paste the OpenAI key, Save. Env fallbacks: `OPENAI_API_KEY`, `AI_PROVIDER=openai`, `AI_MODEL`.
   (The OpenAI account/key must have active billing or calls 401/429.)
 
+## Marketing Platform — vision, pillar map & roadmap
+
+### Vision
+A self-serve, AI-assisted **growth platform** that lives inside the super-admin
+console (`/admin/marketing/*`) and powers Bubaly's own acquisition, activation,
+retention, and reputation — without paying for HubSpot/Klaviyo/Ahrefs. Every
+pillar is **real and wired to Supabase** (no mock data): admins author/configure
+in the console; engines (cron + event-driven) execute; the public marketing site
+(`app/(marketing)`) and the product surface the results. The bar: each pillar is
+production-grade, honest (never shows "sent/published/won" unless it truly
+happened), and instrumented (A/B + automation events where it makes sense).
+
+### Marketing-table conventions (READ BEFORE ADDING A PILLAR)
+- **Business-wide tables** (not family data): name `marketing_*` (or a clear
+  domain noun like `surveys`, `reviews`, `loyalty_*`, `referral_*`, `ab_*`).
+  RLS **ENABLED with NO policies** → service-role only. All access goes through
+  `lib/marketing/admin.ts` `requireMarketingAdmin()` (returns `{ supabase:
+  serviceClient, actorId, actorEmail }`, super-admin gated) and writes are
+  audited via `logMarketingAudit(supabase, {action, resource, resourceId?, …})`
+  → `marketing_audit_logs`. Template: `0013_marketing.sql`, `0020`, `0021`.
+- **Standard columns:** `id uuid pk`, `status text CHECK(...)`, `metadata jsonb`,
+  `created_by/updated_by uuid → auth.users`, **soft delete `deleted_at`**, and
+  `created_at/updated_at` with the `set_updated_at()` trigger. Multi-step
+  structures (funnel steps, automation steps, form fields) live as `jsonb` on the
+  parent row.
+- **Family-readable marketing tables** (a family sees its own slice): use
+  `is_family_member(family_id)` for SELECT only, writes still service-role — e.g.
+  `loyalty_accounts/transactions/redemptions`, public `reviews`, `referrals`.
+- **Types:** hand-add each table to `lib/database.types.ts` as `T<Row,Insert,Update>`.
+- **Pure logic** (scoring, significance, dedup, selection) → `lib/marketing/*.ts`
+  with vitest tests. Engines run via `/api/cron/*` (Bearer `CRON_SECRET`, scheduled
+  in `vercel.json`) and/or event-driven (`fireAutomationEvent`).
+
+### Branch strategy (one pillar = one clean PR)
+`git fetch origin main && git checkout -b claude/marketing-<pillar> origin/main` →
+build → **verify** (`tsc --noEmit`, `next lint`, `next build`, `vitest run`, and
+validate the migration **twice** on a throwaway Postgres 16 cluster for
+idempotency + RLS/CHECK) → draft PR (`mcp__github__create_pull_request`) → mark
+ready → **squash-merge** → apply the migration to prod (Supabase Management API,
+see migration section; **next number: 0052**) → update this doc's pillar row +
+its NEXT step. Keep each PR to one pillar.
+
+### Pillar map (✅ shipped · 🟡 partial · ⬜ not built)
+
+| Pillar | Status | Tables (migration) | Key fields | Admin route | NEXT |
+|---|---|---|---|---|---|
+| Segments | ✅ | `marketing_segments` (0013) | kind(dynamic/static), rules jsonb, member_keys[] | `/admin/marketing/segments` | Materialize dynamic rules against live customers for campaign targeting |
+| Campaigns | ✅ | `marketing_campaigns` (0013) | objective, channel, type, status, segment_id, budget_cents, kpis | `/admin/marketing/campaigns` | Roll up per-channel results (email/sms/ads) into campaign KPIs |
+| Email | ✅ | `marketing_email_campaigns` (0013) | subject, body_html, status, recipients/opens/clicks/bounces, provider_ref | `/admin/marketing/email` | Real send to a segment via Resend + opens/clicks from the Resend webhook |
+| SMS | 🟡 | `marketing_sms_campaigns` (0020) | message, status, recipients/delivered/replies/opt_outs | `/admin/marketing/sms` | Wire a real SMS provider (Twilio) + STOP opt-out → `marketing_suppressions` |
+| Social | 🟡 | `marketing_social_posts` (0020) | platform, content, link, status, scheduled_at | `/admin/marketing/social` | Publish via the product Social Command Center connectors (honest: only on provider confirm) |
+| Ads | 🟡 | `marketing_ad_campaigns` (0020) | platform, budget/spend_cents, impressions/clicks/conversions, utm | `/admin/marketing/ads` | Pull spend/perf from Meta/Google Ads APIs (manual entry only today) |
+| Content calendar | ✅ | `marketing_content_items` (0013) | kind, brief, body, status, publish_at | `/admin/marketing/content` | "Publish to blog" → create a `blog_posts` row from an approved item |
+| SEO | 🟡 | `marketing_seo_pages`, `marketing_seo_keywords` (0013) | path/score/issues; keyword/intent/source/status | `/admin/marketing/seo` | First-party only today → see **Competitor/Keyword/Backlink** below |
+| AEO | ✅ | `marketing_aeo_questions` (0013) | question/answer, pattern, clarity_score, status | `/admin/marketing/aeo` | Emit JSON-LD FAQ schema on public pages from `answered` Q&As |
+| Funnels | 🟡 | `marketing_funnels` (0020) | steps jsonb, status | `/admin/marketing/funnels` | Compute real step conversion from `ab_events`/page analytics (steps are descriptive today) |
+| Landing pages | 🟡 | `marketing_landing_pages` (0020) | slug, headline, subhead, body, published, views, conversions | `/admin/marketing/landing-pages` | **Public renderer (see wiring TODO #54)** — no public route serves these yet |
+| Forms | 🟡 | `marketing_forms`, `marketing_form_submissions` (0020) | fields jsonb; submission payload | `/admin/marketing/forms` | **Public embed + submit endpoint (see wiring TODO #55)** — fire `form_submitted` |
+| Automation / lifecycle | ✅ | `marketing_automation_workflows`, `marketing_automation_runs` (0020), dedup idx (0050), `checkout_sessions` (0051) | trigger, steps jsonb, subject_key | `/admin/marketing/automation` | Execute non-email actions (notify_admin/apply_tag) — recorded but not run (#87) |
+| Customers | ✅ | read-time over contact tickets / Stripe (no table) | MarketingCustomer snapshot | `/admin/marketing/customers` | Persist a `marketing_customers` table for tags/notes instead of read-time only |
+| Customer Health & Churn | ✅ (#78) | read-time | churn score over snapshot | `/admin/marketing/health` | Trigger a win-back automation when score crosses a threshold |
+| Lead Scoring | ✅ (#86) | read-time (`lib/marketing/lead-score.ts`) | score over contact-form tickets | `/admin/marketing/leads` | Persist scores + route hot leads into an automation |
+| A/B Testing | ✅ (#85) | `ab_experiments`, `ab_events` (0049) | variants, metric, exposure/conversion | `/admin/marketing/experiments` | **Instrument real surfaces** — call `assignVariant` + `/api/ab/track` on a CTA |
+| Surveys / NPS / CES / CSAT | ✅ (Pillar 1) | `surveys`, `survey_responses` (0040) | kind(nps/ces/csat), questions jsonb; score/answers | `/admin/marketing/surveys` + public `/s/[slug]` | Auto-route detractors (NPS ≤6) into a follow-up automation |
+| Reviews & Reputation | ✅ (Pillar 2) | `reviews`, `reputation_settings` (0041) | rating, status, reply; platform URLs, min_public_rating | `/admin/marketing/reviews` + public `/reviews`, `/reviews/new` | Email/SMS review-request blast to happy customers |
+| Referrals | ✅ (#39) | `referral_codes`, `referrals` (0039) | code, reward, status | `/admin/marketing/referrals` + `/referrals` | Auto-credit Loyalty points on a `referred→converted` transition |
+| Loyalty & Rewards | ✅ (Pillar 3, #94) | `loyalty_settings/rewards/accounts/transactions/redemptions` (0042) | points/tier ledger; catalog | `/admin/marketing/loyalty` | Family-facing rewards browse/redeem page + hook signup/referral/review → `awardPoints` |
+| Suppressions | ✅ | `marketing_suppressions` (0021) | email/phone, reason | (enforced at send) | Honor across every real send path (email today; SMS/push next) |
+| Settings / Audit / Assistant / Analytics | ✅ | `marketing_settings`, `marketing_audit_logs` (0013) | k/v; actor/action/resource | `/admin/marketing/{settings,audit,assistant,analytics}` | — |
+
+### Remaining pillars to build (⬜ — the growth backlog)
+Each is a clean PR following the conventions above. Suggested order top-to-bottom.
+
+1. **Public-site wiring (TODOs #54 & #55) — do these first; the data already exists.**
+   - **#54 Landing pages → public renderer.** `marketing_landing_pages` has
+     `slug`, `headline/subhead/body`, `published`, `views`, `conversions`, but no
+     public route serves them. Build `app/(marketing)/lp/[slug]/page.tsx` that
+     renders a `published` page, increments `views`, exposes a CTA that records a
+     `conversion`, and (optionally) runs through A/B + a `form_submitted`-style
+     event. Add `/lp` to `middleware.ts` PUBLIC.
+   - **#55 Forms → public embed + submit.** `marketing_forms` (fields jsonb) +
+     `marketing_form_submissions` exist with admin authoring but no public
+     render/submit. Build a public form renderer + `POST` action that inserts a
+     submission (service-role) and calls `fireAutomationEvent('form_submitted', …)`
+     — mirror how the existing contact form already fires that event.
+2. **Asset Library (DAM)** ⬜ — `marketing_assets` (kind image/video/doc/brand,
+   storage_path, tags[], dimensions, alt, usage refs) + a **private storage
+   bucket** `marketing-assets`. Picker reused by Email/Social/Content/Landing.
+   NEXT after build: thumbnail generation + "where used" backrefs.
+3. **Video** ⬜ — `marketing_videos` (provider youtube/vimeo/upload, url/storage_path,
+   poster, captions, transcript, status). Embeds in content/landing; transcript
+   feeds AEO/SEO. Pairs with Asset Library.
+4. **Personalization** ⬜ — `marketing_personalization_rules` (audience match jsonb
+   like Segments, slot/key, content variant, priority). Server resolves the
+   best-match variant per visitor/segment for hero/CTA/landing slots; record
+   exposures via the A/B `/api/ab/track` plumbing.
+5. **Push (marketing)** ⬜ — distinct from transactional web-push (`push_devices`,
+   0035, already used for product notifications). Add `marketing_push_campaigns`
+   (title, body, url, segment_id, status, sent/clicked) and send via the existing
+   web-push/VAPID path to opted-in devices; honor `marketing_suppressions`.
+6. **Exit-intent** ⬜ — `marketing_exit_intent` (offer headline/body/CTA, audience
+   rules, trigger config, impressions/conversions). Client trigger on the public
+   site (mouseleave/scroll-velocity), shown once per visitor; A/B-instrumented.
+7. **Affiliate / Partner program** ⬜ — distinct from Referrals (customer-to-
+   customer). `affiliates` (partner, payout terms, status) + `affiliate_clicks` +
+   `affiliate_conversions` with attribution windows and a payout ledger. Public
+   `?ref=` capture + a partner dashboard.
+8. **Competitor / Keyword / Backlink intelligence** ⬜ — upgrades SEO from
+   first-party-only. `marketing_competitors` (domain, notes, tracked terms),
+   `marketing_keyword_research` (volume/difficulty/CPC from an external API),
+   `marketing_backlinks` (source/target/anchor/first_seen/lost_at, monitoring).
+   Requires an external data provider (DataForSEO/Ahrefs/SerpApi) — gate behind a
+   configurable key in `marketing_settings` and **degrade honestly** (show
+   "connect a data source" when unset; never fabricate metrics).
+
+### Public-site wiring TODOs (detail — tracked as #54/#55)
+The marketing **builders ship before their public surfaces**. As of now, the
+admin can fully author landing pages and forms, but the public site does not yet
+render or accept them — this is the single biggest "looks done but isn't wired"
+gap. Close it via items 1.#54 and 1.#55 above. Same caution applies to any future
+builder: ship the public renderer/endpoint in the same PR as the authoring UI, or
+record it here as a wiring TODO so it isn't mistaken for complete.
+
 ## Backlog (prioritized, each a clean PR)
 1. Event-driven automation triggers (form_submitted, email_opened/clicked,
    checkout_abandoned) — instrument app events to fire workflows in real time.
