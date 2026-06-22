@@ -10,25 +10,28 @@ import { Input, Field } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { cn } from '@/lib/utils/cn';
 import { addCalendarFeed, syncCalendarFeed, removeCalendarFeed } from '@/app/(app)/dashboard/sync/feeds/actions';
+import { CALENDAR_PROVIDERS, getCalendarProvider, type CalendarProvider } from '@/lib/calendar/providers';
 import type { Tables } from '@/lib/database.types';
 
 type CalendarFeed = Tables<'calendar_feeds'>;
-
-const PROVIDER_PRESETS = [
-  { name: 'Google Calendar', icon: '🗓️', hint: 'Settings → "Secret address in iCal format" in Google Calendar' },
-  { name: 'Apple Calendar', icon: '🍎', hint: 'File → Export, or share a public calendar ICS link' },
-  { name: 'Outlook / Microsoft 365', icon: '📅', hint: 'Calendar → Share → Publish online → ICS link' },
-  { name: 'Other ICS feed', icon: '🔗', hint: 'Any public .ics URL (webcal:// will be converted automatically)' },
-];
 
 export function CalendarSyncPanel() {
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
+  const [providerId, setProviderId] = useState<string | null>(null);
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
   const [adding, setAdding] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
+
+  const provider = providerId ? getCalendarProvider(providerId) : null;
+
+  function pick(p: CalendarProvider) {
+    setProviderId(p.id);
+    setName((prev) => prev || (p.id === 'ics' ? '' : p.label));
+  }
+  function closeModal() { setOpen(false); setProviderId(null); setUrl(''); setName(''); }
 
   // Feeds now persist in Supabase — they sync across every device and
   // auto-refresh nightly via cron, instead of living in this browser only.
@@ -45,7 +48,7 @@ export function CalendarSyncPanel() {
     setAdding(false);
     if (!res.ok) { toastError(res.error); return; }
     success(res.imported != null ? `Added — ${res.imported} events imported` : 'Calendar added');
-    setOpen(false); setUrl(''); setName('');
+    closeModal();
   }
 
   async function sync(feed: CalendarFeed) {
@@ -121,42 +124,51 @@ export function CalendarSyncPanel() {
       )}
 
       {open && (
-        <Modal open onClose={() => setOpen(false)} title="Subscribe to a Calendar">
-          <form onSubmit={add} className="space-y-4">
+        <Modal open onClose={closeModal} title={provider ? `Connect ${provider.label}` : 'Connect a calendar'}>
+          {!provider ? (
             <div>
-              <label className="mb-2 block text-sm font-medium">Quick start</label>
-              <div className="grid grid-cols-2 gap-2">
-                {PROVIDER_PRESETS.map((p) => (
-                  <button key={p.name} type="button" onClick={() => setName(p.name)}
-                    className={cn('flex items-center gap-2 rounded-xl border p-2.5 text-left text-xs transition hover:bg-elevated',
-                      name === p.name ? 'border-brand/60 bg-brand/10' : 'border-border')}>
-                    <span className="text-2xl">{p.icon}</span>
-                    <div>
-                      <p className="font-semibold">{p.name}</p>
-                      <p className="text-muted line-clamp-2">{p.hint}</p>
-                    </div>
+              <p className="mb-3 text-sm text-muted">Pick where your events live — we&apos;ll show you exactly how to connect it.</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {CALENDAR_PROVIDERS.map((p) => (
+                  <button key={p.id} type="button" onClick={() => pick(p)}
+                    className="flex flex-col items-center gap-1.5 rounded-xl border border-border p-3 text-center text-xs transition hover:border-brand/50 hover:bg-elevated">
+                    <span className={cn('grid h-10 w-10 place-items-center rounded-full text-xl', p.accent)}>{p.icon}</span>
+                    <span className="font-semibold leading-tight">{p.label}</span>
                   </button>
                 ))}
               </div>
             </div>
-            <Field label="Calendar name">
-              {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Work, School, Soccer…" />}
-            </Field>
-            <Field label="ICS / webcal URL" required>
-              {(id) => (
-                <Input id={id} value={url} onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" autoFocus />
+          ) : (
+            <form onSubmit={add} className="space-y-4">
+              <button type="button" onClick={() => setProviderId(null)} className="text-xs font-semibold text-muted hover:text-fg">← All calendars</button>
+
+              {provider.connect === 'oauth' && provider.connectUrl && (
+                <a href={provider.connectUrl}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand/90">
+                  <Check className="h-4 w-4" /> Connect {provider.label} — two-way
+                </a>
               )}
-            </Field>
-            <p className="text-xs text-muted">
-              Events import into your Bubaly calendar and refresh automatically.
-              <strong className="text-fg"> webcal://</strong> URLs are supported.
-            </p>
-            <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={adding}>Cancel</Button>
-              <Button type="submit" disabled={adding}>{adding ? 'Adding…' : 'Add & Sync Now'}</Button>
-            </div>
-          </form>
+
+              <div className="rounded-xl border border-border bg-surface/40 p-3">
+                <p className="mb-1.5 text-xs font-semibold">{provider.connect === 'oauth' ? 'Prefer read-only? Paste a link:' : 'How to find your link'}</p>
+                <ol className="list-inside list-decimal space-y-1 text-xs text-muted">
+                  {provider.steps.map((s, i) => <li key={i}>{s}</li>)}
+                </ol>
+              </div>
+
+              <Field label="Calendar name">
+                {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Work, School, Soccer…" />}
+              </Field>
+              <Field label="ICS / webcal URL" required>
+                {(id) => <Input id={id} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={provider.placeholder} autoFocus />}
+              </Field>
+              <p className="text-xs text-muted">Events import into your Bubaly calendar and refresh nightly. <strong className="text-fg">webcal://</strong> links work too.</p>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button type="button" variant="ghost" onClick={closeModal} disabled={adding}>Cancel</Button>
+                <Button type="submit" disabled={adding}>{adding ? 'Adding…' : 'Add & Sync Now'}</Button>
+              </div>
+            </form>
+          )}
         </Modal>
       )}
     </div>

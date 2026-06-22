@@ -1,7 +1,33 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after PR #87. Keep this updated as you ship.
+Last updated after the calendar-connect UX PR. Keep this updated as you ship.
+
+> **Session update (2026-06-22d, branch `claude/funny-darwin-gkmptm`):**
+> - **Two-way calendar sync — "super easy connect" UX.** A full sync platform
+>   already exists (migrations 0018/0019/0045): Google OAuth two-way
+>   (`/api/sync/google/*`, only provider implemented in `lib/sync/providers/`),
+>   encrypted tokens, conflict engine, ICS feeds (`calendar_feeds` + nightly
+>   `/api/cron/calendar-feeds`), and a published Bubaly feed
+>   (`/api/sync/feeds/[token]`, `lib/sync/feed-token.ts`).
+> - **This PR** added `lib/calendar/providers.ts` (pure, tested): a provider
+>   catalog (Google, Apple/iCloud, Outlook/MS, Schoology, Google Classroom,
+>   Canvas, TeamSnap, generic ICS) each with step-by-step "where to find your
+>   ICS URL" + placeholders; plus `webcalUrl`/`httpsUrl`/`addToCalendarLinks`
+>   (Google/Outlook/Apple one-click subscribe links for OUTBOUND).
+> - **Rebuilt `components/dashboard/calendar-sync-panel.tsx`** into a guided
+>   provider grid: pick a provider → Google shows one-click two-way OAuth +
+>   read-only fallback; others show exact steps + a paste-the-URL field. Inbound
+>   uses the existing `addCalendarFeed` action (ICS, auto-refreshed nightly).
+>   Lives in Settings (`components/modules/settings-module.tsx`). No migration.
+> - **NEXT (calendar):** (1) **Outbound section in the panel** — surface the
+>   family's published Bubaly feed URL with copy + the `addToCalendarLinks`
+>   buttons (need to get/create the family feed token; see `lib/sync/feed-token.ts`
+>   + `sync_calendars.feed_enabled` / `/api/sync/feeds/[token]`). (2) **Implement
+>   more real two-way providers** beyond Google: Microsoft Graph (Outlook) and
+>   Apple CalDAV — `lib/sync/providers/` only has `google.ts`; capabilities matrix
+>   in `lib/sync/capabilities.ts` already lists them. (3) Add provider presets to
+>   the main `/dashboard/sync` hub too (currently capability-matrix only).
 
 > **Session update (2026-06-22d, branch `claude/loving-mccarthy-e1ahq8`):**
 > - **Public-site wiring #55 DONE — marketing Forms now render & accept submissions
