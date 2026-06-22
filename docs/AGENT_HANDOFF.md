@@ -126,6 +126,13 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - #85 A/B Testing pillar (mig 0049 `ab_experiments`+`ab_events`; admin UI + `/api/ab/track` + significance engine)
 - #86 Lead Scoring (read-time over contact-form tickets; `lib/marketing/lead-score.ts` + `/admin/marketing/leads`)
 - #87 Lifecycle journeys runner: `lib/marketing/automation-runner.ts` + `/api/cron/automations` (daily)
+- #88 Event-driven automation triggers (mig 0050 dedup index): `fireAutomationEvent`
+  (`lib/marketing/automation-events.ts`) fires `form_submitted`/`email_opened`/
+  `email_clicked`/`payment_completed` in real time from the contact form, Resend
+  webhook, and Stripe `checkout.session.completed`. Shared step executor extracted
+  to `lib/marketing/automation-steps.ts`; pure trigger registry/dedup in
+  `lib/marketing/automation-triggers.ts`. Reserves the run row first
+  (ON CONFLICT DO NOTHING) so redelivered webhooks can't double-send.
 
 ## Lifecycle journeys / automation runner — added in #87
 - The `marketing_automation_workflows` admin UI already existed; #87 adds the **runner**
