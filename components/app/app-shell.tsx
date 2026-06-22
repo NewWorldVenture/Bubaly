@@ -8,6 +8,7 @@ import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { APP_NAV_GROUPS, MOBILE_TABS, type NavItem } from '@/lib/constants/navigation';
 import { ROLE_LABELS } from '@/lib/constants/roles';
+import { tierLabelForLevel } from '@/lib/constants/plans';
 import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { cn } from '@/lib/utils/cn';
 import { useTheme } from '@/components/theme/use-theme';
@@ -23,7 +24,7 @@ function isActive(pathname: string, href: string) {
 }
 
 function FamilySwitcher() {
-  const { family, families, role } = useApp();
+  const { family, families, role, planLevel } = useApp();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -46,7 +47,7 @@ function FamilySwitcher() {
         <Avatar name={family.name} size={32} className="rounded-lg" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{family.name}</p>
-          <p className="truncate text-xs text-muted">{ROLE_LABELS[role]}</p>
+          <p className="truncate text-xs text-muted">{ROLE_LABELS[role]} / {tierLabelForLevel(planLevel)}</p>
         </div>
         <ChevronDown className="h-4 w-4 text-muted" />
       </button>

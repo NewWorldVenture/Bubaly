@@ -795,6 +795,12 @@ Plus) and flows those changes to the pricing page + in-app gating. **NO migratio
   override the hardcoded `minLevel` in `lib/constants/navigation.ts`. Today the
   admin control + pricing are live; nav still reads the static `minLevel`. (Verified:
   tsc/lint clean · vitest 494 · build OK; `/admin/tier-features` + `/pricing` built.)
+- **Account widget shows the subscription tier**: the bottom-left family switcher
+  (`components/app/app-shell.tsx` `FamilySwitcher`) now renders
+  `{ROLE_LABELS[role]} / {tierLabelForLevel(planLevel)}` → e.g. "Parent / Admin /
+  Free Tier", auto-updating to "Basic Tier"/"Plus Tier" on upgrade (`planLevel`
+  from `useApp()` reflects the live subscription). Helper `tierLabelForLevel(level)`
+  + `TIER_LABEL_BY_LEVEL` in `lib/constants/plans.ts` (tested in plans.test.ts).
 
 ## Backlog (prioritized, each a clean PR)
 1. Event-driven automation triggers (form_submitted, email_opened/clicked,
