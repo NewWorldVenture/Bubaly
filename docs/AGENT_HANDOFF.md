@@ -184,12 +184,12 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0060**.
+Latest migration applied to prod: **0050**. Next migration number: **0061**.
 (0050 dedup index applied; **0051 `checkout_sessions`**, **0052 `family_onboarding`**,
 **0053 `landing_metrics`** are on main. This branch's marketing-platform
 migrations — **0054 `crm`** + **0055 `crm_quotes`** + **0056 `visitor_intelligence`** +
-**0057 `reputation`** + **0058 `marketing_assets`** + **0059 `marketing_videos`** —
-still need applying to prod when this PR lands.)
+**0057 `reputation`** + **0058 `marketing_assets`** + **0059 `marketing_videos`** +
+**0060 `personalization`** — still need applying to prod when this PR lands.)
 
 > ✅ **Merge-ready: branch migrations renumbered.** They previously collided with
 > main's `0052_family_onboarding`/`0053_landing_metrics`; the six branch
@@ -330,6 +330,22 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   Unpublish. NEXT: (1) a rich-text/markdown editor (today the body is plain text
   with `#`/`**…**` → h2); (2) **JSON-LD Article** schema on `/blog/[slug]`;
   (3) image/cover via the **Asset Library** picker.
+- **#59 Personalization Engine** — mig `0060_personalization.sql`:
+  `marketing_personalization_rules` (name, slot, match jsonb, variant jsonb,
+  priority, status [active/paused], soft-delete). Pure engine
+  `lib/marketing/personalization.ts` (`ruleMatches` — source/medium/campaign/
+  segments/paths/countries/returning/minSessions, ALL must hold; `matchSpecificity`;
+  `resolveSlot`/`resolveVariant` — priority desc → specificity desc → oldest; 8
+  tests). Server resolver `lib/marketing/personalization-server.ts`
+  (`resolvePersonalization(slot, ctx)` reads active rules via service role →
+  resolves). Page `/admin/marketing/personalization` (create rule with audience
+  match + variant fields, grouped by slot, pause/activate, delete). Actions
+  `personalization/actions.ts`. Nav: Personalization. **Apply 0060 at merge.**
+  NEXT: **wire real surfaces** — call `resolvePersonalization('home_hero', ctx)`
+  in the marketing hero / pricing CTA / landing slots (build `ctx` from the
+  `mkt_*` visitor cookie + UTM params from #54), render the variant, and fire an
+  exposure to `/api/ab/track`. (Engine + admin are done; instrumentation is glue,
+  mirroring the A/B pillar's remaining step.)
 
 ### Already EXISTS in the app (don't rebuild — extend)
 Email (`/email`, `marketing_email_campaigns`) · Automation (`/automation`,
@@ -352,13 +368,13 @@ HIGH: Testimonials ✅ + Case Studies ✅ (distinct from reviews) · Asset Libra
 (`marketing_assets` + private bucket; picker/thumbnails/backrefs = next) · Video
 Marketing ✅ (`marketing_videos`; admin/catalog done — public embed + JSON-LD =
 next) · Blog Platform ✅ (content_items → blog_posts publish pipeline; no
-migration; rich editor + JSON-LD = next) · Personalization Engine (NEXT pillar —
-`marketing_personalization_rules`: audience-match jsonb like Segments, slot/key,
-content variant, priority; server resolves best-match per visitor/segment for
-hero/CTA/landing slots, record exposures via the A/B `/api/ab/track` plumbing) ·
-Push Notifications (marketing; reuse `lib/push`) · Exit-Intent Popups (popup_id,
-conversion_rate) · Affiliate Management (distinct from referrals: affiliate_id,
-commission).
+migration; rich editor + JSON-LD = next) · Personalization Engine ✅
+(`marketing_personalization_rules` + server resolver; surface instrumentation =
+next) · Push Notifications (NEXT pillar — marketing; reuse `lib/push`/VAPID:
+`marketing_push_campaigns` {title, body, url, segment_id, status, sent/clicked},
+send to opted-in `push_devices`, honor `marketing_suppressions`) · Exit-Intent
+Popups (popup_id, conversion_rate) · Affiliate Management (distinct from
+referrals: affiliate_id, commission).
 MEDIUM: Competitor Monitoring · Keyword Intelligence · Backlink Monitoring (extend SEO).
 Each: new table(s) per the field lists in the spec, pure logic + tests, an admin
 page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branch.
@@ -367,7 +383,7 @@ page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branc
 1. `git checkout claude/marketing-platform` (create from main if missing), build the
    next pillar following the conventions above, commit to the branch (do NOT merge).
 2. Keep `tsc`/lint/build/vitest green each commit. New migration = next number
-   (**0060+**; this branch's marketing migrations are renumbered 0054–0059 to sit
+   (**0061+**; this branch's marketing migrations are 0054–0060, renumbered to sit
    after main's max). Note it must be applied to prod at merge time, and re-check
    it's still after main's highest migration just before merging.
 3. When the platform is "ready to come together," open the PR to main and apply all
