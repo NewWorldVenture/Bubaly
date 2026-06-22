@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after PR #77. Keep this updated as you ship.
+Last updated after PR #78. Keep this updated as you ship.
 
 ## Product & stack
 - **Bubaly / FamilyOS** — a family operating system. Next.js 15 App Router + TS +
@@ -110,12 +110,12 @@ npx vitest run tests/<your>.test.ts
 - #73 this handoff doc · #74 Smart Birthday & Anniversary Center (mig 0048, `family_dates`)
 - #75 Family Readiness Snapshot (read-time, no schema; teases Plus)
 - #76 handoff refresh · #77 Family Memory Timeline (read-time: milestones+trips+photos)
+- #78 Customer Health & Churn scoring (admin marketing; read-time over MarketingCustomer)
 
 Latest migration applied to prod: **0048**. Next migration number: **0049**.
 
 ## Backlog (prioritized, each a clean PR)
-1. Marketing pillars still open from the earlier brief: Customer Health & Churn
-   scoring, A/B testing, Lead scoring, lifecycle journeys.
+1. Remaining marketing pillars: **A/B testing**, **Lead scoring**, lifecycle journeys.
 3. Broader UX brief (Phases 3/4/5/9/11): mobile-first polish, theme-token audit,
    Family Command Center home, AI-native touches, performance.
 
