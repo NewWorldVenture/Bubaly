@@ -269,6 +269,16 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; title: string; kind?: string; event_date: string; notes?: string | null; remind_days?: number; created_by?: string | null },
         Partial<{ member_id: string | null; title: string; kind: string; event_date: string; notes: string | null; remind_days: number }>
       >;
+      ab_experiments: T<
+        { id: string; key: string; name: string; hypothesis: string | null; status: string; variants: Json; metric: string; winner: string | null; created_by: string | null; updated_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; key: string; name: string; hypothesis?: string | null; status?: string; variants?: Json; metric?: string; winner?: string | null; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; hypothesis: string | null; status: string; variants: Json; metric: string; winner: string | null; updated_by: string | null; deleted_at: string | null }>
+      >;
+      ab_events: T<
+        { id: string; experiment_key: string; variant_key: string; kind: string; visitor_id: string | null; created_at: string },
+        { id?: string; experiment_key: string; variant_key: string; kind: string; visitor_id?: string | null; created_at?: string },
+        Partial<{ kind: string }>
+      >;
       opportunities: T<
         { id: string; family_id: string; member_id: string | null; title: string; category: string | null; url: string | null; cost: number | null; opens_at: string | null; deadline: string | null; status: OpportunityStatus; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id?: string | null; title: string; category?: string | null; url?: string | null; cost?: number | null; opens_at?: string | null; deadline?: string | null; status?: OpportunityStatus; notes?: string | null; created_by?: string | null },

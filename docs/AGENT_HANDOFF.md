@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after PR #84. Keep this updated as you ship.
+Last updated after PR #85. Keep this updated as you ship.
 
 ## Product & stack
 - **Bubaly / FamilyOS** — a family operating system. Next.js 15 App Router + TS +
@@ -123,8 +123,20 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - #80 Domain canonicalization: `theagoras.com` → `www.bubaly.com` (next.config redirect)
 - #81 Removed "Loved by N families" social-proof badge from the marketing hero
 - #82 handoff regen · #83 support@bubaly.com everywhere · #84 finished AI-engine wiring (briefing/weekly/flyer)
+- #85 A/B Testing pillar (mig 0049 `ab_experiments`+`ab_events`; admin UI + `/api/ab/track` + significance engine)
 
-Latest migration applied to prod: **0048**. Next migration number: **0049**.
+Latest migration applied to prod: **0049**. Next migration number: **0050**.
+
+## A/B Testing — added in #85
+- Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
+  start/pause, declare winner; results table with rate/lift/two-proportion significance).
+- `lib/marketing/ab.ts` (pure, tested): `assignVariant` (deterministic FNV hash → sticky,
+  even split), `computeABResults` (two-proportion z-test, p-value, lift), `leadingVariant`.
+- Tracking: `POST /api/ab/track { experiment, variant, kind: exposure|conversion, visitorId }`
+  — service-role insert into `ab_events`, only records for `running` experiments, deduped by
+  a unique (experiment, visitor, kind) index. To USE in a surface: call `assignVariant` to
+  pick a variant, render it, and `fetch('/api/ab/track', …)` on exposure + on conversion.
+  (Instrumenting specific pages/CTAs is the remaining glue — engine + admin are done.)
 
 ## AI engine (configurable provider) — added in #79
 - **Choose the AI engine + set API keys at `/admin/ai`** (super-admin only; linked from
@@ -151,7 +163,7 @@ Latest migration applied to prod: **0048**. Next migration number: **0049**.
   (The OpenAI account/key must have active billing or calls 401/429.)
 
 ## Backlog (prioritized, each a clean PR)
-1. Remaining marketing pillars: **A/B testing**, **Lead scoring**, lifecycle journeys.
+1. Remaining marketing pillars: **Lead scoring**, lifecycle journeys. (A/B testing done #85.)
 2. Broader UX brief (Phases 3/4/5/9/11): mobile-first polish, theme-token audit,
    Family Command Center home, AI-native touches, performance.
 - (DONE #84) Finish AI-engine wiring: briefing/weekly-briefing → resolveProvider; flyer
