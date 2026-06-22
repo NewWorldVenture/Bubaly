@@ -19,15 +19,11 @@ import {
   Pill,
   PlatformBadges,
   PrimaryLink,
-  SocialProofLine,
   TestimonialBand,
   WatchDemoLink,
 } from '@/components/marketing/visual-mocks';
-import { getPublicStats } from '@/lib/marketing/stats';
-import { familiesHeadline } from '@/lib/marketing/format';
 
 export default async function HomePage() {
-  const { families } = await getPublicStats();
   return (
     <PageWrap>
       {/* ── Hero ── */}
@@ -54,10 +50,6 @@ export default async function HomePage() {
             </div>
             <div className="mt-6 flex justify-center lg:justify-start">
               <PlatformBadges />
-            </div>
-
-            <div className="mt-6 flex justify-center lg:justify-start">
-              <SocialProofLine text={familiesHeadline(families)} />
             </div>
           </div>
 
