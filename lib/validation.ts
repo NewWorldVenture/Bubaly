@@ -45,6 +45,21 @@ export const profileUpdateSchema = z.object({
 });
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
 
+// "About your family" onboarding step — household makeup, goals, attribution.
+export const familyDetailsSchema = z.object({
+  familyId: z.string().uuid('Missing family'),
+  householdAdults: z.coerce.number().int().min(0).max(20).default(1),
+  householdChildren: z.coerce.number().int().min(0).max(20).default(0),
+  childAges: z.array(z.number().int().min(0).max(21)).max(20).default([]),
+  region: z.string().trim().max(80).optional().default(''),
+  postalCode: z.string().trim().max(16).optional().default(''),
+  country: z.string().trim().max(80).optional().default(''),
+  goals: z.array(z.string()).max(20).default([]),
+  referralSource: z.string().trim().max(40).optional().default(''),
+  referralDetail: z.string().trim().max(200).optional().default(''),
+});
+export type FamilyDetailsInput = z.infer<typeof familyDetailsSchema>;
+
 export const inviteSchema = z.object({
   email: emailSchema,
   role: z.enum(['adult', 'teen', 'caregiver', 'guest']),

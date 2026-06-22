@@ -145,14 +145,14 @@ export interface Database {
         Partial<{ member_id: string | null; title: string; provider: string | null; location: string | null; starts_at: string; ends_at: string | null; notes: string | null }>
       >;
       chores: T<
-        { id: string; family_id: string; title: string; description: string | null; points: number; priority: Priority; recurrence: RecurrenceFreq; due_at: string | null; requires_approval: boolean; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; title: string; description?: string | null; points?: number; priority?: Priority; recurrence?: RecurrenceFreq; due_at?: string | null; requires_approval?: boolean; created_by?: string | null },
-        Partial<{ title: string; description: string | null; points: number; priority: Priority; recurrence: RecurrenceFreq; due_at: string | null; requires_approval: boolean }>
+        { id: string; family_id: string; title: string; description: string | null; points: number; priority: Priority; recurrence: RecurrenceFreq; due_at: string | null; requires_approval: boolean; created_by: string | null; category: string | null; difficulty: string; est_minutes: number | null; proof_required: string; reward_mode: string; cash_cents: number | null; cash_min_cents: number | null; cash_max_cents: number | null; points_min: number | null; points_max: number | null; auto_approve_score: number | null; safety_level: string; instructions: string | null; example_image_url: string | null; icon: string | null; is_active: boolean } & Stamps,
+        { id?: string; family_id: string; title: string; description?: string | null; points?: number; priority?: Priority; recurrence?: RecurrenceFreq; due_at?: string | null; requires_approval?: boolean; created_by?: string | null; category?: string | null; difficulty?: string; est_minutes?: number | null; proof_required?: string; reward_mode?: string; cash_cents?: number | null; cash_min_cents?: number | null; cash_max_cents?: number | null; points_min?: number | null; points_max?: number | null; auto_approve_score?: number | null; safety_level?: string; instructions?: string | null; example_image_url?: string | null; icon?: string | null; is_active?: boolean },
+        Partial<{ title: string; description: string | null; points: number; priority: Priority; recurrence: RecurrenceFreq; due_at: string | null; requires_approval: boolean; category: string | null; difficulty: string; est_minutes: number | null; proof_required: string; reward_mode: string; cash_cents: number | null; cash_min_cents: number | null; cash_max_cents: number | null; points_min: number | null; points_max: number | null; auto_approve_score: number | null; safety_level: string; instructions: string | null; example_image_url: string | null; icon: string | null; is_active: boolean }>
       >;
       chore_assignments: T<
-        { id: string; family_id: string; chore_id: string; member_id: string; status: TaskStatus; due_at: string | null; submitted_at: string | null; approved_at: string | null; approved_by: string | null; points_awarded: number | null } & Stamps,
+        { id: string; family_id: string; chore_id: string; member_id: string; status: TaskStatus; due_at: string | null; submitted_at: string | null; approved_at: string | null; approved_by: string | null; points_awarded: number | null; ai_score: number | null; cash_awarded_cents: number | null; disputed: boolean } & Stamps,
         { id?: string; family_id: string; chore_id: string; member_id: string; status?: TaskStatus; due_at?: string | null },
-        Partial<{ status: TaskStatus; due_at: string | null; submitted_at: string | null; approved_at: string | null; approved_by: string | null; points_awarded: number | null }>
+        Partial<{ status: TaskStatus; due_at: string | null; submitted_at: string | null; approved_at: string | null; approved_by: string | null; points_awarded: number | null; ai_score: number | null; cash_awarded_cents: number | null; disputed: boolean }>
       >;
       rewards: T<
         { id: string; family_id: string; title: string; description: string | null; cost_points: number; redeemed_by: string | null; redeemed_at: string | null; created_by: string | null } & Stamps,
@@ -173,6 +173,21 @@ export interface Database {
         { id: string; family_id: string; meal_id: string | null; plan_date: string; meal_type: MealType; created_by: string | null } & Stamps,
         { id?: string; family_id: string; meal_id?: string | null; plan_date: string; meal_type?: MealType; created_by?: string | null },
         Partial<{ meal_id: string | null; plan_date: string; meal_type: MealType }>
+      >;
+      meal_votes: T<
+        { id: string; family_id: string; created_by: string | null; title: string; meal_date: string | null; meal_type: string | null; status: string; deadline: string | null; allow_maybe: boolean; winner_option_id: string | null } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; title: string; meal_date?: string | null; meal_type?: string | null; status?: string; deadline?: string | null; allow_maybe?: boolean; winner_option_id?: string | null },
+        Partial<{ title: string; meal_date: string | null; meal_type: string | null; status: string; deadline: string | null; allow_maybe: boolean; winner_option_id: string | null }>
+      >;
+      meal_vote_options: T<
+        { id: string; vote_id: string; family_id: string; recipe_id: string | null; label: string; photo_url: string | null; created_at: string },
+        { id?: string; vote_id: string; family_id: string; recipe_id?: string | null; label: string; photo_url?: string | null },
+        Partial<{ label: string; photo_url: string | null; recipe_id: string | null }>
+      >;
+      meal_vote_ballots: T<
+        { id: string; vote_id: string; option_id: string; family_id: string; member_id: string; choice: string } & Stamps,
+        { id?: string; vote_id: string; option_id: string; family_id: string; member_id: string; choice?: string },
+        Partial<{ choice: string }>
       >;
       grocery_lists: T<
         { id: string; family_id: string; name: string; is_archived: boolean; created_by: string | null } & Stamps,
@@ -511,9 +526,9 @@ export interface Database {
         Partial<{ title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; assigned_to_id: string | null; member_id: string | null; updated_at: string }>
       >;
       family_recipes: T<
-        { id: string; family_id: string; name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; is_public: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; ai_generated: boolean; estimated_cost_cents: number | null; created_by: string | null; created_at: string; updated_at: string },
-        { id?: string; family_id: string; name: string; description?: string | null; category?: string; cuisine?: string | null; servings?: number; prep_time_mins?: number | null; cook_time_mins?: number | null; difficulty?: string; ingredients?: Json; instructions?: Json; notes?: string | null; photo_url?: string | null; tags?: string[]; allergy_flags?: string[]; source_url?: string | null; created_by?: string | null },
-        Partial<{ name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; updated_at: string }>
+        { id: string; family_id: string; name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; is_public: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; ai_generated: boolean; estimated_cost_cents: number | null; source_provider: string | null; source_recipe_id: string | null; attribution: string | null; license_notes: string | null; imported_at: string | null; raw_payload: Json | null; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name: string; description?: string | null; category?: string; cuisine?: string | null; servings?: number; prep_time_mins?: number | null; cook_time_mins?: number | null; difficulty?: string; ingredients?: Json; instructions?: Json; notes?: string | null; photo_url?: string | null; tags?: string[]; allergy_flags?: string[]; ai_generated?: boolean; source_url?: string | null; source_provider?: string | null; source_recipe_id?: string | null; attribution?: string | null; license_notes?: string | null; imported_at?: string | null; raw_payload?: Json | null; created_by?: string | null },
+        Partial<{ name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; source_provider: string | null; source_recipe_id: string | null; attribution: string | null; license_notes: string | null; imported_at: string | null; raw_payload: Json | null; updated_at: string }>
       >;
       todo_lists: T<
         { id: string; family_id: string; created_by: string | null; name: string; color: string; icon: string; is_shared: boolean; sort_order: number; archived_at: string | null; created_at: string; updated_at: string },
@@ -1135,11 +1150,83 @@ export interface Database {
         { id?: string; singleton?: boolean; google_url?: string | null; app_store_url?: string | null; play_store_url?: string | null; trustpilot_url?: string | null; request_headline?: string | null; request_message?: string | null; thank_you_high?: string | null; thank_you_low?: string | null; min_public_rating?: number; auto_approve_min?: number | null; updated_by?: string | null; metadata?: Json },
         Partial<{ google_url: string | null; app_store_url: string | null; play_store_url: string | null; trustpilot_url: string | null; request_headline: string | null; request_message: string | null; thank_you_high: string | null; thank_you_low: string | null; min_public_rating: number; auto_approve_min: number | null; updated_by: string | null; metadata: Json }>
       >;
+
+      // ---- Loyalty & Rewards (migration 0042) ----
+      loyalty_settings: T<
+        { id: string; singleton: boolean; enabled: boolean; program_name: string; points_label: string; earn_signup: number; earn_referral: number; earn_review: number; earn_per_dollar: number; tier_silver_at: number; tier_gold_at: number; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; singleton?: boolean; enabled?: boolean; program_name?: string; points_label?: string; earn_signup?: number; earn_referral?: number; earn_review?: number; earn_per_dollar?: number; tier_silver_at?: number; tier_gold_at?: number; updated_by?: string | null; metadata?: Json },
+        Partial<{ enabled: boolean; program_name: string; points_label: string; earn_signup: number; earn_referral: number; earn_review: number; earn_per_dollar: number; tier_silver_at: number; tier_gold_at: number; updated_by: string | null; metadata: Json }>
+      >;
+      loyalty_rewards: T<
+        { id: string; name: string; description: string | null; cost_points: number; kind: string; value_cents: number | null; image_url: string | null; stock: number | null; is_active: boolean; sort: number; created_by: string | null; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; name: string; description?: string | null; cost_points: number; kind?: string; value_cents?: number | null; image_url?: string | null; stock?: number | null; is_active?: boolean; sort?: number; created_by?: string | null; deleted_at?: string | null; metadata?: Json },
+        Partial<{ name: string; description: string | null; cost_points: number; kind: string; value_cents: number | null; image_url: string | null; stock: number | null; is_active: boolean; sort: number; deleted_at: string | null; metadata: Json }>
+      >;
+      loyalty_accounts: T<
+        { id: string; family_id: string; points_balance: number; lifetime_points: number; tier: string; joined_at: string; metadata: Json } & Stamps,
+        { id?: string; family_id: string; points_balance?: number; lifetime_points?: number; tier?: string; joined_at?: string; metadata?: Json },
+        Partial<{ points_balance: number; lifetime_points: number; tier: string; metadata: Json }>
+      >;
+      loyalty_transactions: T<
+        { id: string; family_id: string; points: number; kind: string; reason: string | null; source: string | null; balance_after: number; reward_id: string | null; created_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; points: number; kind?: string; reason?: string | null; source?: string | null; balance_after?: number; reward_id?: string | null; created_by?: string | null; metadata?: Json },
+        Partial<{ metadata: Json }>
+      >;
+      loyalty_redemptions: T<
+        { id: string; family_id: string; reward_id: string | null; reward_name: string; cost_points: number; status: string; code: string | null; fulfilled_at: string | null; fulfilled_by: string | null; notes: string | null; created_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; reward_id?: string | null; reward_name: string; cost_points: number; status?: string; code?: string | null; fulfilled_at?: string | null; fulfilled_by?: string | null; notes?: string | null; created_by?: string | null; metadata?: Json },
+        Partial<{ status: string; code: string | null; fulfilled_at: string | null; fulfilled_by: string | null; notes: string | null; metadata: Json }>
+      >;
+
+      // ---- Family Missions: AI chore proof/validation + gamification (migration 0043) ----
+      chore_submissions: T<
+        { id: string; family_id: string; assignment_id: string; chore_id: string | null; member_id: string; kind: string; media_paths: string[]; note: string | null; status: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; assignment_id: string; chore_id?: string | null; member_id: string; kind?: string; media_paths?: string[]; note?: string | null; status?: string; created_by?: string | null },
+        Partial<{ kind: string; media_paths: string[]; note: string | null; status: string }>
+      >;
+      chore_ai_validations: T<
+        { id: string; family_id: string; submission_id: string; status: string; quality_score: number | null; confidence: number | null; recommended_reward_type: string | null; recommended_reward_amount: number | null; kid_feedback: string | null; parent_summary: string | null; detected_issues: Json; safety_flags: Json; needs_parent_review: boolean; model: string | null; is_fallback: boolean } & Stamps,
+        { id?: string; family_id: string; submission_id: string; status: string; quality_score?: number | null; confidence?: number | null; recommended_reward_type?: string | null; recommended_reward_amount?: number | null; kid_feedback?: string | null; parent_summary?: string | null; detected_issues?: Json; safety_flags?: Json; needs_parent_review?: boolean; model?: string | null; is_fallback?: boolean },
+        Partial<{ status: string; quality_score: number | null; confidence: number | null; needs_parent_review: boolean }>
+      >;
+      chore_disputes: T<
+        { id: string; family_id: string; submission_id: string; member_id: string; reason: string | null; status: string; resolution: string | null; resolved_by: string | null; resolved_at: string | null } & Stamps,
+        { id?: string; family_id: string; submission_id: string; member_id: string; reason?: string | null; status?: string; resolution?: string | null; resolved_by?: string | null; resolved_at?: string | null },
+        Partial<{ reason: string | null; status: string; resolution: string | null; resolved_by: string | null; resolved_at: string | null }>
+      >;
+      chore_approval_events: T<
+        { id: string; family_id: string; assignment_id: string | null; submission_id: string | null; actor_id: string | null; action: string; points_awarded: number | null; cash_cents: number | null; note: string | null; created_at: string },
+        { id?: string; family_id: string; assignment_id?: string | null; submission_id?: string | null; actor_id?: string | null; action: string; points_awarded?: number | null; cash_cents?: number | null; note?: string | null },
+        Partial<{ note: string | null }>
+      >;
+      kid_progress: T<
+        { id: string; family_id: string; member_id: string; xp: number; level: number; current_streak: number; longest_streak: number; last_activity: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; xp?: number; level?: number; current_streak?: number; longest_streak?: number; last_activity?: string | null },
+        Partial<{ xp: number; level: number; current_streak: number; longest_streak: number; last_activity: string | null }>
+      >;
+      badges: T<
+        { id: string; name: string; description: string | null; icon: string | null; sort: number; created_at: string },
+        { id: string; name: string; description?: string | null; icon?: string | null; sort?: number },
+        Partial<{ name: string; description: string | null; icon: string | null; sort: number }>
+      >;
+      member_badges: T<
+        { id: string; family_id: string; member_id: string; badge_id: string; awarded_at: string },
+        { id?: string; family_id: string; member_id: string; badge_id: string; awarded_at?: string },
+        Partial<{ awarded_at: string }>
+      >;
+
+      // ---- Family onboarding details (migration 0052) ----
+      family_onboarding: T<
+        { id: string; family_id: string; household_adults: number; household_children: number; child_ages: number[]; region: string | null; postal_code: string | null; country: string | null; goals: string[]; referral_source: string | null; referral_detail: string | null; completed_at: string | null; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; household_adults?: number; household_children?: number; child_ages?: number[]; region?: string | null; postal_code?: string | null; country?: string | null; goals?: string[]; referral_source?: string | null; referral_detail?: string | null; completed_at?: string | null; metadata?: Json; created_by?: string | null },
+        Partial<{ household_adults: number; household_children: number; child_ages: number[]; region: string | null; postal_code: string | null; country: string | null; goals: string[]; referral_source: string | null; referral_detail: string | null; completed_at: string | null; metadata: Json }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
       accept_invite: { Args: { p_token: string }; Returns: string };
+      bump_landing_metric: { Args: { p_slug: string; p_metric: string }; Returns: undefined };
       grocery_from_meal_plan: { Args: { p_family_id: string; p_from: string; p_to: string; p_list_id?: string }; Returns: string };
       is_family_member: { Args: { p_family_id: string }; Returns: boolean };
       can_manage_family: { Args: { p_family_id: string }; Returns: boolean };

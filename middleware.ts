@@ -11,6 +11,12 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/reviews',
   // Public exit-intent offer resolve + metric beacon (anonymous visitors).
   '/api/exit-intent',
+  // Public marketing landing pages + their metric beacon.
+  '/lp',
+  '/api/lp/track',
+  // Public marketing forms (lead capture) + their submit endpoint.
+  '/f',
+  '/api/forms',
   // Public iCalendar feeds: subscribed to by Apple Calendar / Outlook / Alexa
   // with no login — the unguessable feed token IS the authorization.
   '/api/sync/feeds',
