@@ -10,6 +10,7 @@ export const EVENT_TRIGGERS = [
   'email_clicked',
   'payment_completed',
   'checkout_abandoned',
+  'onboarding_completed',
 ] as const;
 export type EventTrigger = (typeof EVENT_TRIGGERS)[number];
 
@@ -40,6 +41,10 @@ export const EVENT_DEFAULT_COPY: Record<EventTrigger, Copy> = {
   checkout_abandoned: {
     subject: 'Still thinking it over? Your Bubaly plan is waiting',
     body: 'You were a step away from upgrading your family plan. Pick up right where you left off — it only takes a minute, and you can cancel anytime.',
+  },
+  onboarding_completed: {
+    subject: 'Welcome to Bubaly — your family HQ is ready 🎉',
+    body: "Your family is all set up! Here's how to get the most out of Bubaly in the first week: add your calendar, set up chores, and invite everyone in.",
   },
 };
 

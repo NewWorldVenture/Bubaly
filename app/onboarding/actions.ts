@@ -1,11 +1,14 @@
 'use server';
 
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
 import { sendEmail } from '@/lib/server/email';
 import { APP_URL } from '@/lib/email';
-import { createFamilySchema, inviteSchema, onboardingProfileSchema } from '@/lib/validation';
+import { createFamilySchema, familyDetailsSchema, inviteSchema, onboardingProfileSchema } from '@/lib/validation';
 import { saveUserProfile } from '@/lib/server/profiles';
+import { cleanGoals, cleanReferralSource } from '@/lib/onboarding/family';
+import { fireAutomationEvent } from '@/lib/marketing/automation-events';
+import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -86,6 +89,67 @@ export async function createFamilyAction(input: { name: string; timezone: string
   });
 
   return { ok: true, data: { familyId: family.id } };
+}
+
+/**
+ * Captures the "About your family" step: household makeup, goals, and how they
+ * heard about Bubaly. Upserts one `family_onboarding` row, stamps it complete,
+ * and fires the `onboarding_completed` marketing automation (best-effort). RLS
+ * (`is_family_member`) guarantees the caller can only write their own family.
+ */
+export async function saveFamilyDetailsAction(input: {
+  familyId: string; householdAdults: number; householdChildren: number; childAges: number[];
+  region?: string; postalCode?: string; country?: string;
+  goals: string[]; referralSource?: string; referralDetail?: string;
+}): Promise<Result> {
+  const parsed = familyDetailsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid details' };
+
+  const supabase = await createServer();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { ok: false, error: 'Not signed in' };
+
+  const d = parsed.data;
+  const { error } = await supabase.from('family_onboarding').upsert(
+    {
+      family_id: d.familyId,
+      household_adults: d.householdAdults,
+      household_children: d.householdChildren,
+      child_ages: d.childAges,
+      region: d.region || null,
+      postal_code: d.postalCode || null,
+      country: d.country || null,
+      goals: cleanGoals(d.goals),
+      referral_source: cleanReferralSource(d.referralSource),
+      referral_detail: d.referralDetail || null,
+      completed_at: new Date().toISOString(),
+      created_by: auth.user.id,
+    },
+    { onConflict: 'family_id' },
+  );
+  if (error) return { ok: false, error: error.message };
+
+  await logAudit(supabase, {
+    familyId: d.familyId, actorId: auth.user.id, action: 'update', resource: 'family_onboarding',
+    resourceId: d.familyId, metadata: { goals: cleanGoals(d.goals), referral_source: cleanReferralSource(d.referralSource) },
+  });
+
+  // Fire the welcome/onboarding automation in real time (never blocks the user).
+  try {
+    const { data: profile } = await supabase
+      .from('profiles').select('display_name, full_name, email').eq('id', auth.user.id).maybeSingle();
+    await fireAutomationEvent(createServiceClient(), {
+      trigger: 'onboarding_completed',
+      email: profile?.email ?? auth.user.email ?? null,
+      name: profile?.display_name ?? profile?.full_name ?? null,
+      subjectKey: eventSubjectKey('onboarding_completed', [d.familyId]),
+      context: { familyId: d.familyId, goals: cleanGoals(d.goals), referral_source: cleanReferralSource(d.referralSource) },
+    });
+  } catch (e) {
+    console.error('[onboarding] automation event failed', e);
+  }
+
+  return { ok: true };
 }
 
 /** Adds a managed member with no login (e.g. a young child). */

@@ -2,20 +2,22 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Home, UserPlus, Mail, Check, ArrowRight, Baby, User } from 'lucide-react';
+import { Home, UserPlus, Mail, Check, ArrowRight, Baby, User, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
 import { ROLE_LABELS } from '@/lib/constants/roles';
+import { FAMILY_GOALS, REFERRAL_SOURCES, parseChildAges } from '@/lib/onboarding/family';
 import {
-  saveOnboardingProfileAction, createFamilyAction, addLocalMemberAction, inviteMemberAction,
+  saveOnboardingProfileAction, createFamilyAction, saveFamilyDetailsAction,
+  addLocalMemberAction, inviteMemberAction,
 } from '@/app/onboarding/actions';
 
 const COLORS = ['#7c6dff', '#f4996e', '#4ac99b', '#f0bf5f', '#f57171', '#6aa9ff'];
 
-const TOTAL_STEPS = 3;
+const TOTAL_STEPS = 4;
 
 export type InitialProfile = { firstName: string; lastName: string; phone: string; email: string };
 
@@ -44,6 +46,11 @@ export function OnboardingWizard(
   const [loading, setLoading] = useState(false);
   const [familyId, setFamilyId] = useState<string | null>(null);
   const [members, setMembers] = useState<Added[]>([]);
+  const [goals, setGoals] = useState<string[]>([]);
+
+  function toggleGoal(value: string) {
+    setGoals((g) => (g.includes(value) ? g.filter((x) => x !== value) : [...g, value]));
+  }
 
   async function onSaveProfile(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -72,6 +79,27 @@ export function OnboardingWizard(
     if (!res.ok) return error(res.error);
     setFamilyId(res.data!.familyId);
     setStep(3);
+  }
+
+  async function onSaveFamilyDetails(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!familyId) return;
+    const form = new FormData(e.currentTarget);
+    setLoading(true);
+    const res = await saveFamilyDetailsAction({
+      familyId,
+      householdAdults: Number(form.get('householdAdults') ?? 1),
+      householdChildren: Number(form.get('householdChildren') ?? 0),
+      childAges: parseChildAges(String(form.get('childAges') ?? '')),
+      region: String(form.get('region') ?? ''),
+      postalCode: String(form.get('postalCode') ?? ''),
+      goals,
+      referralSource: String(form.get('referralSource') ?? ''),
+      referralDetail: String(form.get('referralDetail') ?? ''),
+    });
+    setLoading(false);
+    if (!res.ok) return error(res.error);
+    setStep(4);
   }
 
   async function onAddChild(e: React.FormEvent<HTMLFormElement>) {
@@ -202,6 +230,76 @@ export function OnboardingWizard(
       )}
 
       {step === 3 && (
+        <div className="glass-card p-7">
+          <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
+            <Users className="h-6 w-6" />
+          </div>
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight">About your family</h1>
+          <p className="mt-1 text-sm text-muted">This helps us tailor Bubaly to you. You can skip anything.</p>
+          <form onSubmit={onSaveFamilyDetails} className="mt-6 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Adults">
+                {(id) => <Input id={id} name="householdAdults" type="number" inputMode="numeric" min={0} max={20} defaultValue={2} />}
+              </Field>
+              <Field label="Children">
+                {(id) => <Input id={id} name="householdChildren" type="number" inputMode="numeric" min={0} max={20} defaultValue={0} />}
+              </Field>
+            </div>
+            <Field label="Kids' ages" hint="Optional — e.g. 8, 11, 14. Helps age-appropriate chores.">
+              {(id) => <Input id={id} name="childAges" placeholder="8, 11, 14" />}
+            </Field>
+
+            <div>
+              <p className="mb-2 text-sm font-medium">What do you want to use Bubaly for?</p>
+              <div className="flex flex-wrap gap-2">
+                {FAMILY_GOALS.map((g) => {
+                  const on = goals.includes(g.value);
+                  return (
+                    <button
+                      key={g.value}
+                      type="button"
+                      onClick={() => toggleGoal(g.value)}
+                      aria-pressed={on}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition ${
+                        on ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:text-fg'
+                      }`}
+                    >
+                      <span aria-hidden>{g.icon}</span> {g.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="State / region" hint="Optional">
+                {(id) => <Input id={id} name="region" placeholder="California" />}
+              </Field>
+              <Field label="ZIP / postal code" hint="Optional">
+                {(id) => <Input id={id} name="postalCode" placeholder="94016" />}
+              </Field>
+            </div>
+
+            <Field label="How did you hear about us?">
+              {(id) => (
+                <Select id={id} name="referralSource" defaultValue="">
+                  <option value="">Select one…</option>
+                  {REFERRAL_SOURCES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </Select>
+              )}
+            </Field>
+            <Field label="Anything else?" hint="Optional">
+              {(id) => <Input id={id} name="referralDetail" placeholder="A friend's name, the podcast, etc." />}
+            </Field>
+
+            <Button type="submit" loading={loading} className="w-full">
+              Continue <ArrowRight className="h-4 w-4" />
+            </Button>
+          </form>
+        </div>
+      )}
+
+      {step === 4 && (
         <div className="space-y-5">
           <div className="glass-card p-7">
             <h1 className="text-2xl font-semibold tracking-tight">Add your family</h1>
