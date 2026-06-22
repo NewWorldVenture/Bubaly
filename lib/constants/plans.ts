@@ -69,6 +69,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/announcements': 0,
   '/dashboard/activity': 0,
   '/dashboard/celebrations': 0,
+  '/dashboard/readiness': 0,
   '/dashboard/social':   0,  // Social Command (page enforces requireUserContext)
   // Basic routes
   '/dashboard/chores':        1,
