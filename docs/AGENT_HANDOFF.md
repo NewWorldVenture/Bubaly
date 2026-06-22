@@ -154,6 +154,18 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
   reusing the onboarding helpers. Settings module loads `profiles` client-side to
   prefill. `profileUpdateSchema` in `lib/validation.ts`. Closes the loop on the
   onboarding-captured contact info so it stays current.
+- #92 Fix "new row violates RLS for profiles" on onboarding/profile save (NO
+  migration): `profiles` rows are created by the `handle_new_user` SECURITY
+  DEFINER trigger, so an app-level upsert is the FIRST RLS-scoped write to that
+  table — and `INSERT ... ON CONFLICT` evaluates the INSERT `WITH CHECK
+  (id = auth.uid())` policy, which was failing in prod. Fix: new
+  `lib/server/profiles.ts` `saveUserProfile(userId, …)` performs the write with
+  the **service-role client after the caller is authenticated** (getUser on the
+  cookie client), scoped strictly to that userId — RLS bypassed safely, no
+  client-trusted identity. Both `saveOnboardingProfileAction` and
+  `updateMyProfileAction` now route through it. GOTCHA for future writes: prefer
+  this validated-service-role pattern for `profiles` upserts; the table's RLS
+  insert path is effectively untested because the trigger normally creates rows.
 
 ## Lifecycle journeys / automation runner — added in #87
 - The `marketing_automation_workflows` admin UI already existed; #87 adds the **runner**
