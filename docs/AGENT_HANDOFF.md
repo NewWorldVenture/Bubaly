@@ -1,7 +1,26 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the "What can we make tonight?" PR. Keep this updated as you ship.
+Last updated after the Meal Voting PR. Keep this updated as you ship.
+
+> **Session update (2026-06-22h) — FAMILY FOOD OS, PHASE 4: Meal Voting.**
+> - **Shipped:** family meal voting. Propose options (from the vault and/or free-text) →
+>   members vote yes/maybe/no per option → close to pick the winner → add winner's
+>   ingredients to the grocery list.
+> - **Migration `0055_meal_votes.sql`** — `meal_votes`, `meal_vote_options`,
+>   `meal_vote_ballots` (family-scoped RLS `is_family_member`; one ballot per member/
+>   option). **APPLIED TO PROD + verified.** Types added to database.types.ts.
+> - `lib/recipes/voting.ts` (pure, 5 tests): `tallyVotes` (yes+1/maybe+0.5/no−0.5),
+>   `winningOption` (ties → most yes), `summarizeBallots`.
+> - `app/(app)/dashboard/recipes/vote/{page,vote-client,actions}.tsx`: create vote,
+>   castBallot (upsert), closeMealVote (stamps winner), reopen, addWinnerToGrocery
+>   (reuses default grocery list). "Vote" entry in the recipes header.
+> - **KNOWN GAP / NEXT:** "Add winner to **meal plan**" not wired — `meal_plans.meal_id`
+>   → `meals` table, NOT `family_recipes`, so it needs a bridge (create a `meals` row
+>   from the recipe, or add a `recipe_id` column to `meal_plans`). Also: parent-only
+>   gating for create/close (currently any member); deadlines/weighted/anon modes;
+>   "AI suggest compromise meal". Then **post-meal ratings** (next big pillar) →
+>   pantry+barcode → vault OCR → admin provider settings → tier-gate/meter AI.
 
 > **Session update (2026-06-22g) — FAMILY FOOD OS, PHASE 3: "What can we make tonight?"**
 > - **Shipped:** AI suggests dinner from the family's OWN saved vault (always cookable),

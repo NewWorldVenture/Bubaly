@@ -174,6 +174,21 @@ export interface Database {
         { id?: string; family_id: string; meal_id?: string | null; plan_date: string; meal_type?: MealType; created_by?: string | null },
         Partial<{ meal_id: string | null; plan_date: string; meal_type: MealType }>
       >;
+      meal_votes: T<
+        { id: string; family_id: string; created_by: string | null; title: string; meal_date: string | null; meal_type: string | null; status: string; deadline: string | null; allow_maybe: boolean; winner_option_id: string | null } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; title: string; meal_date?: string | null; meal_type?: string | null; status?: string; deadline?: string | null; allow_maybe?: boolean; winner_option_id?: string | null },
+        Partial<{ title: string; meal_date: string | null; meal_type: string | null; status: string; deadline: string | null; allow_maybe: boolean; winner_option_id: string | null }>
+      >;
+      meal_vote_options: T<
+        { id: string; vote_id: string; family_id: string; recipe_id: string | null; label: string; photo_url: string | null; created_at: string },
+        { id?: string; vote_id: string; family_id: string; recipe_id?: string | null; label: string; photo_url?: string | null },
+        Partial<{ label: string; photo_url: string | null; recipe_id: string | null }>
+      >;
+      meal_vote_ballots: T<
+        { id: string; vote_id: string; option_id: string; family_id: string; member_id: string; choice: string } & Stamps,
+        { id?: string; vote_id: string; option_id: string; family_id: string; member_id: string; choice?: string },
+        Partial<{ choice: string }>
+      >;
       grocery_lists: T<
         { id: string; family_id: string; name: string; is_archived: boolean; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name?: string; is_archived?: boolean; created_by?: string | null },
