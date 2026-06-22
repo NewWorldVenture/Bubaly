@@ -3,6 +3,31 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after PR #87. Keep this updated as you ship.
 
+> **Session update (2026-06-22c, branch `claude/lp-public-renderer`):**
+> - **Public-site wiring #54 DONE — landing pages now render publicly.** Admin
+>   could author `marketing_landing_pages` but nothing served them; built the
+>   public renderer + made them publishable end-to-end.
+> - **Public route** `app/(marketing)/lp/[slug]/page.tsx` (service-role read, only
+>   `published` + non-deleted pages) renders headline/subhead/body paragraphs +
+>   a CTA. Client `tracker.tsx` fires a session-deduped **view** beacon on mount
+>   and a **conversion** beacon on CTA click → `POST /api/lp/track`.
+> - **Migration `0053_landing_metrics.sql`** — atomic `bump_landing_metric(slug,
+>   metric)` (SECURITY DEFINER, counts only published pages; EXECUTE granted to
+>   `service_role`, revoked from anon/authenticated/public). **Apply to prod.**
+> - **Admin** (`/admin/marketing/landing-pages`): create form now captures CTA
+>   label/href (stored in `metadata`); each card has a **Publish/Unpublish**
+>   toggle (`setLandingPublished`) + a "View" link. Pages start as drafts.
+> - **Pure helper** `lib/marketing/landing.ts` (`landingCta` w/ safe-href guard,
+>   `bodyParagraphs`, `normalizeSlug`) + tests `tests/marketing-landing.test.ts` (8).
+>   Added `/lp` + `/api/lp/track` to `middleware.ts` PUBLIC; `bump_landing_metric`
+>   added to `database.types.ts` Functions.
+> - **NEXT: public-site wiring #55 — Forms.** `marketing_forms` (fields jsonb) +
+>   `marketing_form_submissions` exist with admin authoring but no public render/
+>   submit. Build a public form renderer + a `POST` endpoint that inserts a
+>   submission (service-role) and calls `fireAutomationEvent('form_submitted', …)`
+>   — mirror the contact form + this landing-page PR (service-role read/write,
+>   middleware PUBLIC, beacon/endpoint pattern).
+
 > **Session update (2026-06-22b, branch `claude/onboarding-journey`):**
 > - **Customer onboarding journey built out.** The wizard already captured Email +
 >   First/Last name + Contact phone (→ `profiles`, #90) and family name + timezone
@@ -217,10 +242,11 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Next migration number: **0053**. Applied to prod by the user: through **0043**
+Next migration number: **0054**. Applied to prod by the user: through **0043**
 (0042 loyalty, 0043 chore missions). **Still needs applying to prod:** any of
-0044–0051 not yet run, plus **0052 `family_onboarding`** (this session).
-Verify with `select max(...)`/`\dt` before assuming a migration is live.
+0044–0051 not yet run, plus **0052 `family_onboarding`** and **0053
+`landing_metrics`**. Verify with `select max(...)`/`\dt` before assuming a
+migration is live.
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -296,7 +322,7 @@ build → **verify** (`tsc --noEmit`, `next lint`, `next build`, `vitest run`, a
 validate the migration **twice** on a throwaway Postgres 16 cluster for
 idempotency + RLS/CHECK) → draft PR (`mcp__github__create_pull_request`) → mark
 ready → **squash-merge** → apply the migration to prod (Supabase Management API,
-see migration section; **next number: 0053**) → update this doc's pillar row +
+see migration section; **next number: 0054**) → update this doc's pillar row +
 its NEXT step. Keep each PR to one pillar.
 
 ### Pillar map (✅ shipped · 🟡 partial · ⬜ not built)
@@ -313,7 +339,7 @@ its NEXT step. Keep each PR to one pillar.
 | SEO | 🟡 | `marketing_seo_pages`, `marketing_seo_keywords` (0013) | path/score/issues; keyword/intent/source/status | `/admin/marketing/seo` | First-party only today → see **Competitor/Keyword/Backlink** below |
 | AEO | ✅ | `marketing_aeo_questions` (0013) | question/answer, pattern, clarity_score, status | `/admin/marketing/aeo` | Emit JSON-LD FAQ schema on public pages from `answered` Q&As |
 | Funnels | 🟡 | `marketing_funnels` (0020) | steps jsonb, status | `/admin/marketing/funnels` | Compute real step conversion from `ab_events`/page analytics (steps are descriptive today) |
-| Landing pages | 🟡 | `marketing_landing_pages` (0020) | slug, headline, subhead, body, published, views, conversions | `/admin/marketing/landing-pages` | **Public renderer (see wiring TODO #54)** — no public route serves these yet |
+| Landing pages | ✅ | `marketing_landing_pages` (0020), `bump_landing_metric` (0053) | slug, headline, subhead, body, published, views, conversions, metadata.cta_* | `/admin/marketing/landing-pages` + public `/lp/[slug]` | A/B-test headline/CTA variants via `assignVariant` + `/api/ab/track`; per-page conversion goals |
 | Forms | 🟡 | `marketing_forms`, `marketing_form_submissions` (0020) | fields jsonb; submission payload | `/admin/marketing/forms` | **Public embed + submit endpoint (see wiring TODO #55)** — fire `form_submitted` |
 | Automation / lifecycle | ✅ | `marketing_automation_workflows`, `marketing_automation_runs` (0020), dedup idx (0050), `checkout_sessions` (0051) | trigger, steps jsonb, subject_key | `/admin/marketing/automation` | Execute non-email actions (notify_admin/apply_tag) — recorded but not run (#87) |
 | Customers | ✅ | read-time over contact tickets / Stripe (no table) | MarketingCustomer snapshot | `/admin/marketing/customers` | Persist a `marketing_customers` table for tags/notes instead of read-time only |
@@ -330,14 +356,12 @@ its NEXT step. Keep each PR to one pillar.
 ### Remaining pillars to build (⬜ — the growth backlog)
 Each is a clean PR following the conventions above. Suggested order top-to-bottom.
 
-1. **Public-site wiring (TODOs #54 & #55) — do these first; the data already exists.**
-   - **#54 Landing pages → public renderer.** `marketing_landing_pages` has
-     `slug`, `headline/subhead/body`, `published`, `views`, `conversions`, but no
-     public route serves them. Build `app/(marketing)/lp/[slug]/page.tsx` that
-     renders a `published` page, increments `views`, exposes a CTA that records a
-     `conversion`, and (optionally) runs through A/B + a `form_submitted`-style
-     event. Add `/lp` to `middleware.ts` PUBLIC.
-   - **#55 Forms → public embed + submit.** `marketing_forms` (fields jsonb) +
+1. **Public-site wiring (TODOs #54 & #55).** The data already exists.
+   - **#54 Landing pages → public renderer. ✅ DONE** (branch
+     `claude/lp-public-renderer`, mig 0053). `/lp/[slug]` renders published pages,
+     CTA + body; `tracker.tsx` beacons view/conversion → `/api/lp/track` →
+     `bump_landing_metric`. Admin has CTA fields + Publish/Unpublish.
+   - **#55 Forms → public embed + submit. ⬜ NEXT.** `marketing_forms` (fields jsonb) +
      `marketing_form_submissions` exist with admin authoring but no public
      render/submit. Build a public form renderer + `POST` action that inserts a
      submission (service-role) and calls `fireAutomationEvent('form_submitted', …)`

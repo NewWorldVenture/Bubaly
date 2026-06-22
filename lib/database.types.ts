@@ -1136,6 +1136,7 @@ export interface Database {
     CompositeTypes: { [_ in never]: never };
     Functions: {
       accept_invite: { Args: { p_token: string }; Returns: string };
+      bump_landing_metric: { Args: { p_slug: string; p_metric: string }; Returns: undefined };
       grocery_from_meal_plan: { Args: { p_family_id: string; p_from: string; p_to: string; p_list_id?: string }; Returns: string };
       is_family_member: { Args: { p_family_id: string }; Returns: boolean };
       can_manage_family: { Args: { p_family_id: string }; Returns: boolean };
