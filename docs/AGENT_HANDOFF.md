@@ -166,6 +166,10 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
   `updateMyProfileAction` now route through it. GOTCHA for future writes: prefer
   this validated-service-role pattern for `profiles` upserts; the table's RLS
   insert path is effectively untested because the trigger normally creates rows.
+- #93 Lock onboarding email for Google sign-ins (NO migration): `/onboarding`
+  page derives `emailLocked` from `auth.user.app_metadata.providers` (includes
+  'google') and passes it to the wizard, which renders the email field
+  `readOnly` + greyed (kept `readOnly` not `disabled` so it still submits).
 
 ## Lifecycle journeys / automation runner — added in #87
 - The `marketing_automation_workflows` admin UI already existed; #87 adds the **runner**

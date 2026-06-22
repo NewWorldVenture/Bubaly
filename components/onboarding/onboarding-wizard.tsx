@@ -30,7 +30,9 @@ function timezones(): string[] {
 
 type Added = { kind: 'local' | 'invite'; label: string; sub: string; color?: string };
 
-export function OnboardingWizard({ initialProfile }: { initialProfile?: InitialProfile }) {
+export function OnboardingWizard(
+  { initialProfile, emailLocked = false }: { initialProfile?: InitialProfile; emailLocked?: boolean },
+) {
   const router = useRouter();
   const { success, error } = useToast();
   const tz = useMemo(timezones, []);
@@ -147,8 +149,25 @@ export function OnboardingWizard({ initialProfile }: { initialProfile?: InitialP
             <Field label="Contact phone" hint="For account security and important family alerts" required>
               {(id) => <Input id={id} name="phone" type="tel" inputMode="tel" defaultValue={initialProfile?.phone} placeholder="(555) 123-4567" required />}
             </Field>
-            <Field label="Email" hint="Where we send invites and notifications" required>
-              {(id) => <Input id={id} name="email" type="email" defaultValue={initialProfile?.email} placeholder="you@example.com" required />}
+            <Field
+              label="Email"
+              hint={emailLocked ? 'Managed by your Google sign-in' : 'Where we send invites and notifications'}
+              required
+            >
+              {(id) => (
+                <Input
+                  id={id}
+                  name="email"
+                  type="email"
+                  defaultValue={initialProfile?.email}
+                  placeholder="you@example.com"
+                  required
+                  readOnly={emailLocked}
+                  aria-disabled={emailLocked || undefined}
+                  tabIndex={emailLocked ? -1 : undefined}
+                  className={emailLocked ? 'cursor-not-allowed opacity-60' : undefined}
+                />
+              )}
             </Field>
             <Button type="submit" loading={loading} className="w-full">
               Continue <ArrowRight className="h-4 w-4" />
