@@ -184,10 +184,11 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0054**.
+Latest migration applied to prod: **0050**. Next migration number: **0055**.
 (0050 dedup index applied; **0051 `checkout_sessions`** (on main, #89) and
-**0052 `crm`** + **0053 `crm_quotes`** (on branch `claude/marketing-platform`,
-not yet merged) still need applying to prod when their PRs land.)
+**0052 `crm`** + **0053 `crm_quotes`** + **0054 `visitor_intelligence`** (on
+branch `claude/marketing-platform`, not yet merged) still need applying to prod
+when their PRs land.)
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -257,6 +258,18 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   (status lifecycle, `isExpired`/`effectiveStatus`, `summarizeQuotes`; 8 tests).
   Page `/admin/marketing/proposals` (stats, new-quote form, send/accept/decline/
   delete). Actions `proposals/actions.ts`. Nav: Proposals. **Apply 0053 at merge.**
+- **#54 Customer Intelligence (Visitor Tracking + Attribution + CDP-lite)** — mig
+  `0054_visitor_intelligence.sql`: `mkt_visitors` (anonymous_id CDP spine,
+  contact_id stitch, session_count), `mkt_sessions` (source/medium/campaign,
+  landing_path), `mkt_touchpoints` (kind touch|conversion). Ingest:
+  `POST /api/mkt/track` (service-role; upserts visitor, records session +
+  touchpoint). Pure logic `lib/marketing/attribution.ts` — 4 models (first/last/
+  linear/position-based), `creditForVisitor`, `attributeConversions`,
+  `conversionCount` (11 tests). Page `/admin/marketing/intelligence` (visitor/
+  session/conversion stats, top channels bar, attribution-by-model grid). Nav:
+  Intelligence. **Apply 0054 at merge.** NEXT: wire `/api/mkt/track` calls into
+  the marketing site (UTM capture on landing + a conversion call on signup), and
+  stitch `contact_id` when a visitor identifies (set on signup/contact-form).
 
 ### Already EXISTS in the app (don't rebuild — extend)
 Email (`/email`, `marketing_email_campaigns`) · Automation (`/automation`,
@@ -271,7 +284,7 @@ Surveys/NPS (#40) · Referrals (#39) · A/B testing (#85, `ab_experiments/ab_eve
 Lead scoring (#86) · Customers/health (derived `getMarketingCustomers`) · Suppressions.
 
 ### Remaining pillars to build (from the spec screenshots, prioritized)
-CRITICAL: CRM ✅ · Sales Pipeline ✅ · Proposal/Quotes ✅ · CDP / unified profile (anonymous_id, device_id →
+CRITICAL: CRM ✅ · Sales Pipeline ✅ · Proposal/Quotes ✅ · Visitor Tracking ✅ · Attribution ✅ · CDP-lite ✅ (identity-stitch contact_id on identify = next) · CDP full / unified profile (anonymous_id, device_id →
 identity stitching) · Attribution (touchpoints: touchpoint_id, source, campaign) ·
 Visitor Tracking (sessions, page_views, visitor_id) · Audience Segmentation (dynamic,
 extend `marketing_segments`).

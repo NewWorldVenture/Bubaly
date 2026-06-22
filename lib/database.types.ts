@@ -746,6 +746,21 @@ export interface Database {
         { id?: string; contact_id?: string | null; deal_id?: string | null; title: string; status?: string; amount_cents?: number; currency?: string; valid_until?: string | null; notes?: string | null; sent_at?: string | null; responded_at?: string | null; created_by?: string | null },
         Partial<{ contact_id: string | null; deal_id: string | null; title: string; status: string; amount_cents: number; currency: string; valid_until: string | null; notes: string | null; sent_at: string | null; responded_at: string | null }>
       >;
+      mkt_visitors: T<
+        { id: string; anonymous_id: string; contact_id: string | null; device_type: string | null; country: string | null; first_seen: string; last_seen: string; session_count: number } & Stamps,
+        { id?: string; anonymous_id: string; contact_id?: string | null; device_type?: string | null; country?: string | null; first_seen?: string; last_seen?: string; session_count?: number },
+        Partial<{ contact_id: string | null; device_type: string | null; country: string | null; last_seen: string; session_count: number }>
+      >;
+      mkt_sessions: T<
+        { id: string; visitor_id: string | null; source: string | null; medium: string | null; campaign: string | null; landing_path: string | null; page_views: number; started_at: string },
+        { id?: string; visitor_id?: string | null; source?: string | null; medium?: string | null; campaign?: string | null; landing_path?: string | null; page_views?: number; started_at?: string },
+        Partial<{ source: string | null; medium: string | null; campaign: string | null; landing_path: string | null; page_views: number }>
+      >;
+      mkt_touchpoints: T<
+        { id: string; visitor_id: string | null; source: string | null; medium: string | null; campaign: string | null; kind: string; occurred_at: string },
+        { id?: string; visitor_id?: string | null; source?: string | null; medium?: string | null; campaign?: string | null; kind?: string; occurred_at?: string },
+        Partial<{ source: string | null; medium: string | null; campaign: string | null; kind: string }>
+      >;
       weather_locations: T<
         { id: string; family_id: string; name: string; admin1: string | null; country: string | null; latitude: number; longitude: number; is_default: boolean; sort_order: number; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name: string; admin1?: string | null; country?: string | null; latitude: number; longitude: number; is_default?: boolean; sort_order?: number; created_by?: string | null },
