@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after PR #74. Keep this updated as you ship.
+Last updated after PR #75. Keep this updated as you ship.
 
 ## Product & stack
 - **Bubaly / FamilyOS** — a family operating system. Next.js 15 App Router + TS +
@@ -108,15 +108,26 @@ npx vitest run tests/<your>.test.ts
 - #69 Family Announcements (mig 0046) · #70 Event RSVP + event detail (mig 0047)
 - #71 Family Activity Feed (read-time, no schema) · #72 Quick Capture FAB
 - #73 this handoff doc · #74 Smart Birthday & Anniversary Center (mig 0048, `family_dates`)
+- #75 Family Readiness Snapshot (read-time, no schema; teases Plus)
+
+Latest migration applied to prod: **0048**. Next migration number: **0049**.
 
 ## Backlog (prioritized, each a clean PR)
-1. **Family Readiness Snapshot** (Free) — simple computed score from real activity
-   (events/chores/lists); teases Plus. Likely read-time, no schema.
-2. **Family Memory Timeline** (Free) — milestones/trips/achievements.
-3. Marketing pillars still open from the earlier brief: Customer Health & Churn
+1. **Family Memory Timeline** (Free) — milestones/trips/achievements. Could be
+   read-time (derive from photos/events/trips) or a small `family_milestones` table.
+2. Marketing pillars still open from the earlier brief: Customer Health & Churn
    scoring, A/B testing, Lead scoring, lifecycle journeys.
-5. Broader UX brief (Phases 3/4/5/9/11): mobile-first polish, theme-token audit,
+3. Broader UX brief (Phases 3/4/5/9/11): mobile-first polish, theme-token audit,
    Family Command Center home, AI-native touches, performance.
+
+## How to continue (quick start for the next agent)
+1. Read this whole file. Recreate `/tmp/sbq.mjs` if missing (see migration section);
+   ask the user for the Supabase PAT.
+2. Pick the top backlog item. Build it following the conventions above.
+3. Verify (tsc/lint/build/vitest), apply any migration via the Management API,
+   then clean single-commit PR → squash-merge to main.
+4. Update this doc's "Shipped"/"Backlog"/migration number after each PR.
+5. Remind the user about the Vercel deploy cap if they expect to see changes live.
 
 ## Reference
 - Source UX/IA brief and the marketing-platform brief are in the session history.
