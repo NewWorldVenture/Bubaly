@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after PR #81. Keep this updated as you ship.
+Last updated after PR #84. Keep this updated as you ship.
 
 ## Product & stack
 - **Bubaly / FamilyOS** — a family operating system. Next.js 15 App Router + TS +
@@ -122,6 +122,7 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - #79 Configurable AI engine (Claude/Anthropic OR ChatGPT/OpenAI) + admin UI for keys
 - #80 Domain canonicalization: `theagoras.com` → `www.bubaly.com` (next.config redirect)
 - #81 Removed "Loved by N families" social-proof badge from the marketing hero
+- #82 handoff regen · #83 support@bubaly.com everywhere · #84 finished AI-engine wiring (briefing/weekly/flyer)
 
 Latest migration applied to prod: **0048**. Next migration number: **0049**.
 
@@ -139,19 +140,22 @@ Latest migration applied to prod: **0048**. Next migration number: **0049**.
 - **Wired through:** all provider-based AI routes use `await resolveProvider()` (briefings
   via provider, conflict, home AI, marketing AI, social, accident, import) AND the main
   assistant `app/api/ai/chat/route.ts`.
-- **Still on the Anthropic SDK directly** (follow-up): `app/api/ai/briefing/route.ts`,
-  `app/api/ai/weekly-briefing/route.ts`, `app/api/ai/flyer/route.ts`
-  (verify: `grep -rln "@anthropic-ai/sdk" app lib`). Migrate the same way; `flyer` uses
-  image input which the generic `complete()` interface doesn't model yet (needs extension).
+- `complete()` takes an optional `maxTokens` (default 1024) — set it for long JSON outputs.
+- **AI wiring is now complete (#84):** `briefing` + `weekly-briefing` go through
+  `resolveProvider()`. `flyer` stays on the Anthropic SDK on purpose (PDF/vision input is
+  Anthropic-specific) but reads the admin-configured Anthropic key/model via `getAIConfig`
+  and returns 503 with a clear message if no Anthropic key is set. If you switch the engine
+  to OpenAI, flyer still needs an Anthropic key (or build an OpenAI-vision path; note: no PDF).
 - To use ChatGPT: `/admin/ai` → pick **ChatGPT (OpenAI)**, choose a model (gpt-4o…),
   paste the OpenAI key, Save. Env fallbacks: `OPENAI_API_KEY`, `AI_PROVIDER=openai`, `AI_MODEL`.
   (The OpenAI account/key must have active billing or calls 401/429.)
 
 ## Backlog (prioritized, each a clean PR)
 1. Remaining marketing pillars: **A/B testing**, **Lead scoring**, lifecycle journeys.
-2. Finish AI-engine wiring: migrate `briefing` / `weekly-briefing` / `flyer` to `resolveProvider()`.
-3. Broader UX brief (Phases 3/4/5/9/11): mobile-first polish, theme-token audit,
+2. Broader UX brief (Phases 3/4/5/9/11): mobile-first polish, theme-token audit,
    Family Command Center home, AI-native touches, performance.
+- (DONE #84) Finish AI-engine wiring: briefing/weekly-briefing → resolveProvider; flyer
+  reads admin Anthropic key.
 
 ## How to continue (quick start for the next agent)
 1. Read this whole file. Recreate `/tmp/sbq.mjs` if missing (see migration section);

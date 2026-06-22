@@ -19,14 +19,18 @@ export type AICompletion = {
   toolCalls: { name: string; args: Record<string, unknown> }[];
 };
 
+export type AICompleteInput = {
+  system: string;
+  messages: AIMessage[];
+  tools: AITool[];
+  /** Max output tokens. Defaults to 1024. */
+  maxTokens?: number;
+};
+
 export interface AIProvider {
   readonly id: string;
   readonly model: string;
-  complete(input: {
-    system: string;
-    messages: AIMessage[];
-    tools: AITool[];
-  }): Promise<AICompletion>;
+  complete(input: AICompleteInput): Promise<AICompletion>;
 }
 
 // --- Anthropic implementation ---
@@ -34,9 +38,7 @@ export class AnthropicProvider implements AIProvider {
   id = 'anthropic';
   constructor(public model = 'claude-sonnet-4-6', private apiKey = process.env.ANTHROPIC_API_KEY!) {}
 
-  async complete({ system, messages, tools }: {
-    system: string; messages: AIMessage[]; tools: AITool[];
-  }): Promise<AICompletion> {
+  async complete({ system, messages, tools, maxTokens = 1024 }: AICompleteInput): Promise<AICompletion> {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -46,7 +48,7 @@ export class AnthropicProvider implements AIProvider {
       },
       body: JSON.stringify({
         model: this.model,
-        max_tokens: 1024,
+        max_tokens: maxTokens,
         system,
         tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema })),
         messages: messages
@@ -72,13 +74,11 @@ export class OpenAIProvider implements AIProvider {
   id = 'openai';
   constructor(public model = 'gpt-4o', private apiKey = process.env.OPENAI_API_KEY ?? '') {}
 
-  async complete({ system, messages, tools }: {
-    system: string; messages: AIMessage[]; tools: AITool[];
-  }): Promise<AICompletion> {
+  async complete({ system, messages, tools, maxTokens = 1024 }: AICompleteInput): Promise<AICompletion> {
     if (!this.apiKey) throw new Error('OpenAI API key is not configured');
     const body: Record<string, unknown> = {
       model: this.model,
-      max_tokens: 1024,
+      max_tokens: maxTokens,
       messages: [
         ...(system ? [{ role: 'system', content: system }] : []),
         ...messages
