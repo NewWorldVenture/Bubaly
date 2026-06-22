@@ -139,6 +139,15 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
   pending sessions past a 60-min grace (≤24h old) and marks them abandoned so it
   never re-fires. Pure selection in `lib/billing/checkout-abandonment.ts` (tested).
   This completes all event-driven triggers (the deferred one from #88).
+- #90 New-customer onboarding journey (NO migration — reuses `profiles`): added a
+  first "Tell us about you" step to the onboarding wizard capturing First/Last
+  name, Contact phone, and Email before the family steps. `saveOnboardingProfileAction`
+  (`app/onboarding/actions.ts`) upserts `profiles` (full_name/display_name/phone/email)
+  and syncs `family_members.display_name`; `createFamilyAction` now seeds the parent
+  member name from that profile. Wizard is now 3 steps (About you → Name family →
+  Add members); `/onboarding` page is a server component that prefills from
+  `profiles`/auth. Pure name/phone helpers in `lib/onboarding/profile.ts` (tested);
+  `onboardingProfileSchema` in `lib/validation.ts`.
 
 ## Lifecycle journeys / automation runner — added in #87
 - The `marketing_automation_workflows` admin UI already existed; #87 adds the **runner**
