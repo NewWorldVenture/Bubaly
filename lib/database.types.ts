@@ -741,6 +741,11 @@ export interface Database {
         { id?: string; contact_id?: string | null; name: string; amount_cents?: number; currency?: string; stage?: string; close_date?: string | null; owner_id?: string | null; notes?: string | null; created_by?: string | null },
         Partial<{ contact_id: string | null; name: string; amount_cents: number; currency: string; stage: string; close_date: string | null; owner_id: string | null; notes: string | null }>
       >;
+      crm_quotes: T<
+        { id: string; contact_id: string | null; deal_id: string | null; title: string; status: string; amount_cents: number; currency: string; valid_until: string | null; notes: string | null; sent_at: string | null; responded_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; contact_id?: string | null; deal_id?: string | null; title: string; status?: string; amount_cents?: number; currency?: string; valid_until?: string | null; notes?: string | null; sent_at?: string | null; responded_at?: string | null; created_by?: string | null },
+        Partial<{ contact_id: string | null; deal_id: string | null; title: string; status: string; amount_cents: number; currency: string; valid_until: string | null; notes: string | null; sent_at: string | null; responded_at: string | null }>
+      >;
       weather_locations: T<
         { id: string; family_id: string; name: string; admin1: string | null; country: string | null; latitude: number; longitude: number; is_default: boolean; sort_order: number; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name: string; admin1?: string | null; country?: string | null; latitude: number; longitude: number; is_default?: boolean; sort_order?: number; created_by?: string | null },

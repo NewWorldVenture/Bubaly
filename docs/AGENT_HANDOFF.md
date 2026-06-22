@@ -184,10 +184,10 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0053**.
+Latest migration applied to prod: **0050**. Next migration number: **0054**.
 (0050 dedup index applied; **0051 `checkout_sessions`** (on main, #89) and
-**0052 `crm`** (on branch `claude/marketing-platform`, not yet merged) still need
-applying to prod when their PRs land.)
+**0052 `crm`** + **0053 `crm_quotes`** (on branch `claude/marketing-platform`,
+not yet merged) still need applying to prod when their PRs land.)
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -251,6 +251,12 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   `/admin/marketing/pipeline` (stage board, add/advance/delete deals). Actions in
   `app/(app)/admin/marketing/crm/actions.ts`. Nav: CRM + Pipeline added to SUBNAV.
   **Migration 0052 must be applied to prod when this branch merges.**
+- **#53 Proposals / Quotes** — mig `0053_crm_quotes.sql`: `crm_quotes` (contact_id,
+  deal_id, title, status [draft/sent/accepted/declined/expired], amount_cents,
+  valid_until, sent_at, responded_at). Pure logic `lib/marketing/quotes.ts`
+  (status lifecycle, `isExpired`/`effectiveStatus`, `summarizeQuotes`; 8 tests).
+  Page `/admin/marketing/proposals` (stats, new-quote form, send/accept/decline/
+  delete). Actions `proposals/actions.ts`. Nav: Proposals. **Apply 0053 at merge.**
 
 ### Already EXISTS in the app (don't rebuild — extend)
 Email (`/email`, `marketing_email_campaigns`) · Automation (`/automation`,
@@ -265,8 +271,7 @@ Surveys/NPS (#40) · Referrals (#39) · A/B testing (#85, `ab_experiments/ab_eve
 Lead scoring (#86) · Customers/health (derived `getMarketingCustomers`) · Suppressions.
 
 ### Remaining pillars to build (from the spec screenshots, prioritized)
-CRITICAL: CRM ✅ · Sales Pipeline ✅ · Proposal/Quotes (`crm_quotes`: quote_id,
-contact_id, status, line items) · CDP / unified profile (anonymous_id, device_id →
+CRITICAL: CRM ✅ · Sales Pipeline ✅ · Proposal/Quotes ✅ · CDP / unified profile (anonymous_id, device_id →
 identity stitching) · Attribution (touchpoints: touchpoint_id, source, campaign) ·
 Visitor Tracking (sessions, page_views, visitor_id) · Audience Segmentation (dynamic,
 extend `marketing_segments`).
