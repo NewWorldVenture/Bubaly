@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after PR #85. Keep this updated as you ship.
+Last updated after PR #86. Keep this updated as you ship.
 
 ## Product & stack
 - **Bubaly / FamilyOS** — a family operating system. Next.js 15 App Router + TS +
@@ -124,6 +124,7 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - #81 Removed "Loved by N families" social-proof badge from the marketing hero
 - #82 handoff regen · #83 support@bubaly.com everywhere · #84 finished AI-engine wiring (briefing/weekly/flyer)
 - #85 A/B Testing pillar (mig 0049 `ab_experiments`+`ab_events`; admin UI + `/api/ab/track` + significance engine)
+- #86 Lead Scoring (read-time over contact-form tickets; `lib/marketing/lead-score.ts` + `/admin/marketing/leads`)
 
 Latest migration applied to prod: **0049**. Next migration number: **0050**.
 
@@ -163,7 +164,8 @@ Latest migration applied to prod: **0049**. Next migration number: **0050**.
   (The OpenAI account/key must have active billing or calls 401/429.)
 
 ## Backlog (prioritized, each a clean PR)
-1. Remaining marketing pillars: **Lead scoring**, lifecycle journeys. (A/B testing done #85.)
+1. Marketing: **lifecycle journeys** (the `marketing_automation_workflows` table exists —
+   wire a runner/triggers). A/B testing (#85) and lead scoring (#86) are done.
 2. Broader UX brief (Phases 3/4/5/9/11): mobile-first polish, theme-token audit,
    Family Command Center home, AI-native touches, performance.
 - (DONE #84) Finish AI-engine wiring: briefing/weekly-briefing → resolveProvider; flyer
