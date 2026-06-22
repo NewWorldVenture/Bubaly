@@ -47,6 +47,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/assistant', label: 'AI Assistant', icon: Sparkles, minLevel: 0 },
       { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, minLevel: 0 },
       { href: '/dashboard/chores', label: 'Tasks & Chores', icon: CheckSquare, minLevel: 1 },
+      { href: '/missions', label: 'Family Missions', icon: Trophy, minLevel: 1 },
       { href: '/dashboard/rewards', label: 'Rewards', icon: Gift, minLevel: 1 },
     ],
   },

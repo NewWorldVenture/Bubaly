@@ -7,9 +7,15 @@ export type AITool = {
   input_schema: Record<string, unknown>;
 };
 
+export type AIImage = {
+  media_type: string;   // e.g. 'image/jpeg', 'image/png'
+  data: string;         // base64-encoded image bytes
+};
+
 export type AIMessage = {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
+  images?: AIImage[];   // optional vision input (user messages only)
   tool_calls?: { name: string; args: Record<string, unknown> }[];
   tool_results?: { name: string; result: unknown }[];
 };
@@ -51,7 +57,22 @@ export class AnthropicProvider implements AIProvider {
         tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema })),
         messages: messages
           .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .map((m) => ({ role: m.role, content: m.content })),
+          .map((m) => {
+            // Attach vision blocks when a message carries images (user only).
+            if (m.images?.length) {
+              return {
+                role: m.role,
+                content: [
+                  ...m.images.map((img) => ({
+                    type: 'image' as const,
+                    source: { type: 'base64' as const, media_type: img.media_type, data: img.data },
+                  })),
+                  { type: 'text' as const, text: m.content },
+                ],
+              };
+            }
+            return { role: m.role, content: m.content };
+          }),
       }),
     });
     if (!res.ok) throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
