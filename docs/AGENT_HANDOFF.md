@@ -1,28 +1,32 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after PR #79. Keep this updated as you ship.
+Last updated after PR #81. Keep this updated as you ship.
 
 ## Product & stack
 - **Bubaly / FamilyOS** — a family operating system. Next.js 15 App Router + TS +
-  Tailwind + Supabase (Postgres/Auth/Storage/RLS) + Stripe + Anthropic AI.
-- Deployed on **Vercel** at **theagoras.com / bubaly.com** (the brand is "Bubaly").
+  Tailwind + Supabase (Postgres/Auth/Storage/RLS) + Stripe + Anthropic/OpenAI AI.
+- Deployed on **Vercel**. **Canonical domain is `www.bubaly.com`** (brand: "Bubaly").
+  `bubaly.com` 308-redirects to `www.bubaly.com`. Legacy `theagoras.com` redirects to
+  `www.bubaly.com` (see Domains section).
 - Route groups: `app/(app)` (authed product), `app/(marketing)` (public), `app/(app)/admin` (super-admin console).
 - Tiers: **Free (level 0)**, **Family Basic (1)**, **Family+ (2)**. `lib/constants/plans.ts`.
 
-## ⚠️ CRITICAL: deploy is blocked (read first)
-- The Vercel account is on the **Hobby plan → 100 deployments/day**, and it's
-  **exhausted**. New pushes to `main` build but **do not promote to production**,
-  so changes are NOT visible on bubaly.com even though they're correctly in `main`.
-- Error seen in Vercel: `api-deployments-free-per-day` ("more than 100, try again in 24h").
-- **Workarounds (user must do — no Vercel token in this env):**
-  1. Alias the latest *built* deployment to the domain via Vercel CLI
-     (`vercel alias set <deployment-url> www.bubaly.com`) — an alias is NOT a new
-     deployment, so it bypasses the cap. (Preview deployments carry preview env vars.)
-  2. Upgrade to Vercel Pro (lifts the cap).
-  3. Wait ~24h for reset, then promote.
-- **Because of this cap, BATCH work into tight single-commit PRs** (one feature per PR).
-  Do not push many commits rapidly — each spawns deployments and superseded builds.
+## Deploy status (was blocked, now OK)
+- The Vercel account is now on **Pro**, so the old Hobby **100-deploys/day** cap that
+  was freezing production is **resolved**. Pushes to `main` promote to production again,
+  and `www.bubaly.com` serves the latest build. (History: many PRs piled up in `main`
+  unable to deploy until the upgrade.)
+- Still good practice: **batch work into tight single-commit PRs** (one feature per PR)
+  to avoid superseded builds and keep diffs clean.
+
+## Domains
+- **Canonical: `www.bubaly.com`** (HTTP 200). `bubaly.com` → 308 → `www.bubaly.com`.
+- `theagoras.com` is legacy. App-level redirect added in `next.config.mjs` (#80):
+  host `(www\.)?theagoras\.com` → `https://www.bubaly.com/:path*` (308 permanent).
+  NOTE: that redirect only fires once the domain is actually attached to this Vercel
+  project. If `theagoras.com` shows `DEPLOYMENT_NOT_FOUND`, attach/redirect it in
+  Vercel → familyos project → Settings → Domains (or point it at www.bubaly.com there).
 
 ## Git workflow (IMPORTANT — the branch is shared & gets polluted)
 - Designated dev branch: **`claude/funny-darwin-gkmptm`**. Never push to `main` directly
@@ -43,8 +47,8 @@ Last updated after PR #79. Keep this updated as you ship.
 - Commit trailer to use:
   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` and
   `Claude-Session: https://claude.ai/code/session_01BVdGmgvtEjp4ZSqcES7ThJ`.
-- Do NOT put the model id in commits/PRs/code. Only create PRs when asked (the user
-  has standing instruction here to push PRs to main aggressively).
+- Do NOT put the model id in commits/PRs/code. The user has a standing instruction here
+  to push PRs to main aggressively (build → PR → squash-merge).
 
 ## Applying Supabase migrations (Postgres ports are blocked; use the Management API)
 - Direct DB connections time out (network policy). **HTTPS works.** Use the Supabase
@@ -57,18 +61,19 @@ Last updated after PR #79. Keep this updated as you ship.
   - Ad-hoc:       `SBP_TOKEN='sbp_...' QUERY="select ..." node /tmp/sbq.mjs`
   - Returns `HTTP 201 []` on success. Verify policies via
     `select policyname, cmd from pg_policies where tablename='...'`.
+  - `/tmp/sbq.mjs` body: read `SBP_TOKEN` + `SBP_REF` (default the REF above) + SQL from
+    `process.argv[2]` file or `QUERY` env; POST to the URL above; print status + text.
 - Migrations are idempotent (CREATE TABLE IF NOT EXISTS, DROP POLICY IF EXISTS, enum
   guards). Always apply the migration to prod after merging the migration file.
 
 ## Conventions
-- **Migrations**: `supabase/migrations/00NN_name.sql`. Next number after **0047**.
-  Next number after **0048**.
+- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0049.**
   Helpers available in DB: `public.is_family_member(family_id)`, `public.is_super_admin()`,
   `public.set_updated_at()` trigger fn, `gen_random_uuid()`.
 - **Family-scoped tables** (member data): RLS pattern —
   `ALTER TABLE ... ENABLE ROW LEVEL SECURITY;` then a single
   `FOR ALL TO authenticated USING (public.is_family_member(family_id)) WITH CHECK (...)`,
-  OR split select/insert policies. See `0043_wishlists.sql`, `0046`, `0047` for templates.
+  OR split select/insert policies. See `0043_wishlists.sql`, `0046`, `0047`, `0048` for templates.
 - **Admin/marketing tables** (business-wide): RLS ENABLED with **NO policies** →
   service-role only. Access via `lib/marketing/admin.ts` `requireMarketingAdmin()`
   (returns service client + actor, super-admin gated). See `0013_marketing.sql`.
@@ -76,7 +81,7 @@ Last updated after PR #79. Keep this updated as you ship.
   `T<Row, Insert, Update>` entry. `& Stamps` adds created_at/updated_at.
 - **Nav**: `lib/constants/navigation.ts` `APP_NAV_GROUPS` (items have `minLevel`).
   Locked items render greyed with a lock and open the tier-aware `UpgradeModal`
-  (`components/app/upgrade-modal.tsx`). Add icon to the lucide import line.
+  (`components/app/upgrade-modal.tsx`, takes `requiredLevel`). Add icon to the lucide import line.
 - **Route gating**: `lib/constants/plans.ts` `ROUTE_PLAN_LEVEL` (0/1/2) AND
   page-level `requirePlanLevel(1|2)` (redirects to `/dashboard/billing?upgrade=1&need=N`).
   Free pages use `requireUserContext()`.
@@ -91,7 +96,7 @@ Last updated after PR #79. Keep this updated as you ship.
 npx tsc --noEmit
 npx next lint --file <changed files>
 npm run build            # must show "Compiled successfully" + your route
-npx vitest run tests/<your>.test.ts
+npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 ```
 
 ## Gotchas
@@ -99,19 +104,24 @@ npx vitest run tests/<your>.test.ts
   (see `app/(app)/dashboard/billing/page.tsx`).
 - A shared Supabase query builder across two tables unions their columns and breaks
   typing — write a separate function per table (see `quick-capture.tsx`).
+- Do NOT import the `server-only` `lib/ai/settings.ts` from client components — use the
+  client-safe `lib/ai/models.ts` for `AIEngine`/`AI_MODELS`/`AIConfigView`.
 - Recipe field is `name` (not `title`). `family_photos.uploaded_by` is a USER id;
   map via `member.user_id`. `chore_assignments` completion = `approved_at` not null.
+- Never commit secrets (the auto classifier blocks it). API keys/PATs stay in chat/env.
 
 ## Shipped so far (this initiative)
 - Marketing pillars (parallel/earlier): Surveys, Reviews, Referrals (#59–#61).
 - #67 tier-aware UpgradeModal · #68 tier-aware billing deep-link
 - #69 Family Announcements (mig 0046) · #70 Event RSVP + event detail (mig 0047)
-- #71 Family Activity Feed (read-time, no schema) · #72 Quick Capture FAB
-- #73 this handoff doc · #74 Smart Birthday & Anniversary Center (mig 0048, `family_dates`)
-- #75 Family Readiness Snapshot (read-time, no schema; teases Plus)
+- #71 Family Activity Feed (read-time) · #72 Quick Capture FAB
+- #73 handoff doc · #74 Smart Birthday & Anniversary Center (mig 0048, `family_dates`)
+- #75 Family Readiness Snapshot (read-time; teases Plus)
 - #76 handoff refresh · #77 Family Memory Timeline (read-time: milestones+trips+photos)
 - #78 Customer Health & Churn scoring (admin marketing; read-time over MarketingCustomer)
 - #79 Configurable AI engine (Claude/Anthropic OR ChatGPT/OpenAI) + admin UI for keys
+- #80 Domain canonicalization: `theagoras.com` → `www.bubaly.com` (next.config redirect)
+- #81 Removed "Loved by N families" social-proof badge from the marketing hero
 
 Latest migration applied to prod: **0048**. Next migration number: **0049**.
 
@@ -123,25 +133,23 @@ Latest migration applied to prod: **0048**. Next migration number: **0049**.
 - `lib/ai/provider.ts`: `AnthropicProvider` + `OpenAIProvider` (raw fetch, no SDK dep),
   `providerFromConfig()`, `getProvider()` (env fallback), and **`resolveProvider()`**
   (async; reads settings via service client → falls back to env).
-- `lib/ai/models.ts`: client-safe `AIEngine`, `AI_MODELS`, `AIConfigView` (DO NOT import
-  the `server-only` `lib/ai/settings.ts` from client components — that was a build break).
+- `lib/ai/models.ts`: client-safe `AIEngine`, `AI_MODELS`, `AIConfigView`.
 - `lib/ai/settings.ts` (server-only): `getAIConfig` (real keys), `getAIConfigView`
   (masked), `setAIConfig`.
-- **Wired through:** all `getProvider()` route callers were migrated to
-  `await resolveProvider()` (briefings, conflict, home AI, marketing AI, social, accident,
-  import) AND the main assistant `app/api/ai/chat/route.ts` (was using the Anthropic SDK
-  directly — now uses `resolveProvider()`).
-- **Still on Anthropic SDK / not yet routed through the provider** (follow-up if needed):
-  `app/api/ai/briefing/route.ts`, `app/api/ai/weekly-briefing/route.ts`,
-  `app/api/ai/flyer/route.ts` (verify with `grep -rln "@anthropic-ai/sdk" app lib`).
-  Migrate the same way — but note `flyer` uses image input, which the generic
-  `complete()` interface doesn't model yet, so it may need an interface extension.
-- To use ChatGPT: open `/admin/ai`, pick **ChatGPT (OpenAI)**, choose a model (gpt-4o…),
-  paste the OpenAI key, Save. Optional env fallbacks: `OPENAI_API_KEY`, `AI_PROVIDER=openai`,
-  `AI_MODEL`.
+- **Wired through:** all provider-based AI routes use `await resolveProvider()` (briefings
+  via provider, conflict, home AI, marketing AI, social, accident, import) AND the main
+  assistant `app/api/ai/chat/route.ts`.
+- **Still on the Anthropic SDK directly** (follow-up): `app/api/ai/briefing/route.ts`,
+  `app/api/ai/weekly-briefing/route.ts`, `app/api/ai/flyer/route.ts`
+  (verify: `grep -rln "@anthropic-ai/sdk" app lib`). Migrate the same way; `flyer` uses
+  image input which the generic `complete()` interface doesn't model yet (needs extension).
+- To use ChatGPT: `/admin/ai` → pick **ChatGPT (OpenAI)**, choose a model (gpt-4o…),
+  paste the OpenAI key, Save. Env fallbacks: `OPENAI_API_KEY`, `AI_PROVIDER=openai`, `AI_MODEL`.
+  (The OpenAI account/key must have active billing or calls 401/429.)
 
 ## Backlog (prioritized, each a clean PR)
 1. Remaining marketing pillars: **A/B testing**, **Lead scoring**, lifecycle journeys.
+2. Finish AI-engine wiring: migrate `briefing` / `weekly-briefing` / `flyer` to `resolveProvider()`.
 3. Broader UX brief (Phases 3/4/5/9/11): mobile-first polish, theme-token audit,
    Family Command Center home, AI-native touches, performance.
 
@@ -152,7 +160,6 @@ Latest migration applied to prod: **0048**. Next migration number: **0049**.
 3. Verify (tsc/lint/build/vitest), apply any migration via the Management API,
    then clean single-commit PR → squash-merge to main.
 4. Update this doc's "Shipped"/"Backlog"/migration number after each PR.
-5. Remind the user about the Vercel deploy cap if they expect to see changes live.
 
 ## Reference
 - Source UX/IA brief and the marketing-platform brief are in the session history.
