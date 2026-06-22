@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0058: Asset Library (DAM) — marketing_assets + private bucket
+-- Migration 0060: Asset Library (DAM) — marketing_assets + private bucket
 -- A central digital-asset manager for the marketing OS: images, video, docs and
 -- brand files, reusable by Email / Social / Content / Landing pickers.
 -- Business-wide (NOT family-scoped): RLS ENABLED, NO policies → service-role only.

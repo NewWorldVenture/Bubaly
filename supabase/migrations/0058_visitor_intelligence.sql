@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0056: Customer Intelligence Layer
+-- Migration 0058: Customer Intelligence Layer
 -- Visitor Tracking + Attribution + CDP-lite identity stitching.
 --   mkt_visitors    — one row per anonymous visitor (the CDP profile spine);
 --                     contact_id links it to a CRM contact once identified.

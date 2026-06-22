@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0060: Personalization Engine — marketing_personalization_rules
+-- Migration 0062: Personalization Engine — marketing_personalization_rules
 -- Per-slot content variants resolved against a visitor/segment context (UTM
 -- source/medium/campaign, returning, segments, session count, path, country).
 -- The server picks the highest-priority matching rule for a slot (e.g.

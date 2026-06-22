@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0062: Exit-Intent Popups — marketing_exit_intent
+-- Migration 0064: Exit-Intent Popups — marketing_exit_intent
 -- Audience-targeted offers shown on the public site when a visitor is about to
 -- leave (mouseleave) or scrolls past a threshold. Reuses the personalization
 -- audience-match shape. Counters are bumped from a public endpoint via a

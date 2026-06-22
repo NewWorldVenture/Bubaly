@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0055: Proposals / Quotes (Sales & Revenue pillar)
+-- Migration 0057: Proposals / Quotes (Sales & Revenue pillar)
 -- Converts qualified leads into customers — a quote tied to a CRM contact (and
 -- optionally a deal), with a status lifecycle and an expiry. Service-role only
 -- (RLS ENABLED, NO policies), per the marketing-table convention.

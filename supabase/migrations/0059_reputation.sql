@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0057: Reputation & Trust — testimonials + case studies
+-- Migration 0059: Reputation & Trust — testimonials + case studies
 -- Social proof and enterprise sales enablement. Distinct from `reviews` (#41,
 -- inbound moderated ratings): these are curated, published marketing assets.
 -- Service-role only for writes (RLS ENABLED, NO policies); the public marketing

@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0059: Video Marketing — marketing_videos
+-- Migration 0061: Video Marketing — marketing_videos
 -- Catalog of marketing videos (YouTube / Vimeo embeds or uploaded files from the
 -- Asset Library). Transcripts feed AEO/SEO; published videos embed in content +
 -- landing pages. Business-wide: RLS ENABLED, NO policies → service-role only.

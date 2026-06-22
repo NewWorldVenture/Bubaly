@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0063: Affiliate Management
+-- Migration 0065: Affiliate Management
 -- Low-cost acquisition via partners who earn commission on conversions.
 -- Distinct from the family Referral Program (#39, invite-a-friend rewards):
 -- affiliates are external partners with a code + commission rate.

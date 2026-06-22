@@ -184,18 +184,18 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0064**.
-(0050 dedup index applied; **0051 `checkout_sessions`**, **0052 `family_onboarding`**,
-**0053 `landing_metrics`** are on main. This branch's marketing-platform
-migrations — **0054 `crm`** + **0055 `crm_quotes`** + **0056 `visitor_intelligence`** +
-**0057 `reputation`** + **0058 `marketing_assets`** + **0059 `marketing_videos`** +
-**0060 `personalization`** + **0061 `marketing_push`** + **0062 `exit_intent`** +
-**0063 `affiliates`** — still need applying to prod when this PR lands.)
+Latest migration applied to prod: **0050**. Next migration number: **0066**.
+(0050 dedup index applied; **0051 `checkout_sessions`** and main's
+**0052 `family_onboarding`**, **0053 `landing_metrics`**, **0054 `recipe_sources`**,
+**0055 `meal_votes`** are on main. This branch's marketing-platform migrations —
+**0056 `crm`** + **0057 `crm_quotes`** + **0058 `visitor_intelligence`** +
+**0059 `reputation`** + **0060 `marketing_assets`** + **0061 `marketing_videos`** +
+**0062 `personalization`** + **0063 `marketing_push`** + **0064 `exit_intent`** +
+**0065 `affiliates`** — still need applying to prod when this PR lands.)
 
-> ✅ **Merge-ready: branch migrations renumbered.** They previously collided with
-> main's `0052_family_onboarding`/`0053_landing_metrics`; the branch
-> migrations were renumbered to slot cleanly after main's max (0053). If `main`
-> gains new migrations before this merges, bump these again to stay after main's max.
+> ✅ **Merge-ready: branch migrations renumbered to 0056–0065** (after main's max
+> 0055). If `main` gains new migrations before this merges, bump these again to
+> stay after main's max.
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -250,7 +250,7 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
 - Pure logic in `lib/marketing/<feature>.ts` + vitest tests.
 
 ### Built on this branch so far
-- **#52 CRM + Sales Pipeline (cornerstone)** — mig `0054_crm.sql`: `crm_contacts`
+- **#52 CRM + Sales Pipeline (cornerstone)** — mig `0056_crm.sql`: `crm_contacts`
   (first/last/email/phone/company, lead_status, lifecycle_stage, lead_source,
   family_id, owner_id) + `crm_deals` (contact_id, name, amount_cents, stage,
   close_date). Pure logic `lib/marketing/crm.ts` (stages, `dealsByStage`,
@@ -259,14 +259,14 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   `/admin/marketing/pipeline` (stage board, add/advance/delete deals). Actions in
   `app/(app)/admin/marketing/crm/actions.ts`. Nav: CRM + Pipeline added to SUBNAV.
   **Migration 0054 must be applied to prod when this branch merges.**
-- **#53 Proposals / Quotes** — mig `0055_crm_quotes.sql`: `crm_quotes` (contact_id,
+- **#53 Proposals / Quotes** — mig `0057_crm_quotes.sql`: `crm_quotes` (contact_id,
   deal_id, title, status [draft/sent/accepted/declined/expired], amount_cents,
   valid_until, sent_at, responded_at). Pure logic `lib/marketing/quotes.ts`
   (status lifecycle, `isExpired`/`effectiveStatus`, `summarizeQuotes`; 8 tests).
   Page `/admin/marketing/proposals` (stats, new-quote form, send/accept/decline/
   delete). Actions `proposals/actions.ts`. Nav: Proposals. **Apply 0055 at merge.**
 - **#54 Customer Intelligence (Visitor Tracking + Attribution + CDP-lite)** — mig
-  `0056_visitor_intelligence.sql`: `mkt_visitors` (anonymous_id CDP spine,
+  `0058_visitor_intelligence.sql`: `mkt_visitors` (anonymous_id CDP spine,
   contact_id stitch, session_count), `mkt_sessions` (source/medium/campaign,
   landing_path), `mkt_touchpoints` (kind touch|conversion). Ingest:
   `POST /api/mkt/track` (service-role; upserts visitor, records session +
@@ -278,7 +278,7 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   the marketing site (UTM capture on landing + a conversion call on signup), and
   stitch `contact_id` when a visitor identifies (set on signup/contact-form).
 - **#55 Reputation & Trust (Testimonials + Case Studies)** — mig
-  `0057_reputation.sql`: `testimonials` (author, quote, rating, is_published,
+  `0059_reputation.sql`: `testimonials` (author, quote, rating, is_published,
   sort_order) + `case_studies` (title, slug UNIQUE, industry, customer_name,
   summary, result_metric, is_published). Pure logic `lib/marketing/reputation.ts`
   (`slugify`, `publishedOnly`, `clampRating`; 5 tests). Page
@@ -286,7 +286,7 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   `reputation/actions.ts`. Nav: Reputation. **Apply 0057 at merge.** NEXT: render
   published testimonials/case-studies on the public marketing site (read via
   service client in a server component, `publishedOnly`).
-- **#56 Asset Library (DAM)** — mig `0058_marketing_assets.sql`: `marketing_assets`
+- **#56 Asset Library (DAM)** — mig `0060_marketing_assets.sql`: `marketing_assets`
   (name, kind [image/video/document/brand], storage_path, mime_type, size_bytes,
   width/height, alt_text, tags text[], metadata, deleted_at) + a **private
   `marketing-assets` Storage bucket** (50 MB/file, NO storage.objects policies →
@@ -301,7 +301,7 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   reusable **asset picker** component for Email/Social/Content/Landing authoring;
   (2) image **dimensions + thumbnail** capture on upload (width/height columns
   exist, currently null); (3) **"where used" backrefs** so deletes warn.
-- **#57 Video Marketing** — mig `0059_marketing_videos.sql`: `marketing_videos`
+- **#57 Video Marketing** — mig `0061_marketing_videos.sql`: `marketing_videos`
   (title, provider [youtube/vimeo/upload], video_id, url, storage_path,
   poster_url, captions_url, transcript, duration_seconds, status [draft/
   published], tags[], metadata, soft-delete). Pure logic `lib/marketing/video.ts`
@@ -330,7 +330,7 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   Unpublish. NEXT: (1) a rich-text/markdown editor (today the body is plain text
   with `#`/`**…**` → h2); (2) **JSON-LD Article** schema on `/blog/[slug]`;
   (3) image/cover via the **Asset Library** picker.
-- **#59 Personalization Engine** — mig `0060_personalization.sql`:
+- **#59 Personalization Engine** — mig `0062_personalization.sql`:
   `marketing_personalization_rules` (name, slot, match jsonb, variant jsonb,
   priority, status [active/paused], soft-delete). Pure engine
   `lib/marketing/personalization.ts` (`ruleMatches` — source/medium/campaign/
@@ -346,7 +346,7 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   `mkt_*` visitor cookie + UTM params from #54), render the variant, and fire an
   exposure to `/api/ab/track`. (Engine + admin are done; instrumentation is glue,
   mirroring the A/B pillar's remaining step.)
-- **#60 Marketing Push Notifications** — mig `0061_marketing_push.sql`:
+- **#60 Marketing Push Notifications** — mig `0063_marketing_push.sql`:
   `marketing_push_campaigns` (title, body, url, segment_id [future targeting],
   audience, status [draft/sending/sent/failed], recipients/sent/failed/skipped/
   clicked counts, sent_at, soft-delete). **Reuses** `lib/server/push.ts`
@@ -363,7 +363,7 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   `segment_id` column + 'segment' audience exist; resolve a segment's members →
   user_ids); (2) **click tracking** (append a tracked param to the url + an
   endpoint that bumps `clicked`); (3) a scheduled/cron send option.
-- **#61 Exit-Intent Popups** — mig `0062_exit_intent.sql`:
+- **#61 Exit-Intent Popups** — mig `0064_exit_intent.sql`:
   `marketing_exit_intent` (name, headline, body, cta_label/href, match jsonb,
   trigger_config jsonb {mode mouseleave|scroll, delayMs, scrollPercent},
   priority, status, impressions/conversions, soft-delete) + SECURITY DEFINER RPC
@@ -381,7 +381,7 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   (1) A/B-test offer variants via `assignVariant`; (2) richer triggers
   (idle-time, scroll-velocity); (3) per-offer frequency cap beyond the global
   weekly once.
-- **#62 Affiliate Management** — mig `0063_affiliates.sql`: `affiliates` (code,
+- **#62 Affiliate Management** — mig `0065_affiliates.sql`: `affiliates` (code,
   commission_rate, status) + `affiliate_referrals` (status pending/converted/
   paid/void, commission_cents). Pure logic `lib/marketing/affiliates.ts`
   (`normalizeAffiliateCode`, `clampRate`, `commissionCents`, `summarizeReferrals`,

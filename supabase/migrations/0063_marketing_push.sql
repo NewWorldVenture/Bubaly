@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0061: Marketing Push Notifications — marketing_push_campaigns
+-- Migration 0063: Marketing Push Notifications — marketing_push_campaigns
 -- Broadcast web/native push to opted-in devices (`push_devices`, mig 0035) via
 -- the existing VAPID/FCM dispatch (lib/server/push.ts). Honors
 -- `marketing_suppressions` (suppressed emails are excluded). Distinct from
