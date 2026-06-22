@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   }
 
   const { name, email, message } = parsed.data;
-  const to = process.env.CONTACT_INBOX ?? 'hello@bubaly.com';
+  const to = process.env.CONTACT_INBOX ?? 'support@bubaly.com';
 
   // Persist as a support ticket so it surfaces in the admin console even if
   // email delivery is unavailable. Best-effort: never block the user on it.
