@@ -5,7 +5,7 @@ import { logAudit } from '@/lib/server/audit';
 import { sendEmail } from '@/lib/server/email';
 import { APP_URL } from '@/lib/email';
 import { createFamilySchema, inviteSchema, onboardingProfileSchema } from '@/lib/validation';
-import { joinName, normalizePhone } from '@/lib/onboarding/profile';
+import { saveUserProfile } from '@/lib/server/profiles';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -26,23 +26,8 @@ export async function saveOnboardingProfileAction(input: {
   if (!auth.user) return { ok: false, error: 'Not signed in' };
 
   const { firstName, lastName, phone, email } = parsed.data;
-  const fullName = joinName(firstName, lastName);
-
-  const { error } = await supabase.from('profiles').upsert(
-    {
-      id: auth.user.id,
-      email,
-      full_name: fullName,
-      display_name: firstName,
-      phone: normalizePhone(phone),
-    },
-    { onConflict: 'id' },
-  );
-  if (error) return { ok: false, error: error.message };
-
-  // Keep any existing family_member display names for this user in sync with
-  // the name they just gave (best-effort — they may not have a family yet).
-  await supabase.from('family_members').update({ display_name: firstName }).eq('user_id', auth.user.id);
+  const res = await saveUserProfile(auth.user.id, { firstName, lastName, phone, email });
+  if (!res.ok) return res;
 
   await logAudit(supabase, {
     familyId: null, actorId: auth.user.id, action: 'update', resource: 'profiles', resourceId: auth.user.id,

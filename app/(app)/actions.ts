@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createServer } from '@/lib/supabase/server';
 import { isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { profileUpdateSchema } from '@/lib/validation';
-import { joinName, normalizePhone } from '@/lib/onboarding/profile';
+import { saveUserProfile } from '@/lib/server/profiles';
 
 /** Updates the signed-in user's account profile (name + contact phone). Keeps
  *  their family_members display name in sync with the first name. */
@@ -18,15 +18,8 @@ export async function updateMyProfileAction(input: {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return { ok: false, error: 'Not signed in' };
 
-  const { firstName, lastName, phone } = parsed.data;
-  const { error } = await supabase.from('profiles').update({
-    full_name: joinName(firstName, lastName),
-    display_name: firstName,
-    phone: normalizePhone(phone),
-  }).eq('id', auth.user.id);
-  if (error) return { ok: false, error: error.message };
-
-  await supabase.from('family_members').update({ display_name: firstName }).eq('user_id', auth.user.id);
+  const res = await saveUserProfile(auth.user.id, parsed.data);
+  if (!res.ok) return res;
 
   revalidatePath('/dashboard', 'layout');
   return { ok: true };
