@@ -184,19 +184,18 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0063**.
+Latest migration applied to prod: **0050**. Next migration number: **0064**.
 (0050 dedup index applied; **0051 `checkout_sessions`**, **0052 `family_onboarding`**,
 **0053 `landing_metrics`** are on main. This branch's marketing-platform
 migrations — **0054 `crm`** + **0055 `crm_quotes`** + **0056 `visitor_intelligence`** +
 **0057 `reputation`** + **0058 `marketing_assets`** + **0059 `marketing_videos`** +
-**0060 `personalization`** + **0061 `marketing_push`** + **0062 `exit_intent`** —
-still need applying to prod when this PR lands.)
+**0060 `personalization`** + **0061 `marketing_push`** + **0062 `exit_intent`** +
+**0063 `affiliates`** — still need applying to prod when this PR lands.)
 
 > ✅ **Merge-ready: branch migrations renumbered.** They previously collided with
-> main's `0052_family_onboarding`/`0053_landing_metrics`; the six branch
-> migrations were renumbered **0052–0057 → 0054–0059** (filenames + in-file
-> headers updated) so they slot cleanly after main's max (0053). If `main` gains
-> new migrations before this merges, bump these again to stay after main's max.
+> main's `0052_family_onboarding`/`0053_landing_metrics`; the branch
+> migrations were renumbered to slot cleanly after main's max (0053). If `main`
+> gains new migrations before this merges, bump these again to stay after main's max.
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -382,6 +381,15 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   (1) A/B-test offer variants via `assignVariant`; (2) richer triggers
   (idle-time, scroll-velocity); (3) per-offer frequency cap beyond the global
   weekly once.
+- **#62 Affiliate Management** — mig `0063_affiliates.sql`: `affiliates` (code,
+  commission_rate, status) + `affiliate_referrals` (status pending/converted/
+  paid/void, commission_cents). Pure logic `lib/marketing/affiliates.ts`
+  (`normalizeAffiliateCode`, `clampRate`, `commissionCents`, `summarizeReferrals`,
+  `payoutByAffiliate`; 5 tests). Page `/admin/marketing/affiliates` (add, pause/
+  activate, pay-out, delete; per-affiliate owed/paid stats). Actions
+  `affiliates/actions.ts`. Nav: Affiliates. **Apply 0063 at merge.** NEXT: wire
+  `?via=CODE` capture on the marketing site → create `affiliate_referrals` on
+  signup/conversion (snapshot commission from the affiliate's rate).
 
 ### Already EXISTS in the app (don't rebuild — extend)
 Email (`/email`, `marketing_email_campaigns`) · Automation (`/automation`,
@@ -410,10 +418,8 @@ next) · Push Notifications ✅ (`marketing_push_campaigns`; broadcast send reus
 VAPID/FCM, honors suppressions; segment targeting + click tracking = next) ·
 Exit-Intent Popups ✅ (`marketing_exit_intent`; fully wired — public popup on the
 marketing site + resolve/track endpoints; A/B variants = next) · Affiliate
-Management (NEXT pillar — distinct from customer referrals: `affiliates`
-{partner, payout terms, status} + `affiliate_clicks` + `affiliate_conversions`
-with attribution windows + a payout ledger; public `?ref=` capture + a partner
-dashboard).
+Management ✅ (`affiliates` + `affiliate_referrals` with commission tracking +
+payout; NEXT: public `?via=CODE` capture + a partner dashboard).
 MEDIUM: Competitor Monitoring · Keyword Intelligence · Backlink Monitoring (extend SEO).
 Each: new table(s) per the field lists in the spec, pure logic + tests, an admin
 page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branch.

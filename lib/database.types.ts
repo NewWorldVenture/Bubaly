@@ -796,6 +796,16 @@ export interface Database {
         { id?: string; name: string; slot: string; match?: Json; variant?: Json; priority?: number; status?: string; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
         Partial<{ name: string; slot: string; match: Json; variant: Json; priority: number; status: string; metadata: Json; deleted_at: string | null }>
       >;
+      affiliates: T<
+        { id: string; name: string; email: string | null; code: string; commission_rate: number; status: string; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; name: string; email?: string | null; code: string; commission_rate?: number; status?: string; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; email: string | null; code: string; commission_rate: number; status: string; notes: string | null }>
+      >;
+      affiliate_referrals: T<
+        { id: string; affiliate_id: string; referred_email: string | null; family_id: string | null; status: string; amount_cents: number; commission_cents: number; converted_at: string | null; paid_at: string | null; created_at: string },
+        { id?: string; affiliate_id: string; referred_email?: string | null; family_id?: string | null; status?: string; amount_cents?: number; commission_cents?: number; converted_at?: string | null; paid_at?: string | null; created_at?: string },
+        Partial<{ referred_email: string | null; family_id: string | null; status: string; amount_cents: number; commission_cents: number; converted_at: string | null; paid_at: string | null }>
+      >;
       weather_locations: T<
         { id: string; family_id: string; name: string; admin1: string | null; country: string | null; latitude: number; longitude: number; is_default: boolean; sort_order: number; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name: string; admin1?: string | null; country?: string | null; latitude: number; longitude: number; is_default?: boolean; sort_order?: number; created_by?: string | null },
