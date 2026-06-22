@@ -3,6 +3,31 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after PR #87. Keep this updated as you ship.
 
+> **Session update (2026-06-22b, branch `claude/onboarding-journey`):**
+> - **Customer onboarding journey built out.** The wizard already captured Email +
+>   First/Last name + Contact phone (→ `profiles`, #90) and family name + timezone
+>   (→ `families`). Added a new **"About your family"** step (now 4 steps:
+>   About you → Name your family → About your family → Add members) capturing
+>   household adults/children, kids' ages, goals (multi-select chips), state/ZIP,
+>   and **how-did-you-hear-about-us attribution**.
+> - **Migration `0052_family_onboarding.sql`** — `family_onboarding` (one row per
+>   family; RLS `is_family_member`, marketing reads via service role). **Apply to
+>   prod after merge** (0042/0043 already applied by the user).
+> - **Marketing wiring:** new **`onboarding_completed`** event trigger
+>   (`lib/marketing/automation-triggers.ts` + default welcome copy);
+>   `saveFamilyDetailsAction` upserts the row, stamps `completed_at`, and fires it
+>   via `fireAutomationEvent(createServiceClient(), …)` (best-effort, deduped by
+>   familyId). An active workflow with that trigger now sends a real welcome.
+> - **Pure helpers** `lib/onboarding/family.ts` (`FAMILY_GOALS`, `REFERRAL_SOURCES`,
+>   `cleanGoals`, `cleanReferralSource`, `parseChildAges`, `householdSummary`) +
+>   `familyDetailsSchema` in `lib/validation.ts`; tests `tests/onboarding-family.test.ts` (8).
+> - **NEXT:** (1) Let families edit these details later in **Settings** (mirror the
+>   #91 profile edit; reuse `family_onboarding` + a `saveFamilyDetailsAction`-style
+>   update). (2) Build the admin **"onboarding_completed" welcome workflow** in
+>   `/admin/marketing/automation` so the trigger actually has a workflow to run.
+>   (3) Use `family_onboarding.goals`/`referral_source` to seed **Segments** +
+>   **Personalization** (marketing roadmap).
+
 > **Session update (2026-06-22, branch `claude/family-missions`):**
 > - **Merged to main:** Marketing Pillar 3 **Loyalty & Rewards** (PR #94, migration `0042_loyalty.sql` — 5 tables, service-role engine `lib/loyalty/server.ts`, admin console `/admin/marketing/loyalty`).
 > - **In review (PR #96):** **Family Missions** — AI chore proof/validation/dispute + gamification, **extending** the existing `chores`/`chore_assignments`/`rewards` system (not a rebuild). Migration `0043_chore_missions.sql` (chore config columns; `chore_submissions`, `chore_ai_validations`, `chore_disputes`, `chore_approval_events`, `kid_progress`, `badges`/`member_badges`; private `chore-proof` bucket). `lib/chores/{ai,logic,server}.ts`; pages `/missions`, `/missions/new`, `/kids/submit/[id]`.
@@ -75,7 +100,7 @@ Last updated after PR #87. Keep this updated as you ship.
   guards). Always apply the migration to prod after merging the migration file.
 
 ## Conventions
-- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0049.**
+- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0053.**
   Helpers available in DB: `public.is_family_member(family_id)`, `public.is_super_admin()`,
   `public.set_updated_at()` trigger fn, `gen_random_uuid()`.
 - **Family-scoped tables** (member data): RLS pattern —
@@ -192,8 +217,10 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0052**.
-(0050 dedup index applied; **0051 `checkout_sessions` still needs applying** to prod.)
+Next migration number: **0053**. Applied to prod by the user: through **0043**
+(0042 loyalty, 0043 chore missions). **Still needs applying to prod:** any of
+0044–0051 not yet run, plus **0052 `family_onboarding`** (this session).
+Verify with `select max(...)`/`\dt` before assuming a migration is live.
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -269,7 +296,7 @@ build → **verify** (`tsc --noEmit`, `next lint`, `next build`, `vitest run`, a
 validate the migration **twice** on a throwaway Postgres 16 cluster for
 idempotency + RLS/CHECK) → draft PR (`mcp__github__create_pull_request`) → mark
 ready → **squash-merge** → apply the migration to prod (Supabase Management API,
-see migration section; **next number: 0052**) → update this doc's pillar row +
+see migration section; **next number: 0053**) → update this doc's pillar row +
 its NEXT step. Keep each PR to one pillar.
 
 ### Pillar map (✅ shipped · 🟡 partial · ⬜ not built)
