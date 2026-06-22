@@ -1,7 +1,43 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the calendar-connect UX PR. Keep this updated as you ship.
+Last updated after the Recipe Discovery PR. Keep this updated as you ship.
+
+> **Session update (2026-06-22e, branch `claude/funny-darwin-gkmptm`) — FAMILY FOOD OS, PHASE 1:**
+> Big spec: build the world's best family recipe/meal-plan/grocery/nutrition/voting/
+> rating system. It's HUGE (21 sections) — being built incrementally. **What already
+> existed:** `family_recipes` vault (ingredients/instructions Json shaped as
+> `{name,quantity,unit}[]` / `{step,text}[]`), `meal_plans`/`meal_plan_*`, `grocery_lists`/
+> `grocery_items`, `pantry`?, the `RecipesModule` UI, and AI recipe endpoints.
+> - **PHASE 1 SHIPPED (this PR): Recipe Discovery + provider architecture + save-to-vault.**
+>   - `lib/recipes/providers/{types,themealdb,index}.ts` — provider registry; **TheMealDB**
+>     (free/keyless) implemented; `searchAllProviders` merges+dedupes. Add new adapters
+>     here (usda, openFoodFacts, spoonacular, edamam, fatsecret, localSupabase) — all must
+>     be OPTIONAL (env-gated `isEnabled()`), keys server-side only.
+>   - `lib/recipes/normalize.ts` (pure, tested) — `normalizeThemealdb`, `normalizeInstructions`,
+>     `normalizeMeasure` → `NormalizedRecipe` matching the vault shape.
+>   - `GET /api/recipes/search?q=` (auth+rate-limited, server-side; strips raw_payload).
+>   - `/dashboard/recipes/discover` (mobile-first search + cards + Save to vault); "Discover"
+>     button added to `RecipesModule` header.
+>   - **Save** (`discover/actions.ts`): re-fetches from provider server-side, copies into
+>     `family_recipes` with full provenance, deduped by (family, provider, source id) so it
+>     survives provider outages. **Migration `0054_recipe_sources.sql`** added source_provider/
+>     source_recipe_id/attribution/license_notes/imported_at/raw_payload to family_recipes —
+>     **APPLIED TO PROD + verified.**
+> - **NEXT (food OS roadmap, priority order):**
+>   1. **More providers** — USDA FoodData Central + Open Food Facts (keyless/free, nutrition +
+>      barcode), then Spoonacular/Edamam/FatSecret (env-key-gated stubs already planned).
+>   2. **AI recipe actions** on a saved recipe ("make healthier/cheaper/higher-protein/
+>      gluten-free/kid-friendly", scale servings, estimate missing nutrition) via
+>      `resolveProvider()` — mark nutrition as ESTIMATES + non-medical disclaimer.
+>   3. **Family meal voting** (new tables `meal_votes`/`meal_vote_options`/member votes;
+>      parent creates options → family votes → winner → add to meal plan → grocery list).
+>   4. **Post-meal ratings** (1–5 + tags + AI "Family/Kid/Parent score" + repeat probability;
+>      feed back into recommendations). 5. **Pantry** (barcode via Open Food Facts, "use soon",
+>      "recipes from pantry"). 6. **Recipe Vault upload/OCR** (image/PDF → AI structure → review).
+>      7. **Admin provider settings** (`recipe_provider_settings`) for enable/keys/limits.
+>   - Reuse existing `meal_plans`/`grocery_lists`. Gate advanced AI/limits by tier
+>     (`requirePlanLevel`). Every external recipe must keep source/attribution/license.
 
 > **Session update (2026-06-22d, branch `claude/funny-darwin-gkmptm`):**
 > - **Two-way calendar sync — "super easy connect" UX.** A full sync platform
