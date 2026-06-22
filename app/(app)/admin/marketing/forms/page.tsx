@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/states';
-import { createForm } from '../actions';
+import { createForm, setFormStatus } from '../actions';
 
 export const metadata: Metadata = { title: 'Marketing · Forms', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -27,11 +27,29 @@ export default async function FormsPage() {
         ) : (
           (forms ?? []).map((f) => {
             const fields = Array.isArray(f.fields) ? f.fields as { label: string }[] : [];
+            const active = f.status === 'active';
             return (
               <Card key={f.id} className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-semibold">{f.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold">{f.name}</p>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${active ? 'bg-success/15 text-success' : 'bg-border/50 text-muted'}`}>
+                      {active ? 'Active' : 'Archived'}
+                    </span>
+                  </div>
                   <p className="mt-1 text-xs text-muted">{fields.map((x) => x.label).join(', ') || 'No fields'}</p>
+                  <div className="mt-2 flex items-center gap-3 text-xs">
+                    {active && (
+                      <a href={`/f/${f.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand hover:underline">
+                        <ExternalLink className="h-3 w-3" /> View public form
+                      </a>
+                    )}
+                    <form action={setFormStatus}>
+                      <input type="hidden" name="id" value={f.id} />
+                      <input type="hidden" name="activate" value={active ? '0' : '1'} />
+                      <button className="text-muted hover:text-fg hover:underline">{active ? 'Archive' : 'Activate'}</button>
+                    </form>
+                  </div>
                 </div>
                 <div className="shrink-0 text-right text-sm">
                   <p className="font-semibold">{countByForm.get(f.id) ?? 0}</p>
@@ -42,7 +60,8 @@ export default async function FormsPage() {
           })
         )}
         <p className="text-xs text-muted">
-          Submissions write to <code>marketing_form_submissions</code> and can feed segments and automations.
+          Active forms are live at <code>/f/&lt;id&gt;</code>. Submissions write to{' '}
+          <code>marketing_form_submissions</code> and fire any <code>form_submitted</code> automation.
         </p>
       </div>
       <Card className="h-fit">

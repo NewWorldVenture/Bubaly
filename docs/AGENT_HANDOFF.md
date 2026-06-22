@@ -3,6 +3,34 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after PR #87. Keep this updated as you ship.
 
+> **Session update (2026-06-22d, branch `claude/loving-mccarthy-e1ahq8`):**
+> - **Public-site wiring #55 DONE — marketing Forms now render & accept submissions
+>   publicly.** Admin could author `marketing_forms` (fields jsonb) but nothing
+>   served them; built the public renderer + submit endpoint, mirroring the #54
+>   landing-page PR. **NO migration** (tables `marketing_forms` /
+>   `marketing_form_submissions` already exist; service-role writes bypass RLS).
+> - **Public route** `app/(marketing)/f/[id]/page.tsx` (service-role read, only
+>   `status='active'` + non-deleted forms with ≥1 field) renders the form via a
+>   client `form-renderer.tsx`. Optional `metadata.{title,description,submit_label,
+>   success_message}` customise it. Pages are `robots: noindex` (utility pages).
+> - **Submit endpoint** `POST /api/forms/submit { formId, values }` — rate-limited
+>   (10/min/IP), validates server-side, inserts a `marketing_form_submissions` row
+>   (service role), and fires `fireAutomationEvent('form_submitted', …)` deduped by
+>   `eventSubjectKey('form_submitted', [formId, submissionId])` (best-effort).
+> - **Pure helper** `lib/marketing/forms.ts` (`parseFormFields` w/ type inference for
+>   legacy label/key fields, `validateSubmission`, `submissionEmail`/`submissionName`,
+>   `inputType`/`fieldAutoComplete`) + tests `tests/marketing-forms.test.ts` (10).
+>   Added `/f` + `/api/forms` to `middleware.ts` PUBLIC.
+> - **Admin** (`/admin/marketing/forms`): each form card now shows an Active/Archived
+>   pill, a "View public form" link (`/f/<id>`) when active, and an Activate/Archive
+>   toggle (`setFormStatus`). New forms are created `active` (live immediately).
+> - **NEXT: Asset Library (DAM)** — `marketing_assets` (kind image/video/doc/brand,
+>   storage_path, tags[], dimensions, alt, usage refs) + private bucket
+>   `marketing-assets`; picker reused by Email/Social/Content/Landing. (Then Video,
+>   Personalization — see "Remaining pillars to build" below.) This completes the
+>   public-site wiring gap (#54 + #55); future builders must ship their public
+>   surface in the same PR.
+
 > **Session update (2026-06-22c, branch `claude/lp-public-renderer`):**
 > - **Public-site wiring #54 DONE — landing pages now render publicly.** Admin
 >   could author `marketing_landing_pages` but nothing served them; built the
@@ -340,7 +368,7 @@ its NEXT step. Keep each PR to one pillar.
 | AEO | ✅ | `marketing_aeo_questions` (0013) | question/answer, pattern, clarity_score, status | `/admin/marketing/aeo` | Emit JSON-LD FAQ schema on public pages from `answered` Q&As |
 | Funnels | 🟡 | `marketing_funnels` (0020) | steps jsonb, status | `/admin/marketing/funnels` | Compute real step conversion from `ab_events`/page analytics (steps are descriptive today) |
 | Landing pages | ✅ | `marketing_landing_pages` (0020), `bump_landing_metric` (0053) | slug, headline, subhead, body, published, views, conversions, metadata.cta_* | `/admin/marketing/landing-pages` + public `/lp/[slug]` | A/B-test headline/CTA variants via `assignVariant` + `/api/ab/track`; per-page conversion goals |
-| Forms | 🟡 | `marketing_forms`, `marketing_form_submissions` (0020) | fields jsonb; submission payload | `/admin/marketing/forms` | **Public embed + submit endpoint (see wiring TODO #55)** — fire `form_submitted` |
+| Forms | ✅ | `marketing_forms`, `marketing_form_submissions` (0020) | fields jsonb; submission payload | `/admin/marketing/forms` + public `/f/[id]` | Field-type/required authoring UI (renderer infers types today); embed snippet + per-form thank-you redirect |
 | Automation / lifecycle | ✅ | `marketing_automation_workflows`, `marketing_automation_runs` (0020), dedup idx (0050), `checkout_sessions` (0051) | trigger, steps jsonb, subject_key | `/admin/marketing/automation` | Execute non-email actions (notify_admin/apply_tag) — recorded but not run (#87) |
 | Customers | ✅ | read-time over contact tickets / Stripe (no table) | MarketingCustomer snapshot | `/admin/marketing/customers` | Persist a `marketing_customers` table for tags/notes instead of read-time only |
 | Customer Health & Churn | ✅ (#78) | read-time | churn score over snapshot | `/admin/marketing/health` | Trigger a win-back automation when score crosses a threshold |
@@ -361,12 +389,13 @@ Each is a clean PR following the conventions above. Suggested order top-to-botto
      `claude/lp-public-renderer`, mig 0053). `/lp/[slug]` renders published pages,
      CTA + body; `tracker.tsx` beacons view/conversion → `/api/lp/track` →
      `bump_landing_metric`. Admin has CTA fields + Publish/Unpublish.
-   - **#55 Forms → public embed + submit. ⬜ NEXT.** `marketing_forms` (fields jsonb) +
-     `marketing_form_submissions` exist with admin authoring but no public
-     render/submit. Build a public form renderer + `POST` action that inserts a
-     submission (service-role) and calls `fireAutomationEvent('form_submitted', …)`
-     — mirror how the existing contact form already fires that event.
-2. **Asset Library (DAM)** ⬜ — `marketing_assets` (kind image/video/doc/brand,
+   - **#55 Forms → public embed + submit. ✅ DONE** (branch
+     `claude/loving-mccarthy-e1ahq8`, NO migration). `/f/[id]` renders active forms;
+     `form-renderer.tsx` posts to `/api/forms/submit` → inserts a submission
+     (service-role) + fires `fireAutomationEvent('form_submitted', …)`. Admin has an
+     Active/Archive toggle + "View public form" link. Pure helpers in
+     `lib/marketing/forms.ts` (tested). This closes the public-site wiring gap.
+2. **Asset Library (DAM)** ⬜ — **NEXT.** `marketing_assets` (kind image/video/doc/brand,
    storage_path, tags[], dimensions, alt, usage refs) + a **private storage
    bucket** `marketing-assets`. Picker reused by Email/Social/Content/Landing.
    NEXT after build: thumbnail generation + "where used" backrefs.
@@ -397,12 +426,13 @@ Each is a clean PR following the conventions above. Suggested order top-to-botto
    "connect a data source" when unset; never fabricate metrics).
 
 ### Public-site wiring TODOs (detail — tracked as #54/#55)
-The marketing **builders ship before their public surfaces**. As of now, the
-admin can fully author landing pages and forms, but the public site does not yet
-render or accept them — this is the single biggest "looks done but isn't wired"
-gap. Close it via items 1.#54 and 1.#55 above. Same caution applies to any future
-builder: ship the public renderer/endpoint in the same PR as the authoring UI, or
-record it here as a wiring TODO so it isn't mistaken for complete.
+The marketing **builders ship before their public surfaces**. Landing pages (#54)
+and forms (#55) are now both wired end-to-end — the public site renders landing
+pages (`/lp/[slug]`) and renders+accepts forms (`/f/[id]` + `/api/forms/submit`).
+This "looks done but isn't wired" gap is **now closed**. The standing caution
+remains for any future builder: ship the public renderer/endpoint in the same PR
+as the authoring UI, or record it here as a wiring TODO so it isn't mistaken for
+complete.
 
 ## Backlog (prioritized, each a clean PR)
 1. Event-driven automation triggers (form_submitted, email_opened/clicked,
