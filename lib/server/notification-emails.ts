@@ -1,4 +1,4 @@
-// Delivers pending FamilyOS notifications as per-recipient email digests.
+// Delivers pending Bubaly notifications as per-recipient email digests.
 // Runs after the notification generator (same cron). Idempotent via the
 // notifications.sent_at column: a row is emailed (or intentionally skipped)
 // exactly once. No-ops cleanly when RESEND_API_KEY isn't configured.
@@ -71,7 +71,7 @@ export async function deliverNotificationEmails(supabase: DB): Promise<number> {
     const items = notifs.map((n) => ({ title: n.title, body: n.body, icon: iconForType(n.type) }));
     const { ok } = await sendReactEmail({
       to: meta.email,
-      subject: `${notifs.length} family update${notifs.length > 1 ? 's' : ''} · FamilyOS`,
+      subject: `${notifs.length} family update${notifs.length > 1 ? 's' : ''} · Bubaly`,
       react: React.createElement(NotificationDigestEmail, { name: meta.name, items }),
     });
     if (ok) {

@@ -3,7 +3,7 @@ import { APP_URL } from '@/lib/email';
 
 export type DigestItem = { title: string; body: string | null; icon: string };
 
-/** Daily roll-up of a member's pending FamilyOS notifications. */
+/** Daily roll-up of a member's pending Bubaly notifications. */
 export function NotificationDigestEmail({
   name, items,
 }: {
@@ -18,7 +18,7 @@ export function NotificationDigestEmail({
       <body style={{ fontFamily: 'system-ui, sans-serif', background: '#030914', color: '#edf0f7', maxWidth: 520, margin: '40px auto', padding: 32 }}>
         <div style={{ marginBottom: 28 }}>
           <span style={{ fontSize: 24, fontWeight: 800, background: 'linear-gradient(135deg,#7c5dff,#f4996e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            FamilyOS
+            Bubaly
           </span>
         </div>
 
@@ -49,7 +49,7 @@ export function NotificationDigestEmail({
           href={`${APP_URL}/dashboard/notifications`}
           style={{ display: 'inline-block', background: 'linear-gradient(135deg,#7c5dff,#6355e6)', color: '#fff', fontWeight: 700, fontSize: 16, padding: '14px 28px', borderRadius: 12, textDecoration: 'none' }}
         >
-          Open FamilyOS
+          Open Bubaly
         </a>
 
         <p style={{ color: '#5b6578', fontSize: 12, marginTop: 32 }}>
