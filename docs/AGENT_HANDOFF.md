@@ -184,11 +184,17 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0056**.
+Latest migration applied to prod: **0050**. Next migration number: **0057**.
 (0050 dedup index applied; **0051 `checkout_sessions`** (on main, #89) and
-**0052 `crm`** + **0053 `crm_quotes`** + **0054 `visitor_intelligence`** + **0055 `reputation`** (on branch
-`claude/marketing-platform`, not yet merged) still need applying to prod when
-their PRs land.)
+**0052 `crm`** + **0053 `crm_quotes`** + **0054 `visitor_intelligence`** + **0055 `reputation`** +
+**0056 `marketing_assets`** (on branch `claude/marketing-platform`, not yet
+merged) still need applying to prod when their PRs land.)
+
+> ⚠️ **Migration-number collision at merge time.** `main` has since merged its own
+> `0052_family_onboarding` and `0053_landing_metrics` (different files, same
+> numbers). When this long-lived branch finally merges, **renumber this branch's
+> 0052–0056 to the next free numbers on main** (and update the filenames + this
+> doc) before applying. The files are otherwise independent/idempotent.
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -279,6 +285,21 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   `reputation/actions.ts`. Nav: Reputation. **Apply 0055 at merge.** NEXT: render
   published testimonials/case-studies on the public marketing site (read via
   service client in a server component, `publishedOnly`).
+- **#56 Asset Library (DAM)** — mig `0056_marketing_assets.sql`: `marketing_assets`
+  (name, kind [image/video/document/brand], storage_path, mime_type, size_bytes,
+  width/height, alt_text, tags text[], metadata, deleted_at) + a **private
+  `marketing-assets` Storage bucket** (50 MB/file, NO storage.objects policies →
+  service-role only; admin mints short-lived signed URLs for image previews).
+  Pure logic `lib/marketing/assets.ts` (`assetKindFromMime`, `formatBytes`,
+  `parseTags`, `sanitizeAssetName`/`buildAssetPath`, `assetsByKind`; 7 tests).
+  Page `/admin/marketing/assets` (upload form, stats, kind-grouped gallery with
+  previews + inline edit alt/tags + delete). Actions `assets/actions.ts`
+  (`uploadAssetAction` uploads to the bucket then inserts, rolling back the
+  orphaned object on insert failure; `deleteAssetAction` removes the file then
+  soft-deletes the row). Nav: Assets. **Apply 0056 at merge.** NEXT: (1) a
+  reusable **asset picker** component for Email/Social/Content/Landing authoring;
+  (2) image **dimensions + thumbnail** capture on upload (width/height columns
+  exist, currently null); (3) **"where used" backrefs** so deletes warn.
 
 ### Already EXISTS in the app (don't rebuild — extend)
 Email (`/email`, `marketing_email_campaigns`) · Automation (`/automation`,
@@ -297,11 +318,13 @@ CRITICAL: CRM ✅ · Sales Pipeline ✅ · Proposal/Quotes ✅ · Visitor Tracki
 identity stitching) · Attribution (touchpoints: touchpoint_id, source, campaign) ·
 Visitor Tracking (sessions, page_views, visitor_id) · Audience Segmentation (dynamic,
 extend `marketing_segments`).
-HIGH: Testimonials ✅ + Case Studies ✅ (distinct from reviews) · Asset Library (assets:
-file_type, storage_url via Supabase Storage) · Video Marketing · Blog Platform
-(extend content) · Personalization Engine · Push Notifications (marketing; reuse
-`lib/push`) · Exit-Intent Popups (popup_id, conversion_rate) · Affiliate Management
-(distinct from referrals: affiliate_id, commission).
+HIGH: Testimonials ✅ + Case Studies ✅ (distinct from reviews) · Asset Library ✅
+(`marketing_assets` + private bucket; picker/thumbnails/backrefs = next) · Video
+Marketing (NEXT pillar — `marketing_videos`: provider youtube/vimeo/upload,
+url/storage_path, poster, captions, transcript; pairs with Asset Library) · Blog
+Platform (extend content) · Personalization Engine · Push Notifications
+(marketing; reuse `lib/push`) · Exit-Intent Popups (popup_id, conversion_rate) ·
+Affiliate Management (distinct from referrals: affiliate_id, commission).
 MEDIUM: Competitor Monitoring · Keyword Intelligence · Backlink Monitoring (extend SEO).
 Each: new table(s) per the field lists in the spec, pure logic + tests, an admin
 page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branch.
