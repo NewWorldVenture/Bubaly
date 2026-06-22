@@ -731,6 +731,16 @@ export interface Database {
         { email: string; reason?: string; campaign_id?: string | null },
         Partial<{ reason: string; campaign_id: string | null }>
       >;
+      crm_contacts: T<
+        { id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null; company: string | null; lead_status: string; lifecycle_stage: string; lead_source: string | null; family_id: string | null; owner_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; first_name?: string | null; last_name?: string | null; email?: string | null; phone?: string | null; company?: string | null; lead_status?: string; lifecycle_stage?: string; lead_source?: string | null; family_id?: string | null; owner_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ first_name: string | null; last_name: string | null; email: string | null; phone: string | null; company: string | null; lead_status: string; lifecycle_stage: string; lead_source: string | null; family_id: string | null; owner_id: string | null; notes: string | null }>
+      >;
+      crm_deals: T<
+        { id: string; contact_id: string | null; name: string; amount_cents: number; currency: string; stage: string; close_date: string | null; owner_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; contact_id?: string | null; name: string; amount_cents?: number; currency?: string; stage?: string; close_date?: string | null; owner_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ contact_id: string | null; name: string; amount_cents: number; currency: string; stage: string; close_date: string | null; owner_id: string | null; notes: string | null }>
+      >;
       weather_locations: T<
         { id: string; family_id: string; name: string; admin1: string | null; country: string | null; latitude: number; longitude: number; is_default: boolean; sort_order: number; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name: string; admin1?: string | null; country?: string | null; latitude: number; longitude: number; is_default?: boolean; sort_order?: number; created_by?: string | null },

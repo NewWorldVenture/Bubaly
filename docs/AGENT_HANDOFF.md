@@ -184,8 +184,10 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0052**.
-(0050 dedup index applied; **0051 `checkout_sessions` still needs applying** to prod.)
+Latest migration applied to prod: **0050**. Next migration number: **0053**.
+(0050 dedup index applied; **0051 `checkout_sessions`** (on main, #89) and
+**0052 `crm`** (on branch `claude/marketing-platform`, not yet merged) still need
+applying to prod when their PRs land.)
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -221,6 +223,69 @@ Latest migration applied to prod: **0050**. Next migration number: **0052**.
 - To use ChatGPT: `/admin/ai` → pick **ChatGPT (OpenAI)**, choose a model (gpt-4o…),
   paste the OpenAI key, Save. Env fallbacks: `OPENAI_API_KEY`, `AI_PROVIDER=openai`, `AI_MODEL`.
   (The OpenAI account/key must have active billing or calls 401/429.)
+
+## Marketing Platform ("HubSpot competitor") — branch `claude/marketing-platform`
+**Long-lived feature branch — do NOT merge to main until it "comes together."** Build
+incrementally here, commit often, keep it building. Vision: a full marketing OS
+(CRM → revenue) modeled on HubSpot/Klaviyo/Semrush etc.
+
+### Conventions for marketing tables (business-wide, NOT family-scoped)
+- Table lives in a new migration; **RLS ENABLED, NO policies** → service-role only.
+- All admin reads use `createServiceClient()`; all writes go through a server action
+  guarded by `requireMarketingAdmin()` (`lib/marketing/admin.ts`) which returns the
+  service client + actor and gates super-admin. Log via `logMarketingAudit(...)`.
+- Pages: `app/(app)/admin/marketing/<name>/page.tsx` (server component, `dynamic =
+  'force-dynamic'`, `robots: { index: false }`); add to `SUBNAV` in
+  `app/(app)/admin/marketing/layout.tsx`. Input class:
+  `h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm`; primary btn:
+  `h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90`.
+- Pure logic in `lib/marketing/<feature>.ts` + vitest tests.
+
+### Built on this branch so far
+- **#52 CRM + Sales Pipeline (cornerstone)** — mig `0052_crm.sql`: `crm_contacts`
+  (first/last/email/phone/company, lead_status, lifecycle_stage, lead_source,
+  family_id, owner_id) + `crm_deals` (contact_id, name, amount_cents, stage,
+  close_date). Pure logic `lib/marketing/crm.ts` (stages, `dealsByStage`,
+  `openPipelineValueCents`, `weightedPipelineValueCents`, `winRate`, `formatCents`;
+  10 tests). Pages `/admin/marketing/crm` (contacts + add form) and
+  `/admin/marketing/pipeline` (stage board, add/advance/delete deals). Actions in
+  `app/(app)/admin/marketing/crm/actions.ts`. Nav: CRM + Pipeline added to SUBNAV.
+  **Migration 0052 must be applied to prod when this branch merges.**
+
+### Already EXISTS in the app (don't rebuild — extend)
+Email (`/email`, `marketing_email_campaigns`) · Automation (`/automation`,
+`marketing_automation_workflows/runs`, event+scheduled triggers #87/#88/#89) ·
+Landing Pages (`marketing_landing_pages`) · Forms (`marketing_forms`,
+`marketing_form_submissions`) · SEO+AEO (`marketing_seo_pages/keywords`,
+`marketing_aeo_questions`) · Social (`marketing_social_posts`) · SMS
+(`marketing_sms_campaigns`) · Ads (`marketing_ad_campaigns`) · Segments
+(`marketing_segments`) · Funnels (`marketing_funnels`) · Campaigns
+(`marketing_campaigns`) · Content (`marketing_content_items`) · Reviews (#41) ·
+Surveys/NPS (#40) · Referrals (#39) · A/B testing (#85, `ab_experiments/ab_events`) ·
+Lead scoring (#86) · Customers/health (derived `getMarketingCustomers`) · Suppressions.
+
+### Remaining pillars to build (from the spec screenshots, prioritized)
+CRITICAL: CRM ✅ · Sales Pipeline ✅ · Proposal/Quotes (`crm_quotes`: quote_id,
+contact_id, status, line items) · CDP / unified profile (anonymous_id, device_id →
+identity stitching) · Attribution (touchpoints: touchpoint_id, source, campaign) ·
+Visitor Tracking (sessions, page_views, visitor_id) · Audience Segmentation (dynamic,
+extend `marketing_segments`).
+HIGH: Testimonials + Case Studies (distinct from reviews) · Asset Library (assets:
+file_type, storage_url via Supabase Storage) · Video Marketing · Blog Platform
+(extend content) · Personalization Engine · Push Notifications (marketing; reuse
+`lib/push`) · Exit-Intent Popups (popup_id, conversion_rate) · Affiliate Management
+(distinct from referrals: affiliate_id, commission).
+MEDIUM: Competitor Monitoring · Keyword Intelligence · Backlink Monitoring (extend SEO).
+Each: new table(s) per the field lists in the spec, pure logic + tests, an admin
+page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branch.
+
+### Marketing platform — how to continue
+1. `git checkout claude/marketing-platform` (create from main if missing), build the
+   next pillar following the conventions above, commit to the branch (do NOT merge).
+2. Keep `tsc`/lint/build/vitest green each commit. New migration = next number
+   (0053+); note it must be applied to prod at merge time.
+3. When the platform is "ready to come together," open the PR to main and apply all
+   its migrations. Until then it stays on the branch.
 
 ## Backlog (prioritized, each a clean PR)
 1. Event-driven automation triggers (form_submitted, email_opened/clicked,
