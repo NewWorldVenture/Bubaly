@@ -184,16 +184,17 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050**. Next migration number: **0057**.
+Latest migration applied to prod: **0050**. Next migration number: **0058**.
 (0050 dedup index applied; **0051 `checkout_sessions`** (on main, #89) and
 **0052 `crm`** + **0053 `crm_quotes`** + **0054 `visitor_intelligence`** + **0055 `reputation`** +
-**0056 `marketing_assets`** (on branch `claude/marketing-platform`, not yet
-merged) still need applying to prod when their PRs land.)
+**0056 `marketing_assets`** + **0057 `marketing_videos`** (on branch
+`claude/marketing-platform`, not yet merged) still need applying to prod when
+their PRs land.)
 
 > ⚠️ **Migration-number collision at merge time.** `main` has since merged its own
 > `0052_family_onboarding` and `0053_landing_metrics` (different files, same
 > numbers). When this long-lived branch finally merges, **renumber this branch's
-> 0052–0056 to the next free numbers on main** (and update the filenames + this
+> 0052–0057 to the next free numbers on main** (and update the filenames + this
 > doc) before applying. The files are otherwise independent/idempotent.
 
 ## A/B Testing — added in #85
@@ -300,6 +301,21 @@ incrementally here, commit often, keep it building. Vision: a full marketing OS
   reusable **asset picker** component for Email/Social/Content/Landing authoring;
   (2) image **dimensions + thumbnail** capture on upload (width/height columns
   exist, currently null); (3) **"where used" backrefs** so deletes warn.
+- **#57 Video Marketing** — mig `0057_marketing_videos.sql`: `marketing_videos`
+  (title, provider [youtube/vimeo/upload], video_id, url, storage_path,
+  poster_url, captions_url, transcript, duration_seconds, status [draft/
+  published], tags[], metadata, soft-delete). Pure logic `lib/marketing/video.ts`
+  (`parseVideoUrl` for YouTube/Vimeo variants, `embedUrl`, `thumbnailUrl`,
+  `formatDuration`, `publishedOnly`; 8 tests). Page `/admin/marketing/video`
+  (add by URL OR pick an uploaded video asset from the Asset Library; gallery
+  with YouTube thumbnails, publish toggle, delete). Actions `video/actions.ts`
+  (`saveVideoAction` parses the URL or resolves the asset's storage_path;
+  `toggleVideoPublishAction`; `deleteVideoAction` soft-deletes — the underlying
+  asset stays in the library). Nav: Video. **Apply 0057 at merge.** NEXT:
+  (1) public **embed component** that renders `embedUrl()` in content/landing
+  pages (the consume side; admin/catalog is done); (2) **JSON-LD VideoObject**
+  schema on pages that embed a published video (transcript → AEO/SEO);
+  (3) auto-fetch **duration + poster** via the YouTube/Vimeo oEmbed API.
 
 ### Already EXISTS in the app (don't rebuild — extend)
 Email (`/email`, `marketing_email_campaigns`) · Automation (`/automation`,
@@ -320,11 +336,12 @@ Visitor Tracking (sessions, page_views, visitor_id) · Audience Segmentation (dy
 extend `marketing_segments`).
 HIGH: Testimonials ✅ + Case Studies ✅ (distinct from reviews) · Asset Library ✅
 (`marketing_assets` + private bucket; picker/thumbnails/backrefs = next) · Video
-Marketing (NEXT pillar — `marketing_videos`: provider youtube/vimeo/upload,
-url/storage_path, poster, captions, transcript; pairs with Asset Library) · Blog
-Platform (extend content) · Personalization Engine · Push Notifications
-(marketing; reuse `lib/push`) · Exit-Intent Popups (popup_id, conversion_rate) ·
-Affiliate Management (distinct from referrals: affiliate_id, commission).
+Marketing ✅ (`marketing_videos`; admin/catalog done — public embed + JSON-LD =
+next) · Blog Platform (NEXT pillar — extend `marketing_content_items`: publish an
+approved content item to a public `/blog/[slug]` route, render body, JSON-LD
+Article) · Personalization Engine · Push Notifications (marketing; reuse
+`lib/push`) · Exit-Intent Popups (popup_id, conversion_rate) · Affiliate
+Management (distinct from referrals: affiliate_id, commission).
 MEDIUM: Competitor Monitoring · Keyword Intelligence · Backlink Monitoring (extend SEO).
 Each: new table(s) per the field lists in the spec, pure logic + tests, an admin
 page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branch.
