@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import {
   ChefHat, Plus, Star, StarOff, Trash2, Edit2, Clock, Users,
-  Search, Filter, Sparkles, ShoppingCart, Heart, ExternalLink,
+  Search, Filter, Sparkles, ShoppingCart, Heart, ExternalLink, Vote,
   BookOpen, Flame, X, Check, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -233,6 +233,7 @@ export function RecipesModule() {
               {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
             <button onClick={() => { setTonightOpen(true); setTonightPicks(null); }} className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-semibold text-brand hover:bg-brand/15"><Sparkles className="h-4 w-4" /> Tonight?</button>
+            <a href="/dashboard/recipes/vote" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Vote className="h-4 w-4" /> Vote</a>
             <a href="/dashboard/recipes/discover" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Search className="h-4 w-4" /> Discover</a>
             <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Recipe</Button>
           </div>
