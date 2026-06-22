@@ -4,7 +4,7 @@
 // structured text; the server action persists the request+response into
 // social_ai_generations so history is auditable. No output is published here.
 import 'server-only';
-import { getProvider } from '@/lib/ai/provider';
+import { resolveProvider } from '@/lib/ai/provider';
 import { PROVIDERS, type SocialPlatform } from './capabilities';
 import { type AiGenerationKind } from './ai-kinds';
 
@@ -74,7 +74,7 @@ export async function generate(input: AiGenerateInput): Promise<AiGenerateResult
   if (!process.env.ANTHROPIC_API_KEY && (process.env.AI_PROVIDER ?? 'anthropic') === 'anthropic') {
     throw new Error('AI is not configured: set ANTHROPIC_API_KEY to enable content generation.');
   }
-  const provider = getProvider();
+  const provider = await resolveProvider();
   const system =
     'You are a senior social media strategist and copywriter for a family-focused brand. ' +
     'Write clear, on-brand, platform-appropriate content. Never invent statistics or fake engagement. ' +

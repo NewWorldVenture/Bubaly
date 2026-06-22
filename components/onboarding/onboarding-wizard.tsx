@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Home, UserPlus, Mail, Check, ArrowRight, Baby } from 'lucide-react';
+import { Home, UserPlus, Mail, Check, ArrowRight, Baby, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
@@ -10,10 +10,14 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast';
 import { ROLE_LABELS } from '@/lib/constants/roles';
 import {
-  createFamilyAction, addLocalMemberAction, inviteMemberAction,
+  saveOnboardingProfileAction, createFamilyAction, addLocalMemberAction, inviteMemberAction,
 } from '@/app/onboarding/actions';
 
 const COLORS = ['#7c6dff', '#f4996e', '#4ac99b', '#f0bf5f', '#f57171', '#6aa9ff'];
+
+const TOTAL_STEPS = 3;
+
+export type InitialProfile = { firstName: string; lastName: string; phone: string; email: string };
 
 function timezones(): string[] {
   try {
@@ -26,7 +30,9 @@ function timezones(): string[] {
 
 type Added = { kind: 'local' | 'invite'; label: string; sub: string; color?: string };
 
-export function OnboardingWizard() {
+export function OnboardingWizard(
+  { initialProfile, emailLocked = false }: { initialProfile?: InitialProfile; emailLocked?: boolean },
+) {
   const router = useRouter();
   const { success, error } = useToast();
   const tz = useMemo(timezones, []);
@@ -39,6 +45,21 @@ export function OnboardingWizard() {
   const [familyId, setFamilyId] = useState<string | null>(null);
   const [members, setMembers] = useState<Added[]>([]);
 
+  async function onSaveProfile(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    setLoading(true);
+    const res = await saveOnboardingProfileAction({
+      firstName: String(form.get('firstName') ?? ''),
+      lastName: String(form.get('lastName') ?? ''),
+      phone: String(form.get('phone') ?? ''),
+      email: String(form.get('email') ?? ''),
+    });
+    setLoading(false);
+    if (!res.ok) return error(res.error);
+    setStep(2);
+  }
+
   async function onCreateFamily(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -50,7 +71,7 @@ export function OnboardingWizard() {
     setLoading(false);
     if (!res.ok) return error(res.error);
     setFamilyId(res.data!.familyId);
-    setStep(2);
+    setStep(3);
   }
 
   async function onAddChild(e: React.FormEvent<HTMLFormElement>) {
@@ -95,7 +116,7 @@ export function OnboardingWizard() {
     <div className="animate-fade-in">
       {/* Progress */}
       <div className="mb-6 flex items-center gap-3">
-        {[1, 2].map((n) => (
+        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((n) => (
           <div key={n} className="flex flex-1 items-center gap-3">
             <div
               className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
@@ -104,12 +125,58 @@ export function OnboardingWizard() {
             >
               {step > n ? <Check className="h-4 w-4" /> : n}
             </div>
-            {n === 1 && <div className={`h-px flex-1 ${step > 1 ? 'bg-brand' : 'bg-border'}`} />}
+            {n < TOTAL_STEPS && <div className={`h-px flex-1 ${step > n ? 'bg-brand' : 'bg-border'}`} />}
           </div>
         ))}
       </div>
 
       {step === 1 && (
+        <div className="glass-card p-7">
+          <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
+            <User className="h-6 w-6" />
+          </div>
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight">Tell us about you</h1>
+          <p className="mt-1 text-sm text-muted">This is your account profile — your family will see your name.</p>
+          <form onSubmit={onSaveProfile} className="mt-6 space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="First name" required>
+                {(id) => <Input id={id} name="firstName" defaultValue={initialProfile?.firstName} placeholder="Jordan" autoFocus required />}
+              </Field>
+              <Field label="Last name" required>
+                {(id) => <Input id={id} name="lastName" defaultValue={initialProfile?.lastName} placeholder="Rivera" required />}
+              </Field>
+            </div>
+            <Field label="Contact phone" hint="For account security and important family alerts" required>
+              {(id) => <Input id={id} name="phone" type="tel" inputMode="tel" defaultValue={initialProfile?.phone} placeholder="(555) 123-4567" required />}
+            </Field>
+            <Field
+              label="Email"
+              hint={emailLocked ? 'Managed by your Google sign-in' : 'Where we send invites and notifications'}
+              required
+            >
+              {(id) => (
+                <Input
+                  id={id}
+                  name="email"
+                  type="email"
+                  defaultValue={initialProfile?.email}
+                  placeholder="you@example.com"
+                  required
+                  readOnly={emailLocked}
+                  aria-disabled={emailLocked || undefined}
+                  tabIndex={emailLocked ? -1 : undefined}
+                  className={emailLocked ? 'cursor-not-allowed opacity-60' : undefined}
+                />
+              )}
+            </Field>
+            <Button type="submit" loading={loading} className="w-full">
+              Continue <ArrowRight className="h-4 w-4" />
+            </Button>
+          </form>
+        </div>
+      )}
+
+      {step === 2 && (
         <div className="glass-card p-7">
           <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
             <Home className="h-6 w-6" />
@@ -134,7 +201,7 @@ export function OnboardingWizard() {
         </div>
       )}
 
-      {step === 2 && (
+      {step === 3 && (
         <div className="space-y-5">
           <div className="glass-card p-7">
             <h1 className="text-2xl font-semibold tracking-tight">Add your family</h1>

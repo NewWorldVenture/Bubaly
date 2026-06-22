@@ -1,9 +1,7 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import Anthropic from '@anthropic-ai/sdk';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { resolveProvider } from '@/lib/ai/provider';
 
 export async function POST(req: NextRequest) {
   try {
@@ -146,14 +144,15 @@ Rules:
 - For weekly briefing, populate weeklyHighlights and weeklyConflicts
 - If data is sparse, be honest but still encouraging`;
 
-    const response = await anthropic.messages.create({
-      model: process.env.AI_MODEL ?? 'claude-haiku-4-5-20251001',
-      max_tokens: 2000,
+    const provider = await resolveProvider();
+    const completion = await provider.complete({
       system: systemPrompt,
       messages: [{ role: 'user', content: `Generate ${type} briefing for ${firstName}.\n\nData:\n${context}` }],
+      tools: [],
+      maxTokens: 2000,
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    const text = completion.text || '{}';
 
     let briefing: Record<string, unknown>;
     try {

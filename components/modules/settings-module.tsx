@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Settings, Users, Mail, Trash2, Plus, Check } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
@@ -16,7 +16,8 @@ import { ROLE_LABELS, INVITABLE_ROLES, isAdmin } from '@/lib/constants/roles';
 import {
   DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, DASHBOARD_DESCRIPTIONS, type DashboardView,
 } from '@/lib/constants/dashboards';
-import { setDefaultDashboardAction } from '@/app/(app)/actions';
+import { setDefaultDashboardAction, updateMyProfileAction } from '@/app/(app)/actions';
+import { splitFullName } from '@/lib/onboarding/profile';
 import { cn } from '@/lib/utils/cn';
 import { CalendarSyncPanel } from '@/components/dashboard/calendar-sync-panel';
 import type { Tables } from '@/lib/database.types';
@@ -34,6 +35,24 @@ export function SettingsModule() {
 
   const selfMember = members.find((m) => m.user_id === userId);
 
+  // Account profile (name + phone) live in `profiles`, not in useApp() — load it
+  // once so the form prefills the values captured during onboarding.
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', phone: '' });
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase.from('profiles').select('full_name, phone').eq('id', userId).maybeSingle();
+      if (!active) return;
+      const { firstName, lastName } = splitFullName(data?.full_name ?? selfMember?.display_name ?? '');
+      setProfileForm({ firstName, lastName, phone: data?.phone ?? '' });
+      setProfileLoaded(true);
+    })();
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
   async function chooseDashboard(view: DashboardView) {
     if (view === dashboardView || savingDashboard) return;
     const previous = dashboardView;
@@ -50,14 +69,10 @@ export function SettingsModule() {
 
   async function saveProfile(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const display_name = String(form.get('display_name') ?? '').trim();
-    if (!display_name) return toastError('Display name is required');
     setSavingProfile(true);
-    const supabase = createClient();
-    const { error } = await supabase.from('profiles').update({ display_name }).eq('id', userId);
+    const res = await updateMyProfileAction(profileForm);
     setSavingProfile(false);
-    if (error) return toastError(error.message);
+    if (!res.ok) return toastError(res.error ?? 'Could not update profile');
     success('Profile updated');
   }
 
@@ -94,17 +109,33 @@ export function SettingsModule() {
         <h2 className="mb-4 text-base font-semibold">Your profile</h2>
         <form onSubmit={saveProfile} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Display name" required>
+            <Field label="First name" required>
               {(id) => (
-                <Input id={id} name="display_name" defaultValue={selfMember?.display_name ?? ''} placeholder="Your name" />
+                <Input id={id} value={profileForm.firstName}
+                  onChange={(e) => setProfileForm((f) => ({ ...f, firstName: e.target.value }))}
+                  placeholder="Jordan" disabled={!profileLoaded} />
               )}
             </Field>
-            <Field label="Email">
+            <Field label="Last name" required>
+              {(id) => (
+                <Input id={id} value={profileForm.lastName}
+                  onChange={(e) => setProfileForm((f) => ({ ...f, lastName: e.target.value }))}
+                  placeholder="Rivera" disabled={!profileLoaded} />
+              )}
+            </Field>
+            <Field label="Contact phone" required>
+              {(id) => (
+                <Input id={id} type="tel" inputMode="tel" value={profileForm.phone}
+                  onChange={(e) => setProfileForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="(555) 123-4567" disabled={!profileLoaded} />
+              )}
+            </Field>
+            <Field label="Email" hint="Managed by your sign-in">
               {(id) => <Input id={id} value={userEmail ?? ''} readOnly className="opacity-60" />}
             </Field>
           </div>
           <div className="flex justify-end">
-            <Button type="submit" loading={savingProfile}>Save profile</Button>
+            <Button type="submit" loading={savingProfile} disabled={!profileLoaded}>Save profile</Button>
           </div>
         </form>
       </Card>

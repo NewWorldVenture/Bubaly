@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   ArrowDownLeft,
@@ -79,21 +80,28 @@ const fmtUsd = (cents: number) => (cents % 100 === 0 ? `$${cents / 100}` : `$${(
 const basicSave = Math.round((1 - BASIC_ANNUAL_CENTS / (BASIC_MONTHLY_CENTS * 12)) * 100);
 const plusSave = Math.round((1 - PLUS_ANNUAL_CENTS / (PLUS_MONTHLY_CENTS * 12)) * 100);
 
-/** Real, purchasable plan selector (Basic + Plus) with a monthly/annual toggle. */
-function UpgradePlans() {
+/** Real, purchasable plan selector (Basic + Plus) with a monthly/annual toggle.
+ *  `highlight` (1 = Basic, 2 = Plus) rings + scrolls to the tier a user was sent
+ *  here to buy after tapping a locked feature. */
+function UpgradePlans({ highlight }: { highlight?: number }) {
   const [annual, setAnnual] = useState(true);
   const [pending, startTransition] = useTransition();
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (highlight) ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlight]);
 
   const tiers = [
     {
-      name: 'Family Basic', featured: false,
+      name: 'Family Basic', featured: false, level: 1,
       perMonth: annual ? Math.round(BASIC_ANNUAL_CENTS / 12) : BASIC_MONTHLY_CENTS,
       sub: annual ? `${fmtUsd(BASIC_ANNUAL_CENTS)}/yr · save ${basicSave}%` : 'billed monthly',
       plan: (annual ? 'basic_annual' : 'basic_monthly') as CheckoutPlan,
       features: ['Unlimited members', 'Chores, meals & grocery planning', 'School & sports hubs', 'Unlimited AI assistant', 'Smart Imports & Kitchen Display'],
     },
     {
-      name: 'Family+', featured: true,
+      name: 'Family+', featured: true, level: 2,
       perMonth: annual ? Math.round(PLUS_ANNUAL_CENTS / 12) : PLUS_MONTHLY_CENTS,
       sub: annual ? `${fmtUsd(PLUS_ANNUAL_CENTS)}/yr · save ${plusSave}%` : 'billed monthly',
       plan: (annual ? 'plus_annual' : 'plus_monthly') as CheckoutPlan,
@@ -102,7 +110,12 @@ function UpgradePlans() {
   ];
 
   return (
-    <div className="space-y-3">
+    <div ref={ref} className="space-y-3 scroll-mt-20">
+      {highlight ? (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 px-3 py-2 text-sm">
+          <span className="font-semibold">{highlight === 2 ? 'Family+' : 'Family Basic'}</span> unlocks the feature you tapped — pick a billing period below.
+        </div>
+      ) : null}
       <div className="flex items-center gap-2">
         <div className="inline-flex items-center gap-1 rounded-full border border-border bg-surface/60 p-1 text-xs">
           <button onClick={() => setAnnual(false)} className={cn('rounded-full px-3 py-1 font-semibold transition', !annual ? 'bg-brand text-white' : 'text-muted')}>Monthly</button>
@@ -112,7 +125,7 @@ function UpgradePlans() {
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {tiers.map((t) => (
-          <div key={t.name} className={cn('rounded-xl border p-4', t.featured ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40')}>
+          <div key={t.name} className={cn('rounded-xl border p-4', t.featured ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40', highlight === t.level && 'ring-2 ring-brand ring-offset-2 ring-offset-bg')}>
             <div className="flex items-center justify-between">
               <p className="font-semibold">{t.name}</p>
               {t.featured && <Badge tone="brand">Most popular</Badge>}
@@ -455,6 +468,9 @@ export function BillingModule() {
   const { familyId, userId, role } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
+  const search = useSearchParams();
+  const wantsUpgrade = search.get('upgrade') === '1';
+  const needLevel = search.get('need') === '2' ? 2 : wantsUpgrade ? 1 : undefined;
   const [tab, setTab] = useState<Tab>('Overview');
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [subLoading, setSubLoading] = useState(true);
@@ -1121,8 +1137,8 @@ export function BillingModule() {
                   )}
                 </div>
               </div>
-              {(!subscription || status === 'trialing' || status === 'canceled') && admin && (
-                <UpgradePlans />
+              {(!subscription || status === 'trialing' || status === 'canceled' || wantsUpgrade) && admin && (
+                <UpgradePlans highlight={needLevel} />
               )}
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                 {['Unlimited family members', 'AI family assistant', 'All modules', 'Real-time sync', 'Document vault', 'Meal planning', 'School & sports', 'Priority support'].map((f) => (

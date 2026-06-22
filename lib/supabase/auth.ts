@@ -123,7 +123,7 @@ export async function requirePlanLevel(minLevel: 1 | 2): Promise<UserContext> {
 
   const level = planLevel(sub?.plan ?? null);
   if (level < minLevel) {
-    redirect('/dashboard/billing?upgrade=1');
+    redirect(`/dashboard/billing?upgrade=1&need=${minLevel}`);
   }
   return ctx;
 }

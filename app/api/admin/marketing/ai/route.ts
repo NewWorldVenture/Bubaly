@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
-import { getProvider } from '@/lib/ai/provider';
+import { resolveProvider } from '@/lib/ai/provider';
 import { getMarketingCustomers, summarizeCustomers } from '@/lib/marketing/customers';
 import { fmtMoney } from '@/lib/utils/format';
 
@@ -53,7 +53,7 @@ Use ONLY the real data provided as grounding. Never fabricate metrics, rankings,
 
     const userMsg = `DATA:\n${context}\n\n${input ? `REQUEST: ${input}` : 'Use the data above.'}`;
 
-    const completion = await getProvider().complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
+    const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
 
     await logMarketingAudit(supabase, { actorId, actorEmail, action: `ai:${task}`, resource: 'marketing_ai', metadata: { input: input?.slice(0, 200) ?? null } });
 

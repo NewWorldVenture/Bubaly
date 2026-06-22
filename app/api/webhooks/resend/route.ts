@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createServiceClient } from '@/lib/supabase/server';
+import { fireAutomationEvent } from '@/lib/marketing/automation-events';
+import { eventSubjectKey, isEventTrigger } from '@/lib/marketing/automation-triggers';
 
 export const runtime = 'nodejs';
+
+// Resend event type → our event-driven automation trigger.
+const EVENT_TRIGGER: Record<string, 'email_opened' | 'email_clicked'> = {
+  'email.opened': 'email_opened',
+  'email.clicked': 'email_clicked',
+};
 
 // Verify a Svix-signed webhook (Resend uses Svix). Returns true only on a valid
 // signature against RESEND_WEBHOOK_SECRET (whsec_...).
@@ -67,6 +75,25 @@ export async function POST(req: NextRequest) {
     const reason = event.type === 'email.bounced' ? 'bounce' : 'complaint';
     for (const to of tos) {
       await supabase.from('marketing_suppressions').upsert({ email: String(to).toLowerCase(), reason, campaign_id: campaignId ?? null });
+    }
+  }
+
+  // Fire event-driven engagement workflows (email_opened / email_clicked). Dedup
+  // is per recipient per campaign per trigger, so repeated opens fire only once.
+  const trigger = EVENT_TRIGGER[event.type];
+  if (trigger && isEventTrigger(trigger)) {
+    const recipient = Array.isArray(event.data?.to) ? event.data?.to[0] : event.data?.to;
+    if (recipient) {
+      try {
+        await fireAutomationEvent(supabase, {
+          trigger,
+          email: String(recipient).toLowerCase(),
+          subjectKey: eventSubjectKey(trigger, [campaignId ?? 'none', String(recipient)]),
+          context: { campaignId: campaignId ?? null },
+        });
+      } catch {
+        /* non-fatal */
+      }
     }
   }
 

@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -57,13 +57,20 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/dashboard/meals', label: 'Meals', icon: UtensilsCrossed, minLevel: 1 },
       { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle, minLevel: 0 },
-      { href: '/dashboard/social', label: 'Social Command', icon: Share2, minLevel: 1 },
+      { href: '/dashboard/announcements', label: 'Announcements', icon: Megaphone, minLevel: 0 },
+      { href: '/dashboard/activity', label: 'Activity Feed', icon: Activity, minLevel: 0 },
+      { href: '/dashboard/celebrations', label: 'Celebrations', icon: Cake, minLevel: 0 },
+      { href: '/dashboard/readiness', label: 'Readiness', icon: Gauge, minLevel: 0 },
+      { href: '/dashboard/memories', label: 'Memories', icon: BookHeart, minLevel: 0 },
+      { href: '/dashboard/locator', label: 'Family Map', icon: MapPin, minLevel: 1 },
+      { href: '/dashboard/social', label: 'Social Command', icon: Share2, minLevel: 0 },
       { href: '/dashboard/grocery', label: 'Groceries', icon: ShoppingCart, minLevel: 0 },
       { href: '/dashboard/reminders', label: 'Reminders', icon: Bell, minLevel: 0 },
       { href: '/dashboard/weather', label: 'Weather', icon: CloudSun, minLevel: 0 },
       { href: '/dashboard/recipes', label: 'Recipes', icon: ChefHat, minLevel: 0 },
       { href: '/dashboard/photos', label: 'Photos', icon: ImageGallery, minLevel: 0 },
       { href: '/dashboard/todos', label: 'To-Do Lists', icon: ListChecks, minLevel: 0 },
+      { href: '/dashboard/wishlists', label: 'Wish Lists', icon: Gift, minLevel: 0 },
       { href: '/dashboard/documents', label: 'Documents', icon: FolderLock, minLevel: 0 },
       { href: '/dashboard/notes', label: 'Notes', icon: StickyNote, minLevel: 0 },
       { href: '/dashboard/contacts', label: 'Contacts', icon: Users, minLevel: 0 },
@@ -74,6 +81,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     layout: 'grid',
     items: [
       { href: '/dashboard/school', label: 'School', icon: GraduationCap, minLevel: 1 },
+      { href: '/dashboard/timetable', label: 'Timetable', icon: CalendarRange, minLevel: 1 },
       { href: '/dashboard/homework', label: 'Homework', icon: BookOpen, minLevel: 1 },
       { href: '/dashboard/signups', label: 'Signups', icon: CalendarClock, minLevel: 1 },
       { href: '/dashboard/home', label: 'Home & Maintenance', icon: Home, minLevel: 1 },

@@ -4,9 +4,38 @@ import { createServer } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
 import { sendEmail } from '@/lib/server/email';
 import { APP_URL } from '@/lib/email';
-import { createFamilySchema, inviteSchema } from '@/lib/validation';
+import { createFamilySchema, inviteSchema, onboardingProfileSchema } from '@/lib/validation';
+import { saveUserProfile } from '@/lib/server/profiles';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
+
+/**
+ * Step 1 of onboarding: capture the account holder's contact details
+ * (first/last name, phone, email) into their profile. Email is editable but
+ * defaults to the signed-in address. Idempotent — safe to re-run if the user
+ * goes back a step.
+ */
+export async function saveOnboardingProfileAction(input: {
+  firstName: string; lastName: string; phone: string; email: string;
+}): Promise<Result> {
+  const parsed = onboardingProfileSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid details' };
+
+  const supabase = await createServer();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { ok: false, error: 'Not signed in' };
+
+  const { firstName, lastName, phone, email } = parsed.data;
+  const res = await saveUserProfile(auth.user.id, { firstName, lastName, phone, email });
+  if (!res.ok) return res;
+
+  await logAudit(supabase, {
+    familyId: null, actorId: auth.user.id, action: 'update', resource: 'profiles', resourceId: auth.user.id,
+    metadata: { onboarding: true },
+  });
+
+  return { ok: true };
+}
 
 /** Creates a family, makes the caller its parent (via DB trigger), sets it active. */
 export async function createFamilyAction(input: { name: string; timezone: string }): Promise<Result<{ familyId: string }>> {
@@ -24,8 +53,16 @@ export async function createFamilyAction(input: { name: string; timezone: string
     .single();
   if (error || !family) return { ok: false, error: error?.message ?? 'Could not create family' };
 
-  // Add the creator as a parent member of the new family.
-  const displayName = auth.user.user_metadata?.full_name
+  // Add the creator as a parent member of the new family. Prefer the name they
+  // gave in the onboarding profile step, then signup metadata, then email.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('display_name, full_name')
+    .eq('id', auth.user.id)
+    .maybeSingle();
+  const displayName = profile?.display_name
+    ?? profile?.full_name
+    ?? auth.user.user_metadata?.full_name
     ?? auth.user.email?.split('@')[0]
     ?? 'Parent';
   await supabase.from('family_members').insert({

@@ -213,7 +213,7 @@ export default function SecurityPage() {
                   <span className="text-sm">{c}</span>
                 </div>
               ))}
-              <Link href="mailto:security@bubaly.com" className="mt-4 flex items-center gap-1 text-sm font-semibold text-violet-300 hover:text-violet-200">
+              <Link href="mailto:support@bubaly.com" className="mt-4 flex items-center gap-1 text-sm font-semibold text-violet-300 hover:text-violet-200">
                 Contact our security team →
               </Link>
             </div>
@@ -227,7 +227,7 @@ export default function SecurityPage() {
           Your family&apos;s trust is at the heart of everything we do. If you ever have a question, we&apos;re here to help.
         </p>
         <p className="mt-1 text-center text-sm">
-          <a href="mailto:security@bubaly.com" className="text-violet-300 hover:text-violet-200">security@bubaly.com</a>
+          <a href="mailto:support@bubaly.com" className="text-violet-300 hover:text-violet-200">support@bubaly.com</a>
         </p>
       </div>
     </PageWrap>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { getProvider } from '@/lib/ai/provider';
+import { resolveProvider } from '@/lib/ai/provider';
 import { AI_TOOLS, runAction } from '@/lib/ai/actions';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 
@@ -76,7 +76,7 @@ Use the provided tools to capture: calendar events, chores, reminders, grocery i
 - If nothing is actionable, make no tool calls.
 Respond only with tool calls (no prose).`;
 
-    const completion = await getProvider().complete({
+    const completion = await (await resolveProvider()).complete({
       system,
       messages: [{ role: 'user', content: text }],
       tools: AI_TOOLS,
