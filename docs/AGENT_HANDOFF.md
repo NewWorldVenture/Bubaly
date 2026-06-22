@@ -796,6 +796,16 @@ Plus) and flows those changes to the pricing page + in-app gating. **NO migratio
   admin control + pricing are live; nav still reads the static `minLevel`. (Verified:
   tsc/lint clean · vitest 494 · build OK; `/admin/tier-features` + `/pricing` built.)
 
+## Marketing admin subnav — grouped multi-row tabs
+The ~40 `/admin/marketing/*` surfaces were one long horizontal-scroll row. Now a
+**grouped, wrapping tab panel** (`app/(app)/admin/marketing/marketing-subnav.tsx`,
+client component using `usePathname` for active highlighting). Items are organized
+into labelled rows: Overview · CRM & Sales · Audience & Intelligence · Channels ·
+Growth · Content & SEO · Reputation & Loyalty. `flex-wrap` chips = no horizontal
+scroll, mobile-friendly (label stacks above chips < sm). `layout.tsx` just renders
+`<MarketingSubnav />`. **When adding a new marketing page, add its chip to the
+right GROUP in `marketing-subnav.tsx`** (the old flat SUBNAV array is gone).
+
 ## Backlog (prioritized, each a clean PR)
 1. Event-driven automation triggers (form_submitted, email_opened/clicked,
    checkout_abandoned) — instrument app events to fire workflows in real time.
