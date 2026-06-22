@@ -9,6 +9,7 @@ export const EVENT_TRIGGERS = [
   'email_opened',
   'email_clicked',
   'payment_completed',
+  'checkout_abandoned',
 ] as const;
 export type EventTrigger = (typeof EVENT_TRIGGERS)[number];
 
@@ -35,6 +36,10 @@ export const EVENT_DEFAULT_COPY: Record<EventTrigger, Copy> = {
   payment_completed: {
     subject: 'Welcome to your upgraded Bubaly plan 🎉',
     body: "Your payment went through — your whole family now has everything unlocked. Here's how to get the most out of it.",
+  },
+  checkout_abandoned: {
+    subject: 'Still thinking it over? Your Bubaly plan is waiting',
+    body: 'You were a step away from upgrading your family plan. Pick up right where you left off — it only takes a minute, and you can cancel anytime.',
   },
 };
 

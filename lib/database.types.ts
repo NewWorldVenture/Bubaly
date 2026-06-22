@@ -354,6 +354,11 @@ export interface Database {
         { id?: string; family_id: string; provider?: string; customer_ref?: string | null },
         Partial<{ provider: string; customer_ref: string | null }>
       >;
+      checkout_sessions: T<
+        { id: string; session_id: string; family_id: string | null; email: string | null; name: string | null; plan: string | null; status: string; created_at: string; completed_at: string | null; abandoned_at: string | null },
+        { id?: string; session_id: string; family_id?: string | null; email?: string | null; name?: string | null; plan?: string | null; status?: string; created_at?: string; completed_at?: string | null; abandoned_at?: string | null },
+        Partial<{ status: string; completed_at: string | null; abandoned_at: string | null }>
+      >;
       subscriptions: T<
         { id: string; family_id: string; billing_customer_id: string | null; plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; seats: number } & Stamps,
         { id?: string; family_id: string; billing_customer_id?: string | null; plan?: string; status?: SubscriptionStatus; provider_ref?: string | null; current_period_end?: string | null; seats?: number },

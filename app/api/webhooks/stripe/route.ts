@@ -86,6 +86,11 @@ export async function POST(req: NextRequest) {
           { onConflict: 'family_id' },
         );
       }
+      // Close out the tracked checkout so the abandoned-checkout cron skips it.
+      await supabase
+        .from('checkout_sessions')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('session_id', session.id);
       // Fire event-driven "payment_completed" automation workflows (deduped by
       // the Stripe session id). Best-effort: never fail the webhook on it.
       try {
