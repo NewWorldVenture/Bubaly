@@ -3,6 +3,14 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after PR #87. Keep this updated as you ship.
 
+> **Session update (2026-06-22, branch `claude/family-missions`):**
+> - **Merged to main:** Marketing Pillar 3 **Loyalty & Rewards** (PR #94, migration `0042_loyalty.sql` — 5 tables, service-role engine `lib/loyalty/server.ts`, admin console `/admin/marketing/loyalty`).
+> - **In review (PR #96):** **Family Missions** — AI chore proof/validation/dispute + gamification, **extending** the existing `chores`/`chore_assignments`/`rewards` system (not a rebuild). Migration `0043_chore_missions.sql` (chore config columns; `chore_submissions`, `chore_ai_validations`, `chore_disputes`, `chore_approval_events`, `kid_progress`, `badges`/`member_badges`; private `chore-proof` bucket). `lib/chores/{ai,logic,server}.ts`; pages `/missions`, `/missions/new`, `/kids/submit/[id]`.
+> - **Provider change:** `lib/ai/provider.ts` now supports **vision** (optional `images:[{media_type,data}]` on a user message → base64 blocks). Backward compatible.
+> - **AI safety rule honored:** chore validation degrades to `parent_review_required` on any failure (never auto-rejects); safety flags force human review.
+> - **Run in Supabase after each merge:** `0042_loyalty.sql`, then `0043_chore_missions.sql` (both idempotent, validated twice on Postgres 16).
+> - **Family Missions backlog (future PRs):** reward-store UX, allowance/wallet page, insights charts, parent AI assistant + fairness engine, gamification UI (XP ring/leaderboard/quests), video-frame validation, chore-event notifications, tier feature-flags, recurrence auto-spawn.
+
 ## Product & stack
 - **Bubaly / FamilyOS** — a family operating system. Next.js 15 App Router + TS +
   Tailwind + Supabase (Postgres/Auth/Storage/RLS) + Stripe + Anthropic/OpenAI AI.
