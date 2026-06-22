@@ -1,7 +1,26 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Recipe Discovery PR. Keep this updated as you ship.
+Last updated after the Recipe AI Actions PR. Keep this updated as you ship.
+
+> **Session update (2026-06-22f) — FAMILY FOOD OS, PHASE 2: AI Recipe Actions.**
+> - **Shipped:** transform any saved recipe into a new vault variant — healthier,
+>   cheaper, higher-protein, lower-sodium, kid-friendly, gluten-free, dairy-free,
+>   vegetarian, vegan, liver-friendly.
+> - `lib/recipes/ai-actions.ts` (pure, 6 tests): `RECIPE_AI_ACTIONS` catalog,
+>   `buildTransformPrompt` (JSON-only, "don't claim to treat disease", conservative
+>   allergies), `parseTransformResult` (lenient JSON → vault shape; auto-appends an
+>   "amounts/nutrition are estimates" note + a non-medical disclaimer for health actions).
+> - `POST /api/recipes/transform { recipeId, actionId }` — auth + rate-limited (12/min),
+>   loads recipe (RLS), `resolveProvider().complete(maxTokens 1800)`, saves a NEW
+>   `family_recipes` row (`ai_generated`, `source_provider:'bubaly_ai'`, `source_recipe_id`
+>   = original id, `tags:['ai:<action>']`). **No migration.**
+> - UI: "AI Remix" chip bar in the recipe detail modal (`recipes-module.tsx`).
+> - Added `ai_generated`/source fields to `family_recipes` Insert type in database.types.
+> - **NEXT (food OS):** (1) tier-gate AI actions + meter monthly usage (`requirePlanLevel`
+>   / a usage counter) — currently only rate-limited. (2) "What can we make tonight?" +
+>   pantry-based search. (3) USDA/Open Food Facts providers (nutrition+barcode). Then meal
+>   voting → ratings → pantry → vault OCR → admin provider settings (see Phase-1 block).
 
 > **Session update (2026-06-22e, branch `claude/funny-darwin-gkmptm`) — FAMILY FOOD OS, PHASE 1:**
 > Big spec: build the world's best family recipe/meal-plan/grocery/nutrition/voting/
