@@ -997,6 +997,33 @@ export interface Database {
         { id?: string; singleton?: boolean; google_url?: string | null; app_store_url?: string | null; play_store_url?: string | null; trustpilot_url?: string | null; request_headline?: string | null; request_message?: string | null; thank_you_high?: string | null; thank_you_low?: string | null; min_public_rating?: number; auto_approve_min?: number | null; updated_by?: string | null; metadata?: Json },
         Partial<{ google_url: string | null; app_store_url: string | null; play_store_url: string | null; trustpilot_url: string | null; request_headline: string | null; request_message: string | null; thank_you_high: string | null; thank_you_low: string | null; min_public_rating: number; auto_approve_min: number | null; updated_by: string | null; metadata: Json }>
       >;
+
+      // ---- Loyalty & Rewards (migration 0042) ----
+      loyalty_settings: T<
+        { id: string; singleton: boolean; enabled: boolean; program_name: string; points_label: string; earn_signup: number; earn_referral: number; earn_review: number; earn_per_dollar: number; tier_silver_at: number; tier_gold_at: number; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; singleton?: boolean; enabled?: boolean; program_name?: string; points_label?: string; earn_signup?: number; earn_referral?: number; earn_review?: number; earn_per_dollar?: number; tier_silver_at?: number; tier_gold_at?: number; updated_by?: string | null; metadata?: Json },
+        Partial<{ enabled: boolean; program_name: string; points_label: string; earn_signup: number; earn_referral: number; earn_review: number; earn_per_dollar: number; tier_silver_at: number; tier_gold_at: number; updated_by: string | null; metadata: Json }>
+      >;
+      loyalty_rewards: T<
+        { id: string; name: string; description: string | null; cost_points: number; kind: string; value_cents: number | null; image_url: string | null; stock: number | null; is_active: boolean; sort: number; created_by: string | null; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; name: string; description?: string | null; cost_points: number; kind?: string; value_cents?: number | null; image_url?: string | null; stock?: number | null; is_active?: boolean; sort?: number; created_by?: string | null; deleted_at?: string | null; metadata?: Json },
+        Partial<{ name: string; description: string | null; cost_points: number; kind: string; value_cents: number | null; image_url: string | null; stock: number | null; is_active: boolean; sort: number; deleted_at: string | null; metadata: Json }>
+      >;
+      loyalty_accounts: T<
+        { id: string; family_id: string; points_balance: number; lifetime_points: number; tier: string; joined_at: string; metadata: Json } & Stamps,
+        { id?: string; family_id: string; points_balance?: number; lifetime_points?: number; tier?: string; joined_at?: string; metadata?: Json },
+        Partial<{ points_balance: number; lifetime_points: number; tier: string; metadata: Json }>
+      >;
+      loyalty_transactions: T<
+        { id: string; family_id: string; points: number; kind: string; reason: string | null; source: string | null; balance_after: number; reward_id: string | null; created_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; points: number; kind?: string; reason?: string | null; source?: string | null; balance_after?: number; reward_id?: string | null; created_by?: string | null; metadata?: Json },
+        Partial<{ metadata: Json }>
+      >;
+      loyalty_redemptions: T<
+        { id: string; family_id: string; reward_id: string | null; reward_name: string; cost_points: number; status: string; code: string | null; fulfilled_at: string | null; fulfilled_by: string | null; notes: string | null; created_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; reward_id?: string | null; reward_name: string; cost_points: number; status?: string; code?: string | null; fulfilled_at?: string | null; fulfilled_by?: string | null; notes?: string | null; created_by?: string | null; metadata?: Json },
+        Partial<{ status: string; code: string | null; fulfilled_at: string | null; fulfilled_by: string | null; notes: string | null; metadata: Json }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
