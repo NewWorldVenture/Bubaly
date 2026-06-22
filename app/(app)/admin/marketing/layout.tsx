@@ -35,6 +35,7 @@ const SUBNAV = [
   ['/admin/marketing/assets', 'Assets'],
   ['/admin/marketing/video', 'Video'],
   ['/admin/marketing/seo', 'SEO'],
+  ['/admin/marketing/competitive', 'Competitive'],
   ['/admin/marketing/aeo', 'AEO'],
   ['/admin/marketing/analytics', 'Analytics'],
   ['/admin/marketing/audit', 'Audit'],
