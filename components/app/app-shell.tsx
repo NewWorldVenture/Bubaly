@@ -14,6 +14,7 @@ import { useTheme } from '@/components/theme/use-theme';
 import { useApp } from './app-context';
 import { NotificationBell } from './notification-bell';
 import { UpgradeModal } from './upgrade-modal';
+import { QuickCapture } from './quick-capture';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
 
 function isActive(pathname: string, href: string) {
@@ -352,6 +353,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mx-auto max-w-[1480px]">{children}</div>
         </main>
       </div>
+
+      <QuickCapture />
 
       {/* Mobile bottom tabs */}
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/90 backdrop-blur-xl lg:hidden">
