@@ -35,6 +35,7 @@ export type HomeworkStatus = 'assigned' | 'in_progress' | 'done' | 'submitted';
 export type RenewalStatus = 'active' | 'renewed' | 'expired' | 'cancelled';
 export type CareLogType = 'check_in' | 'visit' | 'call' | 'meal' | 'medication' | 'appointment' | 'incident' | 'note';
 export type OpportunityStatus = 'interested' | 'registered' | 'waitlisted' | 'passed' | 'missed';
+export type LocationEventType = 'arrived' | 'left' | 'ping';
 export type DoseStatus = 'taken' | 'skipped' | 'missed';
 export type TripStatus = 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
 export type TripItemKind = 'packing' | 'todo' | 'reservation' | 'document';
@@ -220,6 +221,21 @@ export interface Database {
         { id: string; family_id: string; member_id: string; log_type: CareLogType; occurred_at: string; wellbeing: number | null; note: string | null; logged_by: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; log_type?: CareLogType; occurred_at?: string; wellbeing?: number | null; note?: string | null; logged_by?: string | null; created_by?: string | null },
         Partial<{ member_id: string; log_type: CareLogType; occurred_at: string; wellbeing: number | null; note: string | null; logged_by: string | null }>
+      >;
+      family_places: T<
+        { id: string; family_id: string; name: string; icon: string | null; address: string | null; latitude: number; longitude: number; radius_m: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; icon?: string | null; address?: string | null; latitude: number; longitude: number; radius_m?: number; created_by?: string | null },
+        Partial<{ name: string; icon: string | null; address: string | null; latitude: number; longitude: number; radius_m: number }>
+      >;
+      member_locations: T<
+        { id: string; family_id: string; member_id: string; latitude: number | null; longitude: number | null; accuracy_m: number | null; battery: number | null; place_id: string | null; is_sharing: boolean } & Stamps,
+        { id?: string; family_id: string; member_id: string; latitude?: number | null; longitude?: number | null; accuracy_m?: number | null; battery?: number | null; place_id?: string | null; is_sharing?: boolean },
+        Partial<{ latitude: number | null; longitude: number | null; accuracy_m: number | null; battery: number | null; place_id: string | null; is_sharing: boolean }>
+      >;
+      location_events: T<
+        { id: string; family_id: string; member_id: string; place_id: string | null; place_name: string | null; event_type: LocationEventType; latitude: number | null; longitude: number | null; occurred_at: string; created_at: string },
+        { id?: string; family_id: string; member_id: string; place_id?: string | null; place_name?: string | null; event_type?: LocationEventType; latitude?: number | null; longitude?: number | null; occurred_at?: string },
+        Partial<{ place_id: string | null; place_name: string | null; event_type: LocationEventType }>
       >;
       opportunities: T<
         { id: string; family_id: string; member_id: string | null; title: string; category: string | null; url: string | null; cost: number | null; opens_at: string | null; deadline: string | null; status: OpportunityStatus; notes: string | null; created_by: string | null } & Stamps,

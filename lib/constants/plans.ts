@@ -68,6 +68,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   // Basic routes
   '/dashboard/chores':        1,
   '/dashboard/rewards':       1,
+  '/dashboard/locator':       1,
   '/dashboard/meals':         1,
   '/dashboard/school':        1,
   '/dashboard/homework':      1,
