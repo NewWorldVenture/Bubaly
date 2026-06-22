@@ -37,6 +37,11 @@ export function planLevel(plan: string | null | undefined): number {
   }
 }
 
+// Short tier labels by plan level (0/1/2) — used in the account widget etc.
+export const TIER_LABEL_BY_LEVEL = ['Free Tier', 'Basic Tier', 'Plus Tier'] as const;
+export const tierLabelForLevel = (level: number): string =>
+  TIER_LABEL_BY_LEVEL[level] ?? 'Free Tier';
+
 export const PLAN_NAMES: Record<string, string> = {
   free: 'Bubaly Free',
   basic: 'Family Basic',

@@ -3,6 +3,7 @@ import {
   planMonthlyCents,
   planName,
   planById,
+  tierLabelForLevel,
   FAMILY_MONTHLY_CENTS,
   FAMILY_ANNUAL_CENTS,
 } from '@/lib/constants/plans';
@@ -46,5 +47,12 @@ describe('plan pricing source of truth', () => {
     expect(planById('plus')).toBeDefined();
     expect(planById('family')).toBeDefined(); // legacy alias resolves to basic
     expect(planById('family_plus')).toBeUndefined(); // never a real tier
+  });
+
+  it('maps plan level to a tier label for the account widget', () => {
+    expect(tierLabelForLevel(0)).toBe('Free Tier');
+    expect(tierLabelForLevel(1)).toBe('Basic Tier');
+    expect(tierLabelForLevel(2)).toBe('Plus Tier');
+    expect(tierLabelForLevel(99)).toBe('Free Tier'); // safe fallback
   });
 });
