@@ -36,6 +36,7 @@ export type RenewalStatus = 'active' | 'renewed' | 'expired' | 'cancelled';
 export type CareLogType = 'check_in' | 'visit' | 'call' | 'meal' | 'medication' | 'appointment' | 'incident' | 'note';
 export type OpportunityStatus = 'interested' | 'registered' | 'waitlisted' | 'passed' | 'missed';
 export type LocationEventType = 'arrived' | 'left' | 'ping';
+export type WishPriority = 'low' | 'medium' | 'high';
 export type DoseStatus = 'taken' | 'skipped' | 'missed';
 export type TripStatus = 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
 export type TripItemKind = 'packing' | 'todo' | 'reservation' | 'document';
@@ -236,6 +237,11 @@ export interface Database {
         { id: string; family_id: string; member_id: string; place_id: string | null; place_name: string | null; event_type: LocationEventType; latitude: number | null; longitude: number | null; occurred_at: string; created_at: string },
         { id?: string; family_id: string; member_id: string; place_id?: string | null; place_name?: string | null; event_type?: LocationEventType; latitude?: number | null; longitude?: number | null; occurred_at?: string },
         Partial<{ place_id: string | null; place_name: string | null; event_type: LocationEventType }>
+      >;
+      wishlist_items: T<
+        { id: string; family_id: string; member_id: string; title: string; url: string | null; price: number | null; priority: WishPriority; notes: string | null; claimed_by: string | null; claimed_at: string | null; is_purchased: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; title: string; url?: string | null; price?: number | null; priority?: WishPriority; notes?: string | null; claimed_by?: string | null; claimed_at?: string | null; is_purchased?: boolean; created_by?: string | null },
+        Partial<{ member_id: string; title: string; url: string | null; price: number | null; priority: WishPriority; notes: string | null; claimed_by: string | null; claimed_at: string | null; is_purchased: boolean }>
       >;
       opportunities: T<
         { id: string; family_id: string; member_id: string | null; title: string; category: string | null; url: string | null; cost: number | null; opens_at: string | null; deadline: string | null; status: OpportunityStatus; notes: string | null; created_by: string | null } & Stamps,
