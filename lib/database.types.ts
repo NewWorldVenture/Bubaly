@@ -416,6 +416,11 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; provider_id?: string | null; kind?: string; title: string; provider_name?: string | null; location?: string | null; visit_date?: string; reason?: string | null; outcome?: string | null; follow_up_date?: string | null; cost_cents?: number | null; created_by?: string | null },
         Partial<{ member_id: string | null; provider_id: string | null; kind: string; title: string; provider_name: string | null; location: string | null; visit_date: string; reason: string | null; outcome: string | null; follow_up_date: string | null; cost_cents: number | null }>
       >;
+      immunizations: T<
+        { id: string; family_id: string; member_id: string | null; vaccine: string; dose_label: string | null; date_given: string | null; next_due_date: string | null; provider_name: string | null; lot_number: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; vaccine: string; dose_label?: string | null; date_given?: string | null; next_due_date?: string | null; provider_name?: string | null; lot_number?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; vaccine: string; dose_label: string | null; date_given: string | null; next_due_date: string | null; provider_name: string | null; lot_number: string | null; notes: string | null }>
+      >;
       workout_logs: T<
         { id: string; family_id: string; member_id: string; activity: string; duration_minutes: number | null; calories: number | null; distance: number | null; notes: string | null; recorded_at: string; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; activity: string; duration_minutes?: number | null; calories?: number | null; distance?: number | null; notes?: string | null; recorded_at?: string; created_by?: string | null },
