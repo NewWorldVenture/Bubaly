@@ -143,6 +143,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
 export const ADMIN_NAV: NavItem[] = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Users & Families', icon: UsersRound },
+  { href: '/admin/tiers', label: 'Tier & Features', icon: SlidersHorizontal },
   { href: '/admin/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
   { href: '/admin/tier-features', label: 'Tier & Features', icon: SlidersHorizontal },

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { X } from 'lucide-react';
-import { requirePlanLevel } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { AutoRefresh } from '@/components/display/auto-refresh';
 import { DisplayGrid, DEFAULT_TILES, type DisplayData, type Tile } from '@/components/display/display-grid';
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 // Kitchen Display Mode is a Family Basic feature. Fully customizable grid of
 // widgets, with the layout persisted per-family in `display_layouts`.
 export default async function KitchenDisplayPage() {
-  const ctx = await requirePlanLevel(1);
+  const ctx = await requireFeature('/display');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

@@ -170,6 +170,57 @@ Last updated after the Meal Voting PR. Keep this updated as you ship.
 >   — mirror the contact form + this landing-page PR (service-role read/write,
 >   middleware PUBLIC, beacon/endpoint pattern).
 
+> **Session update (2026-06-23, branch `claude/admin-tier-features`):**
+> - **Admin "Tier & Features" — Supabase-backed feature gating, platform-wide.**
+>   `/admin/tiers` lets a super-admin set each feature's minimum tier:
+>   **Free / Basic / Plus / Off**, with the exact semantics: Free→all; Basic→Basic+Plus
+>   (locked for Free); Plus→Plus only (locked for Basic+Free); Off→hidden for all
+>   (super-admins still preview). Persisted to **`feature_settings`** (migration
+>   `0067`, **apply to prod**) — read by everyone (RLS read-only), written
+>   service-role only via `setFeatureTierAction` (super-admin gated + audited).
+> - **Catalog** `lib/features/catalog.ts` (pure, 13 tests): builds the feature
+>   list from `APP_NAV_GROUPS`/`MOBILE_TABS`, with `tierLevel`/`levelTier`,
+>   `featureAccess(tier,userLevel,isSuperAdmin) → visible|locked|hidden`, and
+>   `effectiveTier(key, overrides)` (override → code default).
+> - **Server** `lib/features/server.ts`: `getFeatureOverrides(supabase)` (request-
+>   `cache`d) + `setFeatureTier`. Loaded in `dashboard/layout.tsx` +
+>   `family/layout.tsx`, passed to `AppProvider` as `featureOverrides`.
+> - **Nav** (`components/app/app-shell.tsx`): `resolveItems()` hides Off features,
+>   locks below-tier ones, drops emptied groups; mobile tabs + UpgradeModal use it.
+> - **Route backstop**: new `requireFeature(key)` in `lib/supabase/auth.ts`
+>   (override-aware: Off→`notFound()`, else redirect to billing). The ~28 top-level
+>   gated pages + the `auto`/`home` layouts now call `requireFeature('<route>')`;
+>   `auto/*` and `home/*` subpages keep `requirePlanLevel(1)` as a floor under
+>   their now-feature-gated layout. `requirePlanLevel` is retained for compat.
+> - **To gate a NEW feature:** add the nav item (with a default `minLevel`) → it
+>   auto-appears in `/admin/tiers`; gate its page/layout with
+>   `requireFeature('<href>')`. The key MUST equal the nav `href`.
+
+> **Session update (2026-06-22c, branch `claude/lp-public-renderer`):**
+> - **Public-site wiring #54 DONE — landing pages now render publicly.** Admin
+>   could author `marketing_landing_pages` but nothing served them; built the
+>   public renderer + made them publishable end-to-end.
+> - **Public route** `app/(marketing)/lp/[slug]/page.tsx` (service-role read, only
+>   `published` + non-deleted pages) renders headline/subhead/body paragraphs +
+>   a CTA. Client `tracker.tsx` fires a session-deduped **view** beacon on mount
+>   and a **conversion** beacon on CTA click → `POST /api/lp/track`.
+> - **Migration `0053_landing_metrics.sql`** — atomic `bump_landing_metric(slug,
+>   metric)` (SECURITY DEFINER, counts only published pages; EXECUTE granted to
+>   `service_role`, revoked from anon/authenticated/public). **Apply to prod.**
+> - **Admin** (`/admin/marketing/landing-pages`): create form now captures CTA
+>   label/href (stored in `metadata`); each card has a **Publish/Unpublish**
+>   toggle (`setLandingPublished`) + a "View" link. Pages start as drafts.
+> - **Pure helper** `lib/marketing/landing.ts` (`landingCta` w/ safe-href guard,
+>   `bodyParagraphs`, `normalizeSlug`) + tests `tests/marketing-landing.test.ts` (8).
+>   Added `/lp` + `/api/lp/track` to `middleware.ts` PUBLIC; `bump_landing_metric`
+>   added to `database.types.ts` Functions.
+> - **NEXT: public-site wiring #55 — Forms.** `marketing_forms` (fields jsonb) +
+>   `marketing_form_submissions` exist with admin authoring but no public render/
+>   submit. Build a public form renderer + a `POST` endpoint that inserts a
+>   submission (service-role) and calls `fireAutomationEvent('form_submitted', …)`
+>   — mirror the contact form + this landing-page PR (service-role read/write,
+>   middleware PUBLIC, beacon/endpoint pattern).
+
 > **Session update (2026-06-22b, branch `claude/onboarding-journey`):**
 > - **Customer onboarding journey built out.** The wizard already captured Email +
 >   First/Last name + Contact phone (→ `profiles`, #90) and family name + timezone
@@ -267,7 +318,7 @@ Last updated after the Meal Voting PR. Keep this updated as you ship.
   guards). Always apply the migration to prod after merging the migration file.
 
 ## Conventions
-- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0053.**
+- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0068.**
   Helpers available in DB: `public.is_family_member(family_id)`, `public.is_super_admin()`,
   `public.set_updated_at()` trigger fn, `gen_random_uuid()`.
 - **Family-scoped tables** (member data): RLS pattern —
@@ -282,10 +333,13 @@ Last updated after the Meal Voting PR. Keep this updated as you ship.
 - **Nav**: `lib/constants/navigation.ts` `APP_NAV_GROUPS` (items have `minLevel`).
   Locked items render greyed with a lock and open the tier-aware `UpgradeModal`
   (`components/app/upgrade-modal.tsx`, takes `requiredLevel`). Add icon to the lucide import line.
-- **Route gating**: `lib/constants/plans.ts` `ROUTE_PLAN_LEVEL` (0/1/2) AND
-  page-level `requirePlanLevel(1|2)` (redirects to `/dashboard/billing?upgrade=1&need=N`).
-  Free pages use `requireUserContext()`.
-- **Client modules**: `useApp()` gives `{ familyId, userId, role, members, selfMember, isSuperAdmin, planLevel }`.
+- **Route gating (Supabase-backed, admin-controlled)**: gate a page/layout with
+  **`requireFeature('<nav href>')`** (`lib/supabase/auth.ts`) — it resolves the
+  feature's effective tier from `feature_settings` (admin override → code default
+  in `lib/features/catalog.ts`), `notFound()`s on Off, else redirects to
+  `/dashboard/billing?upgrade=1&need=N`. Super-admins bypass. `requirePlanLevel(1|2)`
+  still exists (numeric floor / legacy); `ROUTE_PLAN_LEVEL` is documentation only.
+- **Client modules**: `useApp()` gives `{ familyId, userId, role, members, selfMember, isSuperAdmin, planLevel, featureOverrides }`.
   `useRealtimeQuery({ table, familyId, deps, fetcher })`. `createClient()` for writes.
   UI: `Modal`, `Input/Textarea/Field/Select`, `Button`, `Avatar`, `PageHeader`,
   `LoadingBlock/ErrorState/EmptyState`, `useToast()` → `{ success, error }`.
@@ -384,16 +438,11 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Latest migration applied to prod: **0050** (verify with `select max(...)`/`\dt`).
-Next migration number: **0067**.
-(0050 dedup index applied; **0051–0055** on main. The marketing-platform pillars
-**0056 `crm`** … **0065 `affiliates`** merged to main via #95, plus
-**0066 `competitive_intel`** (Competitor/Keyword/Backlink) — all **0051–0066 still
-need applying to prod** (verify what's live first; migrations are idempotent).)
-
-> ✅ **Merge-ready: branch migrations renumbered to 0056–0065** (after main's max
-> 0055). If `main` gains new migrations before this merges, bump these again to
-> stay after main's max.
+Next migration number: **0068**. (0051–0066 are on main.) **Still needs applying
+to prod** (verify what's live first with `select max(...)`/`\dt`; all idempotent):
+0044–0066 as applicable, plus **0052 `family_onboarding`**, **0053
+`landing_metrics`**, and **0067 `feature_settings`** (admin Tier & Features —
+renumbered from 0054 after a collision with main's `0054_recipe_sources`).
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -685,7 +734,7 @@ build → **verify** (`tsc --noEmit`, `next lint`, `next build`, `vitest run`, a
 validate the migration **twice** on a throwaway Postgres 16 cluster for
 idempotency + RLS/CHECK) → draft PR (`mcp__github__create_pull_request`) → mark
 ready → **squash-merge** → apply the migration to prod (Supabase Management API,
-see migration section; **next number: 0054**) → update this doc's pillar row +
+see migration section; **next number: 0068**) → update this doc's pillar row +
 its NEXT step. Keep each PR to one pillar.
 
 ### Pillar map (✅ shipped · 🟡 partial · ⬜ not built)

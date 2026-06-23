@@ -1,9 +1,9 @@
 import { Car } from 'lucide-react';
-import { requirePlanLevel } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { AutoSubnav } from '@/components/auto/auto-subnav';
 
 export default async function AutoLayout({ children }: { children: React.ReactNode }) {
-  await requirePlanLevel(1);
+  await requireFeature('/dashboard/auto');
   return (
     <div className="module-page">
       <div className="flex items-center gap-3">
