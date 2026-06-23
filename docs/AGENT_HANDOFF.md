@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Tier-7 Travel & Events audit. Keep this updated as you ship.
+Last updated after the Tier 6 Health & Wellness audit + 3 gap builds. Keep this updated as you ship.
 
 > **Session update (2026-06-23p, branch `claude/travel-tier7`) — TIER-7 TRAVEL &
 > EVENTS AUDIT + 2 new features.** Reviewed all 10 features. The 28-table
@@ -31,6 +31,57 @@ Last updated after the Tier-7 Travel & Events audit. Keep this updated as you sh
 >   vacation detail (`trip-tabs.tsx`) for trip-scoped use; (2) notify members when a
 >   poll opens/closes; (3) AI "trip recap" that drafts a memory from itinerary +
 >   photos. Next migration number: **0080**.
+> **Session update (2026-06-23, branch `claude/health-wellness`) — TIER 6
+> HEALTH & WELLNESS AUDIT + 3 GAP BUILDS.** Task: audit the "Tier 6: Health &
+> Wellness" feature list against the product, note which are world-class, build
+> any gap to be world-class + 100% Supabase-wired + production-ready.
+>
+> **AUDIT — 7 of 10 already EXIST and are strong (left untouched):**
+> | Feature | Where | Verdict |
+> |---|---|---|
+> | Medication Tracking | `medications` table + UI | World-class |
+> | Appointment Tracking | `appointments` + Upcoming Checkups | Strong |
+> | Vaccine Records | immunizations (`tests/health-immunizations.test.ts`) | Strong |
+> | Fitness Tracking | `health_metrics` + `workout_logs` | World-class |
+> | Family Health Dashboard | health-module "at a Glance" + insights | Strong |
+> | Emergency Information | medical_profiles (blood type/allergies) | Strong |
+> | Doctor Directory | contacts/providers | Strong |
+> | **Symptom Journal** | **was ❌ → built** | **This session** |
+> | **Health Goals** | **was ❌ (hardcoded 10k) → built** | **This session** |
+> | **AI Health Assistant** | **was a Link to /assistant → built grounded coach** | **This session** |
+>
+> **MIGRATION `0080_health_wellness.sql` (validated on throwaway PG16, idempotent):**
+> - `symptom_logs` (family_id, member_id, symptom, severity 1-5, body_area,
+>   started_at/ended_at, status active|resolved, notes, created_by, stamps).
+> - `health_goals` (family_id, member_id, metric_type, target>0, period
+>   daily|weekly, label, is_active, UNIQUE(member_id,metric_type,period)).
+> - Both: `set_updated_at` trigger + RLS `*_all` `FOR ALL TO authenticated`
+>   via `is_family_member(family_id)`. **APPLY TO PROD** before the UI is useful.
+> - Types added to `lib/database.types.ts` (`symptom_logs`, `health_goals`).
+>
+> **BUILT into `components/modules/health-module.tsx` (all Supabase-wired, realtime):**
+> - **Symptom Journal** — full-width card: active-count badge, "Log symptom" modal
+>   (member, symptom, severity 1-5, body area, started_at, notes), list sorted
+>   active-first then recent, per-row resolve (sets status+ended_at) and delete.
+> - **Health Goals** — `health_goals` query → `goalMap`/`stepGoalFor(memberId)`
+>   (fallback 10000) + `familyStepsGoal` (sum of members'). Replaced ALL three
+>   hardcoded `10000` step goals (activity ring, member rings, streak insight).
+>   "Set goals" button in Activity Summary header → upsert modal (member, metric,
+>   daily/weekly, target) using `onConflict: member_id,metric_type,period`.
+> - **AI Health Coach** — replaced the old `<Link>Ask AI</Link>` (which broke the
+>   build after the Link import was dropped) with a modal that POSTs
+>   `/api/ai/health/coach` and renders the answer (member select + question).
+>
+> **AI ROUTE `app/api/ai/health/coach/route.ts`** (nodejs, force-dynamic):
+> `requireUserContext()`; 503 if no ANTHROPIC/OPENAI key; grounds ONLY in this
+> family's data (member, medical_profiles, active medications, last 10
+> symptom_logs); safety-first system prompt (red-flag → emergency, never
+> diagnoses, sections WHAT THIS COULD BE / SELF-CARE / SEE A CLINICIAN IF,
+> ends "This is general wellness information, not medical advice."); calls
+> `resolveProvider().complete({tools:[], maxTokens:1024})`; returns `{text}`.
+> - Verified: tsc/lint/build clean; full vitest **641 passing**.
+> - **NEXT (health):** add a dedicated symptom timeline/trend chart per member;
+>   let the coach answer suggest logging a symptom; goal progress notifications.
 
 > **Session update (2026-06-23g, branch `claude/assistant-streaming`): AI Assistant
 > v3 — token streaming, conversation rename, free-time tool.** Builds on v2.

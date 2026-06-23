@@ -463,6 +463,16 @@ export interface Database {
         { id?: string; family_id: string; member_id: string; activity: string; duration_minutes?: number | null; calories?: number | null; distance?: number | null; notes?: string | null; recorded_at?: string; created_by?: string | null },
         Partial<{ activity: string; duration_minutes: number | null; calories: number | null; distance: number | null; notes: string | null; recorded_at: string }>
       >;
+      symptom_logs: T<
+        { id: string; family_id: string; member_id: string; symptom: string; severity: number; body_area: string | null; started_at: string; ended_at: string | null; status: string; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; symptom: string; severity?: number; body_area?: string | null; started_at?: string; ended_at?: string | null; status?: string; notes?: string | null; created_by?: string | null },
+        Partial<{ symptom: string; severity: number; body_area: string | null; started_at: string; ended_at: string | null; status: string; notes: string | null }>
+      >;
+      health_goals: T<
+        { id: string; family_id: string; member_id: string; metric_type: string; target: number; period: string; label: string | null; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; metric_type: string; target: number; period?: string; label?: string | null; is_active?: boolean; created_by?: string | null },
+        Partial<{ metric_type: string; target: number; period: string; label: string | null; is_active: boolean }>
+      >;
       // ── School ──────────────────────────────────────────────
       school_classes: T<
         { id: string; family_id: string; member_id: string; subject: string; teacher: string | null; room: string | null; time_slot: string | null; day_of_week: number | null; school_name: string | null; week_pattern: WeekPattern; created_by: string | null } & Stamps,
