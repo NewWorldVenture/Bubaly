@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Activity, ChevronRight, Dumbbell, Filter, Heart, MoreHorizontal, Plus, Sparkles, Zap } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -622,7 +623,7 @@ export function HealthModule() {
           </div>
           <h3 className="font-bold">AI Health Coach</h3>
           <p className="mt-2 text-xs leading-5 text-muted">Get personalized health tips and wellness insights for your family.</p>
-          <Button onClick={() => {}} className="btn-cta mt-4 w-full">Ask AI</Button>
+          <Link href="/dashboard/assistant" className="btn-cta mt-4 inline-flex w-full items-center justify-center">Ask AI</Link>
         </div>
       </aside>
 
