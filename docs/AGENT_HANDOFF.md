@@ -3,6 +3,30 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the Weekend Planner build. Keep this updated as you ship.
 
+> **Session update (2026-06-23k) — WEEKEND PLANNER: multi-source aggregation.**
+> Expanded discovery from one provider to a **deduping aggregator** over several
+> reliable sources, merged by day. On branch `claude/funny-darwin-gkmptm` (PR #116).
+> - **Providers (keyed, nationwide):** Ticketmaster (`TICKETMASTER_API_KEY`) **and now
+>   SeatGeek** (`SEATGEEK_CLIENT_ID`). Each runs only if its env key is set.
+> - **Family-curated LOCAL feeds:** **migration `0072_weekend_feeds.sql`** —
+>   `weekend_feeds` (label, url, `weekend_feed_kind` ics|rss, is_active, last_fetched_at,
+>   last_status, last_count; UNIQUE(family_id,url)); RLS + trigger. **VALIDATED local PG16.
+>   ⚠️ NOT APPLIED TO PROD.** Families add any city/library/parks/school **.ics or RSS**
+>   calendar; the crawler fetches + parses + windows + merges them.
+> - **`lib/weekend/sources.ts`** (pure; 10 tests in `tests/weekend.test.ts`):
+>   `normalizeSeatGeek[Response]`, robust `parseICS` (line unfolding, `;TZID=`/`;VALUE=`
+>   params, `\,`/`\n` escapes, all-day dates, UID), `parseRSS` (item/entry, CDATA, pubDate/
+>   published), `parseICSDate`, `withinWindow`, `dedupeEvents` (by source+id, then
+>   title+day). To add a provider: write a normalizer here + fan it into the route.
+> - **`/api/weekend/discover`** now fans out to all configured sources in parallel
+>   (per-fetch AbortController timeout ~9s), records each feed's status/count, dedupes,
+>   upserts. `needsConfig:true` 503 only when ZERO sources connected (no keys + no feeds).
+>   Event cards show a **source badge**; UI has a collapsible **"Local sources"** manager
+>   (add/toggle/remove feeds + live status). `weekend_events.source` holds 'ticketmaster' |
+>   'seatgeek' | 'feed:<label>'.
+> - **NEXT:** geocode feed-event locations for distance; per-source toggle in search;
+>   AI "plan our weekend" picker; ICS/calendar export of the shortlist.
+
 > **Session update (2026-06-23j) — WEEKEND PLANNER (local event discovery).**
 > On branch `claude/funny-darwin-gkmptm` (in PR #116 with the items below). Lets a
 > family type a **ZIP code** + pick a **mileage radius dropdown** (5/10/25/50/75/100 mi)
