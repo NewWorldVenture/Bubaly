@@ -43,6 +43,19 @@ export type TripStatus = 'planning' | 'booked' | 'active' | 'completed' | 'cance
 export type TripItemKind = 'packing' | 'todo' | 'reservation' | 'document';
 export type RedemptionStatus = 'requested' | 'approved' | 'fulfilled' | 'rejected';
 
+// Vacation Planner enums (migration 0070)
+export type VacationStatus = 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
+export type VacationKind = 'road_trip' | 'flight' | 'cruise' | 'theme_park' | 'international' | 'domestic' | 'staycation' | 'camping' | 'other';
+export type VacItemKind = 'activity' | 'reservation' | 'meal' | 'travel' | 'reminder' | 'note' | 'free_time';
+export type VacDayPart = 'morning' | 'afternoon' | 'evening' | 'all_day';
+export type VacTransportKind = 'car' | 'train' | 'bus' | 'ferry' | 'rideshare' | 'shuttle' | 'subway' | 'walk' | 'bike' | 'other';
+export type VacLodgingKind = 'hotel' | 'airbnb' | 'resort' | 'cabin' | 'campground' | 'cruise_cabin' | 'hostel' | 'family' | 'rental' | 'other';
+export type VacBudgetCategory = 'flights' | 'lodging' | 'transportation' | 'activities' | 'food' | 'shopping' | 'insurance' | 'fees' | 'misc';
+export type VacPackCategory = 'clothes' | 'toiletries' | 'electronics' | 'medications' | 'documents' | 'sports' | 'beach' | 'ski' | 'camping' | 'baby' | 'snacks' | 'other';
+export type VacDocKind = 'passport' | 'id' | 'visa' | 'ticket' | 'boarding_pass' | 'hotel_confirmation' | 'rental_confirmation' | 'insurance' | 'itinerary' | 'medical' | 'other';
+export type VacRecoKind = 'missing_reservation' | 'packing' | 'budget_warning' | 'weather_warning' | 'travel_conflict' | 'activity_suggestion' | 'restaurant' | 'document_missing' | 'suggestion';
+export type VacRecoStatus = 'open' | 'accepted' | 'dismissed' | 'done';
+
 // Sync platform enums (migration 0018)
 export type SyncProviderEnum = 'google' | 'microsoft' | 'apple' | 'amazon' | 'internal';
 export type SyncDirection = 'import' | 'export' | 'two_way' | 'manual' | 'disabled';
@@ -1245,6 +1258,143 @@ export interface Database {
         { id: string; family_id: string; household_adults: number; household_children: number; child_ages: number[]; region: string | null; postal_code: string | null; country: string | null; goals: string[]; referral_source: string | null; referral_detail: string | null; completed_at: string | null; metadata: Json; created_by: string | null } & Stamps,
         { id?: string; family_id: string; household_adults?: number; household_children?: number; child_ages?: number[]; region?: string | null; postal_code?: string | null; country?: string | null; goals?: string[]; referral_source?: string | null; referral_detail?: string | null; completed_at?: string | null; metadata?: Json; created_by?: string | null },
         Partial<{ household_adults: number; household_children: number; child_ages: number[]; region: string | null; postal_code: string | null; country: string | null; goals: string[]; referral_source: string | null; referral_detail: string | null; completed_at: string | null; metadata: Json }>
+      >;
+
+      // ---- Vacation Planner (migration 0070) ----
+      vacations: T<
+        { id: string; family_id: string; title: string; kind: VacationKind; status: VacationStatus; destination: string | null; start_date: string | null; end_date: string | null; timezone: string | null; cover_image_url: string | null; description: string | null; budget_cents: number | null; currency: string; is_international: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; kind?: VacationKind; status?: VacationStatus; destination?: string | null; start_date?: string | null; end_date?: string | null; timezone?: string | null; cover_image_url?: string | null; description?: string | null; budget_cents?: number | null; currency?: string; is_international?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ title: string; kind: VacationKind; status: VacationStatus; destination: string | null; start_date: string | null; end_date: string | null; timezone: string | null; cover_image_url: string | null; description: string | null; budget_cents: number | null; currency: string; is_international: boolean; notes: string | null }>
+      >;
+      vacation_members: T<
+        { id: string; family_id: string; vacation_id: string; member_id: string | null; role: string | null; guest_name: string | null; dietary_restrictions: string | null; accessibility_needs: string | null; medical_notes: string | null; preferences: string | null; emergency_contact: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; member_id?: string | null; role?: string | null; guest_name?: string | null; dietary_restrictions?: string | null; accessibility_needs?: string | null; medical_notes?: string | null; preferences?: string | null; emergency_contact?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; role: string | null; guest_name: string | null; dietary_restrictions: string | null; accessibility_needs: string | null; medical_notes: string | null; preferences: string | null; emergency_contact: string | null }>
+      >;
+      vacation_destinations: T<
+        { id: string; family_id: string; vacation_id: string; name: string; region: string | null; country: string | null; latitude: number | null; longitude: number | null; arrive_date: string | null; depart_date: string | null; sort_order: number; notes: string | null; map_url: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; name: string; region?: string | null; country?: string | null; latitude?: number | null; longitude?: number | null; arrive_date?: string | null; depart_date?: string | null; sort_order?: number; notes?: string | null; map_url?: string | null; created_by?: string | null },
+        Partial<{ name: string; region: string | null; country: string | null; latitude: number | null; longitude: number | null; arrive_date: string | null; depart_date: string | null; sort_order: number; notes: string | null; map_url: string | null }>
+      >;
+      vacation_itinerary_days: T<
+        { id: string; family_id: string; vacation_id: string; destination_id: string | null; day_date: string; title: string | null; summary: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; destination_id?: string | null; day_date: string; title?: string | null; summary?: string | null; created_by?: string | null },
+        Partial<{ destination_id: string | null; day_date: string; title: string | null; summary: string | null }>
+      >;
+      vacation_itinerary_items: T<
+        { id: string; family_id: string; vacation_id: string; day_id: string | null; kind: VacItemKind; day_part: VacDayPart; title: string; location: string | null; start_time: string | null; end_time: string | null; duration_min: number | null; cost_cents: number | null; booked: boolean; confirmation_code: string | null; notes: string | null; member_ids: string[]; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; day_id?: string | null; kind?: VacItemKind; day_part?: VacDayPart; title: string; location?: string | null; start_time?: string | null; end_time?: string | null; duration_min?: number | null; cost_cents?: number | null; booked?: boolean; confirmation_code?: string | null; notes?: string | null; member_ids?: string[]; sort_order?: number; created_by?: string | null },
+        Partial<{ day_id: string | null; kind: VacItemKind; day_part: VacDayPart; title: string; location: string | null; start_time: string | null; end_time: string | null; duration_min: number | null; cost_cents: number | null; booked: boolean; confirmation_code: string | null; notes: string | null; member_ids: string[]; sort_order: number }>
+      >;
+      vacation_flights: T<
+        { id: string; family_id: string; vacation_id: string; airline: string | null; flight_number: string | null; depart_airport: string | null; arrive_airport: string | null; depart_at: string | null; arrive_at: string | null; terminal: string | null; gate: string | null; seats: string | null; confirmation_code: string | null; booked: boolean; cost_cents: number | null; document_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; airline?: string | null; flight_number?: string | null; depart_airport?: string | null; arrive_airport?: string | null; depart_at?: string | null; arrive_at?: string | null; terminal?: string | null; gate?: string | null; seats?: string | null; confirmation_code?: string | null; booked?: boolean; cost_cents?: number | null; document_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ airline: string | null; flight_number: string | null; depart_airport: string | null; arrive_airport: string | null; depart_at: string | null; arrive_at: string | null; terminal: string | null; gate: string | null; seats: string | null; confirmation_code: string | null; booked: boolean; cost_cents: number | null; document_id: string | null; notes: string | null }>
+      >;
+      vacation_transportation: T<
+        { id: string; family_id: string; vacation_id: string; kind: VacTransportKind; provider: string | null; from_location: string | null; to_location: string | null; depart_at: string | null; arrive_at: string | null; confirmation_code: string | null; distance_miles: number | null; fuel_estimate_cents: number | null; stops: Json; booked: boolean; cost_cents: number | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; kind?: VacTransportKind; provider?: string | null; from_location?: string | null; to_location?: string | null; depart_at?: string | null; arrive_at?: string | null; confirmation_code?: string | null; distance_miles?: number | null; fuel_estimate_cents?: number | null; stops?: Json; booked?: boolean; cost_cents?: number | null; notes?: string | null; created_by?: string | null },
+        Partial<{ kind: VacTransportKind; provider: string | null; from_location: string | null; to_location: string | null; depart_at: string | null; arrive_at: string | null; confirmation_code: string | null; distance_miles: number | null; fuel_estimate_cents: number | null; stops: Json; booked: boolean; cost_cents: number | null; notes: string | null }>
+      >;
+      vacation_lodging: T<
+        { id: string; family_id: string; vacation_id: string; destination_id: string | null; kind: VacLodgingKind; name: string; address: string | null; phone: string | null; check_in: string | null; check_out: string | null; confirmation_code: string | null; nightly_cents: number | null; total_cents: number | null; booked: boolean; url: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; destination_id?: string | null; kind?: VacLodgingKind; name: string; address?: string | null; phone?: string | null; check_in?: string | null; check_out?: string | null; confirmation_code?: string | null; nightly_cents?: number | null; total_cents?: number | null; booked?: boolean; url?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ destination_id: string | null; kind: VacLodgingKind; name: string; address: string | null; phone: string | null; check_in: string | null; check_out: string | null; confirmation_code: string | null; nightly_cents: number | null; total_cents: number | null; booked: boolean; url: string | null; notes: string | null }>
+      >;
+      vacation_activities: T<
+        { id: string; family_id: string; vacation_id: string; destination_id: string | null; name: string; category: string | null; location: string | null; scheduled_at: string | null; duration_min: number | null; cost_cents: number | null; family_friendly: boolean; url: string | null; booked: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; destination_id?: string | null; name: string; category?: string | null; location?: string | null; scheduled_at?: string | null; duration_min?: number | null; cost_cents?: number | null; family_friendly?: boolean; url?: string | null; booked?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ destination_id: string | null; name: string; category: string | null; location: string | null; scheduled_at: string | null; duration_min: number | null; cost_cents: number | null; family_friendly: boolean; url: string | null; booked: boolean; notes: string | null }>
+      >;
+      vacation_activity_tickets: T<
+        { id: string; family_id: string; vacation_id: string; activity_id: string | null; holder_member_id: string | null; holder_name: string | null; ticket_type: string | null; confirmation_code: string | null; price_cents: number | null; document_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; activity_id?: string | null; holder_member_id?: string | null; holder_name?: string | null; ticket_type?: string | null; confirmation_code?: string | null; price_cents?: number | null; document_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ activity_id: string | null; holder_member_id: string | null; holder_name: string | null; ticket_type: string | null; confirmation_code: string | null; price_cents: number | null; document_id: string | null; notes: string | null }>
+      >;
+      vacation_reservations: T<
+        { id: string; family_id: string; vacation_id: string; kind: string | null; name: string; location: string | null; reserved_at: string | null; party_size: number | null; confirmation_code: string | null; cost_cents: number | null; booked: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; kind?: string | null; name: string; location?: string | null; reserved_at?: string | null; party_size?: number | null; confirmation_code?: string | null; cost_cents?: number | null; booked?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ kind: string | null; name: string; location: string | null; reserved_at: string | null; party_size: number | null; confirmation_code: string | null; cost_cents: number | null; booked: boolean; notes: string | null }>
+      >;
+      vacation_budgets: T<
+        { id: string; family_id: string; vacation_id: string; category: VacBudgetCategory; planned_cents: number; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; category: VacBudgetCategory; planned_cents?: number; notes?: string | null; created_by?: string | null },
+        Partial<{ category: VacBudgetCategory; planned_cents: number; notes: string | null }>
+      >;
+      vacation_expenses: T<
+        { id: string; family_id: string; vacation_id: string; category: VacBudgetCategory; description: string; amount_cents: number; spent_on: string; paid_by_member_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; category?: VacBudgetCategory; description: string; amount_cents: number; spent_on?: string; paid_by_member_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ category: VacBudgetCategory; description: string; amount_cents: number; spent_on: string; paid_by_member_id: string | null; notes: string | null }>
+      >;
+      vacation_packing_lists: T<
+        { id: string; family_id: string; vacation_id: string; name: string; member_id: string | null; is_master: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; name: string; member_id?: string | null; is_master?: boolean; created_by?: string | null },
+        Partial<{ name: string; member_id: string | null; is_master: boolean }>
+      >;
+      vacation_packing_items: T<
+        { id: string; family_id: string; vacation_id: string; list_id: string | null; name: string; category: VacPackCategory; quantity: number; packed: boolean; ai_suggested: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; list_id?: string | null; name: string; category?: VacPackCategory; quantity?: number; packed?: boolean; ai_suggested?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ list_id: string | null; name: string; category: VacPackCategory; quantity: number; packed: boolean; ai_suggested: boolean; notes: string | null }>
+      >;
+      vacation_documents: T<
+        { id: string; family_id: string; vacation_id: string; kind: VacDocKind; title: string; member_id: string | null; document_id: string | null; file_url: string | null; number: string | null; issued_on: string | null; expires_on: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; kind?: VacDocKind; title: string; member_id?: string | null; document_id?: string | null; file_url?: string | null; number?: string | null; issued_on?: string | null; expires_on?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ kind: VacDocKind; title: string; member_id: string | null; document_id: string | null; file_url: string | null; number: string | null; issued_on: string | null; expires_on: string | null; notes: string | null }>
+      >;
+      vacation_emergency_contacts: T<
+        { id: string; family_id: string; vacation_id: string; name: string; relationship: string | null; phone: string | null; email: string | null; category: string | null; address: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; name: string; relationship?: string | null; phone?: string | null; email?: string | null; category?: string | null; address?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; relationship: string | null; phone: string | null; email: string | null; category: string | null; address: string | null; notes: string | null }>
+      >;
+      vacation_medical_information: T<
+        { id: string; family_id: string; vacation_id: string; member_id: string | null; allergies: string | null; conditions: string | null; medications: string | null; blood_type: string | null; insurance_provider: string | null; insurance_number: string | null; physician: string | null; physician_phone: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; member_id?: string | null; allergies?: string | null; conditions?: string | null; medications?: string | null; blood_type?: string | null; insurance_provider?: string | null; insurance_number?: string | null; physician?: string | null; physician_phone?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; allergies: string | null; conditions: string | null; medications: string | null; blood_type: string | null; insurance_provider: string | null; insurance_number: string | null; physician: string | null; physician_phone: string | null; notes: string | null }>
+      >;
+      vacation_checklists: T<
+        { id: string; family_id: string; vacation_id: string; title: string; done: boolean; due_date: string | null; assignee_member_id: string | null; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; title: string; done?: boolean; due_date?: string | null; assignee_member_id?: string | null; sort_order?: number; created_by?: string | null },
+        Partial<{ title: string; done: boolean; due_date: string | null; assignee_member_id: string | null; sort_order: number }>
+      >;
+      vacation_weather_snapshots: T<
+        { id: string; family_id: string; vacation_id: string; destination_id: string | null; location_label: string | null; latitude: number | null; longitude: number | null; forecast_date: string; temp_high_c: number | null; temp_low_c: number | null; precip_prob: number | null; precip_mm: number | null; wind_kph: number | null; weather_code: number | null; summary: string | null; fetched_at: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; destination_id?: string | null; location_label?: string | null; latitude?: number | null; longitude?: number | null; forecast_date: string; temp_high_c?: number | null; temp_low_c?: number | null; precip_prob?: number | null; precip_mm?: number | null; wind_kph?: number | null; weather_code?: number | null; summary?: string | null; fetched_at?: string; created_by?: string | null },
+        Partial<{ destination_id: string | null; location_label: string | null; latitude: number | null; longitude: number | null; forecast_date: string; temp_high_c: number | null; temp_low_c: number | null; precip_prob: number | null; precip_mm: number | null; wind_kph: number | null; weather_code: number | null; summary: string | null; fetched_at: string }>
+      >;
+      vacation_ai_recommendations: T<
+        { id: string; family_id: string; vacation_id: string; kind: VacRecoKind; status: VacRecoStatus; title: string; detail: string | null; severity: number; payload: Json; source: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; kind?: VacRecoKind; status?: VacRecoStatus; title: string; detail?: string | null; severity?: number; payload?: Json; source?: string; created_by?: string | null },
+        Partial<{ kind: VacRecoKind; status: VacRecoStatus; title: string; detail: string | null; severity: number; payload: Json; source: string }>
+      >;
+      vacation_ai_conversations: T<
+        { id: string; family_id: string; vacation_id: string | null; title: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; title?: string | null; created_by?: string | null },
+        Partial<{ vacation_id: string | null; title: string | null }>
+      >;
+      vacation_ai_messages: T<
+        { id: string; family_id: string; conversation_id: string; role: AiRole; content: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; conversation_id: string; role: AiRole; content: string; created_by?: string | null },
+        Partial<{ content: string }>
+      >;
+      vacation_travel_scores: T<
+        { id: string; family_id: string; vacation_id: string; score: number; breakdown: Json; computed_at: string } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; score: number; breakdown?: Json; computed_at?: string },
+        Partial<{ score: number; breakdown: Json; computed_at: string }>
+      >;
+      vacation_activity_logs: T<
+        { id: string; family_id: string; vacation_id: string | null; actor_member_id: string | null; action: string; detail: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; actor_member_id?: string | null; action: string; detail?: string | null; created_by?: string | null },
+        Partial<{ vacation_id: string | null; actor_member_id: string | null; action: string; detail: string | null }>
+      >;
+      vacation_notifications: T<
+        { id: string; family_id: string; vacation_id: string | null; member_id: string | null; title: string; body: string | null; read: boolean; send_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; member_id?: string | null; title: string; body?: string | null; read?: boolean; send_at?: string | null; created_by?: string | null },
+        Partial<{ vacation_id: string | null; member_id: string | null; title: string; body: string | null; read: boolean; send_at: string | null }>
+      >;
+      vacation_audit_logs: T<
+        { id: string; family_id: string; vacation_id: string | null; table_name: string; record_id: string | null; action: string; changes: Json; actor_user_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; table_name: string; record_id?: string | null; action: string; changes?: Json; actor_user_id?: string | null; created_by?: string | null },
+        Partial<{ vacation_id: string | null; table_name: string; record_id: string | null; action: string; changes: Json; actor_user_id: string | null }>
       >;
     };
     Views: { [_ in never]: never };
