@@ -1,7 +1,74 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Tier-9 Home Management AI audit + AI Utility Savings build. Keep this updated as you ship.
+Last updated after the Tier-10 Family Social Network audit + build. Keep this updated as you ship.
+
+> **Session update (2026-06-23t, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> TIER-10 FAMILY SOCIAL NETWORK — full audit + build of 3 missing features.**
+> Task: audit all 10 Tier-10 features against the codebase and build any gaps
+> to world-class, 100% Supabase-wired, production-ready.
+>
+> **Audit results:**
+> | Feature | Where | Status |
+> |---|---|---|
+> | Family Feed | Activity Feed (`lib/activity/feed.ts` + `/dashboard/activity`) | ✅ world-class |
+> | Shared Memories | Memories page + Family Memory Brain (`lib/memories/timeline.ts`) | ✅ world-class |
+> | Family Tree | **MISSING** → built | ✅ **built this session** |
+> | Grandparent Portal | **MISSING** → built | ✅ **built this session** |
+> | Family Milestones | `family_milestones` + Celebrations + Memory Brain | ✅ world-class |
+> | Photo Albums | Photos module (`family_albums` + `family_photos`) | ✅ world-class |
+> | Video Sharing | **PARTIAL** (images only) → extended | ✅ **built this session** |
+> | Family Polls | Group Voting (`lib/voting/polls.ts` + `/dashboard/voting`) | ✅ world-class |
+> | Announcements | Announcements module (pin, read receipts) | ✅ world-class |
+> | Memory Timeline | Memories page (grouped-by-month timeline) | ✅ world-class |
+>
+> **BUILT — Family Tree (new feature, migration 0082):**
+> - **`lib/family-tree/tree.ts`** (pure, 12 tests in `tests/family-tree.test.ts`):
+>   `RELATIONSHIPS` (17 types), `relationshipLabel`, `buildTree` (flat→hierarchy),
+>   `flattenTree`, `maxGeneration`, `countByRelationship`, `treeStats`
+>   (total/generations/living/deceased), `generationLabel`, `groupByGeneration`,
+>   `lifespan` formatting.
+> - **`supabase/migrations/0082_family_tree.sql`**: `family_tree_nodes` table
+>   (id, family_id, parent_node_id, member_id, name, relationship, birth_year,
+>   death_year, birth_place, photo_url, bio, metadata) + RLS + indexes + trigger.
+>   Also adds `media_type` + `duration_seconds` to `family_photos` for video.
+> - **`lib/database.types.ts`**: added `family_tree_nodes` table type + updated
+>   `family_photos` with `media_type`/`duration_seconds`.
+> - **`components/modules/family-tree-module.tsx`**: full CRUD — tree view
+>   (expandable hierarchy) + generations view (grouped by generation with color
+>   bands), stats bar (people/generations/living/deceased), detail modal, edit
+>   modal, link-to-member, birth/death years, birthplace, bio.
+> - **`app/(app)/dashboard/family-tree/page.tsx`**: new page.
+> - Feature catalog: `family-tree` (Daily Life, basic).
+> - Navigation: `/dashboard/family-tree` with GitBranch icon.
+>
+> **BUILT — Grandparent Portal (new feature, no additional migration):**
+> - **`lib/grandparent/digest.ts`** (pure, 5 tests in `tests/grandparent-digest.test.ts`):
+>   `buildGrandparentDigest` (assembles simplified read-only view from members,
+>   photos, milestones, announcements, celebrations), `digestSummary` (one-line
+>   summary), `celebrationCountdown`.
+> - **`app/(app)/dashboard/grandparent-portal/page.tsx`**: server-rendered,
+>   simplified warm UI — family members with avatars, recent photos grid,
+>   milestones, family updates, upcoming celebrations with countdown. Uses
+>   existing tables (no new migration needed).
+> - Feature catalog: `grandparent-portal` (Daily Life, free).
+> - Navigation: `/dashboard/grandparent-portal` with Heart icon.
+>
+> **BUILT — Video Sharing (extended Photos module):**
+> - **`components/modules/photos-module.tsx`**: upload handler now accepts
+>   `image/*` and `video/*`, sets `media_type` on insert. Grid shows play icon
+>   + "Video" badge for video items. Lightbox renders `<video>` with controls
+>   for video, `<img>` for images. List view shows play icon for videos.
+>   Upload modal accepts "Photos & Videos", mentions MP4/MOV/WebM formats.
+> - **`supabase/migrations/0082_family_tree.sql`**: adds `media_type text DEFAULT 'image'`
+>   and `duration_seconds int` to `family_photos`.
+>
+> - **Verification:** `tsc` clean · `next lint` clean · `next build` **Compiled
+>   successfully** (both `/dashboard/family-tree` and `/dashboard/grandparent-portal`
+>   registered) · `vitest` **765 passing** (+17). Migration **0082**.
+> - **NEXT (Tier-10 enhancements):** (1) AI-powered "This Week in Our Family"
+>   email digest for grandparents; (2) Interactive family tree visualization
+>   (canvas/SVG); (3) Video transcoding/thumbnails pipeline. Next migration: **0083**.
 
 > **Session update (2026-06-23s, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > TIER-9 HOME MANAGEMENT "IS IT AI-LEADING?" RE-AUDIT + AI UTILITY SAVINGS.**

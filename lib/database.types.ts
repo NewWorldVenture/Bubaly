@@ -363,6 +363,11 @@ export interface Database {
         { id?: string; family_id: string; title?: string | null; body?: string; is_pinned?: boolean; checklist?: Json | null; created_by?: string | null },
         Partial<{ title: string | null; body: string; is_pinned: boolean; checklist: Json | null }>
       >;
+      family_tree_nodes: T<
+        { id: string; family_id: string; parent_node_id: string | null; member_id: string | null; name: string; relationship: string; birth_year: number | null; death_year: number | null; birth_place: string | null; photo_url: string | null; bio: string | null; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; parent_node_id?: string | null; member_id?: string | null; name: string; relationship?: string; birth_year?: number | null; death_year?: number | null; birth_place?: string | null; photo_url?: string | null; bio?: string | null; metadata?: Json; created_by?: string | null },
+        Partial<{ parent_node_id: string | null; member_id: string | null; name: string; relationship: string; birth_year: number | null; death_year: number | null; birth_place: string | null; photo_url: string | null; bio: string | null; metadata: Json }>
+      >;
       family_polls: T<
         { id: string; family_id: string; vacation_id: string | null; question: string; description: string | null; kind: string; status: string; closes_at: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; vacation_id?: string | null; question: string; description?: string | null; kind?: string; status?: string; closes_at?: string | null; created_by?: string | null },
@@ -635,9 +640,9 @@ export interface Database {
         Partial<{ name: string; description: string | null; cover_url: string | null; kind: string; is_shared: boolean; photo_count: number }>
       >;
       family_photos: T<
-        { id: string; family_id: string; album_id: string | null; uploaded_by: string | null; storage_path: string; url: string | null; thumbnail_url: string | null; caption: string | null; taken_at: string | null; width: number | null; height: number | null; size_bytes: number | null; tags: string[]; member_tags: string[]; is_favorite: boolean; metadata: Json; created_at: string },
-        { id?: string; family_id: string; album_id?: string | null; uploaded_by?: string | null; storage_path: string; url?: string | null; thumbnail_url?: string | null; caption?: string | null; taken_at?: string | null; width?: number | null; height?: number | null; size_bytes?: number | null; tags?: string[]; member_tags?: string[] },
-        Partial<{ album_id: string | null; caption: string | null; tags: string[]; member_tags: string[]; is_favorite: boolean; url: string | null }>
+        { id: string; family_id: string; album_id: string | null; uploaded_by: string | null; storage_path: string; url: string | null; thumbnail_url: string | null; caption: string | null; taken_at: string | null; width: number | null; height: number | null; size_bytes: number | null; tags: string[]; member_tags: string[]; is_favorite: boolean; metadata: Json; media_type: string; duration_seconds: number | null; created_at: string },
+        { id?: string; family_id: string; album_id?: string | null; uploaded_by?: string | null; storage_path: string; url?: string | null; thumbnail_url?: string | null; caption?: string | null; taken_at?: string | null; width?: number | null; height?: number | null; size_bytes?: number | null; tags?: string[]; member_tags?: string[]; media_type?: string; duration_seconds?: number | null },
+        Partial<{ album_id: string | null; caption: string | null; tags: string[]; member_tags: string[]; is_favorite: boolean; url: string | null; media_type: string; duration_seconds: number | null }>
       >;
       family_contacts: T<
         { id: string; family_id: string; name: string; relationship: string | null; category: string; phone: string | null; phone_alt: string | null; email: string | null; address: string | null; notes: string | null; photo_url: string | null; is_emergency: boolean; birthday_month: number | null; birthday_day: number | null; tags: string[]; linked_member_id: string | null; specialty: string | null; organization: string | null; created_by: string | null; created_at: string; updated_at: string },

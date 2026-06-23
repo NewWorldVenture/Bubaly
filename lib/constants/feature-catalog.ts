@@ -50,6 +50,8 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('memories', 'Memories', 'Daily Life', 'basic', '/dashboard/memories'),
   F('activity-feed', 'Activity Feed', 'Daily Life', 'basic', '/dashboard/activity'),
   F('social-circle', 'Social Circle', 'Daily Life', 'basic', '/dashboard/social'),
+  F('family-tree', 'Family Tree', 'Daily Life', 'basic', '/dashboard/family-tree'),
+  F('grandparent-portal', 'Grandparent Portal', 'Daily Life', 'free', '/dashboard/grandparent-portal'),
   F('celebrations', 'Celebrations', 'Daily Life', 'basic', '/dashboard/celebrations'),
   F('recipes', 'Recipes', 'Daily Life', 'basic', '/dashboard/recipes'),
   F('readiness', 'Readiness', 'Daily Life', 'basic', '/dashboard/readiness'),
