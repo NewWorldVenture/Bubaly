@@ -1,7 +1,75 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Tier-9 Home Management audit. Keep this updated as you ship.
+Last updated after the "Absolute Goal" 10-category audit + AI Concierge build. Keep this updated as you ship.
+
+> **Session update (2026-06-23r, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> "ABSOLUTE GOAL" 10-CATEGORY AUDIT + AI CONCIERGE (cross-domain digest).**
+> Task: audit the product's north-star image — ONE AI Family OS combining 10
+> categories: (1) Family Coordination, (2) Personal Productivity, (3) Meal
+> Planning, (4) Shopping, (5) Chores, (6) Budgeting, (7) Travel, (8) Home
+> Management, (9) Health, (10) AI Concierge — and build any gap to world-class,
+> 100% Supabase-wired, production-ready.
+>
+> **AUDIT — 9 of 10 already present & world-class (built in prior tier audits):**
+> | # | Category | Where | Verdict |
+> |---|---|---|---|
+> | 1 | Family Coordination | calendar, messages, announcements, activity, locator, voting, celebrations | World-class |
+> | 2 | Personal Productivity | todos, notes, reminders, documents, chores | World-class |
+> | 3 | Meal Planning | meals, recipes, pantry, AI meal planner + nutrition (#126) | World-class |
+> | 4 | Shopping | grocery, shopping, wishlists, grocery deep-links (#126) | World-class |
+> | 5 | Chores | chores, missions, rewards, behavior, screen-time (#119) | World-class |
+> | 6 | Budgeting | billing, expense-split, subscriptions, tax-vault, CFO (#121) | World-class |
+> | 7 | Travel | trips, vacations, weekend, voting, trip-memories (#122) | World-class |
+> | 8 | Home Management | home, utilities, binder, security, devices, auto (#125) | World-class |
+> | 9 | Health | health, medical, medications, care, dental, coordinator (#123) | World-class |
+> | 10 | **AI Concierge** | briefing/command-center existed but **half-blind** | **Built this session** |
+>
+> **GAP → AI CONCIERGE (#10).** The image's closing thesis is "a single daily
+> dashboard that answers: *what does my family need to do today?*" The Daily
+> Briefing (`/api/ai/briefing`) only saw calendar/chores/school/sports/grocery/
+> reminders/meals/appointments — it was **blind to bills, medications, home
+> maintenance, expiring warranties, upcoming trips, and expiring pantry food**.
+> So the "single dashboard" missed ~half the family's obligations.
+>
+> **BUILT — `lib/concierge/digest.ts` (pure, deterministic, 12 vitest tests in
+> `tests/concierge-digest.test.ts`):** `buildConciergeDigest(snapshot)` →
+> prioritized cross-domain `items[]` (domain, urgency overdue|today|soon, title,
+> detail, dueLabel), `counts`, `byDomain` rollup, and a deterministic `headline`.
+> Helpers `dayOffset` (calendar-day math, date-only), `dueLabelFor`
+> (today/tomorrow/in N days), `digestToPromptLines` (LLM grounding). Per-domain
+> "soon" windows (bill 7d, maintenance 7d, warranty 30d, trip 14d, pantry 5d);
+> trips detect in-progress; bills skip `paid`; meds the caller filters to "today".
+>
+> **WIRED into `app/api/ai/briefing/route.ts` (100% Supabase):** added 6 parallel
+> queries — `bills` (≠paid, ≤30d), `medication_schedules`+`medications`
+> (today's `days_of_week`/`ends_on`/`is_active`), `maintenance_tasks` (todo/
+> in_progress, not completed, due ≤30d), `home_warranties` (≤30d), `vacations`
+> (not completed/cancelled), `pantry_items` (expires ≤30d). Builds the digest,
+> injects a **CROSS-DOMAIN ACTION ITEMS** section into the AI context + a system
+> rule to fold them into reminders/outstanding with honest urgency. **Guarded the
+> AI call with `isAIConfigured()`** — when AI is off (or returns junk), a
+> **deterministic concierge briefing** is built straight from the digest
+> (familySummary, schedule from today's events, reminders, ops score from
+> overdue/today counts) so the dashboard ALWAYS answers the question, never
+> fabricates. Response now also returns `digest`.
+>
+> **SURFACED in `components/modules/briefing-module.tsx`:** new `NeedsAttention`
+> card at the top of every briefing tab (morning/evening/weekly) — overdue/today/
+> soon chips, per-item domain emoji + urgency badge, each row deep-links to its
+> module (bill→billing, med→medications, maintenance/warranty→home, trip→
+> vacations, pantry→pantry). Digest is persisted in sessionStorage alongside the
+> briefing.
+>
+> **Verification:** `tsc --noEmit` clean · `next lint` clean (only pre-existing
+> warnings in expenses/subscriptions modules) · `next build` **Compiled
+> successfully** (`/api/ai/briefing` registered) · `vitest` **742 passing**
+> (+12). **NO migration** — reads existing tables only; nothing to apply to prod.
+> **NEXT (concierge):** (1) add behavior/screen-time + signups/permission-slips
+> to the digest; (2) a standalone `/dashboard/command-center` cross-domain view
+> reusing `buildConciergeDigest`; (3) push a morning concierge digest into
+> notifications; (4) let the AI Assistant call the digest as a read tool. Next
+> migration number: **0082**.
 
 > **Session update (2026-06-23q, branch `claude/home-tier9`) — TIER-9 HOME
 > MANAGEMENT AUDIT + 4 new features.** Reviewed all 10 features. **Already present
