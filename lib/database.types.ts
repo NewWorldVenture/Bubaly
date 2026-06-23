@@ -14,6 +14,9 @@ export type EventCategory =
   | 'maintenance' | 'birthday' | 'holiday' | 'other';
 export type RecurrenceFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type PantryLocation = 'pantry' | 'fridge' | 'freezer' | 'counter' | 'garage' | 'other';
+export type MealPollStatus = 'open' | 'closed';
+export type NutritionSubject = 'recipe' | 'meal' | 'week';
 export type NotificationType =
   | 'chore_due' | 'medication_due' | 'calendar_event' | 'school_event' | 'sports_event'
   | 'maintenance_task' | 'grocery_reminder' | 'document_expiry' | 'family_invite' | 'system';
@@ -183,6 +186,21 @@ export interface Database {
         { id: string; family_id: string; list_id: string; name: string; quantity: string | null; category: string | null; is_checked: boolean; source_meal_id: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; list_id: string; name: string; quantity?: string | null; category?: string | null; is_checked?: boolean; source_meal_id?: string | null; created_by?: string | null },
         Partial<{ name: string; quantity: string | null; category: string | null; is_checked: boolean }>
+      >;
+      pantry_items: T<
+        { id: string; family_id: string; name: string; category: string | null; location: PantryLocation; quantity: number; unit: string | null; low_threshold: number | null; expires_at: string | null; barcode: string | null; is_staple: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; category?: string | null; location?: PantryLocation; quantity?: number; unit?: string | null; low_threshold?: number | null; expires_at?: string | null; barcode?: string | null; is_staple?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; category: string | null; location: PantryLocation; quantity: number; unit: string | null; low_threshold: number | null; expires_at: string | null; barcode: string | null; is_staple: boolean; notes: string | null }>
+      >;
+      meal_polls: T<
+        { id: string; family_id: string; title: string; status: MealPollStatus; options: Json; plan_date: string | null; closes_at: string | null; winner_label: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; status?: MealPollStatus; options?: Json; plan_date?: string | null; closes_at?: string | null; winner_label?: string | null; created_by?: string | null },
+        Partial<{ title: string; status: MealPollStatus; options: Json; plan_date: string | null; closes_at: string | null; winner_label: string | null }>
+      >;
+      meal_nutrition: T<
+        { id: string; family_id: string; subject_type: NutritionSubject; subject_id: string; servings: number | null; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null; sugar_g: number | null; sodium_mg: number | null; summary: string | null; details: Json | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; subject_type: NutritionSubject; subject_id: string; servings?: number | null; calories?: number | null; protein_g?: number | null; carbs_g?: number | null; fat_g?: number | null; fiber_g?: number | null; sugar_g?: number | null; sodium_mg?: number | null; summary?: string | null; details?: Json | null; created_by?: string | null },
+        Partial<{ subject_type: NutritionSubject; subject_id: string; servings: number | null; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null; sugar_g: number | null; sodium_mg: number | null; summary: string | null; details: Json | null }>
       >;
       medications: T<
         { id: string; family_id: string; member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean; created_by: string | null } & Stamps,
@@ -407,6 +425,11 @@ export interface Database {
         { id?: string; family_id: string; member_id: string; subject: string; teacher?: string | null; room?: string | null; time_slot?: string | null; day_of_week?: number | null; school_name?: string | null; week_pattern?: WeekPattern; created_by?: string | null },
         Partial<{ subject: string; teacher: string | null; room: string | null; time_slot: string | null; day_of_week: number | null; school_name: string | null; week_pattern: WeekPattern }>
       >;
+      school_resources: T<
+        { id: string; family_id: string; member_id: string | null; title: string; url: string; description: string | null; subject: string | null; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; member_id?: string | null; title: string; url: string; description?: string | null; subject?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; title: string; url: string; description: string | null; subject: string | null; updated_at: string }>
+      >;
       grades: T<
         { id: string; family_id: string; member_id: string; class_id: string | null; subject: string; title: string | null; grade: string | null; grade_type: GradeType; score: number | null; max_score: number | null; date: string; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; class_id?: string | null; subject: string; title?: string | null; grade?: string | null; grade_type?: GradeType; score?: number | null; max_score?: number | null; date?: string; created_by?: string | null },
@@ -478,6 +501,26 @@ export interface Database {
           full_name: string | null; avatar_url: string | null; admin_role: string;
           permissions: string[]; status: string; last_active_at: string | null;
         }>
+      >;
+      newsletter_subscribers: T<
+        { id: string; email: string; source: string; status: string; consented_at: string; unsubscribed_at: string | null; created_at: string; updated_at: string },
+        { id?: string; email: string; source?: string; status?: string; consented_at?: string; unsubscribed_at?: string | null },
+        Partial<{ source: string; status: string; consented_at: string; unsubscribed_at: string | null; updated_at: string }>
+      >;
+      site_faqs: T<
+        { id: string; question: string; answer: string; sort_order: number; is_published: boolean; created_by: string | null; updated_by: string | null; created_at: string; updated_at: string },
+        { id?: string; question: string; answer: string; sort_order?: number; is_published?: boolean; created_by?: string | null; updated_by?: string | null },
+        Partial<{ question: string; answer: string; sort_order: number; is_published: boolean; updated_by: string | null; updated_at: string }>
+      >;
+      admin_access_requests: T<
+        { id: string; requester_id: string; requested_role: string; reason: string; status: string; reviewed_by: string | null; reviewed_at: string | null; review_note: string | null; created_at: string; updated_at: string },
+        { id?: string; requester_id: string; requested_role?: string; reason: string; status?: string; reviewed_by?: string | null; reviewed_at?: string | null; review_note?: string | null },
+        Partial<{ requested_role: string; reason: string; status: string; reviewed_by: string | null; reviewed_at: string | null; review_note: string | null; updated_at: string }>
+      >;
+      admin_settings: T<
+        { key: string; value: Json; description: string | null; updated_by: string | null; created_at: string; updated_at: string },
+        { key: string; value: Json; description?: string | null; updated_by?: string | null },
+        Partial<{ value: Json; description: string | null; updated_by: string | null; updated_at: string }>
       >;
       // ── Core Platform (0014) ──────────────────────────────────
       family_conversations: T<

@@ -25,9 +25,9 @@ type StoredConfig = {
 export async function getAIConfig(supabase: DB): Promise<AIProviderConfig> {
   const { data } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
   const stored = (data?.value ?? {}) as StoredConfig;
-  const provider: AIEngine = stored.provider ?? (process.env.AI_PROVIDER === 'openai' ? 'openai' : 'anthropic');
+  // OpenAI-only deployment: provider is always 'openai' regardless of what was stored.
   return {
-    provider,
+    provider: 'openai',
     model: stored.model || process.env.AI_MODEL || null,
     anthropicKey: stored.anthropicKey || process.env.ANTHROPIC_API_KEY || null,
     openaiKey: stored.openaiKey || process.env.OPENAI_API_KEY || null,
@@ -38,7 +38,7 @@ export async function getAIConfigView(supabase: DB): Promise<AIConfigView> {
   const { data } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
   const stored = (data?.value ?? {}) as StoredConfig;
   return {
-    provider: stored.provider ?? (process.env.AI_PROVIDER === 'openai' ? 'openai' : 'anthropic'),
+    provider: 'openai',
     model: stored.model || process.env.AI_MODEL || null,
     anthropicKeySet: Boolean(stored.anthropicKey || process.env.ANTHROPIC_API_KEY),
     openaiKeySet: Boolean(stored.openaiKey || process.env.OPENAI_API_KEY),
@@ -59,7 +59,7 @@ export async function setAIConfig(
   const { data } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
   const stored = (data?.value ?? {}) as StoredConfig;
   const next: StoredConfig = {
-    provider: input.provider,
+    provider: 'openai',   // OpenAI-only deployment
     model: input.model || null,
     anthropicKey: input.anthropicKey?.trim() ? input.anthropicKey.trim() : stored.anthropicKey ?? null,
     openaiKey: input.openaiKey?.trim() ? input.openaiKey.trim() : stored.openaiKey ?? null,

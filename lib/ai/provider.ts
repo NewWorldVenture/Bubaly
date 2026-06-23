@@ -1,5 +1,7 @@
 // lib/ai/provider.ts — provider-agnostic LLM interface.
-// Swap Anthropic / OpenAI / Gemini / local by implementing AIProvider.
+// This deployment is OpenAI-only: every AI route and helper resolves to ChatGPT
+// (OpenAI). The provider abstraction is kept so a future engine could be added,
+// but `providerFromConfig`/`getProvider`/`resolveProvider` always return OpenAI.
 
 export type AITool = {
   name: string;
@@ -39,61 +41,18 @@ export interface AIProvider {
   complete(input: AICompleteInput): Promise<AICompletion>;
 }
 
-// --- Anthropic implementation ---
-export class AnthropicProvider implements AIProvider {
-  id = 'anthropic';
-  constructor(public model = 'claude-sonnet-4-6', private apiKey = process.env.ANTHROPIC_API_KEY!) {}
+/** Default OpenAI model used everywhere unless an OpenAI model is configured. */
+export const DEFAULT_OPENAI_MODEL = 'gpt-4o';
 
-  async complete({ system, messages, tools, maxTokens = 1024 }: AICompleteInput): Promise<AICompletion> {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': this.apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: this.model,
-        max_tokens: maxTokens,
-        system,
-        tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema })),
-        messages: messages
-          .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .map((m) => {
-            // Attach vision blocks when a message carries images (user only).
-            if (m.images?.length) {
-              return {
-                role: m.role,
-                content: [
-                  ...m.images.map((img) => ({
-                    type: 'image' as const,
-                    source: { type: 'base64' as const, media_type: img.media_type, data: img.data },
-                  })),
-                  { type: 'text' as const, text: m.content },
-                ],
-              };
-            }
-            return { role: m.role, content: m.content };
-          }),
-      }),
-    });
-    if (!res.ok) throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    const text = (data.content ?? [])
-      .filter((b: { type: string }) => b.type === 'text')
-      .map((b: { text: string }) => b.text)
-      .join('\n');
-    const toolCalls = (data.content ?? [])
-      .filter((b: { type: string }) => b.type === 'tool_use')
-      .map((b: { name: string; input: Record<string, unknown> }) => ({ name: b.name, args: b.input }));
-    return { text, toolCalls };
-  }
+/** True when `model` looks like a valid OpenAI model id (gpt-*, o1/o3/o4-*, chatgpt-*). */
+function isOpenAIModel(model: string | null | undefined): model is string {
+  return !!model && /^(gpt-|o\d|chatgpt-)/i.test(model);
 }
 
 // --- OpenAI (ChatGPT) implementation ---
 export class OpenAIProvider implements AIProvider {
   id = 'openai';
-  constructor(public model = 'gpt-4o', private apiKey = process.env.OPENAI_API_KEY ?? '') {}
+  constructor(public model = DEFAULT_OPENAI_MODEL, private apiKey = process.env.OPENAI_API_KEY ?? '') {}
 
   async complete({ system, messages, tools, maxTokens = 1024 }: AICompleteInput): Promise<AICompletion> {
     if (!this.apiKey) throw new Error('OpenAI API key is not configured');
@@ -104,7 +63,22 @@ export class OpenAIProvider implements AIProvider {
         ...(system ? [{ role: 'system', content: system }] : []),
         ...messages
           .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .map((m) => ({ role: m.role, content: m.content })),
+          .map((m) => {
+            // Attach vision blocks when a user message carries images.
+            if (m.images?.length) {
+              return {
+                role: m.role,
+                content: [
+                  { type: 'text' as const, text: m.content },
+                  ...m.images.map((img) => ({
+                    type: 'image_url' as const,
+                    image_url: { url: `data:${img.media_type};base64,${img.data}` },
+                  })),
+                ],
+              };
+            }
+            return { role: m.role, content: m.content };
+          }),
       ],
     };
     if (tools.length) {
@@ -129,36 +103,34 @@ export class OpenAIProvider implements AIProvider {
 }
 
 export type AIProviderConfig = {
-  provider: 'anthropic' | 'openai';
+  provider: 'anthropic' | 'openai';   // kept for settings back-compat; OpenAI is always used
   model?: string | null;
-  anthropicKey?: string | null;
+  anthropicKey?: string | null;       // ignored — OpenAI-only deployment
   openaiKey?: string | null;
 };
 
-const DEFAULT_MODEL: Record<'anthropic' | 'openai', string> = {
-  anthropic: 'claude-sonnet-4-6',
-  openai: 'gpt-4o',
-};
-
-/** Build a provider from an explicit config (used by the settings-backed resolver). */
+/**
+ * Build a provider from config. OpenAI-only: the `provider` field is ignored and
+ * any stored non-OpenAI model is replaced with the default OpenAI model so a
+ * previously-saved Claude model can never break a call.
+ */
 export function providerFromConfig(cfg: AIProviderConfig): AIProvider {
-  const model = cfg.model || DEFAULT_MODEL[cfg.provider];
-  if (cfg.provider === 'openai') {
-    return new OpenAIProvider(model, cfg.openaiKey ?? process.env.OPENAI_API_KEY ?? '');
-  }
-  return new AnthropicProvider(model, cfg.anthropicKey ?? process.env.ANTHROPIC_API_KEY ?? '');
+  const model = isOpenAIModel(cfg.model) ? cfg.model : DEFAULT_OPENAI_MODEL;
+  return new OpenAIProvider(model, cfg.openaiKey ?? process.env.OPENAI_API_KEY ?? '');
 }
 
-/** Env-only provider (back-compat / no DB available). */
+/** Env-only provider (no DB available). Always OpenAI. */
 export function getProvider(): AIProvider {
-  const provider = (process.env.AI_PROVIDER ?? 'anthropic') === 'openai' ? 'openai' : 'anthropic';
-  return providerFromConfig({ provider, model: process.env.AI_MODEL });
+  return new OpenAIProvider(
+    isOpenAIModel(process.env.AI_MODEL) ? process.env.AI_MODEL : DEFAULT_OPENAI_MODEL,
+    process.env.OPENAI_API_KEY ?? '',
+  );
 }
 
 /**
- * Settings-backed provider resolution. Reads the admin-configured AI engine from
- * app_settings (key `ai_provider`) and falls back to environment variables.
- * Use this in route handlers so the in-app AI Engine setting takes effect.
+ * Settings-backed provider resolution. Reads the admin-configured OpenAI key +
+ * model from app_settings (key `ai_provider`) and falls back to environment
+ * variables. Always returns an OpenAI provider.
  */
 export async function resolveProvider(): Promise<AIProvider> {
   try {
@@ -168,5 +140,21 @@ export async function resolveProvider(): Promise<AIProvider> {
     return providerFromConfig(cfg);
   } catch {
     return getProvider();
+  }
+}
+
+/**
+ * Whether OpenAI is configured (env var or an admin-saved key). Use in routes to
+ * fast-fail with an honest 503 before doing any work.
+ */
+export async function isAIConfigured(): Promise<boolean> {
+  if (process.env.OPENAI_API_KEY) return true;
+  try {
+    const { getAIConfig } = await import('@/lib/ai/settings');
+    const { createServiceClient } = await import('@/lib/supabase/server');
+    const cfg = await getAIConfig(createServiceClient());
+    return !!cfg.openaiKey;
+  } catch {
+    return false;
   }
 }

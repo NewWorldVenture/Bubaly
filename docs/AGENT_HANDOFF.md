@@ -3,6 +3,82 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after PR #87. Keep this updated as you ship.
 
+> **Session update (2026-06-23b, AI is now OpenAI-only):**
+> - **Every AI route + helper now runs on ChatGPT (OpenAI). Anthropic is fully
+>   removed from the AI path.** Done at the provider layer so it's global:
+>   `lib/ai/provider.ts` — `providerFromConfig`/`getProvider`/`resolveProvider`
+>   always return `OpenAIProvider`; removed `AnthropicProvider`; **added vision
+>   support to `OpenAIProvider`** (image_url blocks) so chore-proof photos + flyer
+>   scanning still work; any stored non-OpenAI model is sanitized to `gpt-4o`. New
+>   `isAIConfigured()` helper (env OR admin-saved OpenAI key).
+> - **Route guards swapped** from the `ANTHROPIC_API_KEY`/`AI_PROVIDER` check to
+>   `await isAIConfigured()` with an OpenAI message, across all 7 guarded routes
+>   (resolve-conflict, auto/accident, home/{diagnose,find-pro,forecast},
+>   meals/{plan,nutrition}). `lib/social/ai.ts` + `lib/chores/ai.ts` likewise.
+> - **`flyer` route rewritten off the Anthropic SDK** → OpenAI vision via REST
+>   (`image_url` for images, `file` part for PDFs, model `gpt-4o`). `@anthropic-ai/sdk`
+>   is no longer imported anywhere (left in package.json, unused — safe to prune later).
+> - **Admin AI engine UI is OpenAI-only** (`/admin/ai`): single engine card, OpenAI
+>   model picker + key only. `lib/ai/settings.ts` always reports/stores `provider:
+>   'openai'`; `lib/ai/models.ts` `AIEngine = 'openai'`. Health rows in
+>   `/admin/settings` + `/admin/marketing/settings` now check `OPENAI_API_KEY`.
+> - **Env:** set **`OPENAI_API_KEY`** (and optional `AI_MODEL=gpt-4o`) in prod.
+>   `.env.example` updated; `ANTHROPIC_API_KEY`/`AI_PROVIDER=anthropic` no longer used.
+> - Verified: `tsc` clean · `next lint` clean · `vitest` **498 passing** · `next build`
+>   "Compiled successfully". (The admin-saved OpenAI key flows via `resolveProvider`;
+>   chores AI reads the env key.)
+
+> **Session update (2026-06-23, Tier 2 Food & Household build):**
+> - **Audited the Tier 2 "Food & Household" feature list against the app and built
+>   the 7 missing/weak features to production quality.** Already world-class (noted,
+>   not touched): **Recipe Library** (`recipes-module` + `family_recipes`), **Home
+>   Maintenance Tracker** (`home-module` + `maintenance_tasks`), **Chore Management**
+>   (Family Missions #96).
+> - **Migration `0061_food_household.sql`** (idempotent; **apply to prod**) — three
+>   family-scoped tables (RLS `is_family_member`):
+>   `pantry_items` (Pantry Tracking + Expiration Tracking + Household Inventory:
+>   location/quantity/unit/low_threshold/expires_at/is_staple), `meal_polls`
+>   (Family Meal Voting — single-table poll, options+voter_ids as jsonb),
+>   `meal_nutrition` (AI Nutrition Analysis cache, unique on
+>   family+subject_type+subject_id). All three added to `database.types.ts` with
+>   enums `PantryLocation`/`MealPollStatus`/`NutritionSubject`.
+> - **AI Meal Planner** — `POST /api/ai/meals/plan` fills a week from the family's
+>   meals+recipes (weighted by `meal_polls` votes), honors dietary constraints, and
+>   **prefers soon-to-expire pantry items** to cut waste; `write:true` persists into
+>   `meal_plans` (mirrors recipe/new dishes into `meals` rows, clears targeted slots
+>   first). Pure logic in `lib/meals/planner.ts` (tested). UI: "Auto-plan week"
+>   button + modal in `meals-module`.
+> - **AI Nutrition Analysis** — `POST /api/ai/meals/nutrition` for a recipe, a meal,
+>   or a whole week (`subjectType`); **caches to `meal_nutrition`** so unchanged
+>   content never re-bills the model (`refresh:true` recomputes). Pure helpers in
+>   `lib/meals/nutrition.ts` (parse/coerce/aggregate/% daily value, tested). UI:
+>   weekly "Nutrition" sidebar card with per-day macros + DV bars.
+> - **Family Meal Voting** — `meal_polls`-backed poll in the `meals-module` sidebar:
+>   start a poll from the library, single-choice voting with live % bars, close to
+>   declare a winner. Pure logic in `lib/meals/voting.ts` (tested).
+> - **Pantry / Inventory / Expiration** — new `components/modules/pantry-module.tsx`
+>   + `app/(app)/dashboard/pantry/page.tsx` (plan level 1; nav "Pantry" under Daily
+>   Life; `ROUTE_PLAN_LEVEL`). Stat cards, "Use it soon"/"Running low" alerts with
+>   one-tap "add to grocery list", inventory grouped by location with ± quantity.
+>   Pure logic `lib/pantry/logic.ts` (tested).
+> - **Grocery Delivery Integration** — replaced the FAKE static "Buy Online" buttons
+>   in `grocery-module` with a real, honest hand-off: `lib/grocery/retailers.ts`
+>   builds working deep-links into Instacart/Walmart/Target/Kroger/Amazon Fresh
+>   search per item + a copy-paste list. Honest by design — it opens the retailer's
+>   own cart; it never claims to place an order (no API keys held). (tested).
+> - **Verified:** `tsc --noEmit` clean, `next lint` clean on all changed files,
+>   `vitest run` **498 passing** (added 46), `next build` "Compiled successfully"
+>   with `/dashboard/pantry`, `/api/ai/meals/plan`, `/api/ai/meals/nutrition` present.
+> - **Migration drift caught:** the doc previously said "next number 0053/0054" but
+>   real files run through **0060** (others added in parallel sessions). This session
+>   used **0061**; the true **next number is 0062**. Always `ls supabase/migrations`
+>   before picking a number.
+> - **NEXT (Food & Household backlog):** barcode scan-to-add for pantry (`barcode`
+>   column already exists); per-recipe nutrition badge in `recipes-module` (route
+>   already supports `subjectType:'recipe'`); auto-decrement pantry when a planned
+>   meal is cooked; push/notify when items hit expiry; wire a real retailer ordering
+>   API (Instacart Connect) if/when keys are available — keep the honest fallback.
+
 > **Session update (2026-06-22c, branch `claude/lp-public-renderer`):**
 > - **Public-site wiring #54 DONE — landing pages now render publicly.** Admin
 >   could author `marketing_landing_pages` but nothing served them; built the
@@ -54,11 +130,11 @@ Last updated after PR #87. Keep this updated as you ship.
 >   **Personalization** (marketing roadmap).
 
 > **Session update (2026-06-22, branch `claude/family-missions`):**
-> - **Merged to main:** Marketing Pillar 3 **Loyalty & Rewards** (PR #94, migration `0042_loyalty.sql` — 5 tables, service-role engine `lib/loyalty/server.ts`, admin console `/admin/marketing/loyalty`).
-> - **In review (PR #96):** **Family Missions** — AI chore proof/validation/dispute + gamification, **extending** the existing `chores`/`chore_assignments`/`rewards` system (not a rebuild). Migration `0043_chore_missions.sql` (chore config columns; `chore_submissions`, `chore_ai_validations`, `chore_disputes`, `chore_approval_events`, `kid_progress`, `badges`/`member_badges`; private `chore-proof` bucket). `lib/chores/{ai,logic,server}.ts`; pages `/missions`, `/missions/new`, `/kids/submit/[id]`.
+> - **Merged to main:** Marketing Pillar 3 **Loyalty & Rewards** (PR #94, migration `0055_loyalty.sql` — renumbered to eliminate duplicate migration versions; 5 tables, service-role engine `lib/loyalty/server.ts`, admin console `/admin/marketing/loyalty`).
+> - **In review (PR #96):** **Family Missions** — AI chore proof/validation/dispute + gamification, **extending** the existing `chores`/`chore_assignments`/`rewards` system (not a rebuild). Migration `0056_chore_missions.sql` (renumbered to eliminate duplicate migration versions; chore config columns; `chore_submissions`, `chore_ai_validations`, `chore_disputes`, `chore_approval_events`, `kid_progress`, `badges`/`member_badges`; private `chore-proof` bucket). `lib/chores/{ai,logic,server}.ts`; pages `/missions`, `/missions/new`, `/kids/submit/[id]`.
 > - **Provider change:** `lib/ai/provider.ts` now supports **vision** (optional `images:[{media_type,data}]` on a user message → base64 blocks). Backward compatible.
 > - **AI safety rule honored:** chore validation degrades to `parent_review_required` on any failure (never auto-rejects); safety flags force human review.
-> - **Run in Supabase after each merge:** `0042_loyalty.sql`, then `0043_chore_missions.sql` (both idempotent, validated twice on Postgres 16).
+> - **Run through the canonical migration chain:** `0055_loyalty.sql`, then `0056_chore_missions.sql` (both idempotent; use `supabase db push`, not the retired apply bundle).
 > - **Family Missions backlog (future PRs):** reward-store UX, allowance/wallet page, insights charts, parent AI assistant + fairness engine, gamification UI (XP ring/leaderboard/quests), video-frame validation, chore-event notifications, tier feature-flags, recurrence auto-spawn.
 
 ## Product & stack
@@ -125,7 +201,8 @@ Last updated after PR #87. Keep this updated as you ship.
   guards). Always apply the migration to prod after merging the migration file.
 
 ## Conventions
-- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0053.**
+- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0062.**
+  (Files run through 0061; always `ls supabase/migrations` to confirm before picking.)
   Helpers available in DB: `public.is_family_member(family_id)`, `public.is_super_admin()`,
   `public.set_updated_at()` trigger fn, `gen_random_uuid()`.
 - **Family-scoped tables** (member data): RLS pattern —
@@ -242,10 +319,10 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Next migration number: **0054**. Applied to prod by the user: through **0043**
-(0042 loyalty, 0043 chore missions). **Still needs applying to prod:** any of
-0044–0051 not yet run, plus **0052 `family_onboarding`** and **0053
-`landing_metrics`**. Verify with `select max(...)`/`\dt` before assuming a
+Next migration number: **0062** (files run through 0061). Applied to prod by the
+user: through **0043** (0042 loyalty, 0043 chore missions). **Still needs applying
+to prod:** any of 0044–0060 not yet run, plus **0061 `food_household`** (pantry +
+meal polls + nutrition cache). Verify with `select max(...)`/`\dt` before assuming a
 migration is live.
 
 ## A/B Testing — added in #85

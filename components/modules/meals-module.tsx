@@ -1,31 +1,34 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Settings, Check, X as XIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { ChevronLeft, ChevronRight, Plus, Check, X as XIcon, Sparkles, Vote, Activity } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
-import { Input, Field, Select } from '@/components/ui/input';
+import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import {
+  normalizeOptions, castVote, totalVotes, memberVote, votePercent, winnerLabel,
+  type PollOption,
+} from '@/lib/meals/voting';
+import {
+  NUTRIENT_LABELS, dailyValuePct, fmtAmount, type Nutrition,
+} from '@/lib/meals/nutrition';
 import type { Tables, MealType } from '@/lib/database.types';
 
 type Meal = Tables<'meals'>;
 type Plan = Tables<'meal_plans'> & { meal: Meal | null };
+type GroceryItem = Tables<'grocery_items'>;
 
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 const MEAL_LABELS: Record<MealType, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snacks' };
 const MEAL_ICONS: Record<MealType, string> = { breakfast: '🌅', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
-
-const MEAL_IDEAS = [
-  { label: 'High Protein Meals', emoji: '💪' },
-  { label: 'Quick & Easy Dinners', emoji: '⚡' },
-  { label: 'Kid Approved Favorites', emoji: '👦' },
-];
 
 function weekStart(offset = 0): Date {
   const d = new Date();
@@ -43,22 +46,24 @@ function daysOfWeek(monday: Date) {
 }
 
 export function MealsModule() {
-  const { familyId, userId } = useApp();
+  const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const [weekOffset, setWeekOffset] = useState(0);
   const [library, setLibrary] = useState<Meal[]>([]);
   const [addCell, setAddCell] = useState<{ date: string; type: MealType } | null>(null);
   const [newMealOpen, setNewMealOpen] = useState(false);
+  const [autoPlanOpen, setAutoPlanOpen] = useState(false);
 
   const monday = useMemo(() => weekStart(weekOffset), [weekOffset]);
   const days = useMemo(() => daysOfWeek(monday), [monday]);
+  const weekStartStr = useMemo(() => monday.toISOString().slice(0, 10), [monday]);
 
   useEffect(() => {
     createClient().from('meals').select('*').eq('family_id', familyId).order('name')
       .then(({ data }) => setLibrary(data ?? []));
   }, [familyId]);
 
-  const { data: plans, loading, error, refresh } = useRealtimeQuery<Plan>({
+  const { data: plans, loading: plansLoading, error: plansError, refresh } = useRealtimeQuery<Plan>({
     table: 'meal_plans', familyId, deps: [familyId, monday.toISOString()],
     fetcher: async (supabase) => {
       const { data, error } = await supabase.from('meal_plans').select('*').eq('family_id', familyId)
@@ -70,6 +75,10 @@ export function MealsModule() {
       const byId = new Map((meals ?? []).map(m => [m.id, m]));
       return { data: data.map(p => ({ ...p, meal: byId.get(p.meal_id ?? '') ?? null })), error: null };
     },
+  });
+  const { data: groceryItems, loading: groceryLoading, error: groceryError } = useRealtimeQuery<GroceryItem>({
+    table: 'grocery_items', familyId, deps: [familyId],
+    fetcher: (supabase) => supabase.from('grocery_items').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(8),
   });
 
   // Build cell lookup: date+type → plan
@@ -97,8 +106,8 @@ export function MealsModule() {
   const todayStr = new Date().toISOString().slice(0, 10);
   const dateRange = `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
-  if (loading) return <LoadingBlock />;
-  if (error) return <ErrorState message={error} onRetry={refresh} />;
+  if (plansLoading || groceryLoading) return <LoadingBlock />;
+  if (plansError || groceryError) return <ErrorState message={plansError || groceryError || 'Could not load meals'} onRetry={refresh} />;
 
   return (
     <div className="module-with-sidebar">
@@ -111,8 +120,8 @@ export function MealsModule() {
             description="Plan, organize, and enjoy healthy meals together."
             action={
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm">
-                  <Settings className="h-4 w-4" /> Plan Settings
+                <Button size="sm" variant="outline" onClick={() => setAutoPlanOpen(true)}>
+                  <Sparkles className="h-4 w-4" /> <span className="hidden sm:inline">Auto-plan week</span>
                 </Button>
                 <Button size="sm" onClick={() => setNewMealOpen(true)}>
                   <Plus className="h-4 w-4" /> Add Meal
@@ -123,11 +132,8 @@ export function MealsModule() {
 
           {/* Tab strip */}
           <div className="tab-bar mt-4">
-            {['Meal Plan', 'Recipes', 'Favorites'].map((t, i) => (
-              <button key={t} className={cn('tab-item', i === 0 ? 'tab-item-active' : 'tab-item-inactive')}>
-                {t}
-              </button>
-            ))}
+            <span className="tab-item tab-item-active">Meal Plan</span>
+            <Link href="/dashboard/recipes" className="tab-item tab-item-inactive">Recipes</Link>
           </div>
         </div>
 
@@ -138,12 +144,7 @@ export function MealsModule() {
           <span className="flex items-center gap-2 text-sm font-semibold">
             📅 {dateRange}
           </span>
-          <div className="ml-auto flex items-center gap-1 rounded-lg border border-border bg-surface/40 p-0.5">
-            {['Week', 'Month'].map((v, i) => (
-              <button key={v} className={cn('rounded-md px-3 py-1 text-xs font-medium capitalize transition', i === 0 ? 'bg-brand text-brand-fg' : 'text-muted hover:text-fg')}>{v}</button>
-            ))}
-          </div>
-          <Button variant="outline" size="sm" className="hidden sm:inline-flex">Filters</Button>
+          <span className="ml-auto rounded-md bg-brand px-3 py-1 text-xs font-medium text-brand-fg">Week</span>
         </div>
 
         {/* Week meal grid — desktop */}
@@ -210,9 +211,6 @@ export function MealsModule() {
             ))}
           </div>
 
-          <div className="mt-3 flex justify-end">
-            <button className="text-xs text-brand hover:underline">Edit Meal Plan ✏️</button>
-          </div>
         </div>
 
         {/* Week meal grid — mobile (stacked day-by-day) */}
@@ -292,63 +290,28 @@ export function MealsModule() {
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold">Shopping List</p>
-            <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand">14 items</span>
+            <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand">{groceryItems.length} shown</span>
           </div>
           <div className="space-y-1.5">
-            {['Chicken Breast', 'Salmon Fillets', 'Eggs', 'Avocados', 'Spinach', 'Tomatoes', 'Bananas', 'Greek Yogurt'].map((item, i) => (
-              <label key={item} className="flex items-center gap-2 cursor-pointer group">
-                <div className={cn('flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border', [2, 3, 6].includes(i) ? 'bg-brand border-brand' : 'border-border group-hover:border-brand/50')}>
-                  {[2, 3, 6].includes(i) && <Check className="h-2.5 w-2.5 text-brand-fg" />}
+            {groceryItems.map((item) => (
+              <div key={item.id} className="flex items-center gap-2">
+                <div className={cn('flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border', item.is_checked ? 'bg-brand border-brand' : 'border-border')}>
+                  {item.is_checked && <Check className="h-2.5 w-2.5 text-brand-fg" />}
                 </div>
-                <span className={cn('text-xs', [2, 3, 6].includes(i) ? 'text-muted line-through' : 'text-fg')}>{item}</span>
-              </label>
-            ))}
-          </div>
-          <button className="mt-3 text-xs text-brand hover:underline">View full list →</button>
-        </div>
-
-        {/* Nutrition Summary */}
-        <div className="sidebar-card">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold">Nutrition Summary</p>
-            <span className="text-[10px] text-muted">This Week</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <svg width="70" height="70" viewBox="0 0 70 70">
-              <circle cx="35" cy="35" r="28" fill="none" stroke="#1e2d40" strokeWidth="8" />
-              <circle cx="35" cy="35" r="28" fill="none" stroke="#7c5dff" strokeWidth="8" strokeDasharray="79 176" strokeDashoffset="70" style={{ transform: 'rotate(-90deg)', transformOrigin: '35px 35px' }} />
-              <circle cx="35" cy="35" r="28" fill="none" stroke="#22c55e" strokeWidth="8" strokeDasharray="53 176" strokeDashoffset="-9" style={{ transform: 'rotate(-90deg)', transformOrigin: '35px 35px' }} />
-              <circle cx="35" cy="35" r="28" fill="none" stroke="#f59e0b" strokeWidth="8" strokeDasharray="44 176" strokeDashoffset="-62" style={{ transform: 'rotate(-90deg)', transformOrigin: '35px 35px' }} />
-              <text x="35" y="33" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">1,856</text>
-              <text x="35" y="43" textAnchor="middle" fill="#94a0b8" fontSize="7">Total Cal</text>
-            </svg>
-            <div className="space-y-1.5 text-xs">
-              {[{ label: 'Carbs', pct: 45, color: '#7c5dff' }, { label: 'Protein', pct: 30, color: '#22c55e' }, { label: 'Fat', pct: 25, color: '#f59e0b' }].map(n => (
-                <div key={n.label} className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full" style={{ background: n.color }} />
-                  <span className="text-muted">{n.label}</span>
-                  <span className="ml-auto font-semibold">{n.pct}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <button className="mt-3 text-xs text-brand hover:underline">View full nutrition →</button>
-        </div>
-
-        {/* Meal Ideas */}
-        <div className="sidebar-card">
-          <p className="mb-3 text-sm font-semibold">Meal Ideas For You</p>
-          <div className="space-y-2">
-            {MEAL_IDEAS.map(idea => (
-              <div key={idea.label} className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-surface/60 px-3 py-2 cursor-pointer hover:bg-elevated transition">
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-brand/20 text-base">{idea.emoji}</div>
-                <span className="flex-1 text-xs font-medium">{idea.label}</span>
-                <ChevronLeft className="h-3.5 w-3.5 rotate-180 text-muted" />
+                <span className={cn('text-xs', item.is_checked ? 'text-muted line-through' : 'text-fg')}>{item.name}</span>
               </div>
             ))}
+            {groceryItems.length === 0 && <p className="text-xs text-muted">No grocery items saved.</p>}
           </div>
-          <button className="mt-3 text-xs text-brand hover:underline">Explore more ideas →</button>
+          <Link href="/dashboard/grocery" className="mt-3 inline-block text-xs text-brand hover:underline">View full list →</Link>
         </div>
+
+        {/* Family meal vote */}
+        <MealVotePanel familyId={familyId} userId={userId}
+          memberId={selfMember?.id ?? null} library={library} />
+
+        {/* Weekly nutrition */}
+        <WeekNutritionPanel weekStart={weekStartStr} planCount={plans.length} />
       </div>
 
       {/* Add meal cell picker */}
@@ -382,6 +345,318 @@ export function MealsModule() {
       {newMealOpen && (
         <NewMealModal familyId={familyId} userId={userId} onClose={() => setNewMealOpen(false)}
           onSaved={() => { setNewMealOpen(false); createClient().from('meals').select('*').eq('family_id', familyId).order('name').then(({ data }) => setLibrary(data ?? [])); }} />
+      )}
+
+      {autoPlanOpen && (
+        <AutoPlanModal weekStart={weekStartStr} mealTypes={MEAL_TYPES}
+          onClose={() => setAutoPlanOpen(false)}
+          onPlanned={() => { setAutoPlanOpen(false); void refresh(); }} />
+      )}
+    </div>
+  );
+}
+
+/** AI Meal Planner — fills the week from your library/recipes, honoring diet and
+ *  using up soon-to-expire pantry items, then writes it straight into the grid. */
+function AutoPlanModal({ weekStart, mealTypes, onClose, onPlanned }: {
+  weekStart: string; mealTypes: MealType[]; onClose: () => void; onPlanned: () => void;
+}) {
+  const { success, error: toastError } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<MealType[]>(['dinner']);
+  const [dietary, setDietary] = useState('');
+  const [notes, setNotes] = useState('');
+  const [useExpiring, setUseExpiring] = useState(true);
+  const [avoidRepeats, setAvoidRepeats] = useState(true);
+
+  function toggleType(t: MealType) {
+    setSelected((p) => p.includes(t) ? p.filter((x) => x !== t) : [...p, t]);
+  }
+
+  async function run() {
+    if (selected.length === 0) return toastError('Pick at least one meal to plan');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/ai/meals/plan', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          weekStart, mealTypes: selected,
+          dietary: dietary.split(',').map((s) => s.trim()).filter(Boolean),
+          notes, useExpiring, avoidRepeats, write: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toastError(data.error ?? 'Could not generate a plan'); return; }
+      success(`Planned ${data.count ?? data.assignments?.length ?? 0} meals for the week! 🍽️`);
+      onPlanned();
+    } catch {
+      toastError('Network error — please try again');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Auto-plan your week"
+      description="Our planner fills the week from your saved meals & recipes, weighted by family votes, honoring your diet and using up food before it expires.">
+      <div className="space-y-4">
+        <div>
+          <p className="mb-2 text-sm font-medium">Which meals?</p>
+          <div className="flex flex-wrap gap-2">
+            {mealTypes.map((t) => (
+              <button key={t} type="button" onClick={() => toggleType(t)}
+                className={cn('rounded-lg border px-3 py-1.5 text-xs font-medium capitalize transition',
+                  selected.includes(t) ? 'border-brand bg-brand/10 text-brand' : 'border-border hover:bg-elevated')}>
+                {selected.includes(t) && <Check className="mr-1 inline h-3 w-3" />}{MEAL_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <Field label="Dietary needs" hint="Comma-separated, e.g. Vegetarian, Nut-free">
+          {(id) => <Input id={id} value={dietary} onChange={(e) => setDietary(e.target.value)} placeholder="Vegetarian, Dairy-free" />}
+        </Field>
+        <Field label="Anything else?">
+          {(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Kid-friendly, quick weeknights, double up for leftovers…" className="min-h-[50px]" />}
+        </Field>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={useExpiring} onChange={(e) => setUseExpiring(e.target.checked)} className="h-4 w-4 rounded border-border" />
+          Use up pantry items that are expiring soon
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={avoidRepeats} onChange={(e) => setAvoidRepeats(e.target.checked)} className="h-4 w-4 rounded border-border" />
+          Avoid repeating dishes this week
+        </label>
+        <p className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-muted">
+          This replaces any meals already planned in the selected slots for this week.
+        </p>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" loading={loading} onClick={run}><Sparkles className="h-4 w-4" /> Generate plan</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+type MealPoll = Tables<'meal_polls'>;
+
+/** Family Meal Voting — an open poll the whole family votes on (single choice). */
+function MealVotePanel({ familyId, userId, memberId, library }: {
+  familyId: string; userId: string; memberId: string | null; library: Meal[];
+}) {
+  const { success, error: toastError } = useToast();
+  const [poll, setPoll] = useState<MealPoll | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+
+  const load = useCallback(async () => {
+    const { data } = await createClient().from('meal_polls').select('*')
+      .eq('family_id', familyId).eq('status', 'open')
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    setPoll(data ?? null);
+    setLoading(false);
+  }, [familyId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const options = useMemo(() => normalizeOptions(poll?.options), [poll]);
+
+  async function vote(optionId: string) {
+    if (!poll || !memberId) return toastError('Only family members can vote');
+    const next = castVote(options, optionId, memberId);
+    setPoll({ ...poll, options: next as unknown as MealPoll['options'] });   // optimistic
+    const { error } = await createClient().from('meal_polls').update({ options: next as never }).eq('id', poll.id);
+    if (error) { toastError(error.message); void load(); }
+  }
+
+  async function closePoll() {
+    if (!poll) return;
+    const win = winnerLabel(options);
+    const { error } = await createClient().from('meal_polls')
+      .update({ status: 'closed', winner_label: win }).eq('id', poll.id);
+    if (error) return toastError(error.message);
+    success(win ? `"${win}" wins! 🎉` : 'Poll closed');
+    setPoll(null);
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="sidebar-card">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-sm font-semibold"><Vote className="h-4 w-4 text-brand" /> Family Vote</p>
+        {poll && <span className="text-[10px] text-muted">{totalVotes(options)} vote{totalVotes(options) !== 1 ? 's' : ''}</span>}
+      </div>
+
+      {!poll ? (
+        creating ? (
+          <NewPollForm familyId={familyId} userId={userId} library={library}
+            onCancel={() => setCreating(false)}
+            onCreated={(p) => { setCreating(false); setPoll(p); }} />
+        ) : (
+          <div className="text-center">
+            <p className="mb-2 text-xs text-muted">No active poll. Let the family pick what&apos;s for dinner.</p>
+            <Button size="sm" variant="outline" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Start a poll</Button>
+          </div>
+        )
+      ) : (
+        <div className="space-y-2.5">
+          <p className="text-sm font-medium">{poll.title}</p>
+          {options.map((o) => {
+            const pct = votePercent(options, o.id);
+            const mine = memberId ? memberVote(options, memberId) === o.id : false;
+            return (
+              <button key={o.id} onClick={() => vote(o.id)}
+                className={cn('relative w-full overflow-hidden rounded-lg border px-3 py-2 text-left transition',
+                  mine ? 'border-brand bg-brand/5' : 'border-border hover:bg-elevated')}>
+                <div className="absolute inset-y-0 left-0 bg-brand/10" style={{ width: `${pct}%` }} />
+                <div className="relative flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium">{o.emoji ? `${o.emoji} ` : ''}{o.label}</span>
+                  <span className="flex items-center gap-1.5 text-[10px] text-muted">
+                    {o.voter_ids.length > 0 && <span>{o.voter_ids.length}</span>}
+                    {mine && <Check className="h-3 w-3 text-brand" />}
+                    <span>{pct}%</span>
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+          <button onClick={closePoll} className="mt-1 w-full text-center text-[11px] text-muted hover:text-brand">Close poll &amp; pick the winner</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NewPollForm({ familyId, userId, library, onCancel, onCreated }: {
+  familyId: string; userId: string; library: Meal[];
+  onCancel: () => void; onCreated: (p: MealPoll) => void;
+}) {
+  const { error: toastError } = useToast();
+  const [title, setTitle] = useState("What's for dinner?");
+  const [picks, setPicks] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  function togglePick(id: string) {
+    setPicks((p) => p.includes(id) ? p.filter((x) => x !== id) : p.length < 6 ? [...p, id] : p);
+  }
+
+  async function create() {
+    const opts: PollOption[] = picks.map((id) => {
+      const m = library.find((x) => x.id === id);
+      return { id: `meal_${id.slice(0, 8)}`, label: m?.name ?? 'Meal', meal_id: id, emoji: MEAL_ICONS[m?.meal_type ?? 'dinner'], voter_ids: [] };
+    });
+    if (opts.length < 2) return toastError('Pick at least two meals to vote on');
+    setSaving(true);
+    const { data, error } = await createClient().from('meal_polls')
+      .insert({ family_id: familyId, title: title.trim() || "What's for dinner?", options: opts as never, created_by: userId })
+      .select('*').single();
+    setSaving(false);
+    if (error || !data) return toastError(error?.message ?? 'Could not create poll');
+    onCreated(data);
+  }
+
+  return (
+    <div className="space-y-3">
+      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Poll question" />
+      {library.length < 2 ? (
+        <p className="text-xs text-muted">Add at least two meals to your library first.</p>
+      ) : (
+        <div className="max-h-40 space-y-1 overflow-y-auto">
+          {library.map((m) => (
+            <button key={m.id} onClick={() => togglePick(m.id)}
+              className={cn('flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs transition',
+                picks.includes(m.id) ? 'border-brand bg-brand/10' : 'border-border hover:bg-elevated')}>
+              <span>{MEAL_ICONS[m.meal_type]}</span>
+              <span className="flex-1 truncate">{m.name}</span>
+              {picks.includes(m.id) && <Check className="h-3 w-3 text-brand" />}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" loading={saving} onClick={create} disabled={picks.length < 2}>Start vote</Button>
+      </div>
+    </div>
+  );
+}
+
+const NUTRIENT_ORDER: (keyof Nutrition)[] = ['calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sugar_g', 'sodium_mg'];
+
+/** AI Nutrition Analysis for the planned week (cached server-side). */
+function WeekNutritionPanel({ weekStart, planCount }: { weekStart: string; planCount: number }) {
+  const { error: toastError } = useToast();
+  const [data, setData] = useState<(Nutrition & { summary: string | null }) | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [cached, setCached] = useState(false);
+
+  const analyze = useCallback(async (refresh = false) => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/ai/meals/nutrition', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ subjectType: 'week', subjectId: weekStart, refresh }),
+      });
+      const json = await res.json();
+      if (!res.ok) { toastError(json.error ?? 'Could not analyze nutrition'); return; }
+      const n = json.nutrition;
+      setData({
+        calories: n.calories ?? 0, protein_g: Number(n.protein_g ?? 0), carbs_g: Number(n.carbs_g ?? 0),
+        fat_g: Number(n.fat_g ?? 0), fiber_g: Number(n.fiber_g ?? 0), sugar_g: Number(n.sugar_g ?? 0),
+        sodium_mg: Number(n.sodium_mg ?? 0), summary: n.summary ?? null,
+      });
+      setCached(json.cached);
+    } catch {
+      toastError('Network error — please try again');
+    } finally {
+      setLoading(false);
+    }
+  }, [weekStart, toastError]);
+
+  // Reset when the week changes so stale numbers never show for the wrong week.
+  useEffect(() => { setData(null); setCached(false); }, [weekStart]);
+
+  return (
+    <div className="sidebar-card">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-sm font-semibold"><Activity className="h-4 w-4 text-success" /> Nutrition</p>
+        {data && <span className="text-[10px] text-muted">avg / day{cached ? ' · saved' : ''}</span>}
+      </div>
+
+      {!data ? (
+        <div className="text-center">
+          <p className="mb-2 text-xs text-muted">
+            {planCount === 0 ? 'Plan some meals, then analyze the week.' : 'See the nutrition of this week’s plan.'}
+          </p>
+          <Button size="sm" variant="outline" loading={loading} disabled={planCount === 0} onClick={() => analyze(false)}>
+            <Sparkles className="h-4 w-4" /> Analyze week
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {NUTRIENT_ORDER.map((k) => {
+            const val = data[k];
+            const pct = dailyValuePct(k, val);
+            return (
+              <div key={k}>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-muted">{NUTRIENT_LABELS[k]}</span>
+                  <span className="font-medium">{fmtAmount(k, val)}{k !== 'calories' ? ` · ${pct}% DV` : ''}</span>
+                </div>
+                {k !== 'calories' && (
+                  <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-elevated">
+                    <div className="h-full rounded-full bg-success" style={{ width: `${Math.min(100, pct)}%` }} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {data.summary && <p className="pt-1 text-[11px] text-muted">{data.summary}</p>}
+          <button onClick={() => analyze(true)} className="w-full pt-1 text-center text-[11px] text-muted hover:text-brand" disabled={loading}>
+            {loading ? 'Analyzing…' : 'Re-analyze'}
+          </button>
+        </div>
       )}
     </div>
   );
