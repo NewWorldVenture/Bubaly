@@ -75,29 +75,57 @@ export async function POST(req: NextRequest) {
     ];
 
     const provider = await resolveProvider();
-    const tools = buildAssistantTools(supabase, { familyId, userId: ctx.user.id, members: memberRows });
-    const { text, actions } = await provider.runTools({ system, messages, tools, maxTokens: 1500 });
-    const assistantContent = text?.trim() || (actions.length ? 'Done — I’ve updated that for you.' : 'I’m not sure how to help with that yet.');
+    const tools = buildAssistantTools(supabase, { familyId, userId: ctx.user.id, members: memberRows, tz });
 
-    // Persist both turns; record the structured actions on the assistant message.
-    await supabase.from('ai_messages').insert([
-      { family_id: familyId, conversation_id: conversationId, role: 'user', content: message },
-      {
-        family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent,
-        tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_calls']) : null,
-        tool_results: actions.length ? (actions.map((a) => a.result) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_results']) : null,
+    // Stream the run as Server-Sent Events: `action` chips as tools fire,
+    // `delta` chunks as the reply streams, then a final `done` (after persisting).
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (e: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
+        let content = '';
+        const actions: { name: string; args: Record<string, unknown>; result: unknown }[] = [];
+        try {
+          for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: 1500 })) {
+            if (ev.type === 'delta') { content += ev.text; send({ type: 'delta', text: ev.text }); }
+            else { actions.push({ name: ev.name, args: ev.args, result: ev.result }); send({ type: 'action', name: ev.name, ...summarize(ev.result) }); }
+          }
+        } catch (err) {
+          console.error('AI stream error:', err);
+          const m = err instanceof Error && /api key/i.test(err.message)
+            ? 'The AI engine isn’t configured. Set an API key in Admin → AI Engine.'
+            : 'Something went wrong while answering. Please try again.';
+          send({ type: 'error', error: m });
+          if (!content) { controller.close(); return; }
+        }
+
+        const assistantContent = content.trim() || (actions.length ? 'Done — I’ve updated that for you.' : 'I’m not sure how to help with that yet.');
+
+        // Persist both turns + the structured actions, then finish the conversation.
+        try {
+          await supabase.from('ai_messages').insert([
+            { family_id: familyId, conversation_id: conversationId, role: 'user', content: message },
+            {
+              family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent,
+              tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_calls']) : null,
+              tool_results: actions.length ? (actions.map((a) => a.result) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_results']) : null,
+            },
+          ]);
+          const { data: conv } = await supabase.from('ai_conversations').select('title').eq('id', conversationId).maybeSingle();
+          const patch: Database['public']['Tables']['ai_conversations']['Update'] = { model: provider.model };
+          if (!conv?.title || conv.title === 'New conversation') patch.title = message.slice(0, 60);
+          await supabase.from('ai_conversations').update(patch).eq('id', conversationId);
+        } catch (err) {
+          console.error('AI persist error:', err);
+        }
+
+        send({ type: 'done', content: assistantContent });
+        controller.close();
       },
-    ]);
+    });
 
-    // Keep the conversation fresh + auto-title it from the first user message.
-    const { data: conv } = await supabase.from('ai_conversations').select('title').eq('id', conversationId).maybeSingle();
-    const patch: Database['public']['Tables']['ai_conversations']['Update'] = { model: provider.model };
-    if (!conv?.title || conv.title === 'New conversation') patch.title = message.slice(0, 60);
-    await supabase.from('ai_conversations').update(patch).eq('id', conversationId);
-
-    return NextResponse.json({
-      content: assistantContent,
-      actions: actions.map((a) => ({ name: a.name, ...summarize(a.result) })),
+    return new Response(stream, {
+      headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive' },
     });
   } catch (err) {
     console.error('AI chat error:', err);

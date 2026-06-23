@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CalendarDays, CheckCircle2, Bell, Pill, ListChecks, Mic,
   Plus, PlusCircle, School, Send, ShoppingCart, Sparkles, UtensilsCrossed,
-  MessageSquare, Trash2,
+  MessageSquare, Trash2, Pencil,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
@@ -168,6 +168,13 @@ export function AssistantModule() {
     if (id === convId) newChat();
   }
 
+  async function renameConversation(id: string, current: string) {
+    const title = window.prompt('Rename conversation', current || '')?.trim();
+    if (!title || title === current) return;
+    await createClient().from('ai_conversations').update({ title: title.slice(0, 80) }).eq('id', id);
+    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
+  }
+
   useEffect(() => { void loadConversations(); }, [loadConversations]);
   // On first mount, rehydrate the stored conversation (or greet for a new one).
   useEffect(() => {
@@ -182,8 +189,13 @@ export function AssistantModule() {
     setInput('');
 
     const userMsg: Message = { role: 'user', content: msg, id: generateId() };
-    setMessages((prev) => [...prev, userMsg]);
+    const replyId = generateId();
+    // Add the user turn + an empty assistant bubble we fill as the stream arrives.
+    setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '', id: replyId, actions: [] }]);
     setLoading(true);
+
+    const patchReply = (fn: (m: Message) => Message) =>
+      setMessages((prev) => prev.map((m) => (m.id === replyId ? fn(m) : m)));
 
     try {
       const res = await fetch('/api/ai/chat', {
@@ -191,14 +203,34 @@ export function AssistantModule() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conversationId: convId, message: msg }),
       });
-      const data = await res.json() as { content?: string; actions?: ChatAction[]; error?: string };
-      if (!res.ok || data.error) {
-        setMessages((prev) => [...prev, { role: 'assistant', content: data.error ?? 'Sorry, I had trouble with that.', id: generateId() }]);
-      } else {
-        setMessages((prev) => [...prev, { role: 'assistant', content: data.content ?? 'Done.', id: generateId(), actions: data.actions ?? [] }]);
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({ error: 'Sorry, I had trouble with that.' })) as { error?: string };
+        patchReply((m) => ({ ...m, content: err.error ?? 'Sorry, I had trouble with that.' }));
+        return;
+      }
+      // Parse the SSE stream: delta (text), action (chip), error, done.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split('\n\n');
+        buf = parts.pop() ?? '';
+        for (const part of parts) {
+          const line = part.split('\n').find((l) => l.startsWith('data:'));
+          if (!line) continue;
+          let ev: { type: string; text?: string; name?: string; ok?: boolean; summary?: string; content?: string; error?: string };
+          try { ev = JSON.parse(line.slice(5).trim()); } catch { continue; }
+          if (ev.type === 'delta' && ev.text) patchReply((m) => ({ ...m, content: m.content + ev.text }));
+          else if (ev.type === 'action') patchReply((m) => ({ ...m, actions: [...(m.actions ?? []), { name: ev.name ?? '', ok: ev.ok !== false, summary: ev.summary ?? 'Done' }] }));
+          else if (ev.type === 'error') patchReply((m) => ({ ...m, content: m.content || (ev.error ?? 'Something went wrong.') }));
+          else if (ev.type === 'done') patchReply((m) => ({ ...m, content: m.content || (ev.content ?? 'Done.') }));
+        }
       }
     } catch {
-      setMessages((prev) => [...prev, { role: 'assistant', content: 'Something went wrong. Please try again.', id: generateId() }]);
+      patchReply((m) => ({ ...m, content: m.content || 'Something went wrong. Please try again.' }));
     } finally {
       setLoading(false);
       void loadConversations(); // titles/order update after the turn persists
@@ -253,7 +285,15 @@ export function AssistantModule() {
                 <div className="mt-1 h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-blue-600 shadow-glow" />
                 <div className="max-w-[480px] space-y-2">
                   <div className="rounded-2xl border border-border bg-surface/40 p-5 text-sm leading-6 whitespace-pre-wrap">
-                    {msg.content}
+                    {msg.content
+                      ? msg.content
+                      : (msg.actions && msg.actions.length > 0)
+                        ? <span className="text-muted">Working on it…</span>
+                        : (
+                          <span className="inline-flex items-center gap-1.5">
+                            {[0, 1, 2].map((i) => <span key={i} className="h-2 w-2 animate-bounce rounded-full bg-brand" style={{ animationDelay: `${i * 0.15}s` }} />)}
+                          </span>
+                        )}
                   </div>
                   {msg.actions && msg.actions.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
@@ -273,16 +313,6 @@ export function AssistantModule() {
                 </div>
               </div>
             )
-          )}
-          {loading && (
-            <div className="flex gap-4">
-              <div className="mt-1 h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-blue-600" />
-              <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-surface/40 px-5 py-4">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="h-2 w-2 animate-bounce rounded-full bg-brand" style={{ animationDelay: `${i * 0.15}s` }} />
-                ))}
-              </div>
-            </div>
           )}
           <div ref={bottomRef} />
         </div>
@@ -323,6 +353,9 @@ export function AssistantModule() {
                   <button onClick={() => void loadConversation(c.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
                     <MessageSquare className={cn('h-4 w-4 shrink-0', c.id === convId ? 'text-brand' : 'text-muted')} />
                     <span className="truncate text-xs text-fg/80">{c.title || 'New conversation'}</span>
+                  </button>
+                  <button onClick={() => void renameConversation(c.id, c.title)} aria-label="Rename conversation" className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-fg group-hover:opacity-100">
+                    <Pencil className="h-3.5 w-3.5" />
                   </button>
                   <button onClick={() => void deleteConversation(c.id)} aria-label="Delete conversation" className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-rose-400 group-hover:opacity-100">
                     <Trash2 className="h-3.5 w-3.5" />

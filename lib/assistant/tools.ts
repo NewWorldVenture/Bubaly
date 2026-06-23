@@ -12,6 +12,8 @@ export type AssistantCtx = {
   familyId: string;
   userId: string;
   members: { id: string; display_name: string }[];
+  /** Family time zone (IANA), used to format times for availability answers. */
+  tz?: string;
 };
 
 const EVENT_CATEGORIES = ['general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'];
@@ -274,6 +276,45 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           .select('name, quantity').eq('list_id', listId).eq('is_checked', false).order('created_at').limit(100);
         if (error) return { ok: false, error: error.message };
         return { ok: true, items: (data ?? []).map((i) => ({ name: i.name, quantity: i.quantity })) };
+      },
+    },
+    {
+      name: 'find_free_time',
+      description: 'Find when the family is free on a given day. Returns that day’s busy time blocks (in the family time zone); reason over the gaps to suggest open slots.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', description: 'The day to check, as YYYY-MM-DD' },
+          assignee: { type: 'string', description: `Optional: only this member’s events (one of: ${memberNames})` },
+        },
+        required: ['date'],
+      },
+      execute: async (a) => {
+        const date = str(a.date);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: 'date must be YYYY-MM-DD' };
+        // Pull a generous UTC window so the local day is fully covered across offsets.
+        const from = new Date(`${date}T00:00:00Z`); from.setUTCHours(from.getUTCHours() - 14);
+        const to = new Date(`${date}T23:59:59Z`); to.setUTCHours(to.getUTCHours() + 14);
+        const memberId = resolveMember(ctx, a.assignee);
+        let q = supabase.from('calendar_events')
+          .select('title, starts_at, ends_at, all_day, assignee_id')
+          .eq('family_id', ctx.familyId).gte('starts_at', from.toISOString()).lte('starts_at', to.toISOString())
+          .order('starts_at').limit(50);
+        if (memberId) q = q.eq('assignee_id', memberId);
+        const { data, error } = await q;
+        if (error) return { ok: false, error: error.message };
+        const tz = ctx.tz || 'America/New_York';
+        const fmt = (iso: string | null) => {
+          if (!iso) return null;
+          try { return new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(iso)); }
+          catch { return iso.slice(0, 16); }
+        };
+        const onDay = (iso: string) => {
+          try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso)) === date; }
+          catch { return iso.slice(0, 10) === date; }
+        };
+        const busy = (data ?? []).filter((e) => onDay(e.starts_at)).map((e) => ({ title: e.title, start: fmt(e.starts_at), end: fmt(e.ends_at), all_day: e.all_day }));
+        return { ok: true, date, time_zone: tz, busy, note: busy.length ? 'These are the busy blocks; open time is the gaps between them.' : 'No events that day — the whole day is free.' };
       },
     },
   ];

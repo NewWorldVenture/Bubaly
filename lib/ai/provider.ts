@@ -44,6 +44,11 @@ export type RunToolsInput = {
   maxRounds?: number;
 };
 
+/** Streamed events from an agentic run: text deltas + executed actions. */
+export type StreamEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'action'; name: string; args: Record<string, unknown>; result: unknown };
+
 export type AICompleteInput = {
   system: string;
   messages: AIMessage[];
@@ -62,6 +67,12 @@ export interface AIProvider {
    * Returns that reply + the list of actions actually taken.
    */
   runTools(input: RunToolsInput): Promise<ToolRunResult>;
+  /**
+   * Same agentic loop as runTools, but yields incrementally: `action` events as
+   * tools execute and `delta` events as the final reply streams in. Lets the UI
+   * render the answer token-by-token.
+   */
+  runToolsStream(input: RunToolsInput): AsyncGenerator<StreamEvent>;
 }
 
 // --- Anthropic implementation ---
@@ -149,6 +160,14 @@ export class AnthropicProvider implements AIProvider {
       convo.push({ role: 'user', content: results });
     }
     return { text: 'Done.', actions };
+  }
+
+  // Anthropic path runs non-streamed, then emits its actions + final text so the
+  // route/UI can treat every provider uniformly.
+  async *runToolsStream(input: RunToolsInput): AsyncGenerator<StreamEvent> {
+    const { text, actions } = await this.runTools(input);
+    for (const a of actions) yield { type: 'action', name: a.name, args: a.args, result: a.result };
+    if (text) yield { type: 'delta', text };
   }
 }
 
@@ -245,6 +264,78 @@ export class OpenAIProvider implements AIProvider {
     });
     const data = res.ok ? await res.json() : null;
     return { text: data?.choices?.[0]?.message?.content ?? 'Done.', actions };
+  }
+
+  async *runToolsStream({ system, messages, tools, maxTokens = 1024, maxRounds = 6 }: RunToolsInput): AsyncGenerator<StreamEvent> {
+    if (!this.apiKey) throw new Error('OpenAI API key is not configured');
+    const byName = new Map(tools.map((t) => [t.name, t]));
+    const convo: Record<string, unknown>[] = [
+      { role: 'system', content: system },
+      ...messages.filter((m) => m.role === 'user' || m.role === 'assistant').map((m) => ({ role: m.role, content: m.content })),
+    ];
+    const toolDefs = tools.length
+      ? tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }))
+      : undefined;
+
+    for (let round = 0; round < maxRounds; round++) {
+      const last = round === maxRounds - 1;
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
+        body: JSON.stringify({
+          model: this.model, max_tokens: maxTokens, messages: convo, stream: true,
+          ...(toolDefs && !last ? { tools: toolDefs, tool_choice: 'auto' } : {}),
+        }),
+      });
+      if (!res.ok || !res.body) throw new Error(`OpenAI error ${res.status}: ${res.ok ? 'no stream body' : await res.text()}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let content = '';
+      const acc: Record<number, { id: string; name: string; args: string }> = {};
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          const t = line.trim();
+          if (!t.startsWith('data:')) continue;
+          const payload = t.slice(5).trim();
+          if (payload === '[DONE]') continue;
+          let json: { choices?: { delta?: { content?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] } }[] };
+          try { json = JSON.parse(payload); } catch { continue; }
+          const delta = json.choices?.[0]?.delta;
+          if (!delta) continue;
+          if (delta.content) { content += delta.content; yield { type: 'delta', text: delta.content }; }
+          for (const tc of delta.tool_calls ?? []) {
+            const i = tc.index ?? 0;
+            acc[i] ??= { id: '', name: '', args: '' };
+            if (tc.id) acc[i].id = tc.id;
+            if (tc.function?.name) acc[i].name = tc.function.name;
+            if (tc.function?.arguments) acc[i].args += tc.function.arguments;
+          }
+        }
+      }
+
+      const calls = Object.values(acc).filter((c) => c.name);
+      if (calls.length === 0) return; // streamed the final answer already
+
+      convo.push({ role: 'assistant', content: content || null, tool_calls: calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.args } })) });
+      for (const c of calls) {
+        let args: Record<string, unknown> = {};
+        try { args = JSON.parse(c.args || '{}'); } catch { /* ignore */ }
+        const tool = byName.get(c.name);
+        let result: unknown;
+        try { result = tool ? await tool.execute(args) : { ok: false, error: `Unknown tool ${c.name}` }; }
+        catch (e) { result = { ok: false, error: e instanceof Error ? e.message : 'Tool failed' }; }
+        yield { type: 'action', name: c.name, args, result };
+        convo.push({ role: 'tool', tool_call_id: c.id, content: JSON.stringify(result) });
+      }
+    }
   }
 }
 
