@@ -33,6 +33,8 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('command-center', 'Command Center', 'Suggested', 'plus', '/dashboard/command-center'),
   F('family-missions', 'Family Missions', 'Suggested', 'plus', '/missions'),
   F('rewards', 'Rewards', 'Suggested', 'plus', '/dashboard/rewards'),
+  F('behavior-tracking', 'Behavior Tracking', 'Suggested', 'basic', '/dashboard/behavior'),
+  F('screen-time', 'Screen Time', 'Suggested', 'basic', '/dashboard/screen-time'),
   F('conflict-resolution', 'AI Conflict Resolution', 'Suggested', 'plus', '/dashboard/conflicts'),
 
   // ── Daily Life ─────────────────────────────────────────────

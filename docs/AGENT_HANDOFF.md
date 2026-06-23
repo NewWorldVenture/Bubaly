@@ -1,7 +1,41 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Tier 6 Health & Wellness audit + 3 gap builds. Keep this updated as you ship.
+Last updated after the Tier-3 Kids & Parenting audit. Keep this updated as you ship.
+
+> **Session update (2026-06-23m, branch `claude/kids-parenting-tier3`) — TIER-3
+> KIDS & PARENTING AUDIT + 2 new features.** Reviewed all 10 "Tier 3: Kids &
+> Parenting" features against the codebase.
+> **Already present (no work needed):** Chore Rewards (`chores`+`rewards`+
+> `/missions`), AI Chore Validation (`lib/chores/ai.ts`, world-class — photo/video
+> AI proof, degrades to parent_review), Allowance Tracking (points ledger
+> `lib/rewards/points.ts` + `/dashboard/rewards` + `savings_goals`), School
+> Assignments (`/dashboard/homework`, `lib/homework/board.ts`), School Calendar
+> Sync (`/dashboard/timetable` + `/dashboard/sync` + iCal feeds), Family Goals
+> (`goals` table + `GoalsModule` + `/dashboard/goals`), Achievement Badges
+> (`badges`/`member_badges` from #96), Parent Approval Workflows (chore
+> submission→approval flow in `/missions`).
+> **MISSING → built world-class this session:**
+> - **Behavior Tracking** (mig `0073_behavior_tracking.sql`, `behavior_logs`):
+>   per-child positive/concern/neutral logs across categories + points. Pure
+>   `lib/behavior/insights.ts` (balance score, weekly trend, positive-streak; 6
+>   tests). `/dashboard/behavior` module: per-kid insight cards (balance score,
+>   6-week trend bars, streak, top categories) + **AI parenting insight** via
+>   `POST /api/behavior/insight` (`resolveProvider`, graceful fallback). Family
+>   RLS. Nav + feature-catalog `behavior-tracking` (basic).
+> - **Screen Time Dashboard** (mig `0074_screen_time.sql`, `screen_time_entries`
+>   + `screen_time_limits`): per-child daily logging by category + daily limits.
+>   Pure `lib/screen-time/insights.ts` (totals, category breakdown, balance score,
+>   limit progress, under-limit streak; 8 tests). `/dashboard/screen-time` module:
+>   per-kid cards (today vs limit bar, week total, balance, category mix,
+>   under-limit streak) + set-limit. Family RLS. Nav + feature-catalog
+>   `screen-time` (basic).
+> - Types added to `lib/database.types.ts`. `tsc`/lint clean, **build OK**,
+>   **vitest 642 passing** (+14). **Apply 0073 + 0074 to prod after merge.**
+> - **NEXT:** (1) AI "balance coach" for screen-time (mirror the behavior insight
+>   route); (2) tie behavior points → the rewards/allowance ledger; (3) optional
+>   device-API import for screen time (manual today); (4) weekly behavior/screen
+>   digest into the briefing. Next migration number: **0075**.
 
 > **Session update (2026-06-23p, branch `claude/travel-tier7`) — TIER-7 TRAVEL &
 > EVENTS AUDIT + 2 new features.** Reviewed all 10 features. The 28-table
