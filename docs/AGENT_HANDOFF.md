@@ -3,6 +3,33 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the Meal Voting PR. Keep this updated as you ship.
 
+> **Session update (2026-06-23c, branch `claude/billing-robust`): self-serve billing.**
+> Families can now upgrade/downgrade tiers and switch monthly↔annual **in-app**
+> (no Stripe-portal round-trip), plus schedule/undo a cancel-to-Free. All synced
+> to Supabase via the existing Stripe webhook.
+> - **Migration `0067_subscription_cancel.sql`** — adds
+>   `subscriptions.cancel_at_period_end boolean` (**apply to prod**). The webhook
+>   (`app/api/webhooks/stripe/route.ts` `upsertSubscription`) now writes it.
+> - **Pure logic** `lib/billing/plans.ts` (10 tests): `PLAN_META`, `slugToStripePlan`,
+>   `stripePlanFor`, `classifyChange(currentSlug,target) → new|current|upgrade|
+>   downgrade|switch_interval`, `annualSavingsPct`. Plan slugs: `basic`/`basic_annual`/
+>   `plus`/`plus_annual` (+ legacy `family*`→basic); annual slugs end `_annual`.
+> - **`POST /api/billing/change-plan` { plan: StripePlan }** — if a live Stripe sub
+>   exists (active/trialing/past_due) it updates the sub item's price in place with
+>   `proration_behavior:'create_prorations'` and clears any scheduled cancel; on
+>   Free it falls back to Checkout (returns `{url}`). Parent-only (`isAdmin`).
+> - **`POST /api/billing/cancel` { resume?: boolean }** — sets/clears
+>   `cancel_at_period_end` (downgrade to Free at period end / resume). Parent-only.
+> - **UI** `components/modules/billing-module.tsx`: subscription loads live
+>   (realtime on `subscriptions` + reload after each change). New `PlanManager`
+>   (replaces `UpgradePlans`) — monthly/annual toggle + per-tier button computed by
+>   `classifyChange` (Choose/Current/Upgrade/Downgrade/Switch). `changePlan`/`setCancel`
+>   call the routes with toasts; scheduled-cancel banner with one-tap Resume;
+>   "Payment & invoices" still opens the Stripe portal.
+> - **Stripe env (prod):** `STRIPE_PRICE_{BASIC,PLUS}_{MONTHLY,ANNUAL}`,
+>   `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`. The Stripe customer portal is now
+>   only needed for "Payment & invoices"; upgrade/downgrade/switch don't depend on it.
+
 > **Session update (2026-06-22h) — FAMILY FOOD OS, PHASE 4: Meal Voting.**
 > - **Shipped:** family meal voting. Propose options (from the vault and/or free-text) →
 >   members vote yes/maybe/no per option → close to pick the winner → add winner's
@@ -329,7 +356,7 @@ Last updated after the Meal Voting PR. Keep this updated as you ship.
   guards). Always apply the migration to prod after merging the migration file.
 
 ## Conventions
-- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0067.**
+- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0068.**
   Helpers available in DB: `public.is_family_member(family_id)`, `public.is_super_admin()`,
   `public.set_updated_at()` trigger fn, `gen_random_uuid()`.
 - **Family-scoped tables** (member data): RLS pattern —
@@ -450,7 +477,7 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Next migration number: **0067**. (0051–0066 are on main.) **Still needs applying
+Next migration number: **0068**. (0051–0066 on main; 0067 = subscription_cancel this session.) **Still needs applying
 to prod** (verify what's live first with `select max(...)`/`\dt`; all idempotent):
 0044–0066 as applicable, plus **0052 `family_onboarding`** and **0053
 `landing_metrics`**. (NOTE: the Tier & Features system uses **no table** — it
@@ -747,7 +774,7 @@ build → **verify** (`tsc --noEmit`, `next lint`, `next build`, `vitest run`, a
 validate the migration **twice** on a throwaway Postgres 16 cluster for
 idempotency + RLS/CHECK) → draft PR (`mcp__github__create_pull_request`) → mark
 ready → **squash-merge** → apply the migration to prod (Supabase Management API,
-see migration section; **next number: 0067**) → update this doc's pillar row +
+see migration section; **next number: 0068**) → update this doc's pillar row +
 its NEXT step. Keep each PR to one pillar.
 
 ### Pillar map (✅ shipped · 🟡 partial · ⬜ not built)
