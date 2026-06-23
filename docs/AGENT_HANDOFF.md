@@ -1,7 +1,37 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Vacation Planner build. Keep this updated as you ship.
+Last updated after the Weekend Planner build. Keep this updated as you ship.
+
+> **Session update (2026-06-23j) — WEEKEND PLANNER (local event discovery).**
+> On branch `claude/funny-darwin-gkmptm` (in PR #116 with the items below). Lets a
+> family type a **ZIP code** + pick a **mileage radius dropdown** (5/10/25/50/75/100 mi)
+> + a window (3/6/10/14 days, default 6) and pull **real local events** happening nearby.
+> - **Migration `0071_weekend_planner.sql`** — `weekend_events` (cached discoveries:
+>   source/external_id, title, category, venue, address/city/region, lat/lng, starts_at,
+>   url, image_url, price_min/max_cents, distance_miles, is_family_friendly, search_zip/
+>   radius, raw jsonb; UNIQUE(family_id,source,external_id)), `weekend_plans` (shortlist
+>   w/ `weekend_plan_status` enum interested/going/maybe/passed, member_ids[], notes;
+>   UNIQUE(family_id,event_id)), `weekend_searches` (history → seeds default ZIP/radius).
+>   Family-scoped RLS + updated_at triggers via DO-loop. **VALIDATED local PG16. ⚠️ NOT
+>   APPLIED TO PROD** (apply before merge or `/dashboard/weekend` 500s).
+> - **Provider:** **Ticketmaster Discovery API** — takes `postalCode`+`radius`+`unit=miles`
+>   +date window directly (no geocoding). Reads **`TICKETMASTER_API_KEY`** from env; when
+>   missing, `/api/weekend/discover` returns `{needsConfig:true}` 503 (NEVER fake data).
+>   **ACTION: add `TICKETMASTER_API_KEY` to env** to light it up. To add more providers
+>   (SeatGeek/Eventbrite), write another normalizer in `lib/weekend/normalize.ts` and
+>   merge results in the route.
+> - **lib/weekend** (5 tests, `tests/weekend.test.ts`): `meta.ts` (RADIUS_OPTIONS,
+>   categoryMeta, priceRange, isValidZip, PLAN_STATUSES), `normalize.ts`
+>   (`discoveryWindow`, `normalizeTicketmaster[Response]` → cents/16:9 image/km→mi/family).
+> - **`/api/weekend/discover`** (auth + rate-limited): validates ZIP, calls Ticketmaster,
+>   upserts `weekend_events`, logs `weekend_searches`. **`/dashboard/weekend`** =
+>   `components/modules/weekend-module.tsx`: ZIP+radius+window controls, events grouped by
+>   day (image/category/venue/distance/price/tickets link), save-to-shortlist w/ status,
+>   remembers last search. Nav entry "Weekend Planner" (icon CalendarRange, minLevel 1).
+> - **NEXT (weekend):** add `TICKETMASTER_API_KEY`; more providers; "add to family
+>   calendar"/.ics from a saved plan; map view; AI "plan our weekend" that picks a
+>   balanced set; distance from a saved home address instead of typing ZIP each time.
 
 > **Session update (2026-06-23i) — VACATION PLANNER (world-class) + full DB seed + Immunizations.**
 > Branch `claude/funny-darwin-gkmptm` (4 commits ahead of `main`): Immunizations,
