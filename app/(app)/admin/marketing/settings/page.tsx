@@ -13,7 +13,7 @@ function providerStatus() {
   return [
     { name: 'Email (Resend)', ready: !!process.env.RESEND_API_KEY, env: 'RESEND_API_KEY' },
     { name: 'SMS (Twilio)', ready: !!process.env.TWILIO_AUTH_TOKEN, env: 'TWILIO_AUTH_TOKEN' },
-    { name: 'AI (Anthropic)', ready: !!process.env.ANTHROPIC_API_KEY, env: 'ANTHROPIC_API_KEY' },
+    { name: 'AI (OpenAI)', ready: !!process.env.OPENAI_API_KEY, env: 'OPENAI_API_KEY' },
     { name: 'Payments (Stripe)', ready: !!process.env.STRIPE_SECRET_KEY, env: 'STRIPE_SECRET_KEY' },
     { name: 'Search Console', ready: !!process.env.GOOGLE_SEARCH_CONSOLE_KEY, env: 'GOOGLE_SEARCH_CONSOLE_KEY' },
   ];

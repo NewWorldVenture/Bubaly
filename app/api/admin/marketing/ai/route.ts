@@ -60,7 +60,7 @@ Use ONLY the real data provided as grounding. Never fabricate metrics, rankings,
     return NextResponse.json({ text: completion.text });
   } catch (err) {
     console.error('Marketing AI error:', err);
-    const msg = err instanceof Error && err.message.includes('Forbidden') ? 'Forbidden' : 'Could not generate. Check that ANTHROPIC_API_KEY is set.';
+    const msg = err instanceof Error && err.message.includes('Forbidden') ? 'Forbidden' : 'Could not generate. Check that the OpenAI API key is set.';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

@@ -1,17 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Settings, Check, X as XIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, Plus, Sparkles, Activity, Check, X as XIcon } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
-import { Input, Field, Select } from '@/components/ui/input';
+import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { NUTRIENT_LABELS, dailyValuePct, fmtAmount, type Nutrition } from '@/lib/meals/nutrition';
 import type { Tables, MealType } from '@/lib/database.types';
 
 type Meal = Tables<'meals'>;
@@ -49,9 +50,11 @@ export function MealsModule() {
   const [library, setLibrary] = useState<Meal[]>([]);
   const [addCell, setAddCell] = useState<{ date: string; type: MealType } | null>(null);
   const [newMealOpen, setNewMealOpen] = useState(false);
+  const [autoPlanOpen, setAutoPlanOpen] = useState(false);
 
   const monday = useMemo(() => weekStart(weekOffset), [weekOffset]);
   const days = useMemo(() => daysOfWeek(monday), [monday]);
+  const weekStartStr = useMemo(() => monday.toISOString().slice(0, 10), [monday]);
 
   useEffect(() => {
     createClient().from('meals').select('*').eq('family_id', familyId).order('name')
@@ -111,8 +114,8 @@ export function MealsModule() {
             description="Plan, organize, and enjoy healthy meals together."
             action={
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm">
-                  <Settings className="h-4 w-4" /> Plan Settings
+                <Button variant="outline" size="sm" onClick={() => setAutoPlanOpen(true)}>
+                  <Sparkles className="h-4 w-4" /> Auto-plan week
                 </Button>
                 <Button size="sm" onClick={() => setNewMealOpen(true)}>
                   <Plus className="h-4 w-4" /> Add Meal
@@ -307,33 +310,8 @@ export function MealsModule() {
           <button className="mt-3 text-xs text-brand hover:underline">View full list →</button>
         </div>
 
-        {/* Nutrition Summary */}
-        <div className="sidebar-card">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold">Nutrition Summary</p>
-            <span className="text-[10px] text-muted">This Week</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <svg width="70" height="70" viewBox="0 0 70 70">
-              <circle cx="35" cy="35" r="28" fill="none" stroke="#1e2d40" strokeWidth="8" />
-              <circle cx="35" cy="35" r="28" fill="none" stroke="#7c5dff" strokeWidth="8" strokeDasharray="79 176" strokeDashoffset="70" style={{ transform: 'rotate(-90deg)', transformOrigin: '35px 35px' }} />
-              <circle cx="35" cy="35" r="28" fill="none" stroke="#22c55e" strokeWidth="8" strokeDasharray="53 176" strokeDashoffset="-9" style={{ transform: 'rotate(-90deg)', transformOrigin: '35px 35px' }} />
-              <circle cx="35" cy="35" r="28" fill="none" stroke="#f59e0b" strokeWidth="8" strokeDasharray="44 176" strokeDashoffset="-62" style={{ transform: 'rotate(-90deg)', transformOrigin: '35px 35px' }} />
-              <text x="35" y="33" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">1,856</text>
-              <text x="35" y="43" textAnchor="middle" fill="#94a0b8" fontSize="7">Total Cal</text>
-            </svg>
-            <div className="space-y-1.5 text-xs">
-              {[{ label: 'Carbs', pct: 45, color: '#7c5dff' }, { label: 'Protein', pct: 30, color: '#22c55e' }, { label: 'Fat', pct: 25, color: '#f59e0b' }].map(n => (
-                <div key={n.label} className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full" style={{ background: n.color }} />
-                  <span className="text-muted">{n.label}</span>
-                  <span className="ml-auto font-semibold">{n.pct}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <button className="mt-3 text-xs text-brand hover:underline">View full nutrition →</button>
-        </div>
+        {/* Nutrition (real, AI-analyzed) */}
+        <WeekNutritionPanel weekStart={weekStartStr} planCount={plans.length} />
 
         {/* Meal Ideas */}
         <div className="sidebar-card">
@@ -382,6 +360,175 @@ export function MealsModule() {
       {newMealOpen && (
         <NewMealModal familyId={familyId} userId={userId} onClose={() => setNewMealOpen(false)}
           onSaved={() => { setNewMealOpen(false); createClient().from('meals').select('*').eq('family_id', familyId).order('name').then(({ data }) => setLibrary(data ?? [])); }} />
+      )}
+
+      {autoPlanOpen && (
+        <AutoPlanModal weekStart={weekStartStr} mealTypes={MEAL_TYPES}
+          onClose={() => setAutoPlanOpen(false)}
+          onPlanned={() => { setAutoPlanOpen(false); void refresh(); }} />
+      )}
+    </div>
+  );
+}
+
+/** AI Meal Planner — fills the week from your library/recipes, honoring diet and
+ *  using up soon-to-expire pantry items, then writes it straight into the grid. */
+function AutoPlanModal({ weekStart, mealTypes, onClose, onPlanned }: {
+  weekStart: string; mealTypes: MealType[]; onClose: () => void; onPlanned: () => void;
+}) {
+  const { success, error: toastError } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<MealType[]>(['dinner']);
+  const [dietary, setDietary] = useState('');
+  const [notes, setNotes] = useState('');
+  const [useExpiring, setUseExpiring] = useState(true);
+  const [avoidRepeats, setAvoidRepeats] = useState(true);
+
+  function toggleType(t: MealType) {
+    setSelected((p) => p.includes(t) ? p.filter((x) => x !== t) : [...p, t]);
+  }
+
+  async function run() {
+    if (selected.length === 0) return toastError('Pick at least one meal to plan');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/ai/meals/plan', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          weekStart, mealTypes: selected,
+          dietary: dietary.split(',').map((s) => s.trim()).filter(Boolean),
+          notes, useExpiring, avoidRepeats, write: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toastError(data.error ?? 'Could not generate a plan'); return; }
+      success(`Planned ${data.count ?? data.assignments?.length ?? 0} meals for the week! 🍽️`);
+      onPlanned();
+    } catch {
+      toastError('Network error — please try again');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Auto-plan your week"
+      description="Our planner fills the week from your saved meals & recipes, honoring your diet and using up food before it expires.">
+      <div className="space-y-4">
+        <div>
+          <p className="mb-2 text-sm font-medium">Which meals?</p>
+          <div className="flex flex-wrap gap-2">
+            {mealTypes.map((t) => (
+              <button key={t} type="button" onClick={() => toggleType(t)}
+                className={cn('rounded-lg border px-3 py-1.5 text-xs font-medium capitalize transition',
+                  selected.includes(t) ? 'border-brand bg-brand/10 text-brand' : 'border-border hover:bg-elevated')}>
+                {selected.includes(t) && <Check className="mr-1 inline h-3 w-3" />}{MEAL_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <Field label="Dietary needs" hint="Comma-separated, e.g. Vegetarian, Nut-free">
+          {(id) => <Input id={id} value={dietary} onChange={(e) => setDietary(e.target.value)} placeholder="Vegetarian, Dairy-free" />}
+        </Field>
+        <Field label="Anything else?">
+          {(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Kid-friendly, quick weeknights, double up for leftovers…" className="min-h-[50px]" />}
+        </Field>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={useExpiring} onChange={(e) => setUseExpiring(e.target.checked)} className="h-4 w-4 rounded border-border" />
+          Use up pantry items that are expiring soon
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={avoidRepeats} onChange={(e) => setAvoidRepeats(e.target.checked)} className="h-4 w-4 rounded border-border" />
+          Avoid repeating dishes this week
+        </label>
+        <p className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-muted">
+          This replaces any meals already planned in the selected slots for this week.
+        </p>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" loading={loading} onClick={run}><Sparkles className="h-4 w-4" /> Generate plan</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+const NUTRIENT_ORDER: (keyof Nutrition)[] = ['calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sugar_g', 'sodium_mg'];
+
+/** AI Nutrition Analysis for the planned week (cached server-side). Replaces the
+ *  old hard-coded "Nutrition Summary" with real, honest numbers. */
+function WeekNutritionPanel({ weekStart, planCount }: { weekStart: string; planCount: number }) {
+  const { error: toastError } = useToast();
+  const [data, setData] = useState<(Nutrition & { summary: string | null }) | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [cached, setCached] = useState(false);
+
+  const analyze = useCallback(async (refresh = false) => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/ai/meals/nutrition', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ subjectType: 'week', subjectId: weekStart, refresh }),
+      });
+      const json = await res.json();
+      if (!res.ok) { toastError(json.error ?? 'Could not analyze nutrition'); return; }
+      const n = json.nutrition;
+      setData({
+        calories: n.calories ?? 0, protein_g: Number(n.protein_g ?? 0), carbs_g: Number(n.carbs_g ?? 0),
+        fat_g: Number(n.fat_g ?? 0), fiber_g: Number(n.fiber_g ?? 0), sugar_g: Number(n.sugar_g ?? 0),
+        sodium_mg: Number(n.sodium_mg ?? 0), summary: n.summary ?? null,
+      });
+      setCached(json.cached);
+    } catch {
+      toastError('Network error — please try again');
+    } finally {
+      setLoading(false);
+    }
+  }, [weekStart, toastError]);
+
+  // Reset when the week changes so stale numbers never show for the wrong week.
+  useEffect(() => { setData(null); setCached(false); }, [weekStart]);
+
+  return (
+    <div className="sidebar-card">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-sm font-semibold"><Activity className="h-4 w-4 text-success" /> Nutrition</p>
+        {data && <span className="text-[10px] text-muted">avg / day{cached ? ' · saved' : ''}</span>}
+      </div>
+
+      {!data ? (
+        <div className="text-center">
+          <p className="mb-2 text-xs text-muted">
+            {planCount === 0 ? 'Plan some meals, then analyze the week.' : 'See the nutrition of this week’s plan.'}
+          </p>
+          <Button size="sm" variant="outline" loading={loading} disabled={planCount === 0} onClick={() => analyze(false)}>
+            <Sparkles className="h-4 w-4" /> Analyze week
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {NUTRIENT_ORDER.map((k) => {
+            const val = data[k];
+            const pct = dailyValuePct(k, val);
+            return (
+              <div key={k}>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-muted">{NUTRIENT_LABELS[k]}</span>
+                  <span className="font-medium">{fmtAmount(k, val)}{k !== 'calories' ? ` · ${pct}% DV` : ''}</span>
+                </div>
+                {k !== 'calories' && (
+                  <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-elevated">
+                    <div className="h-full rounded-full bg-success" style={{ width: `${Math.min(100, pct)}%` }} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {data.summary && <p className="pt-1 text-[11px] text-muted">{data.summary}</p>}
+          <button onClick={() => analyze(true)} className="w-full pt-1 text-center text-[11px] text-muted hover:text-brand" disabled={loading}>
+            {loading ? 'Analyzing…' : 'Re-analyze'}
+          </button>
+        </div>
       )}
     </div>
   );

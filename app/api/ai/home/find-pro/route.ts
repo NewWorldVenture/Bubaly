@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { resolveProvider } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { TRADES } from '@/lib/home/maintenance';
 
 export const runtime = 'nodejs';
@@ -17,8 +17,8 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   let ctx;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
-  if (!process.env.ANTHROPIC_API_KEY && (process.env.AI_PROVIDER ?? 'anthropic') === 'anthropic') {
-    return NextResponse.json({ error: 'AI is not configured (ANTHROPIC_API_KEY missing).' }, { status: 503 });
+  if (!(await isAIConfigured())) {
+    return NextResponse.json({ error: 'AI is not configured (OpenAI API key missing).' }, { status: 503 });
   }
 
   const body = await req.json().catch(() => ({}));

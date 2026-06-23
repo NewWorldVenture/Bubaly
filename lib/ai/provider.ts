@@ -75,102 +75,6 @@ export interface AIProvider {
   runToolsStream(input: RunToolsInput): AsyncGenerator<StreamEvent>;
 }
 
-// --- Anthropic implementation ---
-export class AnthropicProvider implements AIProvider {
-  id = 'anthropic';
-  constructor(public model = 'claude-sonnet-4-6', private apiKey = process.env.ANTHROPIC_API_KEY!) {}
-
-  async complete({ system, messages, tools, maxTokens = 1024 }: AICompleteInput): Promise<AICompletion> {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': this.apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: this.model,
-        max_tokens: maxTokens,
-        system,
-        tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema })),
-        messages: messages
-          .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .map((m) => {
-            // Attach vision blocks when a message carries images (user only).
-            if (m.images?.length) {
-              return {
-                role: m.role,
-                content: [
-                  ...m.images.map((img) => ({
-                    type: 'image' as const,
-                    source: { type: 'base64' as const, media_type: img.media_type, data: img.data },
-                  })),
-                  { type: 'text' as const, text: m.content },
-                ],
-              };
-            }
-            return { role: m.role, content: m.content };
-          }),
-      }),
-    });
-    if (!res.ok) throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    const text = (data.content ?? [])
-      .filter((b: { type: string }) => b.type === 'text')
-      .map((b: { text: string }) => b.text)
-      .join('\n');
-    const toolCalls = (data.content ?? [])
-      .filter((b: { type: string }) => b.type === 'tool_use')
-      .map((b: { name: string; input: Record<string, unknown> }) => ({ name: b.name, args: b.input }));
-    return { text, toolCalls };
-  }
-
-  async runTools({ system, messages, tools, maxTokens = 1024, maxRounds = 6 }: RunToolsInput): Promise<ToolRunResult> {
-    const byName = new Map(tools.map((t) => [t.name, t]));
-    const convo: { role: 'user' | 'assistant'; content: unknown }[] = messages
-      .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-    const toolDefs = tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema }));
-    const actions: ExecutedAction[] = [];
-
-    for (let round = 0; round < maxRounds; round++) {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-api-key': this.apiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: this.model, max_tokens: maxTokens, system, tools: toolDefs, messages: convo }),
-      });
-      if (!res.ok) throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      const blocks: { type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }[] = data.content ?? [];
-      const text = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-      const uses = blocks.filter((b) => b.type === 'tool_use');
-
-      if (data.stop_reason !== 'tool_use' || uses.length === 0) return { text, actions };
-
-      convo.push({ role: 'assistant', content: blocks });
-      const results: unknown[] = [];
-      for (const use of uses) {
-        const tool = byName.get(use.name ?? '');
-        let result: unknown;
-        try { result = tool ? await tool.execute(use.input ?? {}) : { ok: false, error: `Unknown tool ${use.name}` }; }
-        catch (e) { result = { ok: false, error: e instanceof Error ? e.message : 'Tool failed' }; }
-        actions.push({ name: use.name ?? 'tool', args: use.input ?? {}, result });
-        results.push({ type: 'tool_result', tool_use_id: use.id, content: JSON.stringify(result) });
-      }
-      convo.push({ role: 'user', content: results });
-    }
-    return { text: 'Done.', actions };
-  }
-
-  // Anthropic path runs non-streamed, then emits its actions + final text so the
-  // route/UI can treat every provider uniformly.
-  async *runToolsStream(input: RunToolsInput): AsyncGenerator<StreamEvent> {
-    const { text, actions } = await this.runTools(input);
-    for (const a of actions) yield { type: 'action', name: a.name, args: a.args, result: a.result };
-    if (text) yield { type: 'delta', text };
-  }
-}
-
 // --- OpenAI (ChatGPT) implementation ---
 export class OpenAIProvider implements AIProvider {
   id = 'openai';
@@ -185,7 +89,22 @@ export class OpenAIProvider implements AIProvider {
         ...(system ? [{ role: 'system', content: system }] : []),
         ...messages
           .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .map((m) => ({ role: m.role, content: m.content })),
+          .map((m) => {
+            // Attach vision blocks when a user message carries images.
+            if (m.images?.length) {
+              return {
+                role: m.role,
+                content: [
+                  { type: 'text' as const, text: m.content },
+                  ...m.images.map((img) => ({
+                    type: 'image_url' as const,
+                    image_url: { url: `data:${img.media_type};base64,${img.data}` },
+                  })),
+                ],
+              };
+            }
+            return { role: m.role, content: m.content };
+          }),
       ],
     };
     if (tools.length) {
@@ -340,30 +259,36 @@ export class OpenAIProvider implements AIProvider {
 }
 
 export type AIProviderConfig = {
-  provider: 'anthropic' | 'openai';
+  provider: 'anthropic' | 'openai';   // kept for settings back-compat; OpenAI is always used
   model?: string | null;
-  anthropicKey?: string | null;
+  anthropicKey?: string | null;       // ignored — OpenAI-only deployment
   openaiKey?: string | null;
 };
 
-const DEFAULT_MODEL: Record<'anthropic' | 'openai', string> = {
-  anthropic: 'claude-sonnet-4-6',
-  openai: 'gpt-4o',
-};
+/** Default OpenAI model used everywhere unless an OpenAI model is configured. */
+export const DEFAULT_OPENAI_MODEL = 'gpt-4o';
 
-/** Build a provider from an explicit config (used by the settings-backed resolver). */
-export function providerFromConfig(cfg: AIProviderConfig): AIProvider {
-  const model = cfg.model || DEFAULT_MODEL[cfg.provider];
-  if (cfg.provider === 'openai') {
-    return new OpenAIProvider(model, cfg.openaiKey ?? process.env.OPENAI_API_KEY ?? '');
-  }
-  return new AnthropicProvider(model, cfg.anthropicKey ?? process.env.ANTHROPIC_API_KEY ?? '');
+/** True when `model` looks like a valid OpenAI model id (gpt-*, o1/o3/o4-*, chatgpt-*). */
+function isOpenAIModel(model: string | null | undefined): model is string {
+  return !!model && /^(gpt-|o\d|chatgpt-)/i.test(model);
 }
 
-/** Env-only provider (back-compat / no DB available). */
+/**
+ * Build a provider from config. OpenAI-only: the `provider` field is ignored and
+ * any stored non-OpenAI model is replaced with the default OpenAI model so a
+ * previously-saved Claude model can never break a call.
+ */
+export function providerFromConfig(cfg: AIProviderConfig): AIProvider {
+  const model = isOpenAIModel(cfg.model) ? cfg.model : DEFAULT_OPENAI_MODEL;
+  return new OpenAIProvider(model, cfg.openaiKey ?? process.env.OPENAI_API_KEY ?? '');
+}
+
+/** Env-only provider (no DB available). Always OpenAI. */
 export function getProvider(): AIProvider {
-  const provider = (process.env.AI_PROVIDER ?? 'anthropic') === 'openai' ? 'openai' : 'anthropic';
-  return providerFromConfig({ provider, model: process.env.AI_MODEL });
+  return new OpenAIProvider(
+    isOpenAIModel(process.env.AI_MODEL) ? process.env.AI_MODEL : DEFAULT_OPENAI_MODEL,
+    process.env.OPENAI_API_KEY ?? '',
+  );
 }
 
 /**
@@ -379,5 +304,21 @@ export async function resolveProvider(): Promise<AIProvider> {
     return providerFromConfig(cfg);
   } catch {
     return getProvider();
+  }
+}
+
+/**
+ * Whether OpenAI is configured (env var or an admin-saved key). Use in routes to
+ * fast-fail with an honest 503 before doing any work.
+ */
+export async function isAIConfigured(): Promise<boolean> {
+  if (process.env.OPENAI_API_KEY) return true;
+  try {
+    const { getAIConfig } = await import('@/lib/ai/settings');
+    const { createServiceClient } = await import('@/lib/supabase/server');
+    const cfg = await getAIConfig(createServiceClient());
+    return !!cfg.openaiKey;
+  } catch {
+    return false;
   }
 }
