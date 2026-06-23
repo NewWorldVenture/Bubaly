@@ -1,7 +1,43 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Weekend Planner build. Keep this updated as you ship.
+Last updated after the homepage light/dark + device-showcase work. Keep this updated as you ship.
+
+> **Session update (2026-06-23l) — HOMEPAGE: photorealistic device showcase + full light/dark.**
+> Branch `claude/funny-darwin-gkmptm` (NOT in a PR yet — commits `9eaede8` device showcase,
+> `5dd3ca5` homepage light-mode). The earlier Vacation/Weekend/Seed/Immunizations work is
+> already merged to `main` via PR #116.
+> - **Device showcase** (`components/marketing/visual-mocks.tsx` → `DeviceArtwork` +
+>   `MiniAppScreen`): replaced flat CSS tiles with photorealistic, **theme-aware** frames
+>   (iPhone/Android/iPad/Web/Watch/Smart Display). Frame gradients flip via `dark:` — consts
+>   `FRAME`, `FRAME_NEUTRAL`, `GLARE` near line ~589. `MiniAppScreen` is a real-looking
+>   screenshot that flips (light UI / deep-navy) with constant brand accents. Watch face +
+>   Smart-Display photo stay dark by design. Verified in-browser both themes.
+> - **Whole homepage light mode**: token-ized every ON-CANVAS element to `text-canvas` /
+>   `text-canvas-muted` / `showcase-card` / `border-[rgb(var(--showcase-border))]`. Files:
+>   `app/(marketing)/page.tsx` + visual-mocks (`Pill`, `WatchDemoLink`, `OutlineLink`,
+>   `PlatformBadges`, `FamilyAiPanel` left col, `TestimonialBand`, `TrustStrip`,
+>   `FeaturePreviewCard`, `MiniCalendar`, `CheckList`, `SmallCtaBand`, `DeviceShowcase`).
+>   **IMPORTANT RULE:** components rendered INSIDE a `.dark` wrapper must keep `text-white`
+>   etc. — those are device-screen mockups (`HeroPhoneMockup`, `ProductMockup`, `PhoneMockup`,
+>   `MiniPanel`, `SocialProofLine`, the FamilyAiPanel photo panel). Only convert on-canvas UI.
+> - **Theme system** (already existed): `darkMode:'class'`; `<html>` gets `light`/`dark` from
+>   `localStorage['bubaly-theme']` via `components/theme/use-theme.ts`; tokens in
+>   `app/globals.css` (`--canvas-*`, `--showcase-*`, `--fg/--bg/--surface/--border`); helper
+>   classes `.text-canvas`, `.text-canvas-muted`, `.showcase-card`, `.showcase-panel`.
+>   Header/footer were already token-based with a `ThemeToggle`.
+> - **Verification gotcha:** `npx next dev` / `next start` get OOM-killed (exit 144) in this
+>   sandbox and only served intermittently; `npm run build` (exit 0), tsc, and eslint are
+>   reliable. To screenshot: Playwright at `node_modules/playwright` (require by ABSOLUTE
+>   path), seed theme with `page.addInitScript(t=>localStorage.setItem('bubaly-theme',t),...)`
+>   then goto. Scripts in scratchpad: `shot.js` (device section), `shot-full.js` (full page).
+> - **NEXT / TODO:** (1) screenshot full homepage in light to eyeball spacing (couldn't keep a
+>   dev server alive this session — device showcase WAS verified both themes). (2) Other
+>   marketing pages (`/features`, `/pricing`, `/how-it-works`, `/ai`, `/security`, `/mobile`,
+>   `/faq`, `/blog`, `/contact`, `/lp`, `/f`) still have hardcoded `text-white`/`white/` on
+>   canvas — same token pass needed for site-wide light mode. (3) Open a PR for this branch if
+>   desired, or merge as before. (4) Earlier prod TODO still stands: apply migrations
+>   `0069`–`0072` to prod + set `TICKETMASTER_API_KEY`/`SEATGEEK_CLIENT_ID`.
 
 > **Session update (2026-06-23k) — WEEKEND PLANNER: multi-source aggregation.**
 > Expanded discovery from one provider to a **deduping aggregator** over several
