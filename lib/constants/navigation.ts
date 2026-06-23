@@ -88,6 +88,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/auto', label: 'Auto & Vehicles', icon: Car, minLevel: 1 },
       { href: '/dashboard/renewals', label: 'Renewals', icon: ShieldCheck, minLevel: 1 },
       { href: '/dashboard/trips', label: 'Trip Planner', icon: Plane, minLevel: 1 },
+      { href: '/dashboard/vacations', label: 'Vacation Planner', icon: Sun, minLevel: 1 },
       { href: '/dashboard/sports', label: 'Sports', icon: Trophy, minLevel: 1 },
       { href: '/dashboard/rides', label: 'Rides & Carpool', icon: Car, minLevel: 1 },
       { href: '/display', label: 'Kitchen Display', icon: Monitor, minLevel: 1 },

@@ -5,6 +5,7 @@ import { weatherCodeMeta, cToF, dayAdvice, tripWeatherAdvice } from '@/lib/vacat
 import { suggestPacking } from '@/lib/vacations/packing';
 import { computeReadiness, type ReadinessInput } from '@/lib/vacations/readiness';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
+import { buildICS } from '@/lib/vacations/ics';
 
 const today = new Date('2026-06-23T12:00:00');
 
@@ -109,6 +110,17 @@ describe('readiness', () => {
     expect(r.score).toBeGreaterThanOrEqual(95);
     expect(r.level).toBe('ready');
     expect(r.recommendations.length).toBe(0);
+  });
+});
+
+describe('ics', () => {
+  it('builds a valid all-day VEVENT with exclusive DTEND', () => {
+    const ics = buildICS([{ uid: 't1', title: 'Disney, FL', start: '2026-07-01', end: '2026-07-07', location: 'Orlando' }]);
+    expect(ics).toContain('BEGIN:VCALENDAR');
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260701');
+    expect(ics).toContain('DTEND;VALUE=DATE:20260708'); // end + 1 day (exclusive)
+    expect(ics).toContain('SUMMARY:Disney\\, FL');       // comma escaped
+    expect(ics).toContain('END:VCALENDAR');
   });
 });
 
