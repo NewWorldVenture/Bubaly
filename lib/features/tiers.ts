@@ -74,3 +74,47 @@ export function overridesFromResolved(resolved: Record<string, FeatureTier>): Fe
   }
   return diff;
 }
+
+// ── Route-keyed resolution (drives nav + page gating) ───────────────────────
+function tierLevelOrOff(tier: FeatureTier): number {
+  return tier === 'off' ? Number.POSITIVE_INFINITY : tierToLevel(tier);
+}
+
+/** The more permissive of two tiers (available beats off; lower level wins). */
+export function morePermissiveTier(a: FeatureTier, b: FeatureTier): FeatureTier {
+  return tierLevelOrOff(a) <= tierLevelOrOff(b) ? a : b;
+}
+
+/**
+ * Resolve effective tiers keyed by ROUTE href instead of catalog key. When
+ * several catalog features share a route (e.g. the two dashboards on
+ * `/dashboard`), the route takes the most permissive tier so it's never
+ * over-locked. Used by nav gating + `requireFeature`.
+ */
+export function tiersByHref(resolved: Record<string, FeatureTier>): Record<string, FeatureTier> {
+  const out: Record<string, FeatureTier> = {};
+  for (const f of FEATURE_CATALOG) {
+    if (!f.href) continue;
+    const t = resolved[f.key] ?? f.defaultTier;
+    out[f.href] = out[f.href] === undefined ? t : morePermissiveTier(out[f.href], t);
+  }
+  return out;
+}
+
+export type FeatureAccess = 'visible' | 'locked' | 'hidden';
+
+/**
+ * What a user on `planLevel` sees for a route at `tier`. Routes not in the
+ * catalog (`tier === undefined`) are never gated. Super-admins see everything,
+ * including Off (to preview).
+ */
+export function featureAccessByTier(
+  tier: FeatureTier | undefined,
+  planLevel: number,
+  isSuperAdmin = false,
+): FeatureAccess {
+  if (isSuperAdmin) return 'visible';
+  if (tier === undefined) return 'visible';
+  if (tier === 'off') return 'hidden';
+  return isFeatureAvailable(tier, planLevel) ? 'visible' : 'locked';
+}

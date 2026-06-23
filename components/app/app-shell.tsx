@@ -7,7 +7,8 @@ import { ChevronDown, Check, Gift, Lock, LogOut, Mic, Moon, Plus, Search, Send, 
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { APP_NAV_GROUPS, MOBILE_TABS, type NavItem } from '@/lib/constants/navigation';
-import { effectiveTier, featureAccess, tierLevel, type FeatureOverrides } from '@/lib/features/catalog';
+import { featureAccessByTier } from '@/lib/features/tiers';
+import type { FeatureTier } from '@/lib/constants/feature-catalog';
 import { ROLE_LABELS } from '@/lib/constants/roles';
 import { tierLabelForLevel } from '@/lib/constants/plans';
 import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
@@ -196,17 +197,16 @@ function SidebarDashboardLinks() {
  *  flag (tier above the family's plan) + the level required to unlock. */
 function resolveItems(
   items: readonly NavItem[],
-  overrides: FeatureOverrides,
+  featureTiers: Record<string, FeatureTier>,
   planLevel: number,
   isSuperAdmin: boolean,
 ): { item: NavItem; locked: boolean; requiredLevel: 1 | 2 }[] {
   const out: { item: NavItem; locked: boolean; requiredLevel: 1 | 2 }[] = [];
   for (const item of items) {
-    const tier = effectiveTier(item.href, overrides);
-    const access = featureAccess(tier, planLevel, isSuperAdmin);
+    const tier = featureTiers[item.href];
+    const access = featureAccessByTier(tier, planLevel, isSuperAdmin);
     if (access === 'hidden') continue; // Off → not shown at all
-    const lvl = tierLevel(tier);
-    out.push({ item, locked: access === 'locked', requiredLevel: (lvl === 2 ? 2 : 1) });
+    out.push({ item, locked: access === 'locked', requiredLevel: (tier === 'plus' ? 2 : 1) });
   }
   return out;
 }
@@ -251,11 +251,11 @@ function NavEntry({ item, variant, locked, onLocked }: {
 
 /** Grouped, plan-gated sidebar navigation. */
 function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
-  const { planLevel, isSuperAdmin, featureOverrides } = useApp();
+  const { planLevel, isSuperAdmin, featureTiers } = useApp();
   return (
     <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4 xl:px-4">
       {APP_NAV_GROUPS.map((group) => {
-        const resolved = resolveItems(group.items, featureOverrides, planLevel, isSuperAdmin);
+        const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin);
         const isSuggested = group.title === 'Suggested';
         // Drop a group whose every feature is Off (the Suggested group always
         // keeps the two dashboard links, so it never disappears).
@@ -328,11 +328,11 @@ function ThemeSwitch() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { planLevel, isSuperAdmin, featureOverrides } = useApp();
+  const { planLevel, isSuperAdmin, featureTiers } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
-  const mobileTabs = resolveItems(MOBILE_TABS, featureOverrides, planLevel, isSuperAdmin);
+  const mobileTabs = resolveItems(MOBILE_TABS, featureTiers, planLevel, isSuperAdmin);
   const upgradeLevel: 1 | 2 = upgradeFor
-    ? (tierLevel(effectiveTier(upgradeFor.href, featureOverrides)) === 2 ? 2 : 1)
+    ? (featureTiers[upgradeFor.href] === 'plus' ? 2 : 1)
     : 1;
 
   return (

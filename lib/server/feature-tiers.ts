@@ -1,7 +1,8 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { resolveFeatureTiers, isFeatureTier, type FeatureOverrides } from '@/lib/features/tiers';
+import { cache } from 'react';
+import { resolveFeatureTiers, tiersByHref, isFeatureTier, type FeatureOverrides } from '@/lib/features/tiers';
 import { FEATURE_CATALOG_BY_KEY, type FeatureTier } from '@/lib/constants/feature-catalog';
 
 type DB = SupabaseClient<Database>;
@@ -22,6 +23,14 @@ export async function getFeatureOverrides(supabase: DB): Promise<FeatureOverride
 export async function getResolvedFeatureTiers(supabase: DB): Promise<Record<string, FeatureTier>> {
   return resolveFeatureTiers(await getFeatureOverrides(supabase));
 }
+
+/**
+ * Effective tiers keyed by ROUTE href (drives nav gating + `requireFeature`).
+ * Request-`cache`d so a layout + the route guard share one query per render.
+ */
+export const getFeatureTiersByHref = cache(async (supabase: DB): Promise<Record<string, FeatureTier>> => {
+  return tiersByHref(await getResolvedFeatureTiers(supabase));
+});
 
 /** Sets one feature's tier (or clears it back to default when tier === its default). */
 export async function setFeatureTier(supabase: DB, key: string, tier: FeatureTier): Promise<void> {
