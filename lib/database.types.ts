@@ -375,9 +375,9 @@ export interface Database {
         Partial<{ status: string; completed_at: string | null; abandoned_at: string | null }>
       >;
       subscriptions: T<
-        { id: string; family_id: string; billing_customer_id: string | null; plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; seats: number } & Stamps,
-        { id?: string; family_id: string; billing_customer_id?: string | null; plan?: string; status?: SubscriptionStatus; provider_ref?: string | null; current_period_end?: string | null; seats?: number },
-        Partial<{ plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; seats: number }>
+        { id: string; family_id: string; billing_customer_id: string | null; plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; cancel_at_period_end: boolean; seats: number } & Stamps,
+        { id?: string; family_id: string; billing_customer_id?: string | null; plan?: string; status?: SubscriptionStatus; provider_ref?: string | null; current_period_end?: string | null; cancel_at_period_end?: boolean; seats?: number },
+        Partial<{ plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; cancel_at_period_end: boolean; seats: number }>
       >;
       // ── Financial ──────────────────────────────────────────
       financial_accounts: T<

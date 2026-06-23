@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
@@ -35,6 +35,10 @@ import { PageHeader } from '@/components/app/page-header';
 import { fmtDate } from '@/lib/utils/format';
 import { isAdmin } from '@/lib/constants/roles';
 import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
+import {
+  classifyChange, slugToStripePlan, stripePlanFor, annualSavingsPct,
+  CHANGE_LABELS, type StripePlan, type BillingInterval, type PlanChange,
+} from '@/lib/billing/plans';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
 
@@ -66,48 +70,47 @@ const PLAN_LABELS: Record<string, { name: string; description: string; price: st
   family_annual: { name: 'Family Basic (Annual)', description: 'Family Basic billed yearly.', price: '$99.99/yr' },
 };
 
-type CheckoutPlan = 'basic_monthly' | 'basic_annual' | 'plus_monthly' | 'plus_annual';
-async function startCheckout(plan: CheckoutPlan) {
-  const res = await fetch('/api/billing/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }) });
-  const json = await res.json(); if (json.url) window.location.href = json.url;
-}
 async function openPortal() {
   const res = await fetch('/api/billing/portal', { method: 'POST' });
   const json = await res.json(); if (json.url) window.location.href = json.url;
 }
 
 const fmtUsd = (cents: number) => (cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`);
-const basicSave = Math.round((1 - BASIC_ANNUAL_CENTS / (BASIC_MONTHLY_CENTS * 12)) * 100);
-const plusSave = Math.round((1 - PLUS_ANNUAL_CENTS / (PLUS_MONTHLY_CENTS * 12)) * 100);
 
-/** Real, purchasable plan selector (Basic + Plus) with a monthly/annual toggle.
- *  `highlight` (1 = Basic, 2 = Plus) rings + scrolls to the tier a user was sent
- *  here to buy after tapping a locked feature. */
-function UpgradePlans({ highlight }: { highlight?: number }) {
-  const [annual, setAnnual] = useState(true);
-  const [pending, startTransition] = useTransition();
+const TIER_DEFS = [
+  {
+    level: 1 as const, name: 'Family Basic', featured: false,
+    monthlyCents: BASIC_MONTHLY_CENTS, annualCents: BASIC_ANNUAL_CENTS,
+    features: ['Unlimited members', 'Chores, meals & grocery planning', 'School & sports hubs', 'Unlimited AI assistant', 'Smart Imports & Kitchen Display'],
+  },
+  {
+    level: 2 as const, name: 'Family+', featured: true,
+    monthlyCents: PLUS_MONTHLY_CENTS, annualCents: PLUS_ANNUAL_CENTS,
+    features: ['Everything in Basic', 'AI Concierge & daily briefings', 'AI School & Sports assistant', 'Family Command Center', 'Priority support'],
+  },
+];
+
+/**
+ * World-class plan manager: a monthly/annual toggle + a card per tier whose
+ * action button is computed from the family's current plan (Choose / Current /
+ * Upgrade / Downgrade / Switch billing). One tap calls the in-place change-plan
+ * flow (prorated) or Checkout when on Free.
+ */
+function PlanManager({
+  currentSlug, highlight, pending, onChoose,
+}: {
+  currentSlug: string | null;
+  highlight?: number;
+  pending: boolean;
+  onChoose: (plan: StripePlan) => void;
+}) {
+  const [interval, setInterval] = useState<BillingInterval>('annual');
+  const annual = interval === 'annual';
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (highlight) ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [highlight]);
-
-  const tiers = [
-    {
-      name: 'Family Basic', featured: false, level: 1,
-      perMonth: annual ? Math.round(BASIC_ANNUAL_CENTS / 12) : BASIC_MONTHLY_CENTS,
-      sub: annual ? `${fmtUsd(BASIC_ANNUAL_CENTS)}/yr · save ${basicSave}%` : 'billed monthly',
-      plan: (annual ? 'basic_annual' : 'basic_monthly') as CheckoutPlan,
-      features: ['Unlimited members', 'Chores, meals & grocery planning', 'School & sports hubs', 'Unlimited AI assistant', 'Smart Imports & Kitchen Display'],
-    },
-    {
-      name: 'Family+', featured: true, level: 2,
-      perMonth: annual ? Math.round(PLUS_ANNUAL_CENTS / 12) : PLUS_MONTHLY_CENTS,
-      sub: annual ? `${fmtUsd(PLUS_ANNUAL_CENTS)}/yr · save ${plusSave}%` : 'billed monthly',
-      plan: (annual ? 'plus_annual' : 'plus_monthly') as CheckoutPlan,
-      features: ['Everything in Basic', 'AI Concierge & daily briefings', 'AI School & Sports assistant', 'Family Command Center', 'Priority support'],
-    },
-  ];
 
   return (
     <div ref={ref} className="space-y-3 scroll-mt-20">
@@ -118,32 +121,46 @@ function UpgradePlans({ highlight }: { highlight?: number }) {
       ) : null}
       <div className="flex items-center gap-2">
         <div className="inline-flex items-center gap-1 rounded-full border border-border bg-surface/60 p-1 text-xs">
-          <button onClick={() => setAnnual(false)} className={cn('rounded-full px-3 py-1 font-semibold transition', !annual ? 'bg-brand text-white' : 'text-muted')}>Monthly</button>
-          <button onClick={() => setAnnual(true)} className={cn('rounded-full px-3 py-1 font-semibold transition', annual ? 'bg-brand text-white' : 'text-muted')}>Yearly</button>
+          <button onClick={() => setInterval('monthly')} className={cn('rounded-full px-3 py-1 font-semibold transition', !annual ? 'bg-brand text-white' : 'text-muted')}>Monthly</button>
+          <button onClick={() => setInterval('annual')} className={cn('rounded-full px-3 py-1 font-semibold transition', annual ? 'bg-brand text-white' : 'text-muted')}>Yearly</button>
         </div>
-        {annual && <Badge tone="success">Save up to {Math.max(basicSave, plusSave)}%</Badge>}
+        {annual && <Badge tone="success">Save up to {Math.max(annualSavingsPct(1), annualSavingsPct(2))}%</Badge>}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        {tiers.map((t) => (
-          <div key={t.name} className={cn('rounded-xl border p-4', t.featured ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40', highlight === t.level && 'ring-2 ring-brand ring-offset-2 ring-offset-bg')}>
-            <div className="flex items-center justify-between">
-              <p className="font-semibold">{t.name}</p>
-              {t.featured && <Badge tone="brand">Most popular</Badge>}
+        {TIER_DEFS.map((t) => {
+          const plan = stripePlanFor(t.level, interval);
+          const change: PlanChange = classifyChange(currentSlug, plan);
+          const perMonth = annual ? Math.round(t.annualCents / 12) : t.monthlyCents;
+          const sub = annual ? `${fmtUsd(t.annualCents)}/yr · save ${annualSavingsPct(t.level)}%` : 'billed monthly';
+          const isCurrent = change === 'current';
+          return (
+            <div key={t.name} className={cn('rounded-xl border p-4', t.featured ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40', highlight === t.level && 'ring-2 ring-brand ring-offset-2 ring-offset-bg')}>
+              <div className="flex items-center justify-between">
+                <p className="font-semibold">{t.name}</p>
+                {isCurrent ? <Badge tone="success">Current</Badge> : t.featured && <Badge tone="brand">Most popular</Badge>}
+              </div>
+              <p className="mt-1 text-2xl font-bold">{fmtUsd(perMonth)}<span className="text-sm font-normal text-muted">/mo</span></p>
+              <p className="text-xs text-muted">{sub}</p>
+              <Button
+                className="mt-3 w-full"
+                variant={change === 'downgrade' ? 'secondary' : 'primary'}
+                loading={pending}
+                disabled={isCurrent}
+                onClick={() => onChoose(plan)}
+              >
+                {isCurrent ? 'Current plan' : change === 'new' ? `Choose ${t.name}` : CHANGE_LABELS[change]}
+                {change === 'switch_interval' ? ` to ${annual ? 'annual' : 'monthly'}` : ''}
+              </Button>
+              <ul className="mt-3 space-y-1.5">
+                {t.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-xs text-muted">
+                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />{f}
+                  </li>
+                ))}
+              </ul>
             </div>
-            <p className="mt-1 text-2xl font-bold">{fmtUsd(t.perMonth)}<span className="text-sm font-normal text-muted">/mo</span></p>
-            <p className="text-xs text-muted">{t.sub}</p>
-            <Button className="mt-3 w-full" loading={pending} onClick={() => startTransition(() => void startCheckout(t.plan))}>
-              Choose {t.name}
-            </Button>
-            <ul className="mt-3 space-y-1.5">
-              {t.features.map((f) => (
-                <li key={f} className="flex items-start gap-2 text-xs text-muted">
-                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />{f}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -524,12 +541,52 @@ export function BillingModule() {
       supabase.from('savings_goals').select('*').eq('family_id', familyId).order('name'),
   });
 
-  // ── Stripe subscription ────────────────────────────────────────────────
-  useEffect(() => {
+  // ── Stripe subscription (live: realtime + after self-serve changes) ──────
+  const loadSub = useCallback(async () => {
     const sb = createClient();
-    sb.from('subscriptions').select('*').eq('family_id', familyId).maybeSingle()
-      .then(({ data }) => { setSubscription(data); setSubLoading(false); });
+    const { data } = await sb.from('subscriptions').select('*').eq('family_id', familyId).maybeSingle();
+    setSubscription(data);
+    setSubLoading(false);
   }, [familyId]);
+
+  useEffect(() => {
+    void loadSub();
+    const sb = createClient();
+    const channel = sb
+      .channel(`subscription:${familyId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'subscriptions', filter: `family_id=eq.${familyId}` }, () => { void loadSub(); })
+      .subscribe();
+    return () => { void sb.removeChannel(channel); };
+  }, [familyId, loadSub]);
+
+  // Self-serve plan change (upgrade / downgrade / switch interval). Updates the
+  // live Stripe subscription in place, or redirects to Checkout when on Free.
+  const changePlan = useCallback((plan: StripePlan) => {
+    startTransition(async () => {
+      try {
+        const res = await fetch('/api/billing/change-plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }) });
+        const json = await res.json();
+        if (!res.ok) { toastError(json.error ?? 'Could not change the plan.'); return; }
+        if (json.url) { window.location.href = json.url; return; }       // Free → Checkout
+        if (json.changed) { success('Plan updated. Your next invoice is prorated.'); }
+        else if (json.message) { success(json.message); }
+        await loadSub();
+      } catch { toastError('Could not change the plan.'); }
+    });
+  }, [loadSub, success, toastError]);
+
+  // Schedule a downgrade to Free at period end, or undo it.
+  const setCancel = useCallback((resume: boolean) => {
+    startTransition(async () => {
+      try {
+        const res = await fetch('/api/billing/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resume }) });
+        const json = await res.json();
+        if (!res.ok) { toastError(json.error ?? 'Could not update the subscription.'); return; }
+        success(resume ? 'Your plan will continue.' : 'Your plan will end at the period’s end.');
+        await loadSub();
+      } catch { toastError('Could not update the subscription.'); }
+    });
+  }, [loadSub, success, toastError]);
 
   // ── Computed values ─────────────────────────────────────────────────────
   const totalBalance = useMemo(() => accounts.reduce((s, a) => s + (a.balance ?? 0), 0), [accounts]);
@@ -698,6 +755,9 @@ export function BillingModule() {
   const subConfig = STATUS_CONFIG[status];
   const plan = PLAN_LABELS[subscription?.plan ?? 'free'] ?? PLAN_LABELS.free;
   const hasActiveAccess = ['active', 'trialing'].includes(status);
+  // A live paid plan (drives the Cancel control) + whether a cancel is scheduled.
+  const hasPaidPlan = slugToStripePlan(subscription?.plan) !== null && ['active', 'trialing', 'past_due'].includes(status);
+  const subCanceling = Boolean(subscription?.cancel_at_period_end) && hasPaidPlan;
 
   if (anyLoading) return <LoadingBlock />;
   if (anyError) return <ErrorState message={anyError} onRetry={refreshAll} />;
@@ -1124,7 +1184,9 @@ export function BillingModule() {
                   <p className="mt-1 text-sm text-muted">{plan.description}</p>
                   {subscription?.current_period_end && (
                     <p className="mt-2 text-sm text-muted">
-                      {['canceled', 'incomplete_expired'].includes(status) ? 'Access until' : 'Renews'} {fmtDate(subscription.current_period_end)}
+                      {subCanceling
+                        ? `Cancels — access until ${fmtDate(subscription.current_period_end)}`
+                        : `${['canceled', 'incomplete_expired'].includes(status) ? 'Access until' : 'Renews'} ${fmtDate(subscription.current_period_end)}`}
                     </p>
                   )}
                 </div>
@@ -1133,12 +1195,32 @@ export function BillingModule() {
                     <span className="flex items-center gap-1">{subConfig.icon} {subConfig.label}</span>
                   </Badge>
                   {admin && subscription && (
-                    <Button size="sm" variant="ghost" loading={pending} onClick={() => startTransition(() => void openPortal())}>Manage</Button>
+                    <Button size="sm" variant="ghost" loading={pending} onClick={() => startTransition(() => void openPortal())}>Payment &amp; invoices</Button>
                   )}
                 </div>
               </div>
-              {(!subscription || status === 'trialing' || status === 'canceled' || wantsUpgrade) && admin && (
-                <UpgradePlans highlight={needLevel} />
+
+              {/* Scheduled-cancel banner with one-tap Resume. */}
+              {admin && subCanceling && (
+                <div className="mb-4 flex flex-col gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <span>Your plan ends on {subscription?.current_period_end ? fmtDate(subscription.current_period_end) : 'the period end'} and drops to Free.</span>
+                  <Button size="sm" loading={pending} onClick={() => setCancel(true)}>Resume plan</Button>
+                </div>
+              )}
+
+              {/* Plan picker — always available to admins so they can upgrade,
+                  downgrade, or switch billing interval at any time. */}
+              {admin && (
+                <PlanManager currentSlug={subscription?.plan ?? null} highlight={needLevel} pending={pending} onChoose={changePlan} />
+              )}
+
+              {/* Cancel control for paying families that aren't already canceling. */}
+              {admin && hasPaidPlan && !subCanceling && (
+                <div className="mt-3 text-right">
+                  <button onClick={() => setCancel(false)} disabled={pending} className="text-xs text-muted underline underline-offset-2 hover:text-danger disabled:opacity-50">
+                    Cancel &amp; downgrade to Free
+                  </button>
+                </div>
               )}
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                 {['Unlimited family members', 'AI family assistant', 'All modules', 'Real-time sync', 'Document vault', 'Meal planning', 'School & sports', 'Priority support'].map((f) => (
