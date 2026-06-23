@@ -3,6 +3,26 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the Meal Voting PR. Keep this updated as you ship.
 
+> **Session update (2026-06-23d, branch `claude/wiring-audit`): platform-wide
+> Supabase-wiring audit.** Swept every dashboard page + module + admin surface for
+> unwired UI (empty handlers, mock/placeholder data, TODOs, dead links, frozen
+> fields, forms that don't persist). **Result: the app is comprehensively wired** —
+> no TODO/FIXME/mock-data found; all data-entry modals persist via Supabase
+> (`useRealtimeQuery` reads + `.insert/.update/.upsert/.delete` or server actions);
+> AI surfaces (inbox, scan, weekly-briefing, family-* OS pages) read real data /
+> call real `/api/ai/*` routes. **Fixed the few real defects:**
+> - health-module "Ask AI" button was a no-op (`onClick={() => {}}`) → now links to
+>   `/dashboard/assistant`.
+> - school-module had a "Resources coming soon" placeholder tab → removed the tab.
+> - 3 dead `href="#"` marketing links (blog, security ×2) → pointed to `/blog`,
+>   `/contact`, `/features`.
+> - **Audit method (reusable):** `grep -rniE "TODO|FIXME|coming soon|mock|placeholder"`;
+>   `grep "onClick={() => {}}"`; `href="#"`; controlled `<Input value={} />` missing
+>   `onChange` (frozen fields — all hits were legit hidden/checkbox inputs); modules
+>   with a `<Modal>` but no `.insert/.update/Action` (the one hit, locator, uses
+>   `savePlace`/`deletePlace` server actions — fine). No migration; tsc/lint/build
+>   clean; 596 tests pass.
+
 > **Session update (2026-06-23c, branch `claude/billing-robust`): self-serve billing.**
 > Families can now upgrade/downgrade tiers and switch monthly↔annual **in-app**
 > (no Stripe-portal round-trip), plus schedule/undo a cancel-to-Free. All synced

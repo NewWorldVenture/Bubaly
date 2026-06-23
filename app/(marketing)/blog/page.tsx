@@ -183,7 +183,7 @@ export default async function BlogPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="#" className="mt-4 flex items-center gap-1 text-xs font-semibold text-violet-300 hover:text-violet-200">
+              <Link href="/blog" className="mt-4 flex items-center gap-1 text-xs font-semibold text-violet-300 hover:text-violet-200">
                 View all popular <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>

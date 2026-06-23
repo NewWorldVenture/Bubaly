@@ -151,7 +151,7 @@ export default function SecurityPage() {
                 We are SOC 2 Type II compliant and adhere to strict data protection regulations including GDPR,
                 CCPA, and HIPAA (where applicable).
               </p>
-              <Link href="#" className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-violet-300 hover:text-violet-200">
+              <Link href="/contact" className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-violet-300 hover:text-violet-200">
                 View Compliance Details <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
@@ -181,7 +181,7 @@ export default function SecurityPage() {
               </div>
               <h3 className="font-bold">{title}</h3>
               <p className="mt-2 text-sm leading-6 text-white/55">{desc}</p>
-              <Link href="#" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-violet-300 hover:text-violet-200">
+              <Link href="/features" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-violet-300 hover:text-violet-200">
                 {link} <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
