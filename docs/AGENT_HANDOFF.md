@@ -1,7 +1,36 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Tier-5 Finance audit. Keep this updated as you ship.
+Last updated after the Tier-9 Home Management audit. Keep this updated as you ship.
+
+> **Session update (2026-06-23q, branch `claude/home-tier9`) — TIER-9 HOME
+> MANAGEMENT AUDIT + 4 new features.** Reviewed all 10 features. **Already present
+> (no work):** Home Inventory + Appliance Records + Warranty Tracking
+> (`home_assets` w/ brand/model/warranty_until + `home_warranties` + warranty
+> docs, `/dashboard/home`), Maintenance Schedule (`maintenance_tasks` +
+> `lib/home/maintenance.ts`), Contractor Directory (`home_contractors`,
+> `/dashboard/home/pros`), Service History (`home_service_records`,
+> `/dashboard/home/service`). **MISSING → built world-class this session (one
+> migration `0081_home_management.sql`, all family-scoped RLS, fully wired):**
+> - **Utility Tracking** (`utility_bills`): per-utility bills, monthly run-rate,
+>   trend bars + period-over-period delta. `lib/home/utilities.ts`.
+>   `/dashboard/utilities`.
+> - **Household Binder** (`household_info`): digital command center — wifi/codes/
+>   shutoffs/insurance/contacts grouped by category, sensitive-value masking +
+>   reveal. `lib/home/binder.ts`. `/dashboard/binder`.
+> - **Security Alerts** (`home_security_events`): event log w/ severity, open vs
+>   resolved, all-clear banner. `lib/home/security.ts`. `/dashboard/security`.
+> - **Smart Home** (`smart_devices`): unified device registry across HomeKit/
+>   Google/Alexa/SmartThings/Matter, grouped by room, online/offline status
+>   (honest registry — no fake remote control). `lib/home/devices.ts`.
+>   `/dashboard/devices`.
+> - Pure helpers all tested in `tests/home-management.test.ts` (11). Types,
+>   navigation + feature-catalog (all `basic`). `tsc`/lint clean, **build OK**,
+>   **vitest 652 passing** (+11). **Apply 0081 to prod after merge.**
+> - **NEXT:** (1) Smart Home: real device-API sync (HomeKit/SmartThings webhooks)
+>   to auto-update status — today it's a manual registry; (2) Security Alerts
+>   ingest from camera/alarm webhooks; (3) AI "utility savings" tip from
+>   `utility_bills` trends. Next migration: **0082**.
 
 > **Session update (2026-06-23n, branch `claude/finance-tier5`) — TIER-5 FINANCE
 > AUDIT + 4 new features.** Reviewed all 10 "Tier 5: Finance" features.
