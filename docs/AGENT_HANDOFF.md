@@ -1,7 +1,49 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Weekend Planner build. Keep this updated as you ship.
+Last updated after the Daily Essentials audit + Notes AI Assist. Keep this updated as you ship.
+
+> **Session update (2026-06-23m) — DAILY ESSENTIALS AUDIT + NOTES AI ASSIST.**
+> Task: audit the "Tier 1: Daily Essentials (Must Have)" feature list against the
+> product, note which are world-class/AI-leading, and build out any gap to be
+> world-class + 100% Supabase-wired. On branch `claude/festive-bohr-m4cbeg`.
+>
+> **AUDIT RESULT — all 10 Daily Essentials already EXIST as modules:**
+> | Feature | Module | AI? | Verdict |
+> |---|---|---|---|
+> | Family Calendar | `calendar-module` + `/api/ai/briefing`, conflict resolve | ✅ (briefing/conflicts) | World-class |
+> | Shared To-Do Lists | `todos`/chores | ✅ AI suggest | Strong |
+> | Shopping Lists | `grocery-module` | ✅ AI categorize/suggest | Strong |
+> | Family Messaging | `messages-module` | ✅ AI assist | Strong |
+> | **Shared Notes** | `notes-module` | **was ❌ → now ✅** | **Built this session** |
+> | Contacts Directory | `contacts-module` | ❌ | Exists; AI gap (next) |
+> | Reminders | `reminders-module` | ✅ AI | Strong |
+> | Shared Documents | `documents-module` | ✅ AI (import/extract) | Strong |
+> | Shared Photos | `photos-module` | ❌ | Exists; AI gap (next) |
+> | Event Planning | calendar + weekend planner | ✅ | Strong |
+>
+> **BUILT — Notes AI Assist (the chosen gap; "family knowledge base"):**
+> - **`lib/notes/ai.ts`** (pure, 11 vitest tests in `tests/notes-ai.test.ts`):
+>   `buildNotesPrompt(content)` → {system,user}; `parseNotesResponse(raw)` →
+>   `{summary, actionItems[], tags[]}` (tolerant of code-fences/prose, normalizes
+>   tags lowercase/dedupe/dash, caps 8 items/6 tags); `clampNoteContent`;
+>   `formatInsightsForNote` (renders an appendable markdown block w/ `[ ]` checklist
+>   items so they flow into the module's existing checklist renderer).
+> - **`app/api/ai/notes/route.ts`** — POST `{content}`, `requireUserContext()`-gated,
+>   `resolveProvider().complete()` (maxTokens 700), returns `{insights}`. 502 if the
+>   model yields nothing usable; never fabricates.
+> - **`components/modules/notes-module.tsx`** — "AI Assist" button (Sparkles) in the
+>   note editor toolbar; calls the route on the current body, shows summary/action
+>   items/tags in a brand-tinted card, "Add to note" appends via existing `bodyValue`
+>   state → saved through the SAME Supabase `notes` update/insert path (no migration,
+>   RLS unchanged, 100% Supabase-wired).
+> - Verified: `tsc --noEmit` clean, `next lint` clean, `npm run build` ✓ (route
+>   `/api/ai/notes` registered), 11/11 tests pass.
+> - **NEXT AI gaps (same Daily Essentials list):** Contacts Directory (smart de-dupe /
+>   "who to call" / birthday + relationship enrichment) and Shared Photos (auto-album /
+>   caption / face-free tagging). Mirror this exact pattern: pure `lib/<feat>/ai.ts` +
+>   `app/api/ai/<feat>/route.ts` + a module button; keep writes on the existing
+>   Supabase path.
 
 > **Session update (2026-06-23l) — WEEKEND PLANNER: 500-row test seed.**
 > Added **`supabase/seed_weekend.sql`** — high-volume demo data for the 4 weekend
