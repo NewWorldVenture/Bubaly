@@ -217,5 +217,64 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         return { ok: true, summary: `Created the goal “${title}”.` };
       },
     },
+
+    // ── Read tools (answer questions precisely from live family data) ──────────
+    {
+      name: 'list_upcoming_events',
+      description: 'List the family’s upcoming calendar events. Use this to answer "what’s on our schedule" questions accurately.',
+      input_schema: {
+        type: 'object',
+        properties: { days: { type: 'number', description: 'Look-ahead window in days (default 7)' } },
+      },
+      execute: async (a) => {
+        const days = Number.isFinite(a.days) ? Math.max(1, Math.min(90, Math.round(a.days as number))) : 7;
+        const now = new Date();
+        const until = new Date(now.getTime() + days * 86400000).toISOString();
+        const { data, error } = await supabase.from('calendar_events')
+          .select('title, starts_at, ends_at, all_day, location, assignee_id')
+          .eq('family_id', ctx.familyId).gte('starts_at', now.toISOString()).lte('starts_at', until)
+          .order('starts_at').limit(50);
+        if (error) return { ok: false, error: error.message };
+        const byId = new Map(ctx.members.map((m) => [m.id, m.display_name]));
+        return { ok: true, events: (data ?? []).map((e) => ({ title: e.title, starts_at: e.starts_at, all_day: e.all_day, location: e.location, who: e.assignee_id ? byId.get(e.assignee_id) ?? null : null })) };
+      },
+    },
+    {
+      name: 'list_open_chores',
+      description: 'List open (not-yet-approved) chores, optionally filtered to one family member.',
+      input_schema: {
+        type: 'object',
+        properties: { assignee: { type: 'string', description: `Family member name (one of: ${memberNames})` } },
+      },
+      execute: async (a) => {
+        const memberId = resolveMember(ctx, a.assignee);
+        let q = supabase.from('chore_assignments')
+          .select('chore_id, member_id, status, due_at')
+          .eq('family_id', ctx.familyId).in('status', ['todo', 'in_progress', 'submitted', 'rejected']).limit(50);
+        if (memberId) q = q.eq('member_id', memberId);
+        const { data: assigns, error } = await q;
+        if (error) return { ok: false, error: error.message };
+        const choreIds = [...new Set((assigns ?? []).map((x) => x.chore_id))];
+        const { data: chores } = choreIds.length
+          ? await supabase.from('chores').select('id, title, points').in('id', choreIds)
+          : { data: [] as { id: string; title: string; points: number }[] };
+        const titleById = new Map((chores ?? []).map((c) => [c.id, c.title]));
+        const nameById = new Map(ctx.members.map((m) => [m.id, m.display_name]));
+        return { ok: true, chores: (assigns ?? []).map((x) => ({ title: titleById.get(x.chore_id) ?? 'Chore', who: nameById.get(x.member_id) ?? null, status: x.status, due_at: x.due_at })) };
+      },
+    },
+    {
+      name: 'get_grocery_list',
+      description: 'Get the items currently on the family grocery list (unchecked items).',
+      input_schema: { type: 'object', properties: {} },
+      execute: async () => {
+        const listId = await ensureGroceryList(supabase, ctx.familyId, ctx.userId);
+        if (!listId) return { ok: true, items: [] };
+        const { data, error } = await supabase.from('grocery_items')
+          .select('name, quantity').eq('list_id', listId).eq('is_checked', false).order('created_at').limit(100);
+        if (error) return { ok: false, error: error.message };
+        return { ok: true, items: (data ?? []).map((i) => ({ name: i.name, quantity: i.quantity })) };
+      },
+    },
   ];
 }

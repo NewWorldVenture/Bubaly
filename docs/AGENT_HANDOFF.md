@@ -3,6 +3,24 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the Meal Voting PR. Keep this updated as you ship.
 
+> **Session update (2026-06-23f, branch `claude/assistant-v2`): AI Assistant v2 —
+> conversation history + read-tools.** Builds on the function-calling assistant.
+> **No migration.**
+> - **Conversation history sidebar** (`components/modules/assistant-module.tsx`):
+>   a "Conversations" card lists `ai_conversations` for the family (newest first),
+>   click to **rehydrate** a chat from `ai_messages` (content + action chips from
+>   `tool_results`), **New chat** button (header + sidebar) starts a fresh UUID,
+>   per-row **delete** (cascades messages). List refreshes after each turn; the
+>   stored `assistant-conv-id` is rehydrated on mount. All reads/writes via the
+>   user-scoped client (RLS).
+> - **Read-tools** added to `lib/assistant/tools.ts`: `list_upcoming_events(days?)`,
+>   `list_open_chores(assignee?)`, `get_grocery_list()` — so the assistant answers
+>   "what's on our schedule / who has chores / what's on the list" from LIVE data
+>   instead of only the static snapshot. (Toolbox is now 7 write + 3 read tools.)
+> - Verified: tsc/lint/build clean; full vitest 599 passing.
+> - **NEXT (assistant):** streaming (SSE) responses; conversation rename;
+>   read-tool for free-time/availability ("when is everyone free Saturday?").
+
 > **Session update (2026-06-23e, branch `claude/ai-assistant-pro`): world-class AI
 > Assistant with real actions (function-calling).** The `/dashboard/assistant`
 > chat can now actually DO things via OpenAI/Anthropic tool use, all RLS-scoped to
