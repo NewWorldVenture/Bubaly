@@ -3,6 +3,32 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the Daily Essentials audit + Notes AI Assist. Keep this updated as you ship.
 
+> **Session update (2026-06-23g, branch `claude/assistant-streaming`): AI Assistant
+> v3 — token streaming, conversation rename, free-time tool.** Builds on v2.
+> **No migration.**
+> - **SSE streaming** end to end. `lib/ai/provider.ts`: new `runToolsStream(input):
+>   AsyncGenerator<StreamEvent>` on the `AIProvider` interface. **OpenAI** truly
+>   streams (`stream:true`, parses SSE, reassembles `tool_calls` argument fragments
+>   by `index`, executes tools mid-loop, streams the final reply). **Anthropic**
+>   reuses `runTools` then emits actions + the text as one delta. New `StreamEvent`
+>   type (`delta` | `action`). Tested in `tests/assistant-stream.test.ts` (fake SSE).
+> - **Route** `app/api/ai/chat/route.ts` now returns **`text/event-stream`**: emits
+>   `action` (chip), `delta` (text), then persists both turns + auto-titles the
+>   conversation and sends a final `done`. Early/setup errors still return JSON 500;
+>   mid-stream errors emit an `error` event. (Was: single JSON response.)
+> - **UI** `components/modules/assistant-module.tsx`: `send()` reads the SSE stream
+>   and fills an assistant bubble live (typing dots until first token, action chips
+>   as tools fire). Added **conversation rename** (pencil → prompt → update
+>   `ai_conversations.title`) beside delete in the Conversations sidebar.
+> - **Free-time tool** `lib/assistant/tools.ts` `find_free_time({date, assignee?})`:
+>   returns that day's busy blocks in the family tz (gen UTC window + tz day-filter)
+>   so the model can answer "when are we free Saturday?". `AssistantCtx` gained `tz`
+>   (passed from the route). Toolbox is now **7 write + 4 read tools**.
+> - Verified: tsc/lint/build clean; full vitest **641 passing**.
+> - **NEXT (assistant):** persist/replay the streamed `whitespace-pre-wrap` markdown
+>   as rich text; voice input (mic button is decorative); proactive suggestions
+>   from the live snapshot.
+
 > **Session update (2026-06-23m) — DAILY ESSENTIALS AUDIT + NOTES AI ASSIST.**
 > Task: audit the "Tier 1: Daily Essentials (Must Have)" feature list against the
 > product, note which are world-class/AI-leading, and build out any gap to be
