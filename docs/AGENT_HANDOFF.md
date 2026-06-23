@@ -3,6 +3,38 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the Meal Voting PR. Keep this updated as you ship.
 
+> **Session update (2026-06-23e, branch `claude/ai-assistant-pro`): world-class AI
+> Assistant with real actions (function-calling).** The `/dashboard/assistant`
+> chat can now actually DO things via OpenAI/Anthropic tool use, all RLS-scoped to
+> the family. **No migration** (reuses `ai_conversations` + `ai_messages`, which
+> already had `tool_calls`/`tool_results` jsonb columns).
+> - **Provider tool loop** `lib/ai/provider.ts`: added `runTools(input)` to the
+>   `AIProvider` interface + native implementations for **OpenAI** (function-calling
+>   loop: assistant `tool_calls` → execute → `role:'tool'` results, repeat) and
+>   **Anthropic** (`tool_use`/`tool_result`). New types `ToolSpec`/`ExecutedAction`/
+>   `ToolRunResult`. Returns the final reply + the list of actions taken. Tested in
+>   `tests/assistant-tool-loop.test.ts` (mocked fetch, 3 tests).
+> - **Toolbox** `lib/assistant/tools.ts` (`buildAssistantTools(supabase, ctx)`):
+>   7 Supabase-wired tools — `create_calendar_event`, `add_chore` (+assignment),
+>   `add_grocery_item`, `add_todo`, `add_reminder`, `add_note`, `add_goal`. Member
+>   names resolve to ids; default grocery/todo lists are get-or-created. Tools run on
+>   the **user-scoped client** so every write is RLS-enforced.
+> - **Route** `app/api/ai/chat/route.ts`: rich, timezone-aware family snapshot +
+>   strong system prompt → `provider.runTools` → persists both turns (with
+>   `tool_calls`/`tool_results`), auto-titles + upserts the conversation. **Fixed two
+>   real bugs:** the conversation id was a non-UUID with no parent row (FK failure →
+>   messages never saved) — the route now upserts `ai_conversations` first and the
+>   client uses `crypto.randomUUID()`; and the UI read `data.reply` while the API
+>   returns `content` (every reply showed an error). UI now renders **action chips**
+>   showing what the assistant did.
+> - **Engine = ChatGPT:** uses `resolveProvider()` (admin-configurable at
+>   `/admin/ai`). **To use ChatGPT:** set engine = OpenAI + an `sk-…` key there (env
+>   fallback `AI_PROVIDER=openai`, `OPENAI_API_KEY`, `AI_MODEL`). The loop works
+>   identically on Anthropic.
+> - **NEXT ideas:** streaming responses (currently request/response with a typing
+>   indicator); read-tools ("when is X free?"); a conversations history sidebar
+>   (`ai_conversations` rows exist, not yet listed).
+
 > **Session update (2026-06-23d, branch `claude/wiring-audit`): platform-wide
 > Supabase-wiring audit.** Swept every dashboard page + module + admin surface for
 > unwired UI (empty handlers, mock/placeholder data, TODOs, dead links, frozen

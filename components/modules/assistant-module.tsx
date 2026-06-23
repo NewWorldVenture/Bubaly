@@ -28,13 +28,21 @@ const PROMPTS = [
 
 const TRY_PROMPTS = PROMPTS;
 
-type Message = { role: 'user' | 'assistant'; content: string; id: string };
+type ChatAction = { name: string; ok: boolean; summary: string };
+type Message = { role: 'user' | 'assistant'; content: string; id: string; actions?: ChatAction[] };
 type GlanceItem = { icon: React.ComponentType<{ className?: string }>; value: string; label: string };
 type UpcomingEvent = { id: string; title: string; starts_at: string; all_day: boolean };
 type ActivityItem = { icon: React.ComponentType<{ className?: string }>; text: string; time: string; color: string };
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+function newConversationId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+  // RFC4122-ish fallback for older browsers.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0; const v = c === 'x' ? r : (r & 0x3) | 0x8; return v.toString(16);
+  });
 }
 
 export function AssistantModule() {
@@ -47,12 +55,12 @@ export function AssistantModule() {
   const [convId] = useState(() => {
     if (typeof window !== 'undefined') {
       const stored = sessionStorage.getItem('assistant-conv-id');
-      if (stored) return stored;
-      const id = generateId();
+      if (stored && stored.includes('-')) return stored; // valid UUID
+      const id = newConversationId();
       sessionStorage.setItem('assistant-conv-id', id);
       return id;
     }
-    return generateId();
+    return newConversationId();
   });
 
   // Sidebar data
@@ -135,8 +143,12 @@ export function AssistantModule() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conversationId: convId, message: msg }),
       });
-      const data = await res.json() as { reply?: string; error?: string };
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply ?? 'Sorry, I had trouble with that.', id: generateId() }]);
+      const data = await res.json() as { content?: string; actions?: ChatAction[]; error?: string };
+      if (!res.ok || data.error) {
+        setMessages((prev) => [...prev, { role: 'assistant', content: data.error ?? 'Sorry, I had trouble with that.', id: generateId() }]);
+      } else {
+        setMessages((prev) => [...prev, { role: 'assistant', content: data.content ?? 'Done.', id: generateId(), actions: data.actions ?? [] }]);
+      }
     } catch {
       setMessages((prev) => [...prev, { role: 'assistant', content: 'Something went wrong. Please try again.', id: generateId() }]);
     } finally {
@@ -187,8 +199,19 @@ export function AssistantModule() {
             msg.role === 'assistant' ? (
               <div key={msg.id} className="flex gap-4">
                 <div className="mt-1 h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-blue-600 shadow-glow" />
-                <div className="max-w-[480px] rounded-2xl border border-border bg-surface/40 p-5 text-sm leading-6">
-                  {msg.content}
+                <div className="max-w-[480px] space-y-2">
+                  <div className="rounded-2xl border border-border bg-surface/40 p-5 text-sm leading-6 whitespace-pre-wrap">
+                    {msg.content}
+                  </div>
+                  {msg.actions && msg.actions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {msg.actions.map((a, i) => (
+                        <span key={i} className={cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs', a.ok ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300')}>
+                          <CheckCircle2 className="h-3 w-3" /> {a.summary}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
