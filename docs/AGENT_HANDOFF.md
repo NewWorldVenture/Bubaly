@@ -1,7 +1,162 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Meal Voting PR. Keep this updated as you ship.
+Last updated after the Weekend Planner build. Keep this updated as you ship.
+
+> **Session update (2026-06-23k) — WEEKEND PLANNER: multi-source aggregation.**
+> Expanded discovery from one provider to a **deduping aggregator** over several
+> reliable sources, merged by day. On branch `claude/funny-darwin-gkmptm` (PR #116).
+> - **Providers (keyed, nationwide):** Ticketmaster (`TICKETMASTER_API_KEY`) **and now
+>   SeatGeek** (`SEATGEEK_CLIENT_ID`). Each runs only if its env key is set.
+> - **Family-curated LOCAL feeds:** **migration `0072_weekend_feeds.sql`** —
+>   `weekend_feeds` (label, url, `weekend_feed_kind` ics|rss, is_active, last_fetched_at,
+>   last_status, last_count; UNIQUE(family_id,url)); RLS + trigger. **VALIDATED local PG16.
+>   ⚠️ NOT APPLIED TO PROD.** Families add any city/library/parks/school **.ics or RSS**
+>   calendar; the crawler fetches + parses + windows + merges them.
+> - **`lib/weekend/sources.ts`** (pure; 10 tests in `tests/weekend.test.ts`):
+>   `normalizeSeatGeek[Response]`, robust `parseICS` (line unfolding, `;TZID=`/`;VALUE=`
+>   params, `\,`/`\n` escapes, all-day dates, UID), `parseRSS` (item/entry, CDATA, pubDate/
+>   published), `parseICSDate`, `withinWindow`, `dedupeEvents` (by source+id, then
+>   title+day). To add a provider: write a normalizer here + fan it into the route.
+> - **`/api/weekend/discover`** now fans out to all configured sources in parallel
+>   (per-fetch AbortController timeout ~9s), records each feed's status/count, dedupes,
+>   upserts. `needsConfig:true` 503 only when ZERO sources connected (no keys + no feeds).
+>   Event cards show a **source badge**; UI has a collapsible **"Local sources"** manager
+>   (add/toggle/remove feeds + live status). `weekend_events.source` holds 'ticketmaster' |
+>   'seatgeek' | 'feed:<label>'.
+> - **NEXT:** geocode feed-event locations for distance; per-source toggle in search;
+>   AI "plan our weekend" picker; ICS/calendar export of the shortlist.
+
+> **Session update (2026-06-23j) — WEEKEND PLANNER (local event discovery).**
+> On branch `claude/funny-darwin-gkmptm` (in PR #116 with the items below). Lets a
+> family type a **ZIP code** + pick a **mileage radius dropdown** (5/10/25/50/75/100 mi)
+> + a window (3/6/10/14 days, default 6) and pull **real local events** happening nearby.
+> - **Migration `0071_weekend_planner.sql`** — `weekend_events` (cached discoveries:
+>   source/external_id, title, category, venue, address/city/region, lat/lng, starts_at,
+>   url, image_url, price_min/max_cents, distance_miles, is_family_friendly, search_zip/
+>   radius, raw jsonb; UNIQUE(family_id,source,external_id)), `weekend_plans` (shortlist
+>   w/ `weekend_plan_status` enum interested/going/maybe/passed, member_ids[], notes;
+>   UNIQUE(family_id,event_id)), `weekend_searches` (history → seeds default ZIP/radius).
+>   Family-scoped RLS + updated_at triggers via DO-loop. **VALIDATED local PG16. ⚠️ NOT
+>   APPLIED TO PROD** (apply before merge or `/dashboard/weekend` 500s).
+> - **Provider:** **Ticketmaster Discovery API** — takes `postalCode`+`radius`+`unit=miles`
+>   +date window directly (no geocoding). Reads **`TICKETMASTER_API_KEY`** from env; when
+>   missing, `/api/weekend/discover` returns `{needsConfig:true}` 503 (NEVER fake data).
+>   **ACTION: add `TICKETMASTER_API_KEY` to env** to light it up. To add more providers
+>   (SeatGeek/Eventbrite), write another normalizer in `lib/weekend/normalize.ts` and
+>   merge results in the route.
+> - **lib/weekend** (5 tests, `tests/weekend.test.ts`): `meta.ts` (RADIUS_OPTIONS,
+>   categoryMeta, priceRange, isValidZip, PLAN_STATUSES), `normalize.ts`
+>   (`discoveryWindow`, `normalizeTicketmaster[Response]` → cents/16:9 image/km→mi/family).
+> - **`/api/weekend/discover`** (auth + rate-limited): validates ZIP, calls Ticketmaster,
+>   upserts `weekend_events`, logs `weekend_searches`. **`/dashboard/weekend`** =
+>   `components/modules/weekend-module.tsx`: ZIP+radius+window controls, events grouped by
+>   day (image/category/venue/distance/price/tickets link), save-to-shortlist w/ status,
+>   remembers last search. Nav entry "Weekend Planner" (icon CalendarRange, minLevel 1).
+> - **NEXT (weekend):** add `TICKETMASTER_API_KEY`; more providers; "add to family
+>   calendar"/.ics from a saved plan; map view; AI "plan our weekend" that picks a
+>   balanced set; distance from a saved home address instead of typing ZIP each time.
+
+> **Session update (2026-06-23i) — VACATION PLANNER (world-class) + full DB seed + Immunizations.**
+> Branch `claude/funny-darwin-gkmptm` (4 commits ahead of `main`): Immunizations,
+> seed_full.sql, Vacation foundation, Vacation UI. **No PR opened yet.**
+>
+> **1) Vacation Planner — a complete family Vacation Planning OS.**
+> - **Migration `0070_vacations.sql`** — **27 family-scoped tables** (vacations,
+>   vacation_members, vacation_destinations, vacation_itinerary_days/_items,
+>   vacation_flights, vacation_transportation, vacation_lodging, vacation_activities,
+>   vacation_activity_tickets, vacation_reservations, vacation_budgets, vacation_expenses,
+>   vacation_packing_lists/_items, vacation_documents, vacation_emergency_contacts,
+>   vacation_medical_information, vacation_checklists, vacation_weather_snapshots,
+>   vacation_ai_recommendations, vacation_ai_conversations/_messages, vacation_travel_scores,
+>   vacation_activity_logs, vacation_notifications, vacation_audit_logs). Enums, FKs,
+>   indexes, and **uniform RLS + updated_at triggers via a DO-loop**. **VALIDATED on local
+>   PG16 (tables/RLS/triggers/idempotency/inserts all pass). ⚠️ NOT YET APPLIED TO PROD**
+>   — the auto-mode classifier blocks direct Management-API prod deploys; apply via Supabase
+>   dashboard or get explicit approval **before merging** or the routes 500 in prod.
+> - **Types**: 11 enum unions + 27 `T<>` entries appended to `lib/database.types.ts`.
+> - **Pure engines** (`lib/vacations/`, 12 vitest tests in `tests/vacations.test.ts`):
+>   `readiness.ts` (0–100 Vacation Readiness Score + factors + recommendations),
+>   `conflicts.ts` (overlap/overbooked/no-meals/late-night/nap detection),
+>   `budget.ts` (category rollups + overruns), `weather.ts` (WMO decode + family advice),
+>   `packing.ts` (smart AI-free packing generator), `dates.ts` (countdown/range/nights),
+>   `ics.ts` (.ics calendar export), `meta.ts` (enum display metadata), plus server-only
+>   `weather-fetch.ts` (Open-Meteo geocode + forecast).
+> - **16 routes** under `app/(app)/dashboard/vacations/`: list/command-center, `/new`,
+>   `/calendar`, `/reports`, and tabbed trip workspace `[id]/{overview,itinerary,travel,
+>   lodging,activities,budget,packing,documents,family,emergency,weather,ai-assistant}`
+>   (server `[id]/layout.tsx` loads trip + `TripTabs`). Pages gate via
+>   `requireFeature('/dashboard/vacations')` (uncatalogued → ungated by default).
+> - **Components** (`components/vacations/`): `shared.tsx` exports the **schema-driven
+>   `TripCrudSection`** (powers travel/lodging/activities/reservations/documents/family/
+>   emergency/medical from a FieldDef[] — reuse for new CRUD sections) + `StatPill`,
+>   `Progress`, `SectionHeader`. Bespoke: `vacations-list`, `trip-overview` (persists
+>   readiness to `vacation_travel_scores` so the list shows scores), `trip-itinerary`,
+>   `trip-budget`, `trip-packing`, `trip-weather`, `trip-concierge`, `vacations-calendar`,
+>   `vacations-reports`, `trip-tabs`. `ReadinessRing` is exported from `vacations-list`.
+> - **API** (`app/api/vacations/`): `weather/route.ts` (real Open-Meteo → upserts
+>   `vacation_weather_snapshots`), `ai/route.ts` (`action`: `concierge` chat stored in
+>   Supabase | `build` auto-generates itinerary/activities/budget/packing via
+>   `resolveProvider()` | `recommendations` rule-based scan). All RLS-scoped + rateLimit.
+> - **Calendar integration** = standards-based **.ics export** (Google/Apple/Outlook all
+>   import it) on `/calendar`. Nav entry "Vacation Planner" (icon Sun, minLevel 1) added
+>   in `lib/constants/navigation.ts` after Trip Planner.
+> - Verified: **tsc clean, eslint clean, production build passes, 12 tests green.**
+> - **NEXT (vacations):** apply 0070 to prod; real drag-and-drop itinerary reordering
+>   (currently time/sort ordering); Photo→Itinerary & PDF→Trip AI import (extend
+>   `lib/ai` vision); push trip dates into family `calendar_events` + Google sync;
+>   Supabase Storage for document/ticket files; offline/PWA caching of itinerary;
+>   notifications via `vacation_notifications` + cron. NOTE: a lighter `trips`/`trip_items`
+>   system already exists (`/dashboard/trips`) — vacations is the richer OS; consider
+>   merging or cross-linking later.
+>
+> **2) Full DB seed — `supabase/seed_full.sql`** (curated `supabase/seed.sql` untouched).
+> Generated, schema-introspecting, idempotent PL/pgSQL seed: parents seeded first with
+> keys captured into arrays so child FKs are valid; respects enums, CHECK value-lists,
+> numeric ranges, inequality (`<>`) checks, and unique constraints (deterministic
+> g-indexing). Validated on local PG16: **216 tables, 105,523 rows, 0 errors**. Five
+> tables stay <500 **by design** (roles/social_providers/sync_providers = enum-keyed
+> lookups; loyalty_settings/reputation_settings = singletons). Dev/staging only
+> (`psql ... -f supabase/seed_full.sql`); it TRUNCATEs all public tables first. Generator
+> scripts live in the session scratchpad (`gen.mjs`/`schema-gen.mjs`), not committed.
+>
+> **3) Immunizations** — `migration 0069_immunizations.sql` (structured per-member vaccine
+> ledger replacing the `medical_profiles.immunizations` free-text blob), `lib/health/
+> immunizations.ts` (tests pass), `components/modules/immunizations-module.tsx`, mounted on
+> `/dashboard/medical`. **⚠️ 0069 NOT YET APPLIED TO PROD** (classifier blocked) — apply
+> before merging or the medical page 500s. `0068_health_visits` IS live.
+>
+> **Local Postgres validation harness (reusable):** PG16 binaries at
+> `/usr/lib/postgresql/16/bin`; run as the `postgres` OS user (`pg_ctl` refuses root).
+> Build a faithful local schema from live metadata (no clean migration replay — prod
+> enums diverged from migration history): dump cols/FKs/enums/checks/uniques via the
+> Management API (`/tmp/sbq-full.mjs`, REF `ltcxlbipiihclxwioyqj`) then `schema-gen.mjs`.
+
+> **Session update (2026-06-23g) — HEALTH: structured Visit history (medical/dental/vaccination).**
+> Existing health infra (keep, don't dup): `medications`+`medication_schedules`+
+> `medication_doses`, `health_providers`, `insurance_policies`, `medical_profiles`
+> (immunizations/allergies/conditions are FREE-TEXT blobs here), `appointments`,
+> `health_metrics`; pages `/dashboard/{medical,dental,medications,health,care}`;
+> modules `medical-records-module`, `medications-module`, `health-module`. Dental page
+> was just the medical module with `kind="dental"`.
+> - **Shipped:** structured **Health Visits** log. **Migration `0068_health_visits.sql`**
+>   (`health_visits`: member, provider, `health_visit_kind` enum [medical/dental/vision/
+>   vaccination/specialist/mental_health/therapy/urgent_care/other], title, provider_name,
+>   location, visit_date, reason, outcome, **follow_up_date**, cost_cents; family-scoped
+>   RLS). **APPLIED TO PROD + verified.** Types added to database.types.
+> - `lib/health/visits.ts` (pure, 4 tests): `VISIT_KINDS`, `visitKindMeta`,
+>   `daysUntilFollowUp`, `upcomingFollowUps`, `sortByVisitDate`.
+> - `components/modules/health-visits-module.tsx` (client CRUD): member filter,
+>   **upcoming/overdue follow-up banner**, add/edit/delete; props `defaultKind`,
+>   `lockKind`, `title`. Mounted on `/dashboard/medical` ("Visit history") and
+>   `/dashboard/dental` (locked to dental, "Dental visits & cleanings").
+> - **NEXT (health, priority):** (1) **Structured immunizations** table (vaccine/dose/
+>   date/next-due/member) to replace the free-text blob. (2) **Medication adherence UI**
+>   over `medication_doses` (log/skip dose + adherence % + reminder cron). (3) Surface
+>   follow-ups/next-cleaning in the notifications engine + Kitchen Display. (4) Attach
+>   documents (labs/X-rays) to a visit (Supabase Storage private bucket). (5) "Health
+>   Visits" nav entry (`lib/constants/navigation.ts`; gate via admin Tier&Features →
+>   `requireFeature`).
 
 > **Session update (2026-06-23f, branch `claude/assistant-v2`): AI Assistant v2 —
 > conversation history + read-tools.** Builds on the function-calling assistant.
