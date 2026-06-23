@@ -418,6 +418,26 @@ export interface Database {
         { id?: string; family_id: string; tax_year: number; category?: string; name: string; storage_path?: string | null; amount_cents?: number | null; member_id?: string | null; note?: string | null; created_by?: string | null },
         Partial<{ tax_year: number; category: string; name: string; storage_path: string | null; amount_cents: number | null; member_id: string | null; note: string | null }>
       >;
+      utility_bills: T<
+        { id: string; family_id: string; kind: string; provider: string | null; period_month: string; amount_cents: number; usage: number | null; unit: string | null; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; kind?: string; provider?: string | null; period_month?: string; amount_cents?: number; usage?: number | null; unit?: string | null; note?: string | null; created_by?: string | null },
+        Partial<{ kind: string; provider: string | null; period_month: string; amount_cents: number; usage: number | null; unit: string | null; note: string | null }>
+      >;
+      household_info: T<
+        { id: string; family_id: string; category: string; label: string; value: string | null; note: string | null; is_sensitive: boolean; sort: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; category?: string; label: string; value?: string | null; note?: string | null; is_sensitive?: boolean; sort?: number; created_by?: string | null },
+        Partial<{ category: string; label: string; value: string | null; note: string | null; is_sensitive: boolean; sort: number }>
+      >;
+      home_security_events: T<
+        { id: string; family_id: string; kind: string; severity: string; title: string; detail: string | null; occurred_at: string; resolved: boolean; resolved_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; kind?: string; severity?: string; title: string; detail?: string | null; occurred_at?: string; resolved?: boolean; resolved_at?: string | null; created_by?: string | null },
+        Partial<{ kind: string; severity: string; title: string; detail: string | null; occurred_at: string; resolved: boolean; resolved_at: string | null }>
+      >;
+      smart_devices: T<
+        { id: string; family_id: string; name: string; type: string; room: string | null; brand: string | null; integration: string; status: string; last_state: string | null; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; type?: string; room?: string | null; brand?: string | null; integration?: string; status?: string; last_state?: string | null; note?: string | null; created_by?: string | null },
+        Partial<{ name: string; type: string; room: string | null; brand: string | null; integration: string; status: string; last_state: string | null; note: string | null }>
+      >;
       goals: T<
         { id: string; family_id: string; title: string; description: string | null; target_date: string | null; progress: number; is_complete: boolean; created_by: string | null } & Stamps,
         { id?: string; family_id: string; title: string; description?: string | null; target_date?: string | null; progress?: number; is_complete?: boolean; created_by?: string | null },
