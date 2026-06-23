@@ -3,6 +3,19 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the Weekend Planner build. Keep this updated as you ship.
 
+> **Session update (2026-06-23l) — WEEKEND PLANNER: 500-row test seed.**
+> Added **`supabase/seed_weekend.sql`** — high-volume demo data for the 4 weekend
+> tables (the existing `seed_full.sql`/`seed_large.sql` did NOT cover them). Seeds,
+> for the 5 demo families from `seed.sql`: **weekend_events 600** (120/family),
+> **weekend_plans 500** (100/family, one per event, random member_ids + status),
+> **weekend_searches 500**, **weekend_feeds 500** (ics/rss). Generative
+> (`generate_series` + `(VALUES …) fam(id)`), idempotent (DELETEs the 5 demo
+> families' rows first), pooler-safe (no temp tables / txn) → paste into the
+> Supabase SQL Editor AFTER `seed.sql`. Run order: `seed.sql` → `seed_weekend.sql`.
+> NEXT (per the spec image's "Future Enhancements"): add **Eventbrite** as a source
+> in `lib/weekend/sources.ts` + `/api/weekend/discover` (mirror the SeatGeek
+> normalizer; gate on `EVENTBRITE_API_KEY`) — purely additive to the existing stack.
+
 > **Session update (2026-06-23k) — WEEKEND PLANNER: multi-source aggregation.**
 > Expanded discovery from one provider to a **deduping aggregator** over several
 > reliable sources, merged by day. On branch `claude/funny-darwin-gkmptm` (PR #116).
