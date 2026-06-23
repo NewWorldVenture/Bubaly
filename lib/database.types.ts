@@ -56,6 +56,9 @@ export type VacDocKind = 'passport' | 'id' | 'visa' | 'ticket' | 'boarding_pass'
 export type VacRecoKind = 'missing_reservation' | 'packing' | 'budget_warning' | 'weather_warning' | 'travel_conflict' | 'activity_suggestion' | 'restaurant' | 'document_missing' | 'suggestion';
 export type VacRecoStatus = 'open' | 'accepted' | 'dismissed' | 'done';
 
+// Weekend Planner enums (migration 0071)
+export type WeekendPlanStatus = 'interested' | 'going' | 'maybe' | 'passed';
+
 // Sync platform enums (migration 0018)
 export type SyncProviderEnum = 'google' | 'microsoft' | 'apple' | 'amazon' | 'internal';
 export type SyncDirection = 'import' | 'export' | 'two_way' | 'manual' | 'disabled';
@@ -1395,6 +1398,23 @@ export interface Database {
         { id: string; family_id: string; vacation_id: string | null; table_name: string; record_id: string | null; action: string; changes: Json; actor_user_id: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; vacation_id?: string | null; table_name: string; record_id?: string | null; action: string; changes?: Json; actor_user_id?: string | null; created_by?: string | null },
         Partial<{ vacation_id: string | null; table_name: string; record_id: string | null; action: string; changes: Json; actor_user_id: string | null }>
+      >;
+
+      // ---- Weekend Planner (migration 0071) ----
+      weekend_events: T<
+        { id: string; family_id: string; source: string; external_id: string | null; title: string; category: string | null; description: string | null; venue_name: string | null; address: string | null; city: string | null; region: string | null; postal_code: string | null; latitude: number | null; longitude: number | null; starts_at: string | null; ends_at: string | null; url: string | null; image_url: string | null; price_min_cents: number | null; price_max_cents: number | null; currency: string; distance_miles: number | null; is_family_friendly: boolean; search_zip: string | null; search_radius: number | null; raw: Json; discovered_at: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; source?: string; external_id?: string | null; title: string; category?: string | null; description?: string | null; venue_name?: string | null; address?: string | null; city?: string | null; region?: string | null; postal_code?: string | null; latitude?: number | null; longitude?: number | null; starts_at?: string | null; ends_at?: string | null; url?: string | null; image_url?: string | null; price_min_cents?: number | null; price_max_cents?: number | null; currency?: string; distance_miles?: number | null; is_family_friendly?: boolean; search_zip?: string | null; search_radius?: number | null; raw?: Json; discovered_at?: string; created_by?: string | null },
+        Partial<{ title: string; category: string | null; description: string | null; venue_name: string | null; address: string | null; city: string | null; region: string | null; postal_code: string | null; latitude: number | null; longitude: number | null; starts_at: string | null; ends_at: string | null; url: string | null; image_url: string | null; price_min_cents: number | null; price_max_cents: number | null; distance_miles: number | null; is_family_friendly: boolean; raw: Json }>
+      >;
+      weekend_plans: T<
+        { id: string; family_id: string; event_id: string; status: WeekendPlanStatus; member_ids: string[]; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; event_id: string; status?: WeekendPlanStatus; member_ids?: string[]; notes?: string | null; created_by?: string | null },
+        Partial<{ status: WeekendPlanStatus; member_ids: string[]; notes: string | null }>
+      >;
+      weekend_searches: T<
+        { id: string; family_id: string; zip: string; radius_miles: number; days: number; result_count: number; last_run_at: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; zip: string; radius_miles?: number; days?: number; result_count?: number; last_run_at?: string; created_by?: string | null },
+        Partial<{ zip: string; radius_miles: number; days: number; result_count: number; last_run_at: string }>
       >;
     };
     Views: { [_ in never]: never };
