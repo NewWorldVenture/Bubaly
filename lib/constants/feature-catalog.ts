@@ -66,6 +66,8 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('renewals', 'Renewals', 'Family & Home', 'basic', '/dashboard/renewals'),
   F('scan-center', 'Scan Center', 'Family & Home', 'basic', '/dashboard/scan'),
   F('trips', 'Trips', 'Family & Home', 'basic', '/dashboard/trips'),
+  F('group-voting', 'Group Voting', 'Family & Home', 'basic', '/dashboard/voting'),
+  F('trip-memories', 'Trip Memories', 'Family & Home', 'basic', '/dashboard/trip-memories'),
   F('medications', 'Medications', 'Family & Home', 'basic', '/dashboard/medications'),
   F('rides', 'Rides', 'Family & Home', 'basic', '/dashboard/rides'),
   F('care-plans', 'Care Plans', 'Family & Home', 'basic', '/dashboard/care'),

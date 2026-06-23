@@ -90,6 +90,8 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/trips', label: 'Trip Planner', icon: Plane, minLevel: 1 },
       { href: '/dashboard/vacations', label: 'Vacation Planner', icon: Sun, minLevel: 1 },
       { href: '/dashboard/weekend', label: 'Weekend Planner', icon: CalendarRange, minLevel: 1 },
+      { href: '/dashboard/voting', label: 'Group Voting', icon: ListChecks, minLevel: 1 },
+      { href: '/dashboard/trip-memories', label: 'Trip Memories', icon: BookHeart, minLevel: 1 },
       { href: '/dashboard/sports', label: 'Sports', icon: Trophy, minLevel: 1 },
       { href: '/dashboard/rides', label: 'Rides & Carpool', icon: Car, minLevel: 1 },
       { href: '/display', label: 'Kitchen Display', icon: Monitor, minLevel: 1 },
