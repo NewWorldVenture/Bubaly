@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Gauge, Plus, Trash2, TrendingUp, TrendingDown } from 'lucide-react';
+import { Gauge, Plus, Trash2, TrendingUp, TrendingDown, Sparkles, Loader2, Lightbulb } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -17,6 +17,19 @@ import type { Tables } from '@/lib/database.types';
 type Bill = Tables<'utility_bills'>;
 const blank = () => ({ kind: 'electric', provider: '', period_month: new Date().toISOString().slice(0, 7) + '-01', amount: '', usage: '', unit: '', note: '' });
 
+type SavingsFinding = { kind: string; severity: 'high' | 'medium' | 'info'; title: string; detail: string };
+type SavingsResult = {
+  findings: SavingsFinding[];
+  recommendations: string | null;
+  aiUsed: boolean;
+  summary: { monthlyTotalCents: number; annualTotalCents: number; topCostKind: string | null };
+};
+const SEVERITY_CLS: Record<SavingsFinding['severity'], string> = {
+  high: 'border-danger/40 bg-danger/10',
+  medium: 'border-amber-500/40 bg-amber-500/10',
+  info: 'border-border bg-surface/40',
+};
+
 export function UtilitiesModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -27,6 +40,8 @@ export function UtilitiesModule() {
   });
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
+  const [savings, setSavings] = useState<SavingsResult | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const all = useMemo(() => bills ?? [], [bills]);
   const total = useMemo(() => monthlyTotalCents(all as BillLike[]), [all]);
   const latest = useMemo(() => latestByKind(all), [all]);
@@ -49,6 +64,19 @@ export function UtilitiesModule() {
     const { error } = await createClient().from('utility_bills').delete().eq('id', id);
     if (error) toastError(error.message); else success('Deleted');
   }
+  async function analyze() {
+    setAnalyzing(true);
+    try {
+      const res = await fetch('/api/ai/home/utility-savings', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { toastError(data.error ?? 'Could not analyse utilities'); return; }
+      setSavings(data as SavingsResult);
+    } catch {
+      toastError('Could not analyse utilities');
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   if (loading) return <LoadingBlock />;
 
@@ -56,13 +84,50 @@ export function UtilitiesModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><Gauge className="h-4 w-4 text-brand" /> Utility Tracking</h3>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add bill</Button>
+        <div className="flex items-center gap-2">
+          {kinds.length > 0 && (
+            <Button variant="secondary" onClick={analyze} disabled={analyzing}>
+              {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} AI Savings
+            </Button>
+          )}
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add bill</Button>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
         <p className="text-xs text-muted">Current monthly run-rate (latest bill per utility)</p>
         <p className="text-2xl font-bold">{usd(total)}<span className="text-sm font-normal text-muted">/mo</span></p>
       </div>
+
+      {savings && (
+        <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="flex items-center gap-2 text-sm font-semibold"><Lightbulb className="h-4 w-4 text-brand" /> Savings analysis</h4>
+            <span className="text-xs text-muted">~{usd(savings.summary.annualTotalCents)}/yr {savings.aiUsed ? '· AI' : '· data-based'}</span>
+          </div>
+          {savings.findings.length === 0 && !savings.recommendations ? (
+            <p className="text-sm text-muted">Your utilities look steady — no spikes or sharp increases to flag right now.</p>
+          ) : (
+            <>
+              {savings.findings.length > 0 && (
+                <div className="space-y-2">
+                  {savings.findings.map((f, i) => (
+                    <div key={i} className={`rounded-xl border p-3 ${SEVERITY_CLS[f.severity]}`}>
+                      <p className="text-sm font-medium">{f.title}</p>
+                      <p className="text-xs text-muted mt-0.5">{f.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {savings.recommendations && (
+                <div className="rounded-xl border border-border bg-surface/40 p-3">
+                  <p className="whitespace-pre-wrap text-sm text-fg/90">{savings.recommendations}</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {kinds.length === 0 ? (
         <EmptyState icon={Gauge} title="No utility bills yet" description="Log bills to monitor costs and spot increases over time." />

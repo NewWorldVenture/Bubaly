@@ -1,7 +1,57 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the "Absolute Goal" 10-category audit + AI Concierge build. Keep this updated as you ship.
+Last updated after the Tier-9 Home Management AI audit + AI Utility Savings build. Keep this updated as you ship.
+
+> **Session update (2026-06-23s, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> TIER-9 HOME MANAGEMENT "IS IT AI-LEADING?" RE-AUDIT + AI UTILITY SAVINGS.**
+> Task: re-audit the Tier-9 grid against the bar of *world-class AND AI-leading*
+> (not just "present"). All 10 features exist (6 from earlier, 4 from #125):
+> | Feature | Where | AI-leading? |
+> |---|---|---|
+> | Home Inventory | `home_assets` + `/dashboard/home` | ✅ (feeds AI forecast) |
+> | Warranty Tracking | `home_warranties` + asset `warranty_until` | ✅ |
+> | Appliance Records | `home_assets` (brand/model/age) | ✅ (feeds diagnose) |
+> | Maintenance Schedule | `maintenance_tasks` + `DEFAULT_CADENCES` | ✅ **AI forecast** (`/api/ai/home/forecast`) |
+> | Contractor Directory | `home_contractors` + `/dashboard/home/pros` | ✅ **AI find-pro** (`/api/ai/home/find-pro`) |
+> | Service History | `home_service_records` | ✅ |
+> | Utility Tracking | `utility_bills` + `lib/home/utilities.ts` | ❌→✅ **built this session** |
+> | Smart Home | `smart_devices` (honest registry) | registry only (NEXT) |
+> | Security Alerts | `home_security_events` | registry only (NEXT) |
+> | Household Binder | `household_info` (masking) | registry only (NEXT) |
+> Repair diagnosis (`/api/ai/home/diagnose`) also already exists. So the home
+> domain was already strongly AI-leading on maintenance; the clear gap was
+> **Utility Tracking had no AI** (its own #125 note listed "AI utility savings"
+> as NEXT).
+>
+> **BUILT — AI Utility Savings (world-class, AI-leading, NO migration):**
+> - **`lib/home/utilities.ts`** (pure, +6 tests in `tests/home-management.test.ts`,
+>   17 total there): `annualTotalCents`, `trailingAvgCents` (avg of all-but-latest,
+>   needs ≥3 readings), `spikePct` (latest vs trailing avg, only if above),
+>   `summarizeUtilities` (per-kind latest/delta/spike/baseline, topCostKind,
+>   biggestMover), and **`deterministicSavingsFindings`** — real spikes (≥15% vs
+>   typical → high at ≥40%), sharp MoM jumps (≥25%), and the largest line item.
+>   Every finding restates a figure already in the data; **never fabricates**.
+> - **`app/api/ai/home/utility-savings/route.ts`** (nodejs, force-dynamic):
+>   grounds **server-side** in the family's own `utility_bills` (≤400, oldest→
+>   newest), 400 if none. ALWAYS returns deterministic `findings`; when
+>   `isAIConfigured()`, layers a prioritized savings narrative (TOP OPPORTUNITIES
+>   / QUICK WINS / WATCH) told to reuse the exact figures and invent nothing.
+>   Degrades gracefully (AI error → findings only). Logs to `home_ai_logs`
+>   (`kind:'utility_savings'`, status succeeded|fallback). Returns
+>   `{findings, recommendations, aiUsed, summary}`.
+> - **`components/modules/utilities-module.tsx`**: "AI Savings" button (Sparkles)
+>   beside "Add bill"; renders a savings card — severity-coloured findings (high/
+>   medium/info) + the AI narrative + annual run-rate, "data-based" vs "AI" badge.
+> - **Verification:** `tsc` clean · `next lint` clean · `next build` **Compiled
+>   successfully** (`/api/ai/home/utility-savings` registered) · `vitest` **748
+>   passing** (+6). NO migration (reuses `utility_bills` + `home_ai_logs`).
+> - **NEXT (home AI, to finish "AI-leading" across all 10):** (1) **Smart Home** —
+>   AI scene/automation suggestions from `smart_devices` + an energy-from-devices
+>   estimate; (2) **Security Alerts** — AI triage/severity + "what to do now" on
+>   `home_security_events`; (3) **Household Binder** — AI "what's missing from your
+>   binder?" completeness check + emergency-sheet generator. Mirror this pattern
+>   (pure `lib/home/*` + `/api/ai/home/*` route + module button). Next migration: **0082**.
 
 > **Session update (2026-06-23r, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > "ABSOLUTE GOAL" 10-CATEGORY AUDIT + AI CONCIERGE (cross-domain digest).**
