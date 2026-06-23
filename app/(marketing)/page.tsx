@@ -40,7 +40,7 @@ export default async function HomePage() {
               <GradientText>In one place.</GradientText>
             </h1>
 
-            <p className="mx-auto mt-5 max-w-[520px] text-[15px] leading-6 text-white/70 sm:text-base sm:leading-7 lg:mx-0">
+            <p className="text-canvas-muted mx-auto mt-5 max-w-[520px] text-[15px] leading-6 sm:text-base sm:leading-7 lg:mx-0">
               Bubaly is your AI-powered Operating System for family life. Stay organized, connected, and ahead of what matters most.
             </p>
 
@@ -61,8 +61,8 @@ export default async function HomePage() {
       </Container>
 
       {/* ── Tagline divider ── */}
-      <div className="mt-12 border-y border-white/[0.06] bg-white/[0.012] py-5 text-center lg:mt-2">
-        <p className="text-lg font-semibold text-white/80 sm:text-xl">
+      <div className="mt-12 border-y border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-bg)/0.02)] py-5 text-center lg:mt-2">
+        <p className="text-canvas text-lg font-semibold sm:text-xl">
           Your entire family, perfectly organized
         </p>
       </div>
@@ -74,7 +74,7 @@ export default async function HomePage() {
             <div key={title} className="group flex flex-col items-center text-center">
               <IconOrb icon={icon} tone={tone} className="h-14 w-14 transition group-hover:scale-105 [&>svg]:h-6 [&>svg]:w-6" />
               <h3 className="mt-3 text-xs font-semibold">{title}</h3>
-              <p className="mx-auto mt-2 max-w-[160px] text-xs leading-5 text-white/55">{body}</p>
+              <p className="text-canvas-muted mx-auto mt-2 max-w-[160px] text-xs leading-5">{body}</p>
             </div>
           ))}
         </div>

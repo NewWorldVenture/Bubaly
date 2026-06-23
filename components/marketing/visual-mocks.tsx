@@ -52,7 +52,7 @@ export function Pill({
   className?: string;
 }) {
   return (
-    <span className={cn('inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white/90', className)}>
+    <span className={cn('showcase-card inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-widest text-canvas', className)}>
       <Icon className="h-3.5 w-3.5 text-blue-400" />
       {children}
     </span>
@@ -74,7 +74,7 @@ export function WatchDemoLink({ href, children }: { href: string; children: Reac
   return (
     <Link
       href={href}
-      className="inline-flex h-12 items-center justify-center gap-2.5 rounded-lg border border-white/15 bg-white/[0.025] px-7 text-sm font-semibold text-white transition hover:bg-white/[0.07]"
+      className="showcase-card inline-flex h-12 items-center justify-center gap-2.5 rounded-lg px-7 text-sm font-semibold text-canvas transition hover:opacity-80"
     >
       <PlayCircle className="h-5 w-5 fill-white/20" />
       {children}
@@ -86,7 +86,7 @@ export function OutlineLink({ href, children }: { href: string; children: React.
   return (
     <Link
       href={href}
-      className="inline-flex h-14 items-center justify-center gap-2 rounded-xl border border-white/18 bg-white/[0.025] px-7 text-base font-bold text-white transition hover:bg-white/[0.07]"
+      className="showcase-card inline-flex h-14 items-center justify-center gap-2 rounded-xl px-7 text-base font-bold text-canvas transition hover:opacity-80"
     >
       <PlayCircle className="h-5 w-5" />
       {children}
@@ -176,9 +176,9 @@ export function PlatformBadges() {
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-      <span className="w-full text-[10px] text-white/40">Available on</span>
+      <span className="text-canvas-muted w-full text-[10px]">Available on</span>
       {platforms.map(({ icon: Icon, label }) => (
-        <span key={label} className="flex items-center gap-1.5 text-[10px] text-white/55">
+        <span key={label} className="text-canvas-muted flex items-center gap-1.5 text-[10px]">
           <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
           {label}
         </span>
@@ -447,10 +447,10 @@ export function FamilyAiPanel() {
           <h2 className="text-3xl font-bold leading-tight sm:text-4xl">
             Your <GradientText>AI Family</GradientText> Assistant
           </h2>
-          <p className="mt-5 text-base leading-7 text-white/72 sm:text-lg sm:leading-8">
+          <p className="text-canvas-muted mt-5 text-base leading-7 sm:text-lg sm:leading-8">
             Your built-in family assistant helps you plan, organize, and stay ahead of what matters most.
           </p>
-          <ul className="mt-6 space-y-3 text-sm text-white/86">
+          <ul className="text-canvas mt-6 space-y-3 text-sm">
             {['Create schedules instantly', 'Plan meals and generate grocery lists', 'Get reminders and helpful suggestions', 'Answers tailored to your family'].map((item) => (
               <li key={item} className="flex items-center gap-3">
                 <CheckCircle2 className="h-5 w-5 shrink-0 text-violet-400" /> {item}
@@ -495,9 +495,9 @@ export function TestimonialBand({ compact = false }: { compact?: boolean }) {
           {testimonials.map(([name, role, quote]) => (
             <article key={name} className="showcase-card rounded-xl p-5">
               <Rating />
-              <p className="mt-3 text-xs leading-5 text-white/78">&ldquo;{quote}&rdquo;</p>
-              <p className="mt-4 text-xs font-semibold text-white/90">— {name}</p>
-              <p className="mt-0.5 text-[10px] text-white/45">{role}</p>
+              <p className="text-canvas-muted mt-3 text-xs leading-5">&ldquo;{quote}&rdquo;</p>
+              <p className="text-canvas mt-4 text-xs font-semibold">— {name}</p>
+              <p className="text-canvas-muted mt-0.5 text-[10px]">{role}</p>
             </article>
           ))}
         </div>
@@ -682,13 +682,13 @@ export function TrustStrip({ familiesNote = 'A growing community of families' }:
     [Heart, 'Loved by Families', familiesNote],
   ] as const;
   return (
-    <div className="grid gap-6 border-t border-white/8 py-9 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-6 border-t border-[rgb(var(--showcase-border))] py-9 sm:grid-cols-2 lg:grid-cols-4">
       {items.map(([Icon, title, body]) => (
         <div key={title} className="flex items-start gap-4">
           <IconOrb icon={Icon} className="h-12 w-12" />
           <div>
             <h3 className="font-bold">{title}</h3>
-            <p className="mt-1 text-sm leading-6 text-white/65">{body}</p>
+            <p className="text-canvas-muted mt-1 text-sm leading-6">{body}</p>
           </div>
         </div>
       ))}
@@ -716,8 +716,8 @@ export function FeaturePreviewCard({
         <IconOrb icon={Icon} tone={tone} className="h-11 w-11 rounded-xl" />
         <h3 className="text-lg font-bold">{title}</h3>
       </div>
-      <p className="mt-5 min-h-[88px] text-sm leading-6 text-white/75">{description}</p>
-      <div className="mt-5 rounded-xl border border-white/8 bg-white/[0.035] p-4">{children}</div>
+      <p className="text-canvas-muted mt-5 min-h-[88px] text-sm leading-6">{description}</p>
+      <div className="showcase-card mt-5 rounded-xl p-4">{children}</div>
     </article>
   );
 }
@@ -725,11 +725,11 @@ export function FeaturePreviewCard({
 export function MiniCalendar() {
   return (
     <div className="space-y-3 text-xs">
-      <div className="flex items-center justify-between text-white/75">
+      <div className="text-canvas-muted flex items-center justify-between">
         <span>May 2024</span>
         <span>+</span>
       </div>
-      <div className="grid grid-cols-7 gap-1 text-center text-[9px] text-white/40">
+      <div className="text-canvas-muted grid grid-cols-7 gap-1 text-center text-[9px]">
         {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => <span key={d}>{d}</span>)}
         {Array.from({ length: 28 }).map((_, index) => (
           <span key={index} className={cn('rounded-md py-1', [8, 9, 10, 14].includes(index) && 'bg-violet-600/50 text-white')}>
@@ -746,7 +746,7 @@ export function CheckList({ items, color = 'text-emerald-400' }: { items: string
     <div className="space-y-3 text-sm">
       {items.map((item, index) => (
         <div key={item} className="flex items-center gap-3">
-          {index < 2 ? <CheckCircle2 className={cn('h-5 w-5', color)} /> : <Circle className="h-5 w-5 text-white/35" />}
+          {index < 2 ? <CheckCircle2 className={cn('h-5 w-5', color)} /> : <Circle className="text-canvas-muted h-5 w-5" />}
           <span>{item}</span>
         </div>
       ))}
@@ -761,7 +761,7 @@ export function SmallCtaBand() {
         <IconOrb icon={Sparkles} className="hidden h-16 w-16 sm:inline-flex" />
         <div>
           <h2 className="text-2xl font-bold">One app. Every part of your family life.</h2>
-          <p className="mt-2 max-w-2xl text-white/68">
+          <p className="text-canvas-muted mt-2 max-w-2xl">
             From daily routines to life&apos;s big moments, Bubaly brings it all together so you can focus on what really matters.
           </p>
         </div>
