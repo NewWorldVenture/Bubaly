@@ -1,7 +1,36 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Daily Essentials audit + Notes AI Assist. Keep this updated as you ship.
+Last updated after the Tier-7 Travel & Events audit. Keep this updated as you ship.
+
+> **Session update (2026-06-23p, branch `claude/travel-tier7`) — TIER-7 TRAVEL &
+> EVENTS AUDIT + 2 new features.** Reviewed all 10 features. The 28-table
+> **Vacation Planner** (mig 0070, `/dashboard/vacations`) already covers 8:
+> Vacation Planner, Shared Itineraries (`vacation_itinerary_*`), Packing Lists
+> (`vacation_packing_*` + `lib/vacations/packing.ts`), Travel Documents Vault
+> (`vacation_documents`), Expense Tracking (`vacation_budgets/expenses`),
+> Destination Research (`vacation_destinations`), AI Travel Planner
+> (`vacation_ai_*` + trip concierge), Emergency Travel Contacts
+> (`vacation_emergency_contacts` + medical info). **MISSING → built world-class
+> this session (family-scoped RLS, fully wired):**
+> - **Group Voting** (mig `0078`, `family_polls` + `_options` + `_votes`):
+>   single/multi-choice polls for collaborative decisions, optionally linked to a
+>   `vacation_id`. Live tally bars, leader/tie detection, close/reopen, deadlines.
+>   Pure `lib/voting/polls.ts` (tally, winner, selections, closed; 9 tests).
+>   `/dashboard/voting` module (realtime). Nav + catalog `group-voting` (basic).
+> - **Trip Memories** (mig `0079`, `trip_memories`): dated journal entries w/
+>   optional photo (private `documents` bucket, signed-URL thumbnails), location,
+>   member, trip link. Grouped by trip. Pure `lib/vacations/memories.ts`
+>   (`groupByTrip`; 3 tests). `/dashboard/trip-memories` module. Nav + catalog
+>   `trip-memories` (basic).
+> - Types in `lib/database.types.ts`. `tsc`/lint clean, **build OK**, **vitest 653
+>   passing** (+12). **Apply 0078 + 0079 to prod after merge.**
+> - ⚠️ Migration numbers 0078/0079 assume the open kids (#119: 0073/0074) and
+>   finance (#121: 0075–0077) PRs merge first; renumber to after main's max if out
+>   of order. **NEXT:** (1) surface Group Voting + Trip Memories as tabs inside the
+>   vacation detail (`trip-tabs.tsx`) for trip-scoped use; (2) notify members when a
+>   poll opens/closes; (3) AI "trip recap" that drafts a memory from itinerary +
+>   photos. Next migration number: **0080**.
 
 > **Session update (2026-06-23g, branch `claude/assistant-streaming`): AI Assistant
 > v3 — token streaming, conversation rename, free-time tool.** Builds on v2.

@@ -351,6 +351,26 @@ export interface Database {
         { id?: string; family_id: string; title?: string | null; body?: string; is_pinned?: boolean; checklist?: Json | null; created_by?: string | null },
         Partial<{ title: string | null; body: string; is_pinned: boolean; checklist: Json | null }>
       >;
+      family_polls: T<
+        { id: string; family_id: string; vacation_id: string | null; question: string; description: string | null; kind: string; status: string; closes_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; question: string; description?: string | null; kind?: string; status?: string; closes_at?: string | null; created_by?: string | null },
+        Partial<{ vacation_id: string | null; question: string; description: string | null; kind: string; status: string; closes_at: string | null }>
+      >;
+      family_poll_options: T<
+        { id: string; family_id: string; poll_id: string; label: string; sort: number; created_at: string },
+        { id?: string; family_id: string; poll_id: string; label: string; sort?: number },
+        Partial<{ label: string; sort: number }>
+      >;
+      family_poll_votes: T<
+        { id: string; family_id: string; poll_id: string; option_id: string; member_id: string; created_at: string },
+        { id?: string; family_id: string; poll_id: string; option_id: string; member_id: string },
+        Partial<{ option_id: string; member_id: string }>
+      >;
+      trip_memories: T<
+        { id: string; family_id: string; vacation_id: string | null; title: string; memory_date: string; note: string | null; location: string | null; photo_path: string | null; member_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; title: string; memory_date?: string; note?: string | null; location?: string | null; photo_path?: string | null; member_id?: string | null; created_by?: string | null },
+        Partial<{ vacation_id: string | null; title: string; memory_date: string; note: string | null; location: string | null; photo_path: string | null; member_id: string | null }>
+      >;
       goals: T<
         { id: string; family_id: string; title: string; description: string | null; target_date: string | null; progress: number; is_complete: boolean; created_by: string | null } & Stamps,
         { id?: string; family_id: string; title: string; description?: string | null; target_date?: string | null; progress?: number; is_complete?: boolean; created_by?: string | null },
