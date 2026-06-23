@@ -260,6 +260,18 @@ export async function createForm(formData: FormData) {
   revalidatePath('/admin/marketing/forms');
 }
 
+export async function setFormStatus(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const id = str(formData.get('id'));
+  if (!id) return;
+  const activate = str(formData.get('activate')) === '1';
+  await supabase.from('marketing_forms')
+    .update({ status: activate ? 'active' : 'archived' })
+    .eq('id', id);
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: activate ? 'activate' : 'archive', resource: 'marketing_form', resourceId: id });
+  revalidatePath('/admin/marketing/forms');
+}
+
 export async function saveSetting(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const key = str(formData.get('key'));

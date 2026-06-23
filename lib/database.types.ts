@@ -174,6 +174,21 @@ export interface Database {
         { id?: string; family_id: string; meal_id?: string | null; plan_date: string; meal_type?: MealType; created_by?: string | null },
         Partial<{ meal_id: string | null; plan_date: string; meal_type: MealType }>
       >;
+      meal_votes: T<
+        { id: string; family_id: string; created_by: string | null; title: string; meal_date: string | null; meal_type: string | null; status: string; deadline: string | null; allow_maybe: boolean; winner_option_id: string | null } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; title: string; meal_date?: string | null; meal_type?: string | null; status?: string; deadline?: string | null; allow_maybe?: boolean; winner_option_id?: string | null },
+        Partial<{ title: string; meal_date: string | null; meal_type: string | null; status: string; deadline: string | null; allow_maybe: boolean; winner_option_id: string | null }>
+      >;
+      meal_vote_options: T<
+        { id: string; vote_id: string; family_id: string; recipe_id: string | null; label: string; photo_url: string | null; created_at: string },
+        { id?: string; vote_id: string; family_id: string; recipe_id?: string | null; label: string; photo_url?: string | null },
+        Partial<{ label: string; photo_url: string | null; recipe_id: string | null }>
+      >;
+      meal_vote_ballots: T<
+        { id: string; vote_id: string; option_id: string; family_id: string; member_id: string; choice: string } & Stamps,
+        { id?: string; vote_id: string; option_id: string; family_id: string; member_id: string; choice?: string },
+        Partial<{ choice: string }>
+      >;
       grocery_lists: T<
         { id: string; family_id: string; name: string; is_archived: boolean; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name?: string; is_archived?: boolean; created_by?: string | null },
@@ -511,9 +526,9 @@ export interface Database {
         Partial<{ title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; assigned_to_id: string | null; member_id: string | null; updated_at: string }>
       >;
       family_recipes: T<
-        { id: string; family_id: string; name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; is_public: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; ai_generated: boolean; estimated_cost_cents: number | null; created_by: string | null; created_at: string; updated_at: string },
-        { id?: string; family_id: string; name: string; description?: string | null; category?: string; cuisine?: string | null; servings?: number; prep_time_mins?: number | null; cook_time_mins?: number | null; difficulty?: string; ingredients?: Json; instructions?: Json; notes?: string | null; photo_url?: string | null; tags?: string[]; allergy_flags?: string[]; source_url?: string | null; created_by?: string | null },
-        Partial<{ name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; updated_at: string }>
+        { id: string; family_id: string; name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; is_public: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; ai_generated: boolean; estimated_cost_cents: number | null; source_provider: string | null; source_recipe_id: string | null; attribution: string | null; license_notes: string | null; imported_at: string | null; raw_payload: Json | null; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name: string; description?: string | null; category?: string; cuisine?: string | null; servings?: number; prep_time_mins?: number | null; cook_time_mins?: number | null; difficulty?: string; ingredients?: Json; instructions?: Json; notes?: string | null; photo_url?: string | null; tags?: string[]; allergy_flags?: string[]; ai_generated?: boolean; source_url?: string | null; source_provider?: string | null; source_recipe_id?: string | null; attribution?: string | null; license_notes?: string | null; imported_at?: string | null; raw_payload?: Json | null; created_by?: string | null },
+        Partial<{ name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; source_provider: string | null; source_recipe_id: string | null; attribution: string | null; license_notes: string | null; imported_at: string | null; raw_payload: Json | null; updated_at: string }>
       >;
       todo_lists: T<
         { id: string; family_id: string; created_by: string | null; name: string; color: string; icon: string; is_shared: boolean; sort_order: number; archived_at: string | null; created_at: string; updated_at: string },
@@ -730,6 +745,96 @@ export interface Database {
         { email: string; reason: string; campaign_id: string | null; created_at: string },
         { email: string; reason?: string; campaign_id?: string | null },
         Partial<{ reason: string; campaign_id: string | null }>
+      >;
+      crm_contacts: T<
+        { id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null; company: string | null; lead_status: string; lifecycle_stage: string; lead_source: string | null; family_id: string | null; owner_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; first_name?: string | null; last_name?: string | null; email?: string | null; phone?: string | null; company?: string | null; lead_status?: string; lifecycle_stage?: string; lead_source?: string | null; family_id?: string | null; owner_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ first_name: string | null; last_name: string | null; email: string | null; phone: string | null; company: string | null; lead_status: string; lifecycle_stage: string; lead_source: string | null; family_id: string | null; owner_id: string | null; notes: string | null }>
+      >;
+      crm_deals: T<
+        { id: string; contact_id: string | null; name: string; amount_cents: number; currency: string; stage: string; close_date: string | null; owner_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; contact_id?: string | null; name: string; amount_cents?: number; currency?: string; stage?: string; close_date?: string | null; owner_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ contact_id: string | null; name: string; amount_cents: number; currency: string; stage: string; close_date: string | null; owner_id: string | null; notes: string | null }>
+      >;
+      crm_quotes: T<
+        { id: string; contact_id: string | null; deal_id: string | null; title: string; status: string; amount_cents: number; currency: string; valid_until: string | null; notes: string | null; sent_at: string | null; responded_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; contact_id?: string | null; deal_id?: string | null; title: string; status?: string; amount_cents?: number; currency?: string; valid_until?: string | null; notes?: string | null; sent_at?: string | null; responded_at?: string | null; created_by?: string | null },
+        Partial<{ contact_id: string | null; deal_id: string | null; title: string; status: string; amount_cents: number; currency: string; valid_until: string | null; notes: string | null; sent_at: string | null; responded_at: string | null }>
+      >;
+      mkt_visitors: T<
+        { id: string; anonymous_id: string; contact_id: string | null; device_type: string | null; country: string | null; first_seen: string; last_seen: string; session_count: number } & Stamps,
+        { id?: string; anonymous_id: string; contact_id?: string | null; device_type?: string | null; country?: string | null; first_seen?: string; last_seen?: string; session_count?: number },
+        Partial<{ contact_id: string | null; device_type: string | null; country: string | null; last_seen: string; session_count: number }>
+      >;
+      mkt_sessions: T<
+        { id: string; visitor_id: string | null; source: string | null; medium: string | null; campaign: string | null; landing_path: string | null; page_views: number; started_at: string },
+        { id?: string; visitor_id?: string | null; source?: string | null; medium?: string | null; campaign?: string | null; landing_path?: string | null; page_views?: number; started_at?: string },
+        Partial<{ source: string | null; medium: string | null; campaign: string | null; landing_path: string | null; page_views: number }>
+      >;
+      mkt_touchpoints: T<
+        { id: string; visitor_id: string | null; source: string | null; medium: string | null; campaign: string | null; kind: string; occurred_at: string },
+        { id?: string; visitor_id?: string | null; source?: string | null; medium?: string | null; campaign?: string | null; kind?: string; occurred_at?: string },
+        Partial<{ source: string | null; medium: string | null; campaign: string | null; kind: string }>
+      >;
+      testimonials: T<
+        { id: string; author_name: string; author_role: string | null; company: string | null; quote: string; rating: number | null; avatar_url: string | null; is_published: boolean; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; author_name: string; author_role?: string | null; company?: string | null; quote: string; rating?: number | null; avatar_url?: string | null; is_published?: boolean; sort_order?: number; created_by?: string | null },
+        Partial<{ author_name: string; author_role: string | null; company: string | null; quote: string; rating: number | null; avatar_url: string | null; is_published: boolean; sort_order: number }>
+      >;
+      case_studies: T<
+        { id: string; title: string; slug: string; industry: string | null; customer_name: string | null; summary: string | null; body: string | null; result_metric: string | null; is_published: boolean; created_by: string | null } & Stamps,
+        { id?: string; title: string; slug: string; industry?: string | null; customer_name?: string | null; summary?: string | null; body?: string | null; result_metric?: string | null; is_published?: boolean; created_by?: string | null },
+        Partial<{ title: string; slug: string; industry: string | null; customer_name: string | null; summary: string | null; body: string | null; result_metric: string | null; is_published: boolean }>
+      >;
+      marketing_assets: T<
+        { id: string; name: string; kind: string; storage_path: string; mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null; alt_text: string | null; tags: string[]; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; name: string; kind?: string; storage_path: string; mime_type?: string | null; size_bytes?: number | null; width?: number | null; height?: number | null; alt_text?: string | null; tags?: string[]; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; kind: string; storage_path: string; mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null; alt_text: string | null; tags: string[]; metadata: Json; deleted_at: string | null }>
+      >;
+      marketing_videos: T<
+        { id: string; title: string; provider: string; video_id: string | null; url: string | null; storage_path: string | null; poster_url: string | null; captions_url: string | null; transcript: string | null; duration_seconds: number | null; status: string; tags: string[]; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; title: string; provider?: string; video_id?: string | null; url?: string | null; storage_path?: string | null; poster_url?: string | null; captions_url?: string | null; transcript?: string | null; duration_seconds?: number | null; status?: string; tags?: string[]; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ title: string; provider: string; video_id: string | null; url: string | null; storage_path: string | null; poster_url: string | null; captions_url: string | null; transcript: string | null; duration_seconds: number | null; status: string; tags: string[]; metadata: Json; deleted_at: string | null }>
+      >;
+      marketing_exit_intent: T<
+        { id: string; name: string; headline: string; body: string | null; cta_label: string | null; cta_href: string | null; match: Json; trigger_config: Json; priority: number; status: string; impressions: number; conversions: number; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; name: string; headline: string; body?: string | null; cta_label?: string | null; cta_href?: string | null; match?: Json; trigger_config?: Json; priority?: number; status?: string; impressions?: number; conversions?: number; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; headline: string; body: string | null; cta_label: string | null; cta_href: string | null; match: Json; trigger_config: Json; priority: number; status: string; impressions: number; conversions: number; metadata: Json; deleted_at: string | null }>
+      >;
+      marketing_push_campaigns: T<
+        { id: string; title: string; body: string | null; url: string | null; segment_id: string | null; audience: string; status: string; recipients: number; sent: number; failed: number; skipped: number; clicked: number; sent_at: string | null; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; title: string; body?: string | null; url?: string | null; segment_id?: string | null; audience?: string; status?: string; recipients?: number; sent?: number; failed?: number; skipped?: number; clicked?: number; sent_at?: string | null; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ title: string; body: string | null; url: string | null; segment_id: string | null; audience: string; status: string; recipients: number; sent: number; failed: number; skipped: number; clicked: number; sent_at: string | null; metadata: Json; deleted_at: string | null }>
+      >;
+      marketing_personalization_rules: T<
+        { id: string; name: string; slot: string; match: Json; variant: Json; priority: number; status: string; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; name: string; slot: string; match?: Json; variant?: Json; priority?: number; status?: string; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; slot: string; match: Json; variant: Json; priority: number; status: string; metadata: Json; deleted_at: string | null }>
+      >;
+      affiliates: T<
+        { id: string; name: string; email: string | null; code: string; commission_rate: number; status: string; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; name: string; email?: string | null; code: string; commission_rate?: number; status?: string; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; email: string | null; code: string; commission_rate: number; status: string; notes: string | null }>
+      >;
+      affiliate_referrals: T<
+        { id: string; affiliate_id: string; referred_email: string | null; family_id: string | null; status: string; amount_cents: number; commission_cents: number; converted_at: string | null; paid_at: string | null; created_at: string },
+        { id?: string; affiliate_id: string; referred_email?: string | null; family_id?: string | null; status?: string; amount_cents?: number; commission_cents?: number; converted_at?: string | null; paid_at?: string | null; created_at?: string },
+        Partial<{ referred_email: string | null; family_id: string | null; status: string; amount_cents: number; commission_cents: number; converted_at: string | null; paid_at: string | null }>
+      >;
+      competitors: T<
+        { id: string; name: string; domain: string | null; ranking: number | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; name: string; domain?: string | null; ranking?: number | null; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; domain: string | null; ranking: number | null; notes: string | null }>
+      >;
+      keyword_intel: T<
+        { id: string; keyword: string; search_volume: number; difficulty: number | null; our_rank: number | null; competitor_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; keyword: string; search_volume?: number; difficulty?: number | null; our_rank?: number | null; competitor_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ keyword: string; search_volume: number; difficulty: number | null; our_rank: number | null; competitor_id: string | null; notes: string | null }>
+      >;
+      backlinks: T<
+        { id: string; source_domain: string; target_url: string | null; authority: number | null; status: string; discovered_at: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; source_domain: string; target_url?: string | null; authority?: number | null; status?: string; discovered_at?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ source_domain: string; target_url: string | null; authority: number | null; status: string; discovered_at: string | null; notes: string | null }>
       >;
       weather_locations: T<
         { id: string; family_id: string; name: string; admin1: string | null; country: string | null; latitude: number; longitude: number; is_default: boolean; sort_order: number; created_by: string | null } & Stamps,
@@ -1152,6 +1257,7 @@ export interface Database {
       public_stats: { Args: Record<string, never>; Returns: { families: number; members: number; tasks_completed: number }[] };
       social_role_for: { Args: { p_family_id: string }; Returns: SocialRoleEnum };
       social_has_permission: { Args: { p_family_id: string; p_permission: string }; Returns: boolean };
+      bump_exit_intent: { Args: { p_id: string; p_metric: string }; Returns: undefined };
     };
     Enums: {
       member_role: MemberRole;

@@ -146,6 +146,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/tiers', label: 'Tier & Features', icon: SlidersHorizontal },
   { href: '/admin/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
+  { href: '/admin/tier-features', label: 'Tier & Features', icon: SlidersHorizontal },
   { href: '/admin/system', label: 'System Overview', icon: Activity },
   { href: '/admin/content', label: 'Content Management', icon: FolderKanban },
   { href: '/admin/security', label: 'Security', icon: ShieldCheck },

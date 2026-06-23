@@ -1,7 +1,174 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after PR #87. Keep this updated as you ship.
+Last updated after the Meal Voting PR. Keep this updated as you ship.
+
+> **Session update (2026-06-22h) — FAMILY FOOD OS, PHASE 4: Meal Voting.**
+> - **Shipped:** family meal voting. Propose options (from the vault and/or free-text) →
+>   members vote yes/maybe/no per option → close to pick the winner → add winner's
+>   ingredients to the grocery list.
+> - **Migration `0055_meal_votes.sql`** — `meal_votes`, `meal_vote_options`,
+>   `meal_vote_ballots` (family-scoped RLS `is_family_member`; one ballot per member/
+>   option). **APPLIED TO PROD + verified.** Types added to database.types.ts.
+> - `lib/recipes/voting.ts` (pure, 5 tests): `tallyVotes` (yes+1/maybe+0.5/no−0.5),
+>   `winningOption` (ties → most yes), `summarizeBallots`.
+> - `app/(app)/dashboard/recipes/vote/{page,vote-client,actions}.tsx`: create vote,
+>   castBallot (upsert), closeMealVote (stamps winner), reopen, addWinnerToGrocery
+>   (reuses default grocery list). "Vote" entry in the recipes header.
+> - **KNOWN GAP / NEXT:** "Add winner to **meal plan**" not wired — `meal_plans.meal_id`
+>   → `meals` table, NOT `family_recipes`, so it needs a bridge (create a `meals` row
+>   from the recipe, or add a `recipe_id` column to `meal_plans`). Also: parent-only
+>   gating for create/close (currently any member); deadlines/weighted/anon modes;
+>   "AI suggest compromise meal". Then **post-meal ratings** (next big pillar) →
+>   pantry+barcode → vault OCR → admin provider settings → tier-gate/meter AI.
+
+> **Session update (2026-06-22g) — FAMILY FOOD OS, PHASE 3: "What can we make tonight?"**
+> - **Shipped:** AI suggests dinner from the family's OWN saved vault (always cookable),
+>   with an optional free-text constraint ("we have chicken & rice", "quick", "no dairy").
+> - `lib/recipes/suggest.ts` (pure, 4 tests): `buildSuggestPrompt` (lists vault id/name/
+>   ingredients, JSON-only) + `parseSuggestions` (keeps only valid, de-duped vault ids).
+> - `POST /api/recipes/suggest { constraint? }` — auth + rate-limited; loads up to 80 vault
+>   recipes (favorites first), `resolveProvider().complete(maxTokens 600)`, returns picks
+>   that map back to real recipes. **No migration.**
+> - UI: "Tonight?" button in the recipes header → modal with constraint box + tappable
+>   picks that open the recipe (`recipes-module.tsx`).
+> - **NEXT (food OS):** pantry table + barcode (Open Food Facts) to power true
+>   "use what we have"; then meal voting → ratings → vault OCR → admin provider settings;
+>   tier-gate/meter AI (recipe transform + suggest are rate-limited only).
+
+> **Session update (2026-06-22f) — FAMILY FOOD OS, PHASE 2: AI Recipe Actions.**
+> - **Shipped:** transform any saved recipe into a new vault variant — healthier,
+>   cheaper, higher-protein, lower-sodium, kid-friendly, gluten-free, dairy-free,
+>   vegetarian, vegan, liver-friendly.
+> - `lib/recipes/ai-actions.ts` (pure, 6 tests): `RECIPE_AI_ACTIONS` catalog,
+>   `buildTransformPrompt` (JSON-only, "don't claim to treat disease", conservative
+>   allergies), `parseTransformResult` (lenient JSON → vault shape; auto-appends an
+>   "amounts/nutrition are estimates" note + a non-medical disclaimer for health actions).
+> - `POST /api/recipes/transform { recipeId, actionId }` — auth + rate-limited (12/min),
+>   loads recipe (RLS), `resolveProvider().complete(maxTokens 1800)`, saves a NEW
+>   `family_recipes` row (`ai_generated`, `source_provider:'bubaly_ai'`, `source_recipe_id`
+>   = original id, `tags:['ai:<action>']`). **No migration.**
+> - UI: "AI Remix" chip bar in the recipe detail modal (`recipes-module.tsx`).
+> - Added `ai_generated`/source fields to `family_recipes` Insert type in database.types.
+> - **NEXT (food OS):** (1) tier-gate AI actions + meter monthly usage (`requirePlanLevel`
+>   / a usage counter) — currently only rate-limited. (2) "What can we make tonight?" +
+>   pantry-based search. (3) USDA/Open Food Facts providers (nutrition+barcode). Then meal
+>   voting → ratings → pantry → vault OCR → admin provider settings (see Phase-1 block).
+
+> **Session update (2026-06-22e, branch `claude/funny-darwin-gkmptm`) — FAMILY FOOD OS, PHASE 1:**
+> Big spec: build the world's best family recipe/meal-plan/grocery/nutrition/voting/
+> rating system. It's HUGE (21 sections) — being built incrementally. **What already
+> existed:** `family_recipes` vault (ingredients/instructions Json shaped as
+> `{name,quantity,unit}[]` / `{step,text}[]`), `meal_plans`/`meal_plan_*`, `grocery_lists`/
+> `grocery_items`, `pantry`?, the `RecipesModule` UI, and AI recipe endpoints.
+> - **PHASE 1 SHIPPED (this PR): Recipe Discovery + provider architecture + save-to-vault.**
+>   - `lib/recipes/providers/{types,themealdb,index}.ts` — provider registry; **TheMealDB**
+>     (free/keyless) implemented; `searchAllProviders` merges+dedupes. Add new adapters
+>     here (usda, openFoodFacts, spoonacular, edamam, fatsecret, localSupabase) — all must
+>     be OPTIONAL (env-gated `isEnabled()`), keys server-side only.
+>   - `lib/recipes/normalize.ts` (pure, tested) — `normalizeThemealdb`, `normalizeInstructions`,
+>     `normalizeMeasure` → `NormalizedRecipe` matching the vault shape.
+>   - `GET /api/recipes/search?q=` (auth+rate-limited, server-side; strips raw_payload).
+>   - `/dashboard/recipes/discover` (mobile-first search + cards + Save to vault); "Discover"
+>     button added to `RecipesModule` header.
+>   - **Save** (`discover/actions.ts`): re-fetches from provider server-side, copies into
+>     `family_recipes` with full provenance, deduped by (family, provider, source id) so it
+>     survives provider outages. **Migration `0054_recipe_sources.sql`** added source_provider/
+>     source_recipe_id/attribution/license_notes/imported_at/raw_payload to family_recipes —
+>     **APPLIED TO PROD + verified.**
+> - **NEXT (food OS roadmap, priority order):**
+>   1. **More providers** — USDA FoodData Central + Open Food Facts (keyless/free, nutrition +
+>      barcode), then Spoonacular/Edamam/FatSecret (env-key-gated stubs already planned).
+>   2. **AI recipe actions** on a saved recipe ("make healthier/cheaper/higher-protein/
+>      gluten-free/kid-friendly", scale servings, estimate missing nutrition) via
+>      `resolveProvider()` — mark nutrition as ESTIMATES + non-medical disclaimer.
+>   3. **Family meal voting** (new tables `meal_votes`/`meal_vote_options`/member votes;
+>      parent creates options → family votes → winner → add to meal plan → grocery list).
+>   4. **Post-meal ratings** (1–5 + tags + AI "Family/Kid/Parent score" + repeat probability;
+>      feed back into recommendations). 5. **Pantry** (barcode via Open Food Facts, "use soon",
+>      "recipes from pantry"). 6. **Recipe Vault upload/OCR** (image/PDF → AI structure → review).
+>      7. **Admin provider settings** (`recipe_provider_settings`) for enable/keys/limits.
+>   - Reuse existing `meal_plans`/`grocery_lists`. Gate advanced AI/limits by tier
+>     (`requirePlanLevel`). Every external recipe must keep source/attribution/license.
+
+> **Session update (2026-06-22d, branch `claude/funny-darwin-gkmptm`):**
+> - **Two-way calendar sync — "super easy connect" UX.** A full sync platform
+>   already exists (migrations 0018/0019/0045): Google OAuth two-way
+>   (`/api/sync/google/*`, only provider implemented in `lib/sync/providers/`),
+>   encrypted tokens, conflict engine, ICS feeds (`calendar_feeds` + nightly
+>   `/api/cron/calendar-feeds`), and a published Bubaly feed
+>   (`/api/sync/feeds/[token]`, `lib/sync/feed-token.ts`).
+> - **This PR** added `lib/calendar/providers.ts` (pure, tested): a provider
+>   catalog (Google, Apple/iCloud, Outlook/MS, Schoology, Google Classroom,
+>   Canvas, TeamSnap, generic ICS) each with step-by-step "where to find your
+>   ICS URL" + placeholders; plus `webcalUrl`/`httpsUrl`/`addToCalendarLinks`
+>   (Google/Outlook/Apple one-click subscribe links for OUTBOUND).
+> - **Rebuilt `components/dashboard/calendar-sync-panel.tsx`** into a guided
+>   provider grid: pick a provider → Google shows one-click two-way OAuth +
+>   read-only fallback; others show exact steps + a paste-the-URL field. Inbound
+>   uses the existing `addCalendarFeed` action (ICS, auto-refreshed nightly).
+>   Lives in Settings (`components/modules/settings-module.tsx`). No migration.
+> - **NEXT (calendar):** (1) **Outbound section in the panel** — surface the
+>   family's published Bubaly feed URL with copy + the `addToCalendarLinks`
+>   buttons (need to get/create the family feed token; see `lib/sync/feed-token.ts`
+>   + `sync_calendars.feed_enabled` / `/api/sync/feeds/[token]`). (2) **Implement
+>   more real two-way providers** beyond Google: Microsoft Graph (Outlook) and
+>   Apple CalDAV — `lib/sync/providers/` only has `google.ts`; capabilities matrix
+>   in `lib/sync/capabilities.ts` already lists them. (3) Add provider presets to
+>   the main `/dashboard/sync` hub too (currently capability-matrix only).
+
+> **Session update (2026-06-22d, branch `claude/loving-mccarthy-e1ahq8`):**
+> - **Public-site wiring #55 DONE — marketing Forms now render & accept submissions
+>   publicly.** Admin could author `marketing_forms` (fields jsonb) but nothing
+>   served them; built the public renderer + submit endpoint, mirroring the #54
+>   landing-page PR. **NO migration** (tables `marketing_forms` /
+>   `marketing_form_submissions` already exist; service-role writes bypass RLS).
+> - **Public route** `app/(marketing)/f/[id]/page.tsx` (service-role read, only
+>   `status='active'` + non-deleted forms with ≥1 field) renders the form via a
+>   client `form-renderer.tsx`. Optional `metadata.{title,description,submit_label,
+>   success_message}` customise it. Pages are `robots: noindex` (utility pages).
+> - **Submit endpoint** `POST /api/forms/submit { formId, values }` — rate-limited
+>   (10/min/IP), validates server-side, inserts a `marketing_form_submissions` row
+>   (service role), and fires `fireAutomationEvent('form_submitted', …)` deduped by
+>   `eventSubjectKey('form_submitted', [formId, submissionId])` (best-effort).
+> - **Pure helper** `lib/marketing/forms.ts` (`parseFormFields` w/ type inference for
+>   legacy label/key fields, `validateSubmission`, `submissionEmail`/`submissionName`,
+>   `inputType`/`fieldAutoComplete`) + tests `tests/marketing-forms.test.ts` (10).
+>   Added `/f` + `/api/forms` to `middleware.ts` PUBLIC.
+> - **Admin** (`/admin/marketing/forms`): each form card now shows an Active/Archived
+>   pill, a "View public form" link (`/f/<id>`) when active, and an Activate/Archive
+>   toggle (`setFormStatus`). New forms are created `active` (live immediately).
+> - **NEXT: Asset Library (DAM)** — `marketing_assets` (kind image/video/doc/brand,
+>   storage_path, tags[], dimensions, alt, usage refs) + private bucket
+>   `marketing-assets`; picker reused by Email/Social/Content/Landing. (Then Video,
+>   Personalization — see "Remaining pillars to build" below.) This completes the
+>   public-site wiring gap (#54 + #55); future builders must ship their public
+>   surface in the same PR.
+
+> **Session update (2026-06-22c, branch `claude/lp-public-renderer`):**
+> - **Public-site wiring #54 DONE — landing pages now render publicly.** Admin
+>   could author `marketing_landing_pages` but nothing served them; built the
+>   public renderer + made them publishable end-to-end.
+> - **Public route** `app/(marketing)/lp/[slug]/page.tsx` (service-role read, only
+>   `published` + non-deleted pages) renders headline/subhead/body paragraphs +
+>   a CTA. Client `tracker.tsx` fires a session-deduped **view** beacon on mount
+>   and a **conversion** beacon on CTA click → `POST /api/lp/track`.
+> - **Migration `0053_landing_metrics.sql`** — atomic `bump_landing_metric(slug,
+>   metric)` (SECURITY DEFINER, counts only published pages; EXECUTE granted to
+>   `service_role`, revoked from anon/authenticated/public). **Apply to prod.**
+> - **Admin** (`/admin/marketing/landing-pages`): create form now captures CTA
+>   label/href (stored in `metadata`); each card has a **Publish/Unpublish**
+>   toggle (`setLandingPublished`) + a "View" link. Pages start as drafts.
+> - **Pure helper** `lib/marketing/landing.ts` (`landingCta` w/ safe-href guard,
+>   `bodyParagraphs`, `normalizeSlug`) + tests `tests/marketing-landing.test.ts` (8).
+>   Added `/lp` + `/api/lp/track` to `middleware.ts` PUBLIC; `bump_landing_metric`
+>   added to `database.types.ts` Functions.
+> - **NEXT: public-site wiring #55 — Forms.** `marketing_forms` (fields jsonb) +
+>   `marketing_form_submissions` exist with admin authoring but no public render/
+>   submit. Build a public form renderer + a `POST` endpoint that inserts a
+>   submission (service-role) and calls `fireAutomationEvent('form_submitted', …)`
+>   — mirror the contact form + this landing-page PR (service-role read/write,
+>   middleware PUBLIC, beacon/endpoint pattern).
 
 > **Session update (2026-06-23, branch `claude/admin-tier-features`):**
 > - **Admin "Tier & Features" — Supabase-backed feature gating, platform-wide.**
@@ -9,7 +176,7 @@ Last updated after PR #87. Keep this updated as you ship.
 >   **Free / Basic / Plus / Off**, with the exact semantics: Free→all; Basic→Basic+Plus
 >   (locked for Free); Plus→Plus only (locked for Basic+Free); Off→hidden for all
 >   (super-admins still preview). Persisted to **`feature_settings`** (migration
->   `0054`, **apply to prod**) — read by everyone (RLS read-only), written
+>   `0067`, **apply to prod**) — read by everyone (RLS read-only), written
 >   service-role only via `setFeatureTierAction` (super-admin gated + audited).
 > - **Catalog** `lib/features/catalog.ts` (pure, 13 tests): builds the feature
 >   list from `APP_NAV_GROUPS`/`MOBILE_TABS`, with `tierLevel`/`levelTier`,
@@ -151,7 +318,7 @@ Last updated after PR #87. Keep this updated as you ship.
   guards). Always apply the migration to prod after merging the migration file.
 
 ## Conventions
-- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0055.**
+- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0068.**
   Helpers available in DB: `public.is_family_member(family_id)`, `public.is_super_admin()`,
   `public.set_updated_at()` trigger fn, `gen_random_uuid()`.
 - **Family-scoped tables** (member data): RLS pattern —
@@ -271,11 +438,11 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Next migration number: **0055**. Applied to prod by the user: through **0043**
-(0042 loyalty, 0043 chore missions). **Still needs applying to prod:** any of
-0044–0051 not yet run, plus **0052 `family_onboarding`**, **0053
-`landing_metrics`**, and **0054 `feature_settings`**. Verify with
-`select max(...)`/`\dt` before assuming a migration is live.
+Next migration number: **0068**. (0051–0066 are on main.) **Still needs applying
+to prod** (verify what's live first with `select max(...)`/`\dt`; all idempotent):
+0044–0066 as applicable, plus **0052 `family_onboarding`**, **0053
+`landing_metrics`**, and **0067 `feature_settings`** (admin Tier & Features —
+renumbered from 0054 after a collision with main's `0054_recipe_sources`).
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -311,6 +478,222 @@ Next migration number: **0055**. Applied to prod by the user: through **0043**
 - To use ChatGPT: `/admin/ai` → pick **ChatGPT (OpenAI)**, choose a model (gpt-4o…),
   paste the OpenAI key, Save. Env fallbacks: `OPENAI_API_KEY`, `AI_PROVIDER=openai`, `AI_MODEL`.
   (The OpenAI account/key must have active billing or calls 401/429.)
+
+## Marketing Platform ("HubSpot competitor") — branch `claude/marketing-platform`
+**Long-lived feature branch — do NOT merge to main until it "comes together."** Build
+incrementally here, commit often, keep it building. Vision: a full marketing OS
+(CRM → revenue) modeled on HubSpot/Klaviyo/Semrush etc.
+
+### Conventions for marketing tables (business-wide, NOT family-scoped)
+- Table lives in a new migration; **RLS ENABLED, NO policies** → service-role only.
+- All admin reads use `createServiceClient()`; all writes go through a server action
+  guarded by `requireMarketingAdmin()` (`lib/marketing/admin.ts`) which returns the
+  service client + actor and gates super-admin. Log via `logMarketingAudit(...)`.
+- Pages: `app/(app)/admin/marketing/<name>/page.tsx` (server component, `dynamic =
+  'force-dynamic'`, `robots: { index: false }`); add to `SUBNAV` in
+  `app/(app)/admin/marketing/layout.tsx`. Input class:
+  `h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm`; primary btn:
+  `h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90`.
+- Pure logic in `lib/marketing/<feature>.ts` + vitest tests.
+
+### Built on this branch so far
+- **#52 CRM + Sales Pipeline (cornerstone)** — mig `0056_crm.sql`: `crm_contacts`
+  (first/last/email/phone/company, lead_status, lifecycle_stage, lead_source,
+  family_id, owner_id) + `crm_deals` (contact_id, name, amount_cents, stage,
+  close_date). Pure logic `lib/marketing/crm.ts` (stages, `dealsByStage`,
+  `openPipelineValueCents`, `weightedPipelineValueCents`, `winRate`, `formatCents`;
+  10 tests). Pages `/admin/marketing/crm` (contacts + add form) and
+  `/admin/marketing/pipeline` (stage board, add/advance/delete deals). Actions in
+  `app/(app)/admin/marketing/crm/actions.ts`. Nav: CRM + Pipeline added to SUBNAV.
+  **Migration 0054 must be applied to prod when this branch merges.**
+- **#53 Proposals / Quotes** — mig `0057_crm_quotes.sql`: `crm_quotes` (contact_id,
+  deal_id, title, status [draft/sent/accepted/declined/expired], amount_cents,
+  valid_until, sent_at, responded_at). Pure logic `lib/marketing/quotes.ts`
+  (status lifecycle, `isExpired`/`effectiveStatus`, `summarizeQuotes`; 8 tests).
+  Page `/admin/marketing/proposals` (stats, new-quote form, send/accept/decline/
+  delete). Actions `proposals/actions.ts`. Nav: Proposals. **Apply 0055 at merge.**
+- **#54 Customer Intelligence (Visitor Tracking + Attribution + CDP-lite)** — mig
+  `0058_visitor_intelligence.sql`: `mkt_visitors` (anonymous_id CDP spine,
+  contact_id stitch, session_count), `mkt_sessions` (source/medium/campaign,
+  landing_path), `mkt_touchpoints` (kind touch|conversion). Ingest:
+  `POST /api/mkt/track` (service-role; upserts visitor, records session +
+  touchpoint). Pure logic `lib/marketing/attribution.ts` — 4 models (first/last/
+  linear/position-based), `creditForVisitor`, `attributeConversions`,
+  `conversionCount` (11 tests). Page `/admin/marketing/intelligence` (visitor/
+  session/conversion stats, top channels bar, attribution-by-model grid). Nav:
+  Intelligence. **Apply 0056 at merge.** NEXT: wire `/api/mkt/track` calls into
+  the marketing site (UTM capture on landing + a conversion call on signup), and
+  stitch `contact_id` when a visitor identifies (set on signup/contact-form).
+- **#55 Reputation & Trust (Testimonials + Case Studies)** — mig
+  `0059_reputation.sql`: `testimonials` (author, quote, rating, is_published,
+  sort_order) + `case_studies` (title, slug UNIQUE, industry, customer_name,
+  summary, result_metric, is_published). Pure logic `lib/marketing/reputation.ts`
+  (`slugify`, `publishedOnly`, `clampRating`; 5 tests). Page
+  `/admin/marketing/reputation` (both sections: add/publish-toggle/delete). Actions
+  `reputation/actions.ts`. Nav: Reputation. **Apply 0057 at merge.** NEXT: render
+  published testimonials/case-studies on the public marketing site (read via
+  service client in a server component, `publishedOnly`).
+- **#56 Asset Library (DAM)** — mig `0060_marketing_assets.sql`: `marketing_assets`
+  (name, kind [image/video/document/brand], storage_path, mime_type, size_bytes,
+  width/height, alt_text, tags text[], metadata, deleted_at) + a **private
+  `marketing-assets` Storage bucket** (50 MB/file, NO storage.objects policies →
+  service-role only; admin mints short-lived signed URLs for image previews).
+  Pure logic `lib/marketing/assets.ts` (`assetKindFromMime`, `formatBytes`,
+  `parseTags`, `sanitizeAssetName`/`buildAssetPath`, `assetsByKind`; 7 tests).
+  Page `/admin/marketing/assets` (upload form, stats, kind-grouped gallery with
+  previews + inline edit alt/tags + delete). Actions `assets/actions.ts`
+  (`uploadAssetAction` uploads to the bucket then inserts, rolling back the
+  orphaned object on insert failure; `deleteAssetAction` removes the file then
+  soft-deletes the row). Nav: Assets. **Apply 0058 at merge.** NEXT: (1) a
+  reusable **asset picker** component for Email/Social/Content/Landing authoring;
+  (2) image **dimensions + thumbnail** capture on upload (width/height columns
+  exist, currently null); (3) **"where used" backrefs** so deletes warn.
+- **#57 Video Marketing** — mig `0061_marketing_videos.sql`: `marketing_videos`
+  (title, provider [youtube/vimeo/upload], video_id, url, storage_path,
+  poster_url, captions_url, transcript, duration_seconds, status [draft/
+  published], tags[], metadata, soft-delete). Pure logic `lib/marketing/video.ts`
+  (`parseVideoUrl` for YouTube/Vimeo variants, `embedUrl`, `thumbnailUrl`,
+  `formatDuration`, `publishedOnly`; 8 tests). Page `/admin/marketing/video`
+  (add by URL OR pick an uploaded video asset from the Asset Library; gallery
+  with YouTube thumbnails, publish toggle, delete). Actions `video/actions.ts`
+  (`saveVideoAction` parses the URL or resolves the asset's storage_path;
+  `toggleVideoPublishAction`; `deleteVideoAction` soft-deletes — the underlying
+  asset stays in the library). Nav: Video. **Apply 0059 at merge.** NEXT:
+  (1) public **embed component** that renders `embedUrl()` in content/landing
+  pages (the consume side; admin/catalog is done); (2) **JSON-LD VideoObject**
+  schema on pages that embed a published video (transcript → AEO/SEO);
+  (3) auto-fetch **duration + poster** via the YouTube/Vimeo oEmbed API.
+- **#58 Blog Platform (publish pipeline)** — **NO migration** (bridges existing
+  `marketing_content_items` → existing `blog_posts`, mig 0010, which already
+  powers the public `/blog` + `/blog/[slug]`). Pure logic
+  `lib/marketing/blog-publish.ts` (`contentBodyToBlocks` plain-text→BlogBlock[],
+  `estimateReadingMinutes`, `deriveExcerpt`, `blogSlugify`, `normalizeCategory`,
+  `buildBlogPost`; 8 tests). Actions `content/actions.ts`: `updateContentAction`
+  (edit body + workflow status + `metadata.blog` {slug,category,author,excerpt,
+  featured,tags}), `publishContentToBlogAction` (upsert `blog_posts` keyed by
+  slug → marks the item `published`, stamps the slug back), `unpublishBlogPostAction`.
+  `/admin/marketing/content` now edits the body/blog-meta inline and has a
+  **Publish to blog** button; the published list links to the live post + can
+  Unpublish. NEXT: (1) a rich-text/markdown editor (today the body is plain text
+  with `#`/`**…**` → h2); (2) **JSON-LD Article** schema on `/blog/[slug]`;
+  (3) image/cover via the **Asset Library** picker.
+- **#59 Personalization Engine** — mig `0062_personalization.sql`:
+  `marketing_personalization_rules` (name, slot, match jsonb, variant jsonb,
+  priority, status [active/paused], soft-delete). Pure engine
+  `lib/marketing/personalization.ts` (`ruleMatches` — source/medium/campaign/
+  segments/paths/countries/returning/minSessions, ALL must hold; `matchSpecificity`;
+  `resolveSlot`/`resolveVariant` — priority desc → specificity desc → oldest; 8
+  tests). Server resolver `lib/marketing/personalization-server.ts`
+  (`resolvePersonalization(slot, ctx)` reads active rules via service role →
+  resolves). Page `/admin/marketing/personalization` (create rule with audience
+  match + variant fields, grouped by slot, pause/activate, delete). Actions
+  `personalization/actions.ts`. Nav: Personalization. **Apply 0060 at merge.**
+  NEXT: **wire real surfaces** — call `resolvePersonalization('home_hero', ctx)`
+  in the marketing hero / pricing CTA / landing slots (build `ctx` from the
+  `mkt_*` visitor cookie + UTM params from #54), render the variant, and fire an
+  exposure to `/api/ab/track`. (Engine + admin are done; instrumentation is glue,
+  mirroring the A/B pillar's remaining step.)
+- **#60 Marketing Push Notifications** — mig `0063_marketing_push.sql`:
+  `marketing_push_campaigns` (title, body, url, segment_id [future targeting],
+  audience, status [draft/sending/sent/failed], recipients/sent/failed/skipped/
+  clicked counts, sent_at, soft-delete). **Reuses** `lib/server/push.ts`
+  (`sendPushToUsers`, VAPID/FCM) + `push_devices` (mig 0035). Pure logic
+  `lib/marketing/push.ts` (`selectPushRecipients` dedupe + suppression filter,
+  `deliveryRate`, `canSendPush`, `summarizePush`; 5 tests). Page
+  `/admin/marketing/push` (create draft, Send broadcast, stats incl. opted-in
+  device count, honest "push not configured" banner when VAPID/FCM keys are
+  missing — sends still record but devices are skipped). Actions
+  `push/actions.ts`: `sendPushCampaignAction` reserves status='sending' (no
+  double-send), resolves opted-in `push_devices.user_id`, maps user→email via
+  `profiles`, excludes `marketing_suppressions` emails, fans out, records counts.
+  Nav: Push. **Apply 0061 at merge.** NEXT: (1) **segment targeting** (the
+  `segment_id` column + 'segment' audience exist; resolve a segment's members →
+  user_ids); (2) **click tracking** (append a tracked param to the url + an
+  endpoint that bumps `clicked`); (3) a scheduled/cron send option.
+- **#61 Exit-Intent Popups** — mig `0064_exit_intent.sql`:
+  `marketing_exit_intent` (name, headline, body, cta_label/href, match jsonb,
+  trigger_config jsonb {mode mouseleave|scroll, delayMs, scrollPercent},
+  priority, status, impressions/conversions, soft-delete) + SECURITY DEFINER RPC
+  `bump_exit_intent(p_id, p_metric)` (service_role only). **Fully wired end-to-end.**
+  Pure logic `lib/marketing/exit-intent.ts` (reuses personalization `ruleMatches`;
+  `normalizeTrigger`, `resolveExitIntent`, `conversionRate`, `summarizeExitIntent`;
+  4 tests). Server resolver `exit-intent-server.ts`. **Public:** client
+  `components/marketing/exit-intent.tsx` (mounted in `app/(marketing)/layout.tsx`)
+  resolves via `POST /api/exit-intent/resolve` (UTM/path/returning ctx), arms
+  mouseleave/scroll trigger, shows once per visitor/week (localStorage), and
+  beacons impression/conversion → `POST /api/exit-intent/track` → RPC. Both
+  endpoints added to `middleware.ts` PUBLIC (`/api/exit-intent`). Admin
+  `/admin/marketing/exit-intent` (create offer + trigger + audience, stats,
+  pause/activate, delete). Nav: Exit-Intent. **Apply 0062 at merge.** NEXT:
+  (1) A/B-test offer variants via `assignVariant`; (2) richer triggers
+  (idle-time, scroll-velocity); (3) per-offer frequency cap beyond the global
+  weekly once.
+- **#62 Affiliate Management** — mig `0065_affiliates.sql`: `affiliates` (code,
+  commission_rate, status) + `affiliate_referrals` (status pending/converted/
+  paid/void, commission_cents). Pure logic `lib/marketing/affiliates.ts`
+  (`normalizeAffiliateCode`, `clampRate`, `commissionCents`, `summarizeReferrals`,
+  `payoutByAffiliate`; 5 tests). Page `/admin/marketing/affiliates` (add, pause/
+  activate, pay-out, delete; per-affiliate owed/paid stats). Actions
+  `affiliates/actions.ts`. Nav: Affiliates. **Apply 0063 at merge.** NEXT: wire
+  `?via=CODE` capture on the marketing site → create `affiliate_referrals` on
+  signup/conversion (snapshot commission from the affiliate's rate).
+
+### Already EXISTS in the app (don't rebuild — extend)
+Email (`/email`, `marketing_email_campaigns`) · Automation (`/automation`,
+`marketing_automation_workflows/runs`, event+scheduled triggers #87/#88/#89) ·
+Landing Pages (`marketing_landing_pages`) · Forms (`marketing_forms`,
+`marketing_form_submissions`) · SEO+AEO (`marketing_seo_pages/keywords`,
+`marketing_aeo_questions`) · Social (`marketing_social_posts`) · SMS
+(`marketing_sms_campaigns`) · Ads (`marketing_ad_campaigns`) · Segments
+(`marketing_segments`) · Funnels (`marketing_funnels`) · Campaigns
+(`marketing_campaigns`) · Content (`marketing_content_items`) · Reviews (#41) ·
+Surveys/NPS (#40) · Referrals (#39) · A/B testing (#85, `ab_experiments/ab_events`) ·
+Lead scoring (#86) · Customers/health (derived `getMarketingCustomers`) · Suppressions.
+
+### Remaining pillars to build (from the spec screenshots, prioritized)
+CRITICAL: CRM ✅ · Sales Pipeline ✅ · Proposal/Quotes ✅ · Visitor Tracking ✅ · Attribution ✅ · CDP-lite ✅ (identity-stitch contact_id on identify = next) · CDP full / unified profile (anonymous_id, device_id →
+identity stitching) · Attribution (touchpoints: touchpoint_id, source, campaign) ·
+Visitor Tracking (sessions, page_views, visitor_id) · Audience Segmentation (dynamic,
+extend `marketing_segments`).
+HIGH: Testimonials ✅ + Case Studies ✅ (distinct from reviews) · Asset Library ✅
+(`marketing_assets` + private bucket; picker/thumbnails/backrefs = next) · Video
+Marketing ✅ (`marketing_videos`; admin/catalog done — public embed + JSON-LD =
+next) · Blog Platform ✅ (content_items → blog_posts publish pipeline; no
+migration; rich editor + JSON-LD = next) · Personalization Engine ✅
+(`marketing_personalization_rules` + server resolver; surface instrumentation =
+next) · Push Notifications ✅ (`marketing_push_campaigns`; broadcast send reusing
+VAPID/FCM, honors suppressions; segment targeting + click tracking = next) ·
+Exit-Intent Popups ✅ (`marketing_exit_intent`; fully wired — public popup on the
+marketing site + resolve/track endpoints; A/B variants = next) · Affiliate
+Management ✅ (`affiliates` + `affiliate_referrals` with commission tracking +
+payout; NEXT: public `?via=CODE` capture + a partner dashboard).
+MEDIUM: Competitor Monitoring ✅ · Keyword Intelligence ✅ · Backlink Monitoring ✅
+— shipped as Competitive Intelligence (mig `0066_competitive_intel.sql`:
+`competitors` + `keyword_intel` + `backlinks`; pure logic `lib/marketing/competitive.ts`
+— `normalizeDomain`, `keywordOpportunity` (volume×poor-rank), `summarizeBacklinks`,
+7 tests; page `/admin/marketing/competitive` with all 3 sections + add/delete;
+nav: Competitive). **Apply 0066 at merge.** NEXT: auto-import from Semrush/Ahrefs
+APIs instead of manual entry.
+ALL spec pillars are now built. Remaining work = the per-pillar "NEXT" wiring/glue
+items (public-site instrumentation): visitor `/api/mkt/track` calls + identity
+stitch (#54), public testimonials/case-studies (#55), asset picker (#56), video
+embed (#57), personalization surfaces (#59), push segment/click (#60), exit-intent
+A/B (#61), affiliate `?via=` capture (#62) — see each pillar's NEXT above.
+Each: new table(s) per the field lists in the spec, pure logic + tests, an admin
+page + SUBNAV entry, wire to Supabase. Build one pillar per commit on this branch.
+
+### Marketing platform — how to continue
+1. `git checkout claude/marketing-platform` (create from main if missing), build the
+   next pillar following the conventions above, commit to the branch (do NOT merge).
+2. Keep `tsc`/lint/build/vitest green each commit. New migration = next number
+   (**0063+**; this branch's marketing migrations are 0054–0062, renumbered to sit
+   after main's max). Note it must be applied to prod at merge time, and re-check
+   it's still after main's highest migration just before merging.
+3. When the platform is "ready to come together," open the PR to main and apply all
+   its migrations. Until then it stays on the branch.
+
+---
+<!-- Below: the parallel "vision/roadmap" notes from main; kept for context. -->
 
 ## Marketing Platform — vision, pillar map & roadmap
 
@@ -351,7 +734,7 @@ build → **verify** (`tsc --noEmit`, `next lint`, `next build`, `vitest run`, a
 validate the migration **twice** on a throwaway Postgres 16 cluster for
 idempotency + RLS/CHECK) → draft PR (`mcp__github__create_pull_request`) → mark
 ready → **squash-merge** → apply the migration to prod (Supabase Management API,
-see migration section; **next number: 0054**) → update this doc's pillar row +
+see migration section; **next number: 0068**) → update this doc's pillar row +
 its NEXT step. Keep each PR to one pillar.
 
 ### Pillar map (✅ shipped · 🟡 partial · ⬜ not built)
@@ -369,7 +752,7 @@ its NEXT step. Keep each PR to one pillar.
 | AEO | ✅ | `marketing_aeo_questions` (0013) | question/answer, pattern, clarity_score, status | `/admin/marketing/aeo` | Emit JSON-LD FAQ schema on public pages from `answered` Q&As |
 | Funnels | 🟡 | `marketing_funnels` (0020) | steps jsonb, status | `/admin/marketing/funnels` | Compute real step conversion from `ab_events`/page analytics (steps are descriptive today) |
 | Landing pages | ✅ | `marketing_landing_pages` (0020), `bump_landing_metric` (0053) | slug, headline, subhead, body, published, views, conversions, metadata.cta_* | `/admin/marketing/landing-pages` + public `/lp/[slug]` | A/B-test headline/CTA variants via `assignVariant` + `/api/ab/track`; per-page conversion goals |
-| Forms | 🟡 | `marketing_forms`, `marketing_form_submissions` (0020) | fields jsonb; submission payload | `/admin/marketing/forms` | **Public embed + submit endpoint (see wiring TODO #55)** — fire `form_submitted` |
+| Forms | ✅ | `marketing_forms`, `marketing_form_submissions` (0020) | fields jsonb; submission payload | `/admin/marketing/forms` + public `/f/[id]` | Field-type/required authoring UI (renderer infers types today); embed snippet + per-form thank-you redirect |
 | Automation / lifecycle | ✅ | `marketing_automation_workflows`, `marketing_automation_runs` (0020), dedup idx (0050), `checkout_sessions` (0051) | trigger, steps jsonb, subject_key | `/admin/marketing/automation` | Execute non-email actions (notify_admin/apply_tag) — recorded but not run (#87) |
 | Customers | ✅ | read-time over contact tickets / Stripe (no table) | MarketingCustomer snapshot | `/admin/marketing/customers` | Persist a `marketing_customers` table for tags/notes instead of read-time only |
 | Customer Health & Churn | ✅ (#78) | read-time | churn score over snapshot | `/admin/marketing/health` | Trigger a win-back automation when score crosses a threshold |
@@ -390,12 +773,13 @@ Each is a clean PR following the conventions above. Suggested order top-to-botto
      `claude/lp-public-renderer`, mig 0053). `/lp/[slug]` renders published pages,
      CTA + body; `tracker.tsx` beacons view/conversion → `/api/lp/track` →
      `bump_landing_metric`. Admin has CTA fields + Publish/Unpublish.
-   - **#55 Forms → public embed + submit. ⬜ NEXT.** `marketing_forms` (fields jsonb) +
-     `marketing_form_submissions` exist with admin authoring but no public
-     render/submit. Build a public form renderer + `POST` action that inserts a
-     submission (service-role) and calls `fireAutomationEvent('form_submitted', …)`
-     — mirror how the existing contact form already fires that event.
-2. **Asset Library (DAM)** ⬜ — `marketing_assets` (kind image/video/doc/brand,
+   - **#55 Forms → public embed + submit. ✅ DONE** (branch
+     `claude/loving-mccarthy-e1ahq8`, NO migration). `/f/[id]` renders active forms;
+     `form-renderer.tsx` posts to `/api/forms/submit` → inserts a submission
+     (service-role) + fires `fireAutomationEvent('form_submitted', …)`. Admin has an
+     Active/Archive toggle + "View public form" link. Pure helpers in
+     `lib/marketing/forms.ts` (tested). This closes the public-site wiring gap.
+2. **Asset Library (DAM)** ⬜ — **NEXT.** `marketing_assets` (kind image/video/doc/brand,
    storage_path, tags[], dimensions, alt, usage refs) + a **private storage
    bucket** `marketing-assets`. Picker reused by Email/Social/Content/Landing.
    NEXT after build: thumbnail generation + "where used" backrefs.
@@ -426,12 +810,56 @@ Each is a clean PR following the conventions above. Suggested order top-to-botto
    "connect a data source" when unset; never fabricate metrics).
 
 ### Public-site wiring TODOs (detail — tracked as #54/#55)
-The marketing **builders ship before their public surfaces**. As of now, the
-admin can fully author landing pages and forms, but the public site does not yet
-render or accept them — this is the single biggest "looks done but isn't wired"
-gap. Close it via items 1.#54 and 1.#55 above. Same caution applies to any future
-builder: ship the public renderer/endpoint in the same PR as the authoring UI, or
-record it here as a wiring TODO so it isn't mistaken for complete.
+The marketing **builders ship before their public surfaces**. Landing pages (#54)
+and forms (#55) are now both wired end-to-end — the public site renders landing
+pages (`/lp/[slug]`) and renders+accepts forms (`/f/[id]` + `/api/forms/submit`).
+This "looks done but isn't wired" gap is **now closed**. The standing caution
+remains for any future builder: ship the public renderer/endpoint in the same PR
+as the authoring UI, or record it here as a wiring TODO so it isn't mistaken for
+complete.
+
+## Tier & Features admin (admin-controlled feature gating) — branch `claude/tier-features`
+Goal: one admin screen that sets every service's minimum tier (Off / Free / Basic /
+Plus) and flows those changes to the pricing page + in-app gating. **NO migration**
+(stored in `app_settings` key `feature_tiers`, like the AI config).
+- **Catalog** `lib/constants/feature-catalog.ts` — `FEATURE_CATALOG` (~60 services
+  with `{key,label,section,defaultTier,href}`); defaults mirror the published
+  Free/Basic/Plus comparison grid (the global default offering). 4 sections.
+- **Pure logic** `lib/features/tiers.ts` (11 tests): `FeatureTier` =
+  off|free|basic|plus, `tierToLevel` (free0/basic1/plus2/off-1), `resolveFeatureTiers`
+  (overrides over defaults, ignores unknown/invalid keys), `isFeatureAvailable`,
+  `featuresIncludedInPlan`, `featuresAtTier`, `overridesFromResolved`.
+- **Server** `lib/server/feature-tiers.ts`: `getFeatureOverrides` / `getResolvedFeatureTiers`
+  / `setFeatureTier` (clears override when set back to default) / `resetFeatureTiers`.
+- **Admin** `/admin/tier-features` (super-admin; `page.tsx` + `tier-features-client.tsx`
+  4-button toggle grid per service + `actions.ts` guarded by getUser+isSuperAdmin →
+  service client). Nav: ADMIN_NAV "Tier & Features". Each save revalidates
+  `/pricing` + `/dashboard` layout.
+- **Pricing wired LIVE**: `app/(marketing)/pricing/page.tsx` resolves the matrix and
+  passes `featureMatrix` to `PricingContent`, which renders a new "Every feature, by
+  plan" check-matrix table that reflects admin changes immediately (off = hidden).
+- **REMAINING (next step):** wire **in-app nav gating** to the same config. The
+  catalog rows carry `href`; build a server map `href → tierToLevel(resolvedTier)`
+  and have the sidebar (and `requirePlanLevel`/`ROUTE_PLAN_LEVEL`) consult it to
+  override the hardcoded `minLevel` in `lib/constants/navigation.ts`. Today the
+  admin control + pricing are live; nav still reads the static `minLevel`. (Verified:
+  tsc/lint clean · vitest 494 · build OK; `/admin/tier-features` + `/pricing` built.)
+- **Account widget shows the subscription tier**: the bottom-left family switcher
+  (`components/app/app-shell.tsx` `FamilySwitcher`) now renders
+  `{ROLE_LABELS[role]} / {tierLabelForLevel(planLevel)}` → e.g. "Parent / Admin /
+  Free Tier", auto-updating to "Basic Tier"/"Plus Tier" on upgrade (`planLevel`
+  from `useApp()` reflects the live subscription). Helper `tierLabelForLevel(level)`
+  + `TIER_LABEL_BY_LEVEL` in `lib/constants/plans.ts` (tested in plans.test.ts).
+
+## Marketing admin subnav — grouped multi-row tabs
+The ~40 `/admin/marketing/*` surfaces were one long horizontal-scroll row. Now a
+**grouped, wrapping tab panel** (`app/(app)/admin/marketing/marketing-subnav.tsx`,
+client component using `usePathname` for active highlighting). Items are organized
+into labelled rows: Overview · CRM & Sales · Audience & Intelligence · Channels ·
+Growth · Content & SEO · Reputation & Loyalty. `flex-wrap` chips = no horizontal
+scroll, mobile-friendly (label stacks above chips < sm). `layout.tsx` just renders
+`<MarketingSubnav />`. **When adding a new marketing page, add its chip to the
+right GROUP in `marketing-subnav.tsx`** (the old flat SUBNAV array is gone).
 
 ## Backlog (prioritized, each a clean PR)
 1. Event-driven automation triggers (form_submitted, email_opened/clicked,

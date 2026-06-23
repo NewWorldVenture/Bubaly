@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0054: Feature tier settings (admin "Tier & Features")
+-- Migration 0067: Feature tier settings (admin "Tier & Features")
 -- Lets a super-admin set the minimum subscription tier for each platform
 -- feature: free / basic / plus / off. Stored as sparse overrides keyed by the
 -- feature's route; a missing key falls back to the code default in
