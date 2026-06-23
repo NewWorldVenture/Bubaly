@@ -383,6 +383,21 @@ export interface Database {
         { id?: string; family_id: string; vacation_id?: string | null; title: string; memory_date?: string; note?: string | null; location?: string | null; photo_path?: string | null; member_id?: string | null; created_by?: string | null },
         Partial<{ vacation_id: string | null; title: string; memory_date: string; note: string | null; location: string | null; photo_path: string | null; member_id: string | null }>
       >;
+      behavior_logs: T<
+        { id: string; family_id: string; member_id: string | null; kind: string; category: string; note: string | null; points: number; occurred_at: string; logged_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; kind?: string; category?: string; note?: string | null; points?: number; occurred_at?: string; logged_by?: string | null },
+        Partial<{ member_id: string | null; kind: string; category: string; note: string | null; points: number; occurred_at: string }>
+      >;
+      screen_time_entries: T<
+        { id: string; family_id: string; member_id: string | null; entry_date: string; minutes: number; category: string; device: string | null; note: string | null; logged_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; entry_date?: string; minutes: number; category?: string; device?: string | null; note?: string | null; logged_by?: string | null },
+        Partial<{ member_id: string | null; entry_date: string; minutes: number; category: string; device: string | null; note: string | null }>
+      >;
+      screen_time_limits: T<
+        { id: string; family_id: string; member_id: string; daily_minutes: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; daily_minutes: number; created_by?: string | null },
+        Partial<{ daily_minutes: number }>
+      >;
       goals: T<
         { id: string; family_id: string; title: string; description: string | null; target_date: string | null; progress: number; is_complete: boolean; created_by: string | null } & Stamps,
         { id?: string; family_id: string; title: string; description?: string | null; target_date?: string | null; progress?: number; is_complete?: boolean; created_by?: string | null },
