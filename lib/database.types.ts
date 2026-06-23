@@ -56,8 +56,9 @@ export type VacDocKind = 'passport' | 'id' | 'visa' | 'ticket' | 'boarding_pass'
 export type VacRecoKind = 'missing_reservation' | 'packing' | 'budget_warning' | 'weather_warning' | 'travel_conflict' | 'activity_suggestion' | 'restaurant' | 'document_missing' | 'suggestion';
 export type VacRecoStatus = 'open' | 'accepted' | 'dismissed' | 'done';
 
-// Weekend Planner enums (migration 0071)
+// Weekend Planner enums (migration 0071, 0072)
 export type WeekendPlanStatus = 'interested' | 'going' | 'maybe' | 'passed';
+export type WeekendFeedKind = 'ics' | 'rss';
 
 // Sync platform enums (migration 0018)
 export type SyncProviderEnum = 'google' | 'microsoft' | 'apple' | 'amazon' | 'internal';
@@ -1415,6 +1416,11 @@ export interface Database {
         { id: string; family_id: string; zip: string; radius_miles: number; days: number; result_count: number; last_run_at: string; created_by: string | null } & Stamps,
         { id?: string; family_id: string; zip: string; radius_miles?: number; days?: number; result_count?: number; last_run_at?: string; created_by?: string | null },
         Partial<{ zip: string; radius_miles: number; days: number; result_count: number; last_run_at: string }>
+      >;
+      weekend_feeds: T<
+        { id: string; family_id: string; label: string; url: string; kind: WeekendFeedKind; is_active: boolean; last_fetched_at: string | null; last_status: string | null; last_count: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; label: string; url: string; kind?: WeekendFeedKind; is_active?: boolean; last_fetched_at?: string | null; last_status?: string | null; last_count?: number; created_by?: string | null },
+        Partial<{ label: string; url: string; kind: WeekendFeedKind; is_active: boolean; last_fetched_at: string | null; last_status: string | null; last_count: number }>
       >;
     };
     Views: { [_ in never]: never };

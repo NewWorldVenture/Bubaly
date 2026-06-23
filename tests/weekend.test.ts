@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { categoryMeta, priceRange, isValidZip, RADIUS_OPTIONS } from '@/lib/weekend/meta';
 import { discoveryWindow, normalizeTicketmaster, normalizeTicketmasterResponse } from '@/lib/weekend/normalize';
+import { normalizeSeatGeekResponse, parseICS, parseICSDate, parseRSS, withinWindow, dedupeEvents } from '@/lib/weekend/sources';
 
 describe('weekend meta', () => {
   it('maps categories and validates zip', () => {
@@ -65,5 +66,71 @@ describe('normalizeTicketmaster', () => {
     expect(e.venue_name).toBeNull();
     expect(e.price_min_cents).toBeNull();
     expect(normalizeTicketmasterResponse({})).toEqual([]);
+  });
+});
+
+describe('seatgeek', () => {
+  it('normalizes events with venue + price stats', () => {
+    const [e] = normalizeSeatGeekResponse({ events: [{ id: 42, title: 'Rockets vs Spurs', url: 'https://sg/e/42', type: 'nba', datetime_local: '2026-06-25T19:00:00', venue: { name: 'Arena', city: 'Houston', state: 'TX', postal_code: '77002', location: { lat: 29.7, lon: -95.4 } }, stats: { lowest_price: 25, highest_price: 0 } }] });
+    expect(e.source).toBe('seatgeek');
+    expect(e.external_id).toBe('42');
+    expect(e.category).toBe('nba');
+    expect(e.city).toBe('Houston');
+    expect(e.price_min_cents).toBe(2500);
+    expect(e.price_max_cents).toBeNull(); // 0 → null
+    expect(normalizeSeatGeekResponse({})).toEqual([]);
+  });
+});
+
+describe('ICS parsing', () => {
+  const ics = [
+    'BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'UID:abc@city', 'SUMMARY:Farmers Market',
+    'DTSTART;TZID=America/Chicago:20260625T090000', 'DTEND:20260625T130000',
+    'LOCATION:Downtown Plaza', 'DESCRIPTION:Fresh produce\\, crafts', 'CATEGORIES:Family',
+    'URL:https://city/market', 'END:VEVENT',
+    'BEGIN:VEVENT', 'SUMMARY:All Day Fair', 'DTSTART;VALUE=DATE:20260627', 'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+  it('parses VEVENTs incl. params, folding, escapes, all-day', () => {
+    const out = parseICS(ics, 'cityfeed');
+    expect(out).toHaveLength(2);
+    expect(out[0].title).toBe('Farmers Market');
+    expect(out[0].starts_at).toBe('2026-06-25T09:00:00');
+    expect(out[0].venue_name).toBe('Downtown Plaza');
+    expect(out[0].description).toContain('produce, crafts');
+    expect(out[0].is_family_friendly).toBe(true);
+    expect(out[1].starts_at).toBe('2026-06-27T00:00:00');
+    expect(parseICSDate('20260625T180000Z')).toBe('2026-06-25T18:00:00Z');
+  });
+});
+
+describe('RSS parsing', () => {
+  it('parses items with title/link/date/category', () => {
+    const rss = `<rss><channel>
+      <item><title>Library Story Time</title><link>https://lib/e1</link><pubDate>Thu, 25 Jun 2026 15:00:00 GMT</pubDate><category>Kids</category><description><![CDATA[<p>Ages 3-5</p>]]></description></item>
+      <item><title>No Date Event</title><link>https://lib/e2</link></item>
+    </channel></rss>`;
+    const out = parseRSS(rss, 'library');
+    expect(out).toHaveLength(2);
+    expect(out[0].title).toBe('Library Story Time');
+    expect(out[0].url).toBe('https://lib/e1');
+    expect(out[0].starts_at?.startsWith('2026-06-25')).toBe(true);
+    expect(out[0].description).toContain('Ages 3-5');
+    expect(out[1].starts_at).toBeNull();
+  });
+});
+
+describe('aggregation helpers', () => {
+  const now = new Date('2026-06-23T12:00:00Z');
+  it('withinWindow keeps events inside the horizon', () => {
+    const evs = [
+      { starts_at: '2026-06-25T10:00:00Z' }, { starts_at: '2026-07-30T10:00:00Z' }, { starts_at: null },
+    ] as never[];
+    expect(withinWindow(evs, 6, now)).toHaveLength(1);
+  });
+  it('dedupeEvents removes id-dupes and title+day dupes', () => {
+    const a = [{ source: 'tm', external_id: '1', title: 'Fair', starts_at: '2026-06-25T10:00:00Z' }];
+    const b = [{ source: 'tm', external_id: '1', title: 'Fair', starts_at: '2026-06-25T10:00:00Z' }, { source: 'sg', external_id: '9', title: 'Fair', starts_at: '2026-06-25T20:00:00Z' }];
+    expect(dedupeEvents([a as never, b as never])).toHaveLength(1);
   });
 });

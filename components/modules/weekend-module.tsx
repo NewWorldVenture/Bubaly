@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarHeart, MapPin, Search, ExternalLink, Star, Clock, Navigation, Sparkles } from 'lucide-react';
+import { CalendarHeart, MapPin, Search, ExternalLink, Star, Clock, Navigation, Sparkles, Rss, Plus, Trash2, ChevronDown } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -10,11 +10,19 @@ import { Input, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS, categoryMeta, priceRange, isValidZip, PLAN_STATUSES } from '@/lib/weekend/meta';
-import type { Tables, WeekendPlanStatus } from '@/lib/database.types';
+import type { Tables, WeekendPlanStatus, WeekendFeedKind } from '@/lib/database.types';
 
 type Event = Tables<'weekend_events'>;
 type Plan = Tables<'weekend_plans'>;
 type SearchRow = Tables<'weekend_searches'>;
+type Feed = Tables<'weekend_feeds'>;
+
+function sourceLabel(source: string): string {
+  if (source === 'ticketmaster') return 'Ticketmaster';
+  if (source === 'seatgeek') return 'SeatGeek';
+  if (source.startsWith('feed:')) return source.slice(5);
+  return source;
+}
 
 const dayKey = (iso: string) => iso.slice(0, 10);
 const fmtDay = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
@@ -36,12 +44,18 @@ export function WeekendModule() {
     table: 'weekend_searches', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('weekend_searches').select('*').eq('family_id', familyId),
   });
+  const { data: feeds } = useRealtimeQuery<Feed>({
+    table: 'weekend_feeds', familyId, deps: [familyId],
+    fetcher: (sb) => sb.from('weekend_feeds').select('*').eq('family_id', familyId),
+  });
 
   const [zip, setZip] = useState('');
   const [radius, setRadius] = useState<number>(DEFAULT_RADIUS);
   const [days, setDays] = useState<number>(DEFAULT_DAYS);
   const [busy, setBusy] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [showSources, setShowSources] = useState(false);
+  const [feedForm, setFeedForm] = useState({ label: '', url: '', kind: 'ics' as WeekendFeedKind });
 
   // Seed inputs from the most recent search once it loads.
   useEffect(() => {
@@ -94,6 +108,21 @@ export function WeekendModule() {
     if (error) toastError(error.message); else success('Removed');
   }
 
+  async function addFeed(e: React.FormEvent) {
+    e.preventDefault();
+    if (!feedForm.label.trim() || !feedForm.url.trim()) return toastError('Name and URL required');
+    try { new URL(feedForm.url.trim()); } catch { return toastError('Enter a valid URL'); }
+    const { error } = await createClient().from('weekend_feeds').insert({ family_id: familyId, label: feedForm.label.trim(), url: feedForm.url.trim(), kind: feedForm.kind, created_by: userId });
+    if (error) toastError(error.message); else { success('Source added'); setFeedForm({ label: '', url: '', kind: 'ics' }); }
+  }
+  async function toggleFeed(f: Feed) {
+    await createClient().from('weekend_feeds').update({ is_active: !f.is_active }).eq('id', f.id);
+  }
+  async function removeFeed(id: string) {
+    if (!confirm('Remove this source?')) return;
+    await createClient().from('weekend_feeds').delete().eq('id', id);
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -119,6 +148,35 @@ export function WeekendModule() {
           </Select>
           <Button onClick={discover} loading={busy} className="h-11"><Search className="h-4 w-4" /> Find events</Button>
         </div>
+        <button onClick={() => setShowSources((s) => !s)} className="mt-3 flex items-center gap-1 text-xs text-muted hover:text-fg">
+          <Rss className="h-3.5 w-3.5" /> Local sources{feeds.length ? ` (${feeds.filter((f) => f.is_active).length} active)` : ''}
+          <ChevronDown className={`h-3.5 w-3.5 transition ${showSources ? 'rotate-180' : ''}`} />
+        </button>
+        {showSources && (
+          <div className="mt-3 space-y-3 border-t border-border pt-3">
+            <p className="text-xs text-muted">Add any reliable local calendar — a city events page, library, parks &amp; rec, or school district — as an <strong>.ics</strong> or <strong>RSS</strong> link. We crawl them alongside Ticketmaster &amp; SeatGeek and merge everything by day.</p>
+            {feeds.length > 0 && (
+              <ul className="space-y-1.5">
+                {feeds.map((f) => (
+                  <li key={f.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface/60 p-2 text-sm">
+                    <input type="checkbox" checked={f.is_active} onChange={() => toggleFeed(f)} className="h-4 w-4 rounded border-border" title="Active" />
+                    <span className="font-medium">{f.label}</span>
+                    <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] uppercase text-muted">{f.kind}</span>
+                    {f.last_status && <span className={`text-[11px] ${f.last_status === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}>{f.last_status === 'ok' ? `✓ ${f.last_count} found` : `⚠ ${f.last_status}`}</span>}
+                    <a href={f.url} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-muted hover:text-brand">{f.url}</a>
+                    <button onClick={() => removeFeed(f.id)} className="ml-auto text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form onSubmit={addFeed} className="grid gap-2 sm:grid-cols-[1fr_2fr_auto_auto]">
+              <Input value={feedForm.label} onChange={(e) => setFeedForm({ ...feedForm, label: e.target.value })} placeholder="Name (e.g. City Calendar)" className="h-9" />
+              <Input value={feedForm.url} onChange={(e) => setFeedForm({ ...feedForm, url: e.target.value })} placeholder="https://…/events.ics" className="h-9" />
+              <Select value={feedForm.kind} onChange={(e) => setFeedForm({ ...feedForm, kind: e.target.value as WeekendFeedKind })} className="h-9 sm:w-24"><option value="ics">ICS</option><option value="rss">RSS</option></Select>
+              <Button type="submit" size="sm" className="h-9"><Plus className="h-4 w-4" /> Add</Button>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* saved plans */}
@@ -168,9 +226,10 @@ export function WeekendModule() {
                         ? <img src={e.image_url} alt="" className="h-32 w-full object-cover" loading="lazy" />
                         : <div className="grid h-32 w-full place-items-center bg-elevated text-3xl">{cat.emoji}</div>}
                       <div className="flex flex-1 flex-col p-3">
-                        <div className="mb-1 flex items-center gap-2">
+                        <div className="mb-1 flex flex-wrap items-center gap-1.5">
                           <span className="rounded-full bg-elevated px-2 py-0.5 text-[10px] font-medium text-muted">{cat.emoji} {cat.label}</span>
                           {e.is_family_friendly && <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-medium text-blue-300">Family</span>}
+                          <span className="rounded-full bg-elevated px-2 py-0.5 text-[10px] text-muted">{sourceLabel(e.source)}</span>
                         </div>
                         <p className="line-clamp-2 font-semibold">{e.title}</p>
                         <p className="mt-1 text-xs text-muted">{fmtTime(e.starts_at)}{e.venue_name ? ` · ${e.venue_name}` : ''}</p>
