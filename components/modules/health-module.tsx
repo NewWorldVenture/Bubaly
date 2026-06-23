@@ -1,14 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { Activity, ChevronRight, Dumbbell, Filter, Heart, MoreHorizontal, Plus, Sparkles, Zap } from 'lucide-react';
+import { Activity, ChevronRight, Dumbbell, Filter, Heart, MoreHorizontal, Plus, Sparkles, Zap, Thermometer, CheckCircle2, Trash2, Target, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
-import { Input, Field, Select } from '@/components/ui/input';
+import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
@@ -20,6 +19,11 @@ type HealthMetric = Tables<'health_metrics'>;
 type WorkoutLog = Tables<'workout_logs'>;
 type Appointment = Tables<'appointments'>;
 type Reminder = Tables<'reminders'>;
+type SymptomLog = Tables<'symptom_logs'>;
+type HealthGoal = Tables<'health_goals'>;
+
+const SEVERITY_LABELS = ['', 'Mild', 'Mild', 'Moderate', 'Severe', 'Severe'];
+const SEVERITY_COLORS = ['', 'text-emerald-300', 'text-emerald-300', 'text-amber-300', 'text-orange-300', 'text-rose-300'];
 
 const TABS = ['Overview', 'Activity', 'Nutrition', 'Sleep', 'Checkups', 'Medications', 'Documents', 'Vitals'] as const;
 type Tab = (typeof TABS)[number];
@@ -94,11 +98,22 @@ export function HealthModule() {
   const [apptOpen, setApptOpen] = useState(false);
   const [metricOpen, setMetricOpen] = useState(false);
   const [workoutOpen, setWorkoutOpen] = useState(false);
+  const [symptomOpen, setSymptomOpen] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(false);
+  const [coachOpen, setCoachOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [apptForm, setApptForm] = useState({ title: '', starts_at: '', member_id: '', notes: '' });
   const [metricForm, setMetricForm] = useState({ member_id: '', type: 'steps' as MetricType, value: '', recorded_at: '' });
   const [workoutForm, setWorkoutForm] = useState({ member_id: '', activity: '', duration_minutes: '', calories: '', distance: '', notes: '', recorded_at: '' });
+  const [symptomForm, setSymptomForm] = useState({ member_id: '', symptom: '', severity: '3', body_area: '', notes: '', started_at: '' });
+  const [goalForm, setGoalForm] = useState({ member_id: '', metric_type: 'steps' as MetricType, target: '', period: 'daily' as 'daily' | 'weekly' });
+
+  // AI Health Coach modal state
+  const [coachForm, setCoachForm] = useState({ member_id: '', question: '' });
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachAnswer, setCoachAnswer] = useState('');
+  const [coachError, setCoachError] = useState('');
 
   const now = useMemo(() => new Date().toISOString(), []);
   const weekAgo = useMemo(() => daysAgo(7), []);
@@ -124,6 +139,28 @@ export function HealthModule() {
     table: 'reminders', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false).limit(4),
   });
+
+  const { data: symptoms } = useRealtimeQuery<SymptomLog>({
+    table: 'symptom_logs', familyId, deps: [familyId],
+    fetcher: (sb) => sb.from('symptom_logs').select('*').eq('family_id', familyId).order('started_at', { ascending: false }).limit(50),
+  });
+
+  const { data: goals } = useRealtimeQuery<HealthGoal>({
+    table: 'health_goals', familyId, deps: [familyId],
+    fetcher: (sb) => sb.from('health_goals').select('*').eq('family_id', familyId).eq('is_active', true),
+  });
+
+  // Per-member goal lookup (`member:metric:period`), with a sensible step fallback.
+  const goalMap = useMemo(() => {
+    const map = new Map<string, number>();
+    goals.forEach((g) => map.set(`${g.member_id}:${g.metric_type}:${g.period}`, g.target));
+    return map;
+  }, [goals]);
+  const stepGoalFor = useMemo(() => (memberId: string) => goalMap.get(`${memberId}:steps:daily`) ?? 10000, [goalMap]);
+  const familyStepsGoal = useMemo(
+    () => members.reduce((s, m) => s + stepGoalFor(m.id), 0) || 10000,
+    [members, stepGoalFor],
+  );
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const loading = metricsLoading || workoutsLoading || apptLoading || remLoading;
@@ -158,10 +195,10 @@ export function HealthModule() {
 
   // Activity summary progress bars
   const activityProgress = useMemo(() => [
-    { label: 'Steps', val: totalStepsToday.toLocaleString(), goal: '10,000', pct: Math.min(100, Math.round((totalStepsToday / 10000) * 100)) },
+    { label: 'Steps', val: totalStepsToday.toLocaleString(), goal: familyStepsGoal.toLocaleString(), pct: Math.min(100, Math.round((totalStepsToday / familyStepsGoal) * 100)) },
     { label: 'Calories', val: totalCaloriesToday.toLocaleString(), goal: '2,000', pct: Math.min(100, Math.round((totalCaloriesToday / 2000) * 100)) },
     { label: 'Active Min', val: totalActiveMinToday.toString(), goal: '60', pct: Math.min(100, Math.round((totalActiveMinToday / 60) * 100)) },
-  ], [totalStepsToday, totalCaloriesToday, totalActiveMinToday]);
+  ], [totalStepsToday, totalCaloriesToday, totalActiveMinToday, familyStepsGoal]);
 
   const goalPct = useMemo(() => {
     if (activityProgress.length === 0) return 0;
@@ -197,10 +234,10 @@ export function HealthModule() {
       const sleep = sleepArr.length > 0 ? sleepArr.reduce((s, met) => s + met.value, 0) / sleepArr.length : 0;
       const hrArr = memberMetrics.filter((met) => met.type === 'heart_rate');
       const hr = hrArr.length > 0 ? Math.round(hrArr.reduce((s, met) => s + met.value, 0) / hrArr.length) : 0;
-      const stepGoalPct = Math.min(100, Math.round((steps / 10000) * 100));
+      const stepGoalPct = Math.min(100, Math.round((steps / stepGoalFor(m.id)) * 100));
       return { member: m, steps, sleep, hr, pct: stepGoalPct };
     });
-  }, [members, todayMetrics]);
+  }, [members, todayMetrics, stepGoalFor]);
 
   // Health summary for sidebar
   const healthSummary = useMemo(() => {
@@ -240,7 +277,7 @@ export function HealthModule() {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const key = d.toISOString().slice(0, 10);
-        if ((memberStepDays.get(key) || 0) >= 10000) {
+        if ((memberStepDays.get(key) || 0) >= stepGoalFor(m.id)) {
           consecutive++;
         } else break;
       }
@@ -297,7 +334,7 @@ export function HealthModule() {
     }
 
     return result;
-  }, [metrics, todayMetrics, members, appointments, memberById]);
+  }, [metrics, todayMetrics, members, appointments, memberById, stepGoalFor]);
 
   // ── CRUD handlers ──────────────────────────────────────────
   async function saveAppointment() {
@@ -361,6 +398,95 @@ export function HealthModule() {
     setWorkoutForm({ member_id: '', activity: '', duration_minutes: '', calories: '', distance: '', notes: '', recorded_at: '' });
   }
 
+  async function saveSymptom() {
+    if (!symptomForm.member_id || !symptomForm.symptom.trim()) return;
+    setSaving(true);
+    const sb = createClient();
+    const { error: err } = await sb.from('symptom_logs').insert({
+      family_id: familyId,
+      member_id: symptomForm.member_id,
+      symptom: symptomForm.symptom.trim(),
+      severity: parseInt(symptomForm.severity) || 3,
+      body_area: symptomForm.body_area.trim() || null,
+      notes: symptomForm.notes.trim() || null,
+      started_at: symptomForm.started_at ? new Date(symptomForm.started_at).toISOString() : new Date().toISOString(),
+      created_by: userId,
+    });
+    setSaving(false);
+    if (err) { toastError('Failed to log symptom'); return; }
+    success('Symptom logged!');
+    setSymptomOpen(false);
+    setSymptomForm({ member_id: '', symptom: '', severity: '3', body_area: '', notes: '', started_at: '' });
+  }
+
+  async function resolveSymptom(s: SymptomLog) {
+    const sb = createClient();
+    const { error: err } = await sb.from('symptom_logs').update({ status: 'resolved', ended_at: new Date().toISOString() }).eq('id', s.id);
+    if (err) { toastError('Failed to update symptom'); return; }
+    success('Marked resolved.');
+  }
+
+  async function deleteSymptom(s: SymptomLog) {
+    const sb = createClient();
+    const { error: err } = await sb.from('symptom_logs').delete().eq('id', s.id);
+    if (err) { toastError('Failed to delete symptom'); return; }
+    success('Symptom removed.');
+  }
+
+  async function saveGoal() {
+    if (!goalForm.member_id || !goalForm.target) return;
+    const target = parseFloat(goalForm.target);
+    if (!(target > 0)) { toastError('Target must be greater than 0.'); return; }
+    setSaving(true);
+    const sb = createClient();
+    const typeInfo = METRIC_TYPES.find((t) => t.value === goalForm.metric_type);
+    const { error: err } = await sb.from('health_goals').upsert({
+      family_id: familyId,
+      member_id: goalForm.member_id,
+      metric_type: goalForm.metric_type,
+      target,
+      period: goalForm.period,
+      label: typeInfo?.label ?? null,
+      is_active: true,
+      created_by: userId,
+    }, { onConflict: 'member_id,metric_type,period' });
+    setSaving(false);
+    if (err) { toastError('Failed to save goal'); return; }
+    success('Goal saved!');
+    setGoalOpen(false);
+    setGoalForm({ member_id: '', metric_type: 'steps', target: '', period: 'daily' });
+  }
+
+  async function askCoach() {
+    if (!coachForm.question.trim()) return;
+    setCoachLoading(true);
+    setCoachError('');
+    setCoachAnswer('');
+    try {
+      const res = await fetch('/api/ai/health/coach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: coachForm.question.trim(), memberId: coachForm.member_id || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setCoachError(json.error || 'The coach is unavailable right now.'); return; }
+      setCoachAnswer(json.text || '');
+    } catch {
+      setCoachError('Network error. Please try again.');
+    } finally {
+      setCoachLoading(false);
+    }
+  }
+
+  // Most-recent symptoms first; active ones surfaced to the top.
+  const sortedSymptoms = useMemo(() => {
+    return [...symptoms].sort((a, b) => {
+      if (a.status !== b.status) return a.status === 'active' ? -1 : 1;
+      return b.started_at.localeCompare(a.started_at);
+    });
+  }, [symptoms]);
+  const activeSymptomCount = useMemo(() => symptoms.filter((s) => s.status === 'active').length, [symptoms]);
+
   // ── Loading / Error ──────────────────────────────────────
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorState message={error} />;
@@ -409,7 +535,7 @@ export function HealthModule() {
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">Activity Summary</h2>
-              <span className="text-xs text-muted">Today</span>
+              <button onClick={() => setGoalOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-brand"><Target className="h-3 w-3" /> Set goals</button>
             </div>
             {metrics.length === 0 ? (
               <EmptyState icon={Activity} title="No activity data yet" description="Log your first health metric to see activity summaries." action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Metric</Button>} />
@@ -542,6 +668,53 @@ export function HealthModule() {
             </div>
           </div>
         </div>
+
+        {/* Symptom Journal */}
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Thermometer className="h-4 w-4 text-rose-300" />
+              <h2 className="font-semibold">Symptom Journal</h2>
+              {activeSymptomCount > 0 && (
+                <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">{activeSymptomCount} active</span>
+              )}
+            </div>
+            <Button onClick={() => setSymptomOpen(true)} className="btn-secondary"><Plus className="h-4 w-4" /> Log symptom</Button>
+          </div>
+          {sortedSymptoms.length === 0 ? (
+            <EmptyState icon={Thermometer} title="No symptoms logged" description="Track illnesses and symptoms over time — severity, body area, and when they started." action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log symptom</Button>} />
+          ) : (
+            <div className="space-y-2.5">
+              {sortedSymptoms.slice(0, 12).map((s) => {
+                const member = memberById.get(s.member_id);
+                return (
+                  <div key={s.id} className={cn('flex items-center gap-3 rounded-xl border border-border p-3', s.status === 'resolved' && 'opacity-60')}>
+                    {member && <Avatar name={member.display_name} color={member.color} size={32} />}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold">{s.symptom}</p>
+                        <span className={cn('text-[10px] font-bold uppercase', SEVERITY_COLORS[s.severity] ?? 'text-muted')}>{SEVERITY_LABELS[s.severity] ?? `Lvl ${s.severity}`}</span>
+                        {s.status === 'resolved' && <span className="text-[10px] font-semibold text-emerald-300">Resolved</span>}
+                      </div>
+                      <p className="truncate text-xs text-muted">
+                        {member?.display_name ?? 'Unknown'}
+                        {s.body_area ? ` · ${s.body_area}` : ''}
+                        {` · since ${formatRelativeTime(s.started_at)}`}
+                        {s.notes ? ` · ${s.notes}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {s.status === 'active' && (
+                        <button onClick={() => resolveSymptom(s)} title="Mark resolved" className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:text-emerald-300"><CheckCircle2 className="h-4 w-4" /></button>
+                      )}
+                      <button onClick={() => deleteSymptom(s)} title="Delete" className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:text-rose-300"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Sidebar ──────────────────────────────────────────── */}
@@ -623,7 +796,7 @@ export function HealthModule() {
           </div>
           <h3 className="font-bold">AI Health Coach</h3>
           <p className="mt-2 text-xs leading-5 text-muted">Get personalized health tips and wellness insights for your family.</p>
-          <Link href="/dashboard/assistant" className="btn-cta mt-4 inline-flex w-full items-center justify-center">Ask AI</Link>
+          <Button onClick={() => setCoachOpen(true)} className="btn-cta mt-4 w-full justify-center">Ask AI</Button>
         </div>
       </aside>
 
@@ -666,6 +839,51 @@ export function HealthModule() {
           </div>
           <Field label="Notes (optional)">{(id) => <Input id={id} value={workoutForm.notes} onChange={(e) => setWorkoutForm((f) => ({ ...f, notes: e.target.value }))} placeholder="e.g. Felt great, PR pace" />}</Field>
           <Button onClick={saveWorkout} disabled={saving || !workoutForm.member_id || !workoutForm.activity} loading={saving} className="w-full">{saving ? 'Saving...' : 'Log Workout'}</Button>
+        </div>
+      </Modal>
+
+      {/* Log Symptom Modal */}
+      <Modal open={symptomOpen} title="Log Symptom" onClose={() => setSymptomOpen(false)}>
+        <div className="space-y-4">
+          <Field label="Family Member">{(id) => <Select id={id} value={symptomForm.member_id} onChange={(e) => setSymptomForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Select member</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label="Symptom">{(id) => <Input id={id} value={symptomForm.symptom} onChange={(e) => setSymptomForm((f) => ({ ...f, symptom: e.target.value }))} placeholder="e.g. Headache, Sore throat, Fever" />}</Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Severity">{(id) => <Select id={id} value={symptomForm.severity} onChange={(e) => setSymptomForm((f) => ({ ...f, severity: e.target.value }))}><option value="1">1 — Mild</option><option value="2">2 — Mild</option><option value="3">3 — Moderate</option><option value="4">4 — Severe</option><option value="5">5 — Severe</option></Select>}</Field>
+            <Field label="Body Area (optional)">{(id) => <Input id={id} value={symptomForm.body_area} onChange={(e) => setSymptomForm((f) => ({ ...f, body_area: e.target.value }))} placeholder="e.g. Head, Stomach" />}</Field>
+          </div>
+          <Field label="Started (optional)">{(id) => <Input id={id} type="datetime-local" value={symptomForm.started_at} onChange={(e) => setSymptomForm((f) => ({ ...f, started_at: e.target.value }))} />}</Field>
+          <Field label="Notes (optional)">{(id) => <Textarea id={id} value={symptomForm.notes} onChange={(e) => setSymptomForm((f) => ({ ...f, notes: e.target.value }))} placeholder="e.g. Started after lunch, took ibuprofen" />}</Field>
+          <Button onClick={saveSymptom} disabled={saving || !symptomForm.member_id || !symptomForm.symptom.trim()} loading={saving} className="w-full">{saving ? 'Saving...' : 'Log Symptom'}</Button>
+        </div>
+      </Modal>
+
+      {/* Set Goal Modal */}
+      <Modal open={goalOpen} title="Set Health Goal" onClose={() => setGoalOpen(false)}>
+        <div className="space-y-4">
+          <p className="text-xs text-muted">Set a per-member daily or weekly target. Progress rings and insights use these goals (steps default to 10,000 when no goal is set).</p>
+          <Field label="Family Member">{(id) => <Select id={id} value={goalForm.member_id} onChange={(e) => setGoalForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Select member</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Metric">{(id) => <Select id={id} value={goalForm.metric_type} onChange={(e) => setGoalForm((f) => ({ ...f, metric_type: e.target.value as MetricType }))}>{METRIC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select>}</Field>
+            <Field label="Period">{(id) => <Select id={id} value={goalForm.period} onChange={(e) => setGoalForm((f) => ({ ...f, period: e.target.value as 'daily' | 'weekly' }))}><option value="daily">Daily</option><option value="weekly">Weekly</option></Select>}</Field>
+          </div>
+          <Field label="Target">{(id) => <Input id={id} type="number" value={goalForm.target} onChange={(e) => setGoalForm((f) => ({ ...f, target: e.target.value }))} placeholder={`e.g. ${goalForm.metric_type === 'steps' ? '10000' : goalForm.metric_type === 'sleep_hours' ? '8' : '60'}`} />}</Field>
+          <Button onClick={saveGoal} disabled={saving || !goalForm.member_id || !goalForm.target} loading={saving} className="w-full">{saving ? 'Saving...' : 'Save Goal'}</Button>
+        </div>
+      </Modal>
+
+      {/* AI Health Coach Modal */}
+      <Modal open={coachOpen} title="AI Health Coach" onClose={() => setCoachOpen(false)}>
+        <div className="space-y-4">
+          <p className="text-xs leading-5 text-muted">Ask a wellness question. The coach uses your family&rsquo;s own health data (profile, active meds, recent symptoms) to give grounded, safety-first guidance. This is general wellness information, not medical advice.</p>
+          <Field label="About (optional)">{(id) => <Select id={id} value={coachForm.member_id} onChange={(e) => setCoachForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">General / whole family</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label="Question">{(id) => <Textarea id={id} value={coachForm.question} onChange={(e) => setCoachForm((f) => ({ ...f, question: e.target.value }))} placeholder="e.g. What can help with a lingering cough and when should we see a doctor?" />}</Field>
+          <Button onClick={askCoach} disabled={coachLoading || !coachForm.question.trim()} loading={coachLoading} className="w-full">
+            {coachLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Thinking...</> : <><Sparkles className="h-4 w-4" /> Ask the Coach</>}
+          </Button>
+          {coachError && <p className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger">{coachError}</p>}
+          {coachAnswer && (
+            <div className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-xl border border-border bg-surface/40 p-4 text-sm leading-6 text-fg">{coachAnswer}</div>
+          )}
         </div>
       </Modal>
     </div>
