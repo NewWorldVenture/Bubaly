@@ -519,8 +519,8 @@ export function DeviceShowcase() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 lg:gap-5">
         {devices.map((device) => (
           <div key={device} className="device-card group flex flex-col items-center gap-3">
-            <div className="dark"><DeviceArtwork device={device} /></div>
-            <span className="text-sm font-medium text-white/75 transition group-hover:text-white">{device}</span>
+            <DeviceArtwork device={device} />
+            <span className="text-canvas-muted text-sm font-medium transition group-hover:text-canvas">{device}</span>
           </div>
         ))}
       </div>
@@ -532,15 +532,15 @@ export function DeviceShowcase() {
           { icon: Shield, text: 'End-to-end encrypted' },
           { icon: Heart, text: 'Your data, your family' },
         ].map(({ icon: Icon, text }) => (
-          <div key={text} className="flex items-center justify-center gap-2 text-sm text-white/65">
+          <div key={text} className="text-canvas-muted flex items-center justify-center gap-2 text-sm">
             <Icon className="h-5 w-5 text-emerald-400" />
             {text}
           </div>
         ))}
       </div>
 
-      <div className="mt-8 rounded-xl border border-white/[0.045] bg-white/[0.025] px-5 py-6">
-        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-lg font-black text-white/62 sm:gap-x-14 sm:text-xl">
+      <div className="showcase-card mt-8 rounded-xl px-5 py-6">
+        <div className="text-canvas-muted flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-lg font-black sm:gap-x-14 sm:text-xl">
           <span className="font-serif">Forbes</span>
           <span><span className="mr-1 text-emerald-400">TC</span>TechCrunch</span>
           <span className="text-sm leading-none">GOOD<br />MORNING<br />AMERICA</span>
@@ -556,24 +556,28 @@ export function DeviceShowcase() {
 type DeviceName = 'iPhone' | 'Android' | 'iPad' | 'Web App' | 'Apple Watch' | 'Smart Display';
 
 function MiniAppScreen({ compact = false }: { compact?: boolean }) {
+  // A real-looking Bubaly screenshot that flips with the theme: bright UI in
+  // light mode, deep navy in dark mode. Accent colors stay constant for brand.
+  const tints = ['text-violet-500 dark:text-violet-400', 'text-emerald-500 dark:text-emerald-400', 'text-orange-500 dark:text-orange-400'];
+  const dots = ['bg-blue-400', 'bg-rose-400', 'bg-emerald-400'];
   return (
-    <div className={cn('h-full w-full overflow-hidden rounded-[inherit] bg-[#09111d] p-2', compact && 'p-1.5')}>
+    <div className={cn('flex h-full w-full flex-col overflow-hidden rounded-[inherit] bg-white text-slate-900 transition-colors duration-300 dark:bg-[#0a1120] dark:text-white', compact ? 'p-1.5' : 'p-2')}>
       <div className="flex items-center justify-between">
-        <span className={cn('font-bold text-white', compact ? 'text-[4px]' : 'text-[6px]')}>Bubaly</span>
+        <span className={cn('font-bold tracking-tight', compact ? 'text-[4px]' : 'text-[6px]')}>Bubaly</span>
         <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
       </div>
-      <div className="mt-2 grid grid-cols-3 gap-1">
+      <div className="mt-1.5 grid grid-cols-3 gap-1">
         {[CalendarDays, CheckSquare2, ShoppingCart].map((Icon, index) => (
-          <span key={index} className="grid aspect-square place-items-center rounded-sm bg-white/[0.07]">
-            <Icon className={cn(index === 0 ? 'text-violet-400' : index === 1 ? 'text-emerald-400' : 'text-orange-400', compact ? 'h-2 w-2' : 'h-3 w-3')} />
+          <span key={index} className="grid aspect-square place-items-center rounded-sm bg-slate-100 dark:bg-white/[0.07]">
+            <Icon className={cn(tints[index], compact ? 'h-2 w-2' : 'h-3 w-3')} />
           </span>
         ))}
       </div>
-      <div className="mt-2 space-y-1">
+      <div className="mt-1.5 space-y-1">
         {[55, 82, 68].map((width, index) => (
-          <span key={width} className="flex items-center gap-1 rounded-sm bg-white/[0.045] p-1">
-            <span className={cn('rounded-full', index === 0 ? 'bg-blue-400' : index === 1 ? 'bg-rose-400' : 'bg-emerald-400', compact ? 'h-1 w-1' : 'h-1.5 w-1.5')} />
-            <span className="h-0.5 rounded-full bg-white/30" style={{ width: `${width}%` }} />
+          <span key={width} className="flex items-center gap-1 rounded-sm bg-slate-100 p-1 dark:bg-white/[0.045]">
+            <span className={cn('rounded-full', dots[index], compact ? 'h-1 w-1' : 'h-1.5 w-1.5')} />
+            <span className="h-0.5 rounded-full bg-slate-300 dark:bg-white/30" style={{ width: `${width}%` }} />
           </span>
         ))}
       </div>
@@ -581,32 +585,57 @@ function MiniAppScreen({ compact = false }: { compact?: boolean }) {
   );
 }
 
+// Metallic frame gradients — silver/titanium in light mode, graphite in dark.
+const FRAME = 'bg-[linear-gradient(150deg,#f3f4f6,#c4c7cd_30%,#a7abb3_60%,#e8eaee)] dark:bg-[linear-gradient(150deg,#8b8d90,#34363a_24%,#111317_58%,#77797c)]';
+const FRAME_NEUTRAL = 'bg-[linear-gradient(150deg,#e9ebee,#c2c5cb_45%,#d8dade)] dark:bg-[linear-gradient(150deg,#3a3d44,#202329_45%,#33363d)]';
+const GLARE = 'pointer-events-none absolute inset-0 rounded-[inherit] bg-gradient-to-tr from-transparent via-white/0 to-white/15';
+
 function DeviceArtwork({ device }: { device: DeviceName }) {
+  const shadow = 'shadow-[0_16px_34px_rgba(15,23,42,0.28)] dark:shadow-[0_22px_44px_rgba(0,0,0,0.6)]';
+  const btn = 'absolute bg-black/25 dark:bg-[#4f5155]';
+
   if (device === 'iPhone' || device === 'Android') {
     return (
-      <div className={cn('device-art relative h-32 w-[70px] rounded-[17px] border-[4px] border-[#333742] bg-black p-1 shadow-2xl sm:h-36 sm:w-[78px]', device === 'Android' && 'rounded-[13px]')}>
-        <MiniAppScreen />
-        <span className={cn('absolute left-1/2 top-1.5 -translate-x-1/2 bg-black', device === 'iPhone' ? 'h-2 w-7 rounded-full' : 'h-2 w-2 rounded-full')} />
+      <div className={cn('device-art relative h-32 w-[70px] rounded-[19px] p-[3px] sm:h-36 sm:w-[78px]', FRAME, shadow, device === 'Android' && 'rounded-[15px]')}>
+        <span className={cn(btn, '-left-[2px] top-9 h-7 w-[2px] rounded-l')} />
+        <span className={cn(btn, '-right-[2px] top-12 h-9 w-[2px] rounded-r')} />
+        <div className={cn('relative h-full w-full overflow-hidden bg-black', device === 'Android' ? 'rounded-[12px]' : 'rounded-[16px]')}>
+          <MiniAppScreen />
+          <span className={cn('absolute left-1/2 top-1 z-10 -translate-x-1/2 bg-black', device === 'iPhone' ? 'h-1.5 w-6 rounded-full' : 'h-1.5 w-1.5 rounded-full')} />
+          <span className={GLARE} />
+        </div>
       </div>
     );
   }
 
   if (device === 'iPad') {
     return (
-      <div className="device-art h-28 w-[132px] rounded-xl border-[5px] border-[#333742] bg-black p-1.5 shadow-2xl sm:h-32 sm:w-[148px]">
-        <MiniAppScreen />
+      <div className={cn('device-art relative h-28 w-[132px] rounded-[15px] p-[5px] sm:h-32 sm:w-[148px]', FRAME, shadow)}>
+        <span className="absolute left-1/2 top-[2px] h-1 w-1 -translate-x-1/2 rounded-full bg-black/30 dark:bg-white/20" />
+        <div className="relative h-full w-full overflow-hidden rounded-[10px] bg-black">
+          <MiniAppScreen />
+          <span className={GLARE} />
+        </div>
       </div>
     );
   }
 
   if (device === 'Web App') {
     return (
-      <div className="device-art flex h-32 w-full max-w-[160px] flex-col justify-center sm:h-36">
-        <div className="h-[92px] rounded-lg border-[4px] border-[#333742] bg-black p-1 shadow-2xl sm:h-[104px]">
-          <MiniAppScreen compact />
+      <div className="device-art flex h-32 w-full max-w-[160px] flex-col items-center justify-center sm:h-36">
+        <div className={cn('w-full rounded-[11px] p-[4px]', FRAME_NEUTRAL, shadow)}>
+          <div className="overflow-hidden rounded-[8px] bg-white dark:bg-[#0a1120]">
+            <div className="flex items-center gap-1 border-b border-black/5 px-1.5 py-1 dark:border-white/10">
+              <span className="h-1 w-1 rounded-full bg-rose-400" />
+              <span className="h-1 w-1 rounded-full bg-amber-400" />
+              <span className="h-1 w-1 rounded-full bg-emerald-400" />
+              <span className="ml-1 h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-white/10" />
+            </div>
+            <div className="relative h-[76px] sm:h-[88px]"><MiniAppScreen compact /><span className={GLARE} /></div>
+          </div>
         </div>
-        <div className="mx-auto h-3 w-8 bg-[#333742]" />
-        <div className="mx-auto h-1.5 w-16 rounded-full bg-[#454a57]" />
+        <div className="mx-auto h-3 w-8 bg-gradient-to-b from-[#c8cbd1] to-[#a7abb3] dark:from-[#33363d] dark:to-[#202329]" />
+        <div className="mx-auto h-1.5 w-16 rounded-full bg-[#b4b8c0] dark:bg-[#3a3d44]" />
       </div>
     );
   }
@@ -614,27 +643,33 @@ function DeviceArtwork({ device }: { device: DeviceName }) {
   if (device === 'Apple Watch') {
     return (
       <div className="device-art flex h-32 flex-col items-center justify-center sm:h-36">
-        <div className="h-8 w-9 rounded-t-lg bg-[#353943]" />
-        <div className="relative h-[66px] w-[62px] rounded-[17px] border-[4px] border-[#454a55] bg-black p-1.5 shadow-2xl">
-          <div className="grid h-full place-items-center rounded-xl bg-[#0b1320]">
-            <Bell className="h-5 w-5 text-violet-400" />
-            <span className="absolute bottom-2 text-[6px] font-bold text-white">9:41</span>
+        <div className="h-7 w-9 rounded-t-[11px] bg-gradient-to-b from-[#d9dbdf] to-[#b4b8c0] dark:from-[#3a3d44] dark:to-[#26282e]" />
+        <div className={cn('relative h-[62px] w-[58px] rounded-[19px] p-[4px]', FRAME, shadow)}>
+          <span className="absolute -right-[2px] top-5 h-3 w-[3px] rounded-r bg-[#9aa0a8] dark:bg-[#5a5c60]" />
+          <div className="relative grid h-full w-full place-items-center overflow-hidden rounded-[15px] bg-black">
+            <Bell className="h-4 w-4 text-violet-400" />
+            <span className="absolute top-1.5 text-[6px] font-semibold text-white/85">9:41</span>
+            <span className="absolute bottom-1.5 text-[5px] font-medium text-white/55">Bubaly</span>
+            <span className={GLARE} />
           </div>
         </div>
-        <div className="h-8 w-9 rounded-b-lg bg-[#353943]" />
+        <div className="h-7 w-9 rounded-b-[11px] bg-gradient-to-b from-[#b4b8c0] to-[#d9dbdf] dark:from-[#26282e] dark:to-[#3a3d44]" />
       </div>
     );
   }
 
   return (
     <div className="device-art flex h-32 w-full max-w-[160px] flex-col items-center justify-center sm:h-36">
-      <div className="relative h-[92px] w-full overflow-hidden rounded-xl border-[5px] border-[#333742] bg-black shadow-2xl sm:h-[104px]">
-        <Image src="/images/family-ai-lifestyle.png" alt="Bubaly smart display" fill sizes="160px" className="object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/65 to-transparent" />
-        <span className="absolute bottom-2 left-2 text-[7px] font-bold text-white">Good evening, family</span>
+      <div className={cn('relative w-full rounded-[13px] p-[4px]', FRAME_NEUTRAL, shadow)}>
+        <div className="relative h-[80px] w-full overflow-hidden rounded-[9px] bg-black sm:h-[92px]">
+          <Image src="/images/family-ai-lifestyle.png" alt="Bubaly smart display" fill sizes="160px" className="object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+          <span className="absolute bottom-1.5 left-2 text-[7px] font-bold text-white">Good evening, family</span>
+          <span className={GLARE} />
+        </div>
       </div>
-      <div className="h-3 w-8 bg-[#333742]" />
-      <div className="h-1.5 w-16 rounded-full bg-[#454a57]" />
+      <div className="mx-auto -mt-[1px] h-3 w-10 bg-gradient-to-b from-[#c8cbd1] to-[#a7abb3] dark:from-[#33363d] dark:to-[#202329]" />
+      <div className="mx-auto h-1.5 w-20 rounded-full bg-[#b4b8c0] dark:bg-[#3a3d44]" />
     </div>
   );
 }
