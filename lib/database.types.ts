@@ -398,6 +398,26 @@ export interface Database {
         { id?: string; family_id: string; member_id: string; daily_minutes: number; created_by?: string | null },
         Partial<{ daily_minutes: number }>
       >;
+      expense_splits: T<
+        { id: string; family_id: string; description: string; total_cents: number; category: string | null; paid_by: string | null; spent_on: string; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; description: string; total_cents: number; category?: string | null; paid_by?: string | null; spent_on?: string; note?: string | null; created_by?: string | null },
+        Partial<{ description: string; total_cents: number; category: string | null; paid_by: string | null; spent_on: string; note: string | null }>
+      >;
+      expense_split_shares: T<
+        { id: string; family_id: string; split_id: string; member_id: string; share_cents: number; settled: boolean; settled_at: string | null } & Stamps,
+        { id?: string; family_id: string; split_id: string; member_id: string; share_cents: number; settled?: boolean; settled_at?: string | null },
+        Partial<{ share_cents: number; settled: boolean; settled_at: string | null }>
+      >;
+      subscriptions_tracked: T<
+        { id: string; family_id: string; name: string; cost_cents: number; cadence: string; category: string | null; status: string; next_charge: string | null; last_used: string | null; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; cost_cents: number; cadence?: string; category?: string | null; status?: string; next_charge?: string | null; last_used?: string | null; note?: string | null; created_by?: string | null },
+        Partial<{ name: string; cost_cents: number; cadence: string; category: string | null; status: string; next_charge: string | null; last_used: string | null; note: string | null }>
+      >;
+      tax_documents: T<
+        { id: string; family_id: string; tax_year: number; category: string; name: string; storage_path: string | null; amount_cents: number | null; member_id: string | null; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; tax_year: number; category?: string; name: string; storage_path?: string | null; amount_cents?: number | null; member_id?: string | null; note?: string | null; created_by?: string | null },
+        Partial<{ tax_year: number; category: string; name: string; storage_path: string | null; amount_cents: number | null; member_id: string | null; note: string | null }>
+      >;
       goals: T<
         { id: string; family_id: string; title: string; description: string | null; target_date: string | null; progress: number; is_complete: boolean; created_by: string | null } & Stamps,
         { id?: string; family_id: string; title: string; description?: string | null; target_date?: string | null; progress?: number; is_complete?: boolean; created_by?: string | null },

@@ -1,7 +1,42 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Tier-3 Kids & Parenting audit. Keep this updated as you ship.
+Last updated after the Tier-5 Finance audit. Keep this updated as you ship.
+
+> **Session update (2026-06-23n, branch `claude/finance-tier5`) — TIER-5 FINANCE
+> AUDIT + 4 new features.** Reviewed all 10 "Tier 5: Finance" features.
+> **Already present (no work):** Family Budget, Bill Tracking, Shared Savings
+> Goals, Net Worth Tracking, Financial Reports — all live with full CRUD in the
+> finance workspace `components/modules/billing-module.tsx` (`/dashboard/billing`,
+> tabs Overview/Transactions/Budgets/Bills/Savings Goals/Reports over
+> `financial_accounts`/`transactions`/`budgets`/`bills`/`savings_goals`, mig 0006)
+> + the read-only `family-cfo` glance. Allowance Payments = the points/rewards
+> ledger (`/dashboard/rewards`).
+> **MISSING → built world-class this session (all family-scoped RLS, fully wired):**
+> - **Expense Splitting** (mig `0075`, `expense_splits` + `expense_split_shares`):
+>   split a cost across members, track who owes whom, minimal-transfer "settle up".
+>   Pure `lib/finance/splits.ts` (even-split cents, balances, settlement; 8 tests).
+>   `/dashboard/expenses` module. Nav + catalog `expense-splitting` (basic).
+> - **Subscription Tracking** (mig `0076`, `subscriptions_tracked`): recurring
+>   services w/ cadence-normalised monthly/annual spend + stale/unused "reduce
+>   waste" flags. Pure `lib/finance/subscriptions.ts` (8 tests). `/dashboard/
+>   subscriptions` module. Nav + catalog `subscription-tracking` (basic).
+> - **Tax Document Vault** (mig `0077`, `tax_documents`): docs by year/category,
+>   files in the private `documents` bucket (signed-URL download), deduction
+>   totals. Pure `lib/finance/tax.ts` (tests). `/dashboard/tax-vault` module. Nav +
+>   catalog `tax-vault` (basic).
+> - **AI Savings Suggestions** (NO migration): `POST /api/ai/savings` analyses
+>   transactions/budgets/bills/subscriptions via `resolveProvider`, returns
+>   prioritised suggestions (deterministic data-driven fallback if AI unset).
+>   Surfaced via `SavingsCoachCard` embedded in the Subscriptions module.
+> - Types in `lib/database.types.ts`. `tsc`/lint clean, **build OK**, **vitest 655
+>   passing** (+16). **Apply 0075 + 0076 + 0077 to prod after merge.**
+> - ⚠️ Migration numbers 0075–0077 assume the in-flight kids PR (#119, which uses
+>   0073/0074) merges first; if numbers end up out of order vs main, renumber to
+>   after main's max before applying. **NEXT:** (1) AI-savings as a cron "monthly
+>   money review" notification; (2) link Expense Splitting settlements into
+>   `transactions`; (3) auto-detect subscriptions from recurring `transactions`/
+>   `bills`. Next migration number: **0078**.
 
 > **Session update (2026-06-23m, branch `claude/kids-parenting-tier3`) — TIER-3
 > KIDS & PARENTING AUDIT + 2 new features.** Reviewed all 10 "Tier 3: Kids &
