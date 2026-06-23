@@ -3,8 +3,8 @@ import { redirect, notFound } from 'next/navigation';
 import { createServer } from './server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { planLevel } from '@/lib/constants/plans';
-import { effectiveTier, tierLevel } from '@/lib/features/catalog';
-import { getFeatureOverrides } from '@/lib/features/server';
+import { tierToLevel } from '@/lib/features/tiers';
+import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 
@@ -144,20 +144,21 @@ export async function requireFeature(key: string): Promise<UserContext> {
   if (await isSuperAdmin()) return ctx;
 
   const supabase = await createServer();
-  const [{ data: sub }, overrides] = await Promise.all([
+  const [{ data: sub }, byHref] = await Promise.all([
     supabase
       .from('subscriptions')
       .select('plan, status')
       .eq('family_id', ctx.active.familyId)
       .in('status', ['active', 'trialing'])
       .maybeSingle(),
-    getFeatureOverrides(supabase),
+    getFeatureTiersByHref(supabase),
   ]);
 
-  const tier = effectiveTier(key, overrides);
+  const tier = byHref[key];
+  if (tier === undefined) return ctx;   // route not in the catalog → not gated
   if (tier === 'off') notFound();
 
-  const need = tierLevel(tier); // 0 / 1 / 2
+  const need = tierToLevel(tier); // 0 / 1 / 2
   if (planLevel(sub?.plan ?? null) < need) {
     redirect(`/dashboard/billing?upgrade=1&need=${need}`);
   }

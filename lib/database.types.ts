@@ -1236,13 +1236,6 @@ export interface Database {
         { id?: string; family_id: string; household_adults?: number; household_children?: number; child_ages?: number[]; region?: string | null; postal_code?: string | null; country?: string | null; goals?: string[]; referral_source?: string | null; referral_detail?: string | null; completed_at?: string | null; metadata?: Json; created_by?: string | null },
         Partial<{ household_adults: number; household_children: number; child_ages: number[]; region: string | null; postal_code: string | null; country: string | null; goals: string[]; referral_source: string | null; referral_detail: string | null; completed_at: string | null; metadata: Json }>
       >;
-
-      // ---- Admin Tier & Features gating (migration 0054) ----
-      feature_settings: T<
-        { key: string; tier: string; updated_by: string | null; updated_at: string },
-        { key: string; tier: string; updated_by?: string | null; updated_at?: string },
-        Partial<{ tier: string; updated_by: string | null; updated_at: string }>
-      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

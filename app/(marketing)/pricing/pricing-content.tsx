@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Check, Zap, Crown, Sparkles } from 'lucide-react';
 import {
@@ -193,6 +194,17 @@ function FeatureMatrixSection({ section, items }: { section: string; items: { la
 export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { familiesCount?: number; featureMatrix?: FeatureMatrix }) {
   const [period, setPeriod] = useState<Period>('yearly');
   const yearly = period === 'yearly';
+  const router = useRouter();
+
+  // Keep the tier/feature grid live: an admin change to /admin/tier-features
+  // revalidates this page, and re-fetching on an interval + on tab focus means
+  // an already-open pricing page reflects the change automatically.
+  useEffect(() => {
+    const id = setInterval(() => router.refresh(), 20_000);
+    const onFocus = () => router.refresh();
+    window.addEventListener('focus', onFocus);
+    return () => { clearInterval(id); window.removeEventListener('focus', onFocus); };
+  }, [router]);
 
   const basicPrice    = yearly ? fmt(Math.round(BASIC_ANNUAL_CENTS / 12)) : fmt(BASIC_MONTHLY_CENTS);
   const basicPriceSub = yearly ? `billed ${fmt(BASIC_ANNUAL_CENTS)}/yr · save ${basicSavings}%` : 'billed monthly';

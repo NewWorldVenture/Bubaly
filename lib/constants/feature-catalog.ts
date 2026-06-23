@@ -33,6 +33,7 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('command-center', 'Command Center', 'Suggested', 'plus', '/dashboard/command-center'),
   F('family-missions', 'Family Missions', 'Suggested', 'plus', '/missions'),
   F('rewards', 'Rewards', 'Suggested', 'plus', '/dashboard/rewards'),
+  F('conflict-resolution', 'AI Conflict Resolution', 'Suggested', 'plus', '/dashboard/conflicts'),
 
   // ── Daily Life ─────────────────────────────────────────────
   F('groceries', 'Groceries', 'Daily Life', 'free', '/dashboard/grocery'),
@@ -51,6 +52,8 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('recipes', 'Recipes', 'Daily Life', 'basic', '/dashboard/recipes'),
   F('readiness', 'Readiness', 'Daily Life', 'basic', '/dashboard/readiness'),
   F('documents', 'Documents', 'Daily Life', 'basic', '/dashboard/documents'),
+  F('family-map', 'Family Map', 'Daily Life', 'basic', '/dashboard/locator'),
+  F('notifications', 'Notifications', 'Daily Life', 'basic', '/dashboard/notifications'),
 
   // ── Family & Home ──────────────────────────────────────────
   F('school', 'School', 'Family & Home', 'free', '/dashboard/school'),
@@ -66,6 +69,9 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('medications', 'Medications', 'Family & Home', 'basic', '/dashboard/medications'),
   F('rides', 'Rides', 'Family & Home', 'basic', '/dashboard/rides'),
   F('care-plans', 'Care Plans', 'Family & Home', 'basic', '/dashboard/care'),
+  F('medical-records', 'Medical Records', 'Family & Home', 'basic', '/dashboard/medical'),
+  F('dental', 'Dental', 'Family & Home', 'basic', '/dashboard/dental'),
+  F('family-goals', 'Family Goals', 'Family & Home', 'basic', '/dashboard/goals'),
   F('kitchen', 'Kitchen', 'Family & Home', 'basic', '/display'),
   F('magazines', 'Magazines', 'Family & Home', 'basic', '/dashboard/inbox'),
   F('sports', 'Sports', 'Family & Home', 'plus', '/dashboard/sports'),

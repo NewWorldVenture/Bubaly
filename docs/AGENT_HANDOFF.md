@@ -170,31 +170,42 @@ Last updated after the Meal Voting PR. Keep this updated as you ship.
 >   — mirror the contact form + this landing-page PR (service-role read/write,
 >   middleware PUBLIC, beacon/endpoint pattern).
 
-> **Session update (2026-06-23, branch `claude/admin-tier-features`):**
-> - **Admin "Tier & Features" — Supabase-backed feature gating, platform-wide.**
->   `/admin/tiers` lets a super-admin set each feature's minimum tier:
->   **Free / Basic / Plus / Off**, with the exact semantics: Free→all; Basic→Basic+Plus
->   (locked for Free); Plus→Plus only (locked for Basic+Free); Off→hidden for all
->   (super-admins still preview). Persisted to **`feature_settings`** (migration
->   `0067`, **apply to prod**) — read by everyone (RLS read-only), written
->   service-role only via `setFeatureTierAction` (super-admin gated + audited).
-> - **Catalog** `lib/features/catalog.ts` (pure, 13 tests): builds the feature
->   list from `APP_NAV_GROUPS`/`MOBILE_TABS`, with `tierLevel`/`levelTier`,
->   `featureAccess(tier,userLevel,isSuperAdmin) → visible|locked|hidden`, and
->   `effectiveTier(key, overrides)` (override → code default).
-> - **Server** `lib/features/server.ts`: `getFeatureOverrides(supabase)` (request-
->   `cache`d) + `setFeatureTier`. Loaded in `dashboard/layout.tsx` +
->   `family/layout.tsx`, passed to `AppProvider` as `featureOverrides`.
-> - **Nav** (`components/app/app-shell.tsx`): `resolveItems()` hides Off features,
->   locks below-tier ones, drops emptied groups; mobile tabs + UpgradeModal use it.
-> - **Route backstop**: new `requireFeature(key)` in `lib/supabase/auth.ts`
->   (override-aware: Off→`notFound()`, else redirect to billing). The ~28 top-level
->   gated pages + the `auto`/`home` layouts now call `requireFeature('<route>')`;
->   `auto/*` and `home/*` subpages keep `requirePlanLevel(1)` as a floor under
->   their now-feature-gated layout. `requirePlanLevel` is retained for compat.
-> - **To gate a NEW feature:** add the nav item (with a default `minLevel`) → it
->   auto-appears in `/admin/tiers`; gate its page/layout with
->   `requireFeature('<href>')`. The key MUST equal the nav `href`.
+> **Tier & Features — ONE unified system (updated 2026-06-23b, branch
+> `claude/pricing-from-tiers`).** ⚠️ A duplicate was briefly introduced (PR #110:
+> a `feature_settings` table + `/admin/tiers` + `lib/features/catalog.ts`) and has
+> now been **removed/consolidated** onto the canonical system below. Do NOT
+> reintroduce a second one.
+> - **Canonical store:** `app_settings` key **`feature_tiers`** (sparse overrides),
+>   resolved against **`lib/constants/feature-catalog.ts`** (`FEATURE_CATALOG`,
+>   each entry has `key`, `label`, `section`, `defaultTier`, optional `href`).
+> - **Pure logic** `lib/features/tiers.ts`: `resolveFeatureTiers`, `isFeatureAvailable`,
+>   `featuresAtTier`/`featuresIncludedInPlan`, and (new) **`tiersByHref`**,
+>   **`featureAccessByTier(tier,planLevel,isSuperAdmin)→visible|locked|hidden`**,
+>   `morePermissiveTier`. Tier semantics: Free→all; Basic→Basic+Plus (locked for
+>   Free); Plus→Plus only; Off→hidden for all (super-admins preview). Tests in
+>   `tests/feature-tiers.test.ts`.
+> - **Server** `lib/server/feature-tiers.ts`: `getResolvedFeatureTiers` (by catalog
+>   key) + **`getFeatureTiersByHref`** (by route, request-`cache`d) + `setFeatureTier`.
+> - **Admin page:** **`/admin/tier-features`** (page + `tier-features-client.tsx` +
+>   `actions.ts`). Its `setFeatureTierAction` writes `app_settings` and
+>   `revalidatePath('/pricing')` + `revalidatePath('/dashboard','layout')`.
+>   `/admin/tiers` now just **redirects** here.
+> - **Drives the whole platform:**
+>   - **Nav** (`app-shell.tsx` `resolveItems`) hides Off, locks below-tier, drops
+>     emptied groups — fed by `featureTiers` (href→tier) on `AppProvider` (built in
+>     `dashboard/layout.tsx` + `family/layout.tsx` via `getFeatureTiersByHref`).
+>   - **Routes**: `requireFeature('<href>')` (`lib/supabase/auth.ts`) resolves the
+>     tier by href → Off `notFound()`, else redirect to billing. Top-level gated
+>     pages + `auto`/`home` layouts use it; `auto/*`+`home/*` subpages keep
+>     `requirePlanLevel(1)` as a floor. **Every `requireFeature` href MUST exist in
+>     `FEATURE_CATALOG`** (else the route is treated as ungated). Verify with the
+>     coverage check before shipping.
+>   - **Pricing** (`/pricing`, force-dynamic) reads `getResolvedFeatureTiers` and
+>     renders the admin-controlled matrix; `pricing-content.tsx` `router.refresh()`s
+>     on a 20s interval + on tab focus so an open page updates **in real time**.
+> - **To gate a NEW feature:** add it to `FEATURE_CATALOG` (with `href`) → it
+>   auto-appears in `/admin/tier-features` + the pricing matrix; gate the page/layout
+>   with `requireFeature('<href>')`.
 
 > **Session update (2026-06-22c, branch `claude/lp-public-renderer`):**
 > - **Public-site wiring #54 DONE — landing pages now render publicly.** Admin
@@ -318,7 +329,7 @@ Last updated after the Meal Voting PR. Keep this updated as you ship.
   guards). Always apply the migration to prod after merging the migration file.
 
 ## Conventions
-- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0068.**
+- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0067.**
   Helpers available in DB: `public.is_family_member(family_id)`, `public.is_super_admin()`,
   `public.set_updated_at()` trigger fn, `gen_random_uuid()`.
 - **Family-scoped tables** (member data): RLS pattern —
@@ -334,12 +345,13 @@ Last updated after the Meal Voting PR. Keep this updated as you ship.
   Locked items render greyed with a lock and open the tier-aware `UpgradeModal`
   (`components/app/upgrade-modal.tsx`, takes `requiredLevel`). Add icon to the lucide import line.
 - **Route gating (Supabase-backed, admin-controlled)**: gate a page/layout with
-  **`requireFeature('<nav href>')`** (`lib/supabase/auth.ts`) — it resolves the
-  feature's effective tier from `feature_settings` (admin override → code default
-  in `lib/features/catalog.ts`), `notFound()`s on Off, else redirects to
-  `/dashboard/billing?upgrade=1&need=N`. Super-admins bypass. `requirePlanLevel(1|2)`
-  still exists (numeric floor / legacy); `ROUTE_PLAN_LEVEL` is documentation only.
-- **Client modules**: `useApp()` gives `{ familyId, userId, role, members, selfMember, isSuperAdmin, planLevel, featureOverrides }`.
+  **`requireFeature('<route href>')`** (`lib/supabase/auth.ts`) — it resolves the
+  feature's effective tier by href via `getFeatureTiersByHref` (`app_settings`
+  override → `FEATURE_CATALOG` default), `notFound()`s on Off, else redirects to
+  `/dashboard/billing?upgrade=1&need=N`. The href MUST exist in `FEATURE_CATALOG`.
+  Super-admins bypass. `requirePlanLevel(1|2)` still exists (numeric floor / legacy);
+  `ROUTE_PLAN_LEVEL` is documentation only. (See the unified Tier & Features block above.)
+- **Client modules**: `useApp()` gives `{ familyId, userId, role, members, selfMember, isSuperAdmin, planLevel, featureTiers }`.
   `useRealtimeQuery({ table, familyId, deps, fetcher })`. `createClient()` for writes.
   UI: `Modal`, `Input/Textarea/Field/Select`, `Button`, `Avatar`, `PageHeader`,
   `LoadingBlock/ErrorState/EmptyState`, `useToast()` → `{ success, error }`.
@@ -438,11 +450,12 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Next migration number: **0068**. (0051–0066 are on main.) **Still needs applying
+Next migration number: **0067**. (0051–0066 are on main.) **Still needs applying
 to prod** (verify what's live first with `select max(...)`/`\dt`; all idempotent):
-0044–0066 as applicable, plus **0052 `family_onboarding`**, **0053
-`landing_metrics`**, and **0067 `feature_settings`** (admin Tier & Features —
-renumbered from 0054 after a collision with main's `0054_recipe_sources`).
+0044–0066 as applicable, plus **0052 `family_onboarding`** and **0053
+`landing_metrics`**. (NOTE: the Tier & Features system uses **no table** — it
+stores overrides in `app_settings['feature_tiers']`. The earlier `feature_settings`
+migration was deleted when the duplicate was consolidated away.)
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
@@ -734,7 +747,7 @@ build → **verify** (`tsc --noEmit`, `next lint`, `next build`, `vitest run`, a
 validate the migration **twice** on a throwaway Postgres 16 cluster for
 idempotency + RLS/CHECK) → draft PR (`mcp__github__create_pull_request`) → mark
 ready → **squash-merge** → apply the migration to prod (Supabase Management API,
-see migration section; **next number: 0068**) → update this doc's pillar row +
+see migration section; **next number: 0067**) → update this doc's pillar row +
 its NEXT step. Keep each PR to one pillar.
 
 ### Pillar map (✅ shipped · 🟡 partial · ⬜ not built)

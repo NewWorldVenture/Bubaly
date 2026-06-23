@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   tierToLevel, isFeatureTier, resolveFeatureTiers, isFeatureAvailable,
   featuresIncludedInPlan, featuresAtTier, overridesFromResolved, TIER_ORDER,
+  tiersByHref, featureAccessByTier, morePermissiveTier,
 } from '@/lib/features/tiers';
 import { FEATURE_CATALOG, FEATURE_CATALOG_BY_KEY } from '@/lib/constants/feature-catalog';
 
@@ -80,5 +81,45 @@ describe('overridesFromResolved', () => {
     const r = resolveFeatureTiers({ calendar: 'basic' });
     const diff = overridesFromResolved(r);
     expect(diff).toEqual({ calendar: 'basic' });
+  });
+});
+
+describe('morePermissiveTier', () => {
+  it('lower level wins; available beats off', () => {
+    expect(morePermissiveTier('basic', 'plus')).toBe('basic');
+    expect(morePermissiveTier('free', 'basic')).toBe('free');
+    expect(morePermissiveTier('off', 'plus')).toBe('plus');
+    expect(morePermissiveTier('off', 'off')).toBe('off');
+  });
+});
+
+describe('tiersByHref', () => {
+  it('keys by route and takes the most permissive when shared', () => {
+    const resolved = resolveFeatureTiers(null);
+    const byHref = tiersByHref(resolved);
+    // /dashboard is shared by parent + family dashboards (both free) → free
+    expect(byHref['/dashboard']).toBe('free');
+    expect(byHref['/dashboard/calendar']).toBe('free');
+    expect(byHref['/dashboard/command-center']).toBe('plus');
+  });
+  it('an override flows through to the route', () => {
+    const byHref = tiersByHref(resolveFeatureTiers({ calendar: 'plus' }));
+    expect(byHref['/dashboard/calendar']).toBe('plus');
+  });
+});
+
+describe('featureAccessByTier — exact nav semantics', () => {
+  it('free shows for all, basic locks free, plus locks basic+free', () => {
+    expect(featureAccessByTier('free', 0)).toBe('visible');
+    expect(featureAccessByTier('basic', 0)).toBe('locked');
+    expect(featureAccessByTier('basic', 1)).toBe('visible');
+    expect(featureAccessByTier('plus', 1)).toBe('locked');
+    expect(featureAccessByTier('plus', 2)).toBe('visible');
+  });
+  it('off is hidden; undefined (non-catalog) is visible; super-admin sees all', () => {
+    expect(featureAccessByTier('off', 2)).toBe('hidden');
+    expect(featureAccessByTier(undefined, 0)).toBe('visible');
+    expect(featureAccessByTier('off', 0, true)).toBe('visible');
+    expect(featureAccessByTier('plus', 0, true)).toBe('visible');
   });
 });
