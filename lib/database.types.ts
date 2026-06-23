@@ -411,6 +411,11 @@ export interface Database {
         { id?: string; family_id: string; member_id: string; type: MetricType; value: number; unit?: string | null; recorded_at?: string },
         Partial<{ type: MetricType; value: number; unit: string | null; recorded_at: string }>
       >;
+      health_visits: T<
+        { id: string; family_id: string; member_id: string | null; provider_id: string | null; kind: string; title: string; provider_name: string | null; location: string | null; visit_date: string; reason: string | null; outcome: string | null; follow_up_date: string | null; cost_cents: number | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; provider_id?: string | null; kind?: string; title: string; provider_name?: string | null; location?: string | null; visit_date?: string; reason?: string | null; outcome?: string | null; follow_up_date?: string | null; cost_cents?: number | null; created_by?: string | null },
+        Partial<{ member_id: string | null; provider_id: string | null; kind: string; title: string; provider_name: string | null; location: string | null; visit_date: string; reason: string | null; outcome: string | null; follow_up_date: string | null; cost_cents: number | null }>
+      >;
       workout_logs: T<
         { id: string; family_id: string; member_id: string; activity: string; duration_minutes: number | null; calories: number | null; distance: number | null; notes: string | null; recorded_at: string; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; activity: string; duration_minutes?: number | null; calories?: number | null; distance?: number | null; notes?: string | null; recorded_at?: string; created_by?: string | null },

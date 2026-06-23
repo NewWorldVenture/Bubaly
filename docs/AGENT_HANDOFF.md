@@ -1,7 +1,33 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Meal Voting PR. Keep this updated as you ship.
+Last updated after the Health Visits PR. Keep this updated as you ship.
+
+> **Session update (2026-06-23g) — HEALTH: structured Visit history (medical/dental/vaccination).**
+> Existing health infra (keep, don't dup): `medications`+`medication_schedules`+
+> `medication_doses`, `health_providers`, `insurance_policies`, `medical_profiles`
+> (immunizations/allergies/conditions are FREE-TEXT blobs here), `appointments`,
+> `health_metrics`; pages `/dashboard/{medical,dental,medications,health,care}`;
+> modules `medical-records-module`, `medications-module`, `health-module`. Dental page
+> was just the medical module with `kind="dental"`.
+> - **Shipped:** structured **Health Visits** log. **Migration `0068_health_visits.sql`**
+>   (`health_visits`: member, provider, `health_visit_kind` enum [medical/dental/vision/
+>   vaccination/specialist/mental_health/therapy/urgent_care/other], title, provider_name,
+>   location, visit_date, reason, outcome, **follow_up_date**, cost_cents; family-scoped
+>   RLS). **APPLIED TO PROD + verified.** Types added to database.types.
+> - `lib/health/visits.ts` (pure, 4 tests): `VISIT_KINDS`, `visitKindMeta`,
+>   `daysUntilFollowUp`, `upcomingFollowUps`, `sortByVisitDate`.
+> - `components/modules/health-visits-module.tsx` (client CRUD): member filter,
+>   **upcoming/overdue follow-up banner**, add/edit/delete; props `defaultKind`,
+>   `lockKind`, `title`. Mounted on `/dashboard/medical` ("Visit history") and
+>   `/dashboard/dental` (locked to dental, "Dental visits & cleanings").
+> - **NEXT (health, priority):** (1) **Structured immunizations** table (vaccine/dose/
+>   date/next-due/member) to replace the free-text blob. (2) **Medication adherence UI**
+>   over `medication_doses` (log/skip dose + adherence % + reminder cron). (3) Surface
+>   follow-ups/next-cleaning in the notifications engine + Kitchen Display. (4) Attach
+>   documents (labs/X-rays) to a visit (Supabase Storage private bucket). (5) "Health
+>   Visits" nav entry (`lib/constants/navigation.ts`; gate via admin Tier&Features →
+>   `requireFeature`).
 
 > **Session update (2026-06-23f, branch `claude/assistant-v2`): AI Assistant v2 —
 > conversation history + read-tools.** Builds on the function-calling assistant.
