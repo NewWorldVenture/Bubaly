@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CalendarClock, ArrowLeft } from 'lucide-react';
-import { requirePlanLevel } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { detectConflicts, quickFixMoveAfter, type TimedEvent } from '@/lib/family/conflicts';
 import { ConflictResolver, type ConflictView } from '@/components/family/conflict-resolver';
@@ -20,7 +20,7 @@ function whenLabel(startsAt: string, endsAt: string | null): string {
 }
 
 export default async function ConflictsPage() {
-  const ctx = await requirePlanLevel(2);
+  const ctx = await requireFeature('/dashboard/conflicts');
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 

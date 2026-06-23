@@ -7,6 +7,7 @@ import { ChevronDown, Check, Gift, Lock, LogOut, Mic, Moon, Plus, Search, Send, 
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { APP_NAV_GROUPS, MOBILE_TABS, type NavItem } from '@/lib/constants/navigation';
+import { effectiveTier, featureAccess, tierLevel, type FeatureOverrides } from '@/lib/features/catalog';
 import { ROLE_LABELS } from '@/lib/constants/roles';
 import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { cn } from '@/lib/utils/cn';
@@ -189,15 +190,32 @@ function SidebarDashboardLinks() {
   );
 }
 
+/** Visible nav items for a group given the family's plan + admin tier settings.
+ *  Items whose feature is Off are dropped entirely; the rest carry a `locked`
+ *  flag (tier above the family's plan) + the level required to unlock. */
+function resolveItems(
+  items: readonly NavItem[],
+  overrides: FeatureOverrides,
+  planLevel: number,
+  isSuperAdmin: boolean,
+): { item: NavItem; locked: boolean; requiredLevel: 1 | 2 }[] {
+  const out: { item: NavItem; locked: boolean; requiredLevel: 1 | 2 }[] = [];
+  for (const item of items) {
+    const tier = effectiveTier(item.href, overrides);
+    const access = featureAccess(tier, planLevel, isSuperAdmin);
+    if (access === 'hidden') continue; // Off → not shown at all
+    const lvl = tierLevel(tier);
+    out.push({ item, locked: access === 'locked', requiredLevel: (lvl === 2 ? 2 : 1) });
+  }
+  return out;
+}
+
 /** A single sidebar destination. Free items navigate; items above the family's
  *  plan render greyed-out with a lock and open the upgrade prompt on click. */
-function NavEntry({ item, variant, onLocked }: {
-  item: NavItem; variant: 'list' | 'grid'; onLocked: (item: NavItem) => void;
+function NavEntry({ item, variant, locked, onLocked }: {
+  item: NavItem; variant: 'list' | 'grid'; locked: boolean; onLocked: (item: NavItem) => void;
 }) {
   const pathname = usePathname();
-  const { planLevel, isSuperAdmin } = useApp();
-  // Super admins are never plan-gated, so nothing is locked for them.
-  const locked = !isSuperAdmin && (item.minLevel ?? 0) > planLevel;
   const active = !locked && isActive(pathname, item.href);
 
   const base = variant === 'grid'
@@ -232,29 +250,37 @@ function NavEntry({ item, variant, onLocked }: {
 
 /** Grouped, plan-gated sidebar navigation. */
 function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
+  const { planLevel, isSuperAdmin, featureOverrides } = useApp();
   return (
     <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4 xl:px-4">
-      {APP_NAV_GROUPS.map((group) => (
-        <div key={group.title} className="space-y-1">
-          <p className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted/70">
-            {group.title}
-          </p>
-          {group.title === 'Suggested' && <SidebarDashboardLinks />}
-          {group.layout === 'grid' ? (
-            <div className="grid grid-cols-2 gap-1">
-              {group.items.map((item) => (
-                <NavEntry key={item.href} item={item} variant="grid" onLocked={onLocked} />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-0.5">
-              {group.items.map((item) => (
-                <NavEntry key={item.href} item={item} variant="list" onLocked={onLocked} />
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+      {APP_NAV_GROUPS.map((group) => {
+        const resolved = resolveItems(group.items, featureOverrides, planLevel, isSuperAdmin);
+        const isSuggested = group.title === 'Suggested';
+        // Drop a group whose every feature is Off (the Suggested group always
+        // keeps the two dashboard links, so it never disappears).
+        if (resolved.length === 0 && !isSuggested) return null;
+        return (
+          <div key={group.title} className="space-y-1">
+            <p className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted/70">
+              {group.title}
+            </p>
+            {isSuggested && <SidebarDashboardLinks />}
+            {group.layout === 'grid' ? (
+              <div className="grid grid-cols-2 gap-1">
+                {resolved.map(({ item, locked }) => (
+                  <NavEntry key={item.href} item={item} variant="grid" locked={locked} onLocked={onLocked} />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-0.5">
+                {resolved.map(({ item, locked }) => (
+                  <NavEntry key={item.href} item={item} variant="list" locked={locked} onLocked={onLocked} />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </nav>
   );
 }
@@ -301,8 +327,12 @@ function ThemeSwitch() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { planLevel, isSuperAdmin } = useApp();
+  const { planLevel, isSuperAdmin, featureOverrides } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
+  const mobileTabs = resolveItems(MOBILE_TABS, featureOverrides, planLevel, isSuperAdmin);
+  const upgradeLevel: 1 | 2 = upgradeFor
+    ? (tierLevel(effectiveTier(upgradeFor.href, featureOverrides)) === 2 ? 2 : 1)
+    : 1;
 
   return (
     <div className="min-h-dvh bg-bg text-fg lg:flex">
@@ -359,8 +389,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Mobile bottom tabs */}
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/90 backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex max-w-lg items-stretch justify-around">
-          {MOBILE_TABS.map((item) => {
-            const locked = !isSuperAdmin && (item.minLevel ?? 0) > planLevel;
+          {mobileTabs.map(({ item, locked }) => {
             const active = !locked && isActive(pathname, item.href);
             const className = cn(
               'relative flex flex-1 flex-col items-center gap-0.5 pb-1 pt-2 text-[11px] font-medium transition',
@@ -390,7 +419,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         open={upgradeFor !== null}
         onClose={() => setUpgradeFor(null)}
         featureLabel={upgradeFor?.label}
-        requiredLevel={upgradeFor?.minLevel ?? 1}
+        requiredLevel={upgradeLevel}
       />
     </div>
   );

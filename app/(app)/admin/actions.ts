@@ -8,6 +8,8 @@ import { logAudit } from '@/lib/server/audit';
 import { sendReactEmail, APP_URL } from '@/lib/email';
 import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
+import { setFeatureTier } from '@/lib/features/server';
+import { isFeatureKey, FEATURE_TIERS, type FeatureTier } from '@/lib/features/catalog';
 import type { MemberRole } from '@/lib/constants/roles';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
@@ -238,4 +240,21 @@ export async function adminUpdateTicketStatusAction(ticketId: string, status: Ti
   await adminAuditLog({ familyId: null, action: 'update', resource: 'support_tickets', resourceId: ticketId, metadata: { status } });
   revalidatePath('/admin/support');
   return { ok: true };
+}
+
+/**
+ * Set the minimum subscription tier for a platform feature (admin Tier &
+ * Features). Validates the key is a real feature and the tier is one of
+ * free/basic/plus/off, persists the override, and audits the change.
+ */
+export async function setFeatureTierAction(formData: FormData) {
+  if (!(await isSuperAdmin())) return;
+  const key = String(formData.get('key') ?? '');
+  const tier = String(formData.get('tier') ?? '');
+  if (!isFeatureKey(key) || !(FEATURE_TIERS as readonly string[]).includes(tier)) return;
+
+  const user = await getUser();
+  await setFeatureTier(key, tier as FeatureTier, user?.id ?? null);
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'feature_settings', resourceId: key, metadata: { tier } });
+  revalidatePath('/admin/tiers');
 }

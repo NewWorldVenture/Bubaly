@@ -1,8 +1,8 @@
-import { requirePlanLevel } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { HomeSubnav } from '@/components/home/home-subnav';
 
 export default async function HomeLayout({ children }: { children: React.ReactNode }) {
-  await requirePlanLevel(1);
+  await requireFeature('/dashboard/home');
   return (
     <div className="module-page">
       <HomeSubnav />

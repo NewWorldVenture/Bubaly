@@ -3,6 +3,32 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after PR #87. Keep this updated as you ship.
 
+> **Session update (2026-06-23, branch `claude/admin-tier-features`):**
+> - **Admin "Tier & Features" — Supabase-backed feature gating, platform-wide.**
+>   `/admin/tiers` lets a super-admin set each feature's minimum tier:
+>   **Free / Basic / Plus / Off**, with the exact semantics: Free→all; Basic→Basic+Plus
+>   (locked for Free); Plus→Plus only (locked for Basic+Free); Off→hidden for all
+>   (super-admins still preview). Persisted to **`feature_settings`** (migration
+>   `0054`, **apply to prod**) — read by everyone (RLS read-only), written
+>   service-role only via `setFeatureTierAction` (super-admin gated + audited).
+> - **Catalog** `lib/features/catalog.ts` (pure, 13 tests): builds the feature
+>   list from `APP_NAV_GROUPS`/`MOBILE_TABS`, with `tierLevel`/`levelTier`,
+>   `featureAccess(tier,userLevel,isSuperAdmin) → visible|locked|hidden`, and
+>   `effectiveTier(key, overrides)` (override → code default).
+> - **Server** `lib/features/server.ts`: `getFeatureOverrides(supabase)` (request-
+>   `cache`d) + `setFeatureTier`. Loaded in `dashboard/layout.tsx` +
+>   `family/layout.tsx`, passed to `AppProvider` as `featureOverrides`.
+> - **Nav** (`components/app/app-shell.tsx`): `resolveItems()` hides Off features,
+>   locks below-tier ones, drops emptied groups; mobile tabs + UpgradeModal use it.
+> - **Route backstop**: new `requireFeature(key)` in `lib/supabase/auth.ts`
+>   (override-aware: Off→`notFound()`, else redirect to billing). The ~28 top-level
+>   gated pages + the `auto`/`home` layouts now call `requireFeature('<route>')`;
+>   `auto/*` and `home/*` subpages keep `requirePlanLevel(1)` as a floor under
+>   their now-feature-gated layout. `requirePlanLevel` is retained for compat.
+> - **To gate a NEW feature:** add the nav item (with a default `minLevel`) → it
+>   auto-appears in `/admin/tiers`; gate its page/layout with
+>   `requireFeature('<href>')`. The key MUST equal the nav `href`.
+
 > **Session update (2026-06-22c, branch `claude/lp-public-renderer`):**
 > - **Public-site wiring #54 DONE — landing pages now render publicly.** Admin
 >   could author `marketing_landing_pages` but nothing served them; built the
@@ -125,7 +151,7 @@ Last updated after PR #87. Keep this updated as you ship.
   guards). Always apply the migration to prod after merging the migration file.
 
 ## Conventions
-- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0053.**
+- **Migrations**: `supabase/migrations/00NN_name.sql`. **Next number: 0055.**
   Helpers available in DB: `public.is_family_member(family_id)`, `public.is_super_admin()`,
   `public.set_updated_at()` trigger fn, `gen_random_uuid()`.
 - **Family-scoped tables** (member data): RLS pattern —
@@ -140,10 +166,13 @@ Last updated after PR #87. Keep this updated as you ship.
 - **Nav**: `lib/constants/navigation.ts` `APP_NAV_GROUPS` (items have `minLevel`).
   Locked items render greyed with a lock and open the tier-aware `UpgradeModal`
   (`components/app/upgrade-modal.tsx`, takes `requiredLevel`). Add icon to the lucide import line.
-- **Route gating**: `lib/constants/plans.ts` `ROUTE_PLAN_LEVEL` (0/1/2) AND
-  page-level `requirePlanLevel(1|2)` (redirects to `/dashboard/billing?upgrade=1&need=N`).
-  Free pages use `requireUserContext()`.
-- **Client modules**: `useApp()` gives `{ familyId, userId, role, members, selfMember, isSuperAdmin, planLevel }`.
+- **Route gating (Supabase-backed, admin-controlled)**: gate a page/layout with
+  **`requireFeature('<nav href>')`** (`lib/supabase/auth.ts`) — it resolves the
+  feature's effective tier from `feature_settings` (admin override → code default
+  in `lib/features/catalog.ts`), `notFound()`s on Off, else redirects to
+  `/dashboard/billing?upgrade=1&need=N`. Super-admins bypass. `requirePlanLevel(1|2)`
+  still exists (numeric floor / legacy); `ROUTE_PLAN_LEVEL` is documentation only.
+- **Client modules**: `useApp()` gives `{ familyId, userId, role, members, selfMember, isSuperAdmin, planLevel, featureOverrides }`.
   `useRealtimeQuery({ table, familyId, deps, fetcher })`. `createClient()` for writes.
   UI: `Modal`, `Input/Textarea/Field/Select`, `Button`, `Avatar`, `PageHeader`,
   `LoadingBlock/ErrorState/EmptyState`, `useToast()` → `{ success, error }`.
@@ -242,11 +271,11 @@ npx vitest run tests/<your>.test.ts   # full suite currently 363 passing
 - Cron: `/api/cron/automations` (Bearer `CRON_SECRET`), daily `0 13 * * *` in vercel.json.
 - Pure matching logic `subjectsForTrigger` is unit-tested.
 
-Next migration number: **0054**. Applied to prod by the user: through **0043**
+Next migration number: **0055**. Applied to prod by the user: through **0043**
 (0042 loyalty, 0043 chore missions). **Still needs applying to prod:** any of
-0044–0051 not yet run, plus **0052 `family_onboarding`** and **0053
-`landing_metrics`**. Verify with `select max(...)`/`\dt` before assuming a
-migration is live.
+0044–0051 not yet run, plus **0052 `family_onboarding`**, **0053
+`landing_metrics`**, and **0054 `feature_settings`**. Verify with
+`select max(...)`/`\dt` before assuming a migration is live.
 
 ## A/B Testing — added in #85
 - Admin: `/admin/marketing/experiments` (create experiments with variants + metric,
