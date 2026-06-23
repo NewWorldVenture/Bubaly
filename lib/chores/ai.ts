@@ -35,8 +35,8 @@ export type ValidateInput = {
 };
 
 function aiConfigured(): boolean {
-  if ((process.env.AI_PROVIDER ?? 'anthropic') !== 'anthropic') return true;
-  return !!process.env.ANTHROPIC_API_KEY;
+  // OpenAI-only deployment; chore validation uses the env-configured OpenAI key.
+  return !!process.env.OPENAI_API_KEY;
 }
 
 /** A safe, honest fallback used whenever the model can't be reached. */

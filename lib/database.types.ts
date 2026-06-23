@@ -14,6 +14,8 @@ export type EventCategory =
   | 'maintenance' | 'birthday' | 'holiday' | 'other';
 export type RecurrenceFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type PantryLocation = 'pantry' | 'fridge' | 'freezer' | 'counter' | 'garage' | 'other';
+export type NutritionSubject = 'recipe' | 'meal' | 'week';
 export type NotificationType =
   | 'chore_due' | 'medication_due' | 'calendar_event' | 'school_event' | 'sports_event'
   | 'maintenance_task' | 'grocery_reminder' | 'document_expiry' | 'family_invite' | 'system';
@@ -215,6 +217,16 @@ export interface Database {
         { id: string; family_id: string; list_id: string; name: string; quantity: string | null; category: string | null; is_checked: boolean; source_meal_id: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; list_id: string; name: string; quantity?: string | null; category?: string | null; is_checked?: boolean; source_meal_id?: string | null; created_by?: string | null },
         Partial<{ name: string; quantity: string | null; category: string | null; is_checked: boolean }>
+      >;
+      pantry_items: T<
+        { id: string; family_id: string; name: string; category: string | null; location: PantryLocation; quantity: number; unit: string | null; low_threshold: number | null; expires_at: string | null; barcode: string | null; is_staple: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; category?: string | null; location?: PantryLocation; quantity?: number; unit?: string | null; low_threshold?: number | null; expires_at?: string | null; barcode?: string | null; is_staple?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; category: string | null; location: PantryLocation; quantity: number; unit: string | null; low_threshold: number | null; expires_at: string | null; barcode: string | null; is_staple: boolean; notes: string | null }>
+      >;
+      meal_nutrition: T<
+        { id: string; family_id: string; subject_type: NutritionSubject; subject_id: string; servings: number | null; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null; sugar_g: number | null; sodium_mg: number | null; summary: string | null; details: Json | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; subject_type: NutritionSubject; subject_id: string; servings?: number | null; calories?: number | null; protein_g?: number | null; carbs_g?: number | null; fat_g?: number | null; fiber_g?: number | null; sugar_g?: number | null; sodium_mg?: number | null; summary?: string | null; details?: Json | null; created_by?: string | null },
+        Partial<{ subject_type: NutritionSubject; subject_id: string; servings: number | null; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null; sugar_g: number | null; sodium_mg: number | null; summary: string | null; details: Json | null }>
       >;
       medications: T<
         { id: string; family_id: string; member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean; created_by: string | null } & Stamps,

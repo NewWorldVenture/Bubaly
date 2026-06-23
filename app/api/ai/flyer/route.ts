@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
@@ -94,27 +93,35 @@ Rules:
     const isImage = IMAGE_TYPES.includes(mediaType);
     if (!isPdf && !isImage) return NextResponse.json({ error: 'Upload an image (JPG/PNG/WebP) or PDF.' }, { status: 400 });
 
-    const filePart = isPdf
-      ? { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data } }
-      : { type: 'image' as const, source: { type: 'base64' as const, media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif', data } };
-
-    // Flyer parsing needs PDF/vision input, which is Anthropic-specific — use the
-    // admin-configured Anthropic key/model (Admin → AI Engine), with env fallback.
+    // OpenAI-only deployment. Use the admin-configured OpenAI key/model
+    // (Admin → AI Engine) with env fallback. gpt-4o reads images directly and
+    // PDFs via the file input part.
     const aiConfig = await getAIConfig(createServiceClient());
-    const apiKey = aiConfig.anthropicKey ?? process.env.ANTHROPIC_API_KEY;
+    const apiKey = aiConfig.openaiKey ?? process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'Flyer scanning needs an Anthropic API key. Add one in Admin → AI Engine.' }, { status: 503 });
+      return NextResponse.json({ error: 'Flyer scanning needs an OpenAI API key. Add one in Admin → AI Engine.' }, { status: 503 });
     }
-    const model = aiConfig.provider === 'anthropic' && aiConfig.model ? aiConfig.model : 'claude-sonnet-4-6';
-    const anthropic = new Anthropic({ apiKey });
+    const model = aiConfig.model && /^(gpt-|o\d|chatgpt-)/i.test(aiConfig.model) ? aiConfig.model : 'gpt-4o';
 
-    const response = await anthropic.messages.create({
-      model,
-      max_tokens: 1500,
-      messages: [{ role: 'user', content: [filePart, { type: 'text', text: prompt }] }],
+    const filePart = isPdf
+      ? { type: 'file' as const, file: { filename: 'flyer.pdf', file_data: `data:application/pdf;base64,${data}` } }
+      : { type: 'image_url' as const, image_url: { url: `data:${mediaType};base64,${data}` } };
+
+    const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, filePart] }],
+      }),
     });
-
-    const text = response.content[0]?.type === 'text' ? response.content[0].text : '[]';
+    if (!aiRes.ok) {
+      console.error('Flyer OpenAI error', aiRes.status, await aiRes.text().catch(() => ''));
+      return NextResponse.json({ error: 'Could not read that flyer. Try a clearer photo or a different file.' }, { status: 502 });
+    }
+    const aiJson = await aiRes.json();
+    const text: string = aiJson.choices?.[0]?.message?.content ?? '[]';
     let raw: Array<Record<string, unknown>> = [];
     try {
       const match = text.match(/\[[\s\S]*\]/);

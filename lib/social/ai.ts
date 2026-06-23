@@ -1,10 +1,10 @@
 // lib/social/ai.ts
 // Real AI content generation for the studio, using the project's provider-agnostic
-// LLM interface (lib/ai/provider.ts → Anthropic by default). Each call returns
+// LLM interface (lib/ai/provider.ts → OpenAI / ChatGPT). Each call returns
 // structured text; the server action persists the request+response into
 // social_ai_generations so history is auditable. No output is published here.
 import 'server-only';
-import { resolveProvider } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { PROVIDERS, type SocialPlatform } from './capabilities';
 import { type AiGenerationKind } from './ai-kinds';
 
@@ -71,8 +71,8 @@ function instructionFor(input: AiGenerateInput): string {
  * an honest "AI not configured" state rather than returning fabricated text.
  */
 export async function generate(input: AiGenerateInput): Promise<AiGenerateResult> {
-  if (!process.env.ANTHROPIC_API_KEY && (process.env.AI_PROVIDER ?? 'anthropic') === 'anthropic') {
-    throw new Error('AI is not configured: set ANTHROPIC_API_KEY to enable content generation.');
+  if (!(await isAIConfigured())) {
+    throw new Error('AI is not configured: set OPENAI_API_KEY to enable content generation.');
   }
   const provider = await resolveProvider();
   const system =
