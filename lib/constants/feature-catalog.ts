@@ -100,6 +100,7 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('finances', 'Finances', 'Finances & Admin', 'free', '/dashboard/billing'),
   F('expense-splitting', 'Expense Splitting', 'Finances & Admin', 'basic', '/dashboard/expenses'),
   F('subscription-tracking', 'Subscription Tracking', 'Finances & Admin', 'basic', '/dashboard/subscriptions'),
+  F('insurance-hub', 'Insurance Hub', 'Finances & Admin', 'basic', '/dashboard/insurance'),
   F('tax-vault', 'Tax Document Vault', 'Finances & Admin', 'basic', '/dashboard/tax-vault'),
   F('calendar-sync', 'Calendar Sync', 'Finances & Admin', 'free', '/dashboard/sync'),
   F('family-accounts', 'Family Accounts', 'Finances & Admin', 'basic', '/dashboard/settings#members'),

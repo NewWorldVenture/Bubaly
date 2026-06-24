@@ -15,6 +15,8 @@ export type EventCategory =
 export type RecurrenceFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 export type PetSpecies = 'dog' | 'cat' | 'bird' | 'fish' | 'reptile' | 'small_mammal' | 'horse' | 'other';
 export type PetCareKind = 'vaccination' | 'vet_visit' | 'medication' | 'grooming' | 'weight' | 'other';
+export type InsurancePolicyType = 'health' | 'dental' | 'vision' | 'auto' | 'home' | 'renters' | 'life' | 'disability' | 'umbrella' | 'pet' | 'travel' | 'other';
+export type PremiumFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type PantryLocation = 'pantry' | 'fridge' | 'freezer' | 'counter' | 'garage' | 'other';
 export type NutritionSubject = 'recipe' | 'meal' | 'week';
@@ -369,6 +371,11 @@ export interface Database {
         { id: string; family_id: string; parent_node_id: string | null; member_id: string | null; name: string; relationship: string; birth_year: number | null; death_year: number | null; birth_place: string | null; photo_url: string | null; bio: string | null; metadata: Json; created_by: string | null } & Stamps,
         { id?: string; family_id: string; parent_node_id?: string | null; member_id?: string | null; name: string; relationship?: string; birth_year?: number | null; death_year?: number | null; birth_place?: string | null; photo_url?: string | null; bio?: string | null; metadata?: Json; created_by?: string | null },
         Partial<{ parent_node_id: string | null; member_id: string | null; name: string; relationship: string; birth_year: number | null; death_year: number | null; birth_place: string | null; photo_url: string | null; bio: string | null; metadata: Json }>
+      >;
+      family_insurance_policies: T<
+        { id: string; family_id: string; policy_type: InsurancePolicyType; insurer: string; policy_number: string | null; member_id: string | null; premium_amount: number | null; premium_frequency: PremiumFrequency; coverage_amount: number | null; deductible: number | null; effective_date: string | null; renewal_date: string | null; agent_name: string | null; agent_phone: string | null; claim_phone: string | null; document_path: string | null; notes: string | null; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; policy_type?: InsurancePolicyType; insurer: string; policy_number?: string | null; member_id?: string | null; premium_amount?: number | null; premium_frequency?: PremiumFrequency; coverage_amount?: number | null; deductible?: number | null; effective_date?: string | null; renewal_date?: string | null; agent_name?: string | null; agent_phone?: string | null; claim_phone?: string | null; document_path?: string | null; notes?: string | null; is_active?: boolean; created_by?: string | null },
+        Partial<{ policy_type: InsurancePolicyType; insurer: string; policy_number: string | null; member_id: string | null; premium_amount: number | null; premium_frequency: PremiumFrequency; coverage_amount: number | null; deductible: number | null; effective_date: string | null; renewal_date: string | null; agent_name: string | null; agent_phone: string | null; claim_phone: string | null; document_path: string | null; notes: string | null; is_active: boolean }>
       >;
       pets: T<
         { id: string; family_id: string; name: string; species: PetSpecies; breed: string | null; birthday: string | null; adoption_date: string | null; weight_kg: number | null; color: string | null; microchip_id: string | null; photo_path: string | null; vet_name: string | null; vet_phone: string | null; notes: string | null; is_active: boolean; created_by: string | null } & Stamps,

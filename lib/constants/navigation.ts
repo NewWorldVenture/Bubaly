@@ -122,6 +122,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/billing', label: 'Finances', icon: CreditCard, minLevel: 0 },
       { href: '/dashboard/expenses', label: 'Expense Splitting', icon: DollarSign, minLevel: 1 },
       { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: RefreshCw, minLevel: 1 },
+      { href: '/dashboard/insurance', label: 'Insurance Hub', icon: ShieldAlert, minLevel: 1 },
       { href: '/dashboard/tax-vault', label: 'Tax Vault', icon: FolderLock, minLevel: 1 },
       { href: '/dashboard/sync', label: 'Calendar Sync', icon: RefreshCw, minLevel: 0 },
       { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound, minLevel: 0 },

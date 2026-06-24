@@ -1,7 +1,55 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Family Pet Manager build. Keep this updated as you ship.
+Last updated after the Family Insurance Hub build. Keep this updated as you ship.
+
+> **Session update (2026-06-24f, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> FAMILY INSURANCE HUB (roadmap #80).** Pushed pets + voice assistant to main,
+> then built the next roadmap gap.
+>
+> **AUDIT NOTE:** Insurance previously existed ONLY in fragmented per-domain
+> forms — `insurance_policies` (health cards in medical), `auto_insurance_policies`
+> (vehicle), home `warranties`. There was NO unified household hub. Built one.
+>
+> **BUILT — Family Insurance Hub, world-class + AI-first, fully Supabase-wired:**
+> - **Migration `0084_insurance.sql`** (⚠️ NOT YET APPLIED TO PROD — apply before
+>   `/dashboard/insurance` works in prod): `family_insurance_policies`
+>   (policy_type enum health/dental/vision/auto/home/renters/life/disability/
+>   umbrella/pet/travel/other, insurer, policy_number, member_id, premium_amount,
+>   premium_frequency enum monthly/quarterly/semiannual/annual, coverage_amount,
+>   deductible, effective_date, **renewal_date**, agent_name/phone, claim_phone,
+>   document_path, notes, is_active). Family-scoped RLS via `is_family_member`,
+>   `set_updated_at` trigger, indexes incl. partial on renewal_date. Enums
+>   `insurance_policy_type`, `premium_frequency`. NOTE: table named
+>   `family_insurance_policies` to avoid colliding with the existing
+>   `insurance_policies` (health cards).
+> - **Types** in `lib/database.types.ts` (`InsurancePolicyType`,
+>   `PremiumFrequency`, `family_insurance_policies`).
+> - **`lib/insurance/policies.ts`** (pure, 12 tests in
+>   `tests/insurance-policies.test.ts`): the AI insurance-awareness engine.
+>   `POLICY_TYPES`/`PREMIUM_FREQUENCIES`, `annualPremium` (frequency→annual),
+>   `renewalUrgency` (lapsed/due_soon≤30d/upcoming/none), `upcomingRenewals`,
+>   `totalAnnualPremium`, `premiumByType`, **`coverageGaps`** + `ESSENTIAL_COVERAGE`
+>   (health/auto/home/life — flags essential types with NO active policy),
+>   `insuranceSummary`, `fmtMoney`. Deterministic; never invents amounts.
+> - **`components/modules/insurance-module.tsx`**: annual-premium card with
+>   per-type rollup, **AI "Insurance awareness" panel** (coverage-gap warning +
+>   lapsed/renewing-soon list), policy grid w/ type emoji + premium + renewal
+>   chip, detail modal (full policy facts, tap-to-call agent + claims line).
+>   Realtime via `useRealtimeQuery`.
+> - **`app/(app)/dashboard/insurance/page.tsx`**, nav entry (ShieldAlert icon,
+>   Finances group, minLevel 1), feature-catalog `insurance-hub` (Finances &
+>   Admin, basic).
+>
+> **Verification:** `tsc` clean · `next lint` clean · `next build` **Compiled
+> successfully** (`/dashboard/insurance` registered) · `vitest` **820 passing**
+> (+12). **Migration 0084 must be applied to prod.**
+>
+> **NEXT (roadmap gaps):** Estate/Legacy Vault (#81/82), Volunteer Hub (#87),
+> College/Scholarship Planner (#90/91), Donation Tracker (#95), Family Pet
+> feeding/walk schedules. Mirror this exact pattern (migration + types + pure
+> `lib/<f>/*` + tests + module + page + nav + catalog). Integration items
+> (#72-77) still need external OAuth creds. Next migration: **0085**.
 
 > **Session update (2026-06-24e, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > 100-FEATURE ROADMAP AUDIT + FAMILY PET MANAGER (feature #88).**
