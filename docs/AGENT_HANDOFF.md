@@ -1,7 +1,58 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Family Insurance Hub build. Keep this updated as you ship.
+Last updated after the 6-feature roadmap sprint. Keep this updated as you ship.
+
+> **Session update (2026-06-24g, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> 6-FEATURE ROADMAP SPRINT.** Pushed insurance hub to main, then built 5 more
+> roadmap gaps in succession. All on the feature branch, ready for merge to main.
+>
+> **BUILT THIS SESSION (all world-class, AI-first, fully Supabase-wired):**
+>
+> 1. **Estate & Legacy Vault (#81/82)** — Migration `0085_estate_vault.sql`:
+>    `estate_documents` + `estate_digital_accounts` tables. 12 document types
+>    (will, trust, POA, advance directive, deed, title, digital account, etc.),
+>    review status tracking, attorney contacts, expiration/review dates. Digital
+>    legacy tab for tracking account access + 2FA + legacy contacts. Pure
+>    `lib/estate/planning.ts` engine with review urgency, essential document
+>    gaps (will/POA/directive), expiration tracking. 22 tests. AI awareness
+>    panel. Nav: `/dashboard/estate` (Finances, minLevel 1).
+>
+> 2. **Volunteer Hub (#87)** — Migration `0086_volunteer_hub.sql`:
+>    `volunteer_opportunities` + `volunteer_hours` tables. 11 category types,
+>    status tracking, hour logging per member/opportunity. Pure
+>    `lib/volunteer/tracking.ts` engine with hours-by-member/category rollups,
+>    upcoming opportunities, summary stats. 12 tests. Nav: `/dashboard/volunteer`
+>    (Family & Home, minLevel 1).
+>
+> 3. **Donation Tracker (#95)** — Migration `0087_donations.sql`:
+>    `family_donations` table. 6 donation types, tax-year tracking, EIN, tax-
+>    deductible flag. Pure `lib/donations/giving.ts` engine with year/org/type
+>    rollups, tax-deductible totals, lifetime giving summary. 13 tests. Year
+>    filter, top recipients breakdown. Nav: `/dashboard/donations` (Finances,
+>    minLevel 1).
+>
+> 4. **College & Scholarship Planner (#90/91)** — Migration
+>    `0088_college_planner.sql`: `college_applications` + `scholarships` tables.
+>    8 app statuses, 7 scholarship statuses, deadline tracking, tuition/aid
+>    comparison. Pure `lib/college/planner.ts` engine with deadline urgency, net
+>    cost, scholarship totals. 13 tests. Applications/scholarships tabs, deadline
+>    alerts. Nav: `/dashboard/college` (Family & Home, minLevel 1).
+>
+> 5. **Family Reunion Planner** — Migration `0089_reunion_planner.sql`:
+>    `family_reunions` + `reunion_rsvps` tables. 5 statuses, RSVP tracking
+>    with party size, dietary notes. Pure `lib/reunion/planner.ts` engine with
+>    RSVP counts, upcoming reunions, budget tracking. 9 tests. Nav:
+>    `/dashboard/reunions` (Family & Home, minLevel 1).
+>
+> **Verification:** `tsc` clean · `next lint` clean · `next build` **Compiled
+> successfully** (all 5 new routes registered) · `vitest` **889 passing**
+> (+69 new tests). **Migrations 0085-0089 must be applied to prod.**
+>
+> **NEXT (remaining roadmap gaps):** Yearbook (#89), Relocation Guide,
+> Marketplace. Also still need: integration items (#72-77) requiring
+> external OAuth creds. Next migration: **0090**. Feature branch has all
+> new commits and is ahead of main by 5 commits.
 
 > **Session update (2026-06-24f, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > FAMILY INSURANCE HUB (roadmap #80).** Pushed pets + voice assistant to main,
