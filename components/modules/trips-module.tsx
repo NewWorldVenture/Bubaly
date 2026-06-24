@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import {
   Plane, Plus, Pencil, Trash2, MapPin, CalendarRange, Check, Users,
   Luggage, ListChecks, Ticket, FileText, ChevronRight, ArrowLeft,
+  Sparkles, X,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -21,6 +22,7 @@ import {
   tripDurationDays, daysUntil, isUpcoming, checklistProgress, progressByKind,
   TRIP_STATUS_LABELS, TRIP_ITEM_KIND_LABELS, type TripLike, type TripItemLike, type TripItemKind,
 } from '@/lib/trips/planner';
+import { type TripInsights, type TripsAIResponse } from '@/lib/trips/trips-ai';
 import type { Tables, TripStatus } from '@/lib/database.types';
 
 type Trip = Tables<'trips'>;
@@ -61,6 +63,9 @@ export function TripsModule() {
   const [itemModal, setItemModal] = useState(false);
   const [itemForm, setItemForm] = useState<{ kind: TripItemKind; label: string; details: string; assignee_id: string }>({ kind: 'packing', label: '', details: '', assignee_id: '' });
   const [savingItem, setSavingItem] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<TripInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<TripsAIResponse | null>(null);
 
   const { data: trips, loading, error } = useRealtimeQuery<Trip>({
     table: 'trips', familyId, deps: [familyId],
@@ -167,6 +172,20 @@ export function TripsModule() {
     const e = new Date(`${t.end_date}T00:00:00`).toLocaleDateString('en-US', { ...opt, year: 'numeric' });
     return `${s} – ${e}`;
   };
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/trips', { method: 'POST' });
+      if (!res.ok) throw new Error('AI request failed');
+      const data = await res.json();
+      setAiAnalysis(data.analysis ?? null);
+      setAiInsights(data.aiInsights ?? null);
+    } catch {
+      toastError('Could not analyze trips');
+    }
+    setAiLoading(false);
+  }
 
   if (loading) return <LoadingBlock label="Loading trips…" />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load trips'} />;
@@ -310,8 +329,60 @@ export function TripsModule() {
       <PageHeader
         title="Trip Planner"
         description="Plan family travel end to end — itinerary, packing lists, reservations, and documents."
-        action={canEdit && <Button onClick={openNewTrip} className="gap-1.5"><Plus className="h-4 w-4" /> New trip</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={runAiAssist} disabled={aiLoading}>
+              <Sparkles className={cn('w-4 h-4 mr-1', aiLoading && 'animate-pulse')} />
+              {aiLoading ? 'Analyzing…' : 'AI Assist'}
+            </Button>
+            {canEdit && <Button onClick={openNewTrip} className="gap-1.5"><Plus className="h-4 w-4" /> New trip</Button>}
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4 space-y-3 mb-4">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand">
+              <Sparkles className="h-3.5 w-3.5" /> Travel Insights
+            </span>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {aiAnalysis && (
+            <div className="space-y-1.5">
+              <p className="text-sm">{aiAnalysis.summary}</p>
+              {aiAnalysis.avgChecklistCompletion > 0 && aiAnalysis.avgChecklistCompletion < 100 && (
+                <p className="text-xs text-amber-400">📋 Checklists {aiAnalysis.avgChecklistCompletion}% complete — keep packing!</p>
+              )}
+            </div>
+          )}
+          {aiInsights && (
+            <div className="space-y-2 border-t border-brand/20 pt-2">
+              {aiInsights.packingReminders.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1">Don&apos;t forget to pack</p>
+                  <div className="flex flex-wrap gap-1">
+                    {aiInsights.packingReminders.map((r) => <span key={r} className="text-xs px-2 py-0.5 rounded-full border border-brand/30 bg-brand/10">{r}</span>)}
+                  </div>
+                </div>
+              )}
+              {aiInsights.suggestions.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1">Suggestions</p>
+                  <ul className="space-y-0.5">
+                    {aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}
+                  </ul>
+                </div>
+              )}
+              {aiInsights.planningTip && (
+                <p className="text-xs text-muted italic">💡 {aiInsights.planningTip}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center gap-1.5 mb-4">
         <button onClick={() => setShowPast(false)} className={cn('px-3 py-1.5 rounded-lg text-sm font-medium transition', !showPast ? 'bg-brand text-white' : 'bg-surface/50 text-muted hover:text-fg border border-border')}>Upcoming</button>

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Pill, Plus, Pencil, Trash2, Check, X, Clock, CalendarClock, Activity,
+  Pill, Plus, Pencil, Trash2, Check, X, Clock, CalendarClock, Activity, Sparkles,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -20,6 +20,7 @@ import {
   dosesForDay, adherenceRate, doseStatusCounts, shortTime, localDateKey,
   DAY_LABELS, type ScheduleLike, type DueDose,
 } from '@/lib/medications/adherence';
+import { type MedicationInsights, type MedicationsAIResponse } from '@/lib/medications/medications-ai';
 import type { Tables, DoseStatus } from '@/lib/database.types';
 
 type Medication = Tables<'medications'>;
@@ -66,6 +67,9 @@ export function MedicationsModule() {
   const [scheduleForm, setScheduleForm] = useState(blankSchedule);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [busyDose, setBusyDose] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<MedicationInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<MedicationsAIResponse | null>(null);
 
   // Adherence window lower bound (ISO) for the dose log query.
   const windowStart = useMemo(() => {
@@ -248,6 +252,20 @@ export function MedicationsModule() {
     return map;
   }, [schedules]);
 
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/medications', { method: 'POST' });
+      if (!res.ok) throw new Error('AI request failed');
+      const data = await res.json();
+      setAiAnalysis(data.analysis ?? null);
+      setAiInsights(data.aiInsights ?? null);
+    } catch {
+      toastError('Could not analyze medications');
+    }
+    setAiLoading(false);
+  }
+
   if (medsLoading) return <LoadingBlock label="Loading medications…" />;
   if (medsError) return <ErrorState message={typeof medsError === 'string' ? medsError : 'Failed to load medications'} />;
 
@@ -256,10 +274,60 @@ export function MedicationsModule() {
       <PageHeader
         title="Medications"
         description="Track medications, dosing schedules, and adherence for the whole family."
-        action={canEdit && (
-          <Button onClick={openNewMed} className="gap-1.5"><Plus className="h-4 w-4" /> Add medication</Button>
-        )}
+        action={
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={runAiAssist} disabled={aiLoading}>
+              <Sparkles className={cn('w-4 h-4 mr-1', aiLoading && 'animate-pulse')} />
+              {aiLoading ? 'Analyzing…' : 'AI Assist'}
+            </Button>
+            {canEdit && <Button onClick={openNewMed} className="gap-1.5"><Plus className="h-4 w-4" /> Add medication</Button>}
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4 space-y-3 mb-6">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand">
+              <Sparkles className="h-3.5 w-3.5" /> Medication Insights
+            </span>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {aiAnalysis && (
+            <div className="space-y-1.5">
+              <p className="text-sm">{aiAnalysis.summary}</p>
+              {aiAnalysis.missedDoses > 0 && (
+                <p className="text-xs text-amber-400">⚠ {aiAnalysis.missedDoses} missed dose{aiAnalysis.missedDoses > 1 ? 's' : ''} in tracking window</p>
+              )}
+            </div>
+          )}
+          {aiInsights && (
+            <div className="space-y-2 border-t border-brand/20 pt-2">
+              {aiInsights.adherenceTips.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1">Adherence tips</p>
+                  <ul className="space-y-0.5">
+                    {aiInsights.adherenceTips.map((t, i) => <li key={i} className="text-xs text-muted">• {t}</li>)}
+                  </ul>
+                </div>
+              )}
+              {aiInsights.suggestions.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1">Suggestions</p>
+                  <ul className="space-y-0.5">
+                    {aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}
+                  </ul>
+                </div>
+              )}
+              {aiInsights.organizationTip && (
+                <p className="text-xs text-muted italic">💡 {aiInsights.organizationTip}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Summary: today's doses + adherence */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
