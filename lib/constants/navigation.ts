@@ -80,6 +80,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/documents', label: 'Documents', icon: FolderLock, minLevel: 0 },
       { href: '/dashboard/notes', label: 'Notes', icon: StickyNote, minLevel: 0 },
       { href: '/dashboard/contacts', label: 'Contacts', icon: Users, minLevel: 0 },
+      { href: '/dashboard/yearbook', label: 'Yearbook', icon: BookHeart, minLevel: 1 },
     ],
   },
   {

@@ -26,6 +26,7 @@ export type CollegeAppStatus = 'researching' | 'applying' | 'submitted' | 'accep
 export type ScholarshipStatus = 'researching' | 'applying' | 'submitted' | 'awarded' | 'denied' | 'accepted' | 'declined';
 export type ReunionStatus = 'planning' | 'confirmed' | 'active' | 'completed' | 'cancelled';
 export type RsvpResponse = 'attending' | 'not_attending' | 'maybe' | 'pending';
+// Yearbook uses plain text categories, no enum needed
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type PantryLocation = 'pantry' | 'fridge' | 'freezer' | 'counter' | 'garage' | 'other';
 export type NutritionSubject = 'recipe' | 'meal' | 'week';
@@ -430,6 +431,16 @@ export interface Database {
         { id: string; family_id: string; reunion_id: string; guest_name: string; guest_email: string; response: RsvpResponse; party_size: number; dietary_notes: string; notes: string } & Stamps,
         { id?: string; family_id: string; reunion_id: string; guest_name: string; guest_email?: string; response?: RsvpResponse; party_size?: number; dietary_notes?: string; notes?: string },
         Partial<{ guest_name: string; guest_email: string; response: RsvpResponse; party_size: number; dietary_notes: string; notes: string }>
+      >;
+      family_yearbooks: T<
+        { id: string; family_id: string; created_by: string | null; title: string; year: number; description: string; cover_photo: string; is_published: boolean; notes: string; is_active: boolean } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; title: string; year?: number; description?: string; cover_photo?: string; is_published?: boolean; notes?: string; is_active?: boolean },
+        Partial<{ title: string; year: number; description: string; cover_photo: string; is_published: boolean; notes: string; is_active: boolean }>
+      >;
+      yearbook_entries: T<
+        { id: string; family_id: string; yearbook_id: string; created_by: string | null; title: string; description: string; entry_date: string | null; photo_path: string; category: string; member_id: string | null; sort_order: number } & Stamps,
+        { id?: string; family_id: string; yearbook_id: string; created_by?: string | null; title: string; description?: string; entry_date?: string | null; photo_path?: string; category?: string; member_id?: string | null; sort_order?: number },
+        Partial<{ title: string; description: string; entry_date: string | null; photo_path: string; category: string; member_id: string | null; sort_order: number }>
       >;
       pets: T<
         { id: string; family_id: string; name: string; species: PetSpecies; breed: string | null; birthday: string | null; adoption_date: string | null; weight_kg: number | null; color: string | null; microchip_id: string | null; photo_path: string | null; vet_name: string | null; vet_phone: string | null; notes: string | null; is_active: boolean; created_by: string | null } & Stamps,
