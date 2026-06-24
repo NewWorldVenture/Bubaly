@@ -16,6 +16,7 @@ import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import type { PetsInsights, PetsAIResponse } from '@/lib/pets/pets-ai';
 import {
   PET_SPECIES, CARE_KINDS, speciesMeta, careKindMeta,
   petAgeLabel, careUrgency, upcomingCare, careSummary, recommendedCare,
@@ -59,6 +60,19 @@ export function PetsModule() {
   const [addPetOpen, setAddPetOpen] = useState(false);
   const [selected, setSelected] = useState<Pet | null>(null);
   const [careForPet, setCareForPet] = useState<Pet | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<PetsInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<PetsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/pets', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const summary = useMemo(
     () => careSummary(pets.data.length, records.data, new Date()),
@@ -89,8 +103,40 @@ export function PetsModule() {
       <PageHeader
         title="Pets"
         description="Profiles and complete care operations for every family pet."
-        action={<Button onClick={() => setAddPetOpen(true)}><Plus className="h-4 w-4" /> Add pet</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4" /> AI Assist
+            </Button>
+            <Button onClick={() => setAddPetOpen(true)}><Plus className="h-4 w-4" /> Add pet</Button>
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Pet Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.careTips && aiInsights.careTips.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Care Tips</p>
+              <ul className="space-y-1">{aiInsights.careTips.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.healthReminder && <p className="text-xs text-muted italic">{aiInsights.healthReminder}</p>}
+        </div>
+      )}
 
       {/* Care summary + AI recommendations */}
       {pets.data.length > 0 && (

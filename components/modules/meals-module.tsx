@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import { NUTRIENT_LABELS, dailyValuePct, fmtAmount, type Nutrition } from '@/lib/meals/nutrition';
 import type { Tables, MealType } from '@/lib/database.types';
+import type { MealsInsights, MealsAIResponse } from '@/lib/meals/meals-ai';
 
 type Meal = Tables<'meals'>;
 type Plan = Tables<'meal_plans'> & { meal: Meal | null };
@@ -51,6 +52,19 @@ export function MealsModule() {
   const [addCell, setAddCell] = useState<{ date: string; type: MealType } | null>(null);
   const [newMealOpen, setNewMealOpen] = useState(false);
   const [autoPlanOpen, setAutoPlanOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<MealsInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<MealsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/meals', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const monday = useMemo(() => weekStart(weekOffset), [weekOffset]);
   const days = useMemo(() => daysOfWeek(monday), [monday]);
@@ -114,6 +128,9 @@ export function MealsModule() {
             description="Plan, organize, and enjoy healthy meals together."
             action={
               <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+                  <Sparkles className="h-4 w-4" /> AI Assist
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => setAutoPlanOpen(true)}>
                   <Sparkles className="h-4 w-4" /> Auto-plan week
                 </Button>
@@ -123,6 +140,31 @@ export function MealsModule() {
               </div>
             }
           />
+
+          {(aiAnalysis || aiInsights) && (
+            <div className="mt-4 rounded-xl border border-brand/30 bg-brand/5 p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+                  <Sparkles className="h-4 w-4" /> AI Meal Insights
+                </div>
+                <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><XIcon className="h-4 w-4" /></button>
+              </div>
+              {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+              {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+                <div className="mb-2">
+                  <p className="text-xs font-medium mb-1">Suggestions</p>
+                  <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+                </div>
+              )}
+              {aiInsights?.mealIdeas && aiInsights.mealIdeas.length > 0 && (
+                <div className="mb-2">
+                  <p className="text-xs font-medium mb-1">Meal Ideas</p>
+                  <ul className="space-y-1">{aiInsights.mealIdeas.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+                </div>
+              )}
+              {aiInsights?.nutritionTip && <p className="text-xs text-muted italic">{aiInsights.nutritionTip}</p>}
+            </div>
+          )}
 
           {/* Tab strip */}
           <div className="tab-bar mt-4">

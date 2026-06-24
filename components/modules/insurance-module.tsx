@@ -16,6 +16,7 @@ import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import type { InsuranceInsights, InsuranceAIResponse } from '@/lib/insurance/insurance-ai';
 import {
   POLICY_TYPES, PREMIUM_FREQUENCIES, policyTypeMeta, frequencyMeta,
   annualPremium, renewalUrgency, upcomingRenewals, premiumByType,
@@ -47,6 +48,19 @@ export function InsuranceModule() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<Policy | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<InsuranceInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<InsuranceAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/insurance', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const summary = useMemo(() => insuranceSummary(policies.data, new Date()), [policies.data]);
   const renewals = useMemo(() => upcomingRenewals(policies.data).filter((r) => r.urgency !== 'upcoming').slice(0, 6), [policies.data]);
@@ -69,8 +83,40 @@ export function InsuranceModule() {
       <PageHeader
         title="Insurance Hub"
         description="Every household policy in one place, with AI-managed renewal and coverage awareness."
-        action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add policy</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4" /> AI Assist
+            </Button>
+            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add policy</Button>
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Insurance Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.coverageTips && aiInsights.coverageTips.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Coverage Tips</p>
+              <ul className="space-y-1">{aiInsights.coverageTips.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.savingsTip && <p className="text-xs text-muted italic">{aiInsights.savingsTip}</p>}
+        </div>
+      )}
 
       {policies.data.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-3">

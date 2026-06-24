@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Plus, Trash2, Sparkles,
+  Plus, Trash2, Sparkles, X,
   ChevronRight, Phone, Mail, FileText, Laptop,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -16,6 +16,7 @@ import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import type { EstateInsights, EstateAIResponse } from '@/lib/estate/estate-ai';
 import {
   DOCUMENT_TYPES, REVIEW_STATUSES, docTypeMeta,
   reviewUrgency, upcomingReviews, documentGaps,
@@ -60,6 +61,19 @@ export function EstateModule() {
   const [selectedDoc, setSelectedDoc] = useState<Doc | null>(null);
   const [selectedDigital, setSelectedDigital] = useState<DigitalAccount | null>(null);
   const [tab, setTab] = useState<'documents' | 'digital'>('documents');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<EstateInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<EstateAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/estate', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const summary = useMemo(() => {
     if (!documents.data) return null;
@@ -80,7 +94,39 @@ export function EstateModule() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Estate & Legacy Vault" />
+      <PageHeader
+        title="Estate & Legacy Vault"
+        action={
+          <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+            <Sparkles className="h-4 w-4" /> AI Assist
+          </Button>
+        }
+      />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Estate Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.reviewPriorities && aiInsights.reviewPriorities.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Review Priorities</p>
+              <ul className="space-y-1">{aiInsights.reviewPriorities.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.planningTip && <p className="text-xs text-muted italic">{aiInsights.planningTip}</p>}
+        </div>
+      )}
 
       {/* Summary card */}
       {summary && (
