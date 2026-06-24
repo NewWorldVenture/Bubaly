@@ -1,9 +1,79 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the PR deep dive + AI Assist sprint — 30/67 modules now have
-AI, all PR NEXT items from #118/#125 completed, 961 tests passing.
+Last updated after the AI Assist completion sprint — **54/67 content modules now
+have AI Assist** (all viable content modules done), 1244 tests passing.
 Keep this updated as you ship.
+
+> **Session update (2026-06-24j, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> AI ASSIST COMPLETION SPRINT.** Continued from session i. Systematically added
+> AI Assist (lib + API route + test + UI wiring) to every remaining content module
+> that didn't have it yet, in batches of 4. Fixed column name mismatches found
+> during TSC verification. All 1244 tests passing, zero TSC errors.
+>
+> **BUILT THIS SESSION (Batches 9-12):**
+>
+> **Batch 9 complement** — lib/route/test files for recipes, reminders, rewards,
+> sports (UI was committed earlier but backend files were not):
+> - `lib/recipes/recipes-ai.ts`, `lib/reminders/reminders-ai.ts`,
+>   `lib/rewards/rewards-ai.ts`, `lib/sports/sports-ai.ts`
+> - API routes: `/api/ai/recipes`, `/api/ai/reminders`, `/api/ai/rewards`,
+>   `/api/ai/sports`
+> - 4 test files, 20 tests
+>
+> **Batch 11** — tax-vault, trip-memories, utilities, volunteer:
+> - `lib/tax-vault/tax-vault-ai.ts`, `lib/trip-memories/trip-memories-ai.ts`,
+>   `lib/utilities/utilities-ai.ts`, `lib/volunteer/volunteer-ai.ts`
+> - API routes: `/api/ai/tax-vault`, `/api/ai/trip-memories`,
+>   `/api/ai/utilities`, `/api/ai/volunteer`
+> - 4 test files, 20 tests
+> - UI wired into all 4 modules (custom h3 headers, Sparkles+X)
+> - **Fixed column name mismatches**: `tax_documents` uses `category`/`name`
+>   (not `document_type`/`description`), `trip_memories` uses `location`/`note`
+>   (not `destination`/`highlight`), `utility_bills` uses `kind`/`amount_cents`
+>   (not `utility_type`/`amount`), `volunteer_hours.opportunity_id` is nullable
+>
+> **Batch 12** — weekend, yearbook, school, health:
+> - `lib/weekend/weekend-ai.ts`, `lib/yearbook/yearbook-ai.ts`,
+>   `lib/school/school-ai.ts`, `lib/health/health-ai.ts`
+> - API routes: `/api/ai/weekend`, `/api/ai/yearbook`, `/api/ai/school`,
+>   `/api/ai/health`
+> - 4 test files, 20 tests
+> - UI wired: weekend (custom h1 + AI button), yearbook (PageHeader action),
+>   school (AI button alongside Add Item dropdown), health (AI button
+>   alongside Log Metric/Workout)
+>
+> **Verification:** `tsc --noEmit` clean · `vitest` **1244 passing** (164 test
+> files). All commits pushed to `claude/resolve-pr-conflicts-nwmf2h`.
+>
+> **AI Assist coverage: 54/67 content modules.** The remaining 13 modules are
+> system/infrastructure modules that don't benefit from AI Assist:
+> assistant (IS the AI), billing (system), briefing (generated), home (dashboard),
+> inbox (notifications), locator (real-time), marketplace (listings),
+> messages (chat), notifications (system), scan (utility), settings (config),
+> weather (external API), weekly-briefing (generated).
+>
+> **REMAINING NEXT ITEMS FROM PRs (lower priority):**
+> - PR #96: Mission notification emitting (cron/edge function)
+> - Smart Home: real device-API sync (HomeKit/SmartThings webhooks)
+> - Security: camera/alarm webhook ingest
+> - Concierge: add behavior/screen-time + signups to digest
+> - Blog: email subscribe, RSS feed, OG images
+> - Onboarding: country field, animated transitions
+> - Integration features (#72-77: Alexa, Google, Apple Home, TeamSnap,
+>   SportsEngine, school portals) — require external OAuth credentials
+>
+> **AI Assist pattern (for reference — all 54 modules follow this):**
+> - Pure lib: `analyze*()` (deterministic) + `build*Prompt()` + `parse*Response()`
+>   (tolerant JSON parse with `raw.match(/\{[\s\S]*\}/)`)
+> - API route: `requireUserContext()` → `ctx.active.familyId` → `createServer()`
+>   → query → analysis → `isAIConfigured()` guard → `resolveProvider().complete()`
+>   → parse → return `{analysis, aiInsights?, aiUsed}`
+> - Module UI: `Sparkles`+`X` imports, `aiLoading`/`aiAnalysis`/`aiInsights`
+>   state, `runAiAssist()` fetch handler, AI button in header, insights panel
+>   with `border-brand/30 bg-brand/5` styling
+> - Correct imports: `isAIConfigured` from `@/lib/ai/provider`,
+>   `createServer` from `@/lib/supabase/server`
 
 > **Session update (2026-06-24i, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > PR DEEP DIVE + AI ASSIST SPRINT.** Audited all 12 open PRs for promised-but-
