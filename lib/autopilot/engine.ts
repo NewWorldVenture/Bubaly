@@ -50,6 +50,7 @@ export type StressSignal = { memberId: string | null; weight: number; occurredOn
 export type MedicationSignal = { id: string; name: string; memberId: string | null; refillOn: string; reminderDays: number };
 /** Family Memory: a favorite meal learned from past plans (most-cooked first). */
 export type FavoriteMeal = { name: string; count: number };
+export type InsuranceSignal = { id: string; label: string; renewalOn: string };
 
 export type FamilySnapshot = {
   today: string; // YYYY-MM-DD
@@ -64,6 +65,7 @@ export type FamilySnapshot = {
   medications: MedicationSignal[];
   favoriteMeals: FavoriteMeal[];   // learned from meal_plans history
   plannedDinnerDays: string[];     // YYYY-MM-DD that already have a dinner planned (next few days)
+  insurance: InsuranceSignal[];
 };
 
 const DAY_MS = 86_400_000;
@@ -419,6 +421,35 @@ export function mealSuggestions(s: FamilySnapshot, horizonDays = 3): SuggestionD
   }];
 }
 
+/**
+ * Insurance renewals: a policy whose renewal_date is within 30 days. Mirrors the
+ * renewals rule (confidence scales with proximity); auto-creates a reversible
+ * reminder when ≤7 days out. kind = `insurance`.
+ */
+export function insuranceSuggestions(s: FamilySnapshot): SuggestionDraft[] {
+  return s.insurance
+    .map((p) => ({ p, d: daysUntil(s.today, p.renewalOn) }))
+    .filter(({ d }) => d >= 0 && d <= 30)
+    .map(({ p, d }) => {
+      const confidence = d <= 7 ? 95 : d <= 14 ? 82 : 72;
+      return {
+        kind: 'insurance',
+        title: d === 0 ? `${p.label} renews today` : `${p.label} renews in ${d} day${d === 1 ? '' : 's'}`,
+        detail: 'Review coverage and confirm the renewal before it lapses.',
+        confidence,
+        urgency: clampUrgency(d <= 3 ? 3 : d <= 14 ? 2 : 1),
+        actionType: 'create_reminder',
+        actionLabel: 'Add renewal reminder',
+        payload: { title: `Renew ${p.label}`, at: `${isoDay(p.renewalOn)}T09:00:00Z` },
+        sourceKind: 'family_insurance_policies',
+        sourceId: p.id,
+        memberId: null,
+        dedupeKey: `insurance:${p.id}:${isoDay(p.renewalOn)}`,
+        expiresAt: `${isoDay(p.renewalOn)}T23:59:59Z`,
+      };
+    });
+}
+
 import { confidenceAdjustment, clampConfidence, clampUrgency as clampU, type MemberTraits } from '@/lib/autopilot/twin';
 
 /**
@@ -454,6 +485,7 @@ export function buildSuggestions(s: FamilySnapshot, traitsByMember?: Map<string,
     ...burnoutSuggestions(s),
     ...medicationSuggestions(s),
     ...mealSuggestions(s),
+    ...insuranceSuggestions(s),
   ];
   if (traitsByMember && traitsByMember.size > 0) {
     all = all.map((d) => applyMemberTraits(d, traitsByMember));

@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Rocket, ShieldCheck, AlertTriangle, Sparkles, Check, X, RefreshCw, Gauge,
   CalendarClock, FileClock, Cake, ShoppingCart, ListChecks, CircleDot,
-  CalendarX, Wallet, HeartPulse, Pill, UtensilsCrossed,
+  CalendarX, Wallet, HeartPulse, Pill, UtensilsCrossed, ShieldCheck as ShieldIcon,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -27,6 +27,7 @@ const KIND_ICON: Record<string, typeof Rocket> = {
   document: FileClock, appointment: CalendarClock, chore: ListChecks,
   birthday: Cake, groceries: ShoppingCart, conflict: CalendarX,
   finance: Wallet, wellbeing: HeartPulse, medication: Pill, meal: UtensilsCrossed,
+  insurance: ShieldIcon,
 };
 
 function iconFor(kind: string) {

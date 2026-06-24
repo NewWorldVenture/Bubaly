@@ -3,7 +3,7 @@ import {
   confidenceTier, AUTO_THRESHOLD, APPROVE_THRESHOLD, daysUntilBirthday,
   renewalSuggestions, appointmentSuggestions, choreSuggestions, birthdaySuggestions,
   grocerySuggestions, conflictSuggestions, expenseSuggestions, burnoutSuggestions,
-  medicationSuggestions, mealSuggestions, monthlyCents, buildSuggestions, applyMemberTraits, successProbability, partitionByTier,
+  medicationSuggestions, mealSuggestions, insuranceSuggestions, monthlyCents, buildSuggestions, applyMemberTraits, successProbability, partitionByTier,
   type FamilySnapshot,
 } from '@/lib/autopilot/engine';
 import type { MemberTraits } from '@/lib/autopilot/twin';
@@ -21,6 +21,7 @@ const base = (over: Partial<FamilySnapshot> = {}): FamilySnapshot => ({
   medications: [],
   favoriteMeals: [],
   plannedDinnerDays: [],
+  insurance: [],
   ...over,
 });
 
@@ -237,6 +238,20 @@ describe('mealSuggestions (Meal Agent / Family Memory)', () => {
   });
   it('stays quiet with no learned favorites (nothing to remember yet)', () => {
     expect(mealSuggestions(base({ favoriteMeals: [], plannedDinnerDays: [] }))).toHaveLength(0);
+  });
+});
+
+describe('insuranceSuggestions', () => {
+  it('flags policies renewing within 30 days, scaling confidence by proximity', () => {
+    const out = insuranceSuggestions(base({ insurance: [
+      { id: 'i1', label: 'auto insurance (Geico)', renewalOn: '2026-06-29' }, // 5d → 95
+      { id: 'i2', label: 'home insurance (State)', renewalOn: '2026-07-20' }, // 26d → 72
+      { id: 'i3', label: 'far', renewalOn: '2026-12-01' }, // out of window
+    ] }));
+    expect(out.map((o) => o.sourceId)).toEqual(['i1', 'i2']);
+    expect(out[0].confidence).toBe(95);
+    expect(out[0].kind).toBe('insurance');
+    expect(out[0].dedupeKey).toBe('insurance:i1:2026-06-29');
   });
 });
 
