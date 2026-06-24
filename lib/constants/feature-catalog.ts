@@ -30,6 +30,7 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('ai-assistant', 'AI Assistant', 'Suggested', 'basic', '/dashboard/assistant'),
   F('daily-briefing', 'Daily Briefing', 'Suggested', 'plus', '/dashboard/briefing'),
   F('weekly-briefing', 'Weekly Briefing', 'Suggested', 'plus', '/dashboard/weekly-briefing'),
+  F('autopilot', 'Family Autopilot', 'Suggested', 'plus', '/dashboard/autopilot'),
   F('command-center', 'Command Center', 'Suggested', 'plus', '/dashboard/command-center'),
   F('family-missions', 'Family Missions', 'Suggested', 'plus', '/missions'),
   F('rewards', 'Rewards', 'Suggested', 'plus', '/dashboard/rewards'),

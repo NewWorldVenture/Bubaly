@@ -477,6 +477,11 @@ export interface Database {
         { id?: string; family_id: string; habit_id: string; member_id?: string | null; log_date?: string; count?: number; note?: string | null; created_by?: string | null },
         Partial<{ member_id: string | null; log_date: string; count: number; note: string | null }>
       >;
+      autopilot_suggestions: T<
+        { id: string; family_id: string; member_id: string | null; kind: string; title: string; detail: string | null; confidence: number; urgency: number; status: 'open' | 'approved' | 'executed' | 'auto_executed' | 'dismissed' | 'snoozed'; action_type: string | null; action_label: string | null; payload: Json; source_kind: string | null; source_id: string | null; dedupe_key: string; expires_at: string | null; resolved_at: string | null; resolved_by: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; kind: string; title: string; detail?: string | null; confidence?: number; urgency?: number; status?: 'open' | 'approved' | 'executed' | 'auto_executed' | 'dismissed' | 'snoozed'; action_type?: string | null; action_label?: string | null; payload?: Json; source_kind?: string | null; source_id?: string | null; dedupe_key: string; expires_at?: string | null; resolved_at?: string | null; resolved_by?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; kind: string; title: string; detail: string | null; confidence: number; urgency: number; status: 'open' | 'approved' | 'executed' | 'auto_executed' | 'dismissed' | 'snoozed'; action_type: string | null; action_label: string | null; payload: Json; source_kind: string | null; source_id: string | null; expires_at: string | null; resolved_at: string | null; resolved_by: string | null }>
+      >;
       reminders: T<
         { id: string; family_id: string; title: string; notes: string | null; remind_at: string; recurrence: RecurrenceFreq; is_done: boolean; member_id: string | null; related_type: string | null; related_id: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; title: string; notes?: string | null; remind_at: string; recurrence?: RecurrenceFreq; is_done?: boolean; member_id?: string | null; related_type?: string | null; related_id?: string | null; created_by?: string | null },

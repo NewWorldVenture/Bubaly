@@ -106,6 +106,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/rides':         1,
   '/display':                 1,  // Kitchen Display Mode
   // Plus routes
+  '/dashboard/autopilot':       2, // Family Autopilot (Mission Control)
   '/dashboard/command-center':  2, // AI Family Command Center
   '/dashboard/weekly-briefing': 2, // Weekly AI Briefing
   '/dashboard/conflicts':       2, // AI Conflict Resolution
