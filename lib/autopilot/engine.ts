@@ -384,9 +384,31 @@ function addDaysIso(iso: string, days: number): string {
   return new Date(Date.parse(`${isoDay(iso)}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 }
 
-/** Run every rule and return all suggestion drafts, highest urgency/confidence first. */
-export function buildSuggestions(s: FamilySnapshot): SuggestionDraft[] {
-  const all = [
+import { confidenceAdjustment, clampConfidence, clampUrgency as clampU, type MemberTraits } from '@/lib/autopilot/twin';
+
+/**
+ * Apply the Digital Twin's per-member reliability traits to a draft, bending its
+ * confidence/urgency. Pure: returns a new draft. Drafts without a member, or
+ * members without enough history, pass through unchanged.
+ */
+export function applyMemberTraits(draft: SuggestionDraft, traitsByMember: Map<string, MemberTraits>): SuggestionDraft {
+  if (!draft.memberId) return draft;
+  const adj = confidenceAdjustment(traitsByMember.get(draft.memberId), draft.kind);
+  if (adj.confidenceDelta === 0 && adj.urgencyDelta === 0) return draft;
+  return {
+    ...draft,
+    confidence: clampConfidence(draft.confidence + adj.confidenceDelta),
+    urgency: clampU(draft.urgency + adj.urgencyDelta),
+  };
+}
+
+/**
+ * Run every rule and return all suggestion drafts, highest urgency/confidence
+ * first. Optionally pass the Digital Twin's `traitsByMember` so per-member
+ * reliability modulates each suggestion's confidence + urgency.
+ */
+export function buildSuggestions(s: FamilySnapshot, traitsByMember?: Map<string, MemberTraits>): SuggestionDraft[] {
+  let all = [
     ...renewalSuggestions(s),
     ...appointmentSuggestions(s),
     ...choreSuggestions(s),
@@ -397,6 +419,9 @@ export function buildSuggestions(s: FamilySnapshot): SuggestionDraft[] {
     ...burnoutSuggestions(s),
     ...medicationSuggestions(s),
   ];
+  if (traitsByMember && traitsByMember.size > 0) {
+    all = all.map((d) => applyMemberTraits(d, traitsByMember));
+  }
   return all.sort((a, b) => b.urgency - a.urgency || b.confidence - a.confidence);
 }
 

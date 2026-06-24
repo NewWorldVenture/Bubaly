@@ -8,6 +8,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { buildSuggestions, confidenceTier, type FamilySnapshot } from '@/lib/autopilot/engine';
+import { computeMemberTraits, type MemberTraits, type MemberHistory } from '@/lib/autopilot/twin';
 
 type DB = SupabaseClient<Database>;
 
@@ -22,10 +23,12 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
   const in2 = new Date(now.getTime() + 2 * 86400000).toISOString();
 
   const since60 = new Date(now.getTime() - 8 * 86400000).toISOString().slice(0, 10);
+  const since90 = new Date(now.getTime() - 90 * 86400000).toISOString();
   const [
     { data: renewals }, { data: appts }, { data: choreRows },
     { data: members }, { data: groceries }, { data: apptReminders },
-    { data: events }, { data: subs }, { data: stress }, { data: meds }, { data: existing },
+    { data: events }, { data: subs }, { data: stress }, { data: meds },
+    { data: choreHistory }, { data: twinProfiles }, { data: existing },
   ] = await Promise.all([
     supabase.from('renewals').select('id, title, expires_at, status').eq('family_id', familyId).eq('status', 'active').lte('expires_at', in30).limit(100),
     supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(50),
@@ -37,6 +40,9 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     supabase.from('subscriptions_tracked').select('id, name, cost_cents, cadence, next_charge, last_used, status').eq('family_id', familyId).in('status', ['active', 'trial']).limit(200),
     supabase.from('family_stress_signals').select('member_id, weight, occurred_on').eq('family_id', familyId).eq('status', 'active').gte('occurred_on', since60).limit(500),
     supabase.from('medications').select('id, name, member_id, refill_on, refill_reminder_days').eq('family_id', familyId).eq('is_active', true).not('refill_on', 'is', null).limit(200),
+    // Digital Twin learning: 90d of chore outcomes per member.
+    supabase.from('chore_assignments').select('member_id, status').eq('family_id', familyId).gte('created_at', since90).limit(2000),
+    supabase.from('family_digital_twin_profiles').select('id, member_id, metadata').eq('family_id', familyId).limit(50),
     supabase.from('autopilot_suggestions').select('id, dedupe_key, status').eq('family_id', familyId).limit(500),
   ]);
 
@@ -59,7 +65,41 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     medications: (meds ?? []).map((x) => ({ id: x.id, name: x.name, memberId: x.member_id, refillOn: x.refill_on as string, reminderDays: x.refill_reminder_days })),
   };
 
-  const drafts = buildSuggestions(snapshot);
+  // Digital Twin: learn per-member reliability from chore history, persist it to
+  // the twin profile, and use it to modulate this scan's confidence/urgency.
+  const histByMember = new Map<string, { completed: number; total: number }>();
+  for (const c of choreHistory ?? []) {
+    if (!c.member_id) continue;
+    const h = histByMember.get(c.member_id) ?? { completed: 0, total: 0 };
+    h.total += 1;
+    if (c.status === 'approved') h.completed += 1;
+    histByMember.set(c.member_id, h);
+  }
+  const history: MemberHistory[] = Array.from(histByMember.entries()).map(([memberId, h]) => ({
+    memberId, choresCompleted: h.completed, choresTotal: h.total,
+  }));
+  const traits = computeMemberTraits(history);
+  const traitsByMember = new Map<string, MemberTraits>(traits.map((t) => [t.memberId, t]));
+
+  // Persist learned traits into the twin (best-effort; merges, never clobbers).
+  const profileByMember = new Map((twinProfiles ?? []).map((p) => [p.member_id, p]));
+  for (const t of traits) {
+    try {
+      const existingProfile = profileByMember.get(t.memberId);
+      if (existingProfile) {
+        const merged = { ...(existingProfile.metadata as Record<string, unknown> ?? {}), autopilot_traits: t };
+        await supabase.from('family_digital_twin_profiles').update({ metadata: merged as never }).eq('id', existingProfile.id);
+      } else {
+        await supabase.from('family_digital_twin_profiles').insert({
+          family_id: familyId, member_id: t.memberId, metadata: { autopilot_traits: t } as never, created_by: userId,
+        });
+      }
+    } catch {
+      // non-fatal: trait persistence is an enhancement, not required for the scan
+    }
+  }
+
+  const drafts = buildSuggestions(snapshot, traitsByMember);
   const draftKeys = new Set(drafts.map((d) => d.dedupeKey));
   const existingByKey = new Map((existing ?? []).map((e) => [e.dedupe_key, e]));
 
