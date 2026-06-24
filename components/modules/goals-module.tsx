@@ -7,6 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -62,7 +63,7 @@ export function GoalsModule() {
       <PageHeader
         title="Family Goals"
         description="Set goals, track progress, and celebrate achievements together."
-        action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New goal</Button>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="goals" iconOnly /><Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New goal</Button></div>}
       />
 
       {data.length === 0 ? (

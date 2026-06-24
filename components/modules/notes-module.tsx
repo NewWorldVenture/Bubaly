@@ -11,6 +11,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
@@ -159,6 +160,7 @@ export function NotesModule() {
               className="rounded-xl border border-border p-2 text-muted hover:bg-elevated hover:text-fg transition">
               {view === 'grid' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
             </button>
+            <AiInsight kind="notes" iconOnly />
             <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> New Note</Button>
           </div>
         }

@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import { NUTRIENT_LABELS, dailyValuePct, fmtAmount, type Nutrition } from '@/lib/meals/nutrition';
@@ -114,6 +115,7 @@ export function MealsModule() {
             description="Plan, organize, and enjoy healthy meals together."
             action={
               <div className="flex items-center gap-2">
+                <AiInsight kind="meals" iconOnly />
                 <Button variant="outline" size="sm" onClick={() => setAutoPlanOpen(true)}>
                   <Sparkles className="h-4 w-4" /> Auto-plan week
                 </Button>

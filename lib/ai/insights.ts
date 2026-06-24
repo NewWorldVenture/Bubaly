@@ -22,7 +22,18 @@ export type InsightKind =
   | 'messages'
   | 'weather'
   | 'settings'
-  | 'event';
+  | 'event'
+  | 'meals'
+  | 'reminders'
+  | 'notes'
+  | 'recipes'
+  | 'documents'
+  | 'care'
+  | 'contacts'
+  | 'billing'
+  | 'goals'
+  | 'pets'
+  | 'renewals';
 
 export type InsightMember = { id: string; name: string };
 
@@ -384,6 +395,177 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       const e = r(d, 'calendar_events')[0];
       if (!e) return `Family: ${d.familyName}. Now: ${d.now}.\n\nNo event was provided. Say you need an event to prep for.`;
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nEvent: ${e.title}\nWhen: ${typeof e.starts_at === 'string' ? e.starts_at.replace('T', ' ').slice(0, 16) : '?'}${e.all_day ? ' (all day)' : ''}\nCategory: ${e.category}\nLocation: ${e.location || 'not set'}\nFor: ${e.assignee_id ? who(e.assignee_id) : 'the family'}\nNotes: ${e.description || 'none'}\n\nGive a tight prep checklist: what to bring, when to leave (estimate), and anything to arrange beforehand.${q(d)}`;
+    },
+  },
+
+  meals: {
+    label: 'AI meal plan',
+    title: 'AI Meal Planner',
+    blurb: "Suggest balanced meals for the week based on what's on your plan.",
+    maxTokens: 700,
+    allowQuestion: true,
+    system:
+      'You are a family meal-planning assistant. Review the current meal plan and suggest improvements or ideas for the upcoming week. Consider balanced nutrition, variety, quick weeknight options, and kid-friendly choices. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const plans = r(d, 'meal_plans').slice(0, 14);
+      const meals = r(d, 'meals').slice(0, 20);
+      const summary = plans.length ? `${plans.length} meals planned` : 'No meals planned yet';
+      const names = meals.slice(0, 10).map((m) => m.name).filter(Boolean).join(', ');
+      return `Family: ${d.familyName}. Members: ${d.members.length}. Now: ${d.now}.\nMeal plan: ${summary}.\nRecent meals: ${names || 'none'}.\n\nSuggest a balanced 7-day meal plan with: breakfast, lunch, dinner ideas, one prep-ahead tip, and one ingredient that would cover multiple meals.${q(d)}`;
+    },
+  },
+
+  reminders: {
+    label: 'AI reminders',
+    title: 'AI Reminder Assistant',
+    blurb: 'Review upcoming reminders and suggest what to prioritize.',
+    maxTokens: 600,
+    allowQuestion: true,
+    system:
+      'You are a family scheduling assistant. Review upcoming reminders and help the family stay on top of important tasks. Flag anything overdue, cluster related reminders, and suggest smart snooze or delegation strategies. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const reminders = r(d, 'family_reminders').slice(0, 20);
+      const list = reminders.map((r) => `- ${r.title} (due: ${r.due_at || 'no date'}, kind: ${r.kind || 'general'})`).join('\n') || 'No reminders.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nReminders:\n${list}\n\nIdentify: (1) anything overdue or due soon, (2) what to prioritize today, (3) one reminder to snooze or delegate.${q(d)}`;
+    },
+  },
+
+  notes: {
+    label: 'AI notes',
+    title: 'AI Note Assistant',
+    blurb: 'Summarize, organize, or extract action items from your notes.',
+    maxTokens: 600,
+    allowQuestion: true,
+    system:
+      'You are a personal notes assistant. Help the family summarize, categorize, and extract actionable next steps from their notes. Suggest tags, follow-ups, or connections between notes. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const notes = r(d, 'notes').slice(0, 10);
+      const list = notes.map((n) => `- "${n.title || 'Untitled'}": ${String(n.content || '').slice(0, 120)}`).join('\n') || 'No notes yet.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nNotes (most recent):\n${list}\n\nGive: (1) a 2-sentence summary of key themes, (2) top 2 action items hidden in these notes, (3) one suggestion to organize better.${q(d)}`;
+    },
+  },
+
+  recipes: {
+    label: 'AI recipe ideas',
+    title: 'AI Recipe Suggester',
+    blurb: 'Get recipe ideas based on what\'s in your pantry and meal history.',
+    maxTokens: 700,
+    allowQuestion: true,
+    system:
+      'You are a creative family chef assistant. Suggest recipes that use available ingredients, match dietary preferences, and the family will enjoy. Prioritize quick weeknight dinners and one fun weekend project. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const recipes = r(d, 'recipes').slice(0, 15);
+      const pantry = r(d, 'pantry_items').slice(0, 20);
+      const recipeNames = recipes.map((r) => r.name).filter(Boolean).join(', ') || 'none saved';
+      const ingredients = pantry.map((p) => p.name).filter(Boolean).join(', ') || 'none tracked';
+      return `Family: ${d.familyName}. Members: ${d.members.length}. Now: ${d.now}.\nSaved recipes: ${recipeNames}.\nPantry items: ${ingredients}.\n\nSuggest 3 recipe ideas: 2 quick weeknight dinners (under 30 min) and 1 weekend project. Include key ingredients needed.${q(d)}`;
+    },
+  },
+
+  documents: {
+    label: 'AI document help',
+    title: 'AI Document Assistant',
+    blurb: 'Organize, summarize, or find what you need in your family documents.',
+    maxTokens: 600,
+    allowQuestion: true,
+    system:
+      'You are a family document management assistant. Help organize, categorize, and surface important information from stored documents. Flag anything that may be expiring, needs action, or could be better organized. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const docs = r(d, 'documents').slice(0, 15);
+      const list = docs.map((doc) => `- "${doc.name || doc.original_name || 'Untitled'}" (${doc.category || 'uncategorized'}, ${doc.created_at ? String(doc.created_at).slice(0, 10) : 'unknown date'})`).join('\n') || 'No documents stored.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nDocuments:\n${list}\n\nGive: (1) any documents that may need attention or renewal, (2) categories that seem disorganized, (3) one thing to do to improve the document vault.${q(d)}`;
+    },
+  },
+
+  care: {
+    label: 'AI care summary',
+    title: 'AI Care Log Summary',
+    blurb: 'Summarize care activities and suggest what to track next.',
+    maxTokens: 600,
+    allowQuestion: true,
+    system:
+      'You are a compassionate family care assistant. Review care log entries and help the family track patterns, identify care gaps, and plan upcoming care activities. Be empathetic and practical. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const entries = r(d, 'care_logs').slice(0, 15);
+      const list = entries.map((e) => `- ${e.care_type || 'General'}: ${e.notes || 'no notes'} (${String(e.occurred_at || e.created_at || '').slice(0, 10)})`).join('\n') || 'No care entries logged.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nCare log entries:\n${list}\n\nGive: (1) a brief summary of care activities, (2) any patterns or gaps in care, (3) one care task to schedule soon.${q(d)}`;
+    },
+  },
+
+  contacts: {
+    label: 'AI contacts',
+    title: 'AI Contact Helper',
+    blurb: 'Organize contacts and surface important follow-ups.',
+    maxTokens: 500,
+    allowQuestion: true,
+    system:
+      'You are a family contacts and relationship assistant. Help organize contacts, identify who to follow up with, and suggest ways to strengthen important relationships. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const contacts = r(d, 'contacts').slice(0, 20);
+      const list = contacts.slice(0, 12).map((c) => `- ${c.name || 'Unknown'} (${c.category || 'general'})`).join('\n') || 'No contacts saved.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nContacts (${contacts.length} total):\n${list}\n\nGive: (1) categories that could be better organized, (2) 1-2 contact types the family should add, (3) one relationship to nurture this week.${q(d)}`;
+    },
+  },
+
+  billing: {
+    label: 'AI finance insight',
+    title: 'AI Finance Insight',
+    blurb: 'Review your family finances and identify savings opportunities.',
+    maxTokens: 700,
+    allowQuestion: true,
+    system:
+      'You are a family financial wellness assistant. Review the family\'s finances (subscriptions, expenses, billing) and give practical, actionable advice. Focus on savings, categorization, and budget priorities. Never give investment advice. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const subs = r(d, 'subscriptions').slice(0, 15);
+      const expenses = r(d, 'expenses').slice(0, 20);
+      const subList = subs.map((s) => `- ${s.name}: $${s.amount || '?'}/${s.billing_period || 'mo'}`).join('\n') || 'No subscriptions.';
+      const expTotal = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nSubscriptions:\n${subList}\n\nRecent expenses: ${expenses.length} items, total ~$${expTotal.toFixed(0)}.\n\nGive: (1) subscriptions to consider canceling, (2) top spending category to review, (3) one money-saving action for this month.${q(d)}`;
+    },
+  },
+
+  goals: {
+    label: 'AI goal coach',
+    title: 'AI Goal Coach',
+    blurb: 'Review family goals and get coaching on what to focus on next.',
+    maxTokens: 600,
+    allowQuestion: true,
+    system:
+      'You are a family goal-setting coach. Review active goals, celebrate progress, and give practical next steps. Encourage without overwhelming. Keep focus on the 1-2 most impactful goals. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const goals = r(d, 'family_goals').slice(0, 10);
+      const list = goals.map((g) => `- ${g.title || 'Goal'}: ${g.progress || 0}% complete (${g.status || 'active'})`).join('\n') || 'No goals set yet.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nGoals:\n${list}\n\nGive: (1) congratulate any recent progress, (2) the 1 goal to focus on this week and why, (3) one small action to take today toward it.${q(d)}`;
+    },
+  },
+
+  pets: {
+    label: 'AI pet care',
+    title: 'AI Pet Care Assistant',
+    blurb: 'Track pet care, upcoming vet visits, and wellness tips.',
+    maxTokens: 600,
+    allowQuestion: true,
+    system:
+      'You are a friendly pet care assistant. Review the family\'s pets and their care records. Flag any upcoming care tasks, vet appointments, or wellness concerns. Give practical, loving advice. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const pets = r(d, 'pets').slice(0, 8);
+      const list = pets.map((p) => `- ${p.name || 'Pet'} (${p.species || '?'}, ${p.breed || 'mixed'})`).join('\n') || 'No pets logged.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nPets:\n${list}\n\nGive: (1) any upcoming vet or care tasks to schedule, (2) one wellness tip for the most recent pet, (3) one thing to track in the pet log.${q(d)}`;
+    },
+  },
+
+  renewals: {
+    label: 'AI renewal alerts',
+    title: 'AI Renewal Tracker',
+    blurb: 'Review upcoming renewals and decide what to renew, cancel, or switch.',
+    maxTokens: 600,
+    allowQuestion: true,
+    system:
+      'You are a family renewal and subscription management assistant. Help families stay on top of expiring memberships, licenses, insurance, and subscriptions. Give clear action items. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const renewals = r(d, 'renewals').slice(0, 15);
+      const list = renewals.map((r) => `- ${r.name || 'Item'}: expires ${r.renewal_date || r.expires_at || 'unknown'} ($${r.annual_cost || r.cost || '?'}/yr)`).join('\n') || 'No renewals tracked.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nRenewals:\n${list}\n\nGive: (1) what expires in the next 30 days, (2) anything worth shopping for a better deal, (3) one renewal to cancel.${q(d)}`;
     },
   },
 };

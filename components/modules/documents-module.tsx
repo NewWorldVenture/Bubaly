@@ -14,6 +14,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -156,7 +157,7 @@ export function DocumentsModule() {
         <PageHeader
           title="Documents"
           description="Store, organize, and access important family documents."
-          action={<Button onClick={() => setOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Upload Document</Button>}
+          action={<div className="flex items-center gap-2"><AiInsight kind="documents" iconOnly /><Button onClick={() => setOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Upload Document</Button></div>}
         />
         <div className="grid-stats gap-3">
           {[

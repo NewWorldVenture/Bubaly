@@ -161,7 +161,6 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       return { weather_locations: locs.data ?? [] };
     }
     case 'settings': {
-      // A light cross-section so the model can recommend what to set up next.
       const [ev, todos, chores, meals, docs] = await Promise.all([
         eq(sb, 'calendar_events', familyId).gte('starts_at', nowIso).limit(50),
         eq(sb, 'todo_items', familyId).limit(50),
@@ -173,6 +172,59 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
         calendar_events: ev.data ?? [], todo_items: todos.data ?? [], chores: chores.data ?? [],
         meals: meals.data ?? [], documents: docs.data ?? [],
       };
+    }
+    case 'meals': {
+      const [plans, mealRows] = await Promise.all([
+        sb.from('meal_plans').select('*').eq('family_id', familyId).gte('plan_date', since(7)).order('plan_date').limit(30),
+        sb.from('meals').select('id, name, meal_type, servings').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),
+      ]);
+      return { meal_plans: plans.data ?? [], meals: mealRows.data ?? [] };
+    }
+    case 'reminders': {
+      const r = await eq(sb, 'family_reminders', familyId).order('due_at', { ascending: true, nullsFirst: false }).limit(30);
+      return { family_reminders: r.data ?? [] };
+    }
+    case 'notes': {
+      const n = await eq(sb, 'notes', familyId).order('updated_at', { ascending: false }).limit(15);
+      return { notes: n.data ?? [] };
+    }
+    case 'recipes': {
+      const [recipes, pantry] = await Promise.all([
+        eq(sb, 'recipes', familyId).order('created_at', { ascending: false }).limit(15),
+        eq(sb, 'pantry_items', familyId).eq('is_out_of_stock', false).limit(20),
+      ]);
+      return { recipes: recipes.data ?? [], pantry_items: pantry.data ?? [] };
+    }
+    case 'documents': {
+      const docs = await eq(sb, 'documents', familyId).order('created_at', { ascending: false }).limit(20);
+      return { documents: docs.data ?? [] };
+    }
+    case 'care': {
+      const logs = await eq(sb, 'care_logs', familyId).order('occurred_at', { ascending: false, nullsFirst: false }).limit(20);
+      return { care_logs: logs.data ?? [] };
+    }
+    case 'contacts': {
+      const contacts = await eq(sb, 'contacts', familyId).order('name').limit(30);
+      return { contacts: contacts.data ?? [] };
+    }
+    case 'billing': {
+      const [subs, expenses] = await Promise.all([
+        eq(sb, 'subscriptions_tracked', familyId).limit(30),
+        eq(sb, 'expense_splits', familyId).gte('spent_on', since(30).slice(0, 10)).order('spent_on', { ascending: false }).limit(40),
+      ]);
+      return { subscriptions: subs.data ?? [], expenses: expenses.data ?? [] };
+    }
+    case 'goals': {
+      const goals = await eq(sb, 'family_goals', familyId).neq('status', 'completed').order('created_at', { ascending: false }).limit(15);
+      return { family_goals: goals.data ?? [] };
+    }
+    case 'pets': {
+      const pets = await eq(sb, 'pets', familyId).eq('is_active', true).limit(10);
+      return { pets: pets.data ?? [] };
+    }
+    case 'renewals': {
+      const renewals = await eq(sb, 'renewals', familyId).order('renewal_date', { ascending: true, nullsFirst: false }).limit(20);
+      return { renewals: renewals.data ?? [] };
     }
     default:
       return {};
