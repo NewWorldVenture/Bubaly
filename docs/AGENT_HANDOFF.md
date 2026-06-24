@@ -1,7 +1,35 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the 6-feature roadmap sprint. Keep this updated as you ship.
+Last updated after the 8-feature roadmap sprint. Keep this updated as you ship.
+
+> **Session update (2026-06-24h, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> 8-FEATURE ROADMAP SPRINT (continued).** Added Yearbook + Relocation Guide on
+> top of the 6 features from session g. All on the feature branch.
+>
+> **NEW THIS SESSION:**
+>
+> 7. **Family Yearbook** — Migration `0090_yearbook.sql`:
+>    `family_yearbooks` + `yearbook_entries` tables. Year-indexed, published flag,
+>    entries by category/month/member. Pure `lib/yearbook/yearbook.ts` engine with
+>    entriesByCategory, entriesByMonth, yearbookSummary. 6 tests. Nav:
+>    `/dashboard/yearbook` (Daily Life, minLevel 1).
+>
+> 8. **Relocation Guide** — Migration `0091_relocation.sql`:
+>    `family_relocations` + `relocation_tasks` tables. 5 statuses, task checklists
+>    with 10 categories, budget tracking, days-until-move countdown. Pure
+>    `lib/relocation/guide.ts` engine with taskProgress, tasksByCategory,
+>    daysUntilMove, relocationSummary. 17 tests. Module has progress bars,
+>    category breakdown, status cycling. Nav: `/dashboard/relocation` (Family &
+>    Home, minLevel 1). Feature catalog: `relocation-guide` (basic).
+>
+> **Verification:** `tsc` clean · `next build` **Compiled successfully** (all 8
+> new routes registered) · `vitest` **912 passing** (+23 new tests this session).
+> **Migrations 0085-0091 must be applied to prod.**
+>
+> **REMAINING ROADMAP GAPS:** Marketplace. Integration items (#72-77) need
+> external OAuth creds. Next migration: **0092**. Feature branch is ahead of
+> main by ~10 commits.
 
 > **Session update (2026-06-24g, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > 6-FEATURE ROADMAP SPRINT.** Pushed insurance hub to main, then built 5 more
