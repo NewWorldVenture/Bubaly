@@ -25,7 +25,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
   const [
     { data: renewals }, { data: appts }, { data: choreRows },
     { data: members }, { data: groceries }, { data: apptReminders },
-    { data: events }, { data: subs }, { data: stress }, { data: existing },
+    { data: events }, { data: subs }, { data: stress }, { data: meds }, { data: existing },
   ] = await Promise.all([
     supabase.from('renewals').select('id, title, expires_at, status').eq('family_id', familyId).eq('status', 'active').lte('expires_at', in30).limit(100),
     supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(50),
@@ -36,6 +36,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(100),
     supabase.from('subscriptions_tracked').select('id, name, cost_cents, cadence, next_charge, last_used, status').eq('family_id', familyId).in('status', ['active', 'trial']).limit(200),
     supabase.from('family_stress_signals').select('member_id, weight, occurred_on').eq('family_id', familyId).eq('status', 'active').gte('occurred_on', since60).limit(500),
+    supabase.from('medications').select('id, name, member_id, refill_on, refill_reminder_days').eq('family_id', familyId).eq('is_active', true).not('refill_on', 'is', null).limit(200),
     supabase.from('autopilot_suggestions').select('id, dedupe_key, status').eq('family_id', familyId).limit(500),
   ]);
 
@@ -55,6 +56,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     events: (events ?? []).map((e) => ({ id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, memberId: e.assignee_id })),
     subscriptions: (subs ?? []).map((x) => ({ id: x.id, name: x.name, costCents: x.cost_cents, cadence: x.cadence, nextCharge: x.next_charge, lastUsed: x.last_used, status: x.status })),
     stressSignals: (stress ?? []).map((x) => ({ memberId: x.member_id, weight: Number(x.weight), occurredOn: x.occurred_on })),
+    medications: (meds ?? []).map((x) => ({ id: x.id, name: x.name, memberId: x.member_id, refillOn: x.refill_on as string, reminderDays: x.refill_reminder_days })),
   };
 
   const drafts = buildSuggestions(snapshot);

@@ -1,7 +1,37 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after Autopilot ambient delivery (notifications). Keep this updated as you ship.
+Last updated after Control-Tower home widget + medication-refill signal. Keep this updated as you ship.
+
+> **Session update (2026-06-24f) — GEN-2: CONTROL-TOWER-AS-HOME + MEDICATION REFILLS.**
+> Two roadmap items in one branch (`claude/festive-bohr-m4cbeg`).
+>
+> **#2 Control-Tower-as-Home (non-destructive widget):**
+> - `components/dashboard/ai-home-dashboard.tsx` (the default `/dashboard` AI home) now
+>   renders a **Family Autopilot** card near the top: Today's success %, # handled, # to
+>   review, and the top 3 open suggestions, linking to `/dashboard/autopilot`. Reads
+>   `autopilot_suggestions` directly (open list + handled count) and uses the engine's
+>   `successProbability()`. Only shows when there's something (open or handled). Did NOT
+>   replace the home — additive, so the carefully-designed AI home is intact.
+>
+> **#1 Medication refills signal (needed a migration):**
+> - **Migration `0086_medication_refills.sql`** — adds nullable `refill_on date` +
+>   `refill_reminder_days int default 7` to `medications` (+ partial index). Purely additive.
+>   **VALIDATED build; ⚠️ NOT APPLIED TO PROD** (apply 0085 AND 0086).
+> - **`medicationSuggestions`** in engine.ts: refill due within its lead time (or ≤3 days
+>   overdue). Due ≤2 days → confidence 92 (**auto-tier**: a refill reminder is reversible, so
+>   the autopilot creates it automatically); else 80 (approve). kind = `medication`,
+>   action create_reminder. `scan.ts` reads active meds with a non-null `refill_on`;
+>   autopilot-module has a Pill icon. **2 new tests (22 in tests/autopilot-engine.test.ts).**
+> - Verified: tsc + lint clean · `npm run build` ✓ · **full suite 883/883 pass**.
+>
+> **Autopilot now predicts 9 signal types:** renewals, appointments, chores, birthdays,
+> groceries, schedule conflicts, finance (subscriptions), wellbeing (burnout), medications.
+> **GEN-2 ROADMAP — remaining:** Digital Twin (`family_digital_twin_profiles`, 0022) +
+> Memory (`family_memories`) feeding confidence scoring; a specialized agent network writing
+> into `autopilot_suggestions` (kind = agent); more signals (depleted staples, weather impact
+> on outdoor events, expiring insurance via the insurance table 0084). Signal recipe is in
+> the 2026-06-24d entry below.
 
 > **Session update (2026-06-24e) — GEN-2 ROADMAP: AUTOPILOT AMBIENT DELIVERY.**
 > Made the autopilot reach families WITHOUT opening the app, via the existing

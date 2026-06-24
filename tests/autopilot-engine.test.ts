@@ -3,7 +3,7 @@ import {
   confidenceTier, AUTO_THRESHOLD, APPROVE_THRESHOLD, daysUntilBirthday,
   renewalSuggestions, appointmentSuggestions, choreSuggestions, birthdaySuggestions,
   grocerySuggestions, conflictSuggestions, expenseSuggestions, burnoutSuggestions,
-  monthlyCents, buildSuggestions, successProbability, partitionByTier,
+  medicationSuggestions, monthlyCents, buildSuggestions, successProbability, partitionByTier,
   type FamilySnapshot,
 } from '@/lib/autopilot/engine';
 
@@ -17,6 +17,7 @@ const base = (over: Partial<FamilySnapshot> = {}): FamilySnapshot => ({
   events: [],
   subscriptions: [],
   stressSignals: [],
+  medications: [],
   ...over,
 });
 
@@ -173,6 +174,29 @@ describe('burnoutSuggestions', () => {
   it('stays quiet below threshold or with stale signals', () => {
     expect(burnoutSuggestions(base({ stressSignals: [{ memberId: 'm1', weight: 1, occurredOn: '2026-06-23' }] }))).toHaveLength(0);
     expect(burnoutSuggestions(base({ stressSignals: [{ memberId: 'm1', weight: 9, occurredOn: '2026-05-01' }] }))).toHaveLength(0);
+  });
+});
+
+describe('medicationSuggestions', () => {
+  it('flags a refill within its reminder lead time, auto-tier when due <=2 days', () => {
+    const out = medicationSuggestions(base({ medications: [
+      { id: 'm1', name: 'Insulin', memberId: 'p1', refillOn: '2026-06-25', reminderDays: 7 }, // 1d → 92 auto
+      { id: 'm2', name: 'Vitamin', memberId: null, refillOn: '2026-06-30', reminderDays: 7 }, // 6d → 80 approve
+      { id: 'm3', name: 'Far', memberId: null, refillOn: '2026-08-01', reminderDays: 7 }, // out of window
+    ] }));
+    expect(out.map((o) => o.sourceId)).toEqual(['m1', 'm2']);
+    expect(out[0].confidence).toBe(92);
+    expect(confidenceTier(out[0].confidence)).toBe('auto');
+    expect(out[0].actionType).toBe('create_reminder');
+    expect(out[1].confidence).toBe(80);
+  });
+  it('flags a just-overdue refill but drops very stale ones', () => {
+    expect(medicationSuggestions(base({ medications: [
+      { id: 'm4', name: 'Recent', memberId: null, refillOn: '2026-06-22', reminderDays: 7 }, // 2d overdue → keep
+    ] }))).toHaveLength(1);
+    expect(medicationSuggestions(base({ medications: [
+      { id: 'm5', name: 'Old', memberId: null, refillOn: '2026-06-01', reminderDays: 7 }, // 23d overdue → drop
+    ] }))).toHaveLength(0);
   });
 });
 
