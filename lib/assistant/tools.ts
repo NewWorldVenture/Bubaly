@@ -317,5 +317,125 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         return { ok: true, date, time_zone: tz, busy, note: busy.length ? 'These are the busy blocks; open time is the gaps between them.' : 'No events that day — the whole day is free.' };
       },
     },
+
+    // ── RSVP tools ──────────────────────────────────────────────────────────
+    {
+      name: 'get_event_rsvps',
+      description: 'Get RSVP responses for a calendar event. Use this to answer "who\'s going to…" questions.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          event_title: { type: 'string', description: 'Title (or partial title) of the event to look up' },
+        },
+        required: ['event_title'],
+      },
+      execute: async (a) => {
+        const title = str(a.event_title);
+        if (!title) return { ok: false, error: 'event_title is required' };
+        const { data: events } = await supabase.from('calendar_events')
+          .select('id, title, starts_at')
+          .eq('family_id', ctx.familyId).ilike('title', `%${title}%`)
+          .order('starts_at', { ascending: false }).limit(1);
+        if (!events?.length) return { ok: false, error: `No event matching "${title}" found.` };
+        const event = events[0];
+        const { data: rsvps } = await supabase.from('event_rsvps')
+          .select('member_id, status').eq('event_id', event.id);
+        const byId = new Map(ctx.members.map((m) => [m.id, m.display_name]));
+        const grouped: Record<string, string[]> = { accepted: [], maybe: [], declined: [] };
+        for (const r of rsvps ?? []) {
+          (grouped[r.status] ??= []).push(byId.get(r.member_id) ?? 'Unknown');
+        }
+        const noResponse = ctx.members.filter((m) => !(rsvps ?? []).some((r) => r.member_id === m.id)).map((m) => m.display_name);
+        return { ok: true, event: event.title, starts_at: event.starts_at, going: grouped.accepted, maybe: grouped.maybe, declined: grouped.declined, no_response: noResponse };
+      },
+    },
+    {
+      name: 'rsvp_to_event',
+      description: 'RSVP to a calendar event on behalf of the current user.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          event_title: { type: 'string', description: 'Title (or partial title) of the event' },
+          status: { type: 'string', enum: ['accepted', 'maybe', 'declined'], description: 'RSVP status' },
+        },
+        required: ['event_title', 'status'],
+      },
+      execute: async (a) => {
+        const title = str(a.event_title);
+        const status = str(a.status);
+        if (!title || !['accepted', 'maybe', 'declined'].includes(status)) return { ok: false, error: 'event_title and valid status required' };
+        const { data: events } = await supabase.from('calendar_events')
+          .select('id, title')
+          .eq('family_id', ctx.familyId).ilike('title', `%${title}%`)
+          .order('starts_at', { ascending: false }).limit(1);
+        if (!events?.length) return { ok: false, error: `No event matching "${title}" found.` };
+        const selfMember = ctx.members.find((m) => true);
+        if (!selfMember) return { ok: false, error: 'Could not determine your member profile.' };
+        const { error } = await supabase.from('event_rsvps').upsert(
+          { event_id: events[0].id, family_id: ctx.familyId, member_id: selfMember.id, status: status as 'accepted' | 'maybe' | 'declined' },
+          { onConflict: 'event_id,member_id' },
+        );
+        if (error) return { ok: false, error: error.message };
+        const labels: Record<string, string> = { accepted: 'Going', maybe: 'Maybe', declined: "Can't make it" };
+        return { ok: true, summary: `RSVP'd "${labels[status]}" to "${events[0].title}".` };
+      },
+    },
+
+    // ── Announcement tools ──────────────────────────────────────────────────
+    {
+      name: 'create_announcement',
+      description: 'Post a family announcement visible to all members. Use for important family-wide messages.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Announcement title/headline' },
+          body: { type: 'string', description: 'Announcement details (optional)' },
+          pinned: { type: 'boolean', description: 'Pin to top of announcements (default false)' },
+        },
+        required: ['title'],
+      },
+      execute: async (a) => {
+        const title = str(a.title);
+        if (!title) return { ok: false, error: 'title is required' };
+        const selfMember = ctx.members.find((m) => true);
+        if (!selfMember) return { ok: false, error: 'Could not determine your member profile.' };
+        const { error } = await supabase.from('family_announcements').insert({
+          family_id: ctx.familyId,
+          title,
+          body: optStr(a.body),
+          is_pinned: Boolean(a.pinned),
+          author_member_id: selfMember.id,
+        });
+        if (error) return { ok: false, error: error.message };
+        return { ok: true, summary: `Posted announcement: "${title}".` };
+      },
+    },
+    {
+      name: 'list_announcements',
+      description: 'Get recent family announcements. Use to answer "what announcements are there" or "what did the family post".',
+      input_schema: {
+        type: 'object',
+        properties: { limit: { type: 'number', description: 'Max announcements to return (default 10)' } },
+      },
+      execute: async (a) => {
+        const lim = Number.isFinite(a.limit) ? Math.max(1, Math.min(20, Math.round(a.limit as number))) : 10;
+        const { data, error } = await supabase.from('family_announcements')
+          .select('title, body, is_pinned, created_at, author_member_id')
+          .eq('family_id', ctx.familyId)
+          .order('is_pinned', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(lim);
+        if (error) return { ok: false, error: error.message };
+        const byId = new Map(ctx.members.map((m) => [m.id, m.display_name]));
+        return {
+          ok: true,
+          announcements: (data ?? []).map((a) => ({
+            title: a.title, body: a.body, pinned: a.is_pinned,
+            posted_at: a.created_at,
+            author: a.author_member_id ? byId.get(a.author_member_id) ?? null : null,
+          })),
+        };
+      },
+    },
   ];
 }

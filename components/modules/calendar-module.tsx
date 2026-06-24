@@ -542,7 +542,8 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
     if (!parsed.success) { setErrors(fieldErrors(parsed.error)); return; }
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.from('calendar_events').insert({ ...parsed.data, family_id: familyId, created_by: userId, all_day: false, recurrence: 'none' });
+    const recurrence = String(form.get('recurrence') ?? 'none') as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+    const { error } = await supabase.from('calendar_events').insert({ ...parsed.data, family_id: familyId, created_by: userId, all_day: false, recurrence });
     setLoading(false);
     if (error) return toastError(error.message);
     onSaved();
@@ -573,6 +574,17 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
         </div>
         <Field label="Location">
           {(id) => <Input id={id} name="location" placeholder="Home, School..." />}
+        </Field>
+        <Field label="Repeat">
+          {(id) => (
+            <Select id={id} name="recurrence">
+              <option value="none">No repeat</option>
+              <option value="daily">Every day</option>
+              <option value="weekly">Every week</option>
+              <option value="monthly">Every month</option>
+              <option value="yearly">Every year</option>
+            </Select>
+          )}
         </Field>
         <Field label="Notes">
           {(id) => <Textarea id={id} name="description" placeholder="Optional details..." />}

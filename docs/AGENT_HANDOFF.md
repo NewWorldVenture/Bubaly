@@ -1,7 +1,59 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the onboarding overhaul (transactional draft-based flow). Keep this updated as you ship.
+Last updated after the Free-tier feature audit and gap-fill. Keep this updated as you ship.
+
+> **Session update (2026-06-24c, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> FREE-TIER COMPETITIVE FEATURE AUDIT + GAP FILL.**
+> Task: audit 10 free-tier features from a competitive comparison chart against the
+> codebase. All 10 already existed. 9/10 were world-class. Gaps found and fixed:
+>
+> **AUDIT RESULTS (all 10 features present):**
+> | # | Feature | Was WC | Was AI | Action |
+> |---|---------|--------|--------|--------|
+> | 1 | Basic Reminders | YES | YES | None |
+> | 2 | Family Dashboard | YES | YES | None |
+> | 3 | Family Member Profiles | YES | Partial | None (minor) |
+> | 4 | Event RSVP Tracking | YES | NO | **Added AI tools** |
+> | 5 | Recurring Tasks | PARTIAL | Partial | **Added recurrence UI** |
+> | 6 | Task Assignments | YES | YES | None |
+> | 7 | Family Announcements | YES | NO | **Added AI tools** |
+> | 8 | Birthday Tracking | YES | Partial | None (minor) |
+> | 9 | Family Activity Feed | YES | NO | **Added filtering + summary** |
+> | 10 | Cross-Platform Access | YES | N/A | None |
+>
+> **BUILT — Recurring Tasks UI (making it world-class):**
+> - `components/modules/chores-module.tsx` — NewChoreModal now has a "Repeat"
+>   dropdown (none/daily/weekly/monthly/yearly) that sets the `recurrence`
+>   field on the `chores` table. Previously hardcoded to 'none'.
+> - `components/modules/calendar-module.tsx` — NewEventModal now has a
+>   "Repeat" dropdown (none/daily/weekly/monthly/yearly) that sets the
+>   `recurrence` field on `calendar_events`. Previously hardcoded to 'none'.
+> - The DB schema already supported `recurrence_freq` enum on both tables.
+>
+> **BUILT — Activity Feed filtering + AI summary:**
+> - `app/(app)/dashboard/activity/activity-feed.tsx` (NEW client component):
+>   filter by kind (announcement/event/chore/photo/note/grocery) with toggle
+>   chips, filter by member with dropdown, "Summary" button shows a
+>   deterministic activity summary (counts by kind + active members).
+> - `app/(app)/dashboard/activity/page.tsx` — refactored to pass data to
+>   client component while keeping server-side data loading.
+>
+> **BUILT — AI Assistant tools for RSVPs and Announcements:**
+> - `lib/assistant/tools.ts` — 4 new tools added (11 total):
+>   - `get_event_rsvps`: query who's going/maybe/declined/no-response
+>   - `rsvp_to_event`: RSVP on behalf of current user
+>   - `create_announcement`: post a family-wide announcement
+>   - `list_announcements`: read recent announcements (pinned first)
+>
+> **Verification:** `tsc --noEmit` clean · `next lint` clean (only pre-existing
+> warnings) · `next build` **Compiled successfully** · `vitest` **777 passing**.
+> NO migration. NO database changes.
+>
+> **NEXT (free-tier gaps):** (1) Cron/edge function to dispatch reminder
+> push notifications at `remind_at` time; (2) RSVP count badges on calendar
+> grid; (3) Auto-generation of next recurring chore instance when current
+> one is completed; (4) Profile photo upload. Next migration: **0083**.
 
 > **Session update (2026-06-24b, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > ONBOARDING OVERHAUL: transactional draft, back navigation, expanded member roles.**
