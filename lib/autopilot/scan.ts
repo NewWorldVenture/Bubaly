@@ -11,7 +11,7 @@ import { buildSuggestions, confidenceTier, type FamilySnapshot } from '@/lib/aut
 
 type DB = SupabaseClient<Database>;
 
-export type AutopilotScanResult = { scanned: number; autoExecuted: number; cleared: number };
+export type AutopilotScanResult = { scanned: number; autoExecuted: number; cleared: number; notified: number };
 
 const RESOLVED = new Set(['dismissed', 'snoozed', 'executed', 'approved', 'auto_executed']);
 
@@ -68,7 +68,11 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
   }
 
   // 2) Insert genuinely-new drafts; auto-execute the safe high-confidence ones.
+  //    Ambient delivery: high-urgency or auto-handled items also become a
+  //    `notifications` row so the existing push/email cron reaches the family
+  //    without anyone opening the app.
   let autoExecuted = 0;
+  let notified = 0;
   for (const d of drafts) {
     const prior = existingByKey.get(d.dedupeKey);
     if (prior) continue; // respect prior state (resolved or already-open); avoid churn
@@ -90,7 +94,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
       if (!remErr) { status = 'auto_executed'; autoExecuted++; }
     }
 
-    await supabase.from('autopilot_suggestions').insert({
+    const { data: inserted } = await supabase.from('autopilot_suggestions').insert({
       family_id: familyId,
       member_id: d.memberId,
       kind: d.kind,
@@ -109,8 +113,22 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
       resolved_at: status === 'auto_executed' ? now.toISOString() : null,
       resolved_by: null,
       created_by: userId,
-    });
+    }).select('id').single();
+
+    // Ambient push/email for the things worth interrupting for.
+    if (inserted && (d.urgency >= 2 || status === 'auto_executed')) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        family_id: familyId,
+        user_id: null, // whole family; managers receive it via the delivery pipeline
+        type: 'system',
+        title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : d.title,
+        body: d.detail,
+        related_type: 'autopilot_suggestions',
+        related_id: inserted.id,
+      });
+      if (!notifErr) notified++;
+    }
   }
 
-  return { scanned: drafts.length, autoExecuted, cleared: stale.length };
+  return { scanned: drafts.length, autoExecuted, cleared: stale.length, notified };
 }
