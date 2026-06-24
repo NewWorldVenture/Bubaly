@@ -1,7 +1,23 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after hardening the AI Assistant chat (resilient + self-diagnosing). Keep this updated as you ship.
+Last updated after adding the Admin "Test AI connection" button. Keep this updated as you ship.
+
+> **Session update (2026-06-24, branch `claude/admin-ai-test`) — ADMIN "TEST AI
+> CONNECTION" button.** Lets a super-admin verify the OpenAI key/model/billing are
+> live without leaving the app (the natural follow-up to the chat-error fix).
+> - **`testAIConnectionAction()`** in `app/(app)/admin/ai/actions.ts`: super-admin
+>   gated; fast-returns `unconfigured` via `isAIConfigured()`; else
+>   `resolveProvider().complete()` with a 5-token "reply OK" ping. Returns a
+>   discriminated `TestAIResult` — success `{model, reply, latencyMs}` or failure
+>   `{code,message,detail}` from `describeAIError` (out of credits / bad key / bad
+>   model / rate limit / network).
+> - **UI** in `app/(app)/admin/ai/ai-engine-form.tsx`: a "Test connection" button
+>   beside Save; renders a green OK card (model + reply + latency) or an amber card
+>   with the precise reason, status code, and a collapsible raw detail.
+> - **No migration.** tsc/lint/build clean; vitest **838 passing** (no new tests —
+>   logic is the already-tested `describeAIError` + `provider.complete`).
+> - **NEXT:** none required; optionally log test results to an audit table.
 
 > **Session update (2026-06-24, branch `claude/fix-assistant-chat`) — FIX
 > "Something went wrong while answering" + production-harden the AI chat.**
