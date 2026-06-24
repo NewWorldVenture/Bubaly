@@ -1,7 +1,67 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-24, session `claude/connect-8ysp00` — Comprehensive UX/production audit + 500-record seed file + production readiness checklist. Keep this updated as you ship.
+Last updated: 2026-06-24, session `claude/connect-8ysp00` — Dramatic AI Concierge UI redesign (assistant welcome hero). Keep this updated as you ship.
+
+> **Session update (2026-06-24, branch `claude/connect-8ysp00`, pushed direct to `main`) — DRAMATIC AI ASSISTANT UI REDESIGN ("Family Concierge" hero).**
+>
+> **Task:** Deep-dive the AI user interface and make a dramatic cosmetic upgrade modeled on a reference "AI Concierge" screen (glowing orb, layered headline, hero input, popular-request cards). Must be 100% responsive, match dark AND light mode, stay 100% Supabase-wired, and be production-ready.
+>
+> **WHAT CHANGED — two files, zero schema/route changes (so nothing to apply to prod DB):**
+> - **`app/globals.css`** — added a theme-aware AI-hero toolkit in `@layer components`
+>   (all colour from brand tokens, so it adapts dark/light automatically):
+>   - `.ai-orb` — the glowing concierge orb: radial brand-gradient fill, inset + outer
+>     glow, and TWO animated concentric rings (`::before`/`::after`) emitted on a loop
+>     (`@keyframes ai-orb-ring`), plus a slow breathe (`@keyframes ai-orb-breathe`).
+>   - `.ai-hero-glow` — ambient radial brand/accent wash behind the hero.
+>   - `.ai-composer` — premium input shell: translucent surface + blur, brand focus ring
+>     (`:focus-within`).
+>   - `.ai-send` — gradient send button (brand→accent) with hover lift / active press.
+>   - `.ai-suggest-card` — popular-request card with hover lift + brand wash.
+>   - `.ai-divider-line` — fading sparkle-divider rule.
+>   - `@media (prefers-reduced-motion: reduce)` guard disables the orb animations.
+> - **`components/modules/assistant-module.tsx`** — restructured into two states driven by
+>   `hasConversation = messages.some(m => m.role === 'user')`:
+>   - **Welcome hero (no user messages yet):** centered `.ai-hero-glow` panel — glowing
+>     `.ai-orb` (Sparkles icon) with floating sparkles → layered headline ("Hi, {firstName}!
+>     <gradient>I'm your family concierge.</gradient>") → subtitle → sparkle divider → big
+>     "What can I help you with today?" → **hero `<Composer variant="hero">`** (tall textarea
+>     + gradient send) → **Popular requests** grid (5 cards: Today's plan / Plan dinners /
+>     Assign chores / Grocery list / Set a reminder — each sends a real prompt) → trust note
+>     (ShieldCheck "data stays private") → AI-disclaimer.
+>   - **Active conversation:** compact orb+title header, quick-suggestion chips, the streaming
+>     chat thread (assistant bubbles now use the `.ai-orb` avatar + `assistant-message-enter`
+>     animation; user bubbles get `shadow-glow`), and a docked `<Composer variant="bar">`.
+>   - **New reusable `Composer` component** (`variant: 'hero' | 'bar'`) — single source of truth
+>     for the input, mic/voice states (recording/transcribing/speaking), voice-error banner,
+>     and send button. Hero = textarea + `h-11` gradient send; bar = input + `h-10` send.
+>   - **Sidebar polished:** "At a Glance" is now a 2×2 stat-card grid; cards/hover states
+>     use brand tokens. All sidebar data still loads from Supabase (calendar_events,
+>     chore_assignments, reminders, medications) exactly as before.
+>
+> **100% Supabase-wired — UNCHANGED & VERIFIED:** the redesign is purely presentational.
+> Chat still POSTs to `/api/ai/chat` (SSE stream → delta/action/error/done), conversations
+> rehydrate from `ai_conversations`/`ai_messages`, sidebar counts come from live RLS-scoped
+> queries, voice uses the existing `useVoice` hook + `/api/ai/voice/*`. No new tables,
+> no new routes, no migration.
+>
+> **Dark/light + responsive:** every surface/colour uses CSS-variable brand tokens
+> (`rgb(var(--brand))`, `--surface`, `--accent`, `--success`, `--border`, `--fg`, `--muted`),
+> which flip via the `.light` class — so the hero looks correct in both themes with no
+> theme-specific code. Layout: orb/headline scale `sm:`, popular cards go
+> `grid-cols-2 sm:grid-cols-3 lg:grid-cols-5`, chips horizontally scroll on mobile, sidebar
+> is `hidden lg:block`. Safe-area padding retained on the docked composer.
+>
+> **Verification:** `tsc --noEmit` clean · `next lint` (assistant module) clean ·
+> `npm run build` **Compiled successfully** (exit 0, `/dashboard/assistant` + `/api/ai/chat`
+> intact). No test changes (pure UI). **Pushed directly to `main`** per user instruction.
+>
+> **NEXT (AI UI polish, optional):** (1) auto-grow the hero textarea as the user types;
+> (2) render assistant markdown (bold/lists/links) instead of `whitespace-pre-wrap`;
+> (3) animate the hero→chat transition (fade/slide) instead of an instant swap;
+> (4) apply the same `.ai-orb`/`.ai-composer` language to the global Ask-AI orb
+> (`components/app/ai-orb.tsx`) and the capture shell for a consistent AI identity;
+> (5) per-insight `<AiInsight>` modals could adopt `.ai-composer` for their question box.
 
 > **Session update (2026-06-24, branch `claude/connect-8ysp00`) — COMPREHENSIVE UX/PRODUCTION AUDIT + SEED FILE.**
 >
