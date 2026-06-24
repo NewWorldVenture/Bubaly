@@ -10,6 +10,8 @@ import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
+import { Rocket, Gauge, ShieldCheck } from 'lucide-react';
+import { successProbability } from '@/lib/autopilot/engine';
 
 function greeting() {
   const h = new Date().getHours();
@@ -157,6 +159,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { data: members },
     { data: upcomingEvents },
     { data: recentActivity },
+    { data: autopilotOpen },
+    { count: autopilotHandledCount },
   ] = await Promise.all([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
@@ -187,7 +191,19 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .order('starts_at').limit(5),
     supabase.from('audit_logs').select('id, action, entity_type, created_at')
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(5),
+    supabase.from('autopilot_suggestions')
+      .select('id, title, detail, kind, urgency, confidence')
+      .eq('family_id', familyId).eq('status', 'open')
+      .order('urgency', { ascending: false }).order('confidence', { ascending: false }).limit(20),
+    supabase.from('autopilot_suggestions').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).in('status', ['auto_executed', 'executed', 'approved']),
   ]);
+
+  const openSuggestions = (autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number }[];
+  const autopilotProbability = successProbability(openSuggestions.map((s) => ({ urgency: s.urgency as 1 | 2 | 3, confidence: s.confidence } as never)));
+  const autopilotHandled = autopilotHandledCount ?? 0;
+  const topSuggestions = openSuggestions.slice(0, 3);
+  const showAutopilot = openSuggestions.length > 0 || autopilotHandled > 0;
 
   const actionCards = buildActionCards({
     pendingChores: pendingChores ?? 0,
@@ -225,6 +241,56 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Family Autopilot — Control Tower summary */}
+      {showAutopilot && (
+        <Link href="/dashboard/autopilot"
+          className="block rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-5 transition hover:border-brand/40">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15">
+                <Rocket className="h-5 w-5 text-brand" />
+              </div>
+              <div>
+                <p className="text-sm font-bold">Family Autopilot</p>
+                <p className="text-xs text-muted">Bubaly is watching over today</p>
+              </div>
+            </div>
+            <ArrowRight className="h-4 w-4 text-brand" />
+          </div>
+
+          <div className="mt-4 flex items-center gap-5">
+            <div className="flex items-center gap-2">
+              <Gauge className={cn('h-4 w-4', autopilotProbability >= 85 ? 'text-emerald-400' : autopilotProbability >= 60 ? 'text-amber-400' : 'text-rose-400')} />
+              <span className="text-lg font-black">{autopilotProbability}%</span>
+              <span className="text-[11px] text-muted">on track</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-400" />
+              <span className="text-lg font-black">{autopilotHandled}</span>
+              <span className="text-[11px] text-muted">handled</span>
+            </div>
+            {openSuggestions.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Bell className="h-4 w-4 text-amber-400" />
+                <span className="text-lg font-black">{openSuggestions.length}</span>
+                <span className="text-[11px] text-muted">to review</span>
+              </div>
+            )}
+          </div>
+
+          {topSuggestions.length > 0 && (
+            <div className="mt-4 space-y-1.5 border-t border-border/40 pt-3">
+              {topSuggestions.map((s) => (
+                <div key={s.id} className="flex items-center gap-2 text-xs">
+                  <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', s.urgency === 3 ? 'bg-rose-400' : s.urgency === 2 ? 'bg-amber-400' : 'bg-muted')} />
+                  <span className="truncate text-fg/90">{s.title}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Link>
       )}
 
       {/* AI Action Cards */}

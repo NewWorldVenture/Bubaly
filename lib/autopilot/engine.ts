@@ -47,6 +47,7 @@ export type GrocerySignal = { id: string; name: string; addedAt: string };
 export type EventSignal = { id: string; title: string; startsAt: string; endsAt: string | null; memberId: string | null };
 export type SubscriptionSignal = { id: string; name: string; costCents: number; cadence: string; nextCharge: string | null; lastUsed: string | null; status: string };
 export type StressSignal = { memberId: string | null; weight: number; occurredOn: string };
+export type MedicationSignal = { id: string; name: string; memberId: string | null; refillOn: string; reminderDays: number };
 
 export type FamilySnapshot = {
   today: string; // YYYY-MM-DD
@@ -58,6 +59,7 @@ export type FamilySnapshot = {
   events: EventSignal[];
   subscriptions: SubscriptionSignal[];
   stressSignals: StressSignal[];
+  medications: MedicationSignal[];
 };
 
 const DAY_MS = 86_400_000;
@@ -345,6 +347,43 @@ export function burnoutSuggestions(s: FamilySnapshot, threshold = 5): Suggestion
   }];
 }
 
+/**
+ * Medication refills: flag a prescription whose refill_on date is within its
+ * reminder lead time. Health-critical, so high confidence — creating a refill
+ * reminder is safe + reversible, which makes it eligible for auto-execution
+ * once it crosses the ≥90 threshold (due within ~2 days).
+ */
+export function medicationSuggestions(s: FamilySnapshot): SuggestionDraft[] {
+  return s.medications
+    .map((m) => ({ m, d: daysUntil(s.today, m.refillOn) }))
+    .filter(({ m, d }) => d <= m.reminderDays && d >= -3) // upcoming within lead time, or just overdue
+    .map(({ m, d }) => {
+      const overdue = d < 0;
+      const confidence = d <= 2 ? 92 : 80; // due within 2 days → auto-tier (reversible reminder)
+      return {
+        kind: 'medication',
+        title: overdue
+          ? `Refill overdue: ${m.name}`
+          : d === 0 ? `Refill ${m.name} today` : `Refill ${m.name} in ${d} day${d === 1 ? '' : 's'}`,
+        detail: 'Reorder or pick up before the prescription runs out.',
+        confidence,
+        urgency: clampUrgency(d <= 1 ? 3 : 2),
+        actionType: 'create_reminder',
+        actionLabel: 'Remind me to refill',
+        payload: { title: `Refill ${m.name}`, at: `${isoDay(m.refillOn)}T09:00:00Z` },
+        sourceKind: 'medications',
+        sourceId: m.id,
+        memberId: m.memberId,
+        dedupeKey: `med-refill:${m.id}:${isoDay(m.refillOn)}`,
+        expiresAt: `${addDaysIso(m.refillOn, 7)}T23:59:59Z`,
+      };
+    });
+}
+
+function addDaysIso(iso: string, days: number): string {
+  return new Date(Date.parse(`${isoDay(iso)}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
+}
+
 /** Run every rule and return all suggestion drafts, highest urgency/confidence first. */
 export function buildSuggestions(s: FamilySnapshot): SuggestionDraft[] {
   const all = [
@@ -356,6 +395,7 @@ export function buildSuggestions(s: FamilySnapshot): SuggestionDraft[] {
     ...conflictSuggestions(s),
     ...expenseSuggestions(s),
     ...burnoutSuggestions(s),
+    ...medicationSuggestions(s),
   ];
   return all.sort((a, b) => b.urgency - a.urgency || b.confidence - a.confidence);
 }

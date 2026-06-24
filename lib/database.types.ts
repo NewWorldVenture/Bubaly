@@ -233,9 +233,9 @@ export interface Database {
         Partial<{ subject_type: NutritionSubject; subject_id: string; servings: number | null; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null; sugar_g: number | null; sodium_mg: number | null; summary: string | null; details: Json | null }>
       >;
       medications: T<
-        { id: string; family_id: string; member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; member_id?: string | null; name: string; dosage?: string | null; instructions?: string | null; is_active?: boolean; created_by?: string | null },
-        Partial<{ member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean }>
+        { id: string; family_id: string; member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean; refill_on: string | null; refill_reminder_days: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; name: string; dosage?: string | null; instructions?: string | null; is_active?: boolean; refill_on?: string | null; refill_reminder_days?: number; created_by?: string | null },
+        Partial<{ member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean; refill_on: string | null; refill_reminder_days: number }>
       >;
       medication_schedules: T<
         { id: string; family_id: string; medication_id: string; time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null } & Stamps,
