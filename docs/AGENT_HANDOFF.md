@@ -1,7 +1,44 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the insurance-renewal signal. Keep this updated as you ship.
+Last updated after closing the Tier-4 gaps (Journal, Voice Capture, Focus Mode). Keep this updated as you ship.
+
+> **Session update (2026-06-24j) — TIER-4 GAPS CLOSED: JOURNAL + VOICE CAPTURE + FOCUS MODE.**
+> The 3 remaining "Personal Productivity" gaps are now built, world-class + Supabase-wired.
+> Branch `claude/festive-bohr-m4cbeg`.
+>
+> **#1 Personal Journal:**
+> - **Migration `0087_journal.sql`** — `journal_entries` (member_id author, entry_date,
+>   `journal_mood` enum great|good|okay|low|stressed, title, body, prompt, tags[], is_private).
+>   Family-scoped RLS + trigger. **VALIDATED build; ⚠️ NOT APPLIED TO PROD.** Privacy is
+>   app-scoped (every query filters member_id = self); a stricter owner-only SELECT policy is
+>   an option if cross-member privacy at the DB layer is wanted.
+> - **`lib/journal/prompts.ts`** (pure; tests `tests/journal-prompts.test.ts`): 14 evergreen
+>   `REFLECTION_PROMPTS`, `promptOfTheDay()` (stable daily rotation, zero-AI fallback),
+>   `buildJournalPrompt`/`parseJournalPrompt` for the AI route.
+> - **`app/api/ai/journal/route.ts`** — POST returns ONE personalized reflection prompt from
+>   the member's recent entries via `resolveProvider()`, falling back to prompt-of-the-day so
+>   it never dead-ends.
+> - **`components/modules/journal-module.tsx`** — prompt card (Personalize button), entry list
+>   with mood emoji, composer with mood picker + title + body. Scoped to `selfMember`.
+>
+> **#2 Voice Capture (frictionless, reusable):**
+> - **`lib/voice/transcript.ts`** (pure; tests `tests/voice-transcript.test.ts`):
+>   `cleanTranscript`, `appendTranscript` (smart spacing/punctuation), `speechErrorMessage`.
+> - **`lib/hooks/use-speech-recognition.ts`** — SSR-safe Web Speech API hook
+>   (`SpeechRecognition`/`webkitSpeechRecognition`), graceful unsupported handling. Wired into
+>   the Journal composer as a Mic toggle ("Speak"); reuse it anywhere (notes, capture).
+>
+> **#3 Focus Mode:**
+> - **`components/modules/focus-module.tsx`** — a calm, ONE-thing-at-a-time view of today
+>   (today's events + your open chores + open todos), progress dots, Done/Skip, "you're all
+>   clear" finish. Client-only, reads existing tables; safely completes todos (is_done).
+>   No migration.
+>
+> **Wiring:** feature-catalog `journal` + `focus-mode` (Daily Life, free); nav items
+> (NotebookPen, Focus icons) after Habits; plans.ts route-level 0; pages gated by requireFeature.
+> Verified: tsc + lint clean · `npm run build` ✓ (journal/focus/ai-journal routes) ·
+> **full suite 912/912** (28 new). **Tier-4 Personal Productivity is now 100% covered.**
 
 > **Session update (2026-06-24i) — GEN-2: INSURANCE-RENEWAL SIGNAL.**
 > Another clean autopilot signal reusing the insurance table (0084). NO migration.

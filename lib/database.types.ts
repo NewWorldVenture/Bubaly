@@ -367,6 +367,11 @@ export interface Database {
         { id?: string; family_id: string; title?: string | null; body?: string; is_pinned?: boolean; checklist?: Json | null; created_by?: string | null },
         Partial<{ title: string | null; body: string; is_pinned: boolean; checklist: Json | null }>
       >;
+      journal_entries: T<
+        { id: string; family_id: string; member_id: string | null; entry_date: string; mood: 'great' | 'good' | 'okay' | 'low' | 'stressed' | null; title: string | null; body: string; prompt: string | null; tags: string[]; is_private: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; entry_date?: string; mood?: 'great' | 'good' | 'okay' | 'low' | 'stressed' | null; title?: string | null; body?: string; prompt?: string | null; tags?: string[]; is_private?: boolean; created_by?: string | null },
+        Partial<{ member_id: string | null; entry_date: string; mood: 'great' | 'good' | 'okay' | 'low' | 'stressed' | null; title: string | null; body: string; prompt: string | null; tags: string[]; is_private: boolean }>
+      >;
       family_tree_nodes: T<
         { id: string; family_id: string; parent_node_id: string | null; member_id: string | null; name: string; relationship: string; birth_year: number | null; death_year: number | null; birth_place: string | null; photo_url: string | null; bio: string | null; metadata: Json; created_by: string | null } & Stamps,
         { id?: string; family_id: string; parent_node_id?: string | null; member_id?: string | null; name: string; relationship?: string; birth_year?: number | null; death_year?: number | null; birth_place?: string | null; photo_url?: string | null; bio?: string | null; metadata?: Json; created_by?: string | null },
