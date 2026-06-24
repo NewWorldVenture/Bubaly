@@ -467,6 +467,16 @@ export interface Database {
         { id?: string; family_id: string; title: string; description?: string | null; target_date?: string | null; progress?: number; is_complete?: boolean; created_by?: string | null },
         Partial<{ title: string; description: string | null; target_date: string | null; progress: number; is_complete: boolean }>
       >;
+      habits: T<
+        { id: string; family_id: string; member_id: string | null; title: string; description: string | null; icon: string; color: string; cadence: 'daily' | 'weekly'; target_per_period: number; reminder_time: string | null; weekdays: number[]; is_active: boolean; archived_at: string | null; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; description?: string | null; icon?: string; color?: string; cadence?: 'daily' | 'weekly'; target_per_period?: number; reminder_time?: string | null; weekdays?: number[]; is_active?: boolean; archived_at?: string | null; sort_order?: number; created_by?: string | null },
+        Partial<{ member_id: string | null; title: string; description: string | null; icon: string; color: string; cadence: 'daily' | 'weekly'; target_per_period: number; reminder_time: string | null; weekdays: number[]; is_active: boolean; archived_at: string | null; sort_order: number }>
+      >;
+      habit_logs: T<
+        { id: string; family_id: string; habit_id: string; member_id: string | null; log_date: string; count: number; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; habit_id: string; member_id?: string | null; log_date?: string; count?: number; note?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; log_date: string; count: number; note: string | null }>
+      >;
       reminders: T<
         { id: string; family_id: string; title: string; notes: string | null; remind_at: string; recurrence: RecurrenceFreq; is_done: boolean; member_id: string | null; related_type: string | null; related_id: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; title: string; notes?: string | null; remind_at: string; recurrence?: RecurrenceFreq; is_done?: boolean; member_id?: string | null; related_type?: string | null; related_id?: string | null; created_by?: string | null },

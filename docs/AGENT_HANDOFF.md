@@ -1,6 +1,56 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
+Last updated after the Personal Productivity audit + Habit Tracker build. Keep this updated as you ship.
+
+> **Session update (2026-06-24a) — TIER 4 PERSONAL PRODUCTIVITY AUDIT + HABIT TRACKER.**
+> Task: audit the "Tier 4: Personal Productivity" list, note what's world-class,
+> and build any gap to world-class + 100% Supabase-wired. Branch `claude/festive-bohr-m4cbeg`.
+>
+> **AUDIT — Tier 4 (10 features):**
+> | Feature | Status |
+> |---|---|
+> | AI To-Do Assistant | ✅ exists (`todos-module` has AI) |
+> | Smart Scheduling | ✅ exists (calendar AI briefing + `/dashboard/conflicts`) |
+> | **Habit Tracking** | ❌ → **BUILT this session** |
+> | Personal Notes | ✅ exists (`notes-module` + Notes AI Assist, prior session) |
+> | Daily Dashboard | ✅ exists (`home`, `briefing`, `command-center`) |
+> | **AI Life Coach** | ❌ → **delivered via the Habit AI Coach** (`/api/ai/habits`) |
+> | Focus Mode | ❌ gap (see NEXT) |
+> | Goal Tracking | ✅ exists (`goals-module`, `/dashboard/goals`) |
+> | Personal Journal | ❌ gap (see NEXT) |
+> | Voice Capture | ❌ gap (see NEXT) |
+>
+> **BUILT — Habit Tracker (world-class, 100% Supabase-wired):**
+> - **Migration `0073_habits.sql`** — `habits` (member_id owner nullable=family-wide,
+>   title, icon, color, `habit_cadence` enum daily|weekly, target_per_period,
+>   reminder_time, weekdays int[] 0..6, is_active, archived_at, sort_order) +
+>   `habit_logs` (habit_id, member_id, log_date, count, note; UNIQUE(habit_id,log_date)).
+>   Family-scoped RLS + set_updated_at triggers via the DO-loop pattern. **VALIDATED
+>   build; ⚠️ NOT YET APPLIED TO PROD** (apply 0073 before `/dashboard/habits` works live).
+> - **`lib/habits/streaks.ts`** (pure; **17 tests** `tests/habits-streaks.test.ts`):
+>   `currentStreak`/`longestStreak` (daily + ISO-week weekly), `completionRate`,
+>   `heatmap`, `isScheduledOn` (weekday filter), date helpers. Today-unlogged does NOT
+>   break a streak; unscheduled weekdays are skipped not counted as misses.
+> - **`lib/habits/ai.ts`** (pure; **6 tests** `tests/habits-ai.test.ts`):
+>   `buildCoachPrompt(stats, firstName)` + `parseCoachResponse` → `{headline, nudges[], suggestion}`.
+> - **`app/api/ai/habits/route.ts`** — POST (no body), `requireUserContext`-gated; pulls
+>   active habits + 90d logs, computes per-habit streak stats, asks `resolveProvider()`
+>   for coaching. This IS the "AI Life Coach" surface.
+> - **`components/modules/habits-module.tsx`** — habit cards (color, today check-in ring,
+>   flame streak, 28-day heatmap, 30d %), stats row, add/edit modal (cadence, weekday
+>   picker, per-member or family), "AI Coach" modal. All reads/writes via `habits`/
+>   `habit_logs` (createClient + useRealtimeQuery). Check-in = insert/delete a `habit_logs`
+>   row for today (idempotent on UNIQUE(habit_id,log_date)).
+> - **Wiring:** feature-catalog `habits` (Daily Life, free, `/dashboard/habits`); nav item
+>   (Repeat icon) after Notes; plans.ts route-level 0; page `requireFeature('/dashboard/habits')`.
+> - Verified: tsc clean · lint clean · `npm run build` ✓ (`/api/ai/habits` + `/dashboard/habits`
+>   registered) · 23/23 habit tests pass.
+> - **NEXT Tier-4 gaps (same pattern):** **Personal Journal** (table `journal_entries`
+>   member-scoped + AI reflection prompts), **Voice Capture** (Web Speech API `SpeechRecognition`
+>   into the note/journal composer — pure client, no migration), **Focus Mode** (a
+>   distraction-reducing fullscreen "today" view — client-only, reuse existing data).
+
 Last updated: 2026-06-24, session `claude/connect-8ysp00` — Dramatic AI Concierge UI redesign (assistant welcome hero). Keep this updated as you ship.
 
 > **Session update (2026-06-24, branch `claude/connect-8ysp00`, pushed direct to `main`) — DRAMATIC AI ASSISTANT UI REDESIGN ("Family Concierge" hero).**
@@ -1068,7 +1118,6 @@ Last updated: 2026-06-24, session `claude/connect-8ysp00` — Dramatic AI Concie
 > - **NEXT (assistant):** persist/replay the streamed `whitespace-pre-wrap` markdown
 >   as rich text; voice input (mic button is decorative); proactive suggestions
 >   from the live snapshot.
-
 > **Session update (2026-06-23m) — DAILY ESSENTIALS AUDIT + NOTES AI ASSIST.**
 > Task: audit the "Tier 1: Daily Essentials (Must Have)" feature list against the
 > product, note which are world-class/AI-leading, and build out any gap to be
