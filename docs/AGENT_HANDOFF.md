@@ -1,7 +1,31 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Digital Twin confidence layer. Keep this updated as you ship.
+Last updated after the Meal Agent / Family Memory signal. Keep this updated as you ship.
+
+> **Session update (2026-06-24h) — GEN-2: MEAL AGENT (Family Memory).**
+> First "agent" writing into the autopilot: learns the family's favorite dinners from
+> history and proactively suggests planning when the week ahead is empty. NO migration
+> (reuses `meal_plans` + `meals`). Branch `claude/festive-bohr-m4cbeg`.
+>
+> **BUILT:**
+> - **`mealSuggestions`** in `engine.ts` (pure; 3 new tests, 28 in autopilot-engine):
+>   when ≥2 of the next 3 days lack a dinner plan AND there are learned favorites, emits a
+>   `meal` suggestion ("3 dinners unplanned this week — your family loves Tacos, Pasta…",
+>   conf 76, action plan_meals, weekly dedupe). Snapshot gained `favoriteMeals` +
+>   `plannedDinnerDays`.
+> - **`scan.ts`**: reads 90d of `meal_plans` (dinner) joined to `meals(name)`, ranks the
+>   top 5 favorites (Family Memory), and lists which of the next ~4 days already have a
+>   dinner planned.
+> - **autopilot-module**: `meal` → UtensilsCrossed icon.
+> - Verified: tsc + lint clean · `npm run build` ✓ · engine tests 28/28.
+>
+> **Autopilot now predicts 10 signal types** (renewals, appointments, chores, birthdays,
+> groceries, conflicts, finance, wellbeing, medications, meals) + Digital-Twin confidence
+> modulation. **GEN-2 ROADMAP — remaining:** more agents (Health/Travel) into the same
+> store; Family Memory beyond meals (gift ideas from past birthdays, favorite activities);
+> more signals (depleted staples, weather impact, expiring insurance 0084). Signal recipe:
+> 2026-06-24d entry. Twin-trait recipe: 2026-06-24g entry.
 
 > **Session update (2026-06-24g) — GEN-2: DIGITAL TWIN FEEDS AUTOPILOT CONFIDENCE.**
 > The Family Digital Twin now LEARNS per-member reliability and modulates the
