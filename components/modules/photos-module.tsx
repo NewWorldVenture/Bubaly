@@ -6,6 +6,7 @@ import {
   ChevronLeft, ChevronRight, ZoomIn, Edit2, Grid3X3, List,
   Camera, Heart, Mountain, GraduationCap, Trophy, Calendar,
   Download, Share2, Search, Tag, MoreHorizontal, Film, Play,
+  Sparkles,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -20,6 +21,7 @@ import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { analyzeAlbums, type AlbumInsights, type PhotosAIResponse } from '@/lib/photos/ai';
 
 type Album = Tables<'family_albums'>;
 type Photo = Tables<'family_photos'>;
@@ -48,6 +50,9 @@ export function PhotosModule() {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'albums' | 'all' | 'favorites' | 'recents'>('albums');
   const dropRef = useRef<HTMLDivElement>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<AlbumInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<PhotosAIResponse | null>(null);
 
   const { data: albums, loading: albumsLoading, refresh: refreshAlbums } = useRealtimeQuery<Album>({
     table: 'family_albums', familyId, deps: [familyId],
@@ -144,6 +149,20 @@ export function PhotosModule() {
     setEditPhoto(null);
   }
 
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/photos', { method: 'POST' });
+      if (!res.ok) throw new Error('AI request failed');
+      const data = await res.json();
+      setAiAnalysis(data.analysis ?? null);
+      setAiInsights(data.aiInsights ?? null);
+    } catch {
+      toastError('Could not analyze photos');
+    }
+    setAiLoading(false);
+  }
+
   const loading = albumsLoading || photosLoading;
 
   // ── Album stats ───────────────────────────────────────────
@@ -194,6 +213,58 @@ export function PhotosModule() {
           </button>
         ))}
       </div>
+
+      {/* AI Insights */}
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="ghost" onClick={runAiAssist} disabled={aiLoading}>
+          <Sparkles className={cn('w-4 h-4 mr-1', aiLoading && 'animate-pulse')} />
+          {aiLoading ? 'Analyzing…' : 'AI Assist'}
+        </Button>
+      </div>
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand">
+              <Sparkles className="h-3.5 w-3.5" /> Photo Insights
+            </span>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {aiAnalysis && (
+            <div className="space-y-1.5">
+              <p className="text-sm">{aiAnalysis.summary}</p>
+              {aiAnalysis.emptyAlbums > 0 && (
+                <p className="text-xs text-amber-400">📁 {aiAnalysis.emptyAlbums} empty album{aiAnalysis.emptyAlbums > 1 ? 's' : ''} — consider adding photos or removing them</p>
+              )}
+            </div>
+          )}
+          {aiInsights && (
+            <div className="space-y-2 border-t border-brand/20 pt-2">
+              {aiInsights.suggestions.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1">Suggestions</p>
+                  <ul className="space-y-0.5">
+                    {aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}
+                  </ul>
+                </div>
+              )}
+              {aiInsights.albumIdeas.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1">Album ideas</p>
+                  <div className="flex flex-wrap gap-1">
+                    {aiInsights.albumIdeas.map((a) => <span key={a} className="text-xs px-2 py-0.5 rounded-full border border-brand/30 bg-brand/10">{a}</span>)}
+                  </div>
+                </div>
+              )}
+              {aiInsights.organizationTip && (
+                <p className="text-xs text-muted italic">💡 {aiInsights.organizationTip}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Albums tab */}
       {tab === 'albums' && !activeAlbum && (

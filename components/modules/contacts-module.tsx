@@ -5,7 +5,7 @@ import {
   Users, Plus, Phone, Mail, MapPin, Star, Trash2, Edit2,
   Search, User, Stethoscope, GraduationCap, Trophy, Home,
   AlertTriangle, HeartPulse, Smile, Briefcase, ChevronRight,
-  X, Copy, ExternalLink,
+  X, Copy, ExternalLink, Sparkles,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import { analyzeContacts, type ContactInsights, type ContactAIResponse } from '@/lib/contacts/ai';
 
 type Contact = Tables<'family_contacts'>;
 
@@ -63,6 +64,9 @@ export function ContactsModule() {
   const [selected, setSelected] = useState<Contact | null>(null);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<ContactInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<ContactAIResponse | null>(null);
 
   const { data: contacts, loading, error, refresh } = useRealtimeQuery<Contact>({
     table: 'family_contacts', familyId, deps: [familyId],
@@ -94,6 +98,20 @@ export function ContactsModule() {
     success('Contact deleted');
     void refresh();
     if (selected?.id === id) setSelected(null);
+  }
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/contacts', { method: 'POST' });
+      if (!res.ok) throw new Error('AI request failed');
+      const data = await res.json();
+      setAiAnalysis(data.analysis ?? null);
+      setAiInsights(data.aiInsights ?? null);
+    } catch {
+      toastError('Could not analyze contacts');
+    }
+    setAiLoading(false);
   }
 
   function callPhone(phone: string) {
@@ -147,6 +165,64 @@ export function ContactsModule() {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* AI Insights */}
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="ghost" onClick={runAiAssist} disabled={aiLoading}>
+          <Sparkles className={cn('w-4 h-4 mr-1', aiLoading && 'animate-pulse')} />
+          {aiLoading ? 'Analyzing…' : 'AI Assist'}
+        </Button>
+      </div>
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand">
+              <Sparkles className="h-3.5 w-3.5" /> Contact Insights
+            </span>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {aiAnalysis && (
+            <div className="space-y-1.5">
+              <p className="text-sm">{aiAnalysis.summary}</p>
+              {!aiAnalysis.emergencyReady && (
+                <p className="text-xs text-danger font-medium">⚠ No emergency contact with a phone number</p>
+              )}
+              {aiAnalysis.missingCategories.length > 0 && (
+                <p className="text-xs text-muted">Missing: {aiAnalysis.missingCategories.join(', ')}</p>
+              )}
+              {aiAnalysis.duplicates.length > 0 && (
+                <p className="text-xs text-amber-400">Possible duplicates: {aiAnalysis.duplicates.map((d) => `${d.name} (×${d.count})`).join(', ')}</p>
+              )}
+            </div>
+          )}
+          {aiInsights && (
+            <div className="space-y-2 border-t border-brand/20 pt-2">
+              {aiInsights.suggestions.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1">Suggestions</p>
+                  <ul className="space-y-0.5">
+                    {aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}
+                  </ul>
+                </div>
+              )}
+              {aiInsights.missingRoles.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1">Consider adding</p>
+                  <div className="flex flex-wrap gap-1">
+                    {aiInsights.missingRoles.map((r) => <span key={r} className="text-xs px-2 py-0.5 rounded-full border border-brand/30 bg-brand/10">{r}</span>)}
+                  </div>
+                </div>
+              )}
+              {aiInsights.organizationTip && (
+                <p className="text-xs text-muted italic">💡 {aiInsights.organizationTip}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
