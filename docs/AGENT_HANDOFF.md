@@ -1,7 +1,69 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the voice AI assistant build. Keep this updated as you ship.
+Last updated after the Family Pet Manager build. Keep this updated as you ship.
+
+> **Session update (2026-06-24e, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> 100-FEATURE ROADMAP AUDIT + FAMILY PET MANAGER (feature #88).**
+> Task: audit a 100-row master roadmap against the product; build any genuine
+> gap to world-class, AI-first, 100% Supabase-wired, production-ready.
+>
+> **AUDIT FINDING:** ~85 of the 100 features already exist (verified against
+> `lib/constants/navigation.ts` + `feature-catalog.ts`): calendar, sync,
+> shopping, todos, recipes, messenger, contacts, notes, photos, documents,
+> reminders, dashboard, profiles, RSVP, recurring, assignments, announcements,
+> birthday, activity, cross-platform, school/sports hubs, chores, rewards,
+> meals, grocery, kitchen display, home/vehicle maintenance, goals, budget,
+> subscriptions, warranty, travel, emergency, directory, inventory, timeline,
+> memories, health vault, briefings, concierge, school/sports/meal/grocery/
+> calendar AI assistants, conflict resolution, transportation (rides), command
+> center, photo→calendar/PDF→event/flyer scanner (scan), permission slips
+> (signups), school email parsing (inbox), team import, readiness/stress/
+> health/operations scores, parenting coach (behavior), homework assistant,
+> family CFO/COO, digital twin, knowledge graph, grandparent assistant,
+> caregiver, vacation builder, emergency assistant, smart home (devices),
+> social feed hub, autonomous family management. GENUINE GAPS confirmed absent
+> via grep (0 files each): pet, insurance, estate, legacy, yearbook, volunteer,
+> relocation, college, scholarship, reunion, donation, marketplace. The
+> integration items (Alexa/Google/Apple Home, TeamSnap, SportsEngine, school
+> portals) need external OAuth credentials — can't be made prod-ready here.
+>
+> **BUILT — Family Pet Manager (#88), world-class + AI-first, fully wired:**
+> - **Migration `0083_pets.sql`** (⚠️ NOT YET APPLIED TO PROD — apply before
+>   `/dashboard/pets` works in prod): `pets` (name, species enum
+>   dog/cat/bird/fish/reptile/small_mammal/horse/other, breed, birthday,
+>   adoption_date, weight_kg, color, microchip_id, photo_path, vet_name/phone,
+>   notes, is_active) + `pet_care_records` (kind enum vaccination/vet_visit/
+>   medication/grooming/weight/other, title, record_date, **next_due**, dose,
+>   weight_kg, notes). Both family-scoped RLS via `is_family_member`,
+>   `set_updated_at` triggers, indexes incl. a partial index on next_due.
+>   Enums `pet_species`, `pet_care_kind`.
+> - **Types** added to `lib/database.types.ts` (`PetSpecies`, `PetCareKind`,
+>   `pets`, `pet_care_records`).
+> - **`lib/pets/care.ts`** (pure, 12 tests in `tests/pets-care.test.ts`): the
+>   AI-first care engine. `PET_SPECIES`/`CARE_KINDS` metadata, `petAgeLabel`,
+>   `dayDiff` (date-only), `careUrgency` (overdue/due_soon≤14d/upcoming/ok),
+>   `upcomingCare`, `careSummary`, and **`recommendedCare`** + `SPECIES_CARE_PLAN`
+>   — knows each species' standard cadence (dog: annual exam, rabies, monthly
+>   flea; horse: farrier every 2mo; etc.) and surfaces overdue real records PLUS
+>   standard care with nothing on file. Deterministic, never fabricates.
+> - **`components/modules/pets-module.tsx`**: pet grid w/ species emoji + age +
+>   next-due chip, care-status card, **"Care needs" AI panel** (recommendations
+>   colored by urgency), upcoming-care timeline, pet detail modal (vet contact
+>   tap-to-call, care history w/ delete), add-pet + add-care forms. Realtime via
+>   `useRealtimeQuery` on both tables.
+> - **`app/(app)/dashboard/pets/page.tsx`**, nav entry (PawPrint icon,
+>   minLevel 0), feature-catalog `pets` (Daily Life, basic).
+>
+> **Verification:** `tsc --noEmit` clean · `next lint` clean · `next build`
+> **Compiled successfully** (`/dashboard/pets` registered) · `vitest` **808
+> passing** (+12). **Migration 0083 must be applied to prod.**
+>
+> **NEXT (roadmap gaps, mirror this pattern — pure `lib/<f>/*` + tests + module +
+> page + nav + catalog + migration):** Family Insurance Hub (#80), Family Estate/
+> Legacy Vault (#81/82), Pet feeding/walk schedules + photo→breed AI, Volunteer
+> Hub (#87), College/Scholarship Planner (#90/91), Donation Tracker (#95). The
+> integration items (#72-77) need external API credentials. Next migration: **0084**.
 
 > **Session update (2026-06-24d, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > VOICE AI ASSISTANT: talk-to-AI + AI-to-voice on OpenAI.**
