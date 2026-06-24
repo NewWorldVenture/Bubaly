@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp, MoreHorizontal, Search, SlidersHorizontal, ShoppingBag, Check, ExternalLink, Copy, Store } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp, MoreHorizontal, Search, SlidersHorizontal, ShoppingBag, Check, ExternalLink, Copy, Store, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { cn } from '@/lib/utils/cn';
 import { RETAILERS, itemSearchUrl, buildShoppingText, type Retailer } from '@/lib/grocery/retailers';
+import { analyzeGroceryList, type GroceryInsights, type GroceryAIResponse } from '@/lib/grocery/grocery-ai';
 import type { Tables } from '@/lib/database.types';
 
 type Item = Tables<'grocery_items'>;
@@ -39,6 +40,19 @@ export function GroceryModule() {
   const [searchQ, setSearchQ] = useState('');
   const [tab, setTab] = useState<'all' | 'mine' | 'store'>('all');
   const [shopRetailer, setShopRetailer] = useState<Retailer | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<GroceryInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<GroceryAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/grocery', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -131,6 +145,9 @@ export function GroceryModule() {
             description="Stay organized and never forget an item."
             action={
               <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+                  <Sparkles className="h-4 w-4" /> AI Assist
+                </Button>
                 <Button variant="outline" size="sm">
                   <SlidersHorizontal className="h-4 w-4" /> Reorder
                 </Button>
@@ -177,6 +194,32 @@ export function GroceryModule() {
             ))}
           </div>
         </div>
+
+        {/* AI Insights */}
+        {(aiAnalysis || aiInsights) && (
+          <div className="mx-5 mt-4 rounded-xl border border-brand/30 bg-brand/5 p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+                <Sparkles className="h-4 w-4" /> AI Grocery Insights
+              </div>
+              <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+            </div>
+            {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+            {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+              <div className="mb-2">
+                <p className="text-xs font-medium mb-1">Suggestions</p>
+                <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+              </div>
+            )}
+            {aiInsights?.mealIdeas && aiInsights.mealIdeas.length > 0 && (
+              <div className="mb-2">
+                <p className="text-xs font-medium mb-1">Meal Ideas</p>
+                <ul className="space-y-1">{aiInsights.mealIdeas.map((m, i) => <li key={i} className="text-xs text-muted">• {m}</li>)}</ul>
+              </div>
+            )}
+            {aiInsights?.shoppingTip && <p className="text-xs text-muted italic">{aiInsights.shoppingTip}</p>}
+          </div>
+        )}
 
         {/* Category sections */}
         <div className="flex-1 px-5 py-4 space-y-3">

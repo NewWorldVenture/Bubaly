@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { RefreshCw, Plus, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, AlertTriangle, CheckCircle2, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -17,6 +17,7 @@ import {
   CADENCES, SUB_STATUSES, monthlyCostCents, annualCostCents, summarizeSubscriptions, isStale, wastedMonthlyCents,
   type SubLike,
 } from '@/lib/finance/subscriptions';
+import { analyzeSubscriptions, type SubscriptionInsights, type SubscriptionsAIResponse } from '@/lib/finance/subscriptions-ai';
 import type { Tables } from '@/lib/database.types';
 
 type Sub = Tables<'subscriptions_tracked'>;
@@ -34,6 +35,19 @@ export function SubscriptionsModule() {
   });
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<SubscriptionInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<SubscriptionsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/subscriptions', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
   const all = subs ?? [];
   const stats = useMemo(() => summarizeSubscriptions(all as SubLike[]), [all]);
   const wasted = useMemo(() => wastedMonthlyCents(all as SubLike[]), [all]);
@@ -83,7 +97,12 @@ export function SubscriptionsModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><RefreshCw className="h-4 w-4 text-brand" /> Subscription Tracking</h3>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add subscription</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+            <Sparkles className="h-4 w-4" /> AI Assist
+          </Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add subscription</Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -92,6 +111,32 @@ export function SubscriptionsModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Annual</p><p className="text-xl font-bold">{usd(stats.annualCents)}</p></div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Wasted / mo</p><p className={`text-xl font-bold ${wasted > 0 ? 'text-amber-500' : ''}`}>{usd(wasted)}</p></div>
       </div>
+
+      {/* AI Insights */}
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Subscription Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.savingOpportunities && aiInsights.savingOpportunities.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Saving Opportunities</p>
+              <ul className="space-y-1">{aiInsights.savingOpportunities.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.managementTip && <p className="text-xs text-muted italic">{aiInsights.managementTip}</p>}
+        </div>
+      )}
 
       <SavingsCoachCard />
 
