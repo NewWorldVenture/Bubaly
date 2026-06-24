@@ -1,14 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CheckSquare, Plus, Trash2, Check, Flag, Calendar, User,
   ChevronLeft, MoreHorizontal, Circle, Tag, Search, X,
-  Pencil, Archive, Filter,
+  Pencil, Archive, Filter, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -44,6 +46,7 @@ const LIST_ICONS = ['📋', '🏠', '💼', '🛒', '🎯', '📚', '🏋️', '
 export function TodosModule() {
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
+  const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
 
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const [newListOpen, setNewListOpen] = useState(false);
@@ -68,8 +71,10 @@ export function TodosModule() {
     },
   });
 
-  // Auto-select first list
-  if (lists.length > 0 && !activeListId) setActiveListId(lists[0].id);
+  // Auto-select first list (effect, not render-time setState).
+  useEffect(() => {
+    if (lists.length > 0 && !activeListId) setActiveListId(lists[0].id);
+  }, [lists, activeListId]);
 
   const activeList = lists.find((l) => l.id === activeListId);
 
@@ -85,28 +90,34 @@ export function TodosModule() {
   const pending = items.filter((i) => !i.is_done);
   const done    = items.filter((i) => i.is_done);
 
-  async function toggleItem(item: TodoItem) {
-    const supabase = createClient();
-    await supabase.from('todo_items').update({
-      is_done: !item.is_done,
-      completed_at: item.is_done ? null : new Date().toISOString(),
-    }).eq('id', item.id);
-    void refreshItems();
+  function toggleItem(item: TodoItem) {
+    return run(`toggle:${item.id}`, async () => {
+      const { error } = await createClient().from('todo_items').update({
+        is_done: !item.is_done,
+        completed_at: item.is_done ? null : new Date().toISOString(),
+      }).eq('id', item.id);
+      if (error) throw error;
+      void refreshItems();
+    });
   }
 
-  async function deleteItem(id: string) {
-    const supabase = createClient();
-    await supabase.from('todo_items').delete().eq('id', id);
-    void refreshItems();
+  function deleteItem(id: string) {
+    return run(`delete:${id}`, async () => {
+      const { error } = await createClient().from('todo_items').delete().eq('id', id);
+      if (error) throw error;
+      void refreshItems();
+    });
   }
 
-  async function clearDone() {
-    const supabase = createClient();
-    const ids = done.map((i) => i.id);
-    if (!ids.length) return;
-    await supabase.from('todo_items').delete().in('id', ids);
-    success(`Cleared ${ids.length} completed items`);
-    void refreshItems();
+  function clearDone() {
+    return run('clear-done', async () => {
+      const ids = done.map((i) => i.id);
+      if (!ids.length) return;
+      const { error } = await createClient().from('todo_items').delete().in('id', ids);
+      if (error) throw error;
+      success(`Cleared ${ids.length} completed items`);
+      void refreshItems();
+    });
   }
 
   if (listsLoading) return <LoadingBlock />;
@@ -194,7 +205,7 @@ export function TodosModule() {
               <div className="ml-auto flex items-center gap-2">
                 <AiInsight kind="todos" />
                 {done.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={clearDone}>
+                  <Button variant="ghost" size="sm" onClick={clearDone} disabled={isPending('clear-done')}>
                     <Check className="h-3.5 w-3.5 text-success" /> Clear done
                   </Button>
                 )}
@@ -239,10 +250,10 @@ export function TodosModule() {
                       'group flex items-start gap-3 rounded-xl border p-3 transition hover:bg-elevated/30',
                       item.is_done ? 'border-border/30 opacity-60' : 'border-border',
                     )}>
-                      <button onClick={() => toggleItem(item)}
-                        className={cn('mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition',
+                      <button onClick={() => toggleItem(item)} disabled={isPending(`toggle:${item.id}`)} aria-label={item.is_done ? 'Mark not done' : 'Mark done'}
+                        className={cn('mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition disabled:opacity-60',
                           item.is_done ? 'border-success bg-success' : `border-border hover:border-success/50`)}>
-                        {item.is_done && <Check className="h-3 w-3 text-fg" />}
+                        {isPending(`toggle:${item.id}`) ? <Loader2 className="h-3 w-3 animate-spin text-muted" /> : item.is_done && <Check className="h-3 w-3 text-fg" />}
                       </button>
 
                       <div className="flex-1 min-w-0">
@@ -278,9 +289,9 @@ export function TodosModule() {
                           className="rounded p-1 text-muted opacity-0 group-hover:opacity-100 hover:text-fg transition">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
-                        <button onClick={() => deleteItem(item.id)}
-                          className="rounded p-1 text-muted opacity-0 group-hover:opacity-100 hover:text-danger transition">
-                          <Trash2 className="h-3.5 w-3.5" />
+                        <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label="Delete task"
+                          className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-danger disabled:opacity-50">
+                          {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                         </button>
                       </div>
                     </div>
@@ -320,15 +331,23 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (loading) return;
+    const trimmed = name.trim();
+    if (!trimmed) { toastError('Give your list a name'); return; }
+    if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
     setLoading(true);
-    const supabase = createClient();
-    const { data, error } = await supabase.from('todo_lists').insert({
-      family_id: familyId, name: name.trim(), icon, color, is_shared: isShared,
-    }).select('id').single();
-    setLoading(false);
-    if (error) { toastError(error.message); return; }
-    onCreated(data.id);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.from('todo_lists').insert({
+        family_id: familyId, name: trimmed, icon, color, is_shared: isShared,
+      }).select('id').single();
+      if (error || !data) { toastError(describeDbError(error)); return; }
+      onCreated(data.id);
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -395,20 +414,28 @@ function ItemModal({ familyId, userId, listId, members, item, onClose, onSaved }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (loading) return;
+    const trimmed = title.trim();
+    if (!trimmed) { toastError('Add a task title'); return; }
+    if (trimmed.length > 200) { toastError('Title is too long (max 200 characters)'); return; }
     setLoading(true);
-    const supabase = createClient();
-    const payload = {
-      title: title.trim(), notes: notes || null, priority,
-      due_date: dueDate || null, tags,
-      assigned_to_id: assignedTo || null,
-    };
-    const { error } = item
-      ? await supabase.from('todo_items').update(payload).eq('id', item.id)
-      : await supabase.from('todo_items').insert({ ...payload, family_id: familyId, list_id: listId });
-    setLoading(false);
-    if (error) { toastError(error.message); return; }
-    onSaved();
+    try {
+      const supabase = createClient();
+      const payload = {
+        title: trimmed, notes: notes.trim() || null, priority,
+        due_date: dueDate || null, tags,
+        assigned_to_id: assignedTo || null,
+      };
+      const { error } = item
+        ? await supabase.from('todo_items').update(payload).eq('id', item.id)
+        : await supabase.from('todo_items').insert({ ...payload, family_id: familyId, list_id: listId });
+      if (error) { toastError(describeDbError(error)); return; }
+      onSaved();
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

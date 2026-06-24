@@ -4,11 +4,13 @@ import { useMemo, useState } from 'react';
 import {
   Bell, Plus, Check, Clock, MapPin, Repeat, Pill, CreditCard,
   GraduationCap, CheckSquare, Trash2, Edit2, Sparkles, X,
-  ChevronDown, AlertTriangle, Calendar, User, AlarmClock,
+  AlertTriangle, Calendar, User, AlarmClock, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -73,6 +75,7 @@ const AI_SUGGESTIONS = [
 export function RemindersModule() {
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
+  const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
 
   const [tab, setTab] = useState<'active' | 'completed' | 'all'>('active');
   const [filterKind, setFilterKind] = useState('all');
@@ -99,40 +102,51 @@ export function RemindersModule() {
   const overdue = reminders.filter(isOverdue);
   const activeCount = reminders.filter((r) => r.status === 'active').length;
 
-  async function complete(id: string) {
-    const supabase = createClient();
-    await supabase.from('family_reminders').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', id);
-    success('Reminder completed ✓');
-    void refresh();
-  }
-
-  async function snooze(id: string, mins: number) {
-    const supabase = createClient();
-    const until = new Date(Date.now() + mins * 60000).toISOString();
-    await supabase.from('family_reminders').update({ status: 'snoozed', snoozed_until: until }).eq('id', id);
-    success(`Snoozed for ${mins < 60 ? mins + ' min' : mins / 60 + ' hr'}`);
-    void refresh();
-  }
-
-  async function deleteReminder(id: string) {
-    const supabase = createClient();
-    await supabase.from('family_reminders').delete().eq('id', id);
-    void refresh();
-  }
-
-  async function quickAdd(suggestion: typeof AI_SUGGESTIONS[0]) {
-    const supabase = createClient();
-    await supabase.from('family_reminders').insert({
-      family_id: familyId,
-      created_by: userId,
-      title: suggestion.title,
-      kind: suggestion.kind,
-      priority: suggestion.priority,
-      notes: suggestion.notes,
-      ai_suggested: true,
+  function complete(id: string) {
+    return run(`complete:${id}`, async () => {
+      const { error } = await createClient().from('family_reminders')
+        .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw error;
+      success('Reminder completed ✓');
+      void refresh();
     });
-    success('Reminder added from AI suggestion');
-    void refresh();
+  }
+
+  function snooze(id: string, mins: number) {
+    return run(`snooze:${id}`, async () => {
+      const until = new Date(Date.now() + mins * 60000).toISOString();
+      const { error } = await createClient().from('family_reminders')
+        .update({ status: 'snoozed', snoozed_until: until }).eq('id', id);
+      if (error) throw error;
+      success(`Snoozed for ${mins < 60 ? mins + ' min' : mins / 60 + ' hr'}`);
+      void refresh();
+    });
+  }
+
+  function deleteReminder(id: string) {
+    return run(`delete:${id}`, async () => {
+      const { error } = await createClient().from('family_reminders').delete().eq('id', id);
+      if (error) throw error;
+      success('Reminder deleted');
+      void refresh();
+    });
+  }
+
+  function quickAdd(suggestion: typeof AI_SUGGESTIONS[0]) {
+    return run(`quickadd:${suggestion.title}`, async () => {
+      const { error } = await createClient().from('family_reminders').insert({
+        family_id: familyId,
+        created_by: userId,
+        title: suggestion.title,
+        kind: suggestion.kind,
+        priority: suggestion.priority,
+        notes: suggestion.notes,
+        ai_suggested: true,
+      });
+      if (error) throw error;
+      success('Reminder added from suggestion');
+      void refresh();
+    });
   }
 
   if (loading) return <LoadingBlock />;
@@ -196,14 +210,16 @@ export function RemindersModule() {
             {AI_SUGGESTIONS.map((s) => {
               const kind = kindMeta(s.kind);
               return (
-                <button key={s.title} onClick={() => quickAdd(s)}
-                  className="flex items-start gap-3 rounded-xl border border-border/60 bg-surface/60 p-3 text-left hover:bg-elevated/40 hover:border-brand/30 transition">
+                <button key={s.title} onClick={() => quickAdd(s)} disabled={isPending(`quickadd:${s.title}`)}
+                  className="flex items-start gap-3 rounded-xl border border-border/60 bg-surface/60 p-3 text-left transition hover:bg-elevated/40 hover:border-brand/30 disabled:opacity-50">
                   <kind.icon className={cn('mt-0.5 h-4 w-4 flex-shrink-0', kind.color)} />
                   <div>
                     <p className="text-sm font-semibold">{s.title}</p>
                     <p className="text-xs text-muted">{s.notes}</p>
                   </div>
-                  <Plus className="ml-auto h-4 w-4 flex-shrink-0 text-brand" />
+                  {isPending(`quickadd:${s.title}`)
+                    ? <Loader2 className="ml-auto h-4 w-4 flex-shrink-0 animate-spin text-brand" />
+                    : <Plus className="ml-auto h-4 w-4 flex-shrink-0 text-brand" />}
                 </button>
               );
             })}
@@ -253,14 +269,17 @@ export function RemindersModule() {
                   snoozed && 'border-warning/30 bg-warning/5',
                 )}>
                 {/* Complete button */}
-                <button onClick={() => !completed && complete(reminder.id)}
+                <button onClick={() => !completed && complete(reminder.id)} disabled={completed || isPending(`complete:${reminder.id}`)}
+                  aria-label={completed ? 'Completed' : 'Mark complete'}
                   className={cn(
                     'mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 transition',
                     completed
                       ? 'border-success bg-success text-white'
                       : 'border-border hover:border-success hover:bg-success/10',
                   )}>
-                  {completed && <Check className="h-3.5 w-3.5" />}
+                  {isPending(`complete:${reminder.id}`)
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin text-success" />
+                    : completed && <Check className="h-3.5 w-3.5" />}
                 </button>
 
                 {/* Content */}
@@ -322,8 +341,8 @@ export function RemindersModule() {
                         </summary>
                         <div className="absolute right-0 top-8 z-10 rounded-xl border border-border bg-elevated p-1.5 shadow-xl min-w-[140px]">
                           {[[15,'15 min'],[60,'1 hour'],[180,'3 hours'],[1440,'Tomorrow']].map(([m, l]) => (
-                            <button key={m} onClick={() => snooze(reminder.id, Number(m))}
-                              className="block w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-surface">
+                            <button key={m} onClick={() => snooze(reminder.id, Number(m))} disabled={isPending(`snooze:${reminder.id}`)}
+                              className="block w-full rounded-lg px-3 py-1.5 text-left text-xs hover:bg-surface disabled:opacity-50">
                               {l}
                             </button>
                           ))}
@@ -331,13 +350,13 @@ export function RemindersModule() {
                       </details>
                     </div>
                   )}
-                  <button onClick={() => setEditing(reminder)}
+                  <button onClick={() => setEditing(reminder)} aria-label="Edit reminder"
                     className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
                     <Edit2 className="h-4 w-4" />
                   </button>
-                  <button onClick={() => deleteReminder(reminder.id)}
-                    className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger">
-                    <Trash2 className="h-4 w-4" />
+                  <button onClick={() => deleteReminder(reminder.id)} disabled={isPending(`delete:${reminder.id}`)} aria-label="Delete reminder"
+                    className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-danger disabled:opacity-50">
+                    {isPending(`delete:${reminder.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
@@ -387,16 +406,34 @@ function ReminderModal({ reminder, familyId, userId, members, onClose, onSaved }
       member_id: g('member_id'),
       assigned_to_id: g('assigned_to_id'),
     };
+    // ── Validation ──
     if (!payload.title) return toastError('Title is required');
+    if (payload.title.length > 200) return toastError('Title is too long (max 200 characters)');
+    // A brand-new time-based reminder in the past would never fire — block it.
+    const timeBased = kind === 'time' || kind === 'medication' || kind === 'bill' || kind === 'school' || kind === 'chore';
+    if (!reminder && timeBased && remindAtRaw) {
+      if (new Date(remindAtRaw).getTime() < Date.now() - 60_000) {
+        return toastError('Pick a time in the future for this reminder.');
+      }
+    }
+    if (kind === 'location' && !payload.location_name) {
+      return toastError('Add a location for a location-based reminder.');
+    }
+
     setLoading(true);
-    const supabase = createClient();
-    const { error } = reminder
-      ? await supabase.from('family_reminders').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', reminder.id)
-      : await supabase.from('family_reminders').insert({ ...payload, family_id: familyId, created_by: userId });
-    setLoading(false);
-    if (error) { toastError(error.message); return; }
-    success(reminder ? 'Reminder updated' : 'Reminder created');
-    onSaved();
+    try {
+      const supabase = createClient();
+      const { error } = reminder
+        ? await supabase.from('family_reminders').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', reminder.id)
+        : await supabase.from('family_reminders').insert({ ...payload, family_id: familyId, created_by: userId });
+      if (error) { toastError(describeDbError(error)); return; }
+      success(reminder ? 'Reminder updated' : 'Reminder created');
+      onSaved();
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

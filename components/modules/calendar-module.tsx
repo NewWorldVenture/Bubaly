@@ -4,7 +4,9 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
@@ -207,13 +209,6 @@ export function CalendarModule() {
     }
     return [...map.entries()];
   }, [upcoming]);
-
-  async function remove(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from('calendar_events').delete().eq('id', id);
-    if (error) return toastError(error.message);
-    success('Event removed'); void refresh();
-  }
 
   async function syncGoogle() {
     setSyncing(true);
@@ -542,13 +537,24 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
     };
     const parsed = eventSchema.safeParse(input);
     if (!parsed.success) { setErrors(fieldErrors(parsed.error)); return; }
+    // End must be after start when both are provided.
+    if (parsed.data.ends_at && new Date(parsed.data.ends_at) <= new Date(parsed.data.starts_at)) {
+      setErrors({ ends_at: 'End time must be after the start time.' });
+      return;
+    }
+    setErrors({});
     setLoading(true);
-    const supabase = createClient();
-    const recurrence = String(form.get('recurrence') ?? 'none') as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
-    const { error } = await supabase.from('calendar_events').insert({ ...parsed.data, family_id: familyId, created_by: userId, all_day: false, recurrence });
-    setLoading(false);
-    if (error) return toastError(error.message);
-    onSaved();
+    try {
+      const supabase = createClient();
+      const recurrence = String(form.get('recurrence') ?? 'none') as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+      const { error } = await supabase.from('calendar_events').insert({ ...parsed.data, family_id: familyId, created_by: userId, all_day: false, recurrence });
+      if (error) { toastError(describeDbError(error)); return; }
+      onSaved();
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -570,7 +576,7 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
           <Field label="Starts" error={errors.starts_at} required>
             {(id) => <Input id={id} name="starts_at" type="datetime-local" />}
           </Field>
-          <Field label="Ends">
+          <Field label="Ends" error={errors.ends_at}>
             {(id) => <Input id={id} name="ends_at" type="datetime-local" />}
           </Field>
         </div>

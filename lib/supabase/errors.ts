@@ -1,0 +1,67 @@
+// Friendly, user-facing messages for Supabase/Postgres errors.
+// Distinguishes permission (RLS) failures, missing rows, conflicts, and
+// network problems from generic errors so the UI can show something honest
+// and actionable instead of a raw Postgres string.
+
+export type DbErrorLike =
+  | { message?: string | null; code?: string | null; details?: string | null }
+  | null
+  | undefined;
+
+/**
+ * Turn a Supabase error (or any thrown value) into a short, human message.
+ * Never returns an empty string. Falls back to the raw message, then a
+ * generic line.
+ */
+export function describeDbError(error: unknown, fallback = 'Something went wrong. Please try again.'): string {
+  if (!error) return fallback;
+
+  // Unwrap thrown Error/string values.
+  const obj: DbErrorLike =
+    typeof error === 'object' ? (error as DbErrorLike) : { message: String(error) };
+
+  const code = (obj?.code ?? '').toString();
+  const raw = (obj?.message ?? '').toString();
+  const msg = raw.toLowerCase();
+
+  // RLS / permission — Postgres 42501 (insufficient_privilege) or policy text.
+  if (
+    code === '42501' ||
+    msg.includes('row-level security') ||
+    msg.includes('violates row-level') ||
+    msg.includes('permission denied') ||
+    msg.includes('not allowed') ||
+    msg.includes('policy')
+  ) {
+    return "You don't have permission to do that. Ask a family admin if you think this is a mistake.";
+  }
+
+  // Unique / conflict — 23505.
+  if (code === '23505' || msg.includes('duplicate key') || msg.includes('already exists')) {
+    return 'That already exists. Try a different value.';
+  }
+
+  // Foreign key / not found — 23503 or PostgREST PGRST116 (no rows).
+  if (code === '23503' || code === 'PGRST116' || msg.includes('not found') || msg.includes('no rows')) {
+    return 'That item could not be found — it may have already been removed.';
+  }
+
+  // Not-null / check constraint — 23502 / 23514.
+  if (code === '23502' || code === '23514' || msg.includes('violates check') || msg.includes('null value')) {
+    return 'Some required information is missing or invalid. Please review and try again.';
+  }
+
+  // Network / fetch transport.
+  if (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('network request failed') ||
+    msg.includes('load failed') ||
+    msg.includes('timeout') ||
+    msg.includes('aborted')
+  ) {
+    return 'Network problem — check your connection and try again.';
+  }
+
+  return raw.trim() || fallback;
+}

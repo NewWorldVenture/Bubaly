@@ -9,7 +9,10 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
+import { isValidEmail, isValidPhone } from '@/lib/utils/validation';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -58,6 +61,7 @@ function avatarColor(name: string) {
 export function ContactsModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
+  const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
 
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
@@ -88,13 +92,14 @@ export function ContactsModule() {
 
   const emergencyContacts = contacts.filter((c) => c.is_emergency);
 
-  async function deleteContact(id: string) {
-    const supabase = createClient();
-    const { error: err } = await supabase.from('family_contacts').delete().eq('id', id);
-    if (err) { toastError(err.message); return; }
-    success('Contact deleted');
-    void refresh();
-    if (selected?.id === id) setSelected(null);
+  function deleteContact(id: string) {
+    return run(`delete:${id}`, async () => {
+      const { error: err } = await createClient().from('family_contacts').delete().eq('id', id);
+      if (err) throw err;
+      success('Contact deleted');
+      void refresh();
+      if (selected?.id === id) setSelected(null);
+    });
   }
 
   function callPhone(phone: string) {
@@ -351,9 +356,9 @@ export function ContactsModule() {
                 <Button variant="ghost" size="sm" onClick={() => setEditing(selected)}>
                   <Edit2 className="h-4 w-4" /> Edit
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => { if (confirm('Delete this contact?')) deleteContact(selected.id); }}>
+                <Button variant="ghost" size="sm" disabled={isPending(`delete:${selected.id}`)} onClick={() => { if (confirm('Delete this contact?')) deleteContact(selected.id); }}>
                   <Trash2 className="h-4 w-4 text-danger" />
-                  <span className="text-danger">Delete</span>
+                  <span className="text-danger">{isPending(`delete:${selected.id}`) ? 'Deleting…' : 'Delete'}</span>
                 </Button>
               </div>
             </div>
@@ -400,16 +405,28 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
       birthday_month: form.get('birthday_month') ? Number(form.get('birthday_month')) : null,
       birthday_day: form.get('birthday_day') ? Number(form.get('birthday_day')) : null,
     };
+    // ── Validation ──
     if (!payload.name) return toastError('Name is required');
+    if (payload.name.length > 120) return toastError('Name is too long (max 120 characters)');
+    if (payload.email && !isValidEmail(payload.email)) return toastError('Enter a valid email address (e.g. name@example.com)');
+    if (payload.phone && !isValidPhone(payload.phone)) return toastError('Enter a valid phone number');
+    if (payload.phone_alt && !isValidPhone(payload.phone_alt)) return toastError('The alternate phone number looks invalid');
+    if (payload.birthday_day != null && (payload.birthday_day < 1 || payload.birthday_day > 31)) return toastError('Birthday day must be between 1 and 31');
+
     setLoading(true);
-    const supabase = createClient();
-    const { error } = contact
-      ? await supabase.from('family_contacts').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', contact.id)
-      : await supabase.from('family_contacts').insert({ ...payload, family_id: familyId, created_by: userId });
-    setLoading(false);
-    if (error) { toastError(error.message); return; }
-    success(contact ? 'Contact updated' : 'Contact added');
-    onSaved();
+    try {
+      const supabase = createClient();
+      const { error } = contact
+        ? await supabase.from('family_contacts').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', contact.id)
+        : await supabase.from('family_contacts').insert({ ...payload, family_id: familyId, created_by: userId });
+      if (error) { toastError(describeDbError(error)); return; }
+      success(contact ? 'Contact updated' : 'Contact added');
+      onSaved();
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

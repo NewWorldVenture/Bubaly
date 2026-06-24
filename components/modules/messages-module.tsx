@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   MessageCircle, Plus, Send, Smile, Paperclip, Reply, Pin, Trash2,
-  MoreHorizontal, Check, CheckCheck, ArrowLeft, Users, Search, X, Camera,
+  MoreHorizontal, Check, CheckCheck, ArrowLeft, Users, Search, X, Camera, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -203,50 +204,79 @@ export function MessagesModule() {
     e.preventDefault();
     const content = text.trim();
     if (!content || !activeConv || sending) return;
+    if (content.length > 4000) { toastError('Message is too long (max 4000 characters)'); return; }
+    const prevReplyTo = replyTo;
     setSending(true);
     setText('');
     setReplyTo(null);
-    const supabase = createClient();
-    const { error } = await supabase.from('family_messages').insert({
-      conversation_id: activeConv.id,
-      family_id: familyId,
-      sender_id: userId,
-      sender_name: myName,
-      content,
-      kind: 'text',
-      reply_to_id: replyTo?.id ?? null,
-    });
-    setSending(false);
-    if (error) toastError(error.message);
-    else inputRef.current?.focus();
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from('family_messages').insert({
+        conversation_id: activeConv.id,
+        family_id: familyId,
+        sender_id: userId,
+        sender_name: myName,
+        content,
+        kind: 'text',
+        reply_to_id: prevReplyTo?.id ?? null,
+      });
+      if (error) {
+        // Restore the unsent message so the user doesn't lose their text.
+        toastError(describeDbError(error));
+        setText(content);
+        setReplyTo(prevReplyTo);
+      } else {
+        inputRef.current?.focus();
+      }
+    } catch (err) {
+      toastError(describeDbError(err));
+      setText(content);
+      setReplyTo(prevReplyTo);
+    } finally {
+      setSending(false);
+    }
   }
 
   // ── Send image/file ─────────────────────────────────────────
+  const [uploadingFile, setUploadingFile] = useState(false);
   async function sendFile(file: File) {
-    if (!activeConv) return;
-    const supabase = createClient();
-    const ext = file.name.split('.').pop();
-    const path = `${familyId}/messages/${Date.now()}.${ext}`;
-    const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
-    if (upErr) { toastError(upErr.message); return; }
-    const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
-    const isImage = file.type.startsWith('image/');
-    await supabase.from('family_messages').insert({
-      conversation_id: activeConv.id,
-      family_id: familyId,
-      sender_id: userId,
-      sender_name: myName,
-      content: isImage ? null : file.name,
-      kind: isImage ? 'image' : 'file',
-      attachment_url: publicUrl,
-      attachment_name: file.name,
-      attachment_mime: file.type,
-    });
+    if (!activeConv || uploadingFile) return;
+    // 25 MB cap mirrors the storage bucket limit; fail fast with a clear message.
+    if (file.size > 25 * 1024 * 1024) { toastError('File is too large (max 25 MB)'); return; }
+    setUploadingFile(true);
+    try {
+      const supabase = createClient();
+      const ext = file.name.split('.').pop();
+      const path = `${familyId}/messages/${Date.now()}.${ext}`;
+      const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
+      if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
+      const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
+      const isImage = file.type.startsWith('image/');
+      const { error: insErr } = await supabase.from('family_messages').insert({
+        conversation_id: activeConv.id,
+        family_id: familyId,
+        sender_id: userId,
+        sender_name: myName,
+        content: isImage ? null : file.name,
+        kind: isImage ? 'image' : 'file',
+        attachment_url: publicUrl,
+        attachment_name: file.name,
+        attachment_mime: file.type,
+      });
+      if (insErr) {
+        // Roll back the orphaned upload if the message row failed to insert.
+        await supabase.storage.from('family-media').remove([stored.path]);
+        toastError(describeDbError(insErr));
+      }
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setUploadingFile(false);
+    }
   }
 
   // ── React to message ─────────────────────────────────────────
   async function reactTo(msg: Message, emoji: string) {
-    const supabase = createClient();
     const current = (msg.reactions as Record<string, string[]>) ?? {};
     const existing = current[emoji] ?? [];
     const updated = existing.includes(userId)
@@ -254,22 +284,23 @@ export function MessagesModule() {
       : { ...current, [emoji]: [...existing, userId] };
     // remove keys with empty arrays
     for (const k of Object.keys(updated)) { if (!updated[k].length) delete updated[k]; }
-    await supabase.from('family_messages').update({ reactions: updated }).eq('id', msg.id);
     setMsgMenu(null);
+    const { error } = await createClient().from('family_messages').update({ reactions: updated }).eq('id', msg.id);
+    if (error) toastError(describeDbError(error));
   }
 
   // ── Delete message ──────────────────────────────────────────
   async function deleteMessage(id: string) {
-    const supabase = createClient();
-    await supabase.from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId);
     setMsgMenu(null);
+    const { error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId);
+    if (error) toastError(describeDbError(error));
   }
 
   // ── Pin message ─────────────────────────────────────────────
   async function pinMessage(msg: Message) {
-    const supabase = createClient();
-    await supabase.from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id);
     setMsgMenu(null);
+    const { error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id);
+    if (error) toastError(describeDbError(error));
   }
 
   function selectConversation(conv: Conversation) {
@@ -584,10 +615,10 @@ export function MessagesModule() {
               className="flex items-end gap-2 border-t border-border bg-surface/50 px-4 py-3">
               {/* Attachment */}
               <input ref={fileRef} type="file" accept="image/*,application/pdf,.doc,.docx"
-                className="hidden" onChange={(e) => { if (e.target.files?.[0]) sendFile(e.target.files[0]); }} />
-              <button type="button" onClick={() => fileRef.current?.click()}
-                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg transition">
-                <Paperclip className="h-4 w-4" />
+                className="hidden" onChange={(e) => { if (e.target.files?.[0]) sendFile(e.target.files[0]); e.target.value = ''; }} />
+              <button type="button" onClick={() => fileRef.current?.click()} disabled={uploadingFile} aria-label="Attach file"
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50">
+                {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
               </button>
 
               {/* Emoji */}

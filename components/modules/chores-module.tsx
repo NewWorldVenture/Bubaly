@@ -5,6 +5,7 @@ import { Plus, CheckCircle2, Circle, MoreHorizontal, Filter, SlidersHorizontal }
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
@@ -138,16 +139,17 @@ export function ChoresModule() {
     const next = ['todo', 'in_progress', 'rejected'].includes(a.status) ? 'submitted' : 'todo';
     const { error } = await supabase.from('chore_assignments').update({ status: next, submitted_at: next === 'submitted' ? new Date().toISOString() : null }).eq('id', a.id);
     setBusy(null);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(next === 'submitted' ? 'Submitted for approval!' : 'Marked open'); void refresh();
   }
 
   async function approve(a: Assignment) {
+    if (busy) return;
     setBusy(a.id);
     const supabase = createClient();
     const { error } = await supabase.from('chore_assignments').update({ status: 'approved', approved_at: new Date().toISOString(), approved_by: userId, points_awarded: a.chore?.points ?? 0 }).eq('id', a.id);
     setBusy(null);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Approved!'); void refresh();
   }
 
@@ -405,6 +407,7 @@ function NewChoreModal({ familyId, userId, members, onClose, onSaved }: {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (loading) return;
     const form = new FormData(e.currentTarget);
     const title = String(form.get('title') ?? '').trim();
     const memberId = String(form.get('member_id') ?? '');
@@ -412,15 +415,30 @@ function NewChoreModal({ familyId, userId, members, onClose, onSaved }: {
     const priority = String(form.get('priority') ?? 'medium') as 'low' | 'medium' | 'high';
     const recurrence = String(form.get('recurrence') ?? 'none') as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
     const due_at = String(form.get('due_at') ?? '') || null;
-    if (!title || !memberId) return toastError('Title and assignee required');
+    // ── Validation ──
+    if (!title) return toastError('Add a task title');
+    if (title.length > 160) return toastError('Title is too long (max 160 characters)');
+    if (!memberId) return toastError('Pick who this task is for');
+    if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError('Points must be a number between 0 and 1000');
+
     setLoading(true);
     const supabase = createClient();
-    const { data: chore, error: ce } = await supabase.from('chores').insert({ family_id: familyId, title, points, priority, recurrence, created_by: userId }).select('id').single();
-    if (ce || !chore) { setLoading(false); return toastError(ce?.message ?? 'Failed'); }
-    const { error: ae } = await supabase.from('chore_assignments').insert({ family_id: familyId, chore_id: chore.id, member_id: memberId, status: 'todo', due_at });
-    setLoading(false);
-    if (ae) return toastError(ae.message);
-    onSaved();
+    try {
+      const { data: chore, error: ce } = await supabase.from('chores').insert({ family_id: familyId, title, points, priority, recurrence, created_by: userId }).select('id').single();
+      if (ce || !chore) { toastError(describeDbError(ce)); return; }
+      const { error: ae } = await supabase.from('chore_assignments').insert({ family_id: familyId, chore_id: chore.id, member_id: memberId, status: 'todo', due_at });
+      if (ae) {
+        // Roll back the orphaned chore if the assignment failed.
+        await supabase.from('chores').delete().eq('id', chore.id);
+        toastError(describeDbError(ae));
+        return;
+      }
+      onSaved();
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

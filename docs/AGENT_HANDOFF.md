@@ -1,7 +1,69 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after closing the Tier-4 gaps (Journal, Voice Capture, Focus Mode). Keep this updated as you ship.
+Last updated: 2026-06-24, session `claude/connect-8ysp00` — Audit-fix pass: error handling, loading feedback, validation, duplicate-click guards across 10 modules. Keep this updated as you ship.
+
+> **Session update (2026-06-24, branch `claude/connect-8ysp00`, pushed direct to `main`) — AUDIT FIXES: ERROR HANDLING + LOADING FEEDBACK + VALIDATION + DUPLICATE-CLICK GUARDS.**
+>
+> **Task:** Fix every finding in the Audit Results summary 100% — error handling (8 modules), button/loading feedback (12 modules), modal format validation (6 modals), duplicate requests on rapid clicks (5 modules). Keep 100% Supabase-wired + production-ready.
+>
+> **NEW SHARED PRIMITIVES (the leverage — solve all four concerns uniformly):**
+> - **`lib/hooks/use-action.ts`** — `useAction({ onError })` returns `{ run, isPending, anyPending }`.
+>   `run(key, fn)` (a) ignores a second call with the same `key` while the first is
+>   in flight (synchronous `useRef` guard → kills duplicate/rapid-click writes),
+>   (b) tracks per-key busy state for `isPending(key)` (spinner/disable exactly the
+>   row being mutated), (c) routes any throw to `onError` (toast). Use an item id as
+>   the key for list rows, or a fixed string (`'save'`, `'clear-done'`) for singletons.
+> - **`lib/supabase/errors.ts`** — `describeDbError(err, fallback?)` maps Postgres/
+>   Supabase errors to friendly text: RLS/permission (42501/policy), unique (23505),
+>   not-found (PGRST116/23503), missing-required (23502/23514), network/transport,
+>   else the raw message. Never returns empty.
+> - **`lib/utils/validation.ts`** — `isValidEmail`, `isValidPhone` (7–15 digits),
+>   `cleanText(value, max)`. Permissive client-side guards (DB/zod remain source of truth).
+> - **Tests:** `tests/db-errors.test.ts` (+8). Suite now **846 passing** (was 838).
+>
+> **MODULES FIXED (10) — every async Supabase op now: try/catch or `run()`-wrapped,
+> checks the `error` result, shows a `describeDbError` toast, guards duplicate clicks,
+> and disables/​spinners its button while in flight. Modals validate before submit.**
+> - **reminders** — complete/snooze/delete/quickAdd via `run()` + per-row spinners;
+>   modal validates title length, future `remind_at` for time-based, location required.
+> - **shopping** — addItem/toggle/delete/clearChecked/archive via `run()` + spinners;
+>   New/Edit list modals validate name (≤80) + try/finally + describeDbError.
+> - **expenses** — toggleSettled/removeSplit via `run()` + spinners; `save()` now
+>   validates amount>0 and **rolls back the orphaned split if the shares insert fails**;
+>   submit button shows `loading`.
+> - **contacts** — deleteContact via `run()` + "Deleting…" state; modal validates
+>   email/phone format (new `isValidEmail`/`isValidPhone`), name length, birthday day.
+> - **goals** — remove/updateProgress via `run()` (+ progress clamped 0–100) + per-card
+>   spinner/disable; modal validates title length + future target date.
+> - **messages** — `sendMessage` **restores the unsent text on failure** (was cleared
+>   before await → lost on error); `sendFile` gains a 25 MB guard, busy state, and
+>   **rolls back the uploaded object if the message-row insert fails**; react/delete/pin
+>   now surface errors; file input resets after pick.
+> - **todos** — toggle/delete/clearDone via `run()` + spinners; **fixed a render-time
+>   `setState`** (auto-select first list) → moved into `useEffect`; both modals validate.
+> - **calendar** — AddEvent modal adds **end-after-start** validation + describeDbError +
+>   try/finally; removed dead `remove()` (real delete/RSVP lives in event-detail-modal).
+> - **event-detail-modal** — RSVP `respond()` hardened (guard + try/finally + describeDbError).
+> - **chores** — NewChoreModal validates points (0–1000 numeric) + assignee required +
+>   **rolls back the orphaned chore if the assignment insert fails**; toggle/approve
+>   now use describeDbError and approve guards on `busy`.
+>
+> **100% Supabase-wired — UNCHANGED:** all reads/writes still go through the same
+> RLS-scoped client queries; these fixes only add guards/feedback/validation around the
+> existing calls. No new tables, routes, or migration.
+>
+> **Verification:** `tsc --noEmit` clean · `next lint` clean (only the pre-existing
+> expenses `allSplits/allShares` useMemo warnings) · `npm run build` **exit 0** ·
+> `vitest` **846 passing**. **Pushed directly to `main`.**
+>
+> **NEXT (optional, to extend the pattern further):** (1) apply `useAction` +
+> `describeDbError` to the remaining list modules that still call `error.message`
+> directly (sweep: `grep -rn "toastError(.*\.message)" components/modules`); (2) add a
+> tiny `tests/use-action.test.tsx` (render-hook) covering the duplicate-click guard;
+> (3) consider a shared `<IconButton busy>` wrapper so the spinner/disable pattern is
+> one component instead of repeated inline; (4) Sentry capture inside `useAction`'s
+> onError for real-world error telemetry.
 
 > **Session update (2026-06-24j) — TIER-4 GAPS CLOSED: JOURNAL + VOICE CAPTURE + FOCUS MODE.**
 > The 3 remaining "Personal Productivity" gaps are now built, world-class + Supabase-wired.
@@ -336,7 +398,6 @@ Last updated after closing the Tier-4 gaps (Journal, Voice Capture, Focus Mode).
 >   into the note/journal composer — pure client, no migration), **Focus Mode** (a
 >   distraction-reducing fullscreen "today" view — client-only, reuse existing data).
 
-Last updated: 2026-06-24, session `claude/connect-8ysp00` — Dramatic AI Concierge UI redesign (assistant welcome hero). Keep this updated as you ship.
 
 > **Session update (2026-06-24, branch `claude/connect-8ysp00`, pushed direct to `main`) — DRAMATIC AI ASSISTANT UI REDESIGN ("Family Concierge" hero).**
 >
