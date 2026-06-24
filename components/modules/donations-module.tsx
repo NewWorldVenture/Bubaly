@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Plus, Trash2, Sparkles, ChevronRight, Receipt,
+  Plus, Trash2, Sparkles, ChevronRight, Receipt, X,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -15,6 +15,7 @@ import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import type { DonationsInsights, DonationsAIResponse } from '@/lib/donations/donations-ai';
 import {
   DONATION_TYPES, donationTypeMeta,
   givingByYear, givingByOrg,
@@ -36,6 +37,19 @@ export function DonationsModule() {
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<Donation | null>(null);
   const [yearFilter, setYearFilter] = useState<number | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<DonationsInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<DonationsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/donations', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const summary = useMemo(() => {
     if (!donations.data) return null;
@@ -62,7 +76,39 @@ export function DonationsModule() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Donation Tracker" />
+      <PageHeader
+        title="Donation Tracker"
+        action={
+          <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+            <Sparkles className="h-4 w-4" /> AI Assist
+          </Button>
+        }
+      />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="mb-5 rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Donation Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.taxTips && aiInsights.taxTips.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Tax Tips</p>
+              <ul className="space-y-1">{aiInsights.taxTips.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.givingStrategy && <p className="text-xs text-muted italic">{aiInsights.givingStrategy}</p>}
+        </div>
+      )}
 
       {/* Summary card */}
       {summary && summary.count > 0 && (

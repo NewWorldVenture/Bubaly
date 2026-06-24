@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Download, File, FileText, FolderLock, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
+import { Download, File, FileText, FolderLock, Plus, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import type { DocumentsInsights, DocumentsAIResponse } from '@/lib/documents/documents-ai';
 
 type Document = Tables<'documents'>;
 
@@ -59,6 +60,20 @@ export function DocumentsModule() {
   const [form, setForm] = useState({ title: '', category: 'other', member_id: '' });
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<DocumentsInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<DocumentsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/documents', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data, loading, error, refresh } = useRealtimeQuery<Document>({
@@ -156,8 +171,41 @@ export function DocumentsModule() {
         <PageHeader
           title="Documents"
           description="Store, organize, and access important family documents."
-          action={<Button onClick={() => setOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Upload Document</Button>}
+          action={
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+                <Sparkles className="h-4 w-4" /> AI Assist
+              </Button>
+              <Button onClick={() => setOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Upload Document</Button>
+            </div>
+          }
         />
+
+        {(aiAnalysis || aiInsights) && (
+          <div className="mb-5 rounded-xl border border-brand/30 bg-brand/5 p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+                <Sparkles className="h-4 w-4" /> AI Document Insights
+              </div>
+              <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+            </div>
+            {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+            {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+              <div className="mb-2">
+                <p className="text-xs font-medium mb-1">Suggestions</p>
+                <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+              </div>
+            )}
+            {aiInsights?.organizationTips && aiInsights.organizationTips.length > 0 && (
+              <div className="mb-2">
+                <p className="text-xs font-medium mb-1">Organization Tips</p>
+                <ul className="space-y-1">{aiInsights.organizationTips.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+              </div>
+            )}
+            {aiInsights?.securityTip && <p className="text-xs text-muted italic">{aiInsights.securityTip}</p>}
+          </div>
+        )}
+
         <div className="grid-stats gap-3">
           {[
             { icon: FileText, label: 'Total Documents', value: totalDocs, sub: 'Across all folders', bg: 'bg-brand/15 text-brand' },

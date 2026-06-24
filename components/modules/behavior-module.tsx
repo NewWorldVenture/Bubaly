@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Smile, Frown, Minus, Plus, Trash2, Sparkles, TrendingUp, Flame } from 'lucide-react';
+import { Smile, Frown, Minus, Plus, Trash2, Sparkles, TrendingUp, Flame, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -17,6 +17,7 @@ import {
   type BehaviorLogLike,
 } from '@/lib/behavior/insights';
 import type { Tables } from '@/lib/database.types';
+import type { BehaviorInsights, BehaviorAIResponse } from '@/lib/behavior/behavior-ai';
 
 type Log = Tables<'behavior_logs'>;
 
@@ -37,6 +38,19 @@ export function BehaviorModule() {
   const [memberFilter, setMemberFilter] = useState('all');
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [ai, setAi] = useState<{ loading: boolean; insight: string; tips: string[] } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<BehaviorInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<BehaviorAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/behavior', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const all = useMemo(() => logs ?? [], [logs]);
   const scoped = useMemo(
@@ -104,9 +118,37 @@ export function BehaviorModule() {
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </Select>
           )}
+          <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+            <Sparkles className="h-4 w-4" /> AI Assist
+          </Button>
           <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Log behavior</Button>
         </div>
       </div>
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Behavior Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.encouragementTips && aiInsights.encouragementTips.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Encouragement Tips</p>
+              <ul className="space-y-1">{aiInsights.encouragementTips.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.patternInsight && <p className="text-xs text-muted italic">{aiInsights.patternInsight}</p>}
+        </div>
+      )}
 
       {/* AI parenting insight */}
       <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
