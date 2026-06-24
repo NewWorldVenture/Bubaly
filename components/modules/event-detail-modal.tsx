@@ -5,6 +5,7 @@ import { Check, X, HelpCircle, MapPin, Clock, CalendarDays } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -79,6 +80,8 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
           )}
         </div>
         {event.description && <p className="whitespace-pre-wrap text-sm text-fg/90">{event.description}</p>}
+
+        <AiInsight kind="event" params={{ eventId: event.id }} variant="outline" className="w-full" label="AI prep checklist" />
 
         {selfMemberId && (
           <div>

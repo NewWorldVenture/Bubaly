@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -166,11 +167,16 @@ export function ChoresModule() {
           <PageHeader
             title="Tasks & Chores"
             description="Stay on top of what needs to get done."
-            action={manager ? (
-              <Button onClick={() => setOpen(true)}>
-                <Plus className="h-4 w-4" /> Add Task
-              </Button>
-            ) : undefined}
+            action={
+              <div className="flex items-center gap-2">
+                <AiInsight kind="chores" />
+                {manager && (
+                  <Button onClick={() => setOpen(true)}>
+                    <Plus className="h-4 w-4" /> Add Task
+                  </Button>
+                )}
+              </div>
+            }
           />
 
           <div className="grid-stats">

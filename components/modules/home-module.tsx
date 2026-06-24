@@ -7,6 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -146,12 +147,17 @@ export function HomeModule() {
       <PageHeader
         title="Home & Maintenance"
         description="Track appliances, assets, warranties, and maintenance tasks."
-        action={manager && (
+        action={
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => setOpenAsset(true)}><Package className="h-4 w-4" /> Add asset</Button>
-            <Button onClick={() => setOpenTask(true)}><Plus className="h-4 w-4" /> Add task</Button>
+            <AiInsight kind="home" />
+            {manager && (
+              <>
+                <Button variant="ghost" onClick={() => setOpenAsset(true)}><Package className="h-4 w-4" /> Add asset</Button>
+                <Button onClick={() => setOpenTask(true)}><Plus className="h-4 w-4" /> Add task</Button>
+              </>
+            )}
           </div>
-        )}
+        }
       />
 
       {/* All Warranties */}

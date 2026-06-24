@@ -16,6 +16,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   tripDurationDays, daysUntil, isUpcoming, checklistProgress, progressByKind,
@@ -310,7 +311,12 @@ export function TripsModule() {
       <PageHeader
         title="Trip Planner"
         description="Plan family travel end to end — itinerary, packing lists, reservations, and documents."
-        action={canEdit && <Button onClick={openNewTrip} className="gap-1.5"><Plus className="h-4 w-4" /> New trip</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="trips" />
+            {canEdit && <Button onClick={openNewTrip} className="gap-1.5"><Plus className="h-4 w-4" /> New trip</Button>}
+          </div>
+        }
       />
 
       <div className="flex items-center gap-1.5 mb-4">

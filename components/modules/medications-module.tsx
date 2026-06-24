@@ -15,6 +15,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   dosesForDay, adherenceRate, doseStatusCounts, shortTime, localDateKey,
@@ -256,9 +257,12 @@ export function MedicationsModule() {
       <PageHeader
         title="Medications"
         description="Track medications, dosing schedules, and adherence for the whole family."
-        action={canEdit && (
-          <Button onClick={openNewMed} className="gap-1.5"><Plus className="h-4 w-4" /> Add medication</Button>
-        )}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="medications" />
+            {canEdit && <Button onClick={openNewMed} className="gap-1.5"><Plus className="h-4 w-4" /> Add medication</Button>}
+          </div>
+        }
       />
 
       {/* Summary: today's doses + adherence */}

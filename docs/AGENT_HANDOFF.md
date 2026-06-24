@@ -1,7 +1,53 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Family Insurance Hub build. Keep this updated as you ship.
+Last updated after the AI-everywhere rollout (per-module AI Assist). Keep this updated as you ship.
+
+> **Session update (2026-06-24, branch `claude/ai-everywhere`) — AI INSIGHTS IN
+> EVERY MODULE.** Task: verify the AI engine ("ChatGPT") works, then add a genuine,
+> grounded AI feature to every module that lacked one.
+>
+> **AI engine check:** deployment is OpenAI-only via `lib/ai/provider.ts`
+> (`OpenAIProvider`, `resolveProvider()` reads admin `app_settings.ai_provider`,
+> falls back to `OPENAI_API_KEY`). No live key in the sandbox, so verified the
+> integration *logic*: `complete`/`runTools`/`runToolsStream` request-shape +
+> SSE parsing + tool-loop all pass (tests/assistant-*.test.ts, 49 AI tests green).
+>
+> **Reusable infrastructure (the leverage — one mechanism, all modules):**
+> - `lib/ai/insights.ts` — PURE prompt registry `INSIGHTS[kind]` for 17 kinds
+>   (chores, calendar, expenses, grocery, homework, medications, shopping,
+>   subscriptions, todos, trips, wishlists, home, notifications, messages, weather,
+>   settings, event). Each has `{label,title,blurb,allowQuestion,system,maxTokens,
+>   buildUser(InsightData)}`. `buildUser` turns family rows → a grounded prompt
+>   (resolves member names, sums money in cents→$, dedups, caps list size). Also
+>   exports client-safe `INSIGHT_META` (no prompt internals) + `isInsightKind`.
+>   Fully unit-tested in `tests/ai-insights.test.ts` (9 tests: every kind builds,
+>   grounding facts present, money math, event-missing path, question append).
+> - `app/api/ai/insights/route.ts` — ONE generic grounded route. Auth via
+>   `requireUserContext()`; 503 via `isAIConfigured()`; validates `kind`; fetches
+>   that kind's rows server-side from Supabase (RLS-scoped) in `fetchRows()`
+>   (per-kind queries — see switch); builds prompt via registry; calls
+>   `resolveProvider().complete()`; returns `{text}`. Supports `params`
+>   (event→eventId, messages→conversationId) and an optional focusing `question`.
+> - `components/ai/ai-insight.tsx` — `<AiInsight kind=... params? label? variant?
+>   size? iconOnly? />`. Sparkles button → Modal; optional focus textarea;
+>   POSTs `/api/ai/insights`; renders the answer (regenerate, error, 503 copy).
+>
+> **Wired into 17 modules** (all in `components/modules/*`): chores, calendar,
+> expenses, grocery, homework, medications (safety-first, "not medical advice"),
+> shopping, subscriptions, todos, trips, wishlists, home, notifications, messages
+> (per-conversation summarize), weather, settings, and event-detail-modal
+> (per-event prep checklist). Each is a header/toolbar Sparkles button; no new
+> tables — everything reads existing data under RLS. **No migration.**
+> - Verified: tsc clean; lint clean (only pre-existing expenses/subscriptions
+>   useMemo warnings); **vitest 829 passing**; `next build` OK
+>   (`/api/ai/insights` present).
+> - **NEXT (AI):** stream these answers (route returns plain JSON today — could use
+>   `runToolsStream`); let some kinds *act* (e.g. todos → reprioritize, grocery →
+>   reorder) by giving the route tools; wire AI into remaining modules without it
+>   (pets, recipes/meals already have AI, devices, screen-time, rewards, sports,
+>   school, family-tree, photos, contacts, documents). Add a live weather fetch so
+>   the weather kind grounds on a real forecast.
 
 > **Session update (2026-06-24f, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > FAMILY INSURANCE HUB (roadmap #80).** Pushed pets + voice assistant to main,

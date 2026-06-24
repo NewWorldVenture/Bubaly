@@ -15,6 +15,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   claimState, canToggleClaim, sortWishes, WISH_PRIORITY_LABELS,
@@ -124,7 +125,12 @@ export function WishlistsModule() {
       <PageHeader
         title="Wish Lists"
         description="Everyone's wishes in one place — claim gifts privately so surprises stay surprises."
-        action={isOwnList && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add a wish</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="wishlists" />
+            {isOwnList && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add a wish</Button>}
+          </div>
+        }
       />
 
       {/* Member tabs */}

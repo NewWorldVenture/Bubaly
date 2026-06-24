@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { eventSchema, fieldErrors } from '@/lib/validation';
 import { EventDetailModal } from './event-detail-modal';
@@ -262,6 +263,7 @@ export function CalendarModule() {
                     {syncing ? 'Syncing...' : 'Sync'}
                   </button>
                 )}
+                <AiInsight kind="calendar" />
                 <Button size="sm" onClick={() => setOpen(true)}>
                   <Plus className="h-4 w-4" /> Add Event
                 </Button>
