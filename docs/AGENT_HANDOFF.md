@@ -1,8 +1,72 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the 9-feature roadmap sprint — ALL identified gaps now filled.
+Last updated after the PR deep dive + AI Assist sprint — 30/67 modules now have
+AI, all PR NEXT items from #118/#125 completed, 961 tests passing.
 Keep this updated as you ship.
+
+> **Session update (2026-06-24i, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> PR DEEP DIVE + AI ASSIST SPRINT.** Audited all 12 open PRs for promised-but-
+> unbuilt features. Built AI Assist for 5 modules (Contacts, Photos, Binder,
+> Security, Smart Home) that were explicitly listed as NEXT items in PRs #118
+> and #125. Also fixed assistant markdown rendering and added 2 missing nav
+> entries (Goals, Notifications).
+>
+> **BUILT THIS SESSION:**
+>
+> 1. **AI Assist — Contacts Module** (PR #118 NEXT item):
+>    `lib/contacts/ai.ts`: deterministic analysis (emergency readiness, missing
+>    essential categories, duplicate detection) + AI prompt/parse. API route
+>    `app/api/ai/contacts/route.ts`. 9 tests. Wired into contacts-module.tsx
+>    with Sparkles button + insights panel.
+>
+> 2. **AI Assist — Photos Module** (PR #118 NEXT item):
+>    `lib/photos/ai.ts`: deterministic album analysis (empty albums, photo
+>    counts) + AI prompt/parse for organization suggestions and album ideas.
+>    API route `app/api/ai/photos/route.ts`. 6 tests. Wired into
+>    photos-module.tsx with insights panel.
+>
+> 3. **AI Assist — Household Binder** (PR #125 NEXT item):
+>    `lib/home/binder-ai.ts`: essential category coverage check (wifi,
+>    emergency, shutoff, insurance) + sensitive entry counting. API route
+>    `app/api/ai/binder/route.ts`. 7 tests. Wired into binder-module.tsx.
+>
+> 4. **AI Assist — Security Alerts** (PR #125 NEXT item):
+>    `lib/home/security-ai.ts`: open/critical event analysis + AI triage
+>    with priorities and safety tips. API route
+>    `app/api/ai/security/route.ts`. 7 tests. Wired into security-module.tsx.
+>
+> 5. **AI Assist — Smart Home Devices** (PR #125 NEXT item):
+>    `lib/home/devices-ai.ts`: device/room/status analysis + AI automation
+>    scene suggestions. API route `app/api/ai/devices/route.ts`. 7 tests.
+>    Wired into devices-module.tsx.
+>
+> 6. **Markdown rendering in AI Assistant** (PR #120 NEXT item):
+>    `components/ui/markdown.tsx`: lightweight zero-dependency renderer
+>    (bold, italic, code, headers, lists). Wired into assistant-module.tsx.
+>
+> 7. **Missing nav entries fixed**: `/dashboard/goals` (Target icon, Family &
+>    Home) and `/dashboard/notifications` (BellRing icon, Daily Life) pages
+>    existed but had no sidebar entries — now discoverable.
+>
+> **Verification:** `tsc` clean · `next build` compiled successfully ·
+> `vitest` **961 passing** (+36 new tests). **No new migrations.**
+>
+> **Production audit:** All API routes verified — correct imports
+> (`isAIConfigured` from `@/lib/ai/provider`, `createServer` from
+> `@/lib/supabase/server`, `ctx.active.familyId` pattern). Zero bugs found.
+> 30/67 modules now have AI Assist. All 100 feature catalog entries have
+> existing pages.
+>
+> **REMAINING NEXT ITEMS FROM PRs (lower priority):**
+> - PR #96: Mission notification emitting (cron/edge function)
+> - Smart Home: real device-API sync (HomeKit/SmartThings webhooks)
+> - Security: camera/alarm webhook ingest
+> - Concierge: add behavior/screen-time + signups to digest
+> - Blog: email subscribe, RSS feed, OG images
+> - Onboarding: country field, animated transitions
+> - Integration features (#72-77: Alexa, Google, Apple Home, TeamSnap,
+>   SportsEngine, school portals) — require external OAuth credentials
 
 > **Session update (2026-06-24h, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > 9-FEATURE ROADMAP SPRINT (final).** Added Yearbook, Relocation Guide, and
