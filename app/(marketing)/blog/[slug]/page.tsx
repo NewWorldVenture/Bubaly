@@ -1,18 +1,37 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, Calendar, ChevronRight, Clock, User } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Section } from '@/components/marketing/sections';
-import { getAllPosts, getPost } from '@/lib/blog/posts';
+import { getAllPosts, getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory } from '@/lib/blog/posts';
 import { fmtDate } from '@/lib/utils/format';
+import { cn } from '@/lib/utils/cn';
+import { ReadingProgress } from './reading-progress';
+import { ShareButtons } from './share-buttons';
+import { TableOfContents } from './table-of-contents';
 
 type Params = { params: Promise<{ slug: string }> };
 
-// New posts (added to Supabase after build) render on demand; existing pages
-// re-validate hourly so edits surface without a redeploy.
 export const revalidate = 3600;
 export const dynamicParams = true;
+
+const CATEGORY_COLORS: Record<BlogCategory, string> = {
+  'Parenting': 'border-violet-400/20 bg-violet-500/15 text-violet-300',
+  'Organization': 'border-blue-400/20 bg-blue-500/15 text-blue-300',
+  'School & Activities': 'border-emerald-400/20 bg-emerald-500/15 text-emerald-300',
+  'AI & Technology': 'border-indigo-400/20 bg-indigo-500/15 text-indigo-300',
+  'Wellness': 'border-amber-400/20 bg-amber-500/15 text-amber-300',
+  'Family Finances': 'border-rose-400/20 bg-rose-500/15 text-rose-300',
+};
+
+const ACCENT_BG: Record<BlogCategory, string> = {
+  'Parenting': 'from-violet-600/30 to-violet-900/10',
+  'Organization': 'from-blue-600/30 to-blue-900/10',
+  'School & Activities': 'from-emerald-600/30 to-emerald-900/10',
+  'AI & Technology': 'from-indigo-600/30 to-indigo-900/10',
+  'Wellness': 'from-amber-600/30 to-amber-900/10',
+  'Family Finances': 'from-rose-600/30 to-rose-900/10',
+};
 
 export async function generateStaticParams() {
   return (await getAllPosts()).map((p) => ({ slug: p.slug }));
@@ -25,7 +44,12 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   return {
     title: post.title,
     description: post.excerpt,
-    openGraph: { type: 'article', title: post.title, description: post.excerpt },
+    openGraph: {
+      type: 'article',
+      title: post.title,
+      description: post.excerpt,
+      authors: [post.author],
+    },
   };
 }
 
@@ -34,35 +58,170 @@ export default async function BlogPostPage({ params }: Params) {
   const post = await getPost(slug);
   if (!post) notFound();
 
+  const [related, { prev, next }] = await Promise.all([
+    getRelatedPosts(slug, post.category, 3),
+    getAdjacentPosts(post.date),
+  ]);
+
+  const headings = extractHeadings(post.body);
+
   return (
-    <Section className="max-w-3xl pt-16">
-      <Link href="/blog" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
-        <ArrowLeft className="h-4 w-4" /> All posts
-      </Link>
-      <article className="mt-6">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-          <span>{fmtDate(post.date, 'MMMM d, yyyy')}</span>
-          <span>·</span>
-          <span>{post.readingMinutes} min read</span>
-          <span>·</span>
-          <span>{post.author}</span>
+    <>
+      <ReadingProgress />
+
+      <div className="mx-auto max-w-7xl px-4 pt-16 sm:px-6 lg:px-8">
+        {/* Breadcrumb */}
+        <nav className="mb-6 flex items-center gap-2 text-sm text-white/40">
+          <Link href="/blog" className="transition hover:text-white/70">Blog</Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <Link href={`/blog?category=${encodeURIComponent(post.category)}`} className="transition hover:text-white/70">
+            {post.category}
+          </Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="truncate text-white/60">{post.title}</span>
+        </nav>
+
+        <div className="grid gap-10 lg:grid-cols-[1fr_280px]">
+          {/* Main article */}
+          <article className="min-w-0">
+            {/* Hero banner */}
+            <div className={cn('mb-8 flex h-48 items-end rounded-2xl bg-gradient-to-br p-6 sm:h-56', ACCENT_BG[post.category] ?? 'from-violet-600/20 to-blue-900/10')}>
+              <div className={cn('inline-block rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider', CATEGORY_COLORS[post.category])}>
+                {post.category}
+              </div>
+            </div>
+
+            {/* Title & meta */}
+            <h1 className="text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">{post.title}</h1>
+
+            <div className="mt-5 flex flex-wrap items-center gap-4 text-sm text-white/50">
+              <span className="flex items-center gap-1.5">
+                <User className="h-4 w-4" /> {post.author}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Calendar className="h-4 w-4" /> {fmtDate(post.date, 'MMMM d, yyyy')}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Clock className="h-4 w-4" /> {post.readingMinutes} min read
+              </span>
+            </div>
+
+            {/* Tags */}
+            {post.tags.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {post.tags.map((t) => (
+                  <Badge key={t} tone="brand">{t}</Badge>
+                ))}
+              </div>
+            )}
+
+            {/* Share */}
+            <div className="mt-6 flex items-center gap-3 border-b border-white/8 pb-6">
+              <span className="text-xs font-semibold text-white/40">SHARE</span>
+              <ShareButtons title={post.title} slug={post.slug} />
+            </div>
+
+            {/* Article body */}
+            <div className="prose-family mt-8 space-y-5 pb-10">
+              {post.body.map((block, i) =>
+                block.type === 'h2' ? (
+                  <h2
+                    key={i}
+                    id={block.text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}
+                    className="scroll-mt-24 text-xl font-bold sm:text-2xl"
+                  >
+                    {block.text}
+                  </h2>
+                ) : (
+                  <p key={i} className="text-base leading-7 text-white/70">{block.text}</p>
+                ),
+              )}
+            </div>
+
+            {/* Author bio */}
+            <div className="border-t border-white/8 py-8">
+              <div className="flex items-start gap-4">
+                <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-violet-600/20">
+                  <User className="h-7 w-7 text-violet-300" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-white/40">Written by</p>
+                  <p className="mt-1 text-lg font-bold">{post.author}</p>
+                  <p className="mt-1 text-sm leading-6 text-white/50">
+                    Part of the Bubaly team, helping families stay organized and connected through practical advice and real-world insights.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Share bottom */}
+            <div className="flex items-center gap-3 border-t border-white/8 py-6">
+              <span className="text-xs font-semibold text-white/40">SHARE THIS ARTICLE</span>
+              <ShareButtons title={post.title} slug={post.slug} />
+            </div>
+
+            {/* Prev / Next navigation */}
+            {(prev || next) && (
+              <div className="grid gap-4 border-t border-white/8 py-8 sm:grid-cols-2">
+                {prev ? (
+                  <Link href={`/blog/${prev.slug}`} className="group flex flex-col rounded-2xl border border-white/8 bg-white/[0.03] p-5 transition hover:border-violet-400/20">
+                    <span className="mb-2 flex items-center gap-1 text-xs text-white/40">
+                      <ArrowLeft className="h-3.5 w-3.5" /> Previous Article
+                    </span>
+                    <span className="text-sm font-bold transition group-hover:text-violet-200">{prev.title}</span>
+                    <span className="mt-1 text-xs text-white/40">{fmtDate(prev.date)}</span>
+                  </Link>
+                ) : <div />}
+                {next ? (
+                  <Link href={`/blog/${next.slug}`} className="group flex flex-col items-end rounded-2xl border border-white/8 bg-white/[0.03] p-5 text-right transition hover:border-violet-400/20">
+                    <span className="mb-2 flex items-center gap-1 text-xs text-white/40">
+                      Next Article <ArrowRight className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="text-sm font-bold transition group-hover:text-violet-200">{next.title}</span>
+                    <span className="mt-1 text-xs text-white/40">{fmtDate(next.date)}</span>
+                  </Link>
+                ) : <div />}
+              </div>
+            )}
+          </article>
+
+          {/* Sidebar */}
+          <aside className="hidden lg:block">
+            <div className="sticky top-24 space-y-6">
+              {/* Table of contents */}
+              {headings.length > 0 && (
+                <TableOfContents headings={headings} />
+              )}
+
+              {/* Related posts */}
+              {related.length > 0 && (
+                <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
+                  <h3 className="mb-4 text-sm font-bold">Related Articles</h3>
+                  <ul className="space-y-4">
+                    {related.map((r) => (
+                      <li key={r.slug}>
+                        <Link href={`/blog/${r.slug}`} className="group flex flex-col gap-1">
+                          <span className="text-sm font-semibold leading-snug transition group-hover:text-violet-200">{r.title}</span>
+                          <span className="flex items-center gap-2 text-[11px] text-white/40">
+                            <span>{fmtDate(r.date)}</span>
+                            <span>·</span>
+                            <span>{r.readingMinutes} min</span>
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Back to blog */}
+              <Link href="/blog" className="flex items-center gap-2 text-sm font-semibold text-violet-300 hover:text-violet-200">
+                <ArrowLeft className="h-4 w-4" /> Back to all articles
+              </Link>
+            </div>
+          </aside>
         </div>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">{post.title}</h1>
-        <div className="mt-4 flex gap-2">
-          {post.tags.map((t) => (
-            <Badge key={t} tone="brand">{t}</Badge>
-          ))}
-        </div>
-        <div className="prose-family mt-8 space-y-5">
-          {post.body.map((block, i) =>
-            block.type === 'h2' ? (
-              <h2 key={i} className="text-xl font-semibold">{block.text}</h2>
-            ) : (
-              <p key={i} className="leading-relaxed text-muted">{block.text}</p>
-            ),
-          )}
-        </div>
-      </article>
-    </Section>
+      </div>
+    </>
   );
 }

@@ -1,7 +1,95 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Tier-10 Family Social Network audit + build. Keep this updated as you ship.
+Last updated after the Security & Blog pages world-class upgrade. Keep this updated as you ship.
+
+> **Session update (2026-06-24, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> WORLD-CLASS SECURITY & BLOG PAGES.**
+> Task: fully build out the Security and Blog marketing pages to world-class
+> quality. Both were functional but basic.
+>
+> **SECURITY PAGE (`app/(marketing)/security/page.tsx`) — COMPLETE REBUILD:**
+> - **Hero**: improved copy, dual CTA (Explore Security + FAQ anchor links)
+> - **Defense in Depth architecture section**: 6 layers (Edge Protection,
+>   Transport Security, Authentication, Authorization, Data Encryption,
+>   Backup & Recovery) — each with icon, description, and detail tags showing
+>   specific technologies. Visual timeline layout with layer numbers.
+> - **Trust Center / Compliance**: SOC 2 Type II, GDPR, HIPAA, CCPA — each
+>   badge now has a description of what it means. Footer strip shows annual
+>   pen testing, vulnerability scanning, bug bounty, 99.99% SLA.
+> - **Data Residency section**: US-East, EU-West, AP-Southeast regions with
+>   flags, provider badges, and multi-AZ/failover details.
+> - **User Controls section**: 6 cards (Granular Access, Data Portability,
+>   Instant Deletion, Zero Tracking, Session Management, Audit Logs).
+> - **Incident Response section**: 4-phase timeline (Detection <5min,
+>   Assessment <30min, Notification <24hrs, Resolution ongoing).
+> - **Responsible Disclosure section**: 24hr acknowledgment, 48hr triage,
+>   safe harbor policy, credit/recognition. Contact card with email + PGP.
+> - **Our Commitment section**: 6 commitments with descriptions.
+> - **Interactive Security FAQ**: 10 Q&As using existing `FAQAccordion`
+>   component (covers encryption, data selling, deletion, AI processing,
+>   children's data, MFA, vulnerability reporting, data residency, uptime,
+>   security concerns).
+> - **Contact Security Team footer CTA**.
+>
+> **BLOG LISTING (`app/(marketing)/blog/page.tsx`) — MAJOR UPGRADE:**
+> - **Functional search**: new client component `blog-search.tsx` — type-ahead
+>   dropdown searching title/excerpt/category, min 2 chars, click-outside
+>   dismiss, clear button. Replaces the old non-functional `<input>`.
+> - **Category filtering via URL params**: `?category=Parenting` etc. now
+>   works server-side via `searchParams`. Active tab is visually highlighted.
+>   Category counts shown in tabs and sidebar.
+> - **Dynamic sidebar**: "Recent Posts" pulled from actual DB data (replaced
+>   hardcoded `POPULAR` array with stale dates). Popular Tags section from
+>   post tags. Topics with active-state highlighting.
+> - **Empty state**: shows message + link when category has no posts.
+> - **Post cards**: now show excerpt (line-clamped) for better preview.
+>
+> **BLOG POST (`app/(marketing)/blog/[slug]/page.tsx`) — COMPLETE REBUILD:**
+> - **Reading progress bar**: `reading-progress.tsx` client component — thin
+>   gradient bar fixed at top, tracks scroll position.
+> - **Breadcrumb navigation**: Blog > Category > Title.
+> - **Hero banner**: category-colored gradient header.
+> - **Rich metadata**: author with icon, date, reading time.
+> - **Share buttons**: `share-buttons.tsx` client component — Copy Link
+>   (with clipboard + success state), Twitter/X post, LinkedIn share.
+>   Shown at top and bottom of article.
+> - **Table of contents**: `table-of-contents.tsx` client component —
+>   sticky sidebar, IntersectionObserver-powered active heading tracking,
+>   smooth scroll links with active highlight.
+> - **Heading IDs**: h2 blocks now get slugified `id` attributes for TOC
+>   anchor linking.
+> - **Author bio section**: avatar placeholder + author name + bio.
+> - **Previous/Next navigation**: `getAdjacentPosts()` finds posts by date.
+>   Cards with arrow indicators + title + date.
+> - **Related posts sidebar**: `getRelatedPosts()` finds same-category posts.
+> - **Back to blog link** in sticky sidebar.
+>
+> **BLOG LIB (`lib/blog/posts.ts`) — NEW FUNCTIONS:**
+> - `getPostsByCategory(category)` — DB-level category filter.
+> - `getRelatedPosts(slug, category, limit)` — same category, excluding
+>   current post.
+> - `getAdjacentPosts(date)` — finds prev (older) and next (newer) posts.
+> - `extractHeadings(body)` — pulls h2 blocks into `{id, text}[]` for TOC.
+> - `estimateReadingTime(body)` — word-count based reading time.
+>
+> **NEW CLIENT COMPONENTS:**
+> - `app/(marketing)/blog/blog-search.tsx` — interactive search with dropdown
+> - `app/(marketing)/blog/[slug]/reading-progress.tsx` — scroll progress bar
+> - `app/(marketing)/blog/[slug]/share-buttons.tsx` — copy/twitter/linkedin
+> - `app/(marketing)/blog/[slug]/table-of-contents.tsx` — sticky TOC with
+>   IntersectionObserver active heading tracking
+>
+> **Verification:** `tsc --noEmit` clean · `next lint` clean · `next build`
+> **Compiled successfully** · `vitest` **765 passing** (no test changes — pure
+> marketing pages). NO migration. NO database changes.
+>
+> **NEXT (marketing pages):** (1) Blog: implement email subscribe via Supabase
+> `newsletter_subscribers` table or external service integration; (2) Blog:
+> "Load More" button pagination with offset/limit; (3) Security: add a live
+> status page link (status.bubaly.com); (4) Security: real-time trust
+> dashboard showing uptime metrics; (5) Blog: RSS feed at `/blog/rss.xml`;
+> (6) Blog: OG images per post for social sharing. Next migration: **0083**.
 
 > **Session update (2026-06-23t, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > TIER-10 FAMILY SOCIAL NETWORK — full audit + build of 3 missing features.**
