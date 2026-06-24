@@ -96,6 +96,8 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('school-os', 'School OS', 'Family & Home', 'plus', '/dashboard/family-school'),
   F('lifestyle-coaching', 'Lifestyle Coaching', 'Family & Home', 'plus', '/dashboard/family-automation'),
   F('volunteer-hub', 'Volunteer Hub', 'Family & Home', 'basic', '/dashboard/volunteer'),
+  F('college-planner', 'College Planner', 'Family & Home', 'basic', '/dashboard/college'),
+  F('scholarship-tracker', 'Scholarship Tracker', 'Family & Home', 'basic', '/dashboard/college'),
 
   // ── Finances & Admin ───────────────────────────────────────
   F('finances', 'Finances', 'Finances & Admin', 'free', '/dashboard/billing'),

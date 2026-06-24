@@ -113,6 +113,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/inbox', label: 'Magic Import', icon: Inbox, minLevel: 1 },
       { href: '/dashboard/dental', label: 'Dental', icon: Smile, minLevel: 1 },
       { href: '/dashboard/volunteer', label: 'Volunteer Hub', icon: HandHeart, minLevel: 1 },
+      { href: '/dashboard/college', label: 'College Planner', icon: GraduationCap, minLevel: 1 },
       { href: '/dashboard/settings', label: 'Settings', icon: Settings, minLevel: 0 },
     ],
   },

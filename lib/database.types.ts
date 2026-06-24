@@ -22,6 +22,8 @@ export type EstateReviewStatus = 'current' | 'needs_review' | 'expired' | 'draft
 export type VolunteerStatus = 'active' | 'upcoming' | 'completed' | 'cancelled';
 export type VolunteerCategory = 'community' | 'school' | 'church' | 'sports' | 'environment' | 'animal' | 'health' | 'elderly' | 'youth' | 'disaster' | 'other';
 export type DonationType = 'monetary' | 'goods' | 'stock' | 'vehicle' | 'real_estate' | 'other';
+export type CollegeAppStatus = 'researching' | 'applying' | 'submitted' | 'accepted' | 'waitlisted' | 'rejected' | 'enrolled' | 'declined';
+export type ScholarshipStatus = 'researching' | 'applying' | 'submitted' | 'awarded' | 'denied' | 'accepted' | 'declined';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type PantryLocation = 'pantry' | 'fridge' | 'freezer' | 'counter' | 'garage' | 'other';
 export type NutritionSubject = 'recipe' | 'meal' | 'week';
@@ -406,6 +408,16 @@ export interface Database {
         { id: string; family_id: string; created_by: string | null; organization: string; donation_type: DonationType; amount: number | null; description: string; donation_date: string; tax_year: number; is_tax_deductible: boolean; receipt_path: string; ein: string; category: string; notes: string; is_active: boolean } & Stamps,
         { id?: string; family_id: string; created_by?: string | null; organization: string; donation_type?: DonationType; amount?: number | null; description?: string; donation_date?: string; tax_year?: number; is_tax_deductible?: boolean; receipt_path?: string; ein?: string; category?: string; notes?: string; is_active?: boolean },
         Partial<{ organization: string; donation_type: DonationType; amount: number | null; description: string; donation_date: string; tax_year: number; is_tax_deductible: boolean; receipt_path: string; ein: string; category: string; notes: string; is_active: boolean }>
+      >;
+      college_applications: T<
+        { id: string; family_id: string; member_id: string | null; created_by: string | null; school_name: string; location: string; program: string; status: CollegeAppStatus; deadline: string | null; decision_date: string | null; tuition: number | null; financial_aid: number | null; notes: string; url: string; is_active: boolean } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; created_by?: string | null; school_name: string; location?: string; program?: string; status?: CollegeAppStatus; deadline?: string | null; decision_date?: string | null; tuition?: number | null; financial_aid?: number | null; notes?: string; url?: string; is_active?: boolean },
+        Partial<{ school_name: string; location: string; program: string; status: CollegeAppStatus; deadline: string | null; decision_date: string | null; tuition: number | null; financial_aid: number | null; notes: string; url: string; is_active: boolean }>
+      >;
+      scholarships: T<
+        { id: string; family_id: string; member_id: string | null; created_by: string | null; name: string; provider: string; amount: number | null; status: ScholarshipStatus; deadline: string | null; renewable: boolean; requirements: string; url: string; notes: string; is_active: boolean } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; created_by?: string | null; name: string; provider?: string; amount?: number | null; status?: ScholarshipStatus; deadline?: string | null; renewable?: boolean; requirements?: string; url?: string; notes?: string; is_active?: boolean },
+        Partial<{ name: string; provider: string; amount: number | null; status: ScholarshipStatus; deadline: string | null; renewable: boolean; requirements: string; url: string; notes: string; is_active: boolean }>
       >;
       pets: T<
         { id: string; family_id: string; name: string; species: PetSpecies; breed: string | null; birthday: string | null; adoption_date: string | null; weight_kg: number | null; color: string | null; microchip_id: string | null; photo_path: string | null; vet_name: string | null; vet_phone: string | null; notes: string | null; is_active: boolean; created_by: string | null } & Stamps,
