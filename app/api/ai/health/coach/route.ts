@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { resolveProvider } from '@/lib/ai/provider';
+import { resolveProvider, describeAIError } from '@/lib/ai/provider';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -76,6 +76,8 @@ export async function POST(req: Request) {
     const text = completion.text.trim() || 'I couldn’t generate guidance just now. Please try again.';
     return NextResponse.json({ text });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'AI request failed' }, { status: 503 });
+    console.error('AI health coach error:', err);
+    const { message, detail } = describeAIError(err);
+    return NextResponse.json({ error: message, detail }, { status: 503 });
   }
 }
