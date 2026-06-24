@@ -1,7 +1,31 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after Autopilot expense + burnout signals. Keep this updated as you ship.
+Last updated after Autopilot ambient delivery (notifications). Keep this updated as you ship.
+
+> **Session update (2026-06-24e) — GEN-2 ROADMAP: AUTOPILOT AMBIENT DELIVERY.**
+> Made the autopilot reach families WITHOUT opening the app, via the existing
+> notification/push/email pipeline. NO migration. Branch `claude/festive-bohr-m4cbeg`.
+>
+> **BUILT (`lib/autopilot/scan.ts`):** when the scan creates a NEW suggestion that is
+> high-urgency (urgency ≥ 2) OR was auto-executed, it now also inserts a `notifications`
+> row (`type:'system'`, `related_type:'autopilot_suggestions'`, `related_id`=suggestion id,
+> `user_id:null` = whole family). The existing `/api/cron/notifications` job
+> (`dispatchPendingPushes` + `deliverNotificationEmails`, gated on pushed_at/sent_at) then
+> delivers it across push + email. Auto-executed items read "Autopilot handled: …".
+> - `runAutopilotScan` now returns `{scanned, autoExecuted, cleared, notified}`; the
+>   autopilot cron aggregates `notified` too. The suggestion insert now `.select('id').single()`
+>   so the notification can reference it. One notification per suggestion (suggestions are
+>   deduped by `dedupe_key`, so no notification spam).
+> - Verified: tsc + lint clean · `npm run build` ✓ · 20/20 engine tests.
+> - **DELIVERY NOTE:** autopilot notifications are family-level (`user_id null`); they ride
+>   the same delivery columns as everything else. The notifications cron already loops all
+>   families. So end-to-end ambient delivery works once `CRON_SECRET` + push/email envs are set.
+>
+> **GEN-2 ROADMAP — remaining (next agents):** Control-Tower-as-Home (promote
+> `/dashboard/autopilot`), Digital Twin/Memory feeding confidence scores, specialized agent
+> network writing into `autopilot_suggestions`, more signals (depleted staples, weather impact,
+> expiring insurance). Signal recipe is in the 2026-06-24d entry below.
 
 > **Session update (2026-06-24d) — GEN-2 ROADMAP: AUTOPILOT EXPENSE + BURNOUT SIGNALS.**
 > Continued expanding the autopilot prediction engine. NO migration (reuses 0085;
