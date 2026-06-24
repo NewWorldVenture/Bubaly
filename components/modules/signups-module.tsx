@@ -16,6 +16,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   groupByUrgency, opportunityStats, daysToDeadline, isMissed,
@@ -147,7 +148,12 @@ export function SignupsModule() {
       <PageHeader
         title="Registrations & Signups"
         description="Never miss a camp, school, or activity registration deadline again."
-        action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add signup</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="signups" iconOnly />
+            {canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add signup</Button>}
+          </div>
+        }
       />
 
       {/* Stats */}

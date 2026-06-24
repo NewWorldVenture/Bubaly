@@ -12,6 +12,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
@@ -114,6 +115,7 @@ export function ContactsModule() {
         description="Your family's people — doctors, teachers, coaches, and everyone else who matters."
         action={
           <div className="flex items-center gap-2">
+            <AiInsight kind="contacts" iconOnly />
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
               <Search className="h-4 w-4 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}

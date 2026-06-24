@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { BINDER_CATEGORIES, binderCategoryLabel, maskValue, groupByCategory, type InfoLike } from '@/lib/home/binder';
 import type { Tables } from '@/lib/database.types';
 
@@ -62,7 +63,10 @@ export function BinderModule() {
           <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand" /> Household Binder</h3>
           <p className="text-xs text-muted">Your digital command center — Wi-Fi, codes, shutoffs, policies and key info in one place.</p>
         </div>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add entry</Button>
+        <div className="flex items-center gap-2">
+          <AiInsight kind="binder" iconOnly />
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add entry</Button>
+        </div>
       </div>
 
       {groups.length === 0 ? (

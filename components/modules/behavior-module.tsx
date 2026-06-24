@@ -11,6 +11,7 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import {
   BEHAVIOR_KINDS, BEHAVIOR_CATEGORIES, kindMeta, summarizeMember, trendByWeek, positiveStreakDays,
@@ -104,6 +105,7 @@ export function BehaviorModule() {
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </Select>
           )}
+          <AiInsight kind="behavior" iconOnly />
           <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Log behavior</Button>
         </div>
       </div>

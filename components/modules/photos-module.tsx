@@ -12,6 +12,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
@@ -163,6 +164,7 @@ export function PhotosModule() {
         description="Memories your family will treasure forever."
         action={
           <div className="flex items-center gap-2">
+            <AiInsight kind="photos" iconOnly />
             <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}

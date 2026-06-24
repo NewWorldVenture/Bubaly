@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { groupByTrip } from '@/lib/vacations/memories';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
@@ -103,7 +104,10 @@ export function TripMemoriesModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><BookHeart className="h-4 w-4 text-brand" /> Trip Memories</h3>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add memory</Button>
+        <div className="flex items-center gap-2">
+          <AiInsight kind="memories" iconOnly />
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add memory</Button>
+        </div>
       </div>
 
       {all.length === 0 ? (

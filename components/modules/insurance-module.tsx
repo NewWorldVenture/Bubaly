@@ -10,6 +10,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -69,7 +70,7 @@ export function InsuranceModule() {
       <PageHeader
         title="Insurance Hub"
         description="Every household policy in one place, with AI-managed renewal and coverage awareness."
-        action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add policy</Button>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="insurance" iconOnly /><Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add policy</Button></div>}
       />
 
       {policies.data.length > 0 && (

@@ -11,6 +11,7 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import {
   SCREEN_CATEGORIES, categoryMeta, formatMinutes, minutesOnDate, minutesInWindow,
@@ -95,7 +96,10 @@ export function ScreenTimeModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><MonitorSmartphone className="h-4 w-4 text-brand" /> Screen Time & Balance</h3>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Log time</Button>
+        <div className="flex items-center gap-2">
+          <AiInsight kind="screen_time" iconOnly />
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Log time</Button>
+        </div>
       </div>
 
       {/* Per-child cards */}

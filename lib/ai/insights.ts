@@ -33,7 +33,26 @@ export type InsightKind =
   | 'billing'
   | 'goals'
   | 'pets'
-  | 'renewals';
+  | 'renewals'
+  | 'school'
+  | 'sports'
+  | 'pantry'
+  | 'announcements'
+  | 'medical'
+  | 'insurance'
+  | 'rewards'
+  | 'photos'
+  | 'celebrations'
+  | 'signups'
+  | 'behavior'
+  | 'screen_time'
+  | 'binder'
+  | 'memories'
+  | 'timetable'
+  | 'tax'
+  | 'utilities'
+  | 'rides'
+  | 'votes';
 
 export type InsightMember = { id: string; name: string };
 
@@ -566,6 +585,324 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       const renewals = r(d, 'renewals').slice(0, 15);
       const list = renewals.map((r) => `- ${r.name || 'Item'}: expires ${r.renewal_date || r.expires_at || 'unknown'} ($${r.annual_cost || r.cost || '?'}/yr)`).join('\n') || 'No renewals tracked.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nRenewals:\n${list}\n\nGive: (1) what expires in the next 30 days, (2) anything worth shopping for a better deal, (3) one renewal to cancel.${q(d)}`;
+    },
+  },
+
+  school: {
+    label: 'AI school coach',
+    title: 'AI School Coach',
+    blurb: 'Review grades, assignments, and school schedule for insights.',
+    maxTokens: 700,
+    allowQuestion: true,
+    system:
+      'You are a supportive academic coach for families. Review school assignments, grades, and schedules. Flag overdue work, celebrate achievements, and suggest study strategies. Be encouraging and age-appropriate. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const assignments = r(d, 'homework_assignments').slice(0, 15);
+      const grades = r(d, 'grades').slice(0, 10);
+      const aList = assignments.map((a) => `- ${a.title || 'Assignment'} (${a.status || 'pending'}, due: ${a.due_at ? String(a.due_at).slice(0, 10) : 'no date'})`).join('\n') || 'No assignments.';
+      const gList = grades.slice(0, 6).map((g) => `- ${g.subject || 'Subject'}: ${g.grade || g.score || '?'}`).join('\n') || 'No grades.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nAssignments:\n${aList}\n\nRecent grades:\n${gList}\n\nGive: (1) assignments overdue or due soon, (2) subject areas needing attention, (3) one encouragement or study tip.${q(d)}`;
+    },
+  },
+
+  sports: {
+    label: 'AI sports coach',
+    title: 'AI Sports Assistant',
+    blurb: 'Track game schedules, team performance, and training tips.',
+    maxTokens: 600,
+    allowQuestion: true,
+    system:
+      'You are an enthusiastic family sports assistant. Review upcoming games, team results, and schedules. Give practical tips for game-day preparation, encourage young athletes, and suggest training ideas. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const events = r(d, 'sports_events').slice(0, 10);
+      const teams = r(d, 'sports_teams').slice(0, 5);
+      const eList = events.map((e) => `- ${e.title || 'Game'} (${String(e.starts_at || e.event_date || '').slice(0, 10)}, ${e.home_away || ''} at ${e.location || 'TBD'})`).join('\n') || 'No events.';
+      const tList = teams.map((t) => `- ${t.name || 'Team'} (${t.sport || 'sport'}, W:${t.wins || 0} L:${t.losses || 0})`).join('\n') || 'No teams.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nTeams:\n${tList}\n\nUpcoming events:\n${eList}\n\nGive: (1) next game to prepare for, (2) one game-day tip, (3) one training idea for this week.${q(d)}`;
+    },
+  },
+
+  pantry: {
+    label: 'AI pantry check',
+    title: 'AI Pantry Assistant',
+    blurb: 'See what needs restocking and get meal ideas from what you have.',
+    maxTokens: 600,
+    allowQuestion: true,
+    system:
+      'You are a smart pantry and kitchen assistant. Review pantry inventory and suggest what to restock, what meals can be made with current items, and how to reduce food waste. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const items = r(d, 'pantry_items').slice(0, 30);
+      const low = items.filter((i) => i.is_low_stock || i.quantity === 0 || Number(i.quantity) <= 1);
+      const allNames = items.slice(0, 20).map((i) => i.name).filter(Boolean).join(', ') || 'none tracked';
+      const lowNames = low.slice(0, 10).map((i) => i.name).filter(Boolean).join(', ') || 'none';
+      return `Family: ${d.familyName}. Members: ${d.members.length}. Now: ${d.now}.\n\nPantry items: ${allNames}.\nLow stock: ${lowNames}.\n\nGive: (1) top 5 items to restock this week, (2) a quick dinner idea from current pantry, (3) one item to use before it expires.${q(d)}`;
+    },
+  },
+
+  announcements: {
+    label: 'AI announcement',
+    title: 'AI Announcement Writer',
+    blurb: 'Draft a family announcement or summarize recent family news.',
+    maxTokens: 500,
+    allowQuestion: true,
+    system:
+      'You are a warm, friendly family communications assistant. Help draft announcements, summarize recent family news, or suggest what to share with the family. Keep tone positive and appropriate for all ages. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const posts = r(d, 'announcements').slice(0, 8);
+      const list = posts.map((p) => `- "${p.title || 'Post'}": ${String(p.content || '').slice(0, 80)}`).join('\n') || 'No announcements yet.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nRecent announcements:\n${list}\n\nGive: (1) a summary of recent family news, (2) one suggested announcement to make this week, (3) one question to spark family conversation.${q(d)}`;
+    },
+  },
+
+  medical: {
+    label: 'AI medical review',
+    title: 'AI Medical Records Assistant',
+    blurb: 'Review health records and flag anything that needs attention.',
+    maxTokens: 600,
+    allowQuestion: true,
+    system:
+      'You are a helpful family health records assistant (NOT a doctor). You help families organize and understand their health records, flag upcoming appointments, and identify gaps in care. Always recommend consulting a healthcare provider for medical decisions. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const records = r(d, 'medical_records').slice(0, 15);
+      const appointments = r(d, 'appointments').slice(0, 10);
+      const rList = records.slice(0, 8).map((r) => `- ${r.type || 'Record'}: ${r.provider || ''} (${String(r.date || r.created_at || '').slice(0, 10)})`).join('\n') || 'No records.';
+      const aList = appointments.slice(0, 5).map((a) => `- ${a.appointment_type || 'Appt'} with ${a.provider_name || '?'} on ${String(a.appointment_date || '').slice(0, 10)}`).join('\n') || 'No appointments.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nMedical records:\n${rList}\n\nAppointments:\n${aList}\n\nGive: (1) upcoming appointments to prepare for, (2) any records that look like they need follow-up, (3) one preventive care action to take.${q(d)}`;
+    },
+  },
+
+  insurance: {
+    label: 'AI insurance review',
+    title: 'AI Insurance Assistant',
+    blurb: 'Review your insurance policies and identify coverage gaps.',
+    maxTokens: 600,
+    allowQuestion: true,
+    system:
+      'You are a family insurance advisor. Help families understand their coverage, identify gaps, and flag expiring policies. Always recommend consulting a licensed insurance professional for specific advice. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const policies = r(d, 'insurance_policies').slice(0, 10);
+      const list = policies.map((p) => `- ${p.policy_type || 'Policy'}: ${p.insurer || '?'} | $${p.premium || '?'}/yr | expires: ${String(p.renewal_date || p.expires_at || '').slice(0, 10)}`).join('\n') || 'No policies tracked.';
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nInsurance policies:\n${list}\n\nGive: (1) policies expiring in 60 days, (2) coverage type that seems missing for this family size, (3) one cost-saving action.${q(d)}`;
+    },
+  },
+
+  rewards: {
+    label: 'AI rewards coach',
+    title: 'AI Rewards Coach',
+    blurb: 'Motivate kids with personalized reward suggestions.',
+    maxTokens: 500,
+    allowQuestion: true,
+    system:
+      'You are an encouraging family rewards and motivation coach. Review kids\' points, chore completion, and reward redemptions. Suggest motivating rewards and positive reinforcement strategies. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const assignments = r(d, 'chore_assignments').slice(0, 20);
+      const redemptions = r(d, 'reward_redemptions').slice(0, 10);
+      const totalPoints = assignments.filter((a) => a.status === 'approved' || a.status === 'done')
+        .reduce((s, a) => s + (Number(a.points_awarded) || 0), 0);
+      const pending = assignments.filter((a) => a.status === 'todo' || a.status === 'in_progress').length;
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nTotal points earned: ${totalPoints}. Pending chores: ${pending}. Recent redemptions: ${redemptions.length}.\n\nGive: (1) one motivating observation about progress, (2) two reward ideas that would excite kids, (3) one strategy to keep engagement high.${q(d)}`;
+    },
+  },
+
+  photos: {
+    label: 'AI photo memory',
+    title: 'AI Photo & Memory Assistant',
+    blurb: 'Organize photos and create meaningful family memories.',
+    maxTokens: 500,
+    allowQuestion: true,
+    system:
+      'You are a warm family memory keeper. Help families organize their photo collection, create albums, and capture meaningful moments. Suggest creative ways to preserve and share family memories. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const photos = r(d, 'photos').slice(0, 20);
+      const albums = r(d, 'photo_albums').slice(0, 10);
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nPhotos: ${photos.length} total. Albums: ${albums.length}.\n\nGive: (1) a memory-keeping idea for this week, (2) one album to create from recent photos, (3) one creative way to share memories with family.${q(d)}`;
+    },
+  },
+
+  celebrations: {
+    label: 'AI celebration planner',
+    title: 'AI Celebration Planner',
+    blurb: 'Never miss a birthday or anniversary — get ideas for meaningful celebrations.',
+    maxTokens: 500,
+    allowQuestion: true,
+    system:
+      'You are a thoughtful family celebration planner. Help families prepare for upcoming birthdays, anniversaries, and special dates. Suggest meaningful, personalized celebration ideas that fit different ages and budgets. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const dates = r(d, 'family_dates').slice(0, 20);
+      const upcoming = dates.filter((dt) => {
+        const dStr = dt.date as string;
+        if (!dStr) return false;
+        const thisYear = new Date().getFullYear();
+        const next = new Date(`${thisYear}-${dStr.slice(5, 10)}`);
+        if (next < new Date()) next.setFullYear(thisYear + 1);
+        const diff = (next.getTime() - Date.now()) / 86400000;
+        return diff >= 0 && diff <= 60;
+      });
+      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nUpcoming celebrations (next 60 days): ${upcoming.length > 0 ? JSON.stringify(upcoming.map((dt) => ({ name: dt.name, type: dt.type, date: dt.date }))) : 'none found'}. Total saved dates: ${dates.length}.\n\nGive: (1) alert for any celebration within 2 weeks, (2) two creative ideas for the soonest upcoming occasion, (3) one year-round tradition to start.${q(d)}`;
+    },
+  },
+
+  signups: {
+    label: 'AI activity advisor',
+    title: 'AI Activity & Signups Advisor',
+    blurb: 'Stay on top of registration deadlines and find the right activities for your kids.',
+    maxTokens: 500,
+    allowQuestion: true,
+    system:
+      'You are a helpful family activity coordinator. Help families track registration deadlines, evaluate activity options, and balance kids\' schedules. Prioritize upcoming deadlines and suggest how to avoid over-scheduling. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const opps = r(d, 'opportunities').slice(0, 30);
+      const open = opps.filter((o) => o.status !== 'closed' && o.status !== 'passed');
+      const urgent = open.filter((o) => {
+        if (!o.deadline) return false;
+        const diff = (new Date(o.deadline as string).getTime() - Date.now()) / 86400000;
+        return diff >= 0 && diff <= 14;
+      });
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nOpen opportunities: ${open.length}. Deadlines within 14 days: ${urgent.length}${urgent.length > 0 ? ': ' + JSON.stringify(urgent.map((o) => ({ name: o.name, deadline: o.deadline, type: o.type }))) : ''}.\n\nGive: (1) urgent deadline alerts if any, (2) advice on prioritizing which activities to sign up for, (3) one tip for managing a balanced activity schedule.${q(d)}`;
+    },
+  },
+
+  behavior: {
+    label: 'AI behavior coach',
+    title: 'AI Behavior & Wellness Coach',
+    blurb: 'Understand behavioral patterns and get positive strategies for your family.',
+    maxTokens: 600,
+    allowQuestion: true,
+    system:
+      'You are a supportive family behavior coach grounded in positive psychology. Analyze behavior log patterns and suggest constructive strategies. Always be encouraging, non-judgmental, and focus on growth. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const logs = r(d, 'behavior_logs').slice(0, 30);
+      const positive = logs.filter((l) => l.sentiment === 'positive' || (l.score as number) > 0).length;
+      const negative = logs.filter((l) => l.sentiment === 'negative' || (l.score as number) < 0).length;
+      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nBehavior logs (recent ${logs.length}): ${positive} positive, ${negative} challenging. Sample: ${JSON.stringify(logs.slice(0, 5).map((l) => ({ member: l.member_id, note: l.note, sentiment: l.sentiment })))}.\n\nGive: (1) one positive pattern to celebrate, (2) one gentle strategy for any recurring challenge, (3) one family activity to reinforce positive behavior.${q(d)}`;
+    },
+  },
+
+  screen_time: {
+    label: 'AI screen time guide',
+    title: 'AI Screen Time Advisor',
+    blurb: 'Balance screen time with healthy habits and family connection.',
+    maxTokens: 500,
+    allowQuestion: true,
+    system:
+      'You are a balanced digital wellness advisor for families. Help families set healthy screen time boundaries, understand usage patterns, and create tech-free moments. Be practical and non-preachy. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const entries = r(d, 'screen_time_entries').slice(0, 20);
+      const limits = r(d, 'screen_time_limits').slice(0, 10);
+      const totalMinutes = entries.reduce((sum, e) => sum + ((e.minutes as number) || 0), 0);
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nScreen time logs: ${entries.length} entries, ${totalMinutes} total minutes tracked. Active limits: ${limits.length}.\n\nGive: (1) one observation about screen time balance, (2) two practical ways to encourage tech-free family time, (3) one healthy screen habit to introduce this week.${q(d)}`;
+    },
+  },
+
+  binder: {
+    label: 'AI household guide',
+    title: 'AI Household Binder Assistant',
+    blurb: 'Keep your household information organized and easy to find.',
+    maxTokens: 500,
+    allowQuestion: true,
+    system:
+      'You are a meticulous household information organizer. Help families keep their household binder complete, well-organized, and actionable. Identify gaps in critical information and suggest what to add. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const items = r(d, 'household_info').slice(0, 40);
+      const categories = [...new Set(items.map((i) => i.category as string))];
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nHousehold binder: ${items.length} entries across ${categories.length} categories (${categories.join(', ')}).\n\nGive: (1) one critical category that might be missing (e.g., emergency contacts, utilities, insurance), (2) one item to update or review, (3) one tip for keeping the binder current.${q(d)}`;
+    },
+  },
+
+  memories: {
+    label: 'AI memory keeper',
+    title: 'AI Trip Memory Keeper',
+    blurb: 'Relive adventures and capture the stories behind your family trips.',
+    maxTokens: 500,
+    allowQuestion: true,
+    system:
+      'You are a nostalgic and creative family memory keeper. Help families document and celebrate their travel memories. Suggest ways to preserve stories, create mementos, and inspire future adventures. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const memories = r(d, 'trip_memories').slice(0, 20);
+      const trips = r(d, 'vacations').slice(0, 10);
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nTrip memories recorded: ${memories.length}. Vacations logged: ${trips.length}.\n\nGive: (1) one creative way to preserve a recent memory, (2) one idea for turning memories into a keepsake, (3) one suggestion for capturing better memories on the next trip.${q(d)}`;
+    },
+  },
+
+  timetable: {
+    label: 'AI schedule optimizer',
+    title: 'AI Timetable Optimizer',
+    blurb: 'Optimize class schedules and spot conflicts before they happen.',
+    maxTokens: 400,
+    allowQuestion: true,
+    system:
+      'You are a school schedule optimization expert. Help families organize class timetables, spot scheduling conflicts, and make the most of study time. Be concise and practical. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const classes = r(d, 'school_classes').slice(0, 30);
+      const byMember = d.members.map((m) => ({ name: m.name, classes: classes.filter((c) => c.member_id === m.id).length }));
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nScheduled classes: ${classes.length} total. Per student: ${JSON.stringify(byMember)}.\n\nGive: (1) one scheduling observation or potential conflict, (2) one tip to optimize the weekly study schedule, (3) one suggestion to improve academic-life balance.${q(d)}`;
+    },
+  },
+
+  tax: {
+    label: 'AI tax organizer',
+    title: 'AI Tax Document Organizer',
+    blurb: 'Keep your tax documents organized and never miss a deduction.',
+    maxTokens: 500,
+    allowQuestion: true,
+    system:
+      'You are a helpful tax document organizer (not a licensed tax advisor). Help families organize their tax documents, identify potential deductions, and stay prepared for tax season. Always recommend consulting a tax professional for advice. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const docs = r(d, 'tax_documents').slice(0, 30);
+      const years = [...new Set(docs.map((doc) => doc.tax_year as number))].sort((a, b) => b - a);
+      const deductible = docs.filter((doc) => doc.is_deductible).length;
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nTax documents: ${docs.length} total across ${years.length} years (${years.slice(0, 3).join(', ')}). Deductible items: ${deductible}.\n\nGive: (1) one document category that might be missing (e.g., W-2, 1099, charitable receipts), (2) one deduction opportunity based on the documents stored, (3) one tip for staying organized year-round. Always note: consult a tax professional for personalized advice.${q(d)}`;
+    },
+  },
+
+  utilities: {
+    label: 'AI utility advisor',
+    title: 'AI Utility Cost Advisor',
+    blurb: 'Analyze utility bills and find ways to reduce household costs.',
+    maxTokens: 500,
+    allowQuestion: true,
+    system:
+      'You are a household energy and utility efficiency expert. Analyze utility bill trends and give practical, actionable advice to reduce costs and improve efficiency. Focus on high-impact changes. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const bills = r(d, 'utility_bills').slice(0, 24);
+      const totalCents = bills.reduce((sum, b) => sum + ((b.amount_cents as number) || 0), 0);
+      const kinds = [...new Set(bills.map((b) => b.kind as string))];
+      return `Family: ${d.familyName}. Now: ${d.now}.\n\nUtility bills tracked: ${bills.length} across ${kinds.length} utility types (${kinds.join(', ')}). Total tracked: $${(totalCents / 100).toFixed(2)}.\n\nGive: (1) one observation about spending trends, (2) two practical ways to reduce the highest bill type, (3) one energy-saving habit to introduce this month.${q(d)}`;
+    },
+  },
+
+  rides: {
+    label: 'AI ride coordinator',
+    title: 'AI Ride Coordinator',
+    blurb: 'Coordinate pickups, drop-offs, and carpools without the chaos.',
+    maxTokens: 400,
+    allowQuestion: true,
+    system:
+      'You are a helpful family logistics coordinator. Help families plan rides, identify carpool opportunities, and reduce transportation stress. Be specific and actionable. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const rides = r(d, 'rides').slice(0, 30);
+      const upcoming = rides.filter((ride) => {
+        if (!ride.ride_date) return false;
+        return new Date(ride.ride_date as string) >= new Date();
+      });
+      const pending = rides.filter((r) => r.status === 'requested' || r.status === 'pending').length;
+      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nUpcoming rides: ${upcoming.length}. Pending/unconfirmed: ${pending}.\n\nGive: (1) any urgent unconfirmed rides to address, (2) one carpool or consolidation opportunity, (3) one tip to streamline family transportation.${q(d)}`;
+    },
+  },
+
+  votes: {
+    label: 'AI decision facilitator',
+    title: 'AI Family Decision Facilitator',
+    blurb: 'Get insights on family polls and make collaborative decisions easier.',
+    maxTokens: 400,
+    allowQuestion: true,
+    system:
+      'You are a thoughtful family decision facilitator. Help families understand their poll results, encourage participation, and make collaborative decisions. Be encouraging and inclusive. ' + SHARED_RULES,
+    buildUser: (d) => {
+      const polls = r(d, 'family_polls').slice(0, 15);
+      const open = polls.filter((p) => !p.is_closed).length;
+      const closed = polls.filter((p) => p.is_closed).length;
+      return `Family: ${d.familyName}. Now: ${d.now}. Members: ${d.members.map((m) => m.name).join(', ')}.\n\nFamily polls: ${polls.length} total (${open} open, ${closed} decided). Recent: ${JSON.stringify(polls.slice(0, 3).map((p) => ({ title: p.title, is_closed: p.is_closed })))}.\n\nGive: (1) a nudge to vote on any open polls, (2) one tip to make family decisions more inclusive, (3) one idea for a poll topic the family would enjoy.${q(d)}`;
     },
   },
 };

@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { UTILITY_KINDS, utilityLabel, usd, latestByKind, monthlyTotalCents, trendForKind, deltaPct, type BillLike } from '@/lib/home/utilities';
 import type { Tables } from '@/lib/database.types';
@@ -90,6 +91,7 @@ export function UtilitiesModule() {
               {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} AI Savings
             </Button>
           )}
+          <AiInsight kind="utilities" iconOnly />
           <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add bill</Button>
         </div>
       </div>
