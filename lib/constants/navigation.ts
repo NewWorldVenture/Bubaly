@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -179,11 +179,18 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/admins', label: 'Admin', icon: UserCog },
 ];
 
-/** Bottom tab bar on mobile web — the 5 highest-frequency destinations. */
+/**
+ * Bottom tab bar on mobile web — 5 tabs: Home | Assistant | Capture | Inbox | Profile.
+ * The Capture tab (index 2) is rendered as a raised FAB by the AppShell.
+ * CAPTURE_TAB_INDEX marks which tab gets the special treatment.
+ */
 export const MOBILE_TABS: NavItem[] = [
   { href: '/dashboard', label: 'Home', icon: LayoutDashboard, minLevel: 0 },
-  { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, minLevel: 0 },
-  { href: '/dashboard/chores', label: 'Chores', icon: CheckSquare, minLevel: 1 },
-  { href: '/dashboard/grocery', label: 'Grocery', icon: ShoppingCart, minLevel: 0 },
   { href: '/dashboard/assistant', label: 'Assistant', icon: Sparkles, minLevel: 0 },
+  { href: '/capture', label: 'Capture', icon: Plus, minLevel: 0 },
+  { href: '/dashboard/inbox', label: 'Inbox', icon: Inbox, minLevel: 0 },
+  { href: '/dashboard/profile', label: 'Profile', icon: UserCog, minLevel: 0 },
 ];
+
+/** Index of the special Capture tab in MOBILE_TABS (rendered as a raised FAB). */
+export const CAPTURE_TAB_INDEX = 2;
