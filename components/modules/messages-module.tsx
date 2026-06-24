@@ -9,6 +9,7 @@ import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
@@ -396,6 +397,7 @@ export function MessagesModule() {
                       : `${activeConv.participant_ids?.length || activeConv.member_ids?.length || members.length} members`}
                 </p>
               </div>
+              <AiInsight kind="messages" params={{ conversationId: activeConv.id }} variant="ghost" iconOnly />
               <button className="rounded-lg p-1.5 text-muted hover:text-fg"><Search className="h-4 w-4" /></button>
               <button className="rounded-lg p-1.5 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>
             </div>

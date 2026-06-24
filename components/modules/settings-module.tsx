@@ -6,6 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -102,7 +103,7 @@ export function SettingsModule() {
 
   return (
     <div className="module-page">
-      <PageHeader title="Settings" description="Manage your profile, family, and members." />
+      <PageHeader title="Settings" description="Manage your profile, family, and members." action={<AiInsight kind="settings" />} />
 
       {/* Profile */}
       <Card>

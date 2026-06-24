@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
@@ -112,7 +113,10 @@ export function ExpensesModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><Split className="h-4 w-4 text-brand" /> Expense Splitting</h3>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Split an expense</Button>
+        <div className="flex items-center gap-2">
+          <AiInsight kind="expenses" />
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Split an expense</Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

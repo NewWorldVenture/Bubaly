@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { cn } from '@/lib/utils/cn';
@@ -131,6 +132,7 @@ export function GroceryModule() {
             description="Stay organized and never forget an item."
             action={
               <div className="flex flex-wrap items-center gap-2">
+                <AiInsight kind="grocery" />
                 <Button variant="outline" size="sm">
                   <SlidersHorizontal className="h-4 w-4" /> Reorder
                 </Button>
