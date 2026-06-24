@@ -45,6 +45,8 @@ export type ChoreSignal = { id: string; title: string; dueAt: string | null; mem
 export type BirthdaySignal = { memberId: string; name: string; birthday: string }; // birthday = YYYY-MM-DD (year ignored)
 export type GrocerySignal = { id: string; name: string; addedAt: string };
 export type EventSignal = { id: string; title: string; startsAt: string; endsAt: string | null; memberId: string | null };
+export type SubscriptionSignal = { id: string; name: string; costCents: number; cadence: string; nextCharge: string | null; lastUsed: string | null; status: string };
+export type StressSignal = { memberId: string | null; weight: number; occurredOn: string };
 
 export type FamilySnapshot = {
   today: string; // YYYY-MM-DD
@@ -54,6 +56,8 @@ export type FamilySnapshot = {
   birthdays: BirthdaySignal[];
   lingeringGroceries: GrocerySignal[];
   events: EventSignal[];
+  subscriptions: SubscriptionSignal[];
+  stressSignals: StressSignal[];
 };
 
 const DAY_MS = 86_400_000;
@@ -237,6 +241,110 @@ export function conflictSuggestions(s: FamilySnapshot): SuggestionDraft[] {
   return out;
 }
 
+/** Normalize a subscription's charge to an approximate monthly cost in cents. */
+export function monthlyCents(costCents: number, cadence: string): number {
+  switch (cadence) {
+    case 'weekly': return Math.round(costCents * 52 / 12);
+    case 'quarterly': return Math.round(costCents / 3);
+    case 'yearly': return Math.round(costCents / 12);
+    default: return costCents; // monthly
+  }
+}
+
+function fmtUsd(cents: number): string {
+  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+/**
+ * Financial future-awareness: upcoming subscription charges in the next 7 days,
+ * plus "reduce waste" flags for active subscriptions unused for 60+ days.
+ */
+export function expenseSuggestions(s: FamilySnapshot): SuggestionDraft[] {
+  const out: SuggestionDraft[] = [];
+  for (const sub of s.subscriptions) {
+    if (sub.status !== 'active' && sub.status !== 'trial') continue;
+
+    if (sub.nextCharge) {
+      const d = daysUntil(s.today, sub.nextCharge);
+      if (d >= 0 && d <= 7) {
+        out.push({
+          kind: 'finance',
+          title: `${fmtUsd(sub.costCents)} charge: ${sub.name} ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}`,
+          detail: 'Heads up so the bill is never a surprise.',
+          confidence: 76,
+          urgency: clampUrgency(d <= 1 ? 2 : 1),
+          actionType: 'review_subscription',
+          actionLabel: 'Review',
+          payload: { subscriptionId: sub.id, costCents: sub.costCents },
+          sourceKind: 'subscriptions_tracked',
+          sourceId: sub.id,
+          memberId: null,
+          dedupeKey: `sub-charge:${sub.id}:${isoDay(sub.nextCharge)}`,
+          expiresAt: `${isoDay(sub.nextCharge)}T23:59:59Z`,
+        });
+      }
+    }
+
+    if (sub.lastUsed && -daysUntil(s.today, sub.lastUsed) >= 60) {
+      out.push({
+        kind: 'finance',
+        title: `Unused: ${sub.name} — ${fmtUsd(monthlyCents(sub.costCents, sub.cadence))}/mo`,
+        detail: 'No activity in 60+ days. Keep it or cancel to cut waste?',
+        confidence: 71,
+        urgency: 1,
+        actionType: 'review_subscription',
+        actionLabel: 'Review',
+        payload: { subscriptionId: sub.id },
+        sourceKind: 'subscriptions_tracked',
+        sourceId: sub.id,
+        memberId: null,
+        dedupeKey: `sub-stale:${sub.id}`,
+        expiresAt: null,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Burnout / overload awareness: sum the weight of active stress signals in the
+ * trailing 7 days. Above a threshold, surface a gentle wellbeing heads-up. If a
+ * single member carries most of the load, attribute it to them.
+ */
+export function burnoutSuggestions(s: FamilySnapshot, threshold = 5): SuggestionDraft[] {
+  const recent = s.stressSignals.filter((x) => {
+    const age = -daysUntil(s.today, x.occurredOn);
+    return age >= 0 && age <= 7;
+  });
+  if (recent.length === 0) return [];
+  const total = recent.reduce((sum, x) => sum + x.weight, 0);
+  if (total < threshold) return [];
+
+  // Find the heaviest-loaded member, if any.
+  const byMember = new Map<string, number>();
+  for (const x of recent) if (x.memberId) byMember.set(x.memberId, (byMember.get(x.memberId) ?? 0) + x.weight);
+  let topMember: string | null = null;
+  let topWeight = 0;
+  for (const [m, w] of byMember) if (w > topWeight) { topWeight = w; topMember = m; }
+  const concentrated = topMember && topWeight >= total * 0.6;
+
+  return [{
+    kind: 'wellbeing',
+    title: concentrated ? 'One person is carrying a heavy load this week' : 'Family load has been high this week',
+    detail: 'Consider lightening the schedule or sharing tasks before it tips into burnout.',
+    confidence: 70,
+    urgency: clampUrgency(total >= threshold * 2 ? 3 : 2),
+    actionType: 'review_wellbeing',
+    actionLabel: 'See details',
+    payload: { totalWeight: Math.round(total) },
+    sourceKind: 'family_stress_signals',
+    sourceId: null,
+    memberId: concentrated ? topMember : null,
+    dedupeKey: `burnout:week-${Math.floor(Date.parse(`${s.today}T00:00:00Z`) / DAY_MS / 7)}`,
+    expiresAt: `${s.today}T23:59:59Z`,
+  }];
+}
+
 /** Run every rule and return all suggestion drafts, highest urgency/confidence first. */
 export function buildSuggestions(s: FamilySnapshot): SuggestionDraft[] {
   const all = [
@@ -246,6 +354,8 @@ export function buildSuggestions(s: FamilySnapshot): SuggestionDraft[] {
     ...birthdaySuggestions(s),
     ...grocerySuggestions(s),
     ...conflictSuggestions(s),
+    ...expenseSuggestions(s),
+    ...burnoutSuggestions(s),
   ];
   return all.sort((a, b) => b.urgency - a.urgency || b.confidence - a.confidence);
 }

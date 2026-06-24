@@ -21,10 +21,11 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
   const in30 = new Date(now.getTime() + 30 * 86400000).toISOString().slice(0, 10);
   const in2 = new Date(now.getTime() + 2 * 86400000).toISOString();
 
+  const since60 = new Date(now.getTime() - 8 * 86400000).toISOString().slice(0, 10);
   const [
     { data: renewals }, { data: appts }, { data: choreRows },
     { data: members }, { data: groceries }, { data: apptReminders },
-    { data: events }, { data: existing },
+    { data: events }, { data: subs }, { data: stress }, { data: existing },
   ] = await Promise.all([
     supabase.from('renewals').select('id, title, expires_at, status').eq('family_id', familyId).eq('status', 'active').lte('expires_at', in30).limit(100),
     supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(50),
@@ -33,6 +34,8 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     supabase.from('grocery_items').select('id, name, created_at, is_checked').eq('family_id', familyId).eq('is_checked', false).limit(200),
     supabase.from('reminders').select('related_id').eq('family_id', familyId).eq('related_type', 'appointment').eq('is_done', false).limit(200),
     supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(100),
+    supabase.from('subscriptions_tracked').select('id, name, cost_cents, cadence, next_charge, last_used, status').eq('family_id', familyId).in('status', ['active', 'trial']).limit(200),
+    supabase.from('family_stress_signals').select('member_id, weight, occurred_on').eq('family_id', familyId).eq('status', 'active').gte('occurred_on', since60).limit(500),
     supabase.from('autopilot_suggestions').select('id, dedupe_key, status').eq('family_id', familyId).limit(500),
   ]);
 
@@ -50,6 +53,8 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     birthdays: (members ?? []).map((m) => ({ memberId: m.id, name: m.display_name, birthday: m.birthday as string })),
     lingeringGroceries: (groceries ?? []).map((g) => ({ id: g.id, name: g.name, addedAt: g.created_at })),
     events: (events ?? []).map((e) => ({ id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, memberId: e.assignee_id })),
+    subscriptions: (subs ?? []).map((x) => ({ id: x.id, name: x.name, costCents: x.cost_cents, cadence: x.cadence, nextCharge: x.next_charge, lastUsed: x.last_used, status: x.status })),
+    stressSignals: (stress ?? []).map((x) => ({ memberId: x.member_id, weight: Number(x.weight), occurredOn: x.occurred_on })),
   };
 
   const drafts = buildSuggestions(snapshot);

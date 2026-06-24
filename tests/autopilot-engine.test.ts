@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   confidenceTier, AUTO_THRESHOLD, APPROVE_THRESHOLD, daysUntilBirthday,
   renewalSuggestions, appointmentSuggestions, choreSuggestions, birthdaySuggestions,
-  grocerySuggestions, conflictSuggestions, buildSuggestions, successProbability, partitionByTier,
+  grocerySuggestions, conflictSuggestions, expenseSuggestions, burnoutSuggestions,
+  monthlyCents, buildSuggestions, successProbability, partitionByTier,
   type FamilySnapshot,
 } from '@/lib/autopilot/engine';
 
@@ -14,6 +15,8 @@ const base = (over: Partial<FamilySnapshot> = {}): FamilySnapshot => ({
   birthdays: [],
   lingeringGroceries: [],
   events: [],
+  subscriptions: [],
+  stressSignals: [],
   ...over,
 });
 
@@ -121,6 +124,55 @@ describe('conflictSuggestions', () => {
     ] }));
     expect(out).toHaveLength(1);
     expect(out[0].confidence).toBe(68); // family-wide clash
+  });
+});
+
+describe('monthlyCents', () => {
+  it('normalizes cadences to a monthly figure', () => {
+    expect(monthlyCents(1200, 'monthly')).toBe(1200);
+    expect(monthlyCents(12000, 'yearly')).toBe(1000);
+    expect(monthlyCents(3000, 'quarterly')).toBe(1000);
+    expect(monthlyCents(300, 'weekly')).toBe(1300);
+  });
+});
+
+describe('expenseSuggestions', () => {
+  it('flags an upcoming charge within 7 days', () => {
+    const out = expenseSuggestions(base({ subscriptions: [
+      { id: 's1', name: 'Netflix', costCents: 1599, cadence: 'monthly', nextCharge: '2026-06-27', lastUsed: '2026-06-23', status: 'active' },
+      { id: 's2', name: 'Far', costCents: 999, cadence: 'monthly', nextCharge: '2026-08-01', lastUsed: null, status: 'active' },
+    ] }));
+    expect(out).toHaveLength(1);
+    expect(out[0].kind).toBe('finance');
+    expect(out[0].title).toContain('Netflix');
+    expect(out[0].dedupeKey).toBe('sub-charge:s1:2026-06-27');
+  });
+  it('flags a stale (unused 60+ days) active subscription', () => {
+    const out = expenseSuggestions(base({ subscriptions: [
+      { id: 's3', name: 'Gym', costCents: 4000, cadence: 'monthly', nextCharge: null, lastUsed: '2026-01-01', status: 'active' },
+    ] }));
+    expect(out.some((o) => o.dedupeKey === 'sub-stale:s3')).toBe(true);
+  });
+  it('ignores canceled subscriptions', () => {
+    expect(expenseSuggestions(base({ subscriptions: [
+      { id: 's4', name: 'Old', costCents: 500, cadence: 'monthly', nextCharge: '2026-06-25', lastUsed: null, status: 'canceled' },
+    ] }))).toHaveLength(0);
+  });
+});
+
+describe('burnoutSuggestions', () => {
+  it('surfaces a heads-up when recent stress weight exceeds threshold', () => {
+    const out = burnoutSuggestions(base({ stressSignals: [
+      { memberId: 'm1', weight: 3, occurredOn: '2026-06-22' },
+      { memberId: 'm1', weight: 3, occurredOn: '2026-06-23' },
+    ] }));
+    expect(out).toHaveLength(1);
+    expect(out[0].kind).toBe('wellbeing');
+    expect(out[0].memberId).toBe('m1'); // concentrated on one member
+  });
+  it('stays quiet below threshold or with stale signals', () => {
+    expect(burnoutSuggestions(base({ stressSignals: [{ memberId: 'm1', weight: 1, occurredOn: '2026-06-23' }] }))).toHaveLength(0);
+    expect(burnoutSuggestions(base({ stressSignals: [{ memberId: 'm1', weight: 9, occurredOn: '2026-05-01' }] }))).toHaveLength(0);
   });
 });
 

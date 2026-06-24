@@ -1,7 +1,34 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Autopilot cron + schedule-conflict signal. Keep this updated as you ship.
+Last updated after Autopilot expense + burnout signals. Keep this updated as you ship.
+
+> **Session update (2026-06-24d) — GEN-2 ROADMAP: AUTOPILOT EXPENSE + BURNOUT SIGNALS.**
+> Continued expanding the autopilot prediction engine. NO migration (reuses 0085;
+> reads existing `subscriptions_tracked` (0076) + `family_stress_signals` (0022)).
+> Branch `claude/festive-bohr-m4cbeg`.
+>
+> **BUILT (all in `lib/autopilot/engine.ts`, pure + tested — 20 total tests):**
+> - **`expenseSuggestions`** (Financial future-awareness): upcoming subscription charges
+>   within 7 days ("$16 charge: Netflix in 3 days", conf 76) + "reduce waste" flags for
+>   active subs unused 60+ days (conf 71). Helper `monthlyCents(cents, cadence)` normalizes
+>   weekly/monthly/quarterly/yearly. kind = `finance`.
+> - **`burnoutSuggestions`** (overload awareness): sums active `family_stress_signals`
+>   weight over trailing 7 days; above threshold (default 5) emits a wellbeing heads-up,
+>   attributed to a single member if they carry ≥60% of the load. Weekly dedupe key. kind = `wellbeing`.
+> - **`lib/autopilot/scan.ts`** now reads `subscriptions_tracked` + `family_stress_signals`
+>   and fills `snapshot.subscriptions` / `snapshot.stressSignals`.
+> - **autopilot-module**: added icons for `finance` (Wallet), `wellbeing` (HeartPulse),
+>   `conflict` (CalendarX).
+> - Verified: tsc + lint clean · `npm run build` ✓ · 20/20 engine tests.
+>
+> **HOW TO ADD THE NEXT SIGNAL (the established recipe):** 1) add a pure `xSuggestions(snapshot)`
+> in engine.ts returning `SuggestionDraft[]` with a stable `dedupeKey`; 2) add its input field
+> to `FamilySnapshot`; 3) read the table + map it in `lib/autopilot/scan.ts`; 4) add it to
+> `buildSuggestions()`; 5) add a kind→icon in autopilot-module; 6) write tests. Remaining ideas:
+> depleted staples (recurring grocery history), expiring insurance/documents, weather-impact
+> on outdoor events. Then the bigger items: Digital Twin/Memory feeding confidence, agent
+> network into the same store, Control-Tower-as-Home, ambient (push/SMS) delivery.
 
 > **Session update (2026-06-24c) — GEN-2 ROADMAP #1 + #2: AUTOPILOT CRON + CONFLICT SIGNAL.**
 > Continued the Gen-2 roadmap on top of the Family Autopilot keystone (0085).
