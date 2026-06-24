@@ -44,6 +44,7 @@ export type AppointmentSignal = { id: string; title: string; startsAt: string; m
 export type ChoreSignal = { id: string; title: string; dueAt: string | null; memberId: string | null };
 export type BirthdaySignal = { memberId: string; name: string; birthday: string }; // birthday = YYYY-MM-DD (year ignored)
 export type GrocerySignal = { id: string; name: string; addedAt: string };
+export type EventSignal = { id: string; title: string; startsAt: string; endsAt: string | null; memberId: string | null };
 
 export type FamilySnapshot = {
   today: string; // YYYY-MM-DD
@@ -52,6 +53,7 @@ export type FamilySnapshot = {
   overdueChores: ChoreSignal[];
   birthdays: BirthdaySignal[];
   lingeringGroceries: GrocerySignal[];
+  events: EventSignal[];
 };
 
 const DAY_MS = 86_400_000;
@@ -184,6 +186,57 @@ export function grocerySuggestions(s: FamilySnapshot): SuggestionDraft[] {
     }));
 }
 
+/** Do two time ranges overlap? End defaults to a 1h block when missing. */
+function overlaps(aStart: string, aEnd: string | null, bStart: string, bEnd: string | null): boolean {
+  const as = Date.parse(aStart);
+  const ae = aEnd ? Date.parse(aEnd) : as + 3_600_000;
+  const bs = Date.parse(bStart);
+  const be = bEnd ? Date.parse(bEnd) : bs + 3_600_000;
+  return as < be && bs < ae;
+}
+
+/**
+ * Detect double-bookings: two events on the same day overlapping in time. A
+ * clash for the SAME member is higher-confidence (they literally can't be in
+ * two places); a family-wide clash (different/unassigned members) is awareness.
+ */
+export function conflictSuggestions(s: FamilySnapshot): SuggestionDraft[] {
+  const out: SuggestionDraft[] = [];
+  const seen = new Set<string>();
+  const todays = s.events.filter((e) => {
+    const d = daysUntil(s.today, e.startsAt);
+    return d >= 0 && d <= 1;
+  });
+  for (let i = 0; i < todays.length; i++) {
+    for (let j = i + 1; j < todays.length; j++) {
+      const a = todays[i];
+      const b = todays[j];
+      if (isoDay(a.startsAt) !== isoDay(b.startsAt)) continue;
+      if (!overlaps(a.startsAt, a.endsAt, b.startsAt, b.endsAt)) continue;
+      const sameMember = a.memberId && b.memberId && a.memberId === b.memberId;
+      const key = [a.id, b.id].sort().join('|');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        kind: 'conflict',
+        title: `Schedule clash: "${a.title}" overlaps "${b.title}"`,
+        detail: sameMember ? 'Same person is double-booked.' : 'Two things overlap — who covers which?',
+        confidence: sameMember ? 84 : 68,
+        urgency: 3,
+        actionType: 'review_conflict',
+        actionLabel: 'Resolve clash',
+        payload: { eventIds: [a.id, b.id], titles: [a.title, b.title] },
+        sourceKind: 'calendar_events',
+        sourceId: a.id,
+        memberId: sameMember ? a.memberId : null,
+        dedupeKey: `conflict:${key}`,
+        expiresAt: `${isoDay(a.startsAt)}T23:59:59Z`,
+      });
+    }
+  }
+  return out;
+}
+
 /** Run every rule and return all suggestion drafts, highest urgency/confidence first. */
 export function buildSuggestions(s: FamilySnapshot): SuggestionDraft[] {
   const all = [
@@ -192,6 +245,7 @@ export function buildSuggestions(s: FamilySnapshot): SuggestionDraft[] {
     ...choreSuggestions(s),
     ...birthdaySuggestions(s),
     ...grocerySuggestions(s),
+    ...conflictSuggestions(s),
   ];
   return all.sort((a, b) => b.urgency - a.urgency || b.confidence - a.confidence);
 }
