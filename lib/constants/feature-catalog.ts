@@ -47,6 +47,8 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('wish-lists', 'Wish Lists', 'Daily Life', 'free', '/dashboard/wishlists'),
   F('notes', 'Notes', 'Daily Life', 'free', '/dashboard/notes'),
   F('habits', 'Habits', 'Daily Life', 'free', '/dashboard/habits'),
+  F('journal', 'Journal', 'Daily Life', 'free', '/dashboard/journal'),
+  F('focus-mode', 'Focus Mode', 'Daily Life', 'free', '/dashboard/focus'),
   F('contacts', 'Contacts', 'Daily Life', 'free', '/dashboard/contacts'),
   F('announcements', 'Announcements', 'Daily Life', 'basic', '/dashboard/announcements'),
   F('memories', 'Memories', 'Daily Life', 'basic', '/dashboard/memories'),
