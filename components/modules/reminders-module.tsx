@@ -19,6 +19,7 @@ import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import type { RemindersInsights, RemindersAIResponse } from '@/lib/reminders/reminders-ai';
 
 type Reminder = Tables<'family_reminders'>;
 
@@ -78,6 +79,25 @@ export function RemindersModule() {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Reminder | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<RemindersInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<RemindersAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/reminders', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   const { data: reminders, loading, error, refresh } = useRealtimeQuery<Reminder>({
     table: 'family_reminders', familyId, deps: [familyId],
@@ -144,6 +164,9 @@ export function RemindersModule() {
         description="Never let anything slip through the cracks."
         action={
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+            </Button>
             <Button variant="outline" onClick={() => setShowSuggestions(!showSuggestions)}>
               <Sparkles className="h-4 w-4 text-brand" /> Quick Add
             </Button>
@@ -151,6 +174,32 @@ export function RemindersModule() {
           </div>
         }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-2 text-sm font-bold">
+              <Sparkles className="h-4 w-4 text-brand" /> AI Reminder Insights
+            </p>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights && (
+            <div className="space-y-2">
+              {aiInsights.suggestions.map((s, i) => (
+                <p key={i} className="text-sm">• {s}</p>
+              ))}
+              {aiInsights.organizationTips.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-brand/20">
+                  <p className="text-xs font-semibold text-brand mb-1">Organization Tips</p>
+                  {aiInsights.organizationTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                </div>
+              )}
+              {aiInsights.priorityAdvice && <p className="mt-2 text-xs text-muted italic">{aiInsights.priorityAdvice}</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid-stats">

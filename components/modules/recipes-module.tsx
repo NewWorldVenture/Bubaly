@@ -20,6 +20,7 @@ import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import type { RecipesInsights, RecipesAIResponse } from '@/lib/recipes/recipes-ai';
 
 type Recipe = Tables<'family_recipes'>;
 
@@ -75,6 +76,25 @@ export function RecipesModule() {
   const [tonightConstraint, setTonightConstraint] = useState('');
   const [tonightBusy, setTonightBusy] = useState(false);
   const [tonightPicks, setTonightPicks] = useState<{ id: string; name: string; cuisine: string | null; reason: string }[] | null>(null);
+
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<RecipesInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<RecipesAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/recipes', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   async function suggestTonight() {
     setTonightBusy(true);
@@ -225,6 +245,9 @@ export function RecipesModule() {
         description="Your family's cookbook — organized, searchable, and always at hand."
         action={
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+            </Button>
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3 py-2">
               <Search className="h-4 w-4 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
@@ -239,6 +262,32 @@ export function RecipesModule() {
           </div>
         }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-2 text-sm font-bold">
+              <Sparkles className="h-4 w-4 text-brand" /> AI Recipe Insights
+            </p>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights && (
+            <div className="space-y-2">
+              {aiInsights.suggestions.map((s, i) => (
+                <p key={i} className="text-sm">• {s}</p>
+              ))}
+              {aiInsights.cookingTips.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-brand/20">
+                  <p className="text-xs font-semibold text-brand mb-1">Cooking Tips</p>
+                  {aiInsights.cookingTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                </div>
+              )}
+              {aiInsights.varietyTip && <p className="mt-2 text-xs text-muted italic">{aiInsights.varietyTip}</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid-stats">

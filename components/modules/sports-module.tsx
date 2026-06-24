@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Calendar, ChevronRight, Filter, MoreHorizontal, Plus, Sparkles, Trophy, Users, Zap } from 'lucide-react';
+import { Calendar, ChevronRight, Filter, MoreHorizontal, Plus, Sparkles, Trophy, Users, X, Zap } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GameResult } from '@/lib/database.types';
+import type { SportsInsights, SportsAIResponse } from '@/lib/sports/sports-ai';
 
 type SportsEvent = Tables<'sports_events'>;
 type Team = Tables<'teams'>;
@@ -39,6 +40,25 @@ export function SportsModule() {
   const [teamForm, setTeamForm] = useState({ sport: '', team_name: '', season: '', coach: '', member_id: '' });
   const [gameForm, setGameForm] = useState({ team_id: '', opponent: '', our_score: '', their_score: '', date: '', result: 'win' as string, notes: '' });
   const [saving, setSaving] = useState(false);
+
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<SportsInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<SportsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/sports', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   // --- Date helpers ---
   const now = useMemo(() => new Date().toISOString(), []);
@@ -161,8 +181,41 @@ export function SportsModule() {
         <PageHeader
           title="Sports"
           description="Track games, practices, standings, and team schedules."
-          action={<Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> Add Event</Button>}
+          action={
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+                <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+              </Button>
+              <Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> Add Event</Button>
+            </div>
+          }
         />
+
+        {(aiAnalysis || aiInsights) && (
+          <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="flex items-center gap-2 text-sm font-bold">
+                <Sparkles className="h-4 w-4 text-brand" /> AI Sports Insights
+              </p>
+              <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+            </div>
+            {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+            {aiInsights && (
+              <div className="space-y-2">
+                {aiInsights.suggestions.map((s, i) => (
+                  <p key={i} className="text-sm">• {s}</p>
+                ))}
+                {aiInsights.scheduleTips.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-brand/20">
+                    <p className="text-xs font-semibold text-brand mb-1">Schedule Tips</p>
+                    {aiInsights.scheduleTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                  </div>
+                )}
+                {aiInsights.fitnessTip && <p className="mt-2 text-xs text-muted italic">{aiInsights.fitnessTip}</p>}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tab bar */}
         <div className="flex items-center justify-between border-b border-border">

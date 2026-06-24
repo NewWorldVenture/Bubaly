@@ -22,6 +22,7 @@ import {
   type AssignmentLike, type RedemptionLike,
 } from '@/lib/rewards/points';
 import type { Tables, RedemptionStatus } from '@/lib/database.types';
+import type { RewardsInsights, RewardsAIResponse } from '@/lib/rewards/rewards-ai';
 
 type Reward = Tables<'rewards'>;
 type Redemption = Tables<'reward_redemptions'>;
@@ -45,6 +46,25 @@ export function RewardsModule() {
   const [form, setForm] = useState(blankReward);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<RewardsInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<RewardsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/rewards', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   const { data: rewards, loading, error } = useRealtimeQuery<Reward>({
     table: 'rewards', familyId, deps: [familyId],
@@ -139,8 +159,41 @@ export function RewardsModule() {
       <PageHeader
         title="Rewards & Allowance"
         description="Turn chore points into rewards. Kids request, parents approve, everyone sees the leaderboard."
-        action={canManage && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add reward</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+            </Button>
+            {canManage && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add reward</Button>}
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4 mb-6">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-2 text-sm font-bold">
+              <Sparkles className="h-4 w-4 text-brand" /> AI Rewards Insights
+            </p>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights && (
+            <div className="space-y-2">
+              {aiInsights.suggestions.map((s, i) => (
+                <p key={i} className="text-sm">• {s}</p>
+              ))}
+              {aiInsights.motivationTips.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-brand/20">
+                  <p className="text-xs font-semibold text-brand mb-1">Motivation Tips</p>
+                  {aiInsights.motivationTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                </div>
+              )}
+              {aiInsights.rewardIdea && <p className="mt-2 text-xs text-muted italic">Reward idea: {aiInsights.rewardIdea}</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Balances leaderboard */}
       <div className="rounded-2xl bg-surface/50 border border-border p-5 mb-6">
