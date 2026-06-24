@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Stethoscope, Plus, Pencil, Trash2, CalendarClock, MapPin, AlertCircle } from 'lucide-react';
+import { Stethoscope, Plus, Pencil, Trash2, CalendarClock, MapPin, AlertCircle, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -14,6 +14,7 @@ import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { VISIT_KINDS, visitKindMeta, sortByVisitDate, upcomingFollowUps, daysUntilFollowUp, type VisitKind } from '@/lib/health/visits';
 import type { Tables } from '@/lib/database.types';
+import type { HealthVisitsInsights, HealthVisitsAIResponse } from '@/lib/health/health-visits-ai';
 
 type Visit = Tables<'health_visits'>;
 
@@ -33,6 +34,19 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
 
   const [memberFilter, setMemberFilter] = useState('all');
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<HealthVisitsInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<HealthVisitsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/health-visits', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const scoped = useMemo(() => {
     let list = visits ?? [];
@@ -93,9 +107,37 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
           )}
+          <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+            <Sparkles className="h-4 w-4" /> AI Assist
+          </Button>
           <Button size="sm" onClick={() => setForm(blank(defaultKind ?? 'medical'))}><Plus className="h-4 w-4" /> Add visit</Button>
         </div>
       </div>
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Health Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.preventiveTips && aiInsights.preventiveTips.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Preventive Care Tips</p>
+              <ul className="space-y-1">{aiInsights.preventiveTips.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.wellnessTip && <p className="text-xs text-muted italic">{aiInsights.wellnessTip}</p>}
+        </div>
+      )}
 
       {followUps.length > 0 && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">

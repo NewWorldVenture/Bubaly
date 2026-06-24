@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Target, Plus, Trash2, CheckCircle2 } from 'lucide-react';
+import { Target, Plus, Trash2, CheckCircle2, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -16,6 +16,7 @@ import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import type { GoalsInsights, GoalsAIResponse } from '@/lib/goals/goals-ai';
 
 type Goal = Tables<'goals'>;
 
@@ -24,6 +25,19 @@ export function GoalsModule() {
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Goal | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<GoalsInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<GoalsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/goals', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const { data, loading, error, refresh } = useRealtimeQuery<Goal>({
     table: 'goals',
@@ -62,8 +76,40 @@ export function GoalsModule() {
       <PageHeader
         title="Family Goals"
         description="Set goals, track progress, and celebrate achievements together."
-        action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New goal</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4" /> AI Assist
+            </Button>
+            <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New goal</Button>
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="mb-4 rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Goal Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.motivationTips && aiInsights.motivationTips.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Motivation Tips</p>
+              <ul className="space-y-1">{aiInsights.motivationTips.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.focusAdvice && <p className="text-xs text-muted italic">{aiInsights.focusAdvice}</p>}
+        </div>
+      )}
 
       {data.length === 0 ? (
         <EmptyState icon={Target} title="No goals yet" description="Set a family goal — save for a trip, read more books, exercise together."

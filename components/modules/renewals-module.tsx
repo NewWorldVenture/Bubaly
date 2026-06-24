@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import {
   ShieldCheck, Plus, Pencil, Trash2, AlertTriangle, Clock, ExternalLink,
-  DollarSign, RotateCw,
+  DollarSign, RotateCw, Sparkles, X,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -23,6 +23,7 @@ import {
   type RenewalLike, type ExpiryBucket,
 } from '@/lib/renewals/expiry';
 import type { Tables, RenewalStatus } from '@/lib/database.types';
+import type { RenewalsInsights, RenewalsAIResponse } from '@/lib/renewals/renewals-ai';
 
 type Renewal = Tables<'renewals'>;
 
@@ -55,6 +56,19 @@ export function RenewalsModule() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(blank);
   const [saving, setSaving] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<RenewalsInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<RenewalsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/renewals', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const { data: renewals, loading, error } = useRealtimeQuery<Renewal>({
     table: 'renewals', familyId, deps: [familyId],
@@ -140,8 +154,40 @@ export function RenewalsModule() {
       <PageHeader
         title="Renewals & Expirations"
         description="Track IDs, licenses, registrations, warranties, and subscriptions before they lapse."
-        action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add renewal</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4" /> AI Assist
+            </Button>
+            {canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add renewal</Button>}
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="mb-5 rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Renewal Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.priorityItems && aiInsights.priorityItems.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Priority Items</p>
+              <ul className="space-y-1">{aiInsights.priorityItems.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.organizationTip && <p className="text-xs text-muted italic">{aiInsights.organizationTip}</p>}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-6">
