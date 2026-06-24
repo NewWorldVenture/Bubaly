@@ -116,6 +116,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/volunteer', label: 'Volunteer Hub', icon: HandHeart, minLevel: 1 },
       { href: '/dashboard/college', label: 'College Planner', icon: GraduationCap, minLevel: 1 },
       { href: '/dashboard/reunions', label: 'Family Reunions', icon: Users, minLevel: 1 },
+      { href: '/dashboard/relocation', label: 'Relocation Guide', icon: MapPin, minLevel: 1 },
       { href: '/dashboard/settings', label: 'Settings', icon: Settings, minLevel: 0 },
     ],
   },
