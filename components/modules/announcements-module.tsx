@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Megaphone, Plus, Pin, PinOff, Trash2, Check, Users } from 'lucide-react';
+import { Megaphone, Plus, Pin, PinOff, Trash2, Check, Users, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { isAdmin } from '@/lib/constants/roles';
 import { fmtDateTime } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
+import type { AnnouncementsInsights, AnnouncementsAIResponse } from '@/lib/announcements/announcements-ai';
 
 type Announcement = Tables<'family_announcements'>;
 type Read = Tables<'announcement_reads'>;
@@ -50,6 +51,25 @@ export function AnnouncementsModule() {
   const [body, setBody] = useState('');
   const [pinned, setPinned] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<AnnouncementsInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<AnnouncementsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/announcements', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   // Auto-mark unread announcements as read for the current member.
   useEffect(() => {
@@ -97,8 +117,41 @@ export function AnnouncementsModule() {
       <PageHeader
         title="Announcements"
         description="Broadcast updates to the whole family."
-        action={admin ? <Button onClick={() => setShowCompose(true)}><Plus className="h-4 w-4" /> New</Button> : undefined}
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+            </Button>
+            {admin && <Button onClick={() => setShowCompose(true)}><Plus className="h-4 w-4" /> New</Button>}
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-2 text-sm font-bold">
+              <Sparkles className="h-4 w-4 text-brand" /> AI Communication Insights
+            </p>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights && (
+            <div className="space-y-2">
+              {aiInsights.suggestions.map((s, i) => (
+                <p key={i} className="text-sm">• {s}</p>
+              ))}
+              {aiInsights.communicationTips.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-brand/20">
+                  <p className="text-xs font-semibold text-brand mb-1">Communication Tips</p>
+                  {aiInsights.communicationTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                </div>
+              )}
+              {aiInsights.engagementTip && <p className="mt-2 text-xs text-muted italic">{aiInsights.engagementTip}</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <LoadingBlock />
