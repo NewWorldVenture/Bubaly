@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { BookHeart, Plus, Trash2, MapPin, Plane, ImageIcon } from 'lucide-react';
+import { BookHeart, Plus, Trash2, MapPin, Plane, ImageIcon, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -14,6 +14,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { groupByTrip } from '@/lib/vacations/memories';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import type { Tables } from '@/lib/database.types';
+import type { TripMemoriesInsights, TripMemoriesAIResponse } from '@/lib/trip-memories/trip-memories-ai';
 
 type Memory = Tables<'trip_memories'>;
 type VacationLite = { id: string; title: string };
@@ -37,6 +38,24 @@ export function TripMemoriesModule() {
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [saving, setSaving] = useState(false);
   const [urls, setUrls] = useState<Record<string, string>>({});
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<TripMemoriesInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<TripMemoriesAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/trip-memories', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   const all = useMemo(() => memories ?? [], [memories]);
   const groups = useMemo(() => groupByTrip(all), [all]);
@@ -103,8 +122,39 @@ export function TripMemoriesModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><BookHeart className="h-4 w-4 text-brand" /> Trip Memories</h3>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add memory</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+            <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+          </Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add memory</Button>
+        </div>
       </div>
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-2 text-sm font-bold">
+              <Sparkles className="h-4 w-4 text-brand" /> AI Travel Insights
+            </p>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights && (
+            <div className="space-y-2">
+              {aiInsights.suggestions.map((s, i) => (
+                <p key={i} className="text-sm">• {s}</p>
+              ))}
+              {aiInsights.travelTips.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-brand/20">
+                  <p className="text-xs font-semibold text-brand mb-1">Travel Tips</p>
+                  {aiInsights.travelTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                </div>
+              )}
+              {aiInsights.memoryIdea && <p className="mt-2 text-xs text-muted italic">Memory idea: {aiInsights.memoryIdea}</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       {all.length === 0 ? (
         <EmptyState icon={BookHeart} title="No memories yet" description="Capture moments from your trips — a photo, a note, a place you loved." />

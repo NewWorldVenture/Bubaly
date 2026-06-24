@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import {
   Plus, Trash2, Sparkles, ChevronRight, Phone, Mail, Clock,
-  MapPin, CalendarDays, Users,
+  MapPin, CalendarDays, Users, X,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -16,6 +16,7 @@ import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import type { VolunteerInsights, VolunteerAIResponse } from '@/lib/volunteer/volunteer-ai';
 import {
   CATEGORIES, STATUSES, categoryMeta, statusMeta,
   totalHours, hoursByCategory, upcomingOpportunities,
@@ -52,6 +53,25 @@ export function VolunteerModule() {
   const [addHoursOpen, setAddHoursOpen] = useState(false);
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
 
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<VolunteerInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<VolunteerAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/volunteer', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   const summary = useMemo(() => {
     if (!opportunities.data || !hours.data) return null;
     return volunteerSummary(opportunities.data, hours.data);
@@ -71,7 +91,40 @@ export function VolunteerModule() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Volunteer Hub" />
+      <PageHeader
+        title="Volunteer Hub"
+        action={
+          <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+            <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+          </Button>
+        }
+      />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-2 text-sm font-bold">
+              <Sparkles className="h-4 w-4 text-brand" /> AI Volunteer Insights
+            </p>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights && (
+            <div className="space-y-2">
+              {aiInsights.suggestions.map((s, i) => (
+                <p key={i} className="text-sm">• {s}</p>
+              ))}
+              {aiInsights.impactTips.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-brand/20">
+                  <p className="text-xs font-semibold text-brand mb-1">Impact Tips</p>
+                  {aiInsights.impactTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                </div>
+              )}
+              {aiInsights.opportunityIdea && <p className="mt-2 text-xs text-muted italic">Opportunity idea: {aiInsights.opportunityIdea}</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Summary card */}
       {summary && (

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Gauge, Plus, Trash2, TrendingUp, TrendingDown, Sparkles, Loader2, Lightbulb } from 'lucide-react';
+import { Gauge, Plus, Trash2, TrendingUp, TrendingDown, Sparkles, Loader2, Lightbulb, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -13,6 +13,7 @@ import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { UTILITY_KINDS, utilityLabel, usd, latestByKind, monthlyTotalCents, trendForKind, deltaPct, type BillLike } from '@/lib/home/utilities';
 import type { Tables } from '@/lib/database.types';
+import type { UtilitiesInsights, UtilitiesAIResponse } from '@/lib/utilities/utilities-ai';
 
 type Bill = Tables<'utility_bills'>;
 const blank = () => ({ kind: 'electric', provider: '', period_month: new Date().toISOString().slice(0, 7) + '-01', amount: '', usage: '', unit: '', note: '' });
@@ -42,6 +43,24 @@ export function UtilitiesModule() {
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [savings, setSavings] = useState<SavingsResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<UtilitiesInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<UtilitiesAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/utilities', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
   const all = useMemo(() => bills ?? [], [bills]);
   const total = useMemo(() => monthlyTotalCents(all as BillLike[]), [all]);
   const latest = useMemo(() => latestByKind(all), [all]);
@@ -85,6 +104,9 @@ export function UtilitiesModule() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><Gauge className="h-4 w-4 text-brand" /> Utility Tracking</h3>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+            <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+          </Button>
           {kinds.length > 0 && (
             <Button variant="secondary" onClick={analyze} disabled={analyzing}>
               {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} AI Savings
@@ -93,6 +115,32 @@ export function UtilitiesModule() {
           <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add bill</Button>
         </div>
       </div>
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-2 text-sm font-bold">
+              <Sparkles className="h-4 w-4 text-brand" /> AI Utility Insights
+            </p>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights && (
+            <div className="space-y-2">
+              {aiInsights.suggestions.map((s, i) => (
+                <p key={i} className="text-sm">• {s}</p>
+              ))}
+              {aiInsights.savingsTips.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-brand/20">
+                  <p className="text-xs font-semibold text-brand mb-1">Savings Tips</p>
+                  {aiInsights.savingsTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                </div>
+              )}
+              {aiInsights.efficiencyTip && <p className="mt-2 text-xs text-muted italic">{aiInsights.efficiencyTip}</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
         <p className="text-xs text-muted">Current monthly run-rate (latest bill per utility)</p>

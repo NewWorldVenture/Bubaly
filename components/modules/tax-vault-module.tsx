@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { FolderLock, Plus, Trash2, Download, FileText } from 'lucide-react';
+import { FolderLock, Plus, Trash2, Download, FileText, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -15,6 +15,7 @@ import { usd } from '@/lib/finance/splits';
 import { TAX_CATEGORIES, taxCategoryLabel, isDeductible, groupByYear, deductibleTotalCents, type TaxDocLike } from '@/lib/finance/tax';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import type { Tables } from '@/lib/database.types';
+import type { TaxVaultInsights, TaxVaultAIResponse } from '@/lib/tax-vault/tax-vault-ai';
 
 type TaxDoc = Tables<'tax_documents'>;
 
@@ -33,6 +34,25 @@ export function TaxVaultModule() {
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [saving, setSaving] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<TaxVaultInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<TaxVaultAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/tax-vault', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   const all = useMemo(() => docs ?? [], [docs]);
   const grouped = useMemo(() => groupByYear(all), [all]);
 
@@ -87,8 +107,39 @@ export function TaxVaultModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand" /> Tax Document Vault</h3>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add document</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+            <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+          </Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add document</Button>
+        </div>
       </div>
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-2 text-sm font-bold">
+              <Sparkles className="h-4 w-4 text-brand" /> AI Tax Insights
+            </p>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights && (
+            <div className="space-y-2">
+              {aiInsights.suggestions.map((s, i) => (
+                <p key={i} className="text-sm">• {s}</p>
+              ))}
+              {aiInsights.organizationTips.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-brand/20">
+                  <p className="text-xs font-semibold text-brand mb-1">Organization Tips</p>
+                  {aiInsights.organizationTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                </div>
+              )}
+              {aiInsights.complianceTip && <p className="mt-2 text-xs text-muted italic">{aiInsights.complianceTip}</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       {all.length === 0 ? (
         <EmptyState icon={FolderLock} title="No tax documents yet" description="Securely store W-2s, 1099s, receipts and deduction records by year." />
