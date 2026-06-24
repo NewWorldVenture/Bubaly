@@ -17,6 +17,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { ProviderInfoSheet, CheckInSheet } from '@/components/medical/print-sheet';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, RecordKind } from '@/lib/database.types';
@@ -244,14 +245,17 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
         title={title}
         description={desc}
         action={
-          canEdit ? (
-            <div className="flex gap-2">
-              <Button onClick={() => setCheckInPicker(true)} className="btn-cta"><ClipboardList className="h-4 w-4" /> At the Doctor</Button>
-              <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-secondary"><Plus className="h-4 w-4" /> Add {providerWord}</Button>
-            </div>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> View only</span>
-          )
+          <div className="flex items-center gap-2">
+            <AiInsight kind="medical" iconOnly />
+            {canEdit ? (
+              <>
+                <Button onClick={() => setCheckInPicker(true)} className="btn-cta"><ClipboardList className="h-4 w-4" /> At the Doctor</Button>
+                <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-secondary"><Plus className="h-4 w-4" /> Add {providerWord}</Button>
+              </>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> View only</span>
+            )}
+          </div>
         }
       />
 

@@ -16,6 +16,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   groupByExpiry, renewalStats, daysToExpiry, isExpired, rollForward,
@@ -140,7 +141,7 @@ export function RenewalsModule() {
       <PageHeader
         title="Renewals & Expirations"
         description="Track IDs, licenses, registrations, warranties, and subscriptions before they lapse."
-        action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add renewal</Button>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="renewals" iconOnly />{canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add renewal</Button>}</div>}
       />
 
       {/* Stats */}

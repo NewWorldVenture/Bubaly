@@ -16,6 +16,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   groupByDate, driverConflicts, upcomingRides, needsDriverCount, shortTime,
@@ -144,7 +145,12 @@ export function RidesModule() {
       <PageHeader
         title="Rides & Carpool"
         description="Coordinate who's driving whom, when, and where — with conflict detection."
-        action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add ride</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="rides" iconOnly />
+            {canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add ride</Button>}
+          </div>
+        }
       />
 
       {/* Alerts */}

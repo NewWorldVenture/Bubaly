@@ -12,6 +12,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   buildWeekGrid, weekParity, WEEKDAYS, WEEKDAY_LABELS,
@@ -124,7 +125,7 @@ export function TimetableModule() {
       <PageHeader
         title="Timetable"
         description="A visual Mon–Fri class schedule for every student — with alternating A/B week support for rotating timetables."
-        action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add class</Button>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="timetable" iconOnly /><Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add class</Button></div>}
       />
 
       {/* Controls */}

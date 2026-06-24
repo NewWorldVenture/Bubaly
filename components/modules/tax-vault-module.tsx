@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { usd } from '@/lib/finance/splits';
 import { TAX_CATEGORIES, taxCategoryLabel, isDeductible, groupByYear, deductibleTotalCents, type TaxDocLike } from '@/lib/finance/tax';
@@ -87,7 +88,10 @@ export function TaxVaultModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand" /> Tax Document Vault</h3>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add document</Button>
+        <div className="flex items-center gap-2">
+          <AiInsight kind="tax" iconOnly />
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add document</Button>
+        </div>
       </div>
 
       {all.length === 0 ? (

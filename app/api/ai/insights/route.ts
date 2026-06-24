@@ -161,7 +161,6 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
       return { weather_locations: locs.data ?? [] };
     }
     case 'settings': {
-      // A light cross-section so the model can recommend what to set up next.
       const [ev, todos, chores, meals, docs] = await Promise.all([
         eq(sb, 'calendar_events', familyId).gte('starts_at', nowIso).limit(50),
         eq(sb, 'todo_items', familyId).limit(50),
@@ -173,6 +172,160 @@ async function fetchRows(kind: InsightKind, sb: SupabaseClient, familyId: string
         calendar_events: ev.data ?? [], todo_items: todos.data ?? [], chores: chores.data ?? [],
         meals: meals.data ?? [], documents: docs.data ?? [],
       };
+    }
+    case 'meals': {
+      const [plans, mealRows] = await Promise.all([
+        sb.from('meal_plans').select('*').eq('family_id', familyId).gte('plan_date', since(7)).order('plan_date').limit(30),
+        sb.from('meals').select('id, name, meal_type, servings').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),
+      ]);
+      return { meal_plans: plans.data ?? [], meals: mealRows.data ?? [] };
+    }
+    case 'reminders': {
+      const r = await eq(sb, 'family_reminders', familyId).order('due_at', { ascending: true, nullsFirst: false }).limit(30);
+      return { family_reminders: r.data ?? [] };
+    }
+    case 'notes': {
+      const n = await eq(sb, 'notes', familyId).order('updated_at', { ascending: false }).limit(15);
+      return { notes: n.data ?? [] };
+    }
+    case 'recipes': {
+      const [recipes, pantry] = await Promise.all([
+        eq(sb, 'recipes', familyId).order('created_at', { ascending: false }).limit(15),
+        eq(sb, 'pantry_items', familyId).eq('is_out_of_stock', false).limit(20),
+      ]);
+      return { recipes: recipes.data ?? [], pantry_items: pantry.data ?? [] };
+    }
+    case 'documents': {
+      const docs = await eq(sb, 'documents', familyId).order('created_at', { ascending: false }).limit(20);
+      return { documents: docs.data ?? [] };
+    }
+    case 'care': {
+      const logs = await eq(sb, 'care_logs', familyId).order('occurred_at', { ascending: false, nullsFirst: false }).limit(20);
+      return { care_logs: logs.data ?? [] };
+    }
+    case 'contacts': {
+      const contacts = await eq(sb, 'contacts', familyId).order('name').limit(30);
+      return { contacts: contacts.data ?? [] };
+    }
+    case 'billing': {
+      const [subs, expenses] = await Promise.all([
+        eq(sb, 'subscriptions_tracked', familyId).limit(30),
+        eq(sb, 'expense_splits', familyId).gte('spent_on', since(30).slice(0, 10)).order('spent_on', { ascending: false }).limit(40),
+      ]);
+      return { subscriptions: subs.data ?? [], expenses: expenses.data ?? [] };
+    }
+    case 'goals': {
+      const goals = await eq(sb, 'family_goals', familyId).neq('status', 'completed').order('created_at', { ascending: false }).limit(15);
+      return { family_goals: goals.data ?? [] };
+    }
+    case 'pets': {
+      const pets = await eq(sb, 'pets', familyId).eq('is_active', true).limit(10);
+      return { pets: pets.data ?? [] };
+    }
+    case 'renewals': {
+      const renewals = await eq(sb, 'renewals', familyId).order('renewal_date', { ascending: true, nullsFirst: false }).limit(20);
+      return { renewals: renewals.data ?? [] };
+    }
+    case 'school': {
+      const [hw, grades] = await Promise.all([
+        eq(sb, 'homework_assignments', familyId).neq('status', 'done').order('due_at', { ascending: true, nullsFirst: false }).limit(20),
+        eq(sb, 'grades', familyId).order('created_at', { ascending: false }).limit(15),
+      ]);
+      return { homework_assignments: hw.data ?? [], grades: grades.data ?? [] };
+    }
+    case 'sports': {
+      const [events, teams] = await Promise.all([
+        eq(sb, 'sports_events', familyId).order('starts_at', { ascending: true, nullsFirst: false }).limit(15),
+        eq(sb, 'sports_teams', familyId).limit(10),
+      ]);
+      return { sports_events: events.data ?? [], sports_teams: teams.data ?? [] };
+    }
+    case 'pantry': {
+      const items = await eq(sb, 'pantry_items', familyId).limit(40);
+      return { pantry_items: items.data ?? [] };
+    }
+    case 'announcements': {
+      const posts = await eq(sb, 'announcements', familyId).order('created_at', { ascending: false }).limit(10);
+      return { announcements: posts.data ?? [] };
+    }
+    case 'medical': {
+      const [records, appointments] = await Promise.all([
+        eq(sb, 'medical_records', familyId).order('date', { ascending: false, nullsFirst: false }).limit(15),
+        eq(sb, 'appointments', familyId).gte('appointment_date', nowIso.slice(0, 10)).order('appointment_date').limit(10),
+      ]);
+      return { medical_records: records.data ?? [], appointments: appointments.data ?? [] };
+    }
+    case 'insurance': {
+      const policies = await eq(sb, 'insurance_policies', familyId).order('renewal_date', { ascending: true, nullsFirst: false }).limit(15);
+      return { insurance_policies: policies.data ?? [] };
+    }
+    case 'rewards': {
+      const [asg, redemptions] = await Promise.all([
+        eq(sb, 'chore_assignments', familyId).limit(40),
+        eq(sb, 'reward_redemptions', familyId).order('created_at', { ascending: false }).limit(15),
+      ]);
+      return { chore_assignments: asg.data ?? [], reward_redemptions: redemptions.data ?? [] };
+    }
+    case 'photos': {
+      const [photos, albums] = await Promise.all([
+        eq(sb, 'photos', familyId).order('created_at', { ascending: false }).limit(20),
+        eq(sb, 'photo_albums', familyId).order('created_at', { ascending: false }).limit(10),
+      ]);
+      return { photos: photos.data ?? [], photo_albums: albums.data ?? [] };
+    }
+    case 'celebrations': {
+      const dates = await eq(sb, 'family_dates', familyId).order('date').limit(30);
+      return { family_dates: dates.data ?? [] };
+    }
+    case 'signups': {
+      const opps = await eq(sb, 'opportunities', familyId).order('deadline', { ascending: true, nullsFirst: false }).limit(40);
+      return { opportunities: opps.data ?? [] };
+    }
+    case 'behavior': {
+      const logs = await eq(sb, 'behavior_logs', familyId).order('occurred_at', { ascending: false }).limit(30);
+      return { behavior_logs: logs.data ?? [] };
+    }
+    case 'screen_time': {
+      const [entries, limits] = await Promise.all([
+        eq(sb, 'screen_time_entries', familyId).order('entry_date', { ascending: false }).limit(20),
+        eq(sb, 'screen_time_limits', familyId).limit(10),
+      ]);
+      return { screen_time_entries: entries.data ?? [], screen_time_limits: limits.data ?? [] };
+    }
+    case 'binder': {
+      const items = await eq(sb, 'household_info', familyId).order('category').order('sort').limit(50);
+      return { household_info: items.data ?? [] };
+    }
+    case 'memories': {
+      const [memories, trips] = await Promise.all([
+        eq(sb, 'trip_memories', familyId).order('memory_date', { ascending: false }).limit(20),
+        eq(sb, 'vacations', familyId).order('created_at', { ascending: false }).limit(10),
+      ]);
+      return { trip_memories: memories.data ?? [], vacations: trips.data ?? [] };
+    }
+    case 'timetable': {
+      const classes = await eq(sb, 'school_classes', familyId).order('time_slot').limit(40);
+      return { school_classes: classes.data ?? [] };
+    }
+    case 'tax': {
+      const docs = await eq(sb, 'tax_documents', familyId).order('tax_year', { ascending: false }).order('created_at', { ascending: false }).limit(40);
+      return { tax_documents: docs.data ?? [] };
+    }
+    case 'utilities': {
+      const bills = await eq(sb, 'utility_bills', familyId).order('period_month', { ascending: false }).limit(24);
+      return { utility_bills: bills.data ?? [] };
+    }
+    case 'rides': {
+      const rides = await eq(sb, 'rides', familyId).order('ride_date').order('pickup_time', { nullsFirst: false }).limit(30);
+      return { rides: rides.data ?? [] };
+    }
+    case 'votes': {
+      const [polls, options, votes] = await Promise.all([
+        eq(sb, 'family_polls', familyId).order('created_at', { ascending: false }).limit(15),
+        eq(sb, 'family_poll_options', familyId).limit(60),
+        eq(sb, 'family_poll_votes', familyId).limit(60),
+      ]);
+      return { family_polls: polls.data ?? [], family_poll_options: options.data ?? [], family_poll_votes: votes.data ?? [] };
     }
     default:
       return {};

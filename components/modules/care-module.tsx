@@ -15,6 +15,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   sortByRecent, hoursSinceLastContact, isContactOverdue, averageWellbeing,
@@ -141,7 +142,7 @@ export function CareModule() {
       <PageHeader
         title="Care Log"
         description="Coordinate care for a loved one — log check-ins, track well-being, and see who's been in touch."
-        action={<Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> Log care</Button>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="care" iconOnly /><Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> Log care</Button></div>}
       />
 
       {/* Recipient selector */}

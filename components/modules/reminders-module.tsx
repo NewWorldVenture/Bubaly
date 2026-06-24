@@ -11,6 +11,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
@@ -144,6 +145,7 @@ export function RemindersModule() {
         description="Never let anything slip through the cracks."
         action={
           <div className="flex items-center gap-2">
+            <AiInsight kind="reminders" iconOnly />
             <Button variant="outline" onClick={() => setShowSuggestions(!showSuggestions)}>
               <Sparkles className="h-4 w-4 text-brand" /> Quick Add
             </Button>

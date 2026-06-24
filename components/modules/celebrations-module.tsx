@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { isAdmin } from '@/lib/constants/roles';
 import {
   upcomingCelebrations, countdownLabel, type CelebrationInput, type CelebrationKind,
@@ -85,7 +86,12 @@ export function CelebrationsModule() {
       <PageHeader
         title="Celebrations"
         description="Never miss a birthday or anniversary."
-        action={admin ? <Button onClick={() => setShowAdd(true)}><Plus className="h-4 w-4" /> Add</Button> : undefined}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="celebrations" iconOnly />
+            {admin && <Button onClick={() => setShowAdd(true)}><Plus className="h-4 w-4" /> Add</Button>}
+          </div>
+        }
       />
 
       {loading ? (

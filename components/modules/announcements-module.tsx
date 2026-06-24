@@ -12,6 +12,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { isAdmin } from '@/lib/constants/roles';
 import { fmtDateTime } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
@@ -97,7 +98,12 @@ export function AnnouncementsModule() {
       <PageHeader
         title="Announcements"
         description="Broadcast updates to the whole family."
-        action={admin ? <Button onClick={() => setShowCompose(true)}><Plus className="h-4 w-4" /> New</Button> : undefined}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="announcements" iconOnly />
+            {admin && <Button onClick={() => setShowCompose(true)}><Plus className="h-4 w-4" /> New</Button>}
+          </div>
+        }
       />
 
       {loading ? (

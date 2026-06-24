@@ -12,6 +12,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GradeType } from '@/lib/database.types';
 
@@ -277,7 +278,9 @@ export function SchoolModule() {
           title="School"
           description="Stay on top of classes, assignments, and school events."
           action={
-            <div className="relative">
+            <div className="flex items-center gap-2">
+              <AiInsight kind="school" iconOnly />
+              <div className="relative">
               <Button onClick={() => setAddMenuOpen((v) => !v)}><Plus className="h-4 w-4" /> Add Item</Button>
               {addMenuOpen && (
                 <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border border-border bg-surface p-1 shadow-lg">
@@ -286,6 +289,7 @@ export function SchoolModule() {
                   <button className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface/60" onClick={() => { setAddMenuOpen(false); setGradeOpen(true); }}>Grade</button>
                 </div>
               )}
+              </div>
             </div>
           }
         />

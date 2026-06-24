@@ -10,6 +10,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -95,7 +96,7 @@ export function PantryModule() {
       <PageHeader
         title="Pantry & Inventory"
         description="Track what's in your pantry, fridge, and freezer — never buy doubles or let food expire."
-        action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> Add item</Button>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="pantry" iconOnly /><Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> Add item</Button></div>}
       />
 
       {/* Stats */}

@@ -12,6 +12,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GameResult } from '@/lib/database.types';
 
@@ -161,7 +162,7 @@ export function SportsModule() {
         <PageHeader
           title="Sports"
           description="Track games, practices, standings, and team schedules."
-          action={<Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> Add Event</Button>}
+          action={<div className="flex items-center gap-2"><AiInsight kind="sports" iconOnly /><Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> Add Event</Button></div>}
         />
 
         {/* Tab bar */}

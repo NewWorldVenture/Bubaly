@@ -6,7 +6,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { ChevronDown, Check, Gift, Lock, LogOut, Mic, Moon, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, Sparkles, SunMedium } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
-import { APP_NAV_GROUPS, MOBILE_TABS, type NavItem } from '@/lib/constants/navigation';
+import { APP_NAV_GROUPS, MOBILE_TABS, CAPTURE_TAB_INDEX, type NavItem } from '@/lib/constants/navigation';
 import { featureAccessByTier } from '@/lib/features/tiers';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
 import { ROLE_LABELS } from '@/lib/constants/roles';
@@ -389,12 +389,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <QuickCapture />
       <AIOrb />
 
-      {/* Mobile bottom tabs */}
+      {/* Mobile bottom tabs — 5-tab AI-first nav */}
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/90 backdrop-blur-xl lg:hidden">
-        <div className="mx-auto flex max-w-lg items-stretch justify-around">
-          {mobileTabs.map(({ item, locked }) => {
+        <div className="mx-auto flex max-w-lg items-end justify-around px-1">
+          {mobileTabs.map(({ item, locked }, idx) => {
+            const isCapture = idx === CAPTURE_TAB_INDEX;
             const active = !locked && isActive(pathname, item.href);
-            const className = cn(
+
+            if (isCapture) {
+              // Raised center FAB-style Capture button
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-label="Capture"
+                  className="relative -mt-5 flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-full bg-brand shadow-lg shadow-brand/30 text-white transition hover:scale-105 active:scale-95"
+                >
+                  <item.icon className="h-6 w-6" />
+                </Link>
+              );
+            }
+
+            const tabClass = cn(
               'relative flex flex-1 flex-col items-center gap-0.5 pb-1 pt-2 text-[11px] font-medium transition',
               locked ? 'text-muted/45' : active ? 'text-brand' : 'text-muted',
             );
@@ -406,11 +422,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </>
             );
             return locked ? (
-              <button key={item.href} type="button" onClick={() => setUpgradeFor(item)} className={className}>
+              <button key={item.href} type="button" onClick={() => setUpgradeFor(item)} className={tabClass}>
                 {inner}
               </button>
             ) : (
-              <Link key={item.href} href={item.href} className={className}>
+              <Link key={item.href} href={item.href} className={tabClass}>
                 {inner}
               </Link>
             );

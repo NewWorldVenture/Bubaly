@@ -32,6 +32,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { isAdmin } from '@/lib/constants/roles';
 import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
@@ -1155,7 +1156,7 @@ export function BillingModule() {
         <PageHeader
           title="Finances"
           description="Track spending, budgets, bills, and savings goals."
-          action={<Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> Add Transaction</Button>}
+          action={<div className="flex items-center gap-2"><AiInsight kind="billing" iconOnly /><Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> Add Transaction</Button></div>}
         />
 
         <div className="flex items-center justify-between border-b border-border">

@@ -16,6 +16,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   computeBalances, canAfford, REDEMPTION_STATUS_LABELS,
@@ -139,7 +140,12 @@ export function RewardsModule() {
       <PageHeader
         title="Rewards & Allowance"
         description="Turn chore points into rewards. Kids request, parents approve, everyone sees the leaderboard."
-        action={canManage && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add reward</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="rewards" iconOnly />
+            {canManage && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add reward</Button>}
+          </div>
+        }
       />
 
       {/* Balances leaderboard */}
