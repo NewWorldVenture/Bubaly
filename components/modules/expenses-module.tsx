@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Split, Plus, Trash2, Check, ArrowRight, Scale } from 'lucide-react';
+import { Split, Plus, Trash2, Check, ArrowRight, Scale, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -16,6 +16,7 @@ import {
   usd, splitEvenly, memberBalances, settlementSuggestions, summarizeSplits,
   type SplitLike, type ShareLike,
 } from '@/lib/finance/splits';
+import { analyzeExpenses, type ExpenseInsights, type ExpensesAIResponse } from '@/lib/finance/expenses-ai';
 import type { Tables } from '@/lib/database.types';
 
 type SplitRow = Tables<'expense_splits'>;
@@ -40,6 +41,19 @@ export function ExpensesModule() {
   });
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<ExpenseInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<ExpensesAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/expenses', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const allSplits = splits ?? [];
   const allShares = shares ?? [];
@@ -112,7 +126,12 @@ export function ExpensesModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><Split className="h-4 w-4 text-brand" /> Expense Splitting</h3>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Split an expense</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+            <Sparkles className="h-4 w-4" /> AI Assist
+          </Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Split an expense</Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -120,6 +139,32 @@ export function ExpensesModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Total split</p><p className="text-xl font-bold">{usd(summary.totalCents)}</p></div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Outstanding</p><p className="text-xl font-bold">{usd(summary.unsettledCents)}</p></div>
       </div>
+
+      {/* AI Insights */}
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Expense Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.savingIdeas && aiInsights.savingIdeas.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Saving Ideas</p>
+              <ul className="space-y-1">{aiInsights.savingIdeas.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.budgetTip && <p className="text-xs text-muted italic">{aiInsights.budgetTip}</p>}
+        </div>
+      )}
 
       {/* Settle up */}
       {transfers.length > 0 && (

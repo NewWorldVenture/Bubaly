@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Plus, CheckCircle2, Circle, MoreHorizontal, Filter, SlidersHorizontal } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, MoreHorizontal, Filter, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -14,6 +14,7 @@ import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { analyzeChores, type ChoreInsights, type ChoresAIResponse } from '@/lib/chores/chores-ai';
 import type { Tables } from '@/lib/database.types';
 
 type Chore = Tables<'chores'>;
@@ -81,6 +82,19 @@ export function ChoresModule() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('all');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<ChoreInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<ChoresAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/chores', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const { data, loading, error, refresh } = useRealtimeQuery<Assignment>({
     table: 'chore_assignments', familyId, deps: [familyId],
@@ -166,12 +180,44 @@ export function ChoresModule() {
           <PageHeader
             title="Tasks & Chores"
             description="Stay on top of what needs to get done."
-            action={manager ? (
-              <Button onClick={() => setOpen(true)}>
-                <Plus className="h-4 w-4" /> Add Task
-              </Button>
-            ) : undefined}
+            action={
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+                  <Sparkles className="h-4 w-4" /> AI Assist
+                </Button>
+                {manager && (
+                  <Button onClick={() => setOpen(true)}>
+                    <Plus className="h-4 w-4" /> Add Task
+                  </Button>
+                )}
+              </div>
+            }
           />
+
+          {(aiAnalysis || aiInsights) && (
+            <div className="mb-4 rounded-xl border border-brand/30 bg-brand/5 p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+                  <Sparkles className="h-4 w-4" /> AI Chore Insights
+                </div>
+                <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+              </div>
+              {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+              {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+                <div className="mb-2">
+                  <p className="text-xs font-medium mb-1">Suggestions</p>
+                  <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+                </div>
+              )}
+              {aiInsights?.fairnessIdeas && aiInsights.fairnessIdeas.length > 0 && (
+                <div className="mb-2">
+                  <p className="text-xs font-medium mb-1">Fairness Ideas</p>
+                  <ul className="space-y-1">{aiInsights.fairnessIdeas.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+                </div>
+              )}
+              {aiInsights?.organizationTip && <p className="text-xs text-muted italic">{aiInsights.organizationTip}</p>}
+            </div>
+          )}
 
           <div className="grid-stats">
             {[

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Cake, Heart, PartyPopper, CalendarHeart, Plus, Trash2, Gift } from 'lucide-react';
+import { Cake, Heart, PartyPopper, CalendarHeart, Plus, Trash2, Gift, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -16,6 +16,7 @@ import { isAdmin } from '@/lib/constants/roles';
 import {
   upcomingCelebrations, countdownLabel, type CelebrationInput, type CelebrationKind,
 } from '@/lib/celebrations/dates';
+import { analyzeCelebrations, type CelebrationInsights, type CelebrationsAIResponse } from '@/lib/celebrations/celebrations-ai';
 import type { Tables } from '@/lib/database.types';
 
 type FamilyDate = Tables<'family_dates'>;
@@ -59,6 +60,19 @@ export function CelebrationsModule() {
   const [kind, setKind] = useState<CelebrationKind>('birthday');
   const [date, setDate] = useState('');
   const [saving, setSaving] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<CelebrationInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<CelebrationsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/celebrations', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -85,8 +99,40 @@ export function CelebrationsModule() {
       <PageHeader
         title="Celebrations"
         description="Never miss a birthday or anniversary."
-        action={admin ? <Button onClick={() => setShowAdd(true)}><Plus className="h-4 w-4" /> Add</Button> : undefined}
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4" /> AI Assist
+            </Button>
+            {admin && <Button onClick={() => setShowAdd(true)}><Plus className="h-4 w-4" /> Add</Button>}
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Celebration Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.giftIdeas && aiInsights.giftIdeas.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Gift Ideas</p>
+              <ul className="space-y-1">{aiInsights.giftIdeas.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.planningTip && <p className="text-xs text-muted italic">{aiInsights.planningTip}</p>}
+        </div>
+      )}
 
       {loading ? (
         <LoadingBlock />
