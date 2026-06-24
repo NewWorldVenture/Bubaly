@@ -1,7 +1,68 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Personal Productivity audit + Habit Tracker build. Keep this updated as you ship.
+Last updated after the Family Autopilot (Gen-2 keystone) build. Keep this updated as you ship.
+
+> **Session update (2026-06-24b) — BUBALY GEN 2: FAMILY AUTOPILOT (the keystone).**
+> Vision prompt: turn Bubaly from a "family database" into an autonomous "Family
+> Intelligence System" — digital twin, memory engine, autopilot, prediction layer,
+> control tower, agent network, etc. That's a multi-month program; this session
+> shipped the **keystone that makes the vision real and production-ready**: the
+> **Family Autopilot** (Prediction Layer + Confidence-Tiered Automation + Control
+> Tower), 100% Supabase-wired. Branch `claude/festive-bohr-m4cbeg` → merge to main.
+>
+> **CONFIDENCE TIERS (the core idea):** every suggestion gets a 0-100 confidence →
+> `confidenceTier()`: **≥90 auto** (executed automatically, reversibly) · **70-89
+> approve** (one-tap yes) · **<70 ask** (awareness). See `AUTO_THRESHOLD`/`APPROVE_THRESHOLD`.
+>
+> **BUILT:**
+> - **Migration `0085_autopilot.sql`** — `autopilot_suggestions` (kind, title, detail,
+>   confidence 0-100, urgency 1-3, `autopilot_status` enum open|approved|executed|
+>   auto_executed|dismissed|snoozed, action_type, action_label, payload jsonb,
+>   source_kind/source_id, **dedupe_key UNIQUE(family_id,dedupe_key)**, expires_at,
+>   resolved_at/by). Family-scoped RLS + set_updated_at trigger. **VALIDATED build;
+>   ⚠️ NOT APPLIED TO PROD** (apply 0085 before `/dashboard/autopilot` works live).
+> - **`lib/autopilot/engine.ts`** (pure; **11 tests** `tests/autopilot-engine.test.ts`):
+>   the prediction engine. Normalized `FamilySnapshot` in → confidence-scored
+>   `SuggestionDraft[]` out. Rules: renewals expiring ≤30d, appts today/tomorrow w/o
+>   a reminder, overdue chores, birthdays ≤14d, groceries lingering ≥7d. Plus
+>   `successProbability()` (today's 0-100 "day runs smoothly" score), `partitionByTier`,
+>   `daysUntilBirthday`. Stable `dedupeKey` per signal so re-scans upsert.
+> - **`app/api/autopilot/scan/route.ts`** — POST, `requireUserContext`-gated. Pulls the
+>   real rows (renewals/appointments/chore_assignments+chores/family_members/grocery_items/
+>   reminders), builds the snapshot, runs the engine, then RECONCILES: respects prior
+>   resolutions (never re-nags dismissed/approved), clears stale OPEN suggestions whose
+>   signal vanished, and **auto-executes** new ≥90 `create_reminder` drafts by inserting
+>   a real `reminders` row + marking the suggestion `auto_executed`. Returns
+>   `{scanned, autoExecuted, cleared}`.
+> - **`components/modules/autopilot-module.tsx`** — the **Control Tower / Mission Control**:
+>   auto-scans on open; shows Today's Success %, Handled-for-you count, Risk Alerts; then
+>   3 sections: "Bubaly already handled it" (auto), "Needs a quick yes" (approve), "Heads
+>   up" (ask). One-tap approve (executes reversible actions like creating the reminder) /
+>   dismiss, all via Supabase + realtime.
+> - **Wiring:** feature-catalog `autopilot` (Suggested, **plus**, `/dashboard/autopilot`);
+>   nav = first item in Suggested (Rocket icon, minLevel 2); plans.ts route-level 2;
+>   page `requireFeature('/dashboard/autopilot')`.
+> - Verified: tsc clean · lint clean · `npm run build` ✓ (`/api/autopilot/scan` +
+>   `/dashboard/autopilot` registered) · **full suite 872/872 tests pass** (incl. 11 new).
+>
+> **GEN-2 ROADMAP (next agents — build on this keystone, same pattern):**
+> 1. **Cron the autopilot** — add `/api/cron/autopilot-scan` to `vercel.json` (loop all
+>    families, call the engine) so it runs without anyone opening the app ("invisible product").
+> 2. **More signals** — expand `engine.ts`: depleted staples (recurring grocery history),
+>    expiring documents/insurance, upcoming expenses (subscriptions/renewals cost),
+>    schedule conflicts (overlapping calendar_events), burnout risk (reuse family_stress).
+> 3. **Family Digital Twin** — `family_digital_twin_profiles` already exists (0022_family_os);
+>    enrich it (who drives, who forgets chores, food prefs) and feed it into confidence scoring.
+> 4. **Family Memory Engine** — `family_memories`/`family_milestones` exist; wire long-term
+>    preference learning so recommendations improve over time.
+> 5. **Agent network** — specialized agents (Meal/Health/Travel/Finance…) each emitting
+>    autopilot suggestions into the SAME `autopilot_suggestions` store (kind = agent).
+> 6. **Control Tower as Home** — promote the autopilot surface to the default `/dashboard`
+>    home ("Mission Control") with the morning brief + energy/happiness scores.
+> 7. **Ambient delivery** — push/SMS/email/widgets/watch for auto-executed + high-urgency items.
+> NOTE: `family_ai_recommendations` (0022) is the OLD generic rec store; the NEW autopilot
+> loop is `autopilot_suggestions` (0085) — prefer it for anything confidence/automation.
 
 > **Session update (2026-06-24a) — TIER 4 PERSONAL PRODUCTIVITY AUDIT + HABIT TRACKER.**
 > Task: audit the "Tier 4: Personal Productivity" list, note what's world-class,
