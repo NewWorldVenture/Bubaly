@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { FolderLock, Plus, Trash2, Eye, EyeOff, Pencil } from 'lucide-react';
+import { FolderLock, Plus, Trash2, Eye, EyeOff, Pencil, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -11,6 +11,8 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { BINDER_CATEGORIES, binderCategoryLabel, maskValue, groupByCategory, type InfoLike } from '@/lib/home/binder';
+import { type BinderInsights, type BinderAIResponse } from '@/lib/home/binder-ai';
+import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
 type Info = Tables<'household_info'>;
@@ -28,6 +30,9 @@ export function BinderModule() {
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const groups = useMemo(() => groupByCategory((items ?? []) as (Info & InfoLike)[]), [items]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<BinderInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<BinderAIResponse | null>(null);
 
   function toggleReveal(id: string) {
     setRevealed((r) => { const n = new Set(r); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -53,6 +58,20 @@ export function BinderModule() {
     setForm({ id: i.id, category: i.category, label: i.label, value: i.value ?? '', note: i.note ?? '', is_sensitive: i.is_sensitive });
   }
 
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/binder', { method: 'POST' });
+      if (!res.ok) throw new Error('AI request failed');
+      const data = await res.json();
+      setAiAnalysis(data.analysis ?? null);
+      setAiInsights(data.aiInsights ?? null);
+    } catch {
+      toastError('Could not analyze binder');
+    }
+    setAiLoading(false);
+  }
+
   if (loading) return <LoadingBlock />;
 
   return (
@@ -62,8 +81,58 @@ export function BinderModule() {
           <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand" /> Household Binder</h3>
           <p className="text-xs text-muted">Your digital command center — Wi-Fi, codes, shutoffs, policies and key info in one place.</p>
         </div>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add entry</Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" onClick={runAiAssist} disabled={aiLoading}>
+            <Sparkles className={cn('w-4 h-4 mr-1', aiLoading && 'animate-pulse')} />
+            {aiLoading ? 'Analyzing…' : 'AI Assist'}
+          </Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add entry</Button>
+        </div>
       </div>
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand">
+              <Sparkles className="h-3.5 w-3.5" /> Binder Insights
+            </span>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {aiAnalysis && (
+            <div className="space-y-1.5">
+              <p className="text-sm">{aiAnalysis.summary}</p>
+              {aiAnalysis.missingCategories.length > 0 && (
+                <p className="text-xs text-amber-400">Missing essential: {aiAnalysis.missingCategories.join(', ')}</p>
+              )}
+            </div>
+          )}
+          {aiInsights && (
+            <div className="space-y-2 border-t border-brand/20 pt-2">
+              {aiInsights.suggestions.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1">Suggestions</p>
+                  <ul className="space-y-0.5">
+                    {aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}
+                  </ul>
+                </div>
+              )}
+              {aiInsights.missingEntries.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1">Consider adding</p>
+                  <div className="flex flex-wrap gap-1">
+                    {aiInsights.missingEntries.map((e) => <span key={e} className="text-xs px-2 py-0.5 rounded-full border border-brand/30 bg-brand/10">{e}</span>)}
+                  </div>
+                </div>
+              )}
+              {aiInsights.organizationTip && (
+                <p className="text-xs text-muted italic">💡 {aiInsights.organizationTip}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {groups.length === 0 ? (
         <EmptyState icon={FolderLock} title="Your binder is empty" description="Add the things everyone forgets: Wi-Fi password, alarm code, water shutoff, insurance policy numbers." />

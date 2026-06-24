@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Cpu, Plus, Trash2, Wifi, WifiOff, HelpCircle, Pencil } from 'lucide-react';
+import { Cpu, Plus, Trash2, Wifi, WifiOff, HelpCircle, Pencil, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -11,6 +11,8 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { DEVICE_TYPES, DEVICE_INTEGRATIONS, DEVICE_STATUSES, integrationLabel, summarizeDevices, groupByRoom, type DeviceLike } from '@/lib/home/devices';
+import { type DevicesInsights, type DevicesAIResponse } from '@/lib/home/devices-ai';
+import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
 type Device = Tables<'smart_devices'>;
@@ -31,6 +33,9 @@ export function DevicesModule() {
   const all = useMemo(() => devices ?? [], [devices]);
   const stats = useMemo(() => summarizeDevices(all as DeviceLike[]), [all]);
   const groups = useMemo(() => groupByRoom((all) as (Device & DeviceLike)[]), [all]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<DevicesInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<DevicesAIResponse | null>(null);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -57,6 +62,20 @@ export function DevicesModule() {
     setForm({ id: d.id, name: d.name, type: d.type, room: d.room ?? '', brand: d.brand ?? '', integration: d.integration, status: d.status, last_state: d.last_state ?? '', note: d.note ?? '' });
   }
 
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/devices', { method: 'POST' });
+      if (!res.ok) throw new Error('AI request failed');
+      const data = await res.json();
+      setAiAnalysis(data.analysis ?? null);
+      setAiInsights(data.aiInsights ?? null);
+    } catch {
+      toastError('Could not analyze devices');
+    }
+    setAiLoading(false);
+  }
+
   if (loading) return <LoadingBlock />;
 
   return (
@@ -66,8 +85,58 @@ export function DevicesModule() {
           <h3 className="flex items-center gap-2 text-base font-semibold"><Cpu className="h-4 w-4 text-brand" /> Smart Home</h3>
           <p className="text-xs text-muted">Unified registry of every connected device across HomeKit, Google, Alexa, SmartThings &amp; Matter.</p>
         </div>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add device</Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" onClick={runAiAssist} disabled={aiLoading}>
+            <Sparkles className={cn('w-4 h-4 mr-1', aiLoading && 'animate-pulse')} />
+            {aiLoading ? 'Analyzing…' : 'AI Assist'}
+          </Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add device</Button>
+        </div>
       </div>
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand">
+              <Sparkles className="h-3.5 w-3.5" /> Smart Home Insights
+            </span>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {aiAnalysis && (
+            <div className="space-y-1.5">
+              <p className="text-sm">{aiAnalysis.summary}</p>
+              {aiAnalysis.offlineCount > 0 && (
+                <p className="text-xs text-amber-400">⚠ {aiAnalysis.offlineCount} device{aiAnalysis.offlineCount > 1 ? 's' : ''} offline</p>
+              )}
+            </div>
+          )}
+          {aiInsights && (
+            <div className="space-y-2 border-t border-brand/20 pt-2">
+              {aiInsights.suggestions.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1">Suggestions</p>
+                  <ul className="space-y-0.5">
+                    {aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}
+                  </ul>
+                </div>
+              )}
+              {aiInsights.sceneIdeas.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1">Scene ideas</p>
+                  <div className="flex flex-wrap gap-1">
+                    {aiInsights.sceneIdeas.map((s) => <span key={s} className="text-xs px-2 py-0.5 rounded-full border border-brand/30 bg-brand/10">{s}</span>)}
+                  </div>
+                </div>
+              )}
+              {aiInsights.organizationTip && (
+                <p className="text-xs text-muted italic">💡 {aiInsights.organizationTip}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-2xl border border-border bg-surface/40 p-4"><p className="text-xs text-muted">Devices</p><p className="text-xl font-bold">{stats.total}</p></div>
