@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Rocket, ShieldCheck, AlertTriangle, Sparkles, Check, X, RefreshCw, Gauge,
   CalendarClock, FileClock, Cake, ShoppingCart, ListChecks, CircleDot,
+  CalendarX, Wallet, HeartPulse,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -24,7 +25,8 @@ type Suggestion = Tables<'autopilot_suggestions'>;
 
 const KIND_ICON: Record<string, typeof Rocket> = {
   document: FileClock, appointment: CalendarClock, chore: ListChecks,
-  birthday: Cake, groceries: ShoppingCart,
+  birthday: Cake, groceries: ShoppingCart, conflict: CalendarX,
+  finance: Wallet, wellbeing: HeartPulse,
 };
 
 function iconFor(kind: string) {
