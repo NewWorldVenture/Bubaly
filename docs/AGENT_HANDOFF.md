@@ -1,7 +1,42 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Family Autopilot (Gen-2 keystone) build. Keep this updated as you ship.
+Last updated after the Autopilot cron + schedule-conflict signal. Keep this updated as you ship.
+
+> **Session update (2026-06-24c) — GEN-2 ROADMAP #1 + #2: AUTOPILOT CRON + CONFLICT SIGNAL.**
+> Continued the Gen-2 roadmap on top of the Family Autopilot keystone (0085).
+> Made it the "invisible product" (runs without anyone opening the app) and added
+> the most mind-reading new prediction (schedule clashes). Branch `claude/festive-bohr-m4cbeg`.
+> NO new migration — reuses `autopilot_suggestions` (0085).
+>
+> **BUILT:**
+> - **`lib/autopilot/scan.ts`** — extracted the server-side scan pass into a shared
+>   `runAutopilotScan(supabase, familyId, userId|null)` so BOTH the on-demand route and
+>   the cron reuse identical logic (reads → snapshot → engine → reconcile → auto-execute).
+>   Route `app/api/autopilot/scan/route.ts` is now a thin wrapper.
+> - **`app/api/cron/autopilot-scan/route.ts`** — Bearer `CRON_SECRET` gated (same pattern
+>   as the other crons); service client loops ALL families and runs the scan per family,
+>   tolerant of per-family failures. Returns `{families, scanned, autoExecuted, failures}`.
+> - **`vercel.json`** — added cron `"/api/cron/autopilot-scan"` at `"30 6,18 * * *"`
+>   (twice daily, morning + evening). **ACTION: ensure `CRON_SECRET` env is set in prod.**
+> - **Engine: new `conflictSuggestions`** (`lib/autopilot/engine.ts`) — detects overlapping
+>   same-day `calendar_events` (uses `assignee_id` as the member; missing end = 1h block).
+>   Same-member clash = confidence 84 (approve, "they can't be two places"); family-wide
+>   clash = 68 (ask). Added `events: EventSignal[]` to `FamilySnapshot`; scan.ts reads
+>   calendar_events for today+tomorrow. **3 new tests (14 total in tests/autopilot-engine.test.ts).**
+> - Verified: tsc clean · lint clean · `npm run build` ✓ (`/api/cron/autopilot-scan` registered)
+>   · 14/14 engine tests pass.
+>
+> **GEN-2 ROADMAP — remaining (next agents):**
+> - More signals: upcoming expenses (renewal/subscription cost), depleted staples
+>   (recurring grocery history), burnout risk (reuse `family_stress_signals`), expiring
+>   insurance/documents. Each = a new pure `*Suggestions()` in engine.ts + a read in scan.ts + tests.
+> - **Family Digital Twin** (`family_digital_twin_profiles`, 0022) + **Memory** (`family_memories`/
+>   `family_milestones`) feeding confidence scoring + preference learning.
+> - **Agent network**: specialized agents emit into the SAME `autopilot_suggestions` store (kind = agent).
+> - **Control Tower as Home**: promote `/dashboard/autopilot` to the default `/dashboard`.
+> - **Ambient delivery**: push/SMS/email/widgets for auto-executed + high-urgency items
+>   (notifications cron already exists — fan autopilot rows into it).
 
 > **Session update (2026-06-24b) — BUBALY GEN 2: FAMILY AUTOPILOT (the keystone).**
 > Vision prompt: turn Bubaly from a "family database" into an autonomous "Family

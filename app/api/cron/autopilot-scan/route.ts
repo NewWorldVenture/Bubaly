@@ -1,0 +1,40 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { runAutopilotScan } from '@/lib/autopilot/scan';
+
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
+// Family Autopilot cron — the "invisible product". Runs the prediction engine
+// for every family on a schedule so predictions and reversible auto-actions
+// happen WITHOUT anyone opening the app. Scheduled via Vercel Cron.
+export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get('authorization');
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  try {
+    const supabase = createServiceClient();
+    const { data: families, error } = await supabase.from('families').select('id').limit(5000);
+    if (error) throw error;
+
+    let scanned = 0;
+    let autoExecuted = 0;
+    let failures = 0;
+    for (const fam of families ?? []) {
+      try {
+        const r = await runAutopilotScan(supabase, fam.id, null);
+        scanned += r.scanned;
+        autoExecuted += r.autoExecuted;
+      } catch (err) {
+        failures++;
+        console.error(`Autopilot cron failed for family ${fam.id}:`, err);
+      }
+    }
+
+    return NextResponse.json({ ok: true, families: (families ?? []).length, scanned, autoExecuted, failures });
+  } catch (err) {
+    console.error('Autopilot cron error:', err);
+    return NextResponse.json({ error: 'Autopilot cron failed' }, { status: 500 });
+  }
+}

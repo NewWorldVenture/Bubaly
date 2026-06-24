@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   confidenceTier, AUTO_THRESHOLD, APPROVE_THRESHOLD, daysUntilBirthday,
   renewalSuggestions, appointmentSuggestions, choreSuggestions, birthdaySuggestions,
-  grocerySuggestions, buildSuggestions, successProbability, partitionByTier,
+  grocerySuggestions, conflictSuggestions, buildSuggestions, successProbability, partitionByTier,
   type FamilySnapshot,
 } from '@/lib/autopilot/engine';
 
@@ -13,6 +13,7 @@ const base = (over: Partial<FamilySnapshot> = {}): FamilySnapshot => ({
   overdueChores: [],
   birthdays: [],
   lingeringGroceries: [],
+  events: [],
   ...over,
 });
 
@@ -92,6 +93,34 @@ describe('grocerySuggestions', () => {
     ] }));
     expect(out.map((o) => o.sourceId)).toEqual(['g1']);
     expect(confidenceTier(out[0].confidence)).toBe('auto');
+  });
+});
+
+describe('conflictSuggestions', () => {
+  it('flags overlapping same-day events, higher confidence when same member', () => {
+    const out = conflictSuggestions(base({ events: [
+      { id: 'e1', title: 'Soccer', startsAt: '2026-06-24T15:00:00Z', endsAt: '2026-06-24T16:30:00Z', memberId: 'm1' },
+      { id: 'e2', title: 'Dentist', startsAt: '2026-06-24T16:00:00Z', endsAt: '2026-06-24T17:00:00Z', memberId: 'm1' },
+    ] }));
+    expect(out).toHaveLength(1);
+    expect(out[0].kind).toBe('conflict');
+    expect(out[0].confidence).toBe(84); // same member
+    expect(out[0].urgency).toBe(3);
+    expect(out[0].dedupeKey).toBe('conflict:e1|e2');
+  });
+  it('does not flag non-overlapping or different-day events', () => {
+    expect(conflictSuggestions(base({ events: [
+      { id: 'e1', title: 'A', startsAt: '2026-06-24T09:00:00Z', endsAt: '2026-06-24T10:00:00Z', memberId: 'm1' },
+      { id: 'e2', title: 'B', startsAt: '2026-06-24T11:00:00Z', endsAt: '2026-06-24T12:00:00Z', memberId: 'm1' },
+    ] }))).toHaveLength(0);
+  });
+  it('treats a missing end time as a 1-hour block', () => {
+    const out = conflictSuggestions(base({ events: [
+      { id: 'e1', title: 'A', startsAt: '2026-06-24T09:00:00Z', endsAt: null, memberId: null },
+      { id: 'e2', title: 'B', startsAt: '2026-06-24T09:30:00Z', endsAt: null, memberId: null },
+    ] }));
+    expect(out).toHaveLength(1);
+    expect(out[0].confidence).toBe(68); // family-wide clash
   });
 });
 
