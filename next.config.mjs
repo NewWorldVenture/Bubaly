@@ -9,6 +9,20 @@ const nextConfig = {
       { protocol: 'https', hostname: '*.supabase.co' },
     ],
   },
+  async redirects() {
+    return [
+      // Canonical domain is www.bubaly.com. Permanently redirect the legacy
+      // theagoras.com (apex + www) to it so any request that reaches the app
+      // lands on the live site. (The domains must also be attached to this
+      // Vercel project for the alias to route here in the first place.)
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: '(www\\.)?theagoras\\.com' }],
+        destination: 'https://www.bubaly.com/:path*',
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {

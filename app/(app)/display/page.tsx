@@ -1,46 +1,64 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Calendar, CheckCircle2, ShoppingCart, UtensilsCrossed, Cake, X } from 'lucide-react';
-import { requirePlanLevel } from '@/lib/supabase/auth';
+import { X } from 'lucide-react';
+import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { Avatar } from '@/components/ui/avatar';
-import { fmtTime } from '@/lib/utils/format';
-import { DisplayClock } from '@/components/display/display-clock';
 import { AutoRefresh } from '@/components/display/auto-refresh';
-import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
+import { DisplayGrid, DEFAULT_TILES, type DisplayData, type Tile } from '@/components/display/display-grid';
 
 export const metadata: Metadata = { title: 'Kitchen Display', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
-
-// Kitchen Display Mode is a Family Basic feature.
+// Kitchen Display Mode is a Family Basic feature. Fully customizable grid of
+// widgets, with the layout persisted per-family in `display_layouts`.
 export default async function KitchenDisplayPage() {
-  const ctx = await requirePlanLevel(1);
+  const ctx = await requireFeature('/display');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
   const now = new Date();
   const start = new Date(now); start.setHours(0, 0, 0, 0);
   const end = new Date(start); end.setDate(end.getDate() + 1);
-  const in7 = new Date(start); in7.setDate(in7.getDate() + 7);
+  const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
   const todayDate = start.toISOString().slice(0, 10);
+
+  // Month bounds for the calendar widget.
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
   const [
     { data: members },
     { data: events },
+    { data: upcoming },
     { data: chores },
     { data: mealRows },
+    { data: groceryItems },
     { count: groceryCount },
+    { data: reminders },
+    { data: notes },
+    { data: featuredRecipe },
+    { data: monthEvents },
+    { data: layoutRow },
   ] = await Promise.all([
     supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id')
       .eq('family_id', familyId).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).order('starts_at'),
+    supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id')
+      .eq('family_id', familyId).gte('starts_at', end.toISOString()).lt('starts_at', in14.toISOString()).order('starts_at').limit(12),
     supabase.from('chore_assignments').select('id, status, member_id, chore_id, due_at')
       .eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted'])
       .lte('due_at', end.toISOString()).order('due_at'),
     supabase.from('meal_plans').select('meal_type, meal_id').eq('family_id', familyId).eq('plan_date', todayDate),
+    supabase.from('grocery_items').select('id, name').eq('family_id', familyId).eq('is_checked', false).order('created_at').limit(8),
     supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false),
+    supabase.from('reminders').select('id, title, remind_at').eq('family_id', familyId).eq('is_done', false)
+      .lte('remind_at', in14.toISOString()).order('remind_at').limit(10),
+    supabase.from('notes').select('id, title, body').eq('family_id', familyId).eq('is_pinned', true).order('updated_at', { ascending: false }).limit(6),
+    supabase.from('family_recipes').select('name, category, photo_url').eq('family_id', familyId)
+      .order('is_favorite', { ascending: false }).order('last_made_at', { ascending: false, nullsFirst: false }).limit(1).maybeSingle(),
+    supabase.from('calendar_events').select('starts_at')
+      .eq('family_id', familyId).gte('starts_at', monthStart.toISOString()).lt('starts_at', monthEnd.toISOString()),
+    supabase.from('display_layouts').select('tiles').eq('family_id', familyId).maybeSingle(),
   ]);
 
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
@@ -56,138 +74,58 @@ export default async function KitchenDisplayPage() {
   const mealName = new Map((meals ?? []).map((m) => [m.id, m.name]));
 
   const todaysMeals = (mealRows ?? [])
-    .map((m) => ({ type: m.meal_type, name: m.meal_id ? mealName.get(m.meal_id) ?? null : null }))
-    .filter((m) => m.name);
+    .map((m) => ({ type: m.meal_type as string, name: m.meal_id ? mealName.get(m.meal_id) ?? null : null }))
+    .filter((m): m is { type: string; name: string } => Boolean(m.name));
 
-  const birthdays = (members ?? []).filter((m) => {
-    if (!m.birthday) return false;
-    const bd = m.birthday.slice(5);
-    return bd >= todayDate.slice(5) && bd <= in7.toISOString().slice(5, 10);
-  });
+  // Birthdays in the next two weeks (month-day comparison, handles year wrap).
+  const mmddToday = todayDate.slice(5);
+  const mmddEnd = in14.toISOString().slice(5, 10);
+  const birthdays = (members ?? [])
+    .filter((m) => {
+      if (!m.birthday) return false;
+      const bd = m.birthday.slice(5);
+      return mmddEnd >= mmddToday ? bd >= mmddToday && bd <= mmddEnd : bd >= mmddToday || bd <= mmddEnd;
+    })
+    .map((m) => ({
+      name: m.display_name,
+      date: new Date(`2000-${m.birthday!.slice(5)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    }));
+
+  const eventDays = [...new Set((monthEvents ?? []).map((e) => new Date(e.starts_at).getDate()))];
+
+  const data: DisplayData = {
+    familyName: ctx.active.family.name,
+    members: (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name, color: m.color, role: m.role })),
+    events: events ?? [],
+    upcoming: upcoming ?? [],
+    chores: (chores ?? []).map((c) => ({ id: c.id, status: c.status, member_id: c.member_id, title: choreTitle.get(c.chore_id) ?? 'Chore' })),
+    meals: todaysMeals,
+    grocery: { items: groceryItems ?? [], count: groceryCount ?? 0 },
+    reminders: reminders ?? [],
+    birthdays,
+    notes: (notes ?? []).map((n) => ({ id: n.id, title: n.title, body: n.body })),
+    featured: featuredRecipe ? { name: featuredRecipe.name, category: featuredRecipe.category, imageUrl: featuredRecipe.photo_url } : null,
+    calendar: { year: now.getFullYear(), month: now.getMonth(), today: now.getDate(), eventDays },
+  };
+
+  const savedTiles = (layoutRow?.tiles as Tile[] | null) ?? null;
+  const initialTiles = savedTiles && savedTiles.length ? savedTiles : DEFAULT_TILES;
 
   return (
     <div className="min-h-dvh bg-bg p-6 text-fg lg:p-10">
-      <AutoRefresh seconds={60} />
+      <AutoRefresh seconds={120} />
 
-      {/* Header */}
-      <header className="flex items-start justify-between gap-4">
+      <header className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-widest text-brand">FamilyOS</p>
+          <p className="text-sm font-semibold uppercase tracking-widest text-brand">Bubaly</p>
           <h1 className="mt-1 text-4xl font-black lg:text-5xl">{ctx.active.family.name}</h1>
-          <div className="mt-3 flex -space-x-2">
-            {(members ?? []).slice(0, 8).map((m) => (
-              <Avatar key={m.id} name={m.display_name} color={m.color} size={36} className="ring-2 ring-bg" />
-            ))}
-          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <DashboardWeather />
-          <DisplayClock />
-          <Link href="/dashboard" title="Exit display" className="grid h-10 w-10 place-items-center rounded-full border border-border text-muted transition hover:text-fg">
-            <X className="h-5 w-5" />
-          </Link>
-        </div>
+        <Link href="/dashboard" title="Exit display" className="grid h-10 w-10 place-items-center rounded-full border border-border text-muted transition hover:text-fg">
+          <X className="h-5 w-5" />
+        </Link>
       </header>
 
-      {birthdays.length > 0 && (
-        <div className="mt-6 flex items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-5 py-3 text-lg font-semibold text-rose-200">
-          <Cake className="h-6 w-6" />
-          {birthdays.map((b) => `${b.display_name}'s birthday`).join(' · ')} coming up this week!
-        </div>
-      )}
-
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        {/* Today's schedule — wide */}
-        <section className="rounded-3xl border border-border bg-surface/40 p-6 lg:col-span-2">
-          <div className="mb-5 flex items-center gap-3">
-            <Calendar className="h-7 w-7 text-violet-300" />
-            <h2 className="text-2xl font-bold">Today&apos;s Schedule</h2>
-          </div>
-          {events && events.length > 0 ? (
-            <ul className="space-y-3">
-              {events.map((e) => {
-                const who = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
-                return (
-                  <li key={e.id} className="flex items-center gap-4 rounded-2xl bg-surface/40 px-5 py-4">
-                    <span className="w-24 shrink-0 text-xl font-bold tabular-nums text-violet-200">
-                      {e.all_day ? 'All day' : fmtTime(e.starts_at)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xl font-semibold">{e.title}</p>
-                      {e.location && <p className="truncate text-sm text-muted">{e.location}</p>}
-                    </div>
-                    {who && <Avatar name={who.display_name} color={who.color} size={40} />}
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <Calendar className="h-12 w-12 text-muted/40" />
-              <p className="mt-3 text-xl text-muted">Nothing scheduled today</p>
-            </div>
-          )}
-        </section>
-
-        {/* Right column */}
-        <div className="space-y-6">
-          {/* Chores today */}
-          <section className="rounded-3xl border border-border bg-surface/40 p-6">
-            <div className="mb-4 flex items-center gap-3">
-              <CheckCircle2 className="h-6 w-6 text-emerald-300" />
-              <h2 className="text-xl font-bold">Chores Today</h2>
-            </div>
-            {chores && chores.length > 0 ? (
-              <ul className="space-y-2.5">
-                {chores.slice(0, 6).map((c) => {
-                  const who = memberById.get(c.member_id);
-                  return (
-                    <li key={c.id} className="flex items-center gap-3">
-                      <span className={`h-3 w-3 shrink-0 rounded-full ${c.status === 'submitted' ? 'bg-amber-400' : 'bg-elevated'}`} />
-                      <span className="min-w-0 flex-1 truncate text-lg">{choreTitle.get(c.chore_id) ?? 'Chore'}</span>
-                      {who && <span className="shrink-0 text-sm text-muted">{who.display_name.split(' ')[0]}</span>}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="py-6 text-center text-lg text-muted">All done! 🎉</p>
-            )}
-          </section>
-
-          {/* Tonight's meal */}
-          <section className="rounded-3xl border border-border bg-surface/40 p-6">
-            <div className="mb-4 flex items-center gap-3">
-              <UtensilsCrossed className="h-6 w-6 text-amber-300" />
-              <h2 className="text-xl font-bold">On the Menu</h2>
-            </div>
-            {todaysMeals.length > 0 ? (
-              <ul className="space-y-2">
-                {todaysMeals.map((m) => (
-                  <li key={m.type} className="flex items-center gap-3 text-lg">
-                    <span className="text-2xl">{MEAL_EMOJIS[m.type] ?? '🍽️'}</span>
-                    <span className="capitalize text-muted">{m.type}:</span>
-                    <span className="font-semibold">{m.name}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="py-4 text-center text-lg text-muted">No meals planned</p>
-            )}
-          </section>
-
-          {/* Grocery count */}
-          <section className="flex items-center gap-4 rounded-3xl border border-border bg-surface/40 p-6">
-            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-blue-500/15">
-              <ShoppingCart className="h-7 w-7 text-blue-300" />
-            </div>
-            <div>
-              <p className="text-3xl font-black">{groceryCount ?? 0}</p>
-              <p className="text-muted">items on the grocery list</p>
-            </div>
-          </section>
-        </div>
-      </div>
+      <DisplayGrid initialTiles={initialTiles} data={data} familyId={familyId} userId={ctx.user.id} />
     </div>
   );
 }

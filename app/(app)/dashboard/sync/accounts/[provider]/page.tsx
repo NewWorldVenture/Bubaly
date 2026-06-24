@@ -51,15 +51,15 @@ const SETUP: Record<SyncProvider, { steps: string[]; connectHref?: string; docsH
       'Create an app-specific password at appleid.apple.com → Sign-In and Security.',
       'Enter it here to enable CalDAV sync for Apple Calendar and Reminders.',
       'You can also publish a public ICS feed that Apple Calendar subscribes to.',
-      'Apple Notes has no public API — notes stay internal to theagoras.',
+      'Apple Notes has no public API — notes stay internal to bubaly.',
     ],
   },
   amazon: {
     authKind: 'ICS feed + Alexa account linking',
     docsHref: 'https://developer.amazon.com/docs/alexa/account-linking/account-linking-concepts.html',
     steps: [
-      'Publish a theagoras calendar as an ICS feed and add it as an Alexa calendar (one-way to Alexa).',
-      'There is no public API to read an Amazon calendar back into theagoras.',
+      'Publish a bubaly calendar as an ICS feed and add it as an Alexa calendar (one-way to Alexa).',
+      'There is no public API to read an Amazon calendar back into bubaly.',
       'Alexa reminder writes require a custom Alexa Skill with account linking (not yet enabled).',
     ],
   },

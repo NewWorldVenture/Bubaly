@@ -1,15 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp, MoreHorizontal, Search, SlidersHorizontal, ShoppingBag, Check } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp, MoreHorizontal, Search, SlidersHorizontal, ShoppingBag, Check, ExternalLink, Copy, Store } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
+import { Modal } from '@/components/ui/modal';
 import { cn } from '@/lib/utils/cn';
+import { RETAILERS, itemSearchUrl, buildShoppingText, type Retailer } from '@/lib/grocery/retailers';
 import type { Tables } from '@/lib/database.types';
 
 type Item = Tables<'grocery_items'>;
@@ -36,6 +39,7 @@ export function GroceryModule() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [searchQ, setSearchQ] = useState('');
   const [tab, setTab] = useState<'all' | 'mine' | 'store'>('all');
+  const [shopRetailer, setShopRetailer] = useState<Retailer | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -128,6 +132,7 @@ export function GroceryModule() {
             description="Stay organized and never forget an item."
             action={
               <div className="flex flex-wrap items-center gap-2">
+                <AiInsight kind="grocery" />
                 <Button variant="outline" size="sm">
                   <SlidersHorizontal className="h-4 w-4" /> Reorder
                 </Button>
@@ -240,30 +245,37 @@ export function GroceryModule() {
             )}
           </form>
 
-          {/* Buy Online section */}
+          {/* Buy Online / delivery hand-off */}
           <div className="rounded-xl border border-border bg-surface/30 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand/20 text-xl">🛒</div>
                 <div>
-                  <p className="text-sm font-semibold">Buy Online &amp; Pickup</p>
-                  <p className="text-xs text-muted">Shop from your favorite stores and pick up when it&apos;s convenient for you.</p>
+                  <p className="text-sm font-semibold">Shop online &amp; get it delivered</p>
+                  <p className="text-xs text-muted">Send your list straight to a store — one tap opens each item in their cart.</p>
                 </div>
               </div>
-              <div className="ml-0 flex items-center gap-3 sm:ml-auto">
-                {[{ name: 'Walmart', emoji: '🏪', label: 'Pickup today' }, { name: 'Kroger', emoji: '🏬', label: 'Pickup tomorrow' }, { name: 'Target', emoji: '🎯', label: 'Pickup today' }].map(s => (
-                  <div key={s.name} className="flex flex-col items-center gap-0.5">
-                    <span className="text-xl">{s.emoji}</span>
-                    <span className="text-[9px] font-semibold">{s.name}</span>
-                    <span className="text-[8px] text-muted">{s.label}</span>
-                  </div>
+              <div className="ml-0 flex flex-wrap items-center gap-2 sm:ml-auto">
+                {RETAILERS.map(r => (
+                  <button key={r.id} onClick={() => setShopRetailer(r)}
+                    className="flex items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-2.5 py-1.5 text-xs font-semibold hover:bg-elevated transition"
+                    title={`Shop your list at ${r.name}`}>
+                    <span className="text-base">{r.emoji}</span> {r.name}
+                  </button>
                 ))}
-                <Button variant="outline" size="sm">View Stores</Button>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {shopRetailer && (
+        <ShopOnlineModal
+          retailer={shopRetailer}
+          items={items.filter(i => !i.is_checked)}
+          onClose={() => setShopRetailer(null)}
+        />
+      )}
 
       {/* Right sidebar */}
       <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
@@ -297,6 +309,57 @@ export function GroceryModule() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ShopOnlineModal({ retailer, items, onClose }: {
+  retailer: Retailer; items: Item[]; onClose: () => void;
+}) {
+  const { success } = useToast();
+
+  async function copyList() {
+    const text = buildShoppingText(items.map(i => ({ name: i.name, quantity: i.quantity })));
+    try {
+      await navigator.clipboard.writeText(text);
+      success('Shopping list copied — paste it into the store');
+    } catch {
+      success('Copy not available in this browser');
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose}
+      title={`Shop at ${retailer.name}`}
+      description="We open each item in the store's own search so you can add it to your cart and check out there. Nothing is ordered automatically.">
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <a href={retailer.storeUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-elevated">
+            <Store className="h-4 w-4" /> Open {retailer.name}
+          </a>
+          <Button type="button" variant="outline" size="sm" onClick={copyList} disabled={items.length === 0}>
+            <Copy className="h-4 w-4" /> Copy list
+          </Button>
+        </div>
+
+        {items.length === 0 ? (
+          <p className="text-sm text-muted">Everything on your list is already checked off. 🎉</p>
+        ) : (
+          <ul className="max-h-72 space-y-1.5 overflow-y-auto">
+            {items.map(item => (
+              <li key={item.id}>
+                <a href={itemSearchUrl(retailer.id, item.name)} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-3 rounded-lg border border-border bg-surface/40 px-3 py-2 text-sm hover:bg-elevated transition">
+                  <span className="flex-1 font-medium">{item.name}</span>
+                  {item.quantity && <span className="text-xs text-muted">{item.quantity}</span>}
+                  <ExternalLink className="h-3.5 w-3.5 text-brand" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Modal>
   );
 }
 

@@ -2,7 +2,7 @@
 // and prices. Slugs MUST match what the Stripe webhook writes.
 //
 // Three tiers:
-//   free          → FamilyOS Free (no charge)
+//   free          → Bubaly Free (no charge)
 //   basic / basic_annual  → Family Basic ($9.99/mo or ~$8.33/mo billed yearly)
 //   plus  / plus_annual   → Family+ ($24.99/mo or ~$20.83/mo billed yearly)
 //
@@ -37,8 +37,13 @@ export function planLevel(plan: string | null | undefined): number {
   }
 }
 
+// Short tier labels by plan level (0/1/2) — used in the account widget etc.
+export const TIER_LABEL_BY_LEVEL = ['Free Tier', 'Basic Tier', 'Plus Tier'] as const;
+export const tierLabelForLevel = (level: number): string =>
+  TIER_LABEL_BY_LEVEL[level] ?? 'Free Tier';
+
 export const PLAN_NAMES: Record<string, string> = {
-  free: 'FamilyOS Free',
+  free: 'Bubaly Free',
   basic: 'Family Basic',
   basic_annual: 'Family Basic (Annual)',
   family: 'Family Basic',       // legacy
@@ -65,16 +70,27 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/settings': 0,
   '/dashboard/billing':  0,
   '/dashboard/assistant':0,  // metered AI (10 requests/mo on Free)
+  '/dashboard/wishlists': 0,
+  '/dashboard/announcements': 0,
+  '/dashboard/activity': 0,
+  '/dashboard/celebrations': 0,
+  '/dashboard/readiness': 0,
+  '/dashboard/memories': 0,
+  '/dashboard/social':   0,  // Social Command (page enforces requireUserContext)
   // Basic routes
   '/dashboard/chores':        1,
   '/dashboard/rewards':       1,
+  '/dashboard/locator':       1,
   '/dashboard/meals':         1,
+  '/dashboard/pantry':        1,
   '/dashboard/school':        1,
+  '/dashboard/timetable':     1,
   '/dashboard/homework':      1,
   '/dashboard/signups':       1,
   '/dashboard/sports':        1,
   '/dashboard/health':        1,
   '/dashboard/home':          1,
+  '/dashboard/auto':          1,
   '/dashboard/renewals':      1,
   '/dashboard/medical':       1,
   '/dashboard/care':          1,
@@ -91,6 +107,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   // Plus routes
   '/dashboard/command-center':  2, // AI Family Command Center
   '/dashboard/weekly-briefing': 2, // Weekly AI Briefing
+  '/dashboard/conflicts':       2, // AI Conflict Resolution
 };
 
 // ── Legacy Plan type (kept for admin display) ────────────────────────────────
@@ -107,7 +124,7 @@ export type Plan = {
 export const PLANS: Plan[] = [
   {
     id: 'free',
-    name: 'FamilyOS Free',
+    name: 'Bubaly Free',
     priceMonthly: 0,
     tagline: 'The default family organizer.',
     seats: 5,

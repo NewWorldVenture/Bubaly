@@ -1,6 +1,6 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
-// FamilyOS native shell (iOS / iPadOS / Android).
+// Bubaly native shell (iOS / iPadOS / Android).
 //
 // The app is a dynamic Next.js application (SSR, server actions, Supabase auth
 // over cookies). Rather than a static export that would break that wiring, the
@@ -11,11 +11,11 @@ import type { CapacitorConfig } from '@capacitor/cli';
 //
 // Override the URL per environment with CAP_SERVER_URL (e.g. a LAN dev server,
 // http://192.168.x.x:3000, with `allowNavigation` for OAuth/magic-link hosts).
-const SERVER_URL = process.env.CAP_SERVER_URL || 'https://www.theagoras.com';
+const SERVER_URL = process.env.CAP_SERVER_URL || 'https://www.bubaly.com';
 
 const config: CapacitorConfig = {
-  appId: 'com.theagoras.familyos',
-  appName: 'FamilyOS',
+  appId: 'com.bubaly.bubaly',
+  appName: 'Bubaly',
   // webDir is required by the CLI even when serving from a remote URL; the
   // generated public/ folder (icons, manifest) is a valid, present directory.
   webDir: 'public',
@@ -34,8 +34,8 @@ const config: CapacitorConfig = {
     cleartext: SERVER_URL.startsWith('http://'),
     // Auth providers + Supabase need to load inside the shell during sign-in.
     allowNavigation: [
-      'www.theagoras.com',
-      'theagoras.com',
+      'www.bubaly.com',
+      'bubaly.com',
       '*.supabase.co',
       'accounts.google.com',
       '*.google.com',

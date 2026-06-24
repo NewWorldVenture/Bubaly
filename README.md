@@ -1,4 +1,4 @@
-# FamilyOS
+# Bubaly
 
 **Run your family like a calm, connected team.** An AI chief of staff for the household — calendar, chores, meals, grocery, school, sports, health, home maintenance, documents, notes, goals, and an AI assistant that takes real action.
 
@@ -8,7 +8,7 @@
 Next.js 15 (App Router) · TypeScript · Tailwind · Supabase (Postgres + Auth + Storage + Realtime) · provider-agnostic AI (Anthropic/OpenAI/Gemini) · Vercel · **Capacitor** native shells for iOS/iPadOS/Android.
 
 ## Mobile apps (iOS, iPadOS, Android)
-FamilyOS ships natively via **Capacitor** (one codebase, wrapping the hosted, Supabase-wired app) plus an installable **PWA** — no feature drift between web and mobile. Push notifications are fully wired to Supabase (`push_devices` + `lib/server/push.ts`, delivered through the notification engine). See **[docs/mobile.md](docs/mobile.md)** for setup, build, and release. Building the `.ipa`/`.aab` requires a Mac with Xcode / Android Studio; native push requires Firebase/APNs credentials.
+Bubaly ships natively via **Capacitor** (one codebase, wrapping the hosted, Supabase-wired app) plus an installable **PWA** — no feature drift between web and mobile. Push notifications are fully wired to Supabase (`push_devices` + `lib/server/push.ts`, delivered through the notification engine). See **[docs/mobile.md](docs/mobile.md)** for setup, build, and release. Building the `.ipa`/`.aab` requires a Mac with Xcode / Android Studio; native push requires Firebase/APNs credentials.
 
 ## What's in here now
 ```

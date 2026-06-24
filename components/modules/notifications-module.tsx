@@ -7,6 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -85,6 +86,7 @@ export function NotificationsModule() {
         description="Who needs to know what — surfaced from your family's upcoming schedule, chores, and reminders."
         action={(
           <div className="flex items-center gap-2">
+            <AiInsight kind="notifications" />
             <Button variant="ghost" loading={scanning} onClick={scan}>
               <Radar className="h-4 w-4" /> Scan for updates
             </Button>

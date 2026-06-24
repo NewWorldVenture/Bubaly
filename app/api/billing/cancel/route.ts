@@ -1,0 +1,48 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { requireUserContext } from '@/lib/supabase/auth';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { getStripe } from '@/lib/stripe';
+import { isAdmin } from '@/lib/constants/roles';
+
+export const runtime = 'nodejs';
+
+/**
+ * Schedule a downgrade to Free at period end (cancel_at_period_end = true), or
+ * undo it (`{ resume: true }`). The family keeps their paid features until the
+ * period ends. Family admins (parents) only. The webhook keeps Supabase in sync;
+ * we also write the flag optimistically so the UI updates instantly.
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const ctx = await requireUserContext();
+    if (!isAdmin(ctx.active.role)) {
+      return NextResponse.json({ error: 'Only a parent can change the plan.' }, { status: 403 });
+    }
+    const familyId = ctx.active.familyId;
+    const { resume } = (await req.json().catch(() => ({}))) as { resume?: boolean };
+
+    const supabase = await createServer();
+    const { data: sub } = await supabase
+      .from('subscriptions')
+      .select('provider_ref, status')
+      .eq('family_id', familyId)
+      .maybeSingle();
+
+    if (!sub?.provider_ref) {
+      return NextResponse.json({ error: 'No active subscription to change.' }, { status: 404 });
+    }
+
+    const cancelAtPeriodEnd = !resume;
+    await getStripe().subscriptions.update(sub.provider_ref, { cancel_at_period_end: cancelAtPeriodEnd });
+
+    await createServiceClient()
+      .from('subscriptions')
+      .update({ cancel_at_period_end: cancelAtPeriodEnd })
+      .eq('family_id', familyId);
+
+    return NextResponse.json({ ok: true, cancel_at_period_end: cancelAtPeriodEnd });
+  } catch (err) {
+    console.error('cancel error:', err);
+    return NextResponse.json({ error: 'Could not update the subscription. Please try again.' }, { status: 500 });
+  }
+}

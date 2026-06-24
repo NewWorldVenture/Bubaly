@@ -22,7 +22,7 @@ function ensureVapid(): boolean {
   if (vapidReady !== null) return vapidReady;
   const pub = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const priv = process.env.VAPID_PRIVATE_KEY;
-  const subject = process.env.VAPID_SUBJECT || 'mailto:hello@theagoras.com';
+  const subject = process.env.VAPID_SUBJECT || 'mailto:support@bubaly.com';
   if (pub && priv) {
     try {
       webpush.setVapidDetails(subject, pub, priv);
@@ -120,10 +120,13 @@ export function pushConfigured(): { web: boolean; native: boolean } {
 }
 
 /**
- * Deliver pushes for notification rows that haven't been sent yet (sent_at is
- * null), then stamp sent_at so they're never pushed twice. Whole-family
+ * Deliver pushes for notification rows that haven't been pushed yet (pushed_at
+ * is null), then stamp pushed_at so they're never pushed twice. Whole-family
  * notifications (user_id null) fan out to every active member. Call after the
  * notification engine runs (cron + on-demand). Idempotent.
+ *
+ * Push tracks its own pushed_at (separate from the email digest's sent_at) so a
+ * notification can be both pushed AND emailed in the same cron run.
  */
 export async function dispatchPendingPushes(
   supabase: DB,
@@ -132,7 +135,7 @@ export async function dispatchPendingPushes(
   let q = supabase
     .from('notifications')
     .select('id, family_id, user_id, title, body, related_type, related_id')
-    .is('sent_at', null)
+    .is('pushed_at', null)
     .order('created_at', { ascending: true })
     .limit(opts.limit ?? 200);
   if (opts.familyId) q = q.eq('family_id', opts.familyId);
@@ -159,7 +162,7 @@ export async function dispatchPendingPushes(
     const url = n.related_type === 'social' ? '/dashboard/social' : '/dashboard/notifications';
     const r = await sendPushToUsers(supabase, recipients, { title: n.title, body: n.body, url });
     totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
-    await supabase.from('notifications').update({ sent_at: new Date().toISOString() }).eq('id', n.id);
+    await supabase.from('notifications').update({ pushed_at: new Date().toISOString() }).eq('id', n.id);
   }
   return { notifications: rows.length, result: totals };
 }

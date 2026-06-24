@@ -5,6 +5,18 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/ai', '/mobile', '/faq', '/blog', '/contact', '/login', '/signup', '/auth',
   '/join', '/offline',
+  // Public survey response pages (NPS/CSAT/CES) — respondents may be anonymous.
+  '/s',
+  // Public reviews wall + submission page — no login required.
+  '/reviews',
+  // Public exit-intent offer resolve + metric beacon (anonymous visitors).
+  '/api/exit-intent',
+  // Public marketing landing pages + their metric beacon.
+  '/lp',
+  '/api/lp/track',
+  // Public marketing forms (lead capture) + their submit endpoint.
+  '/f',
+  '/api/forms',
   // Public iCalendar feeds: subscribed to by Apple Calendar / Outlook / Alexa
   // with no login — the unguessable feed token IS the authorization.
   '/api/sync/feeds',

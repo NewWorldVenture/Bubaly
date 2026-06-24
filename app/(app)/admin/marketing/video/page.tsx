@@ -1,0 +1,113 @@
+import type { Metadata } from 'next';
+import { Film, Eye, EyeOff, FileText, Youtube } from 'lucide-react';
+import { createServiceClient } from '@/lib/supabase/server';
+import { Card } from '@/components/ui/card';
+import { fmtDate } from '@/lib/utils/format';
+import type { Tables } from '@/lib/database.types';
+import { thumbnailUrl, formatDuration, isVideoProvider, type VideoProvider } from '@/lib/marketing/video';
+import { saveVideoAction, toggleVideoPublishAction, deleteVideoAction } from './actions';
+
+export const metadata: Metadata = { title: 'Video Marketing', robots: { index: false } };
+export const dynamic = 'force-dynamic';
+
+type Video = Tables<'marketing_videos'>;
+type Asset = Tables<'marketing_assets'>;
+
+const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
+const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
+
+const PROVIDER_LABEL: Record<VideoProvider, string> = { youtube: 'YouTube', vimeo: 'Vimeo', upload: 'Uploaded' };
+
+export default async function VideoPage() {
+  const supabase = createServiceClient();
+  const [{ data: videoData }, { data: assetData }] = await Promise.all([
+    supabase.from('marketing_videos').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(300),
+    supabase.from('marketing_assets').select('id, name').eq('kind', 'video').is('deleted_at', null).order('created_at', { ascending: false }).limit(200),
+  ]);
+  const videos = (videoData ?? []) as Video[];
+  const videoAssets = (assetData ?? []) as Pick<Asset, 'id' | 'name'>[];
+  const published = videos.filter((v) => v.status === 'published').length;
+
+  return (
+    <div className="space-y-5">
+      <p className="text-sm text-muted">
+        Catalog YouTube/Vimeo embeds or uploaded videos. Transcripts feed AEO/SEO; published videos can embed in content and landing pages.
+      </p>
+
+      <Card>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Film className="h-4 w-4 text-brand" /> Add video</h2>
+        <form action={saveVideoAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <input name="title" required placeholder="Title" className={`${inputCls} lg:col-span-2`} />
+          <select name="status" defaultValue="draft" className={inputCls} aria-label="Status">
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+          </select>
+          <input name="duration_seconds" type="number" min="0" placeholder="Duration (sec)" className={inputCls} />
+          <input name="url" placeholder="YouTube / Vimeo URL" className={`${inputCls} lg:col-span-2`} />
+          <select name="asset_id" defaultValue="" className={inputCls} aria-label="Or pick an uploaded video">
+            <option value="">…or pick uploaded video</option>
+            {videoAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <input name="poster_url" placeholder="Poster image URL (optional)" className={inputCls} />
+          <input name="tags" placeholder="Tags, comma-separated" className={`${inputCls} lg:col-span-2`} />
+          <textarea name="transcript" placeholder="Transcript (optional — feeds AEO/SEO)" rows={2} className={`${inputCls} h-auto py-2 lg:col-span-2`} />
+          <button type="submit" className={btnCls}>Add video</button>
+        </form>
+        <p className="mt-3 text-xs text-muted">
+          {videos.length} video{videos.length === 1 ? '' : 's'} · {published} published. Paste a URL, or pick a video uploaded in the Asset Library.
+        </p>
+      </Card>
+
+      {videos.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted">No videos yet — add your first above.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {videos.map((v) => {
+            const provider = isVideoProvider(v.provider) ? v.provider : 'upload';
+            const thumb = v.poster_url ?? thumbnailUrl(provider, v.video_id);
+            return (
+              <div key={v.id} className="flex flex-col rounded-xl border border-border bg-surface/40 p-3">
+                <div className="mb-2 flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-elevated">
+                  {thumb ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={thumb} alt={v.title} className="h-full w-full object-cover" />
+                  ) : (
+                    <Film className="h-8 w-8 text-muted" />
+                  )}
+                </div>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0 flex-1 truncate text-sm font-medium" title={v.title}>{v.title}</p>
+                  <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${v.status === 'published' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-300'}`}>
+                    {v.status === 'published' ? 'Live' : 'Draft'}
+                  </span>
+                </div>
+                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
+                  {provider === 'youtube' ? <Youtube className="h-3 w-3" /> : <Film className="h-3 w-3" />}
+                  {PROVIDER_LABEL[provider]}
+                  {v.duration_seconds ? ` · ${formatDuration(v.duration_seconds)}` : ''}
+                  {v.transcript ? <span className="inline-flex items-center gap-0.5"> · <FileText className="h-3 w-3" /> transcript</span> : ''}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted">{fmtDate(v.created_at)}</p>
+                {v.tags.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {v.tags.map((t) => <span key={t} className="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-muted">{t}</span>)}
+                  </div>
+                )}
+                <div className="mt-2 flex items-center gap-3 text-xs">
+                  <form action={toggleVideoPublishAction.bind(null, v.id, v.status !== 'published')}>
+                    <button type="submit" className="inline-flex items-center gap-1 text-muted hover:text-fg">
+                      {v.status === 'published' ? <><EyeOff className="h-3 w-3" /> Unpublish</> : <><Eye className="h-3 w-3" /> Publish</>}
+                    </button>
+                  </form>
+                  <form action={deleteVideoAction.bind(null, v.id)}>
+                    <button type="submit" className="text-muted hover:text-rose-400">Delete</button>
+                  </form>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -18,7 +18,7 @@ export function InviteEmail({
       <body style={{ fontFamily: 'system-ui, sans-serif', background: '#030914', color: '#edf0f7', maxWidth: 520, margin: '40px auto', padding: 32 }}>
         <div style={{ marginBottom: 32 }}>
           <span style={{ fontSize: 24, fontWeight: 800, background: 'linear-gradient(135deg,#7c5dff,#f4996e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            FamilyOS
+            Bubaly
           </span>
         </div>
 
@@ -26,7 +26,7 @@ export function InviteEmail({
           You&apos;ve been invited to join {familyName}
         </h1>
         <p style={{ color: '#94a0b8', lineHeight: 1.6, marginBottom: 24 }}>
-          {inviterName} has invited you to join their family on FamilyOS as a <strong style={{ color: '#edf0f7' }}>{role}</strong>. FamilyOS helps families coordinate schedules, chores, meals, and more — all in one place.
+          {inviterName} has invited you to join their family on Bubaly as a <strong style={{ color: '#edf0f7' }}>{role}</strong>. Bubaly helps families coordinate schedules, chores, meals, and more — all in one place.
         </p>
 
         <a
@@ -55,7 +55,7 @@ export function InviteEmail({
 
         <hr style={{ borderColor: '#23364e', margin: '32px 0' }} />
         <p style={{ color: '#94a0b8', fontSize: 12 }}>
-          &copy; {new Date().getFullYear()} FamilyOS &middot; You&apos;re receiving this because someone invited you.
+          &copy; {new Date().getFullYear()} Bubaly &middot; You&apos;re receiving this because someone invited you.
         </p>
       </body>
     </html>

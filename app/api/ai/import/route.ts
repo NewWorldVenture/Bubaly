@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { getProvider } from '@/lib/ai/provider';
+import { resolveProvider } from '@/lib/ai/provider';
 import { AI_TOOLS, runAction } from '@/lib/ai/actions';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     if (text.length > 8000) return NextResponse.json({ error: 'That text is too long (8,000 char max).' }, { status: 400 });
 
     const now = new Date();
-    const system = `You are FamilyOS's Magic Import assistant. The user pastes raw text — forwarded emails, school notices, texts, flyers, or notes — and you extract EVERY actionable item.
+    const system = `You are Bubaly's Magic Import assistant. The user pastes raw text — forwarded emails, school notices, texts, flyers, or notes — and you extract EVERY actionable item.
 
 Today is ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} (${now.toISOString().slice(0, 10)}). The family is "${ctx.active.family.name}".
 
@@ -76,7 +76,7 @@ Use the provided tools to capture: calendar events, chores, reminders, grocery i
 - If nothing is actionable, make no tool calls.
 Respond only with tool calls (no prose).`;
 
-    const completion = await getProvider().complete({
+    const completion = await (await resolveProvider()).complete({
       system,
       messages: [{ role: 'user', content: text }],
       tools: AI_TOOLS,

@@ -8,7 +8,7 @@ function secret(): string {
     process.env.MARKETING_UNSUB_SECRET ||
     process.env.INTERNAL_SECRET ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    'familyos-dev-unsub-secret'
+    'bubaly-dev-unsub-secret'
   );
 }
 

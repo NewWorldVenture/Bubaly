@@ -221,11 +221,30 @@ export async function createLandingPage(formData: FormData) {
   const title = str(formData.get('title'));
   const slug = str(formData.get('slug')).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
   if (!title || !slug) return;
+  const ctaLabel = str(formData.get('cta_label'));
+  const ctaHref = str(formData.get('cta_href'));
+  const metadata: Record<string, string> = {};
+  if (ctaLabel) metadata.cta_label = ctaLabel;
+  if (ctaHref) metadata.cta_href = ctaHref;
   const { data } = await supabase.from('marketing_landing_pages').insert({
     title, slug, headline: str(formData.get('headline')) || null, subhead: str(formData.get('subhead')) || null,
     body: str(formData.get('body')) || null, status: 'draft', created_by: actorId,
+    metadata,
   }).select('id').single();
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_landing_page', resourceId: data?.id ?? null, metadata: { slug } });
+  revalidatePath('/admin/marketing/landing-pages');
+}
+
+/** Publish or unpublish a landing page (controls public visibility at /lp/<slug>). */
+export async function setLandingPublished(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const id = str(formData.get('id'));
+  if (!id) return;
+  const publish = str(formData.get('publish')) === '1';
+  await supabase.from('marketing_landing_pages')
+    .update({ published: publish, status: publish ? 'published' : 'draft' })
+    .eq('id', id);
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: publish ? 'publish' : 'unpublish', resource: 'marketing_landing_page', resourceId: id });
   revalidatePath('/admin/marketing/landing-pages');
 }
 
@@ -238,6 +257,18 @@ export async function createForm(formData: FormData) {
     name, fields: fields.map((label) => ({ label, key: label.toLowerCase().replace(/\s+/g, '_') })) as never, created_by: actorId,
   }).select('id').single();
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_form', resourceId: data?.id ?? null, metadata: { name } });
+  revalidatePath('/admin/marketing/forms');
+}
+
+export async function setFormStatus(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const id = str(formData.get('id'));
+  if (!id) return;
+  const activate = str(formData.get('activate')) === '1';
+  await supabase.from('marketing_forms')
+    .update({ status: activate ? 'active' : 'archived' })
+    .eq('id', id);
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: activate ? 'activate' : 'archive', resource: 'marketing_form', resourceId: id });
   revalidatePath('/admin/marketing/forms');
 }
 

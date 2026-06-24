@@ -2,6 +2,7 @@ import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isDashboardView } from '@/lib/constants/dashboards';
 import { planLevel as planLevelOf } from '@/lib/constants/plans';
+import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
 import { AppProvider } from '@/components/app/app-context';
 import { AppShell } from '@/components/app/app-shell';
 import { RegisterSW } from '@/components/pwa/register-sw';
@@ -37,6 +38,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     ? prefs.default_dashboard
     : 'personal';
   const planLevel = planLevelOf(sub?.plan ?? null);
+  const featureTiers = await getFeatureTiersByHref(supabase);
 
   return (
     <AppProvider
@@ -50,6 +52,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         isSuperAdmin: superAdmin,
         defaultDashboard,
         planLevel,
+        featureTiers,
       }}
       initialMembers={members ?? []}
     >

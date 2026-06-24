@@ -1,6 +1,3 @@
-// Supabase-backed blog content. Reads published rows from public.blog_posts
-// (seeded by migration 0010) via the public-read RLS policy. The BlogPost shape
-// is unchanged so the /blog routes only had to switch to awaiting these helpers.
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 
@@ -30,8 +27,6 @@ export type BlogPost = {
 
 type Row = Database['public']['Tables']['blog_posts']['Row'];
 
-// Anonymous, non-cookie-bound client so blog reads work during static
-// generation and on the public marketing site (RLS exposes published posts).
 function anonClient() {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -69,6 +64,20 @@ export async function getAllPosts(): Promise<BlogPost[]> {
   }
 }
 
+export async function getPostsByCategory(category: BlogCategory): Promise<BlogPost[]> {
+  try {
+    const { data } = await anonClient()
+      .from('blog_posts')
+      .select('*')
+      .eq('published', true)
+      .eq('category', category)
+      .order('published_at', { ascending: false });
+    return (data ?? []).map(toPost);
+  } catch {
+    return [];
+  }
+}
+
 export async function getPost(slug: string): Promise<BlogPost | undefined> {
   try {
     const { data } = await anonClient()
@@ -99,6 +108,66 @@ export async function getFeaturedPost(): Promise<BlogPost | undefined> {
   }
   const all = await getAllPosts();
   return all[0];
+}
+
+export async function getRelatedPosts(slug: string, category: BlogCategory, limit = 3): Promise<BlogPost[]> {
+  try {
+    const { data } = await anonClient()
+      .from('blog_posts')
+      .select('*')
+      .eq('published', true)
+      .eq('category', category)
+      .neq('slug', slug)
+      .order('published_at', { ascending: false })
+      .limit(limit);
+    return (data ?? []).map(toPost);
+  } catch {
+    return [];
+  }
+}
+
+export async function getAdjacentPosts(date: string): Promise<{ prev: BlogPost | null; next: BlogPost | null }> {
+  try {
+    const client = anonClient();
+    const [{ data: older }, { data: newer }] = await Promise.all([
+      client
+        .from('blog_posts')
+        .select('*')
+        .eq('published', true)
+        .lt('published_at', date)
+        .order('published_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      client
+        .from('blog_posts')
+        .select('*')
+        .eq('published', true)
+        .gt('published_at', date)
+        .order('published_at', { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    return {
+      prev: older ? toPost(older) : null,
+      next: newer ? toPost(newer) : null,
+    };
+  } catch {
+    return { prev: null, next: null };
+  }
+}
+
+export function extractHeadings(body: BlogBlock[]): { id: string; text: string }[] {
+  return body
+    .filter((b): b is BlogBlock & { type: 'h2' } => b.type === 'h2')
+    .map((b) => ({
+      id: b.text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+      text: b.text,
+    }));
+}
+
+export function estimateReadingTime(body: BlogBlock[]): number {
+  const words = body.reduce((acc, b) => acc + b.text.split(/\s+/).length, 0);
+  return Math.max(1, Math.ceil(words / 200));
 }
 
 export const ALL_CATEGORIES: BlogCategory[] = [

@@ -54,7 +54,7 @@ export default async function AutonomousManagementPage() {
         <div className="flex items-center gap-3">
           <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-blue-600"><Bot className="h-6 w-6 text-white" /></div>
           <div>
-            <p className="font-semibold">FamilyOS is monitoring {monitoring.length} areas</p>
+            <p className="font-semibold">Bubaly is monitoring {monitoring.length} areas</p>
             <p className="text-xs text-muted">Last evaluated just now · {rules.data?.length ?? 0} active automations</p>
           </div>
           <div className="ml-auto flex items-center gap-2"><LevelBadge level={stress.level} /><span className="text-sm font-bold tabular-nums">{completion}% on track</span></div>

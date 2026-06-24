@@ -7,12 +7,12 @@ export function WelcomeEmail({ name }: { name: string }) {
       <body style={{ fontFamily: 'system-ui, sans-serif', background: '#030914', color: '#edf0f7', maxWidth: 520, margin: '40px auto', padding: 32 }}>
         <div style={{ marginBottom: 32 }}>
           <span style={{ fontSize: 24, fontWeight: 800, background: 'linear-gradient(135deg,#7c5dff,#f4996e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            FamilyOS
+            Bubaly
           </span>
         </div>
 
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>
-          Welcome to FamilyOS, {name}!
+          Welcome to Bubaly, {name}!
         </h1>
         <p style={{ color: '#94a0b8', lineHeight: 1.6, marginBottom: 24 }}>
           Your family&apos;s command center is ready. Start by adding your family members, scheduling events on the calendar, or asking your AI assistant to plan the week.
@@ -50,12 +50,12 @@ export function WelcomeEmail({ name }: { name: string }) {
             textDecoration: 'none',
           }}
         >
-          Open FamilyOS →
+          Open Bubaly →
         </a>
 
         <hr style={{ borderColor: '#23364e', margin: '32px 0' }} />
         <p style={{ color: '#94a0b8', fontSize: 12 }}>
-          © {new Date().getFullYear()} FamilyOS · Questions? Reply to this email anytime.
+          © {new Date().getFullYear()} Bubaly · Questions? Reply to this email anytime.
         </p>
       </body>
     </html>

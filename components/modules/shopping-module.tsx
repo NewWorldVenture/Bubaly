@@ -11,6 +11,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field } from '@/components/ui/input';
@@ -199,6 +200,7 @@ export function ShoppingModule() {
                 <h2 className="text-xl font-bold">{activeList.name}</h2>
               </div>
               <div className="ml-auto flex items-center gap-2">
+                <AiInsight kind="shopping" />
                 {checkedCount > 0 && (
                   <Button variant="ghost" size="sm" onClick={clearChecked}>
                     <Check className="h-3.5 w-3.5 text-success" /> Clear {checkedCount} done

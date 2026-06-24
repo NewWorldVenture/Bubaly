@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CheckCircle2, XCircle, Server, Plug, ShieldCheck, Database, UsersRound } from 'lucide-react';
+import { CheckCircle2, XCircle, Server, Plug, ShieldCheck, Database, UsersRound, Sparkles } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 
@@ -20,7 +20,7 @@ export default async function AdminSettingsPage() {
     { name: 'Supabase (database, auth, storage)', ready: !!process.env.NEXT_PUBLIC_SUPABASE_URL, detail: host(process.env.NEXT_PUBLIC_SUPABASE_URL) },
     { name: 'Stripe (payments)', ready: !!process.env.STRIPE_SECRET_KEY, detail: 'STRIPE_SECRET_KEY' },
     { name: 'Resend (email)', ready: !!process.env.RESEND_API_KEY, detail: 'RESEND_API_KEY' },
-    { name: 'Anthropic (AI)', ready: !!process.env.ANTHROPIC_API_KEY, detail: process.env.AI_MODEL ?? 'ANTHROPIC_API_KEY' },
+    { name: 'OpenAI (AI)', ready: !!process.env.OPENAI_API_KEY, detail: process.env.AI_MODEL ?? 'OPENAI_API_KEY' },
     { name: 'Google OAuth (sign-in + calendar)', ready: !!process.env.GOOGLE_CLIENT_ID, detail: 'GOOGLE_CLIENT_ID' },
     { name: 'Twilio (SMS)', ready: !!process.env.TWILIO_AUTH_TOKEN, detail: 'TWILIO_AUTH_TOKEN' },
     { name: 'Resend webhook (email tracking)', ready: !!process.env.RESEND_WEBHOOK_SECRET, detail: 'RESEND_WEBHOOK_SECRET' },
@@ -36,6 +36,7 @@ export default async function AdminSettingsPage() {
   ];
 
   const links = [
+    { href: '/admin/ai', label: 'AI Engine', desc: 'Choose Claude or ChatGPT & set API keys', icon: Sparkles },
     { href: '/admin/admins', label: 'Administrators', desc: 'Manage super-admin access', icon: UsersRound },
     { href: '/admin/integrations', label: 'Integrations', desc: 'Connected services & keys', icon: Plug },
     { href: '/admin/security', label: 'Security', desc: 'Access & audit controls', icon: ShieldCheck },

@@ -3,7 +3,7 @@ import { HowItWorksReferencePage } from '@/components/marketing/reference-showca
 
 export const metadata: Metadata = {
   title: 'How It Works',
-  description: 'How FamilyOS turns scattered family information into organized action.',
+  description: 'How Bubaly turns scattered family information into organized action.',
 };
 
 export default function HowItWorksPage() {

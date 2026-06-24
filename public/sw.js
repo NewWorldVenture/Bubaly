@@ -1,7 +1,7 @@
-/* FamilyOS service worker — app-shell caching for offline-friendly PWA behavior.
+/* Bubaly service worker — app-shell caching for offline-friendly PWA behavior.
    Network-first for navigation/API (always fresh family data when online),
    cache-first for static assets. */
-const CACHE = 'familyos-v2';
+const CACHE = 'bubaly-v3';
 const APP_SHELL = ['/', '/dashboard', '/offline'];
 
 self.addEventListener('install', (event) => {
@@ -55,7 +55,7 @@ self.addEventListener('fetch', (event) => {
 
 // Push notifications (Phase 10 dispatch sends Web Push payloads here).
 self.addEventListener('push', (event) => {
-  let data = { title: 'FamilyOS', body: 'You have a new notification' };
+  let data = { title: 'Bubaly', body: 'You have a new notification' };
   try { data = event.data.json(); } catch (_) {}
   event.waitUntil(
     self.registration.showNotification(data.title, {

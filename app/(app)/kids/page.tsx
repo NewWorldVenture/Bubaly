@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { CheckCircle2, Star, CalendarDays, Trophy, PartyPopper } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtTime } from '@/lib/utils/format';
 
-export const metadata: Metadata = { title: 'My FamilyOS' };
+export const metadata: Metadata = { title: 'My Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function KidsPage() {
@@ -53,10 +54,12 @@ export default async function KidsPage() {
             {myTasks.map((t) => {
               const c = choreById.get(t.chore_id);
               return (
-                <li key={t.id} className="flex items-center gap-4 rounded-2xl border border-border bg-surface/40 p-4">
-                  <div className="h-7 w-7 shrink-0 rounded-full border-4 border-emerald-400/40" />
-                  <span className="flex-1 text-lg font-semibold">{c?.title ?? 'Job'}</span>
-                  {c?.points ? <span className="rounded-full bg-amber-400/20 px-3 py-1 text-sm font-bold text-amber-300">+{c.points}</span> : null}
+                <li key={t.id}>
+                  <Link href={`/kids/submit/${t.id}`} className="flex items-center gap-4 rounded-2xl border border-border bg-surface/40 p-4 transition hover:border-brand">
+                    <div className="h-7 w-7 shrink-0 rounded-full border-4 border-emerald-400/40" />
+                    <span className="flex-1 text-lg font-semibold">{c?.title ?? 'Job'}</span>
+                    {c?.points ? <span className="rounded-full bg-amber-400/20 px-3 py-1 text-sm font-bold text-amber-300">+{c.points}</span> : null}
+                  </Link>
                 </li>
               );
             })}

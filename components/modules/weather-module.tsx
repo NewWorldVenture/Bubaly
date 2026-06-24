@@ -6,6 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
@@ -177,7 +178,7 @@ export function WeatherModule() {
 
   return (
     <div className="module-page space-y-5">
-      <PageHeader title="Weather" description="Live conditions and forecasts for your locations." />
+      <PageHeader title="Weather" description="Live conditions and forecasts for your locations." action={<AiInsight kind="weather" />} />
 
       {/* Location selector */}
       <div className="flex flex-wrap items-center gap-2">

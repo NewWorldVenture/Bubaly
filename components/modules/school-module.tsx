@@ -19,7 +19,7 @@ type SchoolEvent = Tables<'school_events'>;
 type SchoolClass = Tables<'school_classes'>;
 type Grade = Tables<'grades'>;
 
-const TABS = ['Overview', 'Assignments', 'Classes', 'Grades', 'Resources'] as const;
+const TABS = ['Overview', 'Assignments', 'Classes', 'Grades'] as const;
 type Tab = (typeof TABS)[number];
 
 const EVENT_TYPES = ['general', 'holiday', 'field_trip', 'parent_meeting', 'exam', 'concert', 'sport', 'graduation', 'assignment', 'announcement'];
@@ -446,13 +446,6 @@ export function SchoolModule() {
                 </table>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Resources tab */}
-        {tab === 'Resources' && (
-          <div className="rounded-2xl border border-border bg-surface/40 p-5">
-            <EmptyState icon={BookOpen} title="Resources coming soon" description="Study materials, links, and helpful resources will appear here." />
           </div>
         )}
 

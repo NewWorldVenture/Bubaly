@@ -7,13 +7,18 @@ import { ChevronDown, Check, Gift, Lock, LogOut, Mic, Moon, Plus, Search, Send, 
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { APP_NAV_GROUPS, MOBILE_TABS, type NavItem } from '@/lib/constants/navigation';
+import { featureAccessByTier } from '@/lib/features/tiers';
+import type { FeatureTier } from '@/lib/constants/feature-catalog';
 import { ROLE_LABELS } from '@/lib/constants/roles';
+import { tierLabelForLevel } from '@/lib/constants/plans';
 import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { cn } from '@/lib/utils/cn';
 import { useTheme } from '@/components/theme/use-theme';
 import { useApp } from './app-context';
 import { NotificationBell } from './notification-bell';
 import { UpgradeModal } from './upgrade-modal';
+import { QuickCapture } from './quick-capture';
+import { AIOrb } from './ai-orb';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
 
 function isActive(pathname: string, href: string) {
@@ -22,7 +27,7 @@ function isActive(pathname: string, href: string) {
 }
 
 function FamilySwitcher() {
-  const { family, families, role } = useApp();
+  const { family, families, role, planLevel } = useApp();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -45,7 +50,7 @@ function FamilySwitcher() {
         <Avatar name={family.name} size={32} className="rounded-lg" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{family.name}</p>
-          <p className="truncate text-xs text-muted">{ROLE_LABELS[role]}</p>
+          <p className="truncate text-xs text-muted">{ROLE_LABELS[role]} / {tierLabelForLevel(planLevel)}</p>
         </div>
         <ChevronDown className="h-4 w-4 text-muted" />
       </button>
@@ -188,15 +193,31 @@ function SidebarDashboardLinks() {
   );
 }
 
+/** Visible nav items for a group given the family's plan + admin tier settings.
+ *  Items whose feature is Off are dropped entirely; the rest carry a `locked`
+ *  flag (tier above the family's plan) + the level required to unlock. */
+function resolveItems(
+  items: readonly NavItem[],
+  featureTiers: Record<string, FeatureTier>,
+  planLevel: number,
+  isSuperAdmin: boolean,
+): { item: NavItem; locked: boolean; requiredLevel: 1 | 2 }[] {
+  const out: { item: NavItem; locked: boolean; requiredLevel: 1 | 2 }[] = [];
+  for (const item of items) {
+    const tier = featureTiers[item.href];
+    const access = featureAccessByTier(tier, planLevel, isSuperAdmin);
+    if (access === 'hidden') continue; // Off → not shown at all
+    out.push({ item, locked: access === 'locked', requiredLevel: (tier === 'plus' ? 2 : 1) });
+  }
+  return out;
+}
+
 /** A single sidebar destination. Free items navigate; items above the family's
  *  plan render greyed-out with a lock and open the upgrade prompt on click. */
-function NavEntry({ item, variant, onLocked }: {
-  item: NavItem; variant: 'list' | 'grid'; onLocked: (item: NavItem) => void;
+function NavEntry({ item, variant, locked, onLocked }: {
+  item: NavItem; variant: 'list' | 'grid'; locked: boolean; onLocked: (item: NavItem) => void;
 }) {
   const pathname = usePathname();
-  const { planLevel, isSuperAdmin } = useApp();
-  // Super admins are never plan-gated, so nothing is locked for them.
-  const locked = !isSuperAdmin && (item.minLevel ?? 0) > planLevel;
   const active = !locked && isActive(pathname, item.href);
 
   const base = variant === 'grid'
@@ -231,29 +252,37 @@ function NavEntry({ item, variant, onLocked }: {
 
 /** Grouped, plan-gated sidebar navigation. */
 function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
+  const { planLevel, isSuperAdmin, featureTiers } = useApp();
   return (
     <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4 xl:px-4">
-      {APP_NAV_GROUPS.map((group) => (
-        <div key={group.title} className="space-y-1">
-          <p className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted/70">
-            {group.title}
-          </p>
-          {group.title === 'Suggested' && <SidebarDashboardLinks />}
-          {group.layout === 'grid' ? (
-            <div className="grid grid-cols-2 gap-1">
-              {group.items.map((item) => (
-                <NavEntry key={item.href} item={item} variant="grid" onLocked={onLocked} />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-0.5">
-              {group.items.map((item) => (
-                <NavEntry key={item.href} item={item} variant="list" onLocked={onLocked} />
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+      {APP_NAV_GROUPS.map((group) => {
+        const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin);
+        const isSuggested = group.title === 'Suggested';
+        // Drop a group whose every feature is Off (the Suggested group always
+        // keeps the two dashboard links, so it never disappears).
+        if (resolved.length === 0 && !isSuggested) return null;
+        return (
+          <div key={group.title} className="space-y-1">
+            <p className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted/70">
+              {group.title}
+            </p>
+            {isSuggested && <SidebarDashboardLinks />}
+            {group.layout === 'grid' ? (
+              <div className="grid grid-cols-2 gap-1">
+                {resolved.map(({ item, locked }) => (
+                  <NavEntry key={item.href} item={item} variant="grid" locked={locked} onLocked={onLocked} />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-0.5">
+                {resolved.map(({ item, locked }) => (
+                  <NavEntry key={item.href} item={item} variant="list" locked={locked} onLocked={onLocked} />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </nav>
   );
 }
@@ -300,8 +329,12 @@ function ThemeSwitch() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { planLevel, isSuperAdmin } = useApp();
+  const { planLevel, isSuperAdmin, featureTiers } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
+  const mobileTabs = resolveItems(MOBILE_TABS, featureTiers, planLevel, isSuperAdmin);
+  const upgradeLevel: 1 | 2 = upgradeFor
+    ? (featureTiers[upgradeFor.href] === 'plus' ? 2 : 1)
+    : 1;
 
   return (
     <div className="min-h-dvh bg-bg text-fg lg:flex">
@@ -334,7 +367,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Top bar */}
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/60 bg-bg/85 px-3 backdrop-blur-xl sm:h-topbar sm:gap-5 sm:px-5 lg:px-7">
           <Link href="/dashboard" className="lg:hidden">
-            <LogoMark className="h-8 w-8 sm:h-9 sm:w-9" variant="home" />
+            <LogoMark className="h-8 w-14 sm:h-9 sm:w-16" variant="home" />
           </Link>
           <div className="flex-1" />
           <label className="hidden h-10 w-full max-w-[320px] items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 text-muted md:flex lg:max-w-[360px] xl:h-12 xl:gap-3 xl:px-4">
@@ -353,11 +386,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
+      <QuickCapture />
+      <AIOrb />
+
       {/* Mobile bottom tabs */}
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/90 backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex max-w-lg items-stretch justify-around">
-          {MOBILE_TABS.map((item) => {
-            const locked = !isSuperAdmin && (item.minLevel ?? 0) > planLevel;
+          {mobileTabs.map(({ item, locked }) => {
             const active = !locked && isActive(pathname, item.href);
             const className = cn(
               'relative flex flex-1 flex-col items-center gap-0.5 pb-1 pt-2 text-[11px] font-medium transition',
@@ -387,6 +422,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         open={upgradeFor !== null}
         onClose={() => setUpgradeFor(null)}
         featureLabel={upgradeFor?.label}
+        requiredLevel={upgradeLevel}
       />
     </div>
   );

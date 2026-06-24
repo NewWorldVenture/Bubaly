@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Check, Zap, Crown, Sparkles } from 'lucide-react';
 import {
@@ -125,10 +126,85 @@ function PlanCard({
   );
 }
 
+// ── Admin-controlled feature matrix ──────────────────────────────────────────
+type MatrixTier = 'free' | 'basic' | 'plus';
+type FeatureMatrix = { section: string; items: { label: string; tier: MatrixTier }[] }[];
+
+const TIER_COL: { key: MatrixTier; label: string; dot: string }[] = [
+  { key: 'free', label: 'Free', dot: 'bg-emerald-400' },
+  { key: 'basic', label: 'Basic', dot: 'bg-blue-400' },
+  { key: 'plus', label: 'Plus', dot: 'bg-violet-400' },
+];
+const TIER_RANK: Record<MatrixTier, number> = { free: 0, basic: 1, plus: 2 };
+
+function FeatureMatrixTable({ matrix }: { matrix: FeatureMatrix }) {
+  if (matrix.length === 0) return null;
+  return (
+    <section className="mt-12">
+      <h2 className="text-center text-2xl font-black">Every feature, by plan</h2>
+      <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">
+        A check means the feature is included on that plan (and every plan above it).
+      </p>
+      <div className="mt-7 overflow-hidden rounded-2xl border border-white/10">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-white/10 bg-white/[0.03]">
+              <th className="px-4 py-3 text-left font-bold">Feature</th>
+              {TIER_COL.map((t) => (
+                <th key={t.key} className="px-4 py-3 text-center font-bold">
+                  <span className="inline-flex items-center gap-1.5"><span className={cn('h-2 w-2 rounded-full', t.dot)} />{t.label}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {matrix.map((sec) => (
+              <FeatureMatrixSection key={sec.section} section={sec.section} items={sec.items} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function FeatureMatrixSection({ section, items }: { section: string; items: { label: string; tier: MatrixTier }[] }) {
+  return (
+    <>
+      <tr className="bg-white/[0.04]">
+        <td colSpan={4} className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-white/55">{section}</td>
+      </tr>
+      {items.map((it) => (
+        <tr key={it.label} className="border-t border-white/[0.06]">
+          <td className="px-4 py-2.5 text-white/85">{it.label}</td>
+          {TIER_COL.map((t) => (
+            <td key={t.key} className="px-4 py-2.5 text-center">
+              {TIER_RANK[t.key] >= TIER_RANK[it.tier]
+                ? <Check className="mx-auto h-4 w-4 text-emerald-400" />
+                : <span className="text-white/20">—</span>}
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────
-export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }) {
+export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { familiesCount?: number; featureMatrix?: FeatureMatrix }) {
   const [period, setPeriod] = useState<Period>('yearly');
   const yearly = period === 'yearly';
+  const router = useRouter();
+
+  // Keep the tier/feature grid live: an admin change to /admin/tier-features
+  // revalidates this page, and re-fetching on an interval + on tab focus means
+  // an already-open pricing page reflects the change automatically.
+  useEffect(() => {
+    const id = setInterval(() => router.refresh(), 20_000);
+    const onFocus = () => router.refresh();
+    window.addEventListener('focus', onFocus);
+    return () => { clearInterval(id); window.removeEventListener('focus', onFocus); };
+  }, [router]);
 
   const basicPrice    = yearly ? fmt(Math.round(BASIC_ANNUAL_CENTS / 12)) : fmt(BASIC_MONTHLY_CENTS);
   const basicPriceSub = yearly ? `billed ${fmt(BASIC_ANNUAL_CENTS)}/yr · save ${basicSavings}%` : 'billed monthly';
@@ -141,7 +217,7 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
         {/* Hero */}
         <section className="mx-auto max-w-3xl text-center">
           <h1 className="text-5xl font-black leading-[1.08] sm:text-6xl">
-            FamilyOS Pricing
+            Bubaly Pricing
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-white/65">
             Start free. Upgrade when your family is ready.
@@ -172,7 +248,7 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
         {/* Plan cards — 3 columns */}
         <section className="mt-10 grid gap-5 lg:grid-cols-3">
           <PlanCard
-            name="FamilyOS Free"
+            name="Bubaly Free"
             goal="Become the default family organizer."
             icon={<Zap className="h-7 w-7 text-white/60" />}
             price="Free"
@@ -216,11 +292,13 @@ export function PricingContent({ familiesCount = 0 }: { familiesCount?: number }
             <div>
               <h2 className="font-bold">Smart Imports — the feature most competitors don&apos;t offer well</h2>
               <p className="mt-1 text-sm text-white/65">
-                Snap a school flyer, upload a PDF, or share a screenshot. FamilyOS AI automatically creates calendar events, tasks, and reminders — no manual entry.
+                Snap a school flyer, upload a PDF, or share a screenshot. Bubaly AI automatically creates calendar events, tasks, and reminders — no manual entry.
               </p>
             </div>
           </div>
         </section>
+
+        <FeatureMatrixTable matrix={featureMatrix} />
 
         <TrustStrip familiesNote={familiesNote(familiesCount)} />
 

@@ -7,7 +7,7 @@ import { MigrateWizard } from '@/components/migrate/migrate-wizard';
 import { competitorByKey } from '@/lib/migrate/competitors';
 import { fmtRelative } from '@/lib/utils/format';
 
-export const metadata: Metadata = { title: 'Switch to FamilyOS' };
+export const metadata: Metadata = { title: 'Switch to Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MigratePage() {
@@ -24,7 +24,7 @@ export default async function MigratePage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Switch to FamilyOS"
+        title="Switch to Bubaly"
         description="Bring your calendar, lists and tasks over from your old family app — in minutes."
       />
 

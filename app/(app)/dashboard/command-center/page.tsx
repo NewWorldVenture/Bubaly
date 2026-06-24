@@ -4,7 +4,7 @@ import {
   Gauge, AlertTriangle, CalendarClock, CheckCircle2, UtensilsCrossed,
   FileWarning, Users, ArrowRight,
 } from 'lucide-react';
-import { requirePlanLevel } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtTime, fmtDate } from '@/lib/utils/format';
@@ -20,7 +20,7 @@ type Issue = { icon: typeof AlertTriangle; text: string; href: string; severity:
 // Family+ feature — the AI Family Command Center. Every figure is computed from
 // real family data; nothing is fabricated.
 export default async function CommandCenterPage() {
-  const ctx = await requirePlanLevel(2);
+  const ctx = await requireFeature('/dashboard/command-center');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

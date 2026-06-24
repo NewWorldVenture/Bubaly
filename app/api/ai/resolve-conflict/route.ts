@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { getProvider } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,8 +30,8 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  if (!process.env.ANTHROPIC_API_KEY && (process.env.AI_PROVIDER ?? 'anthropic') === 'anthropic') {
-    return NextResponse.json({ error: 'AI is not configured (ANTHROPIC_API_KEY missing).' }, { status: 503 });
+  if (!(await isAIConfigured())) {
+    return NextResponse.json({ error: 'AI is not configured (OpenAI API key missing).' }, { status: 503 });
   }
 
   const body = await req.json().catch(() => ({}));
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   }
   void ctx;
 
-  const provider = getProvider();
+  const provider = await resolveProvider();
   const system =
     'You are a calm, practical family scheduling assistant. Two events overlap. ' +
     'Give exactly 3 short, concrete resolution options a busy parent could act on in seconds. ' +

@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import type { Database } from '@/lib/database.types';
+import type { ConciergeDigest, ConciergeDomain, ConciergeUrgency } from '@/lib/concierge/digest';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -105,6 +106,74 @@ function CategoryBar({ label, score, icon }: OpsCategory) {
           <div className={cn('h-full rounded-full transition-all duration-700', barColor)} style={{ width: `${score}%` }} />
         </div>
       </div>
+    </div>
+  );
+}
+
+const DOMAIN_META: Record<ConciergeDomain, { emoji: string; label: string; href: string }> = {
+  bill:        { emoji: '💵', label: 'Bill',        href: '/dashboard/billing' },
+  medication:  { emoji: '💊', label: 'Medication',  href: '/dashboard/medications' },
+  maintenance: { emoji: '🔧', label: 'Maintenance', href: '/dashboard/home' },
+  warranty:    { emoji: '🛡️', label: 'Warranty',    href: '/dashboard/home' },
+  trip:        { emoji: '✈️', label: 'Trip',        href: '/dashboard/vacations' },
+  pantry:      { emoji: '🥫', label: 'Pantry',      href: '/dashboard/pantry' },
+};
+const DIGEST_URGENCY: Record<ConciergeUrgency, { label: string; cls: string; dot: string }> = {
+  overdue: { label: 'Overdue',   cls: 'text-rose-400 bg-rose-500/10 border-rose-500/30',     dot: 'bg-rose-400' },
+  today:   { label: 'Today',     cls: 'text-amber-400 bg-amber-500/10 border-amber-500/30',   dot: 'bg-amber-400' },
+  soon:    { label: 'Coming up', cls: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/30',      dot: 'bg-cyan-400' },
+};
+
+/**
+ * The cross-domain "What needs attention today?" card — the heart of the AI
+ * Concierge. Pulls deadline-bearing obligations from every domain (bills, meds,
+ * home, warranties, trips, pantry) into one prioritized, deterministic answer.
+ */
+function NeedsAttention({ digest }: { digest: ConciergeDigest }) {
+  const { counts, items, headline } = digest;
+  return (
+    <div className="rounded-2xl bg-gradient-to-br from-violet-500/10 to-indigo-500/[0.04] border border-violet-500/20 p-6">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <LayoutGrid className="h-4 w-4 text-violet-400" />
+          <span className="text-sm font-semibold text-fg uppercase tracking-wider">Needs Attention Today</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {counts.overdue > 0 && <span className="text-xs px-2 py-0.5 rounded-full border text-rose-400 bg-rose-500/10 border-rose-500/30">{counts.overdue} overdue</span>}
+          {counts.today > 0 && <span className="text-xs px-2 py-0.5 rounded-full border text-amber-400 bg-amber-500/10 border-amber-500/30">{counts.today} today</span>}
+          {counts.soon > 0 && <span className="text-xs px-2 py-0.5 rounded-full border text-cyan-300 bg-cyan-500/10 border-cyan-500/30">{counts.soon} soon</span>}
+        </div>
+      </div>
+      {items.length === 0 ? (
+        <div className="flex items-center gap-2 text-sm text-emerald-300 py-2">
+          <CheckCircle2 className="h-4 w-4" /> {headline}
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {items.slice(0, 8).map((item, i) => {
+            const meta = DOMAIN_META[item.domain];
+            const u = DIGEST_URGENCY[item.urgency];
+            return (
+              <li key={i}>
+                <a href={meta.href}
+                  className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5 hover:bg-surface/70 transition-colors group">
+                  <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', u.dot)} />
+                  <span className="text-base flex-shrink-0">{meta.emoji}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-fg block truncate">{item.title}</span>
+                    <span className="text-xs text-muted block truncate">{item.detail}</span>
+                  </span>
+                  <span className={cn('text-xs px-2 py-0.5 rounded-full border flex-shrink-0', u.cls)}>{u.label}</span>
+                  <ChevronRight className="h-4 w-4 text-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                </a>
+              </li>
+            );
+          })}
+          {items.length > 8 && (
+            <li className="text-xs text-muted text-center pt-1">+{items.length - 8} more across bills, home, health &amp; travel</li>
+          )}
+        </ul>
+      )}
     </div>
   );
 }
@@ -451,7 +520,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
           <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center">
             <Sparkles className="h-4 w-4 text-fg" />
           </div>
-          <span className="font-semibold text-fg text-lg">FamilyOS</span>
+          <span className="font-semibold text-fg text-lg">Bubaly</span>
         </div>
         <div className="text-center">
           <div className="text-4xl font-bold text-fg tabular-nums tracking-tight">{clockStr}</div>
@@ -544,6 +613,7 @@ export function BriefingModule() {
   const { familyId, members } = useApp();
   const [tab, setTab] = useState<TabType>('morning');
   const [briefings, setBriefings] = useState<Partial<Record<TabType, BriefingData>>>({});
+  const [digests, setDigests] = useState<Partial<Record<TabType, ConciergeDigest>>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<Partial<Record<TabType, string>>>({});
@@ -561,9 +631,10 @@ export function BriefingModule() {
       try {
         const raw = sessionStorage.getItem(`fos_briefing_${type}_${today}`);
         if (raw) {
-          const { briefing, at } = JSON.parse(raw) as { briefing: BriefingData; at: string };
+          const { briefing, at, digest } = JSON.parse(raw) as { briefing: BriefingData; at: string; digest?: ConciergeDigest };
           setBriefings(prev => ({ ...prev, [type]: briefing }));
           setGeneratedAt(prev => ({ ...prev, [type]: at }));
+          if (digest) setDigests(prev => ({ ...prev, [type]: digest }));
         }
       } catch { /* ignore */ }
     });
@@ -579,10 +650,11 @@ export function BriefingModule() {
         body: JSON.stringify({ type }),
       });
       if (!res.ok) throw new Error('Failed to generate briefing');
-      const { briefing, generatedAt: at } = await res.json() as { briefing: BriefingData; generatedAt: string };
+      const { briefing, generatedAt: at, digest } = await res.json() as { briefing: BriefingData; generatedAt: string; digest?: ConciergeDigest };
       setBriefings(prev => ({ ...prev, [type]: briefing }));
       setGeneratedAt(prev => ({ ...prev, [type]: at }));
-      try { sessionStorage.setItem(`fos_briefing_${type}_${today}`, JSON.stringify({ briefing, at })); } catch { /* ignore */ }
+      if (digest) setDigests(prev => ({ ...prev, [type]: digest }));
+      try { sessionStorage.setItem(`fos_briefing_${type}_${today}`, JSON.stringify({ briefing, at, digest })); } catch { /* ignore */ }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong');
     } finally {
@@ -695,6 +767,9 @@ export function BriefingModule() {
               <LayoutGrid className="h-8 w-8 text-violet-400/30 flex-shrink-0 mt-1" />
             </div>
           </div>
+
+          {/* Cross-domain concierge: "What does my family need to do today?" */}
+          {digests[tab] && <div className="mb-6"><NeedsAttention digest={digests[tab]!} /></div>}
 
           {tab === 'morning' && <MorningContent data={currentBriefing} />}
           {tab === 'evening' && <EveningContent data={currentBriefing} />}

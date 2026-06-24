@@ -19,15 +19,11 @@ import {
   Pill,
   PlatformBadges,
   PrimaryLink,
-  SocialProofLine,
   TestimonialBand,
   WatchDemoLink,
 } from '@/components/marketing/visual-mocks';
-import { getPublicStats } from '@/lib/marketing/stats';
-import { familiesHeadline } from '@/lib/marketing/format';
 
 export default async function HomePage() {
-  const { families } = await getPublicStats();
   return (
     <PageWrap>
       {/* ── Hero ── */}
@@ -36,7 +32,7 @@ export default async function HomePage() {
 
           {/* Left */}
           <div className="order-1 text-center lg:text-left">
-            <Pill icon={Sparkles}>AI-Powered Family Command Center</Pill>
+            <Pill icon={Sparkles}>AI-Powered Family Command Center!!</Pill>
 
             <h1 className="mt-6 text-[clamp(3rem,11vw,4.1rem)] font-extrabold leading-[1.03] tracking-[-0.038em] lg:text-[4.25rem]">
               Everything your<br />
@@ -45,7 +41,7 @@ export default async function HomePage() {
             </h1>
 
             <p className="mx-auto mt-5 max-w-[520px] text-[15px] leading-6 text-white/70 sm:text-base sm:leading-7 lg:mx-0">
-              FamilyOS is your AI-powered Operating System for family life. Stay organized, connected, and ahead of what matters most.
+              Bubaly is your AI-powered Operating System for family life. Stay organized, connected, and ahead of what matters most.
             </p>
 
             <div className="mt-7 flex flex-col items-stretch gap-3 xs:flex-row xs:items-center xs:justify-center lg:justify-start">
@@ -54,10 +50,6 @@ export default async function HomePage() {
             </div>
             <div className="mt-6 flex justify-center lg:justify-start">
               <PlatformBadges />
-            </div>
-
-            <div className="mt-6 flex justify-center lg:justify-start">
-              <SocialProofLine text={familiesHeadline(families)} />
             </div>
           </div>
 
@@ -105,7 +97,7 @@ export default async function HomePage() {
 
       {/* Hidden SEO content */}
       <section className="sr-only">
-        <h2>FamilyOS modules</h2>
+        <h2>Bubaly modules</h2>
         <ul>
           {[CalendarDays, CheckSquare2, UtensilsCrossed, GraduationCap, Heart, Folder, Sparkles].map((Icon, index) => (
             <li key={index}>

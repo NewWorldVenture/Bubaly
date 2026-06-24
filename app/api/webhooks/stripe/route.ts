@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
+import { markReferralConverted } from '@/lib/referrals/server';
+import { fireAutomationEvent } from '@/lib/marketing/automation-events';
+import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import type Stripe from 'stripe';
 
 export const runtime = 'nodejs';
@@ -38,10 +41,17 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
       status: sub.status as 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid',
       provider_ref: sub.id,
       current_period_end: new Date((sub as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
+      cancel_at_period_end: sub.cancel_at_period_end ?? false,
       seats: 10,
     },
     { onConflict: 'family_id' },
   );
+
+  // Credit a pending referral when a referred family first becomes paid.
+  if (plan !== 'free' && (sub.status === 'active' || sub.status === 'trialing')) {
+    try { await markReferralConverted(supabase, familyId); }
+    catch (e) { console.error('[referral] conversion crediting failed', e); }
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -76,6 +86,25 @@ export async function POST(req: NextRequest) {
           { family_id: familyId, provider: 'stripe', customer_ref: String(session.customer) },
           { onConflict: 'family_id' },
         );
+      }
+      // Close out the tracked checkout so the abandoned-checkout cron skips it.
+      await supabase
+        .from('checkout_sessions')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('session_id', session.id);
+      // Fire event-driven "payment_completed" automation workflows (deduped by
+      // the Stripe session id). Best-effort: never fail the webhook on it.
+      try {
+        const buyerEmail = session.customer_details?.email ?? session.customer_email ?? null;
+        await fireAutomationEvent(supabase, {
+          trigger: 'payment_completed',
+          email: buyerEmail,
+          name: session.customer_details?.name ?? null,
+          subjectKey: eventSubjectKey('payment_completed', [session.id]),
+          context: { familyId: familyId ?? null, sessionId: session.id },
+        });
+      } catch {
+        /* non-fatal */
       }
       break;
     }

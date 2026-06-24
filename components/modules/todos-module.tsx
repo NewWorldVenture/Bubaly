@@ -11,6 +11,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -191,6 +192,7 @@ export function TodosModule() {
                 {!activeList.is_shared && <Badge>Private</Badge>}
               </div>
               <div className="ml-auto flex items-center gap-2">
+                <AiInsight kind="todos" />
                 {done.length > 0 && (
                   <Button variant="ghost" size="sm" onClick={clearDone}>
                     <Check className="h-3.5 w-3.5 text-success" /> Clear done

@@ -1,5 +1,5 @@
 'use client';
-// Generic, accessible "quick add" form used across the Family OS modules.
+// Generic, accessible "quick add" form used across the Bubaly modules.
 // Submits through the whitelisted createFamilyRecord server action, so every
 // write is validated + RLS-isolated on the server. Renders loading / error /
 // success states inline.

@@ -5,7 +5,7 @@ import { CTASection } from '@/components/marketing/cta';
 
 export const metadata: Metadata = {
   title: 'Mobile App',
-  description: 'FamilyOS goes everywhere your family does — native iOS and Android apps, plus an installable web app.',
+  description: 'Bubaly goes everywhere your family does — native iOS and Android apps, plus an installable web app.',
 };
 
 const POINTS = [
@@ -21,7 +21,7 @@ export default function MobilePage() {
       <Section className="pt-20 text-center">
         <SectionHeading
           eyebrow="Mobile"
-          title="Your family OS, in your pocket"
+          title="Bubaly, in your pocket"
           description="Install the web app today, or use the native iOS and Android companions."
         />
       </Section>
@@ -34,13 +34,13 @@ export default function MobilePage() {
         <div className="glass-card mx-auto mt-10 max-w-2xl p-7 text-center">
           <h3 className="text-lg font-semibold">Install the web app right now</h3>
           <p className="mt-2 text-sm text-muted">
-            FamilyOS is a Progressive Web App. On your phone, open it in your browser and choose
+            Bubaly is a Progressive Web App. On your phone, open it in your browser and choose
             <span className="font-medium text-fg"> “Add to Home Screen.”</span> It launches
             full-screen, just like a native app.
           </p>
         </div>
       </Section>
-      <CTASection title="Take FamilyOS with you" subtitle="Sign up and install on every device." />
+      <CTASection title="Take Bubaly with you" subtitle="Sign up and install on every device." />
     </>
   );
 }

@@ -18,13 +18,13 @@ export const emailEnabled = (): boolean => Boolean(process.env.RESEND_API_KEY);
  * that's the safe default.
  */
 export const FROM_EMAIL =
-  process.env.EMAIL_FROM ?? 'FamilyOS <onboarding@resend.dev>';
+  process.env.EMAIL_FROM ?? 'Bubaly <onboarding@resend.dev>';
 
 /** Public base URL used to build links inside emails. */
 export const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ??
   process.env.NEXT_PUBLIC_SITE_URL ??
-  'https://familyos.vercel.app';
+  'https://www.bubaly.com';
 
 type SendReactArgs = {
   to: string | string[];

@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -166,11 +167,16 @@ export function ChoresModule() {
           <PageHeader
             title="Tasks & Chores"
             description="Stay on top of what needs to get done."
-            action={manager ? (
-              <Button onClick={() => setOpen(true)}>
-                <Plus className="h-4 w-4" /> Add Task
-              </Button>
-            ) : undefined}
+            action={
+              <div className="flex items-center gap-2">
+                <AiInsight kind="chores" />
+                {manager && (
+                  <Button onClick={() => setOpen(true)}>
+                    <Plus className="h-4 w-4" /> Add Task
+                  </Button>
+                )}
+              </div>
+            }
           />
 
           <div className="grid-stats">
@@ -404,11 +410,12 @@ function NewChoreModal({ familyId, userId, members, onClose, onSaved }: {
     const memberId = String(form.get('member_id') ?? '');
     const points = Number(form.get('points') ?? 10);
     const priority = String(form.get('priority') ?? 'medium') as 'low' | 'medium' | 'high';
+    const recurrence = String(form.get('recurrence') ?? 'none') as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
     const due_at = String(form.get('due_at') ?? '') || null;
     if (!title || !memberId) return toastError('Title and assignee required');
     setLoading(true);
     const supabase = createClient();
-    const { data: chore, error: ce } = await supabase.from('chores').insert({ family_id: familyId, title, points, priority, recurrence: 'none', created_by: userId }).select('id').single();
+    const { data: chore, error: ce } = await supabase.from('chores').insert({ family_id: familyId, title, points, priority, recurrence, created_by: userId }).select('id').single();
     if (ce || !chore) { setLoading(false); return toastError(ce?.message ?? 'Failed'); }
     const { error: ae } = await supabase.from('chore_assignments').insert({ family_id: familyId, chore_id: chore.id, member_id: memberId, status: 'todo', due_at });
     setLoading(false);
@@ -434,6 +441,17 @@ function NewChoreModal({ familyId, userId, members, onClose, onSaved }: {
           <Field label="Points">{(id) => <Input id={id} name="points" type="number" defaultValue="10" min="0" max="100" />}</Field>
           <Field label="Due date">{(id) => <Input id={id} name="due_at" type="date" />}</Field>
         </div>
+        <Field label="Repeat">
+          {(id) => (
+            <Select id={id} name="recurrence">
+              <option value="none">No repeat</option>
+              <option value="daily">Every day</option>
+              <option value="weekly">Every week</option>
+              <option value="monthly">Every month</option>
+              <option value="yearly">Every year</option>
+            </Select>
+          )}
+        </Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={loading}>

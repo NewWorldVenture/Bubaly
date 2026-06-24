@@ -171,7 +171,7 @@ export function FeaturesReferencePage() {
             <GradientText>all in one intelligent place.</GradientText>
           </h1>
           <p className="mx-auto mt-3.5 max-w-[590px] text-[15px] leading-6 text-white/72">
-            FamilyOS combines powerful tools with AI intelligence to help your family
+            Bubaly combines powerful tools with AI intelligence to help your family
             <br className="hidden sm:block" /> stay organized, connected, and ahead of what matters most.
           </p>
         </section>
@@ -187,7 +187,7 @@ export function FeaturesReferencePage() {
 
         <section className="mt-4 border-t border-white/[0.07] pt-[14px] text-center">
           <h2 className="text-[27px] font-bold tracking-[-0.025em]">Powerful features. Peaceful families.</h2>
-          <p className="mt-1.5 text-[13px] text-white/65">Discover how FamilyOS makes everyday life easier.</p>
+          <p className="mt-1.5 text-[13px] text-white/65">Discover how Bubaly makes everyday life easier.</p>
         </section>
 
         <section className="mt-[18px] grid gap-[14px] px-0 sm:grid-cols-2 lg:grid-cols-4 lg:px-[14px]">
@@ -266,7 +266,7 @@ export function FeaturesReferencePage() {
             <Sparkles className="hidden h-10 w-10 shrink-0 text-violet-400 sm:block" strokeWidth={1.7} />
             <div>
               <h2 className="text-[19px] font-semibold tracking-[-0.02em]">One app. Every part of your family life.</h2>
-              <p className="mt-1 text-[13px] leading-5 text-white/68">From daily routines to life&apos;s big moments, FamilyOS brings it all together<br className="hidden xl:block" /> so you can focus on what really matters.</p>
+              <p className="mt-1 text-[13px] leading-5 text-white/68">From daily routines to life&apos;s big moments, Bubaly brings it all together<br className="hidden xl:block" /> so you can focus on what really matters.</p>
             </div>
           </div>
           <PrimaryButton>Get Started Free</PrimaryButton>
@@ -385,7 +385,7 @@ async function TrustStrip() {
 }
 
 const FLOW_CARDS = [
-  [Mail, 'School Email Arrives', 'FamilyOS scans and\nunderstands the details.'],
+  [Mail, 'School Email Arrives', 'Bubaly scans and\nunderstands the details.'],
   [Sparkles, 'AI Extracts & Organizes', 'Events, deadlines, and\naction items are added\nto the right places.'],
   [CalendarDays, 'Everyone Stays In Sync', 'Your whole family is\nupdated automatically.'],
   [CheckCircle2, 'You Stay Ahead', 'AI reminds, suggests, and\nhelps you plan better.'],
@@ -396,7 +396,7 @@ const WORK_STEPS = [
   [Mail, 'Add or Forward Anything', 'Forward emails, snap photos\nof flyers, or add events, tasks,\nand lists.'],
   [Sparkles, 'AI Gets to Work', 'Our AI reads, understands, and\norganizes everything into the\nright places.'],
   [Users, 'Everyone Stays in Sync', 'Calendars, tasks, reminders,\nand updates are shared in\nreal time.'],
-  [CheckCircle2, 'Life Runs Smoother', 'FamilyOS helps you plan\nahead, avoid chaos, and\nenjoy more time together.'],
+  [CheckCircle2, 'Life Runs Smoother', 'Bubaly helps you plan\nahead, avoid chaos, and\nenjoy more time together.'],
 ] as const;
 
 export function HowItWorksReferencePage() {
@@ -407,11 +407,11 @@ export function HowItWorksReferencePage() {
           <div className="max-w-[414px] pt-[26px] lg:pl-[14px]">
             <Eyebrow>Simple. Smart. Life-changing.</Eyebrow>
             <h1 className="mt-3 text-[50px] font-extrabold leading-[1.05] tracking-[-0.04em] sm:text-[58px]">
-              How FamilyOS
+              How Bubaly
               <br />
               <GradientText>Works</GradientText>
             </h1>
-            <p className="mt-[16px] max-w-[390px] text-[16px] leading-[26px] text-white/78">FamilyOS is your family&apos;s AI-powered operating<br className="hidden sm:block" /> system. It brings everything together—and helps<br className="hidden sm:block" /> you stay ahead of what matters most.</p>
+            <p className="mt-[16px] max-w-[390px] text-[16px] leading-[26px] text-white/78">Bubaly is your family&apos;s AI-powered operating<br className="hidden sm:block" /> system. It brings everything together—and helps<br className="hidden sm:block" /> you stay ahead of what matters most.</p>
             <div className="mt-[20px] flex flex-wrap gap-[15px]">
               <PrimaryButton>Get Started Free <ArrowRight className="h-4 w-4" /></PrimaryButton>
               <OutlineButton href="#steps">See It in Action</OutlineButton>
@@ -518,7 +518,7 @@ function MagicPanel() {
     <section className="dark mt-[14px] grid gap-6 rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] p-5 text-white lg:h-[334px] lg:grid-cols-[274px_1fr]">
       <div>
         <h2 className="whitespace-nowrap text-[27px] font-bold tracking-[-0.03em]">The magic is in the <GradientText>AI</GradientText><Sparkles className="ml-0.5 inline h-5 w-5 text-violet-400" /></h2>
-        <p className="mt-2 text-[14px] leading-6 text-white/68">FamilyOS turns scattered information into<br />organized action—automatically.</p>
+        <p className="mt-2 text-[14px] leading-6 text-white/68">Bubaly turns scattered information into<br />organized action—automatically.</p>
         <ul className="mt-4 space-y-2.5">{bullets.map((item) => <li key={item} className="flex items-center gap-2.5 text-[12px] text-white/73"><CheckCircle2 className="h-4 w-4 text-violet-400" />{item}</li>)}</ul>
       </div>
       <div className="grid items-start gap-3 sm:grid-cols-3 lg:grid-cols-[166px_28px_176px_28px_1fr]">
@@ -557,7 +557,7 @@ function MagicCalendar() {
 
 function TestimonialsPanel() {
   const testimonials = [
-    ["FamilyOS has completely\nchanged how we stay organized.\nI don't know how we lived\nwithout it!", 'Jessica M.', 'Mom of 3'],
+    ["Bubaly has completely\nchanged how we stay organized.\nI don't know how we lived\nwithout it!", 'Jessica M.', 'Mom of 3'],
     ['The AI saves me so much time.\nIt catches things I would\nnormally miss.', 'David T.', 'Dad of 2'],
     ['Finally, an app that actually\nbrings everything together in\none place.', 'Amanda R.', 'Mom of 4'],
     ['Our whole family is on the same\npage now. Less stress and more\ntime together.', 'Chris & Maria', 'Parents of 3'],

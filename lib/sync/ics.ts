@@ -3,7 +3,7 @@
 // RFC 5545 (iCalendar) generation + a pragmatic parser. This is the one piece of
 // cross-provider sync that works with NO OAuth and no provider cooperation: any
 // calendar app (Apple Calendar, Outlook, Google "from URL", Alexa) can subscribe
-// to a generated ICS feed URL and receive theagoras events. Generation is pure
+// to a generated ICS feed URL and receive bubaly events. Generation is pure
 // and deterministic (timestamps are passed in), so it is fully unit-testable.
 
 export type IcsEvent = {
@@ -33,7 +33,7 @@ export type IcsCalendarOptions = {
   refreshIntervalMins?: number;
 };
 
-const PRODID = '-//theagoras.com//Sync Platform//EN';
+const PRODID = '-//bubaly.com//Sync Platform//EN';
 
 /** Escape per RFC 5545 §3.3.11 (TEXT): backslash, comma, semicolon, newline. */
 export function escapeIcsText(value: string): string {
@@ -112,7 +112,7 @@ export function generateICS(events: IcsEvent[], opts: IcsCalendarOptions): strin
 }
 
 // ----------------------------------------------------------------------------
-// Minimal parser — enough to IMPORT a subscribed/exported ICS into theagoras.
+// Minimal parser — enough to IMPORT a subscribed/exported ICS into bubaly.
 // Handles line unfolding, escaped TEXT, DATE vs UTC DATETIME, RRULE.
 // ----------------------------------------------------------------------------
 export function unescapeIcsText(value: string): string {

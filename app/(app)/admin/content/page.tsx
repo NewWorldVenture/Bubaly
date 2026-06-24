@@ -78,7 +78,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
     <div className="module-page">
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Content Management</h1>
-        <p className="mt-1 text-sm text-muted">Manage all documents and files across every family on FamilyOS.</p>
+        <p className="mt-1 text-sm text-muted">Manage all documents and files across every family on Bubaly.</p>
       </div>
 
       <div className="tab-bar border-b border-border pb-px">

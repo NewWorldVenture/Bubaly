@@ -28,10 +28,77 @@ export const createFamilySchema = z.object({
   timezone: z.string().min(1).default('UTC'),
 });
 
+export const onboardingProfileSchema = z.object({
+  firstName: z.string().trim().min(1, 'Enter your first name').max(60),
+  lastName: z.string().trim().min(1, 'Enter your last name').max(60),
+  phone: z.string().trim().min(7, 'Enter a valid phone number').max(30),
+  email: emailSchema,
+});
+export type OnboardingProfileInput = z.infer<typeof onboardingProfileSchema>;
+
+// Editing your account profile later (Settings) — email stays managed by auth,
+// so only the name + contact phone are editable here.
+export const profileUpdateSchema = z.object({
+  firstName: z.string().trim().min(1, 'Enter your first name').max(60),
+  lastName: z.string().trim().min(1, 'Enter your last name').max(60),
+  phone: z.string().trim().min(7, 'Enter a valid phone number').max(30),
+});
+export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
+
+// "About your family" onboarding step — household makeup, goals, attribution.
+// The base (no familyId) is reused by the single finalize action, which creates
+// the family and these details together; the extended one is for later edits
+// where a family already exists.
+export const familyDetailsBaseSchema = z.object({
+  householdAdults: z.coerce.number().int().min(0).max(20).default(1),
+  householdChildren: z.coerce.number().int().min(0).max(20).default(0),
+  childAges: z.array(z.number().int().min(0).max(21)).max(20).default([]),
+  region: z.string().trim().max(80).optional().default(''),
+  postalCode: z.string().trim().max(16).optional().default(''),
+  country: z.string().trim().max(80).optional().default(''),
+  goals: z.array(z.string()).max(20).default([]),
+  referralSource: z.string().trim().max(40).optional().default(''),
+  referralDetail: z.string().trim().max(200).optional().default(''),
+});
+export const familyDetailsSchema = familyDetailsBaseSchema.extend({
+  familyId: z.string().uuid('Missing family'),
+});
+export type FamilyDetailsInput = z.infer<typeof familyDetailsSchema>;
+
 export const inviteSchema = z.object({
   email: emailSchema,
   role: z.enum(['adult', 'teen', 'caregiver', 'guest']),
 });
+
+// A family member captured during onboarding. `local` = managed profile with NO
+// email/login (any role, so parents can add kids, grandparents, caregivers who
+// don't have an email); `invite` = an email join link will be sent.
+export const draftMemberSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('local'),
+    name: z.string().trim().min(1, 'Enter a name').max(60),
+    role: z.enum(['adult', 'teen', 'child', 'caregiver', 'guest']),
+    birthday: z.string().trim().max(10).optional().default(''),
+    color: z.string().trim().max(9).optional(),
+  }),
+  z.object({
+    kind: z.literal('invite'),
+    email: emailSchema,
+    role: z.enum(['adult', 'teen', 'caregiver', 'guest']),
+  }),
+]);
+export type DraftMemberInput = z.infer<typeof draftMemberSchema>;
+
+// The ENTIRE onboarding journey, committed in one atomic server action only when
+// the user reaches the end. Abandoning before this writes nothing — so a bailed
+// journey never leaves a half-created account/family behind.
+export const finalizeOnboardingSchema = z.object({
+  profile: onboardingProfileSchema,
+  family: createFamilySchema,
+  details: familyDetailsBaseSchema,
+  members: z.array(draftMemberSchema).max(30).default([]),
+});
+export type FinalizeOnboardingInput = z.infer<typeof finalizeOnboardingSchema>;
 
 export const eventSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').max(200),

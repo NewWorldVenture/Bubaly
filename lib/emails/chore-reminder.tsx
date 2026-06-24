@@ -15,7 +15,7 @@ export function ChoreReminderEmail({
       <body style={{ fontFamily: 'system-ui, sans-serif', background: '#030914', color: '#edf0f7', maxWidth: 520, margin: '40px auto', padding: 32 }}>
         <div style={{ marginBottom: 32 }}>
           <span style={{ fontSize: 24, fontWeight: 800, background: 'linear-gradient(135deg,#7c5dff,#f4996e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            FamilyOS
+            Bubaly
           </span>
         </div>
 
@@ -61,7 +61,7 @@ export function ChoreReminderEmail({
         </a>
 
         <hr style={{ borderColor: '#23364e', margin: '32px 0' }} />
-        <p style={{ color: '#94a0b8', fontSize: 12 }}>© {new Date().getFullYear()} FamilyOS</p>
+        <p style={{ color: '#94a0b8', fontSize: 12 }}>© {new Date().getFullYear()} Bubaly</p>
       </body>
     </html>
   );
