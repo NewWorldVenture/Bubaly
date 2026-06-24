@@ -3,7 +3,7 @@ import {
   confidenceTier, AUTO_THRESHOLD, APPROVE_THRESHOLD, daysUntilBirthday,
   renewalSuggestions, appointmentSuggestions, choreSuggestions, birthdaySuggestions,
   grocerySuggestions, conflictSuggestions, expenseSuggestions, burnoutSuggestions,
-  medicationSuggestions, monthlyCents, buildSuggestions, applyMemberTraits, successProbability, partitionByTier,
+  medicationSuggestions, mealSuggestions, monthlyCents, buildSuggestions, applyMemberTraits, successProbability, partitionByTier,
   type FamilySnapshot,
 } from '@/lib/autopilot/engine';
 import type { MemberTraits } from '@/lib/autopilot/twin';
@@ -19,6 +19,8 @@ const base = (over: Partial<FamilySnapshot> = {}): FamilySnapshot => ({
   subscriptions: [],
   stressSignals: [],
   medications: [],
+  favoriteMeals: [],
+  plannedDinnerDays: [],
   ...over,
 });
 
@@ -218,6 +220,23 @@ describe('applyMemberTraits (Digital Twin modulation)', () => {
     const plain = buildSuggestions(snap);
     const twinned = buildSuggestions(snap, new Map([['m2', forgetful]]));
     expect(twinned[0].confidence).toBe(plain[0].confidence + 8);
+  });
+});
+
+describe('mealSuggestions (Meal Agent / Family Memory)', () => {
+  const favs = [{ name: 'Tacos', count: 9 }, { name: 'Pasta', count: 6 }, { name: 'Stir-fry', count: 4 }];
+  it('suggests planning when most of the next 3 days lack a dinner', () => {
+    const out = mealSuggestions(base({ favoriteMeals: favs, plannedDinnerDays: ['2026-06-24'] }));
+    expect(out).toHaveLength(1);
+    expect(out[0].kind).toBe('meal');
+    expect(out[0].detail).toContain('Tacos');
+    expect((out[0].payload.favorites as string[])).toEqual(['Tacos', 'Pasta', 'Stir-fry']);
+  });
+  it('stays quiet when dinners are mostly planned', () => {
+    expect(mealSuggestions(base({ favoriteMeals: favs, plannedDinnerDays: ['2026-06-24', '2026-06-25', '2026-06-26'] }))).toHaveLength(0);
+  });
+  it('stays quiet with no learned favorites (nothing to remember yet)', () => {
+    expect(mealSuggestions(base({ favoriteMeals: [], plannedDinnerDays: [] }))).toHaveLength(0);
   });
 });
 

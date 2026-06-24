@@ -48,6 +48,8 @@ export type EventSignal = { id: string; title: string; startsAt: string; endsAt:
 export type SubscriptionSignal = { id: string; name: string; costCents: number; cadence: string; nextCharge: string | null; lastUsed: string | null; status: string };
 export type StressSignal = { memberId: string | null; weight: number; occurredOn: string };
 export type MedicationSignal = { id: string; name: string; memberId: string | null; refillOn: string; reminderDays: number };
+/** Family Memory: a favorite meal learned from past plans (most-cooked first). */
+export type FavoriteMeal = { name: string; count: number };
 
 export type FamilySnapshot = {
   today: string; // YYYY-MM-DD
@@ -60,6 +62,8 @@ export type FamilySnapshot = {
   subscriptions: SubscriptionSignal[];
   stressSignals: StressSignal[];
   medications: MedicationSignal[];
+  favoriteMeals: FavoriteMeal[];   // learned from meal_plans history
+  plannedDinnerDays: string[];     // YYYY-MM-DD that already have a dinner planned (next few days)
 };
 
 const DAY_MS = 86_400_000;
@@ -384,6 +388,37 @@ function addDaysIso(iso: string, days: number): string {
   return new Date(Date.parse(`${isoDay(iso)}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 }
 
+/**
+ * Meal Agent (Family Memory): when the next 3 days are mostly missing a dinner
+ * plan, proactively suggest planning — seeded with the family's actual favorite
+ * meals so it feels like it remembers them. kind = `meal`.
+ */
+export function mealSuggestions(s: FamilySnapshot, horizonDays = 3): SuggestionDraft[] {
+  if (s.favoriteMeals.length === 0) return [];
+  const planned = new Set(s.plannedDinnerDays.map(isoDay));
+  let missing = 0;
+  for (let i = 0; i < horizonDays; i++) if (!planned.has(addDaysIso(s.today, i))) missing++;
+  if (missing < 2) return []; // most days already planned → nothing to do
+
+  const top = s.favoriteMeals.slice(0, 3).map((m) => m.name);
+  const weekBucket = Math.floor(Date.parse(`${s.today}T00:00:00Z`) / DAY_MS / 7);
+  return [{
+    kind: 'meal',
+    title: `${missing} dinners unplanned this week`,
+    detail: `Your family loves ${top.join(', ')}. Want to plan around them?`,
+    confidence: 76,
+    urgency: 1,
+    actionType: 'plan_meals',
+    actionLabel: 'Plan dinners',
+    payload: { favorites: top, missing },
+    sourceKind: 'meal_plans',
+    sourceId: null,
+    memberId: null,
+    dedupeKey: `meal-plan:week-${weekBucket}`,
+    expiresAt: `${addDaysIso(s.today, horizonDays)}T23:59:59Z`,
+  }];
+}
+
 import { confidenceAdjustment, clampConfidence, clampUrgency as clampU, type MemberTraits } from '@/lib/autopilot/twin';
 
 /**
@@ -418,6 +453,7 @@ export function buildSuggestions(s: FamilySnapshot, traitsByMember?: Map<string,
     ...expenseSuggestions(s),
     ...burnoutSuggestions(s),
     ...medicationSuggestions(s),
+    ...mealSuggestions(s),
   ];
   if (traitsByMember && traitsByMember.size > 0) {
     all = all.map((d) => applyMemberTraits(d, traitsByMember));

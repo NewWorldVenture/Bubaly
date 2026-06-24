@@ -28,7 +28,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     { data: renewals }, { data: appts }, { data: choreRows },
     { data: members }, { data: groceries }, { data: apptReminders },
     { data: events }, { data: subs }, { data: stress }, { data: meds },
-    { data: choreHistory }, { data: twinProfiles }, { data: existing },
+    { data: choreHistory }, { data: twinProfiles }, { data: mealPlans }, { data: existing },
   ] = await Promise.all([
     supabase.from('renewals').select('id, title, expires_at, status').eq('family_id', familyId).eq('status', 'active').lte('expires_at', in30).limit(100),
     supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(50),
@@ -43,10 +43,27 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     // Digital Twin learning: 90d of chore outcomes per member.
     supabase.from('chore_assignments').select('member_id, status').eq('family_id', familyId).gte('created_at', since90).limit(2000),
     supabase.from('family_digital_twin_profiles').select('id, member_id, metadata').eq('family_id', familyId).limit(50),
+    // Meal Agent / Family Memory: 90d of dinner history + the next few days' plans.
+    supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', since90.slice(0, 10)).limit(500),
     supabase.from('autopilot_suggestions').select('id, dedupe_key, status').eq('family_id', familyId).limit(500),
   ]);
 
   const remindedAppt = new Set((apptReminders ?? []).map((r) => r.related_id).filter(Boolean) as string[]);
+
+  // Family Memory: rank dinners cooked over the last 90 days, and note which of
+  // the next few days already have a dinner planned.
+  const mealCounts = new Map<string, number>();
+  const plannedDinnerDays: string[] = [];
+  const horizonEnd = new Date(now.getTime() + 4 * 86400000).toISOString().slice(0, 10);
+  for (const mp of mealPlans ?? []) {
+    const name = (mp as unknown as { meals: { name: string } | null }).meals?.name;
+    if (name) mealCounts.set(name, (mealCounts.get(name) ?? 0) + 1);
+    if (mp.plan_date >= today && mp.plan_date <= horizonEnd) plannedDinnerDays.push(mp.plan_date);
+  }
+  const favoriteMeals = Array.from(mealCounts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
 
   const snapshot: FamilySnapshot = {
     today,
@@ -63,6 +80,8 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     subscriptions: (subs ?? []).map((x) => ({ id: x.id, name: x.name, costCents: x.cost_cents, cadence: x.cadence, nextCharge: x.next_charge, lastUsed: x.last_used, status: x.status })),
     stressSignals: (stress ?? []).map((x) => ({ memberId: x.member_id, weight: Number(x.weight), occurredOn: x.occurred_on })),
     medications: (meds ?? []).map((x) => ({ id: x.id, name: x.name, memberId: x.member_id, refillOn: x.refill_on as string, reminderDays: x.refill_reminder_days })),
+    favoriteMeals,
+    plannedDinnerDays,
   };
 
   // Digital Twin: learn per-member reliability from chore history, persist it to
