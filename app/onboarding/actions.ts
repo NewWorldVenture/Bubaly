@@ -4,11 +4,12 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
 import { sendEmail } from '@/lib/server/email';
 import { APP_URL } from '@/lib/email';
-import { createFamilySchema, familyDetailsSchema, inviteSchema, onboardingProfileSchema } from '@/lib/validation';
+import { createFamilySchema, familyDetailsSchema, finalizeOnboardingSchema, inviteSchema, onboardingProfileSchema } from '@/lib/validation';
 import { saveUserProfile } from '@/lib/server/profiles';
 import { cleanGoals, cleanReferralSource } from '@/lib/onboarding/family';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
+import type { MemberRole } from '@/lib/constants/roles';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -209,4 +210,137 @@ export async function inviteMemberAction(input: {
     action: 'create', resource: 'invites', metadata: { email: parsed.data.email, role: parsed.data.role },
   });
   return { ok: true };
+}
+
+/**
+ * Atomic onboarding: collects everything in-memory across all wizard steps,
+ * then writes profile + family + details + members + invites in one action.
+ * Abandoning the wizard before this writes NOTHING.
+ *
+ * The DB trigger `handle_new_family` auto-creates the owner as a `parent`
+ * member and provisions a trial subscription on family INSERT, so we skip
+ * inserting the parent member ourselves.
+ */
+export async function finalizeOnboardingAction(input: {
+  profile: { firstName: string; lastName: string; phone: string; email: string };
+  family: { name: string; timezone: string };
+  details: {
+    householdAdults: number; householdChildren: number; childAges: number[];
+    region?: string; postalCode?: string; country?: string;
+    goals: string[]; referralSource?: string; referralDetail?: string;
+  };
+  members: Array<
+    | { kind: 'local'; name: string; role: MemberRole; birthday?: string; color?: string }
+    | { kind: 'invite'; email: string; role: MemberRole }
+  >;
+}): Promise<Result<{ familyId: string }>> {
+  const parsed = finalizeOnboardingSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid onboarding data' };
+
+  const supabase = await createServer();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { ok: false, error: 'Not signed in' };
+
+  const { profile, family, details, members } = parsed.data;
+
+  // 1. Save profile (name, phone, email)
+  const profileRes = await saveUserProfile(auth.user.id, {
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    phone: profile.phone,
+    email: profile.email,
+  });
+  if (!profileRes.ok) return profileRes;
+
+  // 2. Create the family — DB trigger creates parent member + trial subscription
+  const { data: familyRow, error: famErr } = await supabase
+    .from('families')
+    .insert({ name: family.name, timezone: family.timezone, created_by: auth.user.id })
+    .select()
+    .single();
+  if (famErr || !familyRow) return { ok: false, error: famErr?.message ?? 'Could not create family' };
+
+  const familyId = familyRow.id;
+
+  // 3. Set this as the active family
+  await supabase.from('user_preferences').upsert(
+    { user_id: auth.user.id, active_family_id: familyId },
+    { onConflict: 'user_id' },
+  );
+
+  // 4. Save family details / onboarding questionnaire
+  const goals = cleanGoals(details.goals);
+  const referralSource = cleanReferralSource(details.referralSource);
+  await supabase.from('family_onboarding').upsert(
+    {
+      family_id: familyId,
+      household_adults: details.householdAdults,
+      household_children: details.householdChildren,
+      child_ages: details.childAges,
+      region: details.region || null,
+      postal_code: details.postalCode || null,
+      country: details.country || null,
+      goals,
+      referral_source: referralSource,
+      referral_detail: details.referralDetail || null,
+      completed_at: new Date().toISOString(),
+      created_by: auth.user.id,
+    },
+    { onConflict: 'family_id' },
+  );
+
+  // 5. Insert local (managed) members — no user_id, no login
+  for (const m of members) {
+    if (m.kind !== 'local') continue;
+    await supabase.from('family_members').insert({
+      family_id: familyId,
+      role: m.role,
+      display_name: m.name,
+      color: m.color ?? null,
+      birthday: m.birthday || null,
+    });
+  }
+
+  // 6. Create invites and send email join links
+  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? APP_URL;
+  for (const m of members) {
+    if (m.kind !== 'invite') continue;
+    const { data: invite } = await supabase
+      .from('invites')
+      .insert({ family_id: familyId, email: m.email, role: m.role, invited_by: auth.user.id })
+      .select('token')
+      .single();
+    if (invite) {
+      const link = `${origin}/join?token=${invite.token}`;
+      await sendEmail({
+        to: m.email,
+        subject: 'You’re invited to a family on Bubaly',
+        html: `<p>You’ve been invited to join a family on Bubaly.</p><p><a href="${link}">Accept your invite</a></p>`,
+      });
+    }
+  }
+
+  // 7. Audit
+  await logAudit(supabase, {
+    familyId, actorId: auth.user.id,
+    action: 'create', resource: 'families', resourceId: familyId,
+    metadata: { name: family.name, members: members.length },
+  });
+
+  // 8. Fire onboarding_completed automation (best-effort)
+  try {
+    const { data: prof } = await supabase
+      .from('profiles').select('display_name, full_name, email').eq('id', auth.user.id).maybeSingle();
+    await fireAutomationEvent(createServiceClient(), {
+      trigger: 'onboarding_completed',
+      email: prof?.email ?? auth.user.email ?? null,
+      name: prof?.display_name ?? prof?.full_name ?? null,
+      subjectKey: eventSubjectKey('onboarding_completed', [familyId]),
+      context: { familyId, goals, referral_source: referralSource },
+    });
+  } catch (e) {
+    console.error('[onboarding] automation event failed', e);
+  }
+
+  return { ok: true, data: { familyId } };
 }

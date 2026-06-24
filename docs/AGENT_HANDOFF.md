@@ -1,7 +1,76 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Security & Blog pages world-class upgrade. Keep this updated as you ship.
+Last updated after the onboarding overhaul (transactional draft-based flow). Keep this updated as you ship.
+
+> **Session update (2026-06-24b, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> ONBOARDING OVERHAUL: transactional draft, back navigation, expanded member roles.**
+> Task: completely overhaul the customer onboarding wizard so that (1) every step
+> has a back button, (2) abandoning the journey writes NOTHING to the database
+> (no orphaned families/members/subscriptions), and (3) family members without
+> email addresses can be assigned ANY role (adult, teen, child, caregiver, guest)
+> — not just child/teen.
+>
+> **Architecture change — draft-based transactional onboarding:**
+> The old wizard wrote to the DB at each step (profile at step 1, family at
+> step 2, details at step 3, members at step 4). Abandoning mid-flow left
+> orphaned rows. The new wizard collects everything in React state (persisted
+> to sessionStorage for tab-reload resilience) across 5 steps, and writes
+> NOTHING until the user explicitly clicks "Create my family" on the review
+> step. A single atomic `finalizeOnboardingAction` server action handles all
+> DB writes.
+>
+> **New files created:**
+> - `lib/onboarding/draft.ts` — pure helpers for the draft member model:
+>   `DraftMember` interface (id, kind, name, email, role, color, birthday),
+>   `MEMBER_COLORS` (8-color palette), `LOCAL_MEMBER_ROLES` (adult, teen,
+>   child, caregiver, guest), `INVITE_ROLES` (adult, teen, caregiver, guest),
+>   `nextMemberColor`, `draftId`, `hasInviteEmail`, `makeLocalMember`,
+>   `makeInviteMember`, `addMember`, `removeMember`, `draftMemberLabel`,
+>   `summarizeMembers`.
+> - `tests/onboarding-draft.test.ts` — 12 tests covering all draft helpers.
+>
+> **Modified files:**
+> - `lib/validation.ts` — split `familyDetailsSchema` into
+>   `familyDetailsBaseSchema` (no familyId) + extended version (with familyId).
+>   Added `draftMemberSchema` (discriminated union: local with name/role/
+>   birthday/color, invite with email/role). Added `finalizeOnboardingSchema`
+>   bundling profile + family + details + members.
+> - `app/onboarding/actions.ts` — added `finalizeOnboardingAction`: validates
+>   full bundle, saves profile, creates family (DB trigger `handle_new_family`
+>   auto-creates parent member + trial subscription), sets active family,
+>   upserts family_onboarding details, inserts local members (no user_id),
+>   creates invites + sends emails, logs audit, fires onboarding_completed
+>   automation. Old per-step actions kept for backwards compat.
+> - `components/onboarding/onboarding-wizard.tsx` — complete rewrite:
+>   5 steps (profile → family name → family details → add members → review),
+>   back button on every step (ArrowLeft), all data in `DraftState` (React
+>   state + sessionStorage), step 4 allows local members of ANY role with
+>   role labels/descriptions, remove buttons for draft members, step 5
+>   review page with edit links back to each section, single "Create my
+>   family" button calls finalizeOnboardingAction, clears sessionStorage on
+>   success.
+>
+> **Key design decisions:**
+> - DB trigger `handle_new_family` (migration 0003) auto-creates the owner as
+>   a `parent` member + trial subscription on family INSERT. The finalize
+>   action does NOT manually insert a parent member — it lets the trigger
+>   handle it.
+> - sessionStorage key `onboarding-draft` persists the full draft state so
+>   a page refresh doesn't lose progress.
+> - Local members (kind: 'local') get `user_id: null` in `family_members` —
+>   they're managed profiles with no login.
+> - Invite members (kind: 'invite') get a row in `invites` + an email sent.
+>
+> **Verification:** `tsc --noEmit` clean · `next lint` clean (only pre-existing
+> warnings in expenses/subscriptions modules) · `next build` **Compiled
+> successfully** · `vitest` **777 passing** (all 12 onboarding draft tests +
+> 765 existing). NO migration. NO database changes.
+>
+> **NEXT (onboarding):** (1) add country field to family details step;
+> (2) animated step transitions; (3) "Start over" button to clear draft;
+> (4) email validation feedback on invite (check MX records). Next migration:
+> **0083**.
 
 > **Session update (2026-06-24, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > WORLD-CLASS SECURITY & BLOG PAGES.**
