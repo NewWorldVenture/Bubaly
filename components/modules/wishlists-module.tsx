@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import {
   Gift, Plus, Pencil, Trash2, ExternalLink, DollarSign, Check, Lock,
-  HandHeart, ShoppingBag, Star,
+  HandHeart, ShoppingBag, Star, Sparkles, X,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -21,6 +21,7 @@ import {
   type WishLike, type WishPriority, type ClaimState,
 } from '@/lib/wishlists/gifts';
 import type { Tables } from '@/lib/database.types';
+import type { WishlistInsights, WishlistsAIResponse } from '@/lib/wishlists/wishlists-ai';
 
 type Wish = Tables<'wishlist_items'>;
 
@@ -48,6 +49,19 @@ export function WishlistsModule() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(blank);
   const [saving, setSaving] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<WishlistInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<WishlistsAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/wishlists', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const { data: wishes, loading, error } = useRealtimeQuery<Wish>({
     table: 'wishlist_items', familyId, deps: [familyId],
@@ -124,8 +138,40 @@ export function WishlistsModule() {
       <PageHeader
         title="Wish Lists"
         description="Everyone's wishes in one place — claim gifts privately so surprises stay surprises."
-        action={isOwnList && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add a wish</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4" /> AI Assist
+            </Button>
+            {isOwnList && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add a wish</Button>}
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="mb-5 rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Wish List Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.giftIdeas && aiInsights.giftIdeas.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Gift Ideas</p>
+              <ul className="space-y-1">{aiInsights.giftIdeas.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.budgetTip && <p className="text-xs text-muted italic">{aiInsights.budgetTip}</p>}
+        </div>
+      )}
 
       {/* Member tabs */}
       <div className="flex flex-wrap gap-1.5 mb-5">

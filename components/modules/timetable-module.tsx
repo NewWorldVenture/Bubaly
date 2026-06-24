@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CalendarRange, Plus, Pencil, Trash2, Clock, MapPin, Repeat } from 'lucide-react';
+import { CalendarRange, Plus, Pencil, Trash2, Clock, MapPin, Repeat, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -18,6 +18,7 @@ import {
   WEEK_PATTERN_LABELS, type WeekPattern, type ClassLike,
 } from '@/lib/school/timetable';
 import type { Tables } from '@/lib/database.types';
+import type { TimetableInsights, TimetableAIResponse } from '@/lib/school/timetable-ai';
 
 type SchoolClass = Tables<'school_classes'>;
 
@@ -49,6 +50,19 @@ export function TimetableModule() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(blankForm);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<TimetableInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<TimetableAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/timetable', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const { data: classes, loading, error, refresh } = useRealtimeQuery<SchoolClass>({
     table: 'school_classes', familyId, deps: [familyId],
@@ -124,8 +138,40 @@ export function TimetableModule() {
       <PageHeader
         title="Timetable"
         description="A visual Mon–Fri class schedule for every student — with alternating A/B week support for rotating timetables."
-        action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add class</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4" /> AI Assist
+            </Button>
+            <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add class</Button>
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="mb-5 rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Timetable Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.studyTips && aiInsights.studyTips.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Study Tips</p>
+              <ul className="space-y-1">{aiInsights.studyTips.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.organizationTip && <p className="text-xs text-muted italic">{aiInsights.organizationTip}</p>}
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-5">

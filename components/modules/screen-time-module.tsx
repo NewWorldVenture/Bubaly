@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { MonitorSmartphone, Plus, Trash2, Flame, Gauge, Settings2 } from 'lucide-react';
+import { MonitorSmartphone, Plus, Trash2, Flame, Gauge, Settings2, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -17,6 +17,7 @@ import {
   categoryBreakdown, balanceScore, limitProgress, underLimitStreak, type ScreenEntryLike,
 } from '@/lib/screen-time/insights';
 import type { Tables } from '@/lib/database.types';
+import type { ScreenTimeInsights, ScreenTimeAIResponse } from '@/lib/screen-time/screen-time-ai';
 
 type Entry = Tables<'screen_time_entries'>;
 type Limit = Tables<'screen_time_limits'>;
@@ -40,6 +41,19 @@ export function ScreenTimeModule() {
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [limitFor, setLimitFor] = useState<{ memberId: string; minutes: string } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<ScreenTimeInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<ScreenTimeAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/screen-time', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const all = useMemo(() => entries ?? [], [entries]);
   const limitByMember = useMemo(() => new Map((limits ?? []).map((l) => [l.member_id, l.daily_minutes])), [limits]);
@@ -95,8 +109,38 @@ export function ScreenTimeModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><MonitorSmartphone className="h-4 w-4 text-brand" /> Screen Time & Balance</h3>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Log time</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+            <Sparkles className="h-4 w-4" /> AI Assist
+          </Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Log time</Button>
+        </div>
       </div>
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Screen Time Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.balanceTips && aiInsights.balanceTips.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Balance Tips</p>
+              <ul className="space-y-1">{aiInsights.balanceTips.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.limitAdvice && <p className="text-xs text-muted italic">{aiInsights.limitAdvice}</p>}
+        </div>
+      )}
 
       {/* Per-child cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
