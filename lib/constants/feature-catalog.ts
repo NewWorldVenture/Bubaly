@@ -101,6 +101,7 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('family-reunions', 'Family Reunions', 'Family & Home', 'basic', '/dashboard/reunions'),
   F('family-yearbook', 'Family Yearbook', 'Daily Life', 'basic', '/dashboard/yearbook'),
   F('relocation-guide', 'Relocation Guide', 'Family & Home', 'basic', '/dashboard/relocation'),
+  F('marketplace', 'Marketplace', 'Family & Home', 'basic', '/dashboard/marketplace'),
 
   // ── Finances & Admin ───────────────────────────────────────
   F('finances', 'Finances', 'Finances & Admin', 'free', '/dashboard/billing'),

@@ -28,6 +28,9 @@ export type ReunionStatus = 'planning' | 'confirmed' | 'active' | 'completed' | 
 export type RsvpResponse = 'attending' | 'not_attending' | 'maybe' | 'pending';
 export type RelocationStatus = 'researching' | 'planning' | 'in_progress' | 'completed' | 'cancelled';
 export type RelocationTaskStatus = 'todo' | 'in_progress' | 'done' | 'skipped';
+export type ListingType = 'sell' | 'trade' | 'free' | 'wanted';
+export type ListingStatus = 'active' | 'sold' | 'traded' | 'withdrawn';
+export type ItemCondition = 'new' | 'like_new' | 'good' | 'fair' | 'poor';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type PantryLocation = 'pantry' | 'fridge' | 'freezer' | 'counter' | 'garage' | 'other';
 export type NutritionSubject = 'recipe' | 'meal' | 'week';
@@ -452,6 +455,11 @@ export interface Database {
         { id: string; family_id: string; relocation_id: string; created_by: string | null; title: string; category: string; status: RelocationTaskStatus; due_date: string | null; assigned_to: string | null; sort_order: number; notes: string } & Stamps,
         { id?: string; family_id: string; relocation_id: string; created_by?: string | null; title: string; category?: string; status?: RelocationTaskStatus; due_date?: string | null; assigned_to?: string | null; sort_order?: number; notes?: string },
         Partial<{ title: string; category: string; status: RelocationTaskStatus; due_date: string | null; assigned_to: string | null; sort_order: number; notes: string }>
+      >;
+      marketplace_listings: T<
+        { id: string; family_id: string; created_by: string | null; title: string; description: string; category: string; condition: ItemCondition; listing_type: ListingType; status: ListingStatus; price: number | null; location: string; photo_path: string | null; notes: string; is_active: boolean } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; title: string; description?: string; category?: string; condition?: ItemCondition; listing_type?: ListingType; status?: ListingStatus; price?: number | null; location?: string; photo_path?: string | null; notes?: string; is_active?: boolean },
+        Partial<{ title: string; description: string; category: string; condition: ItemCondition; listing_type: ListingType; status: ListingStatus; price: number | null; location: string; photo_path: string | null; notes: string; is_active: boolean }>
       >;
       pets: T<
         { id: string; family_id: string; name: string; species: PetSpecies; breed: string | null; birthday: string | null; adoption_date: string | null; weight_kg: number | null; color: string | null; microchip_id: string | null; photo_path: string | null; vet_name: string | null; vet_phone: string | null; notes: string | null; is_active: boolean; created_by: string | null } & Stamps,

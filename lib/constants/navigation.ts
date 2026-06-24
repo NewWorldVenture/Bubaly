@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, ScrollText, HandHeart, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, ScrollText, HandHeart, Tag, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -117,6 +117,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/college', label: 'College Planner', icon: GraduationCap, minLevel: 1 },
       { href: '/dashboard/reunions', label: 'Family Reunions', icon: Users, minLevel: 1 },
       { href: '/dashboard/relocation', label: 'Relocation Guide', icon: MapPin, minLevel: 1 },
+      { href: '/dashboard/marketplace', label: 'Marketplace', icon: Tag, minLevel: 1 },
       { href: '/dashboard/settings', label: 'Settings', icon: Settings, minLevel: 0 },
     ],
   },
