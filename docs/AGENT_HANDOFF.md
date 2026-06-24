@@ -1,7 +1,25 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Meal Agent / Family Memory signal. Keep this updated as you ship.
+Last updated after the insurance-renewal signal. Keep this updated as you ship.
+
+> **Session update (2026-06-24i) — GEN-2: INSURANCE-RENEWAL SIGNAL.**
+> Another clean autopilot signal reusing the insurance table (0084). NO migration.
+> Branch `claude/festive-bohr-m4cbeg`.
+>
+> **BUILT:** `insuranceSuggestions` in engine.ts (1 test, 29 in autopilot-engine) — a
+> `family_insurance_policies` row whose `renewal_date` is within 30 days → `insurance`
+> suggestion (conf 95/82/72 by proximity, ≤7d auto-creates a reversible reminder),
+> mirroring the renewals rule. `scan.ts` reads active policies with a renewal date ≤30d.
+> autopilot-module: `insurance` → ShieldCheck icon. tsc/lint/build clean.
+>
+> **Autopilot now predicts 11 signal types** (renewals, appointments, chores, birthdays,
+> groceries, conflicts, finance, wellbeing, medications, meals, insurance) + Digital-Twin
+> confidence modulation + the Meal Agent (Family Memory). **GEN-2 ROADMAP — remaining:**
+> more agents (Health/Travel) into the same store; Family Memory beyond meals (gift ideas
+> from past birthdays/wishlists, favorite activities); more signals (depleted staples via
+> recurring grocery history, weather-impact on outdoor calendar events). Signal recipe:
+> 2026-06-24d entry. Twin-trait recipe: 2026-06-24g. Agent pattern: 2026-06-24h (meal).
 
 > **Session update (2026-06-24h) — GEN-2: MEAL AGENT (Family Memory).**
 > First "agent" writing into the autopilot: learns the family's favorite dinners from

@@ -28,7 +28,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     { data: renewals }, { data: appts }, { data: choreRows },
     { data: members }, { data: groceries }, { data: apptReminders },
     { data: events }, { data: subs }, { data: stress }, { data: meds },
-    { data: choreHistory }, { data: twinProfiles }, { data: mealPlans }, { data: existing },
+    { data: choreHistory }, { data: twinProfiles }, { data: mealPlans }, { data: insurance }, { data: existing },
   ] = await Promise.all([
     supabase.from('renewals').select('id, title, expires_at, status').eq('family_id', familyId).eq('status', 'active').lte('expires_at', in30).limit(100),
     supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(50),
@@ -45,6 +45,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     supabase.from('family_digital_twin_profiles').select('id, member_id, metadata').eq('family_id', familyId).limit(50),
     // Meal Agent / Family Memory: 90d of dinner history + the next few days' plans.
     supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', since90.slice(0, 10)).limit(500),
+    supabase.from('family_insurance_policies').select('id, policy_type, insurer, renewal_date').eq('family_id', familyId).eq('is_active', true).not('renewal_date', 'is', null).lte('renewal_date', in30).limit(100),
     supabase.from('autopilot_suggestions').select('id, dedupe_key, status').eq('family_id', familyId).limit(500),
   ]);
 
@@ -82,6 +83,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     medications: (meds ?? []).map((x) => ({ id: x.id, name: x.name, memberId: x.member_id, refillOn: x.refill_on as string, reminderDays: x.refill_reminder_days })),
     favoriteMeals,
     plannedDinnerDays,
+    insurance: (insurance ?? []).map((p) => ({ id: p.id, label: `${p.policy_type} insurance (${p.insurer})`, renewalOn: p.renewal_date as string })),
   };
 
   // Digital Twin: learn per-member reliability from chore history, persist it to
