@@ -34,6 +34,20 @@ export async function getAIConfig(supabase: DB): Promise<AIProviderConfig> {
   };
 }
 
+/**
+ * Resolve just the OpenAI API key (admin-saved value → env). Used by the voice
+ * routes (transcription / TTS) which call OpenAI's audio endpoints directly.
+ * Returns '' when no key is configured so callers can fail honestly with a 503.
+ */
+export async function getOpenAIKey(supabase: DB): Promise<string> {
+  try {
+    const cfg = await getAIConfig(supabase);
+    return cfg.openaiKey ?? '';
+  } catch {
+    return process.env.OPENAI_API_KEY ?? '';
+  }
+}
+
 export async function getAIConfigView(supabase: DB): Promise<AIConfigView> {
   const { data } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
   const stored = (data?.value ?? {}) as StoredConfig;

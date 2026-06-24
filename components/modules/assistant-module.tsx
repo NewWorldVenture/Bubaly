@@ -4,12 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CalendarDays, CheckCircle2, Bell, Pill, ListChecks, Mic,
   Plus, PlusCircle, School, Send, ShoppingCart, Sparkles, UtensilsCrossed,
-  MessageSquare, Trash2, Pencil,
+  MessageSquare, Trash2, Pencil, Square, Volume2, VolumeX, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { useVoice } from '@/lib/hooks/use-voice';
+import { VOICE_MODES, cleanTranscript } from '@/lib/ai/voice';
 
 const CHIPS = [
   [CalendarDays, "What's happening today?"],
@@ -49,6 +51,10 @@ function newConversationId() {
 export function AssistantModule() {
   const { family, selfMember } = useApp();
   const firstName = (selfMember?.display_name || 'there').split(' ')[0];
+
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const voice = useVoice({ onError: setVoiceError });
+  const [showVoiceMenu, setShowVoiceMenu] = useState(false);
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -212,6 +218,7 @@ export function AssistantModule() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
+      let finalText = '';
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -223,17 +230,30 @@ export function AssistantModule() {
           if (!line) continue;
           let ev: { type: string; text?: string; name?: string; ok?: boolean; summary?: string; content?: string; error?: string };
           try { ev = JSON.parse(line.slice(5).trim()); } catch { continue; }
-          if (ev.type === 'delta' && ev.text) patchReply((m) => ({ ...m, content: m.content + ev.text }));
+          if (ev.type === 'delta' && ev.text) { finalText += ev.text; patchReply((m) => ({ ...m, content: m.content + ev.text })); }
           else if (ev.type === 'action') patchReply((m) => ({ ...m, actions: [...(m.actions ?? []), { name: ev.name ?? '', ok: ev.ok !== false, summary: ev.summary ?? 'Done' }] }));
           else if (ev.type === 'error') patchReply((m) => ({ ...m, content: m.content || (ev.error ?? 'Something went wrong.') }));
-          else if (ev.type === 'done') patchReply((m) => ({ ...m, content: m.content || (ev.content ?? 'Done.') }));
+          else if (ev.type === 'done') { finalText = ev.content || finalText; patchReply((m) => ({ ...m, content: m.content || (ev.content ?? 'Done.') })); }
         }
       }
+      // Speak the reply aloud when voice output is enabled on this device.
+      if (finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText);
     } catch {
       patchReply((m) => ({ ...m, content: m.content || 'Something went wrong. Please try again.' }));
     } finally {
       setLoading(false);
       void loadConversations(); // titles/order update after the turn persists
+    }
+  }
+
+  // Mic flow: record → transcribe → drop into the input (auto-send if we got text).
+  async function onMicPress() {
+    setVoiceError(null);
+    if (voice.status === 'recording') { voice.stopRecording(); return; }
+    const text = await voice.startRecording();
+    if (text) {
+      const cleaned = cleanTranscript(text);
+      if (cleaned) void send(cleaned);
     }
   }
 
@@ -249,9 +269,48 @@ export function AssistantModule() {
             <h1 className="text-3xl font-black">AI Assistant</h1>
             <span className="rounded-md bg-brand px-3 py-1 text-xs font-black text-brand-fg">BETA</span>
           </div>
-          <button onClick={newChat} className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/40 px-3 py-1.5 text-sm font-semibold text-fg transition hover:bg-elevated">
-            <Plus className="h-4 w-4" /> New chat
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            {/* Voice output mode */}
+            <div className="relative">
+              <button
+                onClick={() => setShowVoiceMenu((s) => !s)}
+                aria-label="Voice settings"
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition',
+                  voice.mode === 'text'
+                    ? 'border-border bg-surface/40 text-fg hover:bg-elevated'
+                    : 'border-brand/40 bg-brand/10 text-brand',
+                )}
+              >
+                {voice.mode === 'text' ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                <span className="hidden sm:inline">Voice</span>
+              </button>
+              {showVoiceMenu && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowVoiceMenu(false)} />
+                  <div className="absolute right-0 z-20 mt-2 w-60 rounded-2xl border border-border bg-surface p-2 shadow-xl">
+                    <p className="px-2 py-1.5 text-xs font-semibold text-muted">Assistant voice (this device)</p>
+                    {VOICE_MODES.map((m) => (
+                      <button
+                        key={m.value}
+                        onClick={() => { voice.setMode(m.value); setShowVoiceMenu(false); if (m.value === 'text') voice.stopSpeaking(); }}
+                        className={cn(
+                          'flex w-full flex-col items-start rounded-lg px-2 py-2 text-left transition',
+                          voice.mode === m.value ? 'bg-brand/10' : 'hover:bg-elevated',
+                        )}
+                      >
+                        <span className={cn('text-sm font-medium', voice.mode === m.value ? 'text-brand' : 'text-fg')}>{m.label}</span>
+                        <span className="text-xs text-muted">{m.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <button onClick={newChat} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/40 px-3 py-1.5 text-sm font-semibold text-fg transition hover:bg-elevated">
+              <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New chat</span>
+            </button>
+          </div>
         </div>
 
         <div className="mt-8">
@@ -318,21 +377,62 @@ export function AssistantModule() {
         </div>
 
         {/* Input bar */}
-        <div className="mt-4">
-          <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-4 py-3">
-            <Plus className="h-5 w-5 shrink-0 text-muted" />
-            <input
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
-              placeholder="Ask anything or give a command..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
-              disabled={loading}
-            />
-            <button onClick={() => void send()} disabled={loading || !input.trim()} className="grid h-10 w-10 place-items-center rounded-full bg-brand text-brand-fg disabled:opacity-40">
-              <Send className="h-4 w-4" />
+        <div className="mt-4 pb-[env(safe-area-inset-bottom)]">
+          {voiceError && (
+            <div className="mb-2 flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+              <span>{voiceError}</span>
+              <button onClick={() => setVoiceError(null)} aria-label="Dismiss" className="ml-2 text-amber-300/70 hover:text-amber-200">✕</button>
+            </div>
+          )}
+          {voice.status === 'speaking' && (
+            <button
+              onClick={voice.stopSpeaking}
+              className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-3 py-1.5 text-xs font-medium text-brand"
+            >
+              <Square className="h-3 w-3" /> Stop speaking
             </button>
-          </div>
+          )}
+
+          {voice.status === 'recording' ? (
+            // Recording state: pulsing indicator + stop / cancel.
+            <div className="flex items-center gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3">
+              <span className="relative flex h-3 w-3 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-500" />
+              </span>
+              <span className="flex-1 text-sm font-medium text-rose-200">Listening… tap the mic to send</span>
+              <button onClick={voice.cancelRecording} className="rounded-full px-3 py-1.5 text-xs font-semibold text-rose-200/80 hover:text-rose-100">
+                Cancel
+              </button>
+              <button onClick={onMicPress} aria-label="Stop and send" className="grid h-10 w-10 place-items-center rounded-full bg-rose-500 text-white">
+                <Square className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-2xl border border-border bg-surface/40 px-3 py-3 sm:gap-3 sm:px-4">
+              <input
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
+                placeholder={voice.status === 'transcribing' ? 'Transcribing…' : 'Ask anything or give a command…'}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
+                disabled={loading || voice.status === 'transcribing'}
+              />
+              {voice.supported && (
+                <button
+                  onClick={() => void onMicPress()}
+                  disabled={loading || voice.status === 'transcribing'}
+                  aria-label="Record voice message"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-40"
+                >
+                  {voice.status === 'transcribing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+                </button>
+              )}
+              <button onClick={() => void send()} disabled={loading || !input.trim()} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-brand-fg disabled:opacity-40">
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           <p className="mt-3 text-center text-xs text-muted/60">AI can make mistakes. Please double-check important information.</p>
         </div>
       </section>

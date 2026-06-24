@@ -1,7 +1,62 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Free-tier feature audit and gap-fill. Keep this updated as you ship.
+Last updated after the voice AI assistant build. Keep this updated as you ship.
+
+> **Session update (2026-06-24d, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> VOICE AI ASSISTANT: talk-to-AI + AI-to-voice on OpenAI.**
+> Task prompt asked to "wire entire project to ChatGPT + world-class voice AI
+> assistant." AUDIT FINDING: the project was ALREADY fully wired to OpenAI/
+> ChatGPT (OpenAI-only deployment via `lib/ai/provider.ts` — streaming, native
+> function/tool calling, agentic tool loop, admin-configured model+key in
+> `app_settings`, honest `isAIConfigured()` 503 fallbacks, `ai_conversations`/
+> `ai_messages` persistence, 11 action tools, context-aware briefing/snapshots,
+> admin AI engine settings at `/admin/ai`). The text assistant was already
+> world-class. **The single genuine gap was VOICE** — the assistant imported a
+> `Mic` icon but had ZERO voice functionality (no transcription, no TTS, no
+> MediaRecorder anywhere in the repo). Built that gap, production-ready.
+>
+> **BUILT — Voice layer (OpenAI Whisper STT + OpenAI TTS):**
+> - `lib/ai/voice.ts` (NEW, pure/client-safe, 19 tests in `tests/ai-voice.test.ts`):
+>   `VoiceMode` (text|voice|both), `shouldSpeak`, `normalizeVoiceMode`,
+>   `TTS_VOICES`/`normalizeTtsVoice`, `pickRecordingMimeType` (browser-aware
+>   codec selection — opus webm → mp4 Safari fallback), `filenameForMime`,
+>   `cleanTranscript`, `prepareSpeechText` (strips markdown that sounds bad
+>   aloud + caps length on a sentence boundary), `isValidAudioUpload` (server
+>   guard: size/type, 25 MB cap).
+> - `lib/ai/settings.ts` — added `getOpenAIKey()` helper (admin key → env).
+> - `app/api/ai/voice/transcribe/route.ts` (NEW, nodejs): auth-gated, multipart
+>   audio → OpenAI `/v1/audio/transcriptions` (model `OPENAI_TRANSCRIBE_MODEL`,
+>   default `whisper-1`). Honest 503 when no OpenAI key. Never fakes a transcript.
+> - `app/api/ai/voice/speak/route.ts` (NEW, nodejs): auth-gated, `{text,voice}`
+>   → OpenAI `/v1/audio/speech` (model `OPENAI_TTS_MODEL` default
+>   `gpt-4o-mini-tts`), streams `audio/mpeg`. Honest 503; never fakes audio.
+> - `lib/hooks/use-voice.ts` (NEW client hook): MediaRecorder recording →
+>   transcribe → returns text; mode/voice persisted in localStorage (device-
+>   level: voice output is genuinely per-device); `speak()` plays OpenAI TTS
+>   with browser `speechSynthesis` graceful fallback; mic-permission-denied,
+>   unsupported-browser, Safari mp4 all handled; `stopSpeaking`/`cancelRecording`.
+> - `components/modules/assistant-module.tsx` — wired in: mic button (record→
+>   transcribe→auto-send), pulsing "Listening…" recording state with stop/cancel,
+>   transcribing spinner, voice-mode menu (Text only / Text+voice / Voice first)
+>   in the header, "Stop speaking" control, voice-error banner, speaks the final
+>   streamed reply when voice output is on. Safe-area padding for mobile.
+> - `components/app/ai-orb.tsx` (NEW) + mounted in `app-shell.tsx`: global
+>   floating "Ask AI" orb on every app page (above the Quick Capture FAB,
+>   hidden on the assistant page) → routes to `/dashboard/assistant`.
+> - `.env.example` — documented `OPENAI_TRANSCRIBE_MODEL`, `OPENAI_TTS_MODEL`,
+>   `OPENAI_TTS_VOICE` (all reuse the one `OPENAI_API_KEY`).
+>
+> **Verification:** `tsc --noEmit` clean · `next lint` clean (only pre-existing
+> warnings) · `next build` **Compiled successfully** (both `/api/ai/voice/*`
+> routes registered) · `vitest` **796 passing** (+19 voice). NO migration —
+> voice is stateless OpenAI calls + a device-local preference; no schema change.
+>
+> **NEXT (voice/AI):** (1) realtime/streaming voice (OpenAI Realtime API) for
+> barge-in conversation; (2) persist `ai_transcriptions`/`ai_speech_outputs` to
+> Supabase if usage analytics are wanted (needs a migration — currently stateless);
+> (3) wake-word / hands-free continuous mode; (4) per-tier voice limits; (5) admin
+> toggle for voice models in `/admin/ai`. Next migration: **0083**.
 
 > **Session update (2026-06-24c, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > FREE-TIER COMPETITIVE FEATURE AUDIT + GAP FILL.**
