@@ -19,6 +19,8 @@ export type InsurancePolicyType = 'health' | 'dental' | 'vision' | 'auto' | 'hom
 export type PremiumFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 export type EstateDocumentType = 'will' | 'trust' | 'power_of_attorney' | 'advance_directive' | 'beneficiary_designation' | 'insurance_policy' | 'deed' | 'title' | 'digital_account' | 'letter_of_intent' | 'funeral_wishes' | 'other';
 export type EstateReviewStatus = 'current' | 'needs_review' | 'expired' | 'draft';
+export type VolunteerStatus = 'active' | 'upcoming' | 'completed' | 'cancelled';
+export type VolunteerCategory = 'community' | 'school' | 'church' | 'sports' | 'environment' | 'animal' | 'health' | 'elderly' | 'youth' | 'disaster' | 'other';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type PantryLocation = 'pantry' | 'fridge' | 'freezer' | 'counter' | 'garage' | 'other';
 export type NutritionSubject = 'recipe' | 'meal' | 'week';
@@ -388,6 +390,16 @@ export interface Database {
         { id: string; family_id: string; created_by: string | null; account_name: string; provider: string; account_type: string; username: string; legacy_contact_name: string; legacy_contact_email: string; instructions: string; has_2fa: boolean; notes: string; is_active: boolean } & Stamps,
         { id?: string; family_id: string; created_by?: string | null; account_name: string; provider?: string; account_type?: string; username?: string; legacy_contact_name?: string; legacy_contact_email?: string; instructions?: string; has_2fa?: boolean; notes?: string; is_active?: boolean },
         Partial<{ account_name: string; provider: string; account_type: string; username: string; legacy_contact_name: string; legacy_contact_email: string; instructions: string; has_2fa: boolean; notes: string; is_active: boolean }>
+      >;
+      volunteer_opportunities: T<
+        { id: string; family_id: string; created_by: string | null; title: string; organization: string; category: VolunteerCategory; status: VolunteerStatus; description: string; location: string; contact_name: string; contact_phone: string; contact_email: string; start_date: string | null; end_date: string | null; recurring: boolean; url: string; notes: string; is_active: boolean } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; title: string; organization?: string; category?: VolunteerCategory; status?: VolunteerStatus; description?: string; location?: string; contact_name?: string; contact_phone?: string; contact_email?: string; start_date?: string | null; end_date?: string | null; recurring?: boolean; url?: string; notes?: string; is_active?: boolean },
+        Partial<{ title: string; organization: string; category: VolunteerCategory; status: VolunteerStatus; description: string; location: string; contact_name: string; contact_phone: string; contact_email: string; start_date: string | null; end_date: string | null; recurring: boolean; url: string; notes: string; is_active: boolean }>
+      >;
+      volunteer_hours: T<
+        { id: string; family_id: string; opportunity_id: string | null; member_id: string | null; hours: number; log_date: string; description: string; notes: string } & Stamps,
+        { id?: string; family_id: string; opportunity_id?: string | null; member_id?: string | null; hours?: number; log_date?: string; description?: string; notes?: string },
+        Partial<{ opportunity_id: string | null; member_id: string | null; hours: number; log_date: string; description: string; notes: string }>
       >;
       pets: T<
         { id: string; family_id: string; name: string; species: PetSpecies; breed: string | null; birthday: string | null; adoption_date: string | null; weight_kg: number | null; color: string | null; microchip_id: string | null; photo_path: string | null; vet_name: string | null; vet_phone: string | null; notes: string | null; is_active: boolean; created_by: string | null } & Stamps,

@@ -95,6 +95,7 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('stress-tracker', 'Stress Tracker', 'Family & Home', 'plus', '/dashboard/family-stress'),
   F('school-os', 'School OS', 'Family & Home', 'plus', '/dashboard/family-school'),
   F('lifestyle-coaching', 'Lifestyle Coaching', 'Family & Home', 'plus', '/dashboard/family-automation'),
+  F('volunteer-hub', 'Volunteer Hub', 'Family & Home', 'basic', '/dashboard/volunteer'),
 
   // ── Finances & Admin ───────────────────────────────────────
   F('finances', 'Finances', 'Finances & Admin', 'free', '/dashboard/billing'),
