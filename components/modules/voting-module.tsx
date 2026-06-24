@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Vote, Plus, Trash2, Check, Trophy, Lock, Plane } from 'lucide-react';
+import { Vote, Plus, Trash2, Check, Trophy, Lock, Plane, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -13,6 +13,7 @@ import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { tallyPoll, voterCount, memberSelections, isPollClosed, type VoteLike, type OptionLike } from '@/lib/voting/polls';
 import type { Tables } from '@/lib/database.types';
+import type { VotingInsights, VotingAIResponse } from '@/lib/voting/voting-ai';
 
 type Poll = Tables<'family_polls'>;
 type Option = Tables<'family_poll_options'>;
@@ -44,6 +45,20 @@ export function VotingModule() {
   });
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<VotingInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<VotingAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/voting', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
+
   const optionsByPoll = useMemo(() => {
     const m = new Map<string, Option[]>();
     for (const o of options ?? []) { const a = m.get(o.poll_id) ?? []; a.push(o); m.set(o.poll_id, a); }
@@ -113,8 +128,38 @@ export function VotingModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold"><Vote className="h-4 w-4 text-brand" /> Group Voting</h3>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> New poll</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+            <Sparkles className="h-4 w-4" /> AI Assist
+          </Button>
+          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> New poll</Button>
+        </div>
       </div>
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Voting Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.engagementTips && aiInsights.engagementTips.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Engagement Tips</p>
+              <ul className="space-y-1">{aiInsights.engagementTips.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.decisionTip && <p className="text-xs text-muted italic">{aiInsights.decisionTip}</p>}
+        </div>
+      )}
 
       {all.length === 0 ? (
         <EmptyState icon={Vote} title="No polls yet" description="Create a poll to make a collaborative family decision — a trip, a restaurant, a movie night." />

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import {
   HeartHandshake, Plus, Pencil, Trash2, Phone, Home as HomeIcon, PhoneCall,
-  UtensilsCrossed, Pill, Stethoscope, AlertTriangle, StickyNote, Clock, Heart,
+  UtensilsCrossed, Pill, Stethoscope, AlertTriangle, StickyNote, Clock, Heart, Sparkles, X,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -22,6 +22,7 @@ import {
   type CareEntryLike, type CareLogType,
 } from '@/lib/care/log';
 import type { Tables } from '@/lib/database.types';
+import type { CareInsights, CareAIResponse } from '@/lib/care/care-ai';
 
 type CareEntry = Tables<'care_log'>;
 
@@ -55,6 +56,19 @@ export function CareModule() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(blank);
   const [saving, setSaving] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<CareInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<CareAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/care', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const { data: entries, loading, error } = useRealtimeQuery<CareEntry>({
     table: 'care_log', familyId, deps: [familyId],
@@ -141,8 +155,40 @@ export function CareModule() {
       <PageHeader
         title="Care Log"
         description="Coordinate care for a loved one — log check-ins, track well-being, and see who's been in touch."
-        action={<Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> Log care</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4" /> AI Assist
+            </Button>
+            <Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> Log care</Button>
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="mb-5 rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Care Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.wellbeingTips && aiInsights.wellbeingTips.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Well-being Tips</p>
+              <ul className="space-y-1">{aiInsights.wellbeingTips.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.coordinationTip && <p className="text-xs text-muted italic">{aiInsights.coordinationTip}</p>}
+        </div>
+      )}
 
       {/* Recipient selector */}
       <div className="flex flex-wrap items-center gap-2 mb-5">

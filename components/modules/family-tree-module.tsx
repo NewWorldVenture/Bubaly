@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  GitBranch, Plus, Trash2, Users, TreePine, Eye, ChevronDown, ChevronRight, Edit2,
+  GitBranch, Plus, Trash2, Users, TreePine, Eye, ChevronDown, ChevronRight, Edit2, Sparkles, X,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -19,6 +19,7 @@ import {
   RELATIONSHIPS, type TreeNode,
 } from '@/lib/family-tree/tree';
 import type { Tables } from '@/lib/database.types';
+import type { FamilyTreeInsights, FamilyTreeAIResponse } from '@/lib/family-tree/family-tree-ai';
 
 type Node = Tables<'family_tree_nodes'>;
 
@@ -56,6 +57,19 @@ export function FamilyTreeModule() {
   const [view, setView] = useState<'tree' | 'generations'>('tree');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [detail, setDetail] = useState<Node | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<FamilyTreeInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<FamilyTreeAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/family-tree', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const all = useMemo(() => nodes ?? [], [nodes]);
   const tree = useMemo(() => buildTree(all), [all]);
@@ -149,12 +163,40 @@ export function FamilyTreeModule() {
                 </button>
               </div>
             )}
+            <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4" /> AI Assist
+            </Button>
             <Button onClick={() => { setEditNode(null); setForm(blank()); }}>
               <Plus className="h-4 w-4" /> Add person
             </Button>
           </div>
         }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Family Tree Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.heritageTips && aiInsights.heritageTips.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Heritage Tips</p>
+              <ul className="space-y-1">{aiInsights.heritageTips.map((s, i) => <li key={i} className="text-xs text-muted">{'•'} {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.storytellingTip && <p className="text-xs text-muted italic">{aiInsights.storytellingTip}</p>}
+        </div>
+      )}
 
       {/* Stats bar */}
       {all.length > 0 && (
