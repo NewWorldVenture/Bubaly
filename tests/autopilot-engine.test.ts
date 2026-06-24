@@ -3,9 +3,10 @@ import {
   confidenceTier, AUTO_THRESHOLD, APPROVE_THRESHOLD, daysUntilBirthday,
   renewalSuggestions, appointmentSuggestions, choreSuggestions, birthdaySuggestions,
   grocerySuggestions, conflictSuggestions, expenseSuggestions, burnoutSuggestions,
-  medicationSuggestions, monthlyCents, buildSuggestions, successProbability, partitionByTier,
+  medicationSuggestions, monthlyCents, buildSuggestions, applyMemberTraits, successProbability, partitionByTier,
   type FamilySnapshot,
 } from '@/lib/autopilot/engine';
+import type { MemberTraits } from '@/lib/autopilot/twin';
 
 const base = (over: Partial<FamilySnapshot> = {}): FamilySnapshot => ({
   today: '2026-06-24',
@@ -197,6 +198,26 @@ describe('medicationSuggestions', () => {
     expect(medicationSuggestions(base({ medications: [
       { id: 'm5', name: 'Old', memberId: null, refillOn: '2026-06-01', reminderDays: 7 }, // 23d overdue → drop
     ] }))).toHaveLength(0);
+  });
+});
+
+describe('applyMemberTraits (Digital Twin modulation)', () => {
+  const forgetful: MemberTraits = { memberId: 'm2', choreCompletionRate: 0.3, reliabilityScore: 30, sampleSize: 10 };
+  it('bends a chore draft for a forgetful member', () => {
+    const drafts = choreSuggestions(base({ overdueChores: [{ id: 'c1', title: 'Trash', dueAt: '2026-06-20', memberId: 'm2' }] }));
+    const adjusted = applyMemberTraits(drafts[0], new Map([['m2', forgetful]]));
+    expect(adjusted.confidence).toBe(drafts[0].confidence + 8);
+    expect(adjusted.urgency).toBe(3); // 2 + 1
+  });
+  it('passes through drafts without a member or matching traits', () => {
+    const d = grocerySuggestions(base({ lingeringGroceries: [{ id: 'g1', name: 'Milk', addedAt: '2026-06-10' }] }))[0];
+    expect(applyMemberTraits(d, new Map([['m2', forgetful]]))).toBe(d); // no memberId → unchanged ref
+  });
+  it('buildSuggestions applies the traits map', () => {
+    const snap = base({ overdueChores: [{ id: 'c1', title: 'Trash', dueAt: '2026-06-20', memberId: 'm2' }] });
+    const plain = buildSuggestions(snap);
+    const twinned = buildSuggestions(snap, new Map([['m2', forgetful]]));
+    expect(twinned[0].confidence).toBe(plain[0].confidence + 8);
   });
 });
 

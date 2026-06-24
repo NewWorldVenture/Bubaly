@@ -1,7 +1,36 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after Control-Tower home widget + medication-refill signal. Keep this updated as you ship.
+Last updated after the Digital Twin confidence layer. Keep this updated as you ship.
+
+> **Session update (2026-06-24g) — GEN-2: DIGITAL TWIN FEEDS AUTOPILOT CONFIDENCE.**
+> The Family Digital Twin now LEARNS per-member reliability and modulates the
+> autopilot's confidence/urgency. NO migration (reuses `family_digital_twin_profiles`
+> .metadata, 0022). Branch `claude/festive-bohr-m4cbeg`.
+>
+> **BUILT:**
+> - **`lib/autopilot/twin.ts`** (pure; **9 tests** `tests/autopilot-twin.test.ts`):
+>   `computeMemberTraits(history)` → per-member `{choreCompletionRate, reliabilityScore,
+>   sampleSize}`; `confidenceAdjustment(traits, kind)` → `{confidenceDelta, urgencyDelta}`.
+>   Acts only past `MIN_SAMPLE` (5 obs): a forgetful member (chore rate <0.5) gets +8 conf
+>   / +1 urgency on chores; a dependable one (>0.85) gets −4/−1; unreliable members
+>   (reliability <50) get +5/+1 on appointments + medications. No history = fully reliable.
+> - **`engine.ts`**: `applyMemberTraits(draft, traitsByMember)` + `buildSuggestions(snapshot,
+>   traitsByMember?)` now optionally bends each member-attributed draft. Pure, clamped
+>   (conf 0-100, urgency 1-3). Backward compatible (param optional). **3 new engine tests (25).**
+> - **`lib/autopilot/scan.ts`**: reads 90d of `chore_assignments` (member_id,status), computes
+>   traits, **persists** them into `family_digital_twin_profiles.metadata.autopilot_traits`
+>   (merge-not-clobber; insert profile if missing — best-effort, non-fatal), and passes
+>   `traitsByMember` into `buildSuggestions`. So the twin learns every scan and the
+>   confidence reflects it.
+> - Verified: tsc + lint clean · `npm run build` ✓ · twin+engine tests 33/33.
+>
+> **GEN-2 ROADMAP — remaining:** Family Memory (`family_memories`/`family_milestones`)
+> preference learning → feed meal/gift/activity suggestions; specialized **agent network**
+> (Meal/Health/Travel agents writing into `autopilot_suggestions`, kind=agent); more signals
+> (depleted staples via grocery history, weather-impact on outdoor events, expiring insurance
+> via 0084). Twin traits could expand beyond chores (appointment no-show rate, reminder
+> snooze rate) — same `computeMemberTraits` pattern. Signal recipe: 2026-06-24d entry below.
 
 > **Session update (2026-06-24f) — GEN-2: CONTROL-TOWER-AS-HOME + MEDICATION REFILLS.**
 > Two roadmap items in one branch (`claude/festive-bohr-m4cbeg`).
