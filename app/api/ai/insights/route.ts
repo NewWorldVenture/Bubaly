@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { INSIGHTS, isInsightKind, type InsightData, type InsightKind } from '@/lib/ai/insights';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -71,7 +71,9 @@ export async function POST(req: Request) {
     if (!text) return NextResponse.json({ error: 'No suggestions just now. Please try again.' }, { status: 502 });
     return NextResponse.json({ text });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'AI request failed' }, { status: 503 });
+    console.error('AI insights error:', err);
+    const { message, detail } = describeAIError(err);
+    return NextResponse.json({ error: message, detail }, { status: 503 });
   }
 }
 

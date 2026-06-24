@@ -75,6 +75,42 @@ export interface AIProvider {
   runToolsStream(input: RunToolsInput): AsyncGenerator<StreamEvent>;
 }
 
+/** Build a concise Error from a non-OK OpenAI response (parses the JSON error message). */
+async function openAIError(res: Response): Promise<Error> {
+  let body = '';
+  try { body = await res.text(); } catch { /* ignore */ }
+  let detail = body;
+  try {
+    const j = JSON.parse(body);
+    detail = j?.error?.message || j?.error?.code || j?.error?.type || body;
+  } catch { /* not JSON */ }
+  return new Error(`OpenAI error ${res.status}: ${String(detail).slice(0, 240)}`);
+}
+
+/**
+ * Classify any provider/transport error into a user-facing message + short, safe
+ * detail. Lets routes show the real reason (out of credits, bad key, rate limit,
+ * bad model, network) instead of a blanket "something went wrong".
+ */
+export function describeAIError(err: unknown): { code: string; message: string; detail: string } {
+  const raw = err instanceof Error ? err.message : String(err ?? '');
+  const detail = raw.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer …').slice(0, 280);
+  const has = (re: RegExp) => re.test(raw);
+  if (has(/not configured|missing.*key|no api key/i))
+    return { code: 'unconfigured', message: 'The AI engine isn’t set up yet. Add an OpenAI API key in Admin → AI Engine.', detail };
+  if (has(/insufficient_quota|exceeded your current quota|billing|payment required|\b402\b/i))
+    return { code: 'quota', message: 'The AI engine is out of credits. Add billing to the OpenAI account, then try again.', detail };
+  if (has(/\b401\b|incorrect api key|invalid api key|invalid_api_key|unauthorized/i))
+    return { code: 'auth', message: 'The AI engine’s API key is invalid. Update it in Admin → AI Engine.', detail };
+  if (has(/\b429\b|rate.?limit/i))
+    return { code: 'rate_limit', message: 'The AI engine is busy right now (rate limit). Wait a few seconds and try again.', detail };
+  if (has(/\b404\b|does not exist|model.*not found|unknown model|unsupported model/i))
+    return { code: 'model', message: 'The selected AI model isn’t available. Choose a valid model in Admin → AI Engine.', detail };
+  if (has(/timeout|etimedout|econnreset|enotfound|fetch failed|network|socket hang up/i))
+    return { code: 'network', message: 'Couldn’t reach the AI engine (network issue). Please try again.', detail };
+  return { code: 'unknown', message: 'Something went wrong while answering. Please try again.', detail };
+}
+
 // --- OpenAI (ChatGPT) implementation ---
 export class OpenAIProvider implements AIProvider {
   id = 'openai';
@@ -115,7 +151,7 @@ export class OpenAIProvider implements AIProvider {
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
+    if (!res.ok) throw await openAIError(res);
     const data = await res.json();
     const msg = data.choices?.[0]?.message ?? {};
     const text = msg.content ?? '';
@@ -155,7 +191,7 @@ export class OpenAIProvider implements AIProvider {
           ...(toolDefs && !last ? { tools: toolDefs, tool_choice: 'auto' } : {}),
         }),
       });
-      if (!res.ok) throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw await openAIError(res);
       const data = await res.json();
       const msg = data.choices?.[0]?.message ?? {};
       const calls: { id: string; function: { name: string; arguments: string } }[] = msg.tool_calls ?? [];
@@ -206,7 +242,8 @@ export class OpenAIProvider implements AIProvider {
           ...(toolDefs && !last ? { tools: toolDefs, tool_choice: 'auto' } : {}),
         }),
       });
-      if (!res.ok || !res.body) throw new Error(`OpenAI error ${res.status}: ${res.ok ? 'no stream body' : await res.text()}`);
+      if (!res.ok) throw await openAIError(res);
+      if (!res.body) throw new Error('OpenAI error: no stream body');
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();

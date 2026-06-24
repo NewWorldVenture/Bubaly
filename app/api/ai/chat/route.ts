@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { resolveProvider, type AIMessage } from '@/lib/ai/provider';
+import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
 import { buildAssistantTools } from '@/lib/assistant/tools';
 import type { Database } from '@/lib/database.types';
 
@@ -18,6 +18,10 @@ export async function POST(req: NextRequest) {
     const { conversationId, message } = (await req.json()) as { conversationId: string; message: string };
     if (!message?.trim()) return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     if (!conversationId) return NextResponse.json({ error: 'conversationId is required' }, { status: 400 });
+
+    if (!(await isAIConfigured())) {
+      return NextResponse.json({ error: 'The AI engine isn’t set up yet. Add an OpenAI API key in Admin → AI Engine.' }, { status: 503 });
+    }
 
     // Ensure the conversation row exists (the client generates its UUID up front)
     // so the ai_messages FK is satisfied and history accumulates.
@@ -85,18 +89,36 @@ export async function POST(req: NextRequest) {
         const send = (e: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
         let content = '';
         const actions: { name: string; args: Record<string, unknown>; result: unknown }[] = [];
+        const pushAction = (name: string, args: Record<string, unknown>, result: unknown) => {
+          actions.push({ name, args, result });
+          send({ type: 'action', name, ...summarize(result) });
+        };
         try {
           for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: 1500 })) {
             if (ev.type === 'delta') { content += ev.text; send({ type: 'delta', text: ev.text }); }
-            else { actions.push({ name: ev.name, args: ev.args, result: ev.result }); send({ type: 'action', name: ev.name, ...summarize(ev.result) }); }
+            else pushAction(ev.name, ev.args, ev.result);
           }
-        } catch (err) {
-          console.error('AI stream error:', err);
-          const m = err instanceof Error && /api key/i.test(err.message)
-            ? 'The AI engine isn’t configured. Set an API key in Admin → AI Engine.'
-            : 'Something went wrong while answering. Please try again.';
-          send({ type: 'error', error: m });
-          if (!content) { controller.close(); return; }
+        } catch (streamErr) {
+          console.error('AI stream error:', streamErr);
+          // Resilience: if streaming failed before producing any text (e.g. a proxy
+          // buffered/blocked the SSE response), fall back to a single non-streaming
+          // run so the assistant still works. Only surface an error if that fails too.
+          if (!content) {
+            try {
+              const result = await provider.runTools({ system, messages, tools, maxTokens: 1500 });
+              for (const a of result.actions) if (!actions.some((x) => x.name === a.name && JSON.stringify(x.args) === JSON.stringify(a.args))) pushAction(a.name, a.args, a.result);
+              if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
+            } catch (fallbackErr) {
+              console.error('AI fallback error:', fallbackErr);
+              const { message, detail } = describeAIError(fallbackErr);
+              send({ type: 'error', error: message, detail });
+              controller.close();
+              return;
+            }
+          } else {
+            // We already streamed a partial answer; report the interruption but keep what we have.
+            send({ type: 'error', error: describeAIError(streamErr).message });
+          }
         }
 
         const assistantContent = content.trim() || (actions.length ? 'Done — I’ve updated that for you.' : 'I’m not sure how to help with that yet.');
@@ -129,10 +151,8 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('AI chat error:', err);
-    const msg = err instanceof Error && /api key/i.test(err.message)
-      ? 'The AI engine isn’t configured. Set an API key in Admin → AI Engine.'
-      : 'Something went wrong. Please try again.';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const { message, detail } = describeAIError(err);
+    return NextResponse.json({ error: message, detail }, { status: 500 });
   }
 }
 

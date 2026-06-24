@@ -1,7 +1,43 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the AI-everywhere rollout (per-module AI Assist). Keep this updated as you ship.
+Last updated after hardening the AI Assistant chat (resilient + self-diagnosing). Keep this updated as you ship.
+
+> **Session update (2026-06-24, branch `claude/fix-assistant-chat`) — FIX
+> "Something went wrong while answering" + production-harden the AI chat.**
+> Symptom: `/dashboard/assistant` chat returned the generic error on send. Root
+> cause is the OpenAI streaming call in `app/api/ai/chat/route.ts` throwing — and
+> since a missing/invalid key already matched `/api key/i` (→ "not configured"
+> message), the *generic* message meant a non-key failure (out of credits / rate
+> limit / bad model / blocked SSE transport), with no way to tell which.
+>
+> **Fixes (all in `lib/ai/provider.ts` + the three AI routes):**
+> - **`describeAIError(err)`** (new, exported, tested): classifies any provider/
+>   transport error into a user-facing `{code,message,detail}` —
+>   unconfigured / quota / auth / rate_limit / model / network / unknown. Redacts
+>   `Bearer …` tokens. Now the chat shows the REAL reason (e.g. "out of credits").
+> - **`openAIError(res)`** (new): builds a concise Error from a non-OK OpenAI
+>   response by parsing `error.message/code/type` (was dumping raw `res.text()`).
+>   All three throw sites in `complete`/`runTools`/`runToolsStream` use it, so the
+>   status code + reason survive for classification.
+> - **Non-streaming fallback** in the chat route: if `runToolsStream` throws
+>   before emitting any text (e.g. a proxy/CDN buffered the SSE), it retries once
+>   with non-streaming `runTools` and streams that result as a single delta;
+>   dedups actions. Only emits an `error` event if the fallback ALSO fails —
+>   then with the precise `describeAIError` message + `detail`.
+> - **Fast 503** up front via `isAIConfigured()` so an unconfigured engine returns
+>   a clean JSON 503 instead of failing mid-stream.
+> - Applied `describeAIError` to `/api/ai/insights` and `/api/ai/health/coach`
+>   catches too, for consistent actionable errors. SSE `error` events now carry
+>   `detail`; the assistant UI shows the friendly `error` (client unchanged).
+> - **No migration.** tsc/lint/build clean; vitest **838 passing** (+9 in
+>   `tests/ai-error.test.ts`: classification + that the provider surfaces a
+>   429/quota error end-to-end).
+> - **NOTE for prod:** if chat still errors, the message now names the cause. Most
+>   likely it’s **OpenAI billing/quota** or a bad model in Admin → AI Engine — set
+>   `OPENAI_API_KEY` (env) and ensure the account has credits. **NEXT:** add a tiny
+>   `/api/ai/health` ping endpoint + an Admin "Test connection" button that calls
+>   `provider.complete` with a 1-token prompt and shows `describeAIError` output.
 
 > **Session update (2026-06-24, branch `claude/ai-everywhere`) — AI INSIGHTS IN
 > EVERY MODULE.** Task: verify the AI engine ("ChatGPT") works, then add a genuine,
