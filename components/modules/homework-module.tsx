@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import {
   BookOpen, Plus, Pencil, Trash2, Check, AlertTriangle, Clock,
-  CircleDashed, GraduationCap,
+  CircleDashed, GraduationCap, Sparkles, X,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -20,6 +20,7 @@ import {
   groupByDue, homeworkStats, isOverdue, HOMEWORK_STATUS_LABELS, DUE_BUCKET_LABELS,
   type HomeworkLike, type DueBucket,
 } from '@/lib/homework/board';
+import { analyzeHomework, type HomeworkInsights, type HomeworkAIResponse } from '@/lib/homework/homework-ai';
 import type { Tables, HomeworkStatus } from '@/lib/database.types';
 
 type Homework = Tables<'homework_assignments'>;
@@ -52,6 +53,19 @@ export function HomeworkModule() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(blank);
   const [saving, setSaving] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<HomeworkInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<HomeworkAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/homework', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const { data: homework, loading, error } = useRealtimeQuery<Homework>({
     table: 'homework_assignments', familyId, deps: [familyId],
@@ -135,8 +149,40 @@ export function HomeworkModule() {
       <PageHeader
         title="Homework"
         description="Keep every assignment on track — by student, by due date, with overdue alerts."
-        action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add homework</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4" /> AI Assist
+            </Button>
+            <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add homework</Button>
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="mb-4 rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Homework Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.studyTips && aiInsights.studyTips.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Study Tips</p>
+              <ul className="space-y-1">{aiInsights.studyTips.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.priorityTip && <p className="text-xs text-muted italic">{aiInsights.priorityTip}</p>}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-6">

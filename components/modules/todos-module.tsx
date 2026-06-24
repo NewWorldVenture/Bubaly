@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import {
   CheckSquare, Plus, Trash2, Check, Flag, Calendar, User,
   ChevronLeft, MoreHorizontal, Circle, Tag, Search, X,
-  Pencil, Archive, Filter,
+  Pencil, Archive, Filter, Sparkles,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
+import { analyzeTodos, type TodoInsights, type TodosAIResponse } from '@/lib/todos/todos-ai';
 import type { Tables } from '@/lib/database.types';
 
 type TodoList = Tables<'todo_lists'>;
@@ -50,6 +51,19 @@ export function TodosModule() {
   const [editingItem, setEditingItem] = useState<TodoItem | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'done' | 'urgent'>('all');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<TodoInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<TodosAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/todos', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const { data: lists, loading: listsLoading, refresh: refreshLists } = useRealtimeQuery<TodoList>({
     table: 'todo_lists', familyId, deps: [familyId],
@@ -196,11 +210,39 @@ export function TodosModule() {
                     <Check className="h-3.5 w-3.5 text-success" /> Clear done
                   </Button>
                 )}
+                <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+                  <Sparkles className="h-4 w-4" /> AI Assist
+                </Button>
                 <Button size="sm" onClick={() => setNewItemOpen(true)}>
                   <Plus className="h-4 w-4" /> Add Task
                 </Button>
               </div>
             </div>
+
+            {(aiAnalysis || aiInsights) && (
+              <div className="mb-3 rounded-xl border border-brand/30 bg-brand/5 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+                    <Sparkles className="h-4 w-4" /> AI Todo Insights
+                  </div>
+                  <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+                </div>
+                {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+                {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-xs font-medium mb-1">Suggestions</p>
+                    <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+                  </div>
+                )}
+                {aiInsights?.productivityTips && aiInsights.productivityTips.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-xs font-medium mb-1">Productivity Tips</p>
+                    <ul className="space-y-1">{aiInsights.productivityTips.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+                  </div>
+                )}
+                {aiInsights?.focusTip && <p className="text-xs text-muted italic">{aiInsights.focusTip}</p>}
+              </div>
+            )}
 
             {/* Filter + search */}
             <div className="flex flex-wrap items-center gap-2">

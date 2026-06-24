@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import {
   Package, Plus, Trash2, Edit2, AlertTriangle, Clock, ShoppingCart,
-  PackageCheck, Minus, Boxes,
+  PackageCheck, Minus, Boxes, Sparkles, X,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -21,6 +21,7 @@ import {
   PANTRY_LOCATIONS, locationMeta, expiryStatus, isLowStock, expiringSoon,
   lowStockItems, groupByLocation, pantrySummary, type PantryLocation,
 } from '@/lib/pantry/logic';
+import { analyzePantry, type PantryInsights, type PantryAIResponse } from '@/lib/pantry/pantry-ai';
 import type { Tables } from '@/lib/database.types';
 
 type PantryItem = Tables<'pantry_items'>;
@@ -36,6 +37,19 @@ export function PantryModule() {
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<PantryItem | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<PantryInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<PantryAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/pantry', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
 
   const { data: items, loading, error, refresh } = useRealtimeQuery<PantryItem>({
     table: 'pantry_items', familyId, deps: [familyId],
@@ -95,8 +109,40 @@ export function PantryModule() {
       <PageHeader
         title="Pantry & Inventory"
         description="Track what's in your pantry, fridge, and freezer — never buy doubles or let food expire."
-        action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> Add item</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+              <Sparkles className="h-4 w-4" /> AI Assist
+            </Button>
+            <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> Add item</Button>
+          </div>
+        }
       />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="mb-4 rounded-xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+              <Sparkles className="h-4 w-4" /> AI Pantry Insights
+            </div>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Suggestions</p>
+              <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.restockItems && aiInsights.restockItems.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium mb-1">Restock</p>
+              <ul className="space-y-1">{aiInsights.restockItems.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+            </div>
+          )}
+          {aiInsights?.organizationTip && <p className="text-xs text-muted italic">{aiInsights.organizationTip}</p>}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid-stats">

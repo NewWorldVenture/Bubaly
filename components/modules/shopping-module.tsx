@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ShoppingBag, Plus, Trash2, Check, Search, X, ChevronDown, ChevronUp,
-  ShoppingCart, Pencil, Star, Archive, MoreHorizontal, Share2,
+  ShoppingCart, Pencil, Star, Archive, MoreHorizontal, Share2, Sparkles,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -17,6 +17,7 @@ import { Input, Field } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
+import { analyzeShoppingLists, type ShoppingInsights, type ShoppingAIResponse } from '@/lib/shopping/shopping-ai';
 import type { Tables } from '@/lib/database.types';
 
 type GroceryList = Tables<'grocery_lists'>;
@@ -45,6 +46,19 @@ export function ShoppingModule() {
   const [addingCategory, setAddingCategory] = useState('Other');
   const [search, setSearch] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<ShoppingInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<ShoppingAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/shopping', { method: 'POST' });
+      const data = await res.json();
+      if (data.analysis) setAiAnalysis(data.analysis);
+      if (data.aiInsights) setAiInsights(data.aiInsights);
+    } catch { /* ignore */ } finally { setAiLoading(false); }
+  }
   const [editingList, setEditingList] = useState<GroceryList | null>(null);
 
   const { data: lists, loading: listsLoading, refresh: refreshLists } = useRealtimeQuery<GroceryList>({
@@ -210,8 +224,36 @@ export function ShoppingModule() {
                     className="w-28 bg-transparent text-sm placeholder:text-muted outline-none" />
                   {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
                 </div>
+                <Button variant="outline" size="sm" onClick={runAiAssist} loading={aiLoading}>
+                  <Sparkles className="h-4 w-4" /> AI Assist
+                </Button>
               </div>
             </div>
+
+            {(aiAnalysis || aiInsights) && (
+              <div className="mb-3 rounded-xl border border-brand/30 bg-brand/5 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+                    <Sparkles className="h-4 w-4" /> AI Shopping Insights
+                  </div>
+                  <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }} className="text-muted hover:text-fg"><X className="h-4 w-4" /></button>
+                </div>
+                {aiAnalysis && <p className="mb-2 text-xs text-muted">{aiAnalysis.summary}</p>}
+                {aiInsights?.suggestions && aiInsights.suggestions.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-xs font-medium mb-1">Suggestions</p>
+                    <ul className="space-y-1">{aiInsights.suggestions.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+                  </div>
+                )}
+                {aiInsights?.dealTips && aiInsights.dealTips.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-xs font-medium mb-1">Deal Tips</p>
+                    <ul className="space-y-1">{aiInsights.dealTips.map((s, i) => <li key={i} className="text-xs text-muted">• {s}</li>)}</ul>
+                  </div>
+                )}
+                {aiInsights?.organizationTip && <p className="text-xs text-muted italic">{aiInsights.organizationTip}</p>}
+              </div>
+            )}
 
             {/* Progress bar */}
             {totalCount > 0 && (
