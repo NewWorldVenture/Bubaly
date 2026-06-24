@@ -24,6 +24,8 @@ export type VolunteerCategory = 'community' | 'school' | 'church' | 'sports' | '
 export type DonationType = 'monetary' | 'goods' | 'stock' | 'vehicle' | 'real_estate' | 'other';
 export type CollegeAppStatus = 'researching' | 'applying' | 'submitted' | 'accepted' | 'waitlisted' | 'rejected' | 'enrolled' | 'declined';
 export type ScholarshipStatus = 'researching' | 'applying' | 'submitted' | 'awarded' | 'denied' | 'accepted' | 'declined';
+export type ReunionStatus = 'planning' | 'confirmed' | 'active' | 'completed' | 'cancelled';
+export type RsvpResponse = 'attending' | 'not_attending' | 'maybe' | 'pending';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type PantryLocation = 'pantry' | 'fridge' | 'freezer' | 'counter' | 'garage' | 'other';
 export type NutritionSubject = 'recipe' | 'meal' | 'week';
@@ -418,6 +420,16 @@ export interface Database {
         { id: string; family_id: string; member_id: string | null; created_by: string | null; name: string; provider: string; amount: number | null; status: ScholarshipStatus; deadline: string | null; renewable: boolean; requirements: string; url: string; notes: string; is_active: boolean } & Stamps,
         { id?: string; family_id: string; member_id?: string | null; created_by?: string | null; name: string; provider?: string; amount?: number | null; status?: ScholarshipStatus; deadline?: string | null; renewable?: boolean; requirements?: string; url?: string; notes?: string; is_active?: boolean },
         Partial<{ name: string; provider: string; amount: number | null; status: ScholarshipStatus; deadline: string | null; renewable: boolean; requirements: string; url: string; notes: string; is_active: boolean }>
+      >;
+      family_reunions: T<
+        { id: string; family_id: string; created_by: string | null; title: string; description: string; location: string; venue: string; status: ReunionStatus; start_date: string | null; end_date: string | null; budget: number | null; headcount: number; contact_name: string; contact_phone: string; contact_email: string; theme: string; notes: string; is_active: boolean } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; title: string; description?: string; location?: string; venue?: string; status?: ReunionStatus; start_date?: string | null; end_date?: string | null; budget?: number | null; headcount?: number; contact_name?: string; contact_phone?: string; contact_email?: string; theme?: string; notes?: string; is_active?: boolean },
+        Partial<{ title: string; description: string; location: string; venue: string; status: ReunionStatus; start_date: string | null; end_date: string | null; budget: number | null; headcount: number; contact_name: string; contact_phone: string; contact_email: string; theme: string; notes: string; is_active: boolean }>
+      >;
+      reunion_rsvps: T<
+        { id: string; family_id: string; reunion_id: string; guest_name: string; guest_email: string; response: RsvpResponse; party_size: number; dietary_notes: string; notes: string } & Stamps,
+        { id?: string; family_id: string; reunion_id: string; guest_name: string; guest_email?: string; response?: RsvpResponse; party_size?: number; dietary_notes?: string; notes?: string },
+        Partial<{ guest_name: string; guest_email: string; response: RsvpResponse; party_size: number; dietary_notes: string; notes: string }>
       >;
       pets: T<
         { id: string; family_id: string; name: string; species: PetSpecies; breed: string | null; birthday: string | null; adoption_date: string | null; weight_kg: number | null; color: string | null; microchip_id: string | null; photo_path: string | null; vet_name: string | null; vet_phone: string | null; notes: string | null; is_active: boolean; created_by: string | null } & Stamps,
