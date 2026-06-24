@@ -96,6 +96,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/care':          1,
   '/dashboard/dental':        1,
   '/dashboard/goals':         1,
+  '/dashboard/habits':        0,
   '/dashboard/notifications': 1,
   '/dashboard/briefing':      1,
   '/dashboard/medications':   1,
