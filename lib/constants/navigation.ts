@@ -126,6 +126,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/insurance', label: 'Insurance Hub', icon: ShieldAlert, minLevel: 1 },
       { href: '/dashboard/tax-vault', label: 'Tax Vault', icon: FolderLock, minLevel: 1 },
       { href: '/dashboard/estate', label: 'Estate & Legacy', icon: ScrollText, minLevel: 1 },
+      { href: '/dashboard/donations', label: 'Donations', icon: Heart, minLevel: 1 },
       { href: '/dashboard/sync', label: 'Calendar Sync', icon: RefreshCw, minLevel: 0 },
       { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound, minLevel: 0 },
       { href: '/dashboard/migrate', label: 'Switch to Bubaly', icon: Import, minLevel: 0 },

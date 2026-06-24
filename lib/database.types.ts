@@ -21,6 +21,7 @@ export type EstateDocumentType = 'will' | 'trust' | 'power_of_attorney' | 'advan
 export type EstateReviewStatus = 'current' | 'needs_review' | 'expired' | 'draft';
 export type VolunteerStatus = 'active' | 'upcoming' | 'completed' | 'cancelled';
 export type VolunteerCategory = 'community' | 'school' | 'church' | 'sports' | 'environment' | 'animal' | 'health' | 'elderly' | 'youth' | 'disaster' | 'other';
+export type DonationType = 'monetary' | 'goods' | 'stock' | 'vehicle' | 'real_estate' | 'other';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type PantryLocation = 'pantry' | 'fridge' | 'freezer' | 'counter' | 'garage' | 'other';
 export type NutritionSubject = 'recipe' | 'meal' | 'week';
@@ -400,6 +401,11 @@ export interface Database {
         { id: string; family_id: string; opportunity_id: string | null; member_id: string | null; hours: number; log_date: string; description: string; notes: string } & Stamps,
         { id?: string; family_id: string; opportunity_id?: string | null; member_id?: string | null; hours?: number; log_date?: string; description?: string; notes?: string },
         Partial<{ opportunity_id: string | null; member_id: string | null; hours: number; log_date: string; description: string; notes: string }>
+      >;
+      family_donations: T<
+        { id: string; family_id: string; created_by: string | null; organization: string; donation_type: DonationType; amount: number | null; description: string; donation_date: string; tax_year: number; is_tax_deductible: boolean; receipt_path: string; ein: string; category: string; notes: string; is_active: boolean } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; organization: string; donation_type?: DonationType; amount?: number | null; description?: string; donation_date?: string; tax_year?: number; is_tax_deductible?: boolean; receipt_path?: string; ein?: string; category?: string; notes?: string; is_active?: boolean },
+        Partial<{ organization: string; donation_type: DonationType; amount: number | null; description: string; donation_date: string; tax_year: number; is_tax_deductible: boolean; receipt_path: string; ein: string; category: string; notes: string; is_active: boolean }>
       >;
       pets: T<
         { id: string; family_id: string; name: string; species: PetSpecies; breed: string | null; birthday: string | null; adoption_date: string | null; weight_kg: number | null; color: string | null; microchip_id: string | null; photo_path: string | null; vet_name: string | null; vet_phone: string | null; notes: string | null; is_active: boolean; created_by: string | null } & Stamps,

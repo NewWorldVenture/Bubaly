@@ -104,6 +104,7 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('insurance-hub', 'Insurance Hub', 'Finances & Admin', 'basic', '/dashboard/insurance'),
   F('tax-vault', 'Tax Document Vault', 'Finances & Admin', 'basic', '/dashboard/tax-vault'),
   F('estate-vault', 'Estate & Legacy Vault', 'Finances & Admin', 'basic', '/dashboard/estate'),
+  F('donation-tracker', 'Donation Tracker', 'Finances & Admin', 'basic', '/dashboard/donations'),
   F('calendar-sync', 'Calendar Sync', 'Finances & Admin', 'free', '/dashboard/sync'),
   F('family-accounts', 'Family Accounts', 'Finances & Admin', 'basic', '/dashboard/settings#members'),
   F('switch-to-family', 'Switch to Family', 'Finances & Admin', 'basic', '/dashboard/migrate'),
