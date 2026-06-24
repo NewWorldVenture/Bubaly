@@ -12,6 +12,7 @@ import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { useVoice } from '@/lib/hooks/use-voice';
 import { VOICE_MODES, cleanTranscript } from '@/lib/ai/voice';
+import { Markdown } from '@/components/ui/markdown';
 
 const CHIPS = [
   [CalendarDays, "What's happening today?"],
@@ -343,9 +344,9 @@ export function AssistantModule() {
               <div key={msg.id} className="flex gap-4">
                 <div className="mt-1 h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-violet-500 to-blue-600 shadow-glow" />
                 <div className="max-w-[480px] space-y-2">
-                  <div className="rounded-2xl border border-border bg-surface/40 p-5 text-sm leading-6 whitespace-pre-wrap">
+                  <div className="rounded-2xl border border-border bg-surface/40 p-5 text-sm leading-6">
                     {msg.content
-                      ? msg.content
+                      ? <Markdown content={msg.content} />
                       : (msg.actions && msg.actions.length > 0)
                         ? <span className="text-muted">Working on it…</span>
                         : (

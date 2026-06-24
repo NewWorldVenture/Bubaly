@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, ScrollText, HandHeart, Tag, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, ScrollText, HandHeart, Tag, Target, BellRing, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -80,6 +80,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/documents', label: 'Documents', icon: FolderLock, minLevel: 0 },
       { href: '/dashboard/notes', label: 'Notes', icon: StickyNote, minLevel: 0 },
       { href: '/dashboard/contacts', label: 'Contacts', icon: Users, minLevel: 0 },
+      { href: '/dashboard/notifications', label: 'Notifications', icon: BellRing, minLevel: 1 },
       { href: '/dashboard/yearbook', label: 'Yearbook', icon: BookHeart, minLevel: 1 },
     ],
   },
@@ -112,6 +113,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/medications', label: 'Medications', icon: Pill, minLevel: 1 },
       { href: '/dashboard/care', label: 'Care Log', icon: HeartHandshake, minLevel: 1 },
       { href: '/dashboard/inbox', label: 'Magic Import', icon: Inbox, minLevel: 1 },
+      { href: '/dashboard/goals', label: 'Family Goals', icon: Target, minLevel: 1 },
       { href: '/dashboard/dental', label: 'Dental', icon: Smile, minLevel: 1 },
       { href: '/dashboard/volunteer', label: 'Volunteer Hub', icon: HandHeart, minLevel: 1 },
       { href: '/dashboard/college', label: 'College Planner', icon: GraduationCap, minLevel: 1 },
