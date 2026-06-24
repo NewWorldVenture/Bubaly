@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Plus, Trash2, ChevronRight, BookOpen, Image as ImageIcon,
+  Plus, Trash2, ChevronRight, BookOpen, Image as ImageIcon, Sparkles, X,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -15,6 +15,7 @@ import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
+import type { YearbookInsights, YearbookAIResponse } from '@/lib/yearbook/yearbook-ai';
 import {
   ENTRY_CATEGORIES, entriesByCategory,
   yearbookSummary, fmtDate,
@@ -35,6 +36,24 @@ export function YearbookModule() {
 
   const [selectedYb, setSelectedYb] = useState<Yearbook | null>(null);
   const [addYbOpen, setAddYbOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<YearbookInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<YearbookAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/yearbook', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   const summary = useMemo(() => {
     if (!yearbooks.data) return null;
@@ -45,7 +64,37 @@ export function YearbookModule() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Family Yearbook" />
+      <PageHeader title="Family Yearbook" action={
+        <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+          <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+        </Button>
+      } />
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-2 text-sm font-bold">
+              <Sparkles className="h-4 w-4 text-brand" /> AI Yearbook Insights
+            </p>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights && (
+            <div className="space-y-2">
+              {aiInsights.suggestions.map((s, i) => (
+                <p key={i} className="text-sm">• {s}</p>
+              ))}
+              {aiInsights.memoryTips.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-brand/20">
+                  <p className="text-xs font-semibold text-brand mb-1">Memory Tips</p>
+                  {aiInsights.memoryTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                </div>
+              )}
+              {aiInsights.themeIdea && <p className="mt-2 text-xs text-muted italic">Theme idea: {aiInsights.themeIdea}</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       {summary && summary.totalYearbooks > 0 && (
         <div className="rounded-xl border border-border bg-surface/60 p-4">

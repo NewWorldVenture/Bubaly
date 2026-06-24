@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Activity, ChevronRight, Dumbbell, Filter, Heart, MoreHorizontal, Plus, Sparkles, Zap, Thermometer, CheckCircle2, Trash2, Target, Loader2 } from 'lucide-react';
+import { Activity, ChevronRight, Dumbbell, Filter, Heart, MoreHorizontal, Plus, Sparkles, Zap, Thermometer, CheckCircle2, Trash2, Target, Loader2, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, MetricType } from '@/lib/database.types';
+import type { HealthInsights, HealthAIResponse } from '@/lib/health/health-ai';
 
 type HealthMetric = Tables<'health_metrics'>;
 type WorkoutLog = Tables<'workout_logs'>;
@@ -114,6 +115,24 @@ export function HealthModule() {
   const [coachLoading, setCoachLoading] = useState(false);
   const [coachAnswer, setCoachAnswer] = useState('');
   const [coachError, setCoachError] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<HealthInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<HealthAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/health', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   const now = useMemo(() => new Date().toISOString(), []);
   const weekAgo = useMemo(() => daysAgo(7), []);
@@ -501,11 +520,40 @@ export function HealthModule() {
           description="Track fitness, wellness, and health across your whole family."
           action={
             <div className="flex gap-2">
+              <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+                <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+              </Button>
               <Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Metric</Button>
               <Button onClick={() => setWorkoutOpen(true)} className="btn-secondary"><Dumbbell className="h-4 w-4" /> Log Workout</Button>
             </div>
           }
         />
+
+        {(aiAnalysis || aiInsights) && (
+          <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="flex items-center gap-2 text-sm font-bold">
+                <Sparkles className="h-4 w-4 text-brand" /> AI Health Insights
+              </p>
+              <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+            </div>
+            {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+            {aiInsights && (
+              <div className="space-y-2">
+                {aiInsights.suggestions.map((s, i) => (
+                  <p key={i} className="text-sm">• {s}</p>
+                ))}
+                {aiInsights.wellnessTips.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-brand/20">
+                    <p className="text-xs font-semibold text-brand mb-1">Wellness Tips</p>
+                    {aiInsights.wellnessTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                  </div>
+                )}
+                {aiInsights.motivationTip && <p className="mt-2 text-xs text-muted italic">{aiInsights.motivationTip}</p>}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tab bar */}
         <div className="flex items-center justify-between border-b border-border">

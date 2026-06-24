@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarHeart, MapPin, Search, ExternalLink, Star, Clock, Navigation, Sparkles, Rss, Plus, Trash2, ChevronDown } from 'lucide-react';
+import { CalendarHeart, MapPin, Search, ExternalLink, Star, Clock, Navigation, Sparkles, Rss, Plus, Trash2, ChevronDown, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS, categoryMeta, priceRange, isValidZip, PLAN_STATUSES } from '@/lib/weekend/meta';
 import type { Tables, WeekendPlanStatus, WeekendFeedKind } from '@/lib/database.types';
+import type { WeekendInsights, WeekendAIResponse } from '@/lib/weekend/weekend-ai';
 
 type Event = Tables<'weekend_events'>;
 type Plan = Tables<'weekend_plans'>;
@@ -56,6 +57,24 @@ export function WeekendModule() {
   const [touched, setTouched] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [feedForm, setFeedForm] = useState({ label: '', url: '', kind: 'ics' as WeekendFeedKind });
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<WeekendInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<WeekendAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/weekend', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   // Seed inputs from the most recent search once it loads.
   useEffect(() => {
@@ -125,10 +144,41 @@ export function WeekendModule() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarHeart className="h-6 w-6 text-brand" /> Weekend Planner</h1>
-        <p className="text-sm text-muted">Type a ZIP code, pick how far you&apos;ll travel, and discover everything happening nearby over the next few days.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarHeart className="h-6 w-6 text-brand" /> Weekend Planner</h1>
+          <p className="text-sm text-muted">Type a ZIP code, pick how far you&apos;ll travel, and discover everything happening nearby over the next few days.</p>
+        </div>
+        <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+          <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+        </Button>
       </div>
+
+      {(aiAnalysis || aiInsights) && (
+        <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-2 text-sm font-bold">
+              <Sparkles className="h-4 w-4 text-brand" /> AI Weekend Insights
+            </p>
+            <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+          </div>
+          {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+          {aiInsights && (
+            <div className="space-y-2">
+              {aiInsights.suggestions.map((s, i) => (
+                <p key={i} className="text-sm">• {s}</p>
+              ))}
+              {aiInsights.activityTips.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-brand/20">
+                  <p className="text-xs font-semibold text-brand mb-1">Activity Tips</p>
+                  {aiInsights.activityTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                </div>
+              )}
+              {aiInsights.familyIdea && <p className="mt-2 text-xs text-muted italic">Family idea: {aiInsights.familyIdea}</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* search bar */}
       <div className="rounded-2xl border border-border bg-surface/40 p-4">

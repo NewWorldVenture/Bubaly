@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { BookOpen, Calendar, ChevronRight, Filter, GraduationCap, MoreHorizontal, Plus, Sparkles } from 'lucide-react';
+import { BookOpen, Calendar, ChevronRight, Filter, GraduationCap, MoreHorizontal, Plus, Sparkles, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GradeType } from '@/lib/database.types';
+import type { SchoolInsights, SchoolAIResponse } from '@/lib/school/school-ai';
 
 type SchoolEvent = Tables<'school_events'>;
 type SchoolClass = Tables<'school_classes'>;
@@ -103,6 +104,24 @@ export function SchoolModule() {
   const [eventForm, setEventForm] = useState({ title: '', event_type: 'assignment', starts_at: '', notes: '', member_id: '', school_name: '' });
   const [classForm, setClassForm] = useState({ member_id: '', subject: '', teacher: '', room: '', time_slot: '', day_of_week: '1', school_name: '' });
   const [gradeForm, setGradeForm] = useState({ member_id: '', subject: '', title: '', grade: '', grade_type: 'test' as GradeType, score: '', max_score: '100', date: '' });
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<SchoolInsights | null>(null);
+  const [aiInsights, setAiInsights] = useState<SchoolAIResponse | null>(null);
+
+  async function runAiAssist() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/school', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'AI analysis failed');
+      setAiAnalysis(json.analysis ?? null);
+      setAiInsights(json.aiInsights ?? null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   const now = useMemo(() => new Date().toISOString(), []);
   const in14 = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 14); return d.toISOString(); }, []);
@@ -277,7 +296,11 @@ export function SchoolModule() {
           title="School"
           description="Stay on top of classes, assignments, and school events."
           action={
-            <div className="relative">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={runAiAssist} loading={aiLoading}>
+                <Sparkles className="h-4 w-4 text-brand" /> AI Assist
+              </Button>
+              <div className="relative">
               <Button onClick={() => setAddMenuOpen((v) => !v)}><Plus className="h-4 w-4" /> Add Item</Button>
               {addMenuOpen && (
                 <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border border-border bg-surface p-1 shadow-lg">
@@ -286,9 +309,36 @@ export function SchoolModule() {
                   <button className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface/60" onClick={() => { setAddMenuOpen(false); setGradeOpen(true); }}>Grade</button>
                 </div>
               )}
+              </div>
             </div>
           }
         />
+
+        {(aiAnalysis || aiInsights) && (
+          <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="flex items-center gap-2 text-sm font-bold">
+                <Sparkles className="h-4 w-4 text-brand" /> AI School Insights
+              </p>
+              <button onClick={() => { setAiAnalysis(null); setAiInsights(null); }}><X className="h-4 w-4 text-muted" /></button>
+            </div>
+            {aiAnalysis && <p className="mb-3 text-sm text-muted">{aiAnalysis.summary}</p>}
+            {aiInsights && (
+              <div className="space-y-2">
+                {aiInsights.suggestions.map((s, i) => (
+                  <p key={i} className="text-sm">• {s}</p>
+                ))}
+                {aiInsights.studyTips.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-brand/20">
+                    <p className="text-xs font-semibold text-brand mb-1">Study Tips</p>
+                    {aiInsights.studyTips.map((t, i) => <p key={i} className="text-xs text-muted">• {t}</p>)}
+                  </div>
+                )}
+                {aiInsights.encouragement && <p className="mt-2 text-xs text-muted italic">{aiInsights.encouragement}</p>}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tab bar */}
         <div className="flex items-center justify-between border-b border-border">
