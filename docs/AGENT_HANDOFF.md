@@ -1,7 +1,98 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after adding the Admin "Test AI connection" button. Keep this updated as you ship.
+Last updated: 2026-06-24, session `claude/connect-8ysp00` — AI-first navigation transformation + full AI insights coverage across ALL modules. Keep this updated as you ship.
+
+> **Session update (2026-06-24, branch `claude/connect-8ysp00`) — AI-FIRST
+> TRANSFORMATION: 5-TAB NAV + AI HOME SCREEN + UNIVERSAL CAPTURE + ALL 47
+> MODULE AI INSIGHTS WIRED.**
+>
+> **PRIMARY TRANSFORMATION — Mobile-first AI-first navigation:**
+> - **5-tab bottom nav** (`lib/constants/navigation.ts`): Home | Assistant |
+>   Capture (raised FAB center, index 2, `CAPTURE_TAB_INDEX = 2`) | Inbox | Profile
+> - **`components/app/app-shell.tsx`**: center tab renders as a round brand-colored
+>   floating action button (`-mt-5`, `h-14 w-14`, `rounded-full`, shadow) instead of
+>   a normal tab. All other tabs render normally with active/locked states.
+> - **AI-first home dashboard** (`components/dashboard/ai-home-dashboard.tsx`):
+>   server component, 9 parallel Supabase queries (chores, events, grocery, meds,
+>   approvals, todos, members, upcoming, activity). Greeting + date, family member
+>   strip (avatars + first names), contextual AI action cards (high priority = amber
+>   ring), today's schedule, upcoming week view, 8-module quick-access grid, AI nudge
+>   card. `app/(app)/dashboard/page.tsx` routes: no param → AiHomeDashboard,
+>   `?view=family` → FamilyDashboard, `?view=personal` → PersonalDashboard.
+> - **Universal Capture** (`components/capture/capture-shell.tsx`): 4 modes — type,
+>   voice (SpeechRecognition), photo (file input), scan. Client-side `routeCapture(text)`
+>   regex router → grocery/calendar/meals/trips/health/documents/notes/tasks/assistant.
+>   Shows route destination with "Go to X" CTA + "Change" button. Quick route chips grid.
+>   `app/(app)/capture/layout.tsx` mirrors dashboard layout (AppProvider + AppShell).
+> - **Floating AI FAB** (`components/app/ai-fab.tsx`): `fixed bottom-24 right-4 z-50`,
+>   hidden on `/dashboard/assistant*`, links to `/dashboard/assistant`.
+>   Mounted in app-shell above the bottom nav.
+> - **Profile module** (`components/modules/profile-module.tsx` +
+>   `app/(app)/dashboard/profile/page.tsx`): user avatar, family name, role, settings
+>   rows/sections, dark/light toggle, sign-out form.
+>
+> **FULL AI INSIGHTS COVERAGE — 47 InsightKind values, ALL eligible modules wired:**
+>
+> Previously: 17 kinds (chores/calendar/expenses/grocery/homework/medications/
+> shopping/subscriptions/todos/trips/wishlists/home/notifications/messages/weather/
+> settings/event)
+>
+> Added in prior sub-sessions: meals/reminders/notes/recipes/documents/care/
+> contacts/billing/goals/pets/renewals (first batch), school/sports/pantry/
+> announcements/medical/insurance/rewards/photos (second batch)
+>
+> Added in this final session: `celebrations`, `signups`, `behavior`, `screen_time`,
+> `binder`, `memories`, `timetable`, `tax`, `utilities`, `rides`, `votes`
+>
+> **Total: 47 InsightKind values — every family data domain covered.**
+>
+> **Architecture (unchanged — still pure + grounded):**
+> - `lib/ai/insights.ts` — INSIGHTS[kind] registry: `{label, title, blurb,
+>   allowQuestion, system, maxTokens, buildUser(InsightData)}`. `buildUser` converts
+>   RLS-scoped Supabase rows into a grounded prompt that only references real data.
+> - `app/api/ai/insights/route.ts` — auth-gated generic route. `fetchRows(kind)` uses
+>   a switch with per-kind Supabase queries. Returns `{text}` (never fabricates).
+> - `<AiInsight kind="..." iconOnly />` — Sparkles button → modal. POSTs the route,
+>   renders answer, supports regenerate + optional question input.
+>
+> **Modules wired (complete list):**
+> All 47 kinds have `<AiInsight>` placed in their PageHeader action or custom header.
+> Intentionally excluded (already AI-first or settings-only):
+>   - `assistant-module` (IS the AI chat)
+>   - `briefing-module` + `weekly-briefing-module` (own `/api/ai/briefing*` endpoints)
+>   - `inbox-module` (IS the AI import UI)
+>   - `locator-module` (location privacy; no useful AI aggregate insight)
+>   - `profile-module`, `security-module`, `scan-module`, `devices-module` (settings/utility)
+>
+> **Commits on `claude/connect-8ysp00`:**
+> 1. `chore: merge origin/main into claude/connect-8ysp00` (89 commits synced, 34 conflict files resolved)
+> 2. `feat(nav): AI-first 5-tab navigation + home screen + capture` (+878/-25, 10 files)
+> 3. `feat(ai): wire AI insights into 10 more modules + 11 new insight kinds` (+256/-8, 12 files)
+> 4. `feat(ai): wire AI insights into all 47 modules — full coverage` (+532/-24, 22 files)
+>
+> **Verification:** `tsc --noEmit` — zero errors. All 4 commits clean.
+> Test baseline inherited: **838 passing** (no new tests added in this session — all
+> changes are pure JSX/prompt additions on already-tested infrastructure).
+>
+> **NEXT (recommended follow-up):**
+> 1. **Stream insight answers** — `/api/ai/insights` returns plain JSON today; convert
+>    to SSE using `runToolsStream` for progressive rendering (mirrors the chat route).
+> 2. **AI home personalization** — the `AiHomeDashboard` uses deterministic logic;
+>    add a "What needs attention?" call to `/api/ai/insights?kind=settings` to inject
+>    a personalized AI note into the dashboard.
+> 3. **Capture → AI routing** — the capture shell routes client-side with regex; add
+>    a server-side `/api/capture/route` that uses the AI assistant to classify ambiguous
+>    inputs and return structured actions.
+> 4. **AI Assist "act" tools** — let some insight kinds take actions (grocery → add
+>    missing items, todos → reprioritize) by giving the insights route tools in the
+>    provider call.
+> 5. **Real weather grounding** — the `weather` kind builds a prompt from DB locations
+>    but can't fetch a real forecast; add a server-side weather API call (OpenWeather
+>    or WeatherKit) in `fetchRows('weather')` and inject current conditions.
+> 6. **Apply pending migrations to prod** (all from previous sessions — the AI nav
+>    transform needs no migration; all insight kinds read existing tables under RLS).
+>    Check earlier session entries for which migration numbers are pending.
 
 > **Session update (2026-06-24, branch `claude/admin-ai-test`) — ADMIN "TEST AI
 > CONNECTION" button.** Lets a super-admin verify the OpenAI key/model/billing are
