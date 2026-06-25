@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Wallet, PiggyBank, ShoppingBag, HeartHandshake, TrendingUp, Plus, X, ArrowDownLeft, ArrowUpRight,
+  Wallet, PiggyBank, ShoppingBag, HeartHandshake, TrendingUp, Plus, X, ArrowDownLeft, ArrowUpRight, Sparkles,
 } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -19,8 +19,10 @@ import { cn } from '@/lib/utils/cn';
 import { fmtRelative } from '@/lib/utils/format';
 import { formatCents, type BucketKind } from '@/lib/wallet/ledger';
 import { computeFunding, serviceFeeLabel, type WalletTier } from '@/lib/wallet/fees';
-import { WALLET_TIERS } from '@/lib/wallet/tiers';
+import { WALLET_TIERS, aiCoachLevel } from '@/lib/wallet/tiers';
 import { addFundsAction } from '@/app/(app)/wallet/actions';
+
+type Coaching = { headline: string; insights: string[]; suggestion: string };
 
 export type ChildWalletView = {
   id: string;
@@ -57,11 +59,51 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
   recent: RecentTxn[];
 }) {
   const [addFor, setAddFor] = useState<ChildWalletView | null>(null);
+  const [coach, setCoach] = useState<Coaching | null>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const { error: toastError } = useToast();
   const sampleGift = computeFunding(5000, tier); // $50 gift fee preview
+  const hasCoach = aiCoachLevel(tier) !== 'none';
+
+  async function runCoach() {
+    setCoachLoading(true);
+    try {
+      const res = await fetch('/api/ai/wallet', { method: 'POST' });
+      const json = (await res.json()) as { coaching?: Coaching; error?: string };
+      if (!res.ok || !json.coaching) throw new Error(json.error || 'Could not get coaching');
+      setCoach(json.coaching);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Coach failed');
+    } finally {
+      setCoachLoading(false);
+    }
+  }
 
   return (
     <div className="module-page">
-      <PageHeader title="Family Wallet" description="Spend, save, give, and invest — for the whole family." />
+      <PageHeader title="Family Wallet" description="Spend, save, give, and invest — for the whole family."
+        action={hasCoach ? (
+          <Button variant="ghost" onClick={runCoach} loading={coachLoading}><Sparkles className="h-4 w-4" /> Money Coach</Button>
+        ) : undefined}
+      />
+
+      {coach && (
+        <div className="mb-5 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-5">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand"><Sparkles className="h-3.5 w-3.5" /> Money Coach</span>
+            <button onClick={() => setCoach(null)} className="text-muted hover:text-fg"><X className="h-3.5 w-3.5" /></button>
+          </div>
+          {coach.headline && <p className="text-sm font-semibold leading-relaxed">{coach.headline}</p>}
+          {coach.insights.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {coach.insights.map((it, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-xs text-muted"><Sparkles className="mt-0.5 h-3 w-3 flex-shrink-0 text-brand" /> {it}</li>
+              ))}
+            </ul>
+          )}
+          {coach.suggestion && <p className="mt-2 rounded-xl border border-brand/20 bg-brand/5 p-2.5 text-xs"><span className="font-semibold text-brand">Try this: </span>{coach.suggestion}</p>}
+        </div>
+      )}
 
       {/* Family total */}
       <div className="mb-5 rounded-3xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-6">

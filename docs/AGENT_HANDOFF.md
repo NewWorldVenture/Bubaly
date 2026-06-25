@@ -1,7 +1,23 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Wallet monetization (fees + tiers) + allowance/chore automation. Keep this updated as you ship.
+Last updated after the AI Family Financial Coach. Keep this updated as you ship.
+
+> **Session update (2026-06-25c) — WALLET: AI FAMILY FINANCIAL COACH.**
+> Built the headline AI feature from the tier matrix (Free none / Basic limited / Plus
+> unlimited). NO migration. Branch `claude/festive-bohr-m4cbeg`.
+> - **`lib/wallet/coach.ts`** (pure; 6 tests `tests/wallet-coach.test.ts`):
+>   `buildWalletCoachPrompt({children, goals, familyName})` + `parseWalletCoach` →
+>   `{headline, insights[], suggestion}`. Goal lines use the forecast ("~3 weeks away").
+> - **`app/api/ai/wallet/route.ts`** — POST, tier-gated (`aiCoachLevel`==='none' → 403 for Free).
+>   Computes per-child balances + save-bucket from the immutable ledger, estimates each child's
+>   weekly contribution from the last 8 weeks of credits, runs `weeksToGoal` per goal, then
+>   `resolveProvider()`. Returns `{coaching, tier}`.
+> - **wallet-dashboard**: a "Money Coach" header button (Basic+ only) that shows headline +
+>   insights + a suggestion card.
+> - Verified: tsc + lint clean · `npm run build` ✓ (`/api/ai/wallet`) · **full suite 965/965**.
+> NOTE: `AI_COACH_DAILY_LIMIT` (basic 5/day) exists in tiers.ts but is NOT yet enforced per-day —
+> a metering counter (count today's coach calls) is the next step.
 
 > **Session update (2026-06-25b) — WALLET PHASE 2: FEES, TIERS, ALLOWANCE + CHORE LEDGER.**
 > Built the published business model (per the product screenshots) + the ledger
