@@ -1,7 +1,37 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-24, session `claude/connect-8ysp00` — Cookie-consent notice completing the legal/onboarding theme. Keep this updated as you ship.
+Last updated: 2026-06-25, session `claude/connect-8ysp00` — International phone + avatar picker for onboarding. Keep this updated as you ship.
+
+> **Session update (2026-06-25, branch `claude/connect-8ysp00`, pushed direct to `main`) — INTERNATIONAL PHONE SUPPORT + AVATAR PICKER IN ONBOARDING.**
+>
+> **Task:** (1) Add international phone number support to the onboarding wizard (country dial-code selector, E.164 storage, phone optional). (2) Add avatar picking — preset gradient circles OR upload-your-own-photo — wired to `profiles.avatar_url`.
+>
+> **NEW FILES:**
+> - **`lib/utils/phone.ts`** — `CountryDialCode` type + `COUNTRY_DIAL_CODES` (52 countries with flag emoji, ISO code, dial code, local format placeholder); `guessCountryDialCode()` (browser locale), `guessDialCodeFromPhone()` (parse E.164 prefix), `extractLocalNumber()`.
+> - **`components/ui/phone-input.tsx`** — compound `<PhoneInput>`: left "flag + dialCode" dropdown (searchable, 52 countries), right local-number text input, unified border/focus ring. Outputs `<input type="hidden" name="phone">` (E.164), `name="dialCode"` and `name="countryCode"` so the form's `FormData` captures all three. Auto-detects locale on first render; re-populates from draft on back-navigation.
+> - **`lib/storage/avatars.ts`** — `uploadAvatar(supabase, userId, file)`: uploads to the `avatars` Supabase Storage bucket (5 MB limit, allow-list of image types, user-id-scoped path), returns public URL. **⚠️ REQUIRES: create a PUBLIC bucket named `avatars` in Supabase Storage with RLS policy: INSERT where `auth.uid() = (storage.foldername(name))[1]::uuid`, SELECT public true.**
+> - **`components/ui/avatar-picker.tsx`** — `<AvatarPicker>`: 12 preset gradient-circle SVG data-URIs (violet → slate) + a camera icon "Upload" button in the same grid. Live 64px preview; selected preset gets a checkmark ring; upload calls `uploadAvatar`; hidden `<input name="avatarUrl">` carries the selection into the form. Remove button (×) top-right of preview.
+>
+> **MODIFIED FILES:**
+> - **`lib/validation.ts`** — `onboardingProfileSchema`: `phone` is now optional (`z.string().max(20).optional().default('')`) — E.164 or empty. `avatarUrl` added (`z.string().max(5000).optional().default('')`). `finalizeOnboardingSchema` inherits both changes automatically (it uses `profile: onboardingProfileSchema`).
+> - **`lib/server/profiles.ts`** — `saveUserProfile` accepts `avatarUrl?: string | null`; if provided (including empty → null), writes `avatar_url` to the `profiles` row.
+> - **`app/onboarding/actions.ts`** — `saveOnboardingProfileAction` + `finalizeOnboardingAction` pass `avatarUrl` to `saveUserProfile`. Both server action signatures extended with `avatarUrl?: string`.
+> - **`components/onboarding/onboarding-wizard.tsx`** — `DraftState.profile` gains `dialCode`, `countryCode`, `avatarUrl`; `defaultDraft` infers country from locale/stored phone; `loadDraft` deep-merges profile defaults (safe for old sessionStorage drafts); Step 1 shows `<AvatarPicker>` above name fields and replaces the old plain phone `<Input>` with `<PhoneInput>`; phone `Field` hint says "Optional"; `captureProfile` reads all hidden inputs; `onFinalize` passes `avatarUrl`; Step 5 review shows avatar thumbnail beside name/email.
+>
+> **Design notes:**
+> - Preset avatars are `data:image/svg+xml` URIs (gradient circles) stored directly in `profiles.avatar_url` — fully portable, no external CDN, ~200 bytes each.
+> - Phone is optional throughout (no `required` on the field) — international users who prefer not to share their number won't be blocked.
+> - Country dial code is detected from browser locale on first visit and remembered in the draft for back-navigation.
+>
+> **Verification:** `tsc --noEmit` clean · `npm run build` **exit 0** · **pushed directly to `main`** (commit `1eb7c20`).
+>
+> **NEXT OPPORTUNITIES (pick any):**
+> 1. **Profile settings page** — add `<AvatarPicker>` + `<PhoneInput>` to the Settings profile editor so users can change avatar/phone after onboarding (`app/dashboard/settings` or similar).
+> 2. **Avatar upload bucket** — ensure the `avatars` Supabase Storage bucket exists with the RLS policy above (see lib/storage/avatars.ts). Without it, photo uploads silently fail (preset picks still work).
+> 3. **Testimonials on `/`** — the marketing homepage has a placeholder `CTASection`; a published-testimonials carousel from the `testimonials` table would add social proof.
+> 4. **Apple OAuth** — still needs to be enabled in the Supabase Dashboard (see 2026-06-24 entry). Currently shows a clean "not enabled yet" toast.
+> 5. **Family profile photo** — `families` table also has `avatar_url`. Could add a family-photo picker in Step 2 of onboarding (name your family step) or in family settings.
 
 > **Session update (2026-06-24, branch `claude/connect-8ysp00`, pushed direct to `main`) — COOKIE-CONSENT NOTICE (completes the legal/onboarding initiative).**
 > - **`components/marketing/cookie-consent.tsx`** (NEW) — lightweight, non-blocking
