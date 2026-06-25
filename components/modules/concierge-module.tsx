@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Sparkles, Send, Plus, Plane, UtensilsCrossed, Heart, Zap,
   PartyPopper, MapPin, Calendar, CheckCircle2, Clock,
-  ChevronRight, Trash2, ArrowLeft, Star, DollarSign, CalendarPlus, Check, Loader2,
+  ChevronRight, Trash2, ArrowLeft, DollarSign, CalendarPlus, Check, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
