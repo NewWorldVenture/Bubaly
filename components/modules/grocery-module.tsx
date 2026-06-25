@@ -5,6 +5,7 @@ import { Plus, Trash2, ChevronDown, ChevronUp, MoreHorizontal, Search, SlidersHo
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
@@ -84,14 +85,14 @@ export function GroceryModule() {
   async function toggleItem(item: Item) {
     const supabase = createClient();
     const { error } = await supabase.from('grocery_items').update({ is_checked: !item.is_checked }).eq('id', item.id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     void refresh();
   }
 
   async function deleteItem(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('grocery_items').delete().eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     void refresh();
   }
 
@@ -101,7 +102,7 @@ export function GroceryModule() {
     if (!name || !listId) return;
     const supabase = createClient();
     const { error } = await supabase.from('grocery_items').insert({ family_id: familyId, list_id: listId, name, category: addingCategory, created_by: userId });
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     setAddingItem(''); void refresh();
   }
 

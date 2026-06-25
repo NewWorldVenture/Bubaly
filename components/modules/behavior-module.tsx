@@ -5,6 +5,7 @@ import { Smile, Frown, Minus, Plus, Trash2, Sparkles, TrendingUp, Flame } from '
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -67,7 +68,7 @@ export function BehaviorModule() {
     const { error } = form.id
       ? await supabase.from('behavior_logs').update(row).eq('id', form.id)
       : await supabase.from('behavior_logs').insert({ ...row, family_id: familyId, logged_by: userId });
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(form.id ? 'Updated' : 'Logged');
     setForm(null);
   }
@@ -75,7 +76,7 @@ export function BehaviorModule() {
   async function remove(id: string) {
     if (!confirm('Delete this entry?')) return;
     const { error } = await createClient().from('behavior_logs').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success('Deleted');
   }
 
   async function getInsight() {

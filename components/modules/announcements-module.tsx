@@ -5,6 +5,7 @@ import { Megaphone, Plus, Pin, PinOff, Trash2, Check, Users } from 'lucide-react
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
@@ -75,7 +76,7 @@ export function AnnouncementsModule() {
       title: title.trim(), body: body.trim() || null, is_pinned: pinned,
     });
     setSaving(false);
-    if (err) return toastError(err.message);
+    if (err) return toastError(describeDbError(err));
     success('Announcement posted');
     setTitle(''); setBody(''); setPinned(false); setShowCompose(false);
   }
@@ -83,13 +84,13 @@ export function AnnouncementsModule() {
   async function togglePin(a: Announcement) {
     const supabase = createClient();
     const { error: err } = await supabase.from('family_announcements').update({ is_pinned: !a.is_pinned }).eq('id', a.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
   async function remove(id: string) {
     const supabase = createClient();
     const { error: err } = await supabase.from('family_announcements').delete().eq('id', id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
     else success('Announcement removed');
   }
 

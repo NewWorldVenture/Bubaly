@@ -7,6 +7,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -88,7 +89,7 @@ export function FamilyTreeModule() {
       ...row, family_id: familyId, created_by: userId,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Added to family tree');
     setForm(null);
   }
@@ -109,7 +110,7 @@ export function FamilyTreeModule() {
       member_id: f.member_id || null,
     }).eq('id', editNode.id);
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Updated');
     setEditNode(null); setForm(null);
   }
@@ -117,7 +118,7 @@ export function FamilyTreeModule() {
   async function remove(id: string) {
     if (!confirm('Remove this person from the tree?')) return;
     const { error } = await createClient().from('family_tree_nodes').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Removed');
+    if (error) toastError(describeDbError(error)); else success('Removed');
   }
 
   function startEdit(n: Node) {

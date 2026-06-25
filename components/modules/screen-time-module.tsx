@@ -5,6 +5,7 @@ import { MonitorSmartphone, Plus, Trash2, Flame, Gauge, Settings2 } from 'lucide
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -67,7 +68,7 @@ export function ScreenTimeModule() {
     const { error } = form.id
       ? await supabase.from('screen_time_entries').update(row).eq('id', form.id)
       : await supabase.from('screen_time_entries').insert({ ...row, family_id: familyId, logged_by: userId });
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(form.id ? 'Updated' : 'Logged');
     setForm(null);
   }
@@ -75,7 +76,7 @@ export function ScreenTimeModule() {
   async function remove(id: string) {
     if (!confirm('Delete this entry?')) return;
     const { error } = await createClient().from('screen_time_entries').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success('Deleted');
   }
 
   async function saveLimit(e: React.FormEvent) {
@@ -85,7 +86,7 @@ export function ScreenTimeModule() {
     const { error } = await createClient()
       .from('screen_time_limits')
       .upsert({ family_id: familyId, member_id: limitFor.memberId, daily_minutes: minutes, created_by: userId }, { onConflict: 'family_id,member_id' });
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Daily limit saved');
     setLimitFor(null);
   }

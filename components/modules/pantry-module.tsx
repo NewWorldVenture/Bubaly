@@ -8,6 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -54,14 +55,14 @@ export function PantryModule() {
     const next = Math.max(0, Number(item.quantity) + delta);
     const supabase = createClient();
     const { error } = await supabase.from('pantry_items').update({ quantity: next }).eq('id', item.id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     void refresh();
   }
 
   async function removeItem(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('pantry_items').delete().eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Removed');
     void refresh();
   }
@@ -75,7 +76,7 @@ export function PantryModule() {
     if (!list) {
       const { data: created, error } = await supabase.from('grocery_lists')
         .insert({ family_id: familyId, name: 'Groceries', created_by: userId }).select('id').single();
-      if (error || !created) return toastError(error?.message ?? 'Could not create a grocery list');
+      if (error || !created) return toastError(describeDbError(error, 'Could not create a grocery list'));
       list = created;
     }
     const items = rows.map((r) => ({
@@ -84,7 +85,7 @@ export function PantryModule() {
       category: r.category ?? 'Pantry', created_by: userId,
     }));
     const { error } = await supabase.from('grocery_items').insert(items);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(`Added ${items.length} item${items.length > 1 ? 's' : ''} to your grocery list`);
   }
 
@@ -256,7 +257,7 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
       ? await supabase.from('pantry_items').update(payload).eq('id', item.id)
       : await supabase.from('pantry_items').insert({ ...payload, family_id: familyId, created_by: userId });
     setLoading(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(item ? 'Updated' : 'Item added');
     onSaved();
   }

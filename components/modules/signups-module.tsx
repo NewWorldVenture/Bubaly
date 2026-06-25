@@ -8,6 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -110,7 +111,7 @@ export function SignupsModule() {
       ? await sb.from('opportunities').update(fields).eq('id', form.id)
       : await sb.from('opportunities').insert({ ...fields, family_id: familyId, created_by: userId });
     setSaving(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(form.id ? 'Signup updated' : 'Signup added');
     setModalOpen(false);
   }
@@ -118,14 +119,14 @@ export function SignupsModule() {
   async function setStatus(o: Opportunity, status: OpportunityStatus) {
     const sb = createClient();
     const { error: err } = await sb.from('opportunities').update({ status }).eq('id', o.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
   async function remove(o: Opportunity) {
     if (!confirm(`Delete "${o.title}"?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('opportunities').delete().eq('id', o.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Signup deleted');
   }
 

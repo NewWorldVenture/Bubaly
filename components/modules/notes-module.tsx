@@ -9,6 +9,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -115,7 +116,7 @@ export function NotesModule() {
   async function remove(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('notes').delete().eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Note deleted');
     void refresh();
     if (viewing?.id === id) setViewing(null);
@@ -404,7 +405,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
       ? await supabase.from('notes').update({ title, body: body ?? '' }).eq('id', note.id)
       : await supabase.from('notes').insert({ family_id: familyId, created_by: userId, title, body: body ?? '' });
     setLoading(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(note ? 'Note saved' : 'Note created');
     onSaved();
   }

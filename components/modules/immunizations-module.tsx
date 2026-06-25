@@ -5,6 +5,7 @@ import { Syringe, Plus, Pencil, Trash2, CalendarClock } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -62,7 +63,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
     const { error } = form.id
       ? await supabase.from('immunizations').update(row).eq('id', form.id)
       : await supabase.from('immunizations').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(form.id ? 'Record updated' : 'Immunization added');
     setForm(null);
   }
@@ -70,7 +71,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
   async function remove(id: string) {
     if (!confirm('Delete this immunization record?')) return;
     const { error } = await createClient().from('immunizations').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success('Deleted');
   }
 
   function edit(s: Immunization) {

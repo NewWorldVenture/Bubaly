@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Settings, Users, Mail, Trash2, Plus, Check } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -86,7 +87,7 @@ export function SettingsModule() {
     const supabase = createClient();
     const { error } = await supabase.from('families').update({ name }).eq('id', family.id);
     setSavingFamily(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Family name updated');
   }
 
@@ -94,7 +95,7 @@ export function SettingsModule() {
     if (!confirm('Remove this member from the family?')) return;
     const supabase = createClient();
     const { error } = await supabase.from('family_members').update({ is_active: false }).eq('id', memberId);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Member removed');
     window.location.reload();
   }
@@ -262,7 +263,7 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
       role,
       invited_by: userId,
     }).select('id').single();
-    if (error || !invite) { setLoading(false); return toastError(error?.message ?? 'Failed'); }
+    if (error || !invite) { setLoading(false); return toastError(describeDbError(error, 'Failed')); }
 
     // Fire invite email (non-blocking — don't fail UI if email fails)
     void fetch('/api/email/invite', {

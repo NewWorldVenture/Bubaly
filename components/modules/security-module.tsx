@@ -5,6 +5,7 @@ import { ShieldAlert, ShieldCheck, Plus, Trash2, Check, RotateCcw } from 'lucide
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -36,17 +37,17 @@ export function SecurityModule() {
     if (!form || !form.title.trim()) return;
     const row = { kind: form.kind, severity: form.severity, title: form.title.trim(), detail: form.detail.trim() || null, occurred_at: new Date(form.occurred_at).toISOString() };
     const { error } = await createClient().from('home_security_events').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Logged'); setForm(null);
   }
   async function toggleResolved(ev: Event) {
     const { error } = await createClient().from('home_security_events').update({ resolved: !ev.resolved, resolved_at: !ev.resolved ? new Date().toISOString() : null }).eq('id', ev.id);
-    if (error) toastError(error.message);
+    if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
     if (!confirm('Delete this event?')) return;
     const { error } = await createClient().from('home_security_events').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success('Deleted');
   }
 
   if (loading) return <LoadingBlock />;

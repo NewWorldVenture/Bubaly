@@ -8,6 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -106,7 +107,7 @@ export function CareModule() {
       ? await sb.from('care_log').update(fields).eq('id', form.id)
       : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId });
     setSaving(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(form.id ? 'Entry updated' : 'Care logged');
     setModalOpen(false);
   }
@@ -118,7 +119,7 @@ export function CareModule() {
       family_id: familyId, member_id: recipientId, log_type: type,
       occurred_at: new Date().toISOString(), logged_by: selfMember?.id ?? null, created_by: userId,
     });
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(`${CARE_LOG_TYPE_LABELS[type]} logged`);
   }
 
@@ -126,7 +127,7 @@ export function CareModule() {
     if (!confirm('Delete this care entry?')) return;
     const sb = createClient();
     const { error: err } = await sb.from('care_log').delete().eq('id', e.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Entry deleted');
   }
 

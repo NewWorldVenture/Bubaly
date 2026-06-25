@@ -8,6 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -56,7 +57,7 @@ export function InsuranceModule() {
   async function removePolicy(id: string) {
     if (!confirm('Remove this policy?')) return;
     const { error } = await createClient().from('family_insurance_policies').update({ is_active: false }).eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     setSelected(null);
     success('Policy removed');
   }
@@ -226,7 +227,7 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
       created_by: userId,
     });
     setLoading(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     onSaved();
   }
 

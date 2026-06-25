@@ -8,6 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -98,7 +99,7 @@ export function HomeworkModule() {
       ? await sb.from('homework_assignments').update(fields).eq('id', form.id)
       : await sb.from('homework_assignments').insert({ ...fields, family_id: familyId, created_by: userId });
     setSaving(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(form.id ? 'Homework updated' : 'Homework added');
     setModalOpen(false);
   }
@@ -110,14 +111,14 @@ export function HomeworkModule() {
     const { error: err } = await sb.from('homework_assignments').update({
       status: next, completed_at: isDone ? new Date().toISOString() : null,
     }).eq('id', h.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
   async function remove(h: Homework) {
     if (!confirm(`Delete "${h.title}"?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('homework_assignments').delete().eq('id', h.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Homework deleted');
   }
 

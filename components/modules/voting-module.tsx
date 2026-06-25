@@ -5,6 +5,7 @@ import { Vote, Plus, Trash2, Check, Trophy, Lock, Plane } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -72,11 +73,11 @@ export function VotingModule() {
       closes_at: form.closes_at ? new Date(form.closes_at).toISOString() : null,
       created_by: userId,
     }).select('id').single();
-    if (error || !poll) return toastError(error?.message ?? 'Could not create');
+    if (error || !poll) return toastError(describeDbError(error, 'Could not create'));
     const { error: oErr } = await supabase.from('family_poll_options').insert(
       opts.map((label, i) => ({ family_id: familyId, poll_id: poll.id, label, sort: i })),
     );
-    if (oErr) return toastError(oErr.message);
+    if (oErr) return toastError(describeDbError(oErr));
     success('Poll created');
     setForm(null);
   }
@@ -94,17 +95,17 @@ export function VotingModule() {
       await supabase.from('family_poll_votes').delete().eq('poll_id', poll.id).eq('member_id', meId);
     }
     const { error } = await supabase.from('family_poll_votes').insert({ family_id: familyId, poll_id: poll.id, option_id: optionId, member_id: meId });
-    if (error) toastError(error.message);
+    if (error) toastError(describeDbError(error));
   }
 
   async function setStatus(id: string, status: string) {
     const { error } = await createClient().from('family_polls').update({ status }).eq('id', id);
-    if (error) toastError(error.message);
+    if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
     if (!confirm('Delete this poll?')) return;
     const { error } = await createClient().from('family_polls').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success('Deleted');
   }
 
   if (loading) return <LoadingBlock />;

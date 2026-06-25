@@ -5,6 +5,7 @@ import { FolderLock, Plus, Trash2, Download, FileText } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -60,7 +61,7 @@ export function TaxVaultModule() {
         note: form.note.trim() || null,
         created_by: userId,
       });
-      if (error) return toastError(error.message);
+      if (error) return toastError(describeDbError(error));
       success('Document saved');
       setForm(null);
     } finally {
@@ -79,7 +80,7 @@ export function TaxVaultModule() {
     const supabase = createClient();
     if (d.storage_path) await removeFamilyDocument(supabase, d.storage_path);
     const { error } = await supabase.from('tax_documents').delete().eq('id', d.id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success('Deleted');
   }
 
   if (loading) return <LoadingBlock />;

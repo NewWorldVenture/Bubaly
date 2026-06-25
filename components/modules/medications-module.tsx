@@ -7,6 +7,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -159,7 +160,7 @@ export function MedicationsModule() {
       }));
     }
     setBusyDose(null);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     if (status === 'taken') success('Dose logged');
   }
 
@@ -186,7 +187,7 @@ export function MedicationsModule() {
       ? await sb.from('medications').update(fields).eq('id', medForm.id)
       : await sb.from('medications').insert({ ...fields, family_id: familyId, created_by: userId });
     setSavingMed(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(medForm.id ? 'Medication updated' : 'Medication added');
     setMedModalOpen(false);
   }
@@ -195,14 +196,14 @@ export function MedicationsModule() {
     if (!confirm(`Delete ${m.name}? This also removes its schedules and dose history.`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('medications').delete().eq('id', m.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Medication deleted');
   }
 
   async function toggleActive(m: Medication) {
     const sb = createClient();
     const { error: err } = await sb.from('medications').update({ is_active: !m.is_active }).eq('id', m.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
   // ── Schedule CRUD ─────────────────────────────────────────
@@ -222,7 +223,7 @@ export function MedicationsModule() {
       ends_on: scheduleForm.ends_on || null,
     });
     setSavingSchedule(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Schedule added');
     setScheduleFor(null);
   }
@@ -230,7 +231,7 @@ export function MedicationsModule() {
   async function deleteSchedule(id: string) {
     const sb = createClient();
     const { error: err } = await sb.from('medication_schedules').delete().eq('id', id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
   function toggleDay(day: number) {

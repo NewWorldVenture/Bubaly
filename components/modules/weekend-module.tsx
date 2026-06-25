@@ -5,6 +5,7 @@ import { CalendarHeart, MapPin, Search, ExternalLink, Star, Clock, Navigation, S
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Input, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -101,11 +102,11 @@ export function WeekendModule() {
     const { error } = existing
       ? await sb.from('weekend_plans').update({ status }).eq('id', existing.id)
       : await sb.from('weekend_plans').insert({ family_id: familyId, event_id: event.id, status, created_by: userId });
-    if (error) toastError(error.message); else success(existing ? 'Updated' : 'Saved to plans');
+    if (error) toastError(describeDbError(error)); else success(existing ? 'Updated' : 'Saved to plans');
   }
   async function removePlan(id: string) {
     const { error } = await createClient().from('weekend_plans').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Removed');
+    if (error) toastError(describeDbError(error)); else success('Removed');
   }
 
   async function addFeed(e: React.FormEvent) {
@@ -113,7 +114,7 @@ export function WeekendModule() {
     if (!feedForm.label.trim() || !feedForm.url.trim()) return toastError('Name and URL required');
     try { new URL(feedForm.url.trim()); } catch { return toastError('Enter a valid URL'); }
     const { error } = await createClient().from('weekend_feeds').insert({ family_id: familyId, label: feedForm.label.trim(), url: feedForm.url.trim(), kind: feedForm.kind, created_by: userId });
-    if (error) toastError(error.message); else { success('Source added'); setFeedForm({ label: '', url: '', kind: 'ics' }); }
+    if (error) toastError(describeDbError(error)); else { success('Source added'); setFeedForm({ label: '', url: '', kind: 'ics' }); }
   }
   async function toggleFeed(f: Feed) {
     await createClient().from('weekend_feeds').update({ is_active: !f.is_active }).eq('id', f.id);

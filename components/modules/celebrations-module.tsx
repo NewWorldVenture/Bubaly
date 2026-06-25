@@ -5,6 +5,7 @@ import { Cake, Heart, PartyPopper, CalendarHeart, Plus, Trash2, Gift } from 'luc
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -70,7 +71,7 @@ export function CelebrationsModule() {
       family_id: familyId, title: title.trim(), kind, event_date: date, created_by: userId,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Celebration added');
     setTitle(''); setDate(''); setKind('birthday'); setShowAdd(false);
   }
@@ -78,7 +79,7 @@ export function CelebrationsModule() {
   async function remove(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('family_dates').delete().eq('id', id.replace(/^d-/, ''));
-    if (error) toastError(error.message); else success('Removed');
+    if (error) toastError(describeDbError(error)); else success('Removed');
   }
 
   return (

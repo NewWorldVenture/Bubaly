@@ -5,6 +5,7 @@ import { Cpu, Plus, Trash2, Wifi, WifiOff, HelpCircle, Pencil } from 'lucide-rea
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -40,18 +41,18 @@ export function DevicesModule() {
     const { error } = form.id
       ? await supabase.from('smart_devices').update(row).eq('id', form.id)
       : await supabase.from('smart_devices').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(form.id ? 'Updated' : 'Added'); setForm(null);
   }
   async function cycleStatus(d: Device) {
     const next = d.status === 'online' ? 'offline' : d.status === 'offline' ? 'unknown' : 'online';
     const { error } = await createClient().from('smart_devices').update({ status: next }).eq('id', d.id);
-    if (error) toastError(error.message);
+    if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
     if (!confirm('Delete this device?')) return;
     const { error } = await createClient().from('smart_devices').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success('Deleted');
   }
   function edit(d: Device) {
     setForm({ id: d.id, name: d.name, type: d.type, room: d.room ?? '', brand: d.brand ?? '', integration: d.integration, status: d.status, last_state: d.last_state ?? '', note: d.note ?? '' });

@@ -10,6 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -88,14 +89,14 @@ export function HabitsModule() {
     if (done) {
       const { error } = await supabase.from('habit_logs').delete()
         .eq('family_id', familyId).eq('habit_id', habit.id).eq('log_date', today);
-      if (error) return toastError(error.message);
+      if (error) return toastError(describeDbError(error));
     } else {
       const { error } = await supabase.from('habit_logs').insert({
         family_id: familyId, habit_id: habit.id,
         member_id: habit.member_id ?? selfMember?.id ?? null,
         log_date: today, count: 1, created_by: userId,
       });
-      if (error) return toastError(error.message);
+      if (error) return toastError(describeDbError(error));
       success('Nice! Checked in for today 🔥');
     }
     void logsQ.refresh();
@@ -105,7 +106,7 @@ export function HabitsModule() {
     const supabase = createClient();
     const { error } = await supabase.from('habits')
       .update({ is_active: false, archived_at: new Date().toISOString() }).eq('id', habit.id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Habit archived');
     void habitsQ.refresh();
   }
@@ -316,7 +317,7 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
       ? await supabase.from('habits').update(patch).eq('id', habit.id)
       : await supabase.from('habits').insert({ family_id: familyId, created_by: userId, ...patch });
     setLoading(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(habit ? 'Habit saved' : 'Habit created');
     onSaved();
   }

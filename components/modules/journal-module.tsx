@@ -10,6 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -53,7 +54,7 @@ export function JournalModule() {
   async function remove(id: string) {
     const supabase = createClient();
     const { error: delErr } = await supabase.from('journal_entries').delete().eq('id', id);
-    if (delErr) return toastError(delErr.message);
+    if (delErr) return toastError(describeDbError(delErr));
     success('Entry deleted');
     void refresh();
   }
@@ -188,7 +189,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
       ? await supabase.from('journal_entries').update(patch).eq('id', entry.id)
       : await supabase.from('journal_entries').insert({ family_id: familyId, member_id: memberId, created_by: userId, ...patch });
     setLoading(false);
-    if (saveErr) return toastError(saveErr.message);
+    if (saveErr) return toastError(describeDbError(saveErr));
     success(entry ? 'Entry saved' : 'Entry added');
     onSaved();
   }

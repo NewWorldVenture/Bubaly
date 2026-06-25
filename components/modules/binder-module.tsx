@@ -5,6 +5,7 @@ import { FolderLock, Plus, Trash2, Eye, EyeOff, Pencil } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -42,13 +43,13 @@ export function BinderModule() {
     const { error } = form.id
       ? await supabase.from('household_info').update(row).eq('id', form.id)
       : await supabase.from('household_info').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(form.id ? 'Updated' : 'Saved'); setForm(null);
   }
   async function remove(id: string) {
     if (!confirm('Delete this entry?')) return;
     const { error } = await createClient().from('household_info').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success('Deleted');
   }
   function edit(i: Info) {
     setForm({ id: i.id, category: i.category, label: i.label, value: i.value ?? '', note: i.note ?? '', is_sensitive: i.is_sensitive });

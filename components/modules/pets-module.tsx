@@ -8,6 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -76,7 +77,7 @@ export function PetsModule() {
   async function removePet(id: string) {
     if (!confirm('Remove this pet and all its care records?')) return;
     const { error } = await createClient().from('pets').update({ is_active: false }).eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     setSelected(null);
     success('Pet removed');
   }
@@ -245,7 +246,7 @@ function PetForm({ familyId, userId, onClose, onSaved }: { familyId: string; use
       created_by: userId,
     });
     setLoading(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     onSaved();
   }
 
@@ -302,7 +303,7 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
       created_by: userId,
     });
     setLoading(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     onSaved();
   }
 

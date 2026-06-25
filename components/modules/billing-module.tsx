@@ -25,6 +25,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
 import { Badge } from '@/components/ui/badge';
@@ -234,7 +235,7 @@ function AddAccountModal({ open, onClose, familyId, userId, onDone }: {
       last_four: lastFour.trim() || null, balance: parseFloat(balance) || 0, currency: 'USD',
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Account added');
     reset(); onClose(); onDone();
   }
@@ -288,7 +289,7 @@ function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone
       account_id: accountId || null, notes: null,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Transaction added');
     reset(); onClose(); onDone();
   }
@@ -346,7 +347,7 @@ function AddBudgetModal({ open, onClose, familyId, userId, onDone }: {
       category, amount: parseFloat(amount), period,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Budget added');
     reset(); onClose(); onDone();
   }
@@ -399,7 +400,7 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
       status: 'upcoming', category,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Bill added');
     reset(); onClose(); onDone();
   }
@@ -461,7 +462,7 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
       target_date: targetDate || null, emoji,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Savings goal added');
     reset(); onClose(); onDone();
   }
@@ -695,7 +696,7 @@ export function BillingModule() {
   async function deleteTransaction(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('transactions').delete().eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Transaction removed');
     void refreshTransactions();
   }
@@ -703,7 +704,7 @@ export function BillingModule() {
   async function deleteBudget(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('budgets').delete().eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Budget removed');
     void refreshBudgets();
   }
@@ -711,7 +712,7 @@ export function BillingModule() {
   async function deleteBill(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('bills').delete().eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Bill removed');
     void refreshBills();
   }
@@ -719,7 +720,7 @@ export function BillingModule() {
   async function markBillPaid(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('bills').update({ status: 'paid' }).eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Bill marked as paid');
     void refreshBills();
   }
@@ -727,7 +728,7 @@ export function BillingModule() {
   async function deleteGoal(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('savings_goals').delete().eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Goal removed');
     void refreshGoals();
   }
@@ -735,7 +736,7 @@ export function BillingModule() {
   async function deleteAccount(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('financial_accounts').delete().eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Account removed');
     void refreshAccounts();
   }

@@ -5,6 +5,7 @@ import { RefreshCw, Plus, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-rea
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -56,23 +57,23 @@ export function SubscriptionsModule() {
     const { error } = form.id
       ? await supabase.from('subscriptions_tracked').update(row).eq('id', form.id)
       : await supabase.from('subscriptions_tracked').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(form.id ? 'Updated' : 'Added');
     setForm(null);
   }
 
   async function markUsed(id: string) {
     const { error } = await createClient().from('subscriptions_tracked').update({ last_used: new Date().toISOString().slice(0, 10) }).eq('id', id);
-    if (error) toastError(error.message); else success('Marked used today');
+    if (error) toastError(describeDbError(error)); else success('Marked used today');
   }
   async function setStatus(id: string, status: string) {
     const { error } = await createClient().from('subscriptions_tracked').update({ status }).eq('id', id);
-    if (error) toastError(error.message);
+    if (error) toastError(describeDbError(error));
   }
   async function remove(id: string) {
     if (!confirm('Delete this subscription?')) return;
     const { error } = await createClient().from('subscriptions_tracked').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success('Deleted');
   }
   function edit(s: Sub) {
     setForm({ id: s.id, name: s.name, cost: (s.cost_cents / 100).toString(), cadence: s.cadence, category: s.category ?? 'Other', status: s.status, next_charge: s.next_charge ?? '', last_used: s.last_used ?? '', note: s.note ?? '' });

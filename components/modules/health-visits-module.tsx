@@ -5,6 +5,7 @@ import { Stethoscope, Plus, Pencil, Trash2, CalendarClock, MapPin, AlertCircle }
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -62,7 +63,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
     const { error } = form.id
       ? await supabase.from('health_visits').update(row).eq('id', form.id)
       : await supabase.from('health_visits').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(form.id ? 'Visit updated' : 'Visit added');
     setForm(null);
   }
@@ -70,7 +71,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   async function remove(id: string) {
     if (!confirm('Delete this visit record?')) return;
     const { error } = await createClient().from('health_visits').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Visit deleted');
+    if (error) toastError(describeDbError(error)); else success('Visit deleted');
   }
 
   function edit(v: Visit) {

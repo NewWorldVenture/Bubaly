@@ -13,6 +13,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -103,7 +104,7 @@ export function AutopilotModule() {
     const { error: upErr } = await supabase.from('autopilot_suggestions')
       .update({ status, resolved_at: new Date().toISOString(), resolved_by: userId })
       .eq('id', s.id);
-    if (upErr) return toastError(upErr.message);
+    if (upErr) return toastError(describeDbError(upErr));
     success(status === 'dismissed' ? 'Dismissed' : 'Done — Bubaly handled it');
     void refresh();
   }

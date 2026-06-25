@@ -9,6 +9,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -181,7 +182,7 @@ export function RecipesModule() {
       };
     });
     const { error } = await supabase.from('grocery_items').insert(items);
-    if (error) { toastError(error.message); return false; }
+    if (error) { toastError(describeDbError(error)); return false; }
     success(`${items.length} ingredients added to your grocery list!`);
     return true;
   }
@@ -205,7 +206,7 @@ export function RecipesModule() {
       .from('grocery_lists')
       .insert({ family_id: familyId, name, created_by: userId })
       .select('id').single();
-    if (error || !created) { setCreatingList(false); toastError(error?.message ?? 'Could not create list'); return; }
+    if (error || !created) { setCreatingList(false); toastError(describeDbError(error, 'Could not create list')); return; }
     const ok = await addItemsToList(groceryPrompt, created.id);
     setCreatingList(false);
     if (ok) setGroceryPrompt(null);
@@ -603,7 +604,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
       ? await supabase.from('family_recipes').update(payload as never).eq('id', recipe.id)
       : await supabase.from('family_recipes').insert({ ...payload, family_id: familyId, created_by: userId } as never);
     setLoading(false);
-    if (error) { toastError(error.message); return; }
+    if (error) { toastError(describeDbError(error)); return; }
     success(recipe ? 'Recipe updated' : 'Recipe added');
     onSaved();
   }

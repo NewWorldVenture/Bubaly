@@ -793,7 +793,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
     });
 
     setLoading(false);
-    if (error || !data) { toastError(error?.message ?? 'Could not create conversation'); return; }
+    if (error || !data) { toastError(describeDbError(error, 'Could not create conversation')); return; }
     onCreated(data);
   }
 

@@ -6,6 +6,7 @@ import { Download, File, FileText, FolderLock, Plus, Sparkles, Trash2, Upload } 
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -104,7 +105,7 @@ export function DocumentsModule() {
     // Remove the underlying storage object first so we never orphan files.
     if (doc.storage_path) await removeFamilyDocument(sb, doc.storage_path);
     const { error: err } = await sb.from('documents').delete().eq('id', doc.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Document removed'); refresh();
   }
 

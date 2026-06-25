@@ -8,6 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -90,7 +91,7 @@ export function RewardsModule() {
       ? await sb.from('rewards').update(fields).eq('id', form.id)
       : await sb.from('rewards').insert({ ...fields, family_id: familyId, created_by: userId });
     setSaving(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(form.id ? 'Reward updated' : 'Reward added');
     setModalOpen(false);
   }
@@ -99,7 +100,7 @@ export function RewardsModule() {
     if (!confirm(`Delete the reward "${r.title}"?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('rewards').delete().eq('id', r.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Reward deleted');
   }
 
@@ -117,7 +118,7 @@ export function RewardsModule() {
       decided_at: canManage && forMemberId === selfMember?.id ? new Date().toISOString() : null,
     });
     setBusy(null);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(canManage && forMemberId === selfMember?.id ? 'Reward redeemed' : 'Redemption requested');
   }
 
@@ -128,7 +129,7 @@ export function RewardsModule() {
       status, decided_by: selfMember?.id ?? null, decided_at: new Date().toISOString(),
     }).eq('id', red.id);
     setBusy(null);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Marked fulfilled');
   }
 

@@ -5,6 +5,7 @@ import { Gauge, Plus, Trash2, TrendingUp, TrendingDown, Sparkles, Loader2, Light
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -57,13 +58,13 @@ export function UtilitiesModule() {
       amount_cents: cents, usage: form.usage ? parseFloat(form.usage) : null, unit: form.unit.trim() || null, note: form.note.trim() || null,
     };
     const { error } = await createClient().from('utility_bills').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Bill added'); setForm(null);
   }
   async function remove(id: string) {
     if (!confirm('Delete this bill?')) return;
     const { error } = await createClient().from('utility_bills').delete().eq('id', id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success('Deleted');
   }
   async function analyze() {
     setAnalyzing(true);

@@ -10,6 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -451,7 +452,7 @@ function NewAlbumModal({ familyId, userId, onClose, onCreated }: {
       family_id: familyId, name: name.trim(), kind, description: description.trim() || null, created_by: userId,
     });
     setLoading(false);
-    if (error) { toastError(error.message); return; }
+    if (error) { toastError(describeDbError(error)); return; }
     onCreated();
   }
 

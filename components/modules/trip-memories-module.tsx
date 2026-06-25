@@ -5,6 +5,7 @@ import { BookHeart, Plus, Trash2, MapPin, Plane, ImageIcon } from 'lucide-react'
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -82,7 +83,7 @@ export function TripMemoriesModule() {
         member_id: form.member_id || null,
         created_by: userId,
       });
-      if (error) return toastError(error.message);
+      if (error) return toastError(describeDbError(error));
       success('Memory saved');
       setForm(null);
     } finally {
@@ -95,7 +96,7 @@ export function TripMemoriesModule() {
     const supabase = createClient();
     if (m.photo_path) await removeFamilyDocument(supabase, m.photo_path);
     const { error } = await supabase.from('trip_memories').delete().eq('id', m.id);
-    if (error) toastError(error.message); else success('Deleted');
+    if (error) toastError(describeDbError(error)); else success('Deleted');
   }
 
   if (loading) return <LoadingBlock />;

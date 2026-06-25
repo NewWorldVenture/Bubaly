@@ -8,6 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -111,7 +112,7 @@ export function RidesModule() {
       ? await sb.from('rides').update(fields).eq('id', form.id)
       : await sb.from('rides').insert({ ...fields, family_id: familyId, created_by: userId });
     setSaving(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(form.id ? 'Ride updated' : 'Ride added');
     setModalOpen(false);
   }
@@ -120,14 +121,14 @@ export function RidesModule() {
     if (!confirm(`Delete the ride "${r.title}"?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('rides').delete().eq('id', r.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Ride deleted');
   }
 
   async function setStatus(r: Ride, status: RideStatus) {
     const sb = createClient();
     const { error: err } = await sb.from('rides').update({ status }).eq('id', r.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
   function toggleRider(id: string) {

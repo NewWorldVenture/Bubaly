@@ -1,7 +1,43 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-24, session `claude/connect-8ysp00` — World-class onboarding: Google+Apple+email sign-up screen + 4 legal pages + footer. Keep this updated as you ship.
+Last updated: 2026-06-24, session `claude/connect-8ysp00` — App-wide error-message hardening (describeDbError across all 43 remaining modules). Keep this updated as you ship.
+
+> **Session update (2026-06-24, branch `claude/connect-8ysp00`, pushed direct to `main`) — APP-WIDE FRIENDLY ERROR MESSAGES (describeDbError across ALL remaining modules).**
+>
+> **Task (autonomous follow-up):** finish the audit-fix initiative by extending
+> `describeDbError` to every module that still surfaced raw Postgres strings.
+>
+> **WHAT CHANGED:** swept **43 modules** in `components/modules/*` replacing
+> `toastError(error.message)` → `toastError(describeDbError(error))` (and the
+> `?? 'fallback'` variants → `describeDbError(error, 'fallback')`), adding the
+> `@/lib/supabase/errors` import where missing. ~133 call sites now show the same
+> friendly, classified messages (permission/network/not-found/conflict) the 10
+> audit-fixed modules already use — so the WHOLE app speaks one error language.
+> Done via a verified regex transform (only simple `IDENT.message` args inside
+> `toastError(...)`; the `err instanceof Error ? err.message : '…'`, template-literal,
+> and location-permission cases were intentionally left alone — they handle
+> non-DB/transport errors and were already fine).
+>
+> **Modules touched:** announcements, autopilot, behavior, billing (11 sites), binder,
+> care, celebrations, devices, documents, family-tree, grocery, habits, health-visits,
+> home (7), homework, immunizations, insurance, journal, meals, medications (6),
+> messages, notes, notifications, pantry, pets, photos, recipes, renewals, rewards,
+> rides, screen-time, security, settings, signups, subscriptions, tax-vault,
+> trip-memories, trips, utilities, voting, weather, weekend, wishlists.
+>
+> **100% Supabase-wired:** purely a message-formatting change around existing
+> RLS-scoped calls. No new tables, routes, or migration.
+>
+> **Verification:** `tsc` clean · `next lint` clean (only the pre-existing
+> expenses/subscriptions useMemo warnings) · `npm run build` **exit 0** · `vitest`
+> **920 passing**. **Pushed directly to `main`.**
+>
+> **NEXT (optional):** (1) a few non-DB call sites still use `err instanceof Error ?
+> err.message : '…'` for fetch/AI routes — fine as-is, but could get an
+> `describeAIError`/`describeDbError` pass for consistency; (2) the shared
+> `<IconButton busy>` wrapper idea from the prior entry; (3) Sentry capture in
+> `useAction.onError`.
 
 > **Session update (2026-06-24, branch `claude/connect-8ysp00`, pushed direct to `main`) — WORLD-CLASS SIGN-UP SCREEN (Google + Apple + email) + LEGAL PAGES + FOOTER.**
 >

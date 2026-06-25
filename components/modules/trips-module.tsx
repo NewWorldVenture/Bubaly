@@ -8,6 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -115,7 +116,7 @@ export function TripsModule() {
       ? await sb.from('trips').update(fields).eq('id', tripForm.id)
       : await sb.from('trips').insert({ ...fields, family_id: familyId, created_by: userId });
     setSavingTrip(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(tripForm.id ? 'Trip updated' : 'Trip created');
     setTripModal(false);
   }
@@ -123,7 +124,7 @@ export function TripsModule() {
     if (!confirm(`Delete "${t.name}" and its checklist?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('trips').delete().eq('id', t.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Trip deleted');
     if (selectedId === t.id) setSelectedId(null);
   }
@@ -145,19 +146,19 @@ export function TripsModule() {
       sort_order: selectedItems.length, created_by: userId,
     });
     setSavingItem(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Item added');
     setItemModal(false);
   }
   async function toggleItem(it: TripItem) {
     const sb = createClient();
     const { error: err } = await sb.from('trip_items').update({ is_done: !it.is_done }).eq('id', it.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
   async function removeItem(it: TripItem) {
     const sb = createClient();
     const { error: err } = await sb.from('trip_items').delete().eq('id', it.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
   const fmtRange = (t: Trip) => {

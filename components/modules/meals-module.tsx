@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Plus, Sparkles, Activity, Check, X as XIcon 
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -87,14 +88,14 @@ export function MealsModule() {
   async function removePlan(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('meal_plans').delete().eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     void refresh();
   }
 
   async function addFromLibrary(mealId: string, date: string, mealType: MealType) {
     const supabase = createClient();
     const { error } = await supabase.from('meal_plans').insert({ family_id: familyId, meal_id: mealId, plan_date: date, meal_type: mealType, created_by: userId });
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     setAddCell(null); void refresh();
   }
 
@@ -549,7 +550,7 @@ function NewMealModal({ familyId, userId, onClose, onSaved }: { familyId: string
     setLoading(true);
     const { error } = await createClient().from('meals').insert({ family_id: familyId, name, meal_type, ingredients: [], created_by: userId });
     setLoading(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     onSaved();
   }
 
