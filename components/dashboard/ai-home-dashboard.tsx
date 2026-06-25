@@ -2,7 +2,7 @@ import Link from 'next/link';
 import {
   Sparkles, Calendar, CheckSquare, ShoppingCart, HeartPulse,
   ArrowRight, Bell, ChevronRight, Home, Pill, GraduationCap,
-  Trophy, Sun, Clock, Users, MessageSquare, Plane,
+  Trophy, Sun, Clock, Users, MessageSquare, Plane, PhoneCall,
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
 import type { UserContext } from '@/lib/supabase/auth';
@@ -163,6 +163,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { count: autopilotHandledCount },
     { count: unreadCommsCount },
     { data: activeConcierge },
+    { count: unreadCallsCount },
   ] = await Promise.all([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
@@ -204,6 +205,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('concierge_plans').select('id, title, kind, status')
       .eq('family_id', familyId).in('status', ['planning', 'booked', 'confirmed'])
       .order('created_at', { ascending: false }).limit(2),
+    supabase.from('call_logs').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).eq('is_read', false),
   ]);
 
   const openSuggestions = (autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number }[];
@@ -301,8 +304,25 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         </Link>
       )}
 
-      {/* Communications + Concierge widgets */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Front Desk + Communications + Concierge widgets */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Link href="/dashboard/front-desk"
+          className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated hover:border-brand/20">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-green-500/10">
+            <PhoneCall className="h-5 w-5 text-green-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Front Desk</p>
+            <p className="truncate text-xs text-muted">
+              {(unreadCallsCount ?? 0) > 0 ? `${unreadCallsCount} new call${unreadCallsCount === 1 ? '' : 's'}` : 'All calls handled'}
+            </p>
+          </div>
+          {(unreadCallsCount ?? 0) > 0 && (
+            <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-green-500 text-[10px] font-bold text-white shrink-0">
+              {unreadCallsCount}
+            </span>
+          )}
+        </Link>
         <Link href="/dashboard/inbox"
           className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated hover:border-brand/20">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-500/10">
