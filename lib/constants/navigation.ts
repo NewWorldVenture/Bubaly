@@ -46,6 +46,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/weekly-briefing', label: 'Weekly Briefing', icon: CalendarDays, minLevel: 2 },
       { href: '/dashboard/command-center', label: 'Command Center', icon: Gauge, minLevel: 2 },
       { href: '/dashboard/assistant', label: 'AI Assistant', icon: Sparkles, minLevel: 0 },
+      { href: '/dashboard/trust', label: 'Trust & Permissions', icon: ShieldCheck, minLevel: 0 },
       { href: '/dashboard/concierge', label: 'AI Concierge', icon: Plane, minLevel: 1 },
       { href: '/dashboard/front-desk', label: 'AI Front Desk', icon: PhoneCall, minLevel: 1 },
       { href: '/dashboard/inbox', label: 'Communications Hub', icon: Inbox, minLevel: 1 },

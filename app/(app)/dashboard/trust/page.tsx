@@ -1,0 +1,45 @@
+import type { Metadata } from 'next';
+import { requireUserContext } from '@/lib/supabase/auth';
+import { createServer } from '@/lib/supabase/server';
+import { isManager } from '@/lib/constants/roles';
+import { TrustModule, type TrustData } from '@/components/modules/trust-module';
+
+export const metadata: Metadata = { title: 'Trust & Permissions' };
+export const dynamic = 'force-dynamic';
+
+export default async function TrustPage() {
+  const ctx = await requireUserContext();
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+  const nowIso = new Date().toISOString();
+
+  const [
+    { data: members },
+    { data: policies },
+    { data: grants },
+    { data: delegations },
+    { data: approvals },
+    { data: emergencies },
+    { data: audit },
+  ] = await Promise.all([
+    supabase.from('family_members').select('id, display_name, role, color').eq('family_id', familyId).eq('is_active', true).order('created_at'),
+    supabase.from('trust_policies').select('*').eq('family_id', familyId).order('priority', { ascending: false }),
+    supabase.from('permission_grants').select('id, member_id, domain, capability, effect').eq('family_id', familyId),
+    supabase.from('trust_delegations').select('*').eq('family_id', familyId).is('revoked_at', null).gt('expires_at', nowIso).order('expires_at'),
+    supabase.from('approval_requests').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(50),
+    supabase.from('emergency_sessions').select('*').eq('family_id', familyId).is('ended_at', null),
+    supabase.from('trust_audit_logs').select('id, actor_kind, actor_id, domain, capability, decision, reason, confidence, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(40),
+  ]);
+
+  const data: TrustData = {
+    members: (members ?? []).map(m => ({ id: m.id, name: m.display_name, role: m.role, color: m.color })),
+    policies: (policies ?? []) as unknown as TrustData['policies'],
+    grants: (grants ?? []) as unknown as TrustData['grants'],
+    delegations: (delegations ?? []) as unknown as TrustData['delegations'],
+    approvals: (approvals ?? []) as unknown as TrustData['approvals'],
+    emergencies: (emergencies ?? []) as unknown as TrustData['emergencies'],
+    audit: (audit ?? []) as unknown as TrustData['audit'],
+  };
+
+  return <TrustModule data={data} canManage={isManager(ctx.active.role)} />;
+}

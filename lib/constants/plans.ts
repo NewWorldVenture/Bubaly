@@ -70,6 +70,7 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/settings': 0,
   '/dashboard/billing':  0,
   '/dashboard/assistant':0,  // metered AI (10 requests/mo on Free)
+  '/dashboard/trust':    0,  // Trust & Permissions is foundational safety — free for all
   '/dashboard/wishlists': 0,
   '/dashboard/announcements': 0,
   '/dashboard/activity': 0,

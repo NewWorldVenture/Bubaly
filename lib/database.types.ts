@@ -788,6 +788,41 @@ export interface Database {
         { id?: string; family_id: string; contact_id?: string | null; caller_name?: string | null; caller_number?: string | null; direction?: string; status?: string; classification?: string; priority?: string; transcript?: string | null; ai_summary?: string | null; action_items?: unknown[]; voicemail_url?: string | null; duration_secs?: number | null; is_read?: boolean; received_at?: string; created_by?: string | null },
         Partial<{ contact_id: string | null; caller_name: string | null; caller_number: string | null; status: string; classification: string; priority: string; transcript: string | null; ai_summary: string | null; action_items: unknown[]; voicemail_url: string | null; duration_secs: number | null; is_read: boolean; updated_at: string }>
       >;
+      trust_policies: T<
+        { id: string; family_id: string; name: string; description: string | null; domain: string; capability: string; subject_kind: string; subject_role: string | null; subject_member_id: string | null; effect: string; conditions: Json; approval_model: string; required_approvals: number; priority: number; enabled: boolean; is_system: boolean; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name: string; description?: string | null; domain?: string; capability?: string; subject_kind?: string; subject_role?: string | null; subject_member_id?: string | null; effect?: string; conditions?: Json; approval_model?: string; required_approvals?: number; priority?: number; enabled?: boolean; is_system?: boolean; created_by?: string | null },
+        Partial<{ name: string; description: string | null; domain: string; capability: string; subject_kind: string; subject_role: string | null; subject_member_id: string | null; effect: string; conditions: Json; approval_model: string; required_approvals: number; priority: number; enabled: boolean; updated_at: string }>
+      >;
+      permission_grants: T<
+        { id: string; family_id: string; member_id: string; domain: string; capability: string; effect: string; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; member_id: string; domain: string; capability: string; effect?: string; created_by?: string | null },
+        Partial<{ domain: string; capability: string; effect: string; updated_at: string }>
+      >;
+      trust_delegations: T<
+        { id: string; family_id: string; from_member_id: string; to_member_id: string; domains: string[]; reason: string | null; starts_at: string; expires_at: string; revoked_at: string | null; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; from_member_id: string; to_member_id: string; domains?: string[]; reason?: string | null; starts_at?: string; expires_at: string; revoked_at?: string | null; created_by?: string | null },
+        Partial<{ domains: string[]; reason: string | null; expires_at: string; revoked_at: string | null; updated_at: string }>
+      >;
+      approval_requests: T<
+        { id: string; family_id: string; domain: string; capability: string; requested_by_kind: string; requested_by_member_id: string | null; agent: string | null; title: string; summary: string | null; payload: Json; amount_cents: number | null; confidence: number | null; policy_id: string | null; reasoning: string | null; approval_model: string; required_approvals: number; approvals: Json; status: string; priority: string; decided_by: string | null; decided_at: string | null; expires_at: string | null; executed_at: string | null; execution_result: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; domain: string; capability?: string; requested_by_kind?: string; requested_by_member_id?: string | null; agent?: string | null; title: string; summary?: string | null; payload?: Json; amount_cents?: number | null; confidence?: number | null; policy_id?: string | null; reasoning?: string | null; approval_model?: string; required_approvals?: number; approvals?: Json; status?: string; priority?: string; expires_at?: string | null },
+        Partial<{ status: string; approvals: Json; decided_by: string | null; decided_at: string | null; executed_at: string | null; execution_result: string | null; priority: string; updated_at: string }>
+      >;
+      trust_scores: T<
+        { id: string; family_id: string; actor_kind: string; actor_id: string; score: number; factors: Json; verified: boolean; interactions: number; successes: number; updated_at: string; created_at: string },
+        { id?: string; family_id: string; actor_kind: string; actor_id: string; score?: number; factors?: Json; verified?: boolean; interactions?: number; successes?: number },
+        Partial<{ score: number; factors: Json; verified: boolean; interactions: number; successes: number; updated_at: string }>
+      >;
+      emergency_sessions: T<
+        { id: string; family_id: string; kind: string; reason: string | null; activated_by: string | null; activated_at: string; ended_by: string | null; ended_at: string | null; elevated_domains: string[]; created_at: string; updated_at: string },
+        { id?: string; family_id: string; kind?: string; reason?: string | null; activated_by?: string | null; ended_by?: string | null; ended_at?: string | null; elevated_domains?: string[] },
+        Partial<{ kind: string; reason: string | null; ended_by: string | null; ended_at: string | null; elevated_domains: string[]; updated_at: string }>
+      >;
+      trust_audit_logs: T<
+        { id: string; family_id: string; actor_kind: string; actor_id: string | null; domain: string | null; capability: string | null; decision: string; reason: string | null; policy_id: string | null; confidence: number | null; approval_id: string | null; context: Json; device: string | null; created_at: string },
+        { id?: string; family_id: string; actor_kind?: string; actor_id?: string | null; domain?: string | null; capability?: string | null; decision: string; reason?: string | null; policy_id?: string | null; confidence?: number | null; approval_id?: string | null; context?: Json; device?: string | null },
+        Partial<{ reason: string | null; context: Json }>
+      >;
       concierge_sessions: T<
         { id: string; family_id: string; created_by: string | null; title: string; kind: string; status: string; notes: string | null; ai_summary: string | null; messages: unknown[]; created_at: string; updated_at: string },
         { id?: string; family_id: string; created_by?: string | null; title?: string; kind?: string; status?: string; notes?: string | null; ai_summary?: string | null; messages?: unknown[] },
