@@ -1,7 +1,38 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after onboarding avatar/phone production-readiness (avatars bucket, 0089). Keep this updated as you ship.
+Last updated: 2026-06-25 — international phone input added to the Settings profile editor. Keep this updated as you ship.
+
+> **Session update (2026-06-25, pushed direct to `main`, commit `bd30c43`) — INTERNATIONAL PHONE IN SETTINGS PROFILE EDITOR.**
+>
+> **Context:** A parallel session had already shipped the avatars Storage bucket
+> (`0089_avatars_bucket.sql`) + avatar editing in Settings + the editable
+> `profileUpdateSchema` (phone optional, `avatarUrl` added). On a fresh `main`
+> the *only* remaining gap from the onboarding-parity work was that the Settings
+> "Contact phone" field was still a plain US-style `<Input>`.
+>
+> **WHAT CHANGED (one file):** `components/modules/settings-module.tsx` — replaced
+> the plain phone `<Input>` with the same `<PhoneInput>` used in onboarding
+> (searchable 52-country dial-code selector, E.164 output). It pre-selects the
+> country from the saved E.164 number (`guessDialCodeFromPhone` +
+> `COUNTRY_DIAL_CODES` lookup → `defaultCountryCode`/`defaultDialCode`, local
+> digits via `extractLocalNumber`) and writes back into the existing controlled
+> `profileForm.phone` through `PhoneInput`'s `onChange(e164)`. Rendered only once
+> `profileLoaded` so it initialises from saved values (mirrors how `<AvatarPicker>`
+> is gated just above it); shows a disabled placeholder input until then.
+>
+> **No schema/action change needed** — `updateMyProfileAction` + `profileUpdateSchema`
+> already accept optional phone + `avatarUrl` from the prior session's work.
+>
+> **Verification:** `tsc --noEmit` clean · `next lint` clean · `npm run build`
+> **exit 0** · `vitest` **978 passing**. Settings profile editing is now fully at
+> parity with onboarding (avatar + international phone), end-to-end Supabase-wired.
+>
+> **NOTE FOR CONTINUERS:** multiple sessions push to `main` in parallel — always
+> `git fetch origin main` and rebase/reset onto it before building, or you'll
+> duplicate work (this session initially rebuilt the avatars bucket before
+> discovering it was already merged). Migration numbers are a common collision
+> point; check the latest `supabase/migrations/` before adding one.
 
 > ## 🏦 FAMILY WALLET — PROGRAM MAP (read this first if you're continuing the wallet)
 > A parent-controlled financial OS built as an **immutable ledger** (balances are derived by
