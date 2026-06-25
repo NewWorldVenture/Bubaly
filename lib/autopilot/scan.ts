@@ -28,7 +28,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     { data: renewals }, { data: appts }, { data: choreRows },
     { data: members }, { data: groceries }, { data: apptReminders },
     { data: events }, { data: subs }, { data: stress }, { data: meds },
-    { data: choreHistory }, { data: twinProfiles }, { data: mealPlans }, { data: insurance }, { data: existing },
+    { data: choreHistory }, { data: twinProfiles }, { data: mealPlans }, { data: insurance }, { data: wishlist }, { data: existing },
   ] = await Promise.all([
     supabase.from('renewals').select('id, title, expires_at, status').eq('family_id', familyId).eq('status', 'active').lte('expires_at', in30).limit(100),
     supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(50),
@@ -46,10 +46,20 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     // Meal Agent / Family Memory: 90d of dinner history + the next few days' plans.
     supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', since90.slice(0, 10)).limit(500),
     supabase.from('family_insurance_policies').select('id, policy_type, insurer, renewal_date').eq('family_id', familyId).eq('is_active', true).not('renewal_date', 'is', null).lte('renewal_date', in30).limit(100),
+    // Family Memory: unpurchased wish-list items → gift ideas for upcoming birthdays.
+    supabase.from('wishlist_items').select('member_id, title, priority, is_purchased').eq('family_id', familyId).eq('is_purchased', false).limit(500),
     supabase.from('autopilot_suggestions').select('id, dedupe_key, status').eq('family_id', familyId).limit(500),
   ]);
 
   const remindedAppt = new Set((apptReminders ?? []).map((r) => r.related_id).filter(Boolean) as string[]);
+
+  // Family Memory: top unpurchased wish-list titles per member (high priority first).
+  const prioRank: Record<string, number> = { high: 3, medium: 2, low: 1 };
+  const giftsByMember = new Map<string, string[]>();
+  for (const w of (wishlist ?? []).slice().sort((a, b) => (prioRank[b.priority] ?? 0) - (prioRank[a.priority] ?? 0))) {
+    const arr = giftsByMember.get(w.member_id) ?? [];
+    if (arr.length < 3) { arr.push(w.title); giftsByMember.set(w.member_id, arr); }
+  }
 
   // Family Memory: rank dinners cooked over the last 90 days, and note which of
   // the next few days already have a dinner planned.
@@ -75,7 +85,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
       title: (c as unknown as { chores: { title: string } | null }).chores?.title ?? 'Chore',
       dueAt: c.due_at, memberId: c.member_id,
     })),
-    birthdays: (members ?? []).map((m) => ({ memberId: m.id, name: m.display_name, birthday: m.birthday as string })),
+    birthdays: (members ?? []).map((m) => ({ memberId: m.id, name: m.display_name, birthday: m.birthday as string, giftIdeas: giftsByMember.get(m.id) })),
     lingeringGroceries: (groceries ?? []).map((g) => ({ id: g.id, name: g.name, addedAt: g.created_at })),
     events: (events ?? []).map((e) => ({ id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, memberId: e.assignee_id })),
     subscriptions: (subs ?? []).map((x) => ({ id: x.id, name: x.name, costCents: x.cost_cents, cadence: x.cadence, nextCharge: x.next_charge, lastUsed: x.last_used, status: x.status })),
