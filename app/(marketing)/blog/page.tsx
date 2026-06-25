@@ -5,10 +5,12 @@ import { getAllPosts, getFeaturedPost, getPostsByCategory, ALL_CATEGORIES, type 
 import { Container, GradientText, PageWrap } from '@/components/marketing/visual-mocks';
 import { cn } from '@/lib/utils/cn';
 import { BlogSearch } from './blog-search';
+import { SubscribeForm } from './subscribe-form';
 
 export const metadata: Metadata = {
   title: 'Blog — Tips, Stories & Insights for Modern Families',
   description: 'Practical advice, real stories, and smart tips to help your family stay organized and enjoy more time together.',
+  alternates: { types: { 'application/rss+xml': '/feed.xml' } },
 };
 
 export const revalidate = 3600;
@@ -255,8 +257,7 @@ export default async function BlogPage({ searchParams }: Props) {
             <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
               <h3 className="mb-1 font-bold">Subscribe to Our Blog</h3>
               <p className="mb-4 text-xs leading-5 text-white/55">Get the latest tips and insights delivered to your inbox.</p>
-              <input className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm outline-none placeholder:text-white/35 focus:border-violet-400/50" placeholder="Enter your email" />
-              <button className="mt-3 w-full rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 py-2.5 text-sm font-bold shadow-glow">Subscribe</button>
+              <SubscribeForm className="space-y-3" buttonClass="w-full" />
             </div>
 
             {/* Topics with counts */}
@@ -313,10 +314,7 @@ export default async function BlogPage({ searchParams }: Props) {
                 <p className="text-sm text-white/55">New tips, real stories, and helpful resources — straight to your inbox.</p>
               </div>
             </div>
-            <div className="flex w-full max-w-md gap-3">
-              <input className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm outline-none placeholder:text-white/35" placeholder="Enter your email" />
-              <button className="rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-5 py-3 text-sm font-bold shadow-glow">Subscribe</button>
-            </div>
+            <SubscribeForm className="w-full max-w-md" inputClass="py-3" buttonClass="py-3" />
           </div>
         </Container>
       </div>

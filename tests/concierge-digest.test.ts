@@ -156,6 +156,70 @@ describe('buildConciergeDigest — ordering, counts, headline', () => {
   });
 });
 
+describe('buildConciergeDigest — signups', () => {
+  it('classifies signups by deadline proximity and skips completed', () => {
+    const d = buildConciergeDigest({
+      now: NOW,
+      signups: [
+        { title: 'Field Trip', deadline: '2026-06-22', member: 'Emma' },     // overdue
+        { title: 'Camp Signup', deadline: '2026-06-25' },                     // soon
+        { title: 'Swim Team', deadline: '2026-06-23', status: 'passed' }, // skip
+        { title: 'Far Away', deadline: '2026-08-01' },                       // out of window
+        { title: 'No Date', deadline: null },                                // skip
+      ],
+    });
+    const items = d.items.filter(i => i.domain === 'signup');
+    expect(items).toHaveLength(2);
+    expect(items[0].title).toBe('Field Trip');
+    expect(items[0].urgency).toBe('overdue');
+    expect(items[0].detail).toBe('Deadline yesterday · Emma');
+    expect(items[1].title).toBe('Camp Signup');
+    expect(items[1].urgency).toBe('soon');
+  });
+});
+
+describe('buildConciergeDigest — screen time', () => {
+  it('surfaces members who exceeded their daily limit', () => {
+    const d = buildConciergeDigest({
+      now: NOW,
+      screenTime: [
+        { member: 'Jackson', usedMinutes: 180, limitMinutes: 120 },
+        { member: 'Emma', usedMinutes: 60, limitMinutes: 90 },  // under limit → skip
+      ],
+    });
+    const items = d.items.filter(i => i.domain === 'screen_time');
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toBe('Jackson screen time');
+    expect(items[0].detail).toBe('180 of 120 min used (150%)');
+    expect(items[0].urgency).toBe('today');
+  });
+});
+
+describe('buildConciergeDigest — behavior', () => {
+  it('surfaces behavior incident counts for today', () => {
+    const d = buildConciergeDigest({
+      now: NOW,
+      behaviorIncidents: [
+        { member: 'Emma', count: 3, latestKind: 'tantrum' },
+        { member: 'Jackson', count: 0 },  // zero → skip
+      ],
+    });
+    const items = d.items.filter(i => i.domain === 'behavior');
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toBe('Emma behavior');
+    expect(items[0].detail).toBe('3 incidents today · tantrum');
+    expect(items[0].member).toBe('Emma');
+  });
+
+  it('handles single incident grammar', () => {
+    const d = buildConciergeDigest({
+      now: NOW,
+      behaviorIncidents: [{ member: 'Mia', count: 1 }],
+    });
+    expect(d.items[0].detail).toBe('1 incident today');
+  });
+});
+
 describe('digestToPromptLines', () => {
   it('renders tagged lines for LLM grounding', () => {
     const d = buildConciergeDigest({

@@ -18,7 +18,10 @@ export type ConciergeDomain =
   | 'maintenance'
   | 'warranty'
   | 'trip'
-  | 'pantry';
+  | 'pantry'
+  | 'signup'
+  | 'screen_time'
+  | 'behavior';
 
 export type ConciergeUrgency = 'overdue' | 'today' | 'soon';
 
@@ -43,6 +46,11 @@ export interface ConciergeSnapshot {
   warranties?: { name: string; expiresOn: string | null }[];
   trips?: { title: string; startDate: string | null; endDate?: string | null; destination?: string | null }[];
   pantry?: { name: string; expiresAt: string | null }[];
+  signups?: { title: string; deadline: string | null; member?: string | null; status?: string | null }[];
+  /** Screen-time usage vs limits, already aggregated per-member by the caller. */
+  screenTime?: { member: string; usedMinutes: number; limitMinutes: number }[];
+  /** Behavior incident counts for today, already aggregated per-member. */
+  behaviorIncidents?: { member: string; count: number; latestKind?: string | null }[];
 }
 
 export interface ConciergeDigest {
@@ -61,16 +69,22 @@ const SOON_WINDOW_DAYS: Record<ConciergeDomain, number> = {
   warranty: 30,
   trip: 14,
   pantry: 5,
+  signup: 7,
+  screen_time: 0,
+  behavior: 0,
 };
 
 const URGENCY_RANK: Record<ConciergeUrgency, number> = { overdue: 0, today: 1, soon: 2 };
 const DOMAIN_RANK: Record<ConciergeDomain, number> = {
   medication: 0,
-  bill: 1,
-  maintenance: 2,
-  pantry: 3,
-  trip: 4,
-  warranty: 5,
+  screen_time: 1,
+  behavior: 2,
+  bill: 3,
+  signup: 4,
+  maintenance: 5,
+  pantry: 6,
+  trip: 7,
+  warranty: 8,
 };
 
 /** Calendar-day offset between an ISO date/datetime and `now` (date-only math). */
@@ -226,6 +240,55 @@ export function buildConciergeDigest(snapshot: ConciergeSnapshot): ConciergeDige
       detail: off < 0 ? `Expired ${label}` : `Expires ${label}`,
       dueLabel: label,
       dayOffset: off,
+    });
+  }
+
+  // ── Signups / permission slips approaching deadline ────────────────────────
+  for (const s of snapshot.signups ?? []) {
+    const st = (s.status ?? '').toLowerCase();
+    if (!s.deadline || st === 'passed' || st === 'missed') continue;
+    const off = dayOffset(s.deadline, now);
+    if (off === null) continue;
+    const urgency = classify(off, SOON_WINDOW_DAYS.signup);
+    if (!urgency) continue;
+    const label = dueLabelFor(off);
+    items.push({
+      domain: 'signup',
+      urgency,
+      title: s.title,
+      detail: `Deadline ${label}${s.member ? ` · ${s.member}` : ''}`,
+      member: s.member ?? undefined,
+      dueLabel: label,
+      dayOffset: off,
+    });
+  }
+
+  // ── Screen-time limit violations (today only) ────────────────────────────
+  for (const st of snapshot.screenTime ?? []) {
+    if (st.usedMinutes <= st.limitMinutes) continue;
+    const pct = Math.round((st.usedMinutes / st.limitMinutes) * 100);
+    items.push({
+      domain: 'screen_time',
+      urgency: 'today',
+      title: `${st.member} screen time`,
+      detail: `${st.usedMinutes} of ${st.limitMinutes} min used (${pct}%)`,
+      member: st.member,
+      dueLabel: 'today',
+      dayOffset: 0,
+    });
+  }
+
+  // ── Behavior incidents logged today ──────────────────────────────────────
+  for (const b of snapshot.behaviorIncidents ?? []) {
+    if (b.count === 0) continue;
+    items.push({
+      domain: 'behavior',
+      urgency: 'today',
+      title: `${b.member} behavior`,
+      detail: `${b.count} incident${b.count !== 1 ? 's' : ''} today${b.latestKind ? ` · ${b.latestKind}` : ''}`,
+      member: b.member,
+      dueLabel: 'today',
+      dayOffset: 0,
     });
   }
 

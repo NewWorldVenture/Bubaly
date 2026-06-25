@@ -40,6 +40,10 @@ export async function POST(req: NextRequest) {
       { data: warranties },
       { data: trips },
       { data: pantry },
+      { data: signups },
+      { data: screenEntries },
+      { data: screenLimits },
+      { data: behaviorLogs },
     ] = await Promise.all([
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
       supabase.from('calendar_events').select('title, starts_at, ends_at, location, category, assignee_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', todayEnd).order('starts_at'),
@@ -51,13 +55,17 @@ export async function POST(req: NextRequest) {
       supabase.from('reminders').select('title, notes, remind_at').eq('family_id', familyId).eq('is_done', false).lte('remind_at', weekEnd).order('remind_at').limit(8),
       supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).gte('plan_date', today).lte('plan_date', weekEnd.slice(0, 10)).order('plan_date').limit(14),
       supabase.from('appointments').select('title, starts_at, provider, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(6),
-      // ── Cross-domain concierge signals (previously invisible to the briefing) ──
+      // ── Cross-domain concierge signals ──
       supabase.from('bills').select('name, amount, due_date, status').eq('family_id', familyId).neq('status', 'paid').lte('due_date', horizon).order('due_date').limit(20),
       supabase.from('medication_schedules').select('time_of_day, days_of_week, starts_on, ends_on, medications(name, member_id, is_active)').eq('family_id', familyId).lte('starts_on', today).limit(40),
       supabase.from('maintenance_tasks').select('title, due_at, status, completed_at').eq('family_id', familyId).in('status', ['todo', 'in_progress']).is('completed_at', null).not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
       supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
       supabase.from('vacations').select('title, destination, start_date, end_date, status').eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null).limit(20),
       supabase.from('pantry_items').select('name, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).lte('expires_at', horizon).order('expires_at').limit(25),
+      supabase.from('opportunities').select('title, deadline, member_id, status').eq('family_id', familyId).not('status', 'in', '("passed","missed")').not('deadline', 'is', null).lte('deadline', horizon).order('deadline').limit(20),
+      supabase.from('screen_time_entries').select('member_id, minutes').eq('family_id', familyId).eq('entry_date', today),
+      supabase.from('screen_time_limits').select('member_id, daily_minutes').eq('family_id', familyId),
+      supabase.from('behavior_logs').select('member_id, kind').eq('family_id', familyId).gte('occurred_at', todayStart).lte('occurred_at', todayEnd),
     ]);
 
     const memberMap = new Map((members ?? []).map(m => [m.id, m]));
@@ -92,6 +100,37 @@ export async function POST(req: NextRequest) {
         timeOfDay: fmtTimeOfDay(s.time_of_day),
       }));
 
+    // ── Aggregate screen time per member (usage vs limit) ─────────────────────
+    const stUsageByMember = new Map<string, number>();
+    for (const e of screenEntries ?? []) {
+      if (!e.member_id) continue;
+      stUsageByMember.set(e.member_id, (stUsageByMember.get(e.member_id) ?? 0) + e.minutes);
+    }
+    const stLimitByMember = new Map<string, number>();
+    for (const l of screenLimits ?? []) {
+      stLimitByMember.set(l.member_id, l.daily_minutes);
+    }
+    const screenTimeItems = [...stLimitByMember.entries()]
+      .filter(([mid]) => stUsageByMember.has(mid))
+      .map(([mid, limit]) => ({
+        member: memberMap.get(mid)?.display_name ?? 'Unknown',
+        usedMinutes: stUsageByMember.get(mid)!,
+        limitMinutes: limit,
+      }));
+
+    // ── Aggregate behavior incidents per member ────────────────────────────
+    const behaviorByMember = new Map<string, { count: number; latestKind: string | null }>();
+    for (const b of behaviorLogs ?? []) {
+      const mid = b.member_id ?? '__unassigned';
+      const prev = behaviorByMember.get(mid);
+      behaviorByMember.set(mid, { count: (prev?.count ?? 0) + 1, latestKind: b.kind ?? prev?.latestKind ?? null });
+    }
+    const behaviorItems = [...behaviorByMember.entries()].map(([mid, { count, latestKind }]) => ({
+      member: mid === '__unassigned' ? 'Family' : (memberMap.get(mid)?.display_name ?? 'Unknown'),
+      count,
+      latestKind,
+    }));
+
     const conciergeSnapshot: ConciergeSnapshot = {
       now,
       bills: (bills ?? []).map(b => ({ name: b.name, amount: b.amount, dueDate: b.due_date, status: b.status })),
@@ -100,6 +139,9 @@ export async function POST(req: NextRequest) {
       warranties: (warranties ?? []).map(w => ({ name: w.name, expiresOn: w.expires_on })),
       trips: (trips ?? []).map(t => ({ title: t.title, startDate: t.start_date, endDate: t.end_date, destination: t.destination })),
       pantry: (pantry ?? []).map(p => ({ name: p.name, expiresAt: p.expires_at })),
+      signups: (signups ?? []).map(s => ({ title: s.title, deadline: s.deadline, member: s.member_id ? memberMap.get(s.member_id)?.display_name ?? null : null, status: s.status })),
+      screenTime: screenTimeItems,
+      behaviorIncidents: behaviorItems,
     };
     const digest = buildConciergeDigest(conciergeSnapshot);
 

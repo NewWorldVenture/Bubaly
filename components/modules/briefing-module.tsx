@@ -117,6 +117,9 @@ const DOMAIN_META: Record<ConciergeDomain, { emoji: string; label: string; href:
   warranty:    { emoji: '🛡️', label: 'Warranty',    href: '/dashboard/home' },
   trip:        { emoji: '✈️', label: 'Trip',        href: '/dashboard/vacations' },
   pantry:      { emoji: '🥫', label: 'Pantry',      href: '/dashboard/pantry' },
+  signup:      { emoji: '📋', label: 'Signup',      href: '/dashboard/signups' },
+  screen_time: { emoji: '📱', label: 'Screen Time', href: '/dashboard/screen-time' },
+  behavior:    { emoji: '📝', label: 'Behavior',    href: '/dashboard/behavior' },
 };
 const DIGEST_URGENCY: Record<ConciergeUrgency, { label: string; cls: string; dot: string }> = {
   overdue: { label: 'Overdue',   cls: 'text-rose-400 bg-rose-500/10 border-rose-500/30',     dot: 'bg-rose-400' },
