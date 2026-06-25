@@ -218,3 +218,84 @@ export async function saveAllowanceRuleAction(input: {
   revalidatePath('/wallet');
   return { ok: true };
 }
+
+/** Toggle an allowance rule on/off (pause/resume). */
+export async function toggleAllowanceRuleAction(input: { id: string; isActive: boolean }): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can change allowances.' };
+  const supabase = await createServer();
+  const { error } = await supabase.from('allowance_rules')
+    .update({ is_active: input.isActive }).eq('id', input.id).eq('family_id', ctx.active.familyId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/wallet/allowance');
+  return { ok: true };
+}
+
+/** Create a savings goal (child-specific when childWalletId is given, else family-wide). */
+export async function createGoalAction(input: {
+  title: string; kind?: string; targetCents: number; childWalletId?: string | null; targetDate?: string | null;
+}): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can create goals.' };
+  const title = input.title.trim();
+  const target = Math.trunc(input.targetCents);
+  if (!title) return { ok: false, error: 'Give the goal a name.' };
+  if (!Number.isFinite(target) || target <= 0) return { ok: false, error: 'Set a target greater than $0.' };
+
+  const supabase = await createServer();
+  const { error } = await supabase.from('wallet_goals').insert({
+    family_id: ctx.active.familyId, child_wallet_id: input.childWalletId ?? null,
+    title, kind: input.kind ?? 'custom', target_cents: target, target_date: input.targetDate ?? null, created_by: ctx.user.id,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/wallet/goals');
+  return { ok: true };
+}
+
+/**
+ * Move money into a goal from a child's Save bucket. Writes an immutable
+ * goal_transfer debit against the save bucket and increments the goal's saved
+ * total (marking it reached when the target is met). Refuses to overdraw.
+ */
+export async function fundGoalAction(input: { goalId: string; amountCents: number }): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can fund goals.' };
+  const familyId = ctx.active.familyId;
+  const amount = Math.trunc(input.amountCents);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Enter an amount greater than $0.' };
+  const supabase = await createServer();
+
+  const { data: goal } = await supabase
+    .from('wallet_goals').select('id, child_wallet_id, title, target_cents, saved_cents, status')
+    .eq('id', input.goalId).eq('family_id', familyId).maybeSingle();
+  if (!goal) return { ok: false, error: 'Goal not found.' };
+  if (!goal.child_wallet_id) return { ok: false, error: 'Family goals are funded by contributions, not a single wallet.' };
+
+  // available Save-bucket balance for this child (derived from the ledger)
+  const { data: saveBucket } = await supabase
+    .from('wallet_buckets').select('id').eq('family_id', familyId).eq('child_wallet_id', goal.child_wallet_id).eq('kind', 'save').maybeSingle();
+  const { data: saveTxns } = await supabase
+    .from('wallet_transactions').select('direction, amount_cents, status')
+    .eq('family_id', familyId).eq('bucket_id', saveBucket?.id ?? '00000000-0000-0000-0000-000000000000');
+  const available = (saveTxns ?? []).reduce((s, t) => s + (t.status === 'completed' ? (t.direction === 'credit' ? t.amount_cents : -t.amount_cents) : 0), 0);
+  if (amount > available) return { ok: false, error: `Only ${(available / 100).toFixed(2)} available in Save.` };
+
+  const { error: txErr } = await supabase.from('wallet_transactions').insert({
+    family_id: familyId, child_wallet_id: goal.child_wallet_id, bucket_id: saveBucket?.id ?? null,
+    type: 'goal_transfer', status: 'completed', direction: 'debit', amount_cents: amount,
+    description: `Into goal: ${goal.title}`, related_type: 'wallet_goals', related_id: goal.id, created_by: ctx.user.id, approved_by: ctx.user.id,
+  });
+  if (txErr) return { ok: false, error: txErr.message };
+
+  const newSaved = goal.saved_cents + amount;
+  await supabase.from('wallet_goals').update({
+    saved_cents: newSaved, status: newSaved >= goal.target_cents ? 'reached' : goal.status,
+  }).eq('id', goal.id);
+  await supabase.from('wallet_audit_logs').insert({
+    family_id: familyId, actor_user_id: ctx.user.id, action: 'goal_funded', entity_type: 'wallet_goals', entity_id: goal.id,
+    detail: `Funded ${amount}c into ${goal.title}`,
+  });
+
+  revalidatePath('/wallet/goals');
+  return { ok: true };
+}
