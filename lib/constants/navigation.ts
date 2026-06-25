@@ -125,6 +125,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/dashboard/billing', label: 'Finances', icon: CreditCard, minLevel: 0 },
       { href: '/wallet', label: 'Family Wallet', icon: Wallet, minLevel: 0 },
+      { href: '/money', label: 'Bubaly Money', icon: DollarSign, minLevel: 0 },
       { href: '/dashboard/expenses', label: 'Expense Splitting', icon: DollarSign, minLevel: 1 },
       { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: RefreshCw, minLevel: 1 },
       { href: '/dashboard/insurance', label: 'Insurance Hub', icon: ShieldAlert, minLevel: 1 },
@@ -174,6 +175,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/security', label: 'Security', icon: ShieldCheck },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
   { href: '/admin/billing', label: 'Billing & Payments', icon: DollarSign },
+  { href: '/admin/stripe', label: 'Stripe Console', icon: CreditCard },
   { href: '/admin/integrations', label: 'Integrations', icon: Plug },
   { href: '/admin/sync', label: 'Sync Platform', icon: RefreshCw },
   { href: '/admin/social', label: 'Social Platform', icon: Share2 },
