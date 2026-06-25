@@ -452,6 +452,16 @@ export interface Database {
         { key: string; enabled?: boolean; description?: string | null },
         Partial<{ enabled: boolean; description: string | null }>
       >;
+      dashboard_layouts: T<
+        { id: string; family_id: string; user_id: string | null; scope: 'user' | 'family'; device_context: 'all' | 'mobile' | 'tablet' | 'desktop'; feature_keys: string[]; is_active: boolean; created_by: string | null; updated_by: string | null; metadata: Json; deleted_at: string | null } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; scope?: 'user' | 'family'; device_context?: 'all' | 'mobile' | 'tablet' | 'desktop'; feature_keys?: string[]; is_active?: boolean; created_by?: string | null; updated_by?: string | null; metadata?: Json; deleted_at?: string | null },
+        Partial<{ user_id: string | null; scope: 'user' | 'family'; device_context: 'all' | 'mobile' | 'tablet' | 'desktop'; feature_keys: string[]; is_active: boolean; updated_by: string | null; metadata: Json; deleted_at: string | null }>
+      >;
+      dashboard_layout_events: T<
+        { id: string; family_id: string; user_id: string | null; action: string; feature_key: string | null; metadata: Json; created_at: string },
+        { id?: string; family_id: string; user_id?: string | null; action: string; feature_key?: string | null; metadata?: Json },
+        Partial<{ metadata: Json }>
+      >;
       family_tree_nodes: T<
         { id: string; family_id: string; parent_node_id: string | null; member_id: string | null; name: string; relationship: string; birth_year: number | null; death_year: number | null; birth_place: string | null; photo_url: string | null; bio: string | null; metadata: Json; created_by: string | null } & Stamps,
         { id?: string; family_id: string; parent_node_id?: string | null; member_id?: string | null; name: string; relationship?: string; birth_year?: number | null; death_year?: number | null; birth_place?: string | null; photo_url?: string | null; bio?: string | null; metadata?: Json; created_by?: string | null },

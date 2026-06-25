@@ -1,6 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
+<<<<<<< Updated upstream
 Last updated: 2026-06-25 — dead-button sweep: every interactive control now works (or is gone). Keep this updated as you ship.
 
 > **Session update (2026-06-25l) — DEAD-BUTTON SWEEP + REAL DATA (opus-4-8)**
@@ -272,6 +273,43 @@ Last updated: 2026-06-25 — dead-button sweep: every interactive control now wo
 > duplicate work (this session initially rebuilt the avatars bucket before
 > discovering it was already merged). Migration numbers are a common collision
 > point; check the latest `supabase/migrations/` before adding one.
+=======
+Last updated after customizable tier-aware dashboard buttons. Keep this updated as you ship.
+
+> **Session update (2026-06-25f) — CUSTOMIZABLE TIER-AWARE DASHBOARD BUTTONS.**
+> The AI home "Quick Access" grid is now user-customizable + tier-aware, Supabase-backed.
+> Branch `claude/festive-bohr-m4cbeg`.
+> - **Migration `0089_dashboard_layouts.sql`** — `dashboard_layouts` (per-user OR family-default
+>   ordered `feature_keys[]`, scope user|family, device_context, soft-delete; partial unique
+>   indexes per (family,user,device) and (family,device)) + `dashboard_layout_events` (audit/
+>   analytics). RLS family-isolation + trigger. **VALIDATED build; ⚠️ NOT APPLIED TO PROD.**
+> - **`lib/dashboard/registry.ts`** (server-safe) — the dashboard feature registry: `DASH_FEATURES`
+>   (key/label/route/icon/category/requiredTier, real non-breaking routes), `FIXED_FEATURES`
+>   (quick_add `/capture` + ai_assistant `/dashboard/assistant`, isFixed/!customizable),
+>   `DEFAULT_LAYOUT_BY_TIER` (tier-correct), `MAX_DASH_BUTTONS=8`, `tierForPlanLevel`.
+> - **`lib/dashboard/layout.ts`** (pure; **16 tests** `tests/dashboard-layout.test.ts`):
+>   `resolvePrimary(savedKeys, tier)` (tier-filter → dedupe → drop locked/broken → gap-fill,
+>   never sparse), `validateLayout` (SERVER-side: rejects unknown/fixed/locked/dupe/over-long),
+>   `availableFeatures`/`lockedFeatures`/`addableFeatures`. Downgrade auto-drops paid buttons.
+> - **`app/(app)/dashboard/customize-actions.ts`** — `saveDashboardLayoutAction` (validated),
+>   `resetDashboardLayoutAction`, `saveFamilyDefaultLayoutAction` (parent-only),
+>   `logDashboardEventAction` (analytics). Tier resolved from the family's subscription.
+> - **`components/dashboard/quick-actions.tsx`** — Customize mode: remove, reorder (↑/↓),
+>   tap-to-replace, add via a searchable/category-filtered picker, reset, save/cancel.
+>   Fixed + and AI tiles always shown (badged "Fixed" in edit). "Unlock more" section shows
+>   locked features → route to `/pricing` (NOT the feature), logging locked/upgrade events.
+>   `components/dashboard/feature-icons.tsx` maps icon keys → Lucide (keeps registry serializable).
+> - **`ai-home-dashboard.tsx`** now loads the layout + subscription, resolves server-side, and
+>   renders `<DashboardQuickActions>` instead of the old static `QUICK_LINKS`.
+> - Verified: tsc + lint clean · `npm run build` ✓ · **full suite 989/989**.
+>
+> **DASHBOARD BUTTONS — remaining/next:** desktop drag-and-drop (currently ↑/↓ reorder, works all
+> viewports); a family-default editor UI (action `saveFamilyDefaultLayoutAction` exists); child-
+> customization permission settings (currently any member can set their own — add a family setting
+> + gate in the action); device-specific layouts (schema supports `device_context`, UI sends 'all');
+> stricter RLS so a user can only write their own row (currently family-isolation RLS + action-layer
+> ownership). Registry `requiredTier` could read live admin overrides via `resolveFeatureTiers`.
+>>>>>>> Stashed changes
 
 > ## 🏦 FAMILY WALLET — PROGRAM MAP (read this first if you're continuing the wallet)
 > A parent-controlled financial OS built as an **immutable ledger** (balances are derived by
