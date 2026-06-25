@@ -1,7 +1,34 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Wallet Goals + Allowance screens. Keep this updated as you ship.
+Last updated after the Wallet grandparent gifting flow. Keep this updated as you ship.
+
+> **Session update (2026-06-25e) — WALLET PHASE 5: GRANDPARENT GIFTING (public + approve).**
+> The headline relative-gifting flow, fully working in ledger mode (no Stripe needed). NO
+> migration. Branch `claude/festive-bohr-m4cbeg`.
+> - **`lib/wallet/gift.ts`** (pure; 8 tests): `parseSuggestedAmounts`, `clampGiftAmountCents`
+>   (min $1 / max $1000 anti-abuse), `isValidOccasion`, `giftPath`, `occasionLabel`.
+> - **PUBLIC `/gift/[token]`** (`app/gift/[token]/page.tsx` + `public-gift-form.tsx`) — unauth
+>   page (added `/gift` to middleware PUBLIC). Shows child + occasion + message + suggested
+>   amounts; a relative picks an amount, adds a note, submits. Compliance copy ("not a bank",
+>   no charge until confirmed). `export const dynamic='force-dynamic'`, robots noindex.
+> - **`app/gift/actions.ts` `submitGiftPledgeAction`** — service-client (token IS the auth),
+>   validates amount, caps 25 pending/link (anti-abuse), inserts a PENDING `gift_payments`,
+>   and notifies the family (`notifications`). No money moves until a parent approves.
+> - **`/wallet/gift`** (`gift-view.tsx`) — create shareable gift links (per child, occasion,
+>   suggested amounts), copy link; approve/decline pending gifts. **Approve → `creditChildWallet`**
+>   (type `gift_received`, allocated by split, immutable). Actions: `createGiftLinkAction`
+>   (crypto token), `approveGiftAction`, `dismissGiftAction`. Added Gifts to the wallet subnav.
+> - Verified: tsc + lint clean · `npm run build` ✓ (`/gift/[token]`, `/wallet/gift`) · suite 973/973.
+> NOTE: QR codes not yet rendered (no qrcode dep) — links are copy-to-share; add a QR (svg or a
+> small dep) as a polish follow-up. With Stripe on, the public form should run Checkout BEFORE
+> creating the pledge (use `computeFunding` for the fee breakdown), then webhook → approve.
+>
+> **WALLET — remaining (next agent):** chore-pay UI button (action `payChoreRewardAction` exists);
+> per-child page `/wallet/children/[childId]`; /wallet/cards(/order) + /wallet/babysitters +
+> /wallet/activity + /wallet/settings; /admin/wallet + /admin/stripe + /admin/card-designs;
+> per-day AI-coach metering; the full Stripe service layer + Issuing authorization webhook (needs
+> Stripe approval — see 2026-06-25a). All credits reuse `creditChildWallet` / immutable ledger.
 
 > **Session update (2026-06-25d) — WALLET PHASE 4: GOALS + ALLOWANCE SCREENS + SUBNAV.**
 > Built the UI for the goal/allowance actions + a wallet section nav. NO migration.

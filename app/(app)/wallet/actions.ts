@@ -299,3 +299,65 @@ export async function fundGoalAction(input: { goalId: string; amountCents: numbe
   revalidatePath('/wallet/goals');
   return { ok: true };
 }
+
+/** Create a public gift link for a child (relatives gift via the token). */
+export async function createGiftLinkAction(input: {
+  childWalletId: string; occasion?: string | null; message?: string | null; suggestedCents?: number[];
+}): Promise<Result & { token?: string }> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can create gift links.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+
+  const { data: cw } = await supabase.from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
+  if (!cw) return { ok: false, error: 'That wallet was not found.' };
+
+  const token = `gift_${crypto.randomUUID().replace(/-/g, '')}`;
+  const { error } = await supabase.from('gift_links').insert({
+    family_id: familyId, child_wallet_id: input.childWalletId, token,
+    occasion: input.occasion ?? null, message: input.message ?? null,
+    suggested_cents: input.suggestedCents && input.suggestedCents.length > 0 ? input.suggestedCents : undefined,
+    created_by: ctx.user.id,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/wallet/gift');
+  return { ok: true, token };
+}
+
+/** Approve a pending gift → credit the child's wallet (allocated by split). */
+export async function approveGiftAction(input: { giftPaymentId: string }): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can approve gifts.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+
+  const { data: gift } = await supabase
+    .from('gift_payments').select('id, child_wallet_id, amount_cents, status, giver_name, applied_txn_id')
+    .eq('id', input.giftPaymentId).eq('family_id', familyId).maybeSingle();
+  if (!gift) return { ok: false, error: 'Gift not found.' };
+  if (gift.status === 'completed' || gift.applied_txn_id) return { ok: false, error: 'This gift was already applied.' };
+  if (!gift.child_wallet_id) return { ok: false, error: 'This gift has no child wallet.' };
+
+  const res = await creditChildWallet(supabase, {
+    familyId, childWalletId: gift.child_wallet_id, amountCents: gift.amount_cents, type: 'gift_received',
+    description: gift.giver_name ? `Gift from ${gift.giver_name}` : 'Gift received', createdBy: ctx.user.id,
+    relatedType: 'gift_payments', relatedId: gift.id,
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+
+  await supabase.from('gift_payments').update({ status: 'completed' }).eq('id', gift.id);
+  revalidatePath('/wallet/gift');
+  return { ok: true };
+}
+
+/** Decline a pending gift (does not credit the wallet). */
+export async function dismissGiftAction(input: { giftPaymentId: string }): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can manage gifts.' };
+  const supabase = await createServer();
+  const { error } = await supabase.from('gift_payments')
+    .update({ status: 'cancelled' }).eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/wallet/gift');
+  return { ok: true };
+}
