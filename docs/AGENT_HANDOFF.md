@@ -1,7 +1,40 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-25 — AI surfaces (Concierge/Comms Hub/Front Desk) made fully actionable + frictionless. Keep this updated as you ship.
+Last updated: 2026-06-25 — dead-button sweep: every interactive control now works (or is gone). Keep this updated as you ship.
+
+> **Session update (2026-06-25l) — DEAD-BUTTON SWEEP + REAL DATA (opus-4-8)**
+>
+> Pushed to `main` (commits `639bef8`, `486b733`). tsc clean · build exit 0 ·
+> 978/978 tests pass. Audited EVERY module for non-functional buttons (a button
+> that does nothing is worse than no button) and fixed each one.
+>
+> ## Now functional (were dead)
+> - **Chores**: Filter (by priority) + Sort (due/priority/name) are real dropdowns;
+>   "View all" → My Tasks tab; "View full report" → Completed tab; the row "…" button
+>   is now a real **Delete task** (manager-only, confirm) — you previously could NOT
+>   delete a chore at all.
+> - **Calendar**: "Filters" → real category-filter dropdown (applied to all views);
+>   "View full agenda" → switches to agenda view.
+> - **Grocery**: "Share List" → native share sheet / clipboard copy of pending items.
+> - **Meals**: "Auto-plan the week ✨" → opens the AI auto-planner (was dead "Edit Meal
+>   Plan"); "Explore more ideas" → /dashboard/recipes; "View full list" → /dashboard/grocery.
+>
+> ## Fixed hardcoded placeholder data
+> - **Meals "Shopping List" sidebar** was a STATIC fake array (`['Chicken Breast', …]`,
+>   fake "14 items", fake checkmarks). Now reads **real `grocery_items`** via
+>   useRealtimeQuery (unchecked, live). This was the only fake-data placeholder found —
+>   a sweep of all inline arrays confirmed the rest are legit config (tabs/categories/
+>   palettes/day-names) and billing/finance charts read real data.
+>
+> ## Removed (redundant with tab bars)
+> - Health / School / Sports decorative "Filter"/"More" buttons + now-unused icon imports.
+>
+> ## How to keep this bar (for the next agent)
+> Run this to find dead buttons: a `<button>` with visible text/label and NO `onClick`,
+> `type="submit"`, or `disabled`. The icon-only `MoreHorizontal` "…" buttons still
+> present in **school** (row 356) and **sports** (row 240) tables are the last no-ops —
+> low-traffic; wire them to a row action (edit/delete) or remove when you touch those modules.
 
 > **Session update (2026-06-25k) — AI SURFACES MADE ACTIONABLE + FRICTIONLESS (opus-4-8)**
 >
