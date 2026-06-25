@@ -4,6 +4,17 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { AI_TOOLS, runAction } from '@/lib/ai/actions';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { evaluateTrust, roleOf } from '@/lib/trust/server';
+
+// Map a Magic-Import action to a Trust Engine domain so the governance layer can
+// allow / block / require-approval before the AI writes anything.
+const ACTION_DOMAIN: Record<string, string> = {
+  create_calendar_event: 'calendar',
+  create_chore: 'chores',
+  create_reminder: 'scheduling',
+  add_grocery_item: 'shopping',
+  create_meal_plan_entry: 'meal_planning',
+};
 
 export const runtime = 'nodejs';
 
@@ -48,15 +59,35 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as { text?: string; confirm?: Item[] };
 
     // ── Phase 2: execute the items the user confirmed ──────────────────────
+    // Every confirmed action is first evaluated by the Trust & Permissions Engine.
+    // allow → execute · require_approval → queue (don't execute) · deny → block.
     if (Array.isArray(body.confirm)) {
+      const actorRole = roleOf(ctx.active.role);
       const results = await Promise.all(
         body.confirm.map(async (item) => {
+          const domain = ACTION_DOMAIN[item.name] ?? 'tasks';
+          const { decision } = await evaluateTrust(supabase, familyId, {
+            actor: { kind: 'ai_agent', id: 'magic_import', role: actorRole },
+            domain, capability: 'automate',
+            agent: 'Magic Import',
+            title: item.summary,
+            payload: { name: item.name, args: item.args },
+            context: { confidence: 0.9 },
+          });
+
+          if (decision.effect === 'deny') {
+            return { summary: item.summary, ok: false, blocked: true, error: decision.reason };
+          }
+          if (decision.effect === 'require_approval') {
+            return { summary: item.summary, ok: false, pendingApproval: true, error: decision.reason };
+          }
           const res = await runAction({ supabase, familyId, userId }, { name: item.name, args: item.args });
           return { summary: item.summary, ok: res.ok, error: res.error };
         }),
       );
       const created = results.filter((r) => r.ok).length;
-      return NextResponse.json({ created, results });
+      const queued = results.filter((r) => 'pendingApproval' in r && r.pendingApproval).length;
+      return NextResponse.json({ created, queued, results });
     }
 
     // ── Phase 1: parse pasted text into proposed actions ───────────────────
