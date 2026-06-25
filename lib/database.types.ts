@@ -23,6 +23,11 @@ export type NutritionSubject = 'recipe' | 'meal' | 'week';
 export type NotificationType =
   | 'chore_due' | 'medication_due' | 'calendar_event' | 'school_event' | 'sports_event'
   | 'maintenance_task' | 'grocery_reminder' | 'document_expiry' | 'family_invite' | 'system';
+export type WalletTxnType =
+  | 'gift_received' | 'parent_top_up' | 'allowance' | 'chore_reward' | 'babysitter_payment'
+  | 'card_spend' | 'card_refund' | 'goal_transfer' | 'bucket_transfer' | 'withdrawal' | 'fee' | 'adjustment' | 'reversal';
+export type WalletTxnStatus =
+  | 'pending' | 'requires_parent_approval' | 'processing' | 'completed' | 'failed' | 'reversed' | 'cancelled';
 export type SubscriptionStatus =
   | 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid';
 export type AccountType = 'checking' | 'savings' | 'credit' | 'investment' | 'retirement';
@@ -371,6 +376,81 @@ export interface Database {
         { id: string; family_id: string; member_id: string | null; entry_date: string; mood: 'great' | 'good' | 'okay' | 'low' | 'stressed' | null; title: string | null; body: string; prompt: string | null; tags: string[]; is_private: boolean; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id?: string | null; entry_date?: string; mood?: 'great' | 'good' | 'okay' | 'low' | 'stressed' | null; title?: string | null; body?: string; prompt?: string | null; tags?: string[]; is_private?: boolean; created_by?: string | null },
         Partial<{ member_id: string | null; entry_date: string; mood: 'great' | 'good' | 'okay' | 'low' | 'stressed' | null; title: string | null; body: string; prompt: string | null; tags: string[]; is_private: boolean }>
+      >;
+      family_wallets: T<
+        { id: string; family_id: string; currency: string; mode: 'ledger' | 'treasury'; is_active: boolean; disclosures_accepted_at: string | null; disclosures_accepted_by: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; currency?: string; mode?: 'ledger' | 'treasury'; is_active?: boolean; disclosures_accepted_at?: string | null; disclosures_accepted_by?: string | null; created_by?: string | null },
+        Partial<{ currency: string; mode: 'ledger' | 'treasury'; is_active: boolean; disclosures_accepted_at: string | null; disclosures_accepted_by: string | null }>
+      >;
+      child_wallets: T<
+        { id: string; family_id: string; member_id: string; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; is_active?: boolean; created_by?: string | null },
+        Partial<{ is_active: boolean }>
+      >;
+      wallet_buckets: T<
+        { id: string; family_id: string; child_wallet_id: string; kind: 'spend' | 'save' | 'give' | 'invest' | 'goal'; label: string; sort_order: number } & Stamps,
+        { id?: string; family_id: string; child_wallet_id: string; kind: 'spend' | 'save' | 'give' | 'invest' | 'goal'; label: string; sort_order?: number },
+        Partial<{ label: string; sort_order: number }>
+      >;
+      wallet_transactions: T<
+        { id: string; family_id: string; child_wallet_id: string | null; bucket_id: string | null; type: WalletTxnType; status: WalletTxnStatus; direction: 'credit' | 'debit'; amount_cents: number; currency: string; description: string | null; related_type: string | null; related_id: string | null; reverses_id: string | null; stripe_ref: string | null; metadata: Json; created_by: string | null; approved_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id?: string | null; bucket_id?: string | null; type: WalletTxnType; status?: WalletTxnStatus; direction: 'credit' | 'debit'; amount_cents: number; currency?: string; description?: string | null; related_type?: string | null; related_id?: string | null; reverses_id?: string | null; stripe_ref?: string | null; metadata?: Json; created_by?: string | null; approved_by?: string | null },
+        Partial<{ status: WalletTxnStatus; description: string | null; approved_by: string | null; metadata: Json }>
+      >;
+      wallet_rules: T<
+        { id: string; family_id: string; child_wallet_id: string | null; split: Json; auto_accept_gifts: boolean; require_approval_over_cents: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id?: string | null; split?: Json; auto_accept_gifts?: boolean; require_approval_over_cents?: number; created_by?: string | null },
+        Partial<{ split: Json; auto_accept_gifts: boolean; require_approval_over_cents: number }>
+      >;
+      wallet_goals: T<
+        { id: string; family_id: string; child_wallet_id: string | null; title: string; kind: string; target_cents: number; saved_cents: number; target_date: string | null; status: string; image_url: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id?: string | null; title: string; kind?: string; target_cents: number; saved_cents?: number; target_date?: string | null; status?: string; image_url?: string | null; created_by?: string | null },
+        Partial<{ title: string; kind: string; target_cents: number; saved_cents: number; target_date: string | null; status: string; image_url: string | null }>
+      >;
+      gift_links: T<
+        { id: string; family_id: string; child_wallet_id: string | null; token: string; occasion: string | null; message: string | null; suggested_cents: number[]; is_active: boolean; expires_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id?: string | null; token: string; occasion?: string | null; message?: string | null; suggested_cents?: number[]; is_active?: boolean; expires_at?: string | null; created_by?: string | null },
+        Partial<{ occasion: string | null; message: string | null; suggested_cents: number[]; is_active: boolean; expires_at: string | null }>
+      >;
+      gift_payments: T<
+        { id: string; family_id: string; gift_link_id: string | null; child_wallet_id: string | null; giver_name: string | null; giver_email: string | null; amount_cents: number; message: string | null; occasion: string | null; status: WalletTxnStatus; stripe_ref: string | null; applied_txn_id: string | null } & Stamps,
+        { id?: string; family_id: string; gift_link_id?: string | null; child_wallet_id?: string | null; giver_name?: string | null; giver_email?: string | null; amount_cents: number; message?: string | null; occasion?: string | null; status?: WalletTxnStatus; stripe_ref?: string | null; applied_txn_id?: string | null },
+        Partial<{ status: WalletTxnStatus; applied_txn_id: string | null; stripe_ref: string | null }>
+      >;
+      allowance_rules: T<
+        { id: string; family_id: string; child_wallet_id: string; amount_cents: number; cadence: 'weekly' | 'biweekly' | 'monthly'; split: Json | null; is_active: boolean; next_run_on: string | null; last_run_on: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id: string; amount_cents: number; cadence?: 'weekly' | 'biweekly' | 'monthly'; split?: Json | null; is_active?: boolean; next_run_on?: string | null; last_run_on?: string | null; created_by?: string | null },
+        Partial<{ amount_cents: number; cadence: 'weekly' | 'biweekly' | 'monthly'; split: Json | null; is_active: boolean; next_run_on: string | null; last_run_on: string | null }>
+      >;
+      babysitter_profiles: T<
+        { id: string; family_id: string; name: string; phone: string | null; email: string | null; rate_cents: number | null; notes: string | null; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; phone?: string | null; email?: string | null; rate_cents?: number | null; notes?: string | null; is_active?: boolean; created_by?: string | null },
+        Partial<{ name: string; phone: string | null; email: string | null; rate_cents: number | null; notes: string | null; is_active: boolean }>
+      >;
+      babysitter_payments: T<
+        { id: string; family_id: string; babysitter_id: string | null; event_id: string | null; hours: number | null; rate_cents: number | null; tip_cents: number; amount_cents: number; status: WalletTxnStatus; stripe_ref: string | null; receipt_url: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; babysitter_id?: string | null; event_id?: string | null; hours?: number | null; rate_cents?: number | null; tip_cents?: number; amount_cents: number; status?: WalletTxnStatus; stripe_ref?: string | null; receipt_url?: string | null; created_by?: string | null },
+        Partial<{ status: WalletTxnStatus; tip_cents: number; receipt_url: string | null }>
+      >;
+      parent_approvals: T<
+        { id: string; family_id: string; kind: string; ref_type: string | null; ref_id: string | null; amount_cents: number | null; status: 'pending' | 'approved' | 'rejected'; requested_by: string | null; decided_by: string | null; decided_at: string | null; note: string | null } & Stamps,
+        { id?: string; family_id: string; kind: string; ref_type?: string | null; ref_id?: string | null; amount_cents?: number | null; status?: 'pending' | 'approved' | 'rejected'; requested_by?: string | null; decided_by?: string | null; decided_at?: string | null; note?: string | null },
+        Partial<{ status: 'pending' | 'approved' | 'rejected'; decided_by: string | null; decided_at: string | null; note: string | null }>
+      >;
+      wallet_audit_logs: T<
+        { id: string; family_id: string; actor_user_id: string | null; action: string; entity_type: string | null; entity_id: string | null; detail: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; actor_user_id?: string | null; action: string; entity_type?: string | null; entity_id?: string | null; detail?: string | null; metadata?: Json },
+        Partial<{ detail: string | null; metadata: Json }>
+      >;
+      compliance_disclosures: T<
+        { id: string; family_id: string; kind: string; version: string; accepted_by: string | null; accepted_at: string; ip_address: string | null } & Stamps,
+        { id?: string; family_id: string; kind: string; version: string; accepted_by?: string | null; accepted_at?: string; ip_address?: string | null },
+        Partial<{ kind: string; version: string }>
+      >;
+      feature_flags: T<
+        { key: string; enabled: boolean; description: string | null; updated_at: string },
+        { key: string; enabled?: boolean; description?: string | null },
+        Partial<{ enabled: boolean; description: string | null }>
       >;
       family_tree_nodes: T<
         { id: string; family_id: string; parent_node_id: string | null; member_id: string | null; name: string; relationship: string; birth_year: number | null; death_year: number | null; birth_place: string | null; photo_url: string | null; bio: string | null; metadata: Json; created_by: string | null } & Stamps,

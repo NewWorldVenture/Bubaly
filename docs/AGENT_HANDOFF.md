@@ -1,7 +1,75 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-25, session `claude/connect-8ysp00` — International phone + avatar picker for onboarding. Keep this updated as you ship.
+Last updated after the Bubaly Family Wallet (virtual-ledger MVP). Keep this updated as you ship.
+
+> **Session update (2026-06-25a) — BUBALY FAMILY WALLET: virtual-ledger MVP.**
+> Built the foundation of the family financial OS. The spec is huge (Stripe
+> Connect/Treasury/Issuing/cards) — most of which needs Stripe approval and can't run
+> live — so this ships the REQUIRED baseline the spec itself designates: a
+> production-ready, 100% Supabase-wired **virtual-ledger** wallet. Stripe layers plug
+> into this ledger next. Branch `claude/festive-bohr-m4cbeg`.
+>
+> **BUILT:**
+> - **Migration `0088_family_wallet.sql`** — 14 family-scoped tables + global `feature_flags`.
+>   Enums: wallet_mode, wallet_bucket_kind, wallet_txn_type (13), wallet_txn_status (7),
+>   wallet_txn_direction, allowance_cadence, approval_status. Tables: family_wallets,
+>   child_wallets, wallet_buckets, **wallet_transactions (IMMUTABLE LEDGER)**, wallet_rules,
+>   wallet_goals, gift_links, gift_payments, allowance_rules, babysitter_profiles,
+>   babysitter_payments, parent_approvals, wallet_audit_logs, compliance_disclosures.
+>   Family-scoped RLS + set_updated_at triggers (DO-loop). feature_flags is global
+>   (authenticated SELECT) and SEEDS the 10 flags (virtual_ledger/babysitter/gifting/ai
+>   ON; all stripe_* OFF). **VALIDATED build; ⚠️ NOT APPLIED TO PROD.**
+> - **`lib/wallet/ledger.ts`** (pure; **16 tests** `tests/wallet-ledger.test.ts` incl. an
+>   exhaustive cent-conservation sweep): `allocate(cents, split)` (floors + distributes
+>   remainder so parts ALWAYS sum to the whole, never funds a 0% bucket), `balanceFromLedger`
+>   / `bucketBalances` (derive balances; only `completed` counts; credit+/debit−),
+>   `reversalOf` (immutable corrections), `goalProgress`/`weeksToGoal` (AI forecast math),
+>   `formatCents`, split validation. THE SINGLE SOURCE OF TRUTH for money math (server + client).
+> - **`app/(app)/wallet/actions.ts`** — `activateFamilyWalletAction` (parent-gated; provisions
+>   family wallet + child wallets + 4 buckets + default rule + disclosure record; idempotent
+>   upserts) and `addFundsAction` (parent top-up → `allocate` across buckets → writes one
+>   immutable completed credit PER bucket; audit-logged).
+> - **`app/(app)/wallet/page.tsx`** (server) — loads wallet/children/buckets/txns, computes
+>   balances via the ledger lib, renders dashboard or activation.
+> - **`components/wallet/wallet-activation.tsx`** — explains product, shows **compliance
+>   disclosures** ("Bubaly is not a bank", parent-controlled, no FDIC/interest claims, fees
+>   disclosed), parent-only Activate w/ checkbox consent → records `compliance_disclosures`.
+> - **`components/wallet/wallet-dashboard.tsx`** — mobile-first: family total, per-child
+>   balance + Spend/Save/Give/Invest buckets, recent ledger activity, parent "Add funds" modal.
+> - **Wiring:** feature-catalog `family-wallet` (Finances & Admin, free, /wallet); nav item
+>   (Wallet icon); types for all 15 tables + WalletTxnType/Status aliases.
+> - Also fixed a PRE-EXISTING red test on main (`onboarding-profile`: phone became optional
+>   in validation but the test wasn't updated) so the suite is green again.
+> - Verified: tsc + lint clean · `npm run build` ✓ (/wallet) · **full suite 938/938**.
+>
+> **WALLET NEXT PHASES (documented for the next agent — build ON the ledger above):**
+> 1. **Remaining money-movement actions** (all write immutable `wallet_transactions`, reuse
+>    `allocate`): chore_reward (on chore approval), allowance run (cron over `allowance_rules`
+>    using next_run_on), bucket_transfer, goal_transfer (fund `wallet_goals`), withdrawal,
+>    babysitter_payment. Gate amounts > `wallet_rules.require_approval_over_cents` via
+>    `parent_approvals`.
+> 2. **Grandparent gifting**: `/wallet/gift/[token]` PUBLIC page reading `gift_links`,
+>    Stripe Checkout (when `stripe_payments_enabled`) → webhook `checkout.session.completed`
+>    creates a `gift_payments` row → on parent approval (or `auto_accept_gifts`) `allocate`
+>    into buckets. Add QR + suggested amounts (already on gift_links). Rate-limit the public route.
+> 3. **Stripe service layer** (`lib/stripe/*`): client w/ idempotency keys; Connect onboarding
+>    (`create-account-link`), Treasury financial accounts, Issuing cardholders + virtual/physical
+>    cards, real-time `issuing_authorization.request` webhook that checks card status + bucket
+>    balance + parent rules + blocked MCCs (gambling/adult/etc, ATM off by default) → approve/decline.
+>    Stripe tables to add: stripe_customers, stripe_connected_accounts, stripe_financial_accounts,
+>    stripe_cardholders, stripe_issuing_cards, stripe_authorizations, card_controls, card_designs,
+>    stripe_webhook_events. ALL gated by the feature_flags so the app stays in ledger mode until
+>    Treasury/Issuing are approved.
+> 4. **AI wallet coach** (`/api/ai/wallet`): goal forecasts (use `weeksToGoal`), allowance-by-age,
+>    chore pricing, "how much has X saved", monthly money report. Wire into AI Concierge.
+> 5. **Pages from spec** still to build: /wallet/children/[childId], /wallet/goals, /wallet/cards(/order),
+>    /wallet/allowance, /wallet/chores, /wallet/babysitters, /wallet/activity, /wallet/settings,
+>    /admin/wallet, /admin/stripe, /admin/card-designs.
+> ENV (add when wiring Stripe): STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET,
+> STRIPE_CONNECT_CLIENT_ID, STRIPE_TREASURY_ENABLED, STRIPE_ISSUING_ENABLED,
+> STRIPE_CARD_CUSTOMIZATION_ENABLED, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY. Flip the matching
+> `feature_flags` rows ON only after Stripe review/approval.
 
 > **Session update (2026-06-25, branch `claude/connect-8ysp00`, pushed direct to `main`) — INTERNATIONAL PHONE SUPPORT + AVATAR PICKER IN ONBOARDING.**
 >

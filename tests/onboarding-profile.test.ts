@@ -57,10 +57,11 @@ describe('isLikelyPhone', () => {
 });
 
 describe('profile schemas', () => {
-  it('onboardingProfileSchema requires name, phone, email', () => {
+  it('onboardingProfileSchema requires name + email; phone is optional', () => {
     expect(onboardingProfileSchema.safeParse({ firstName: 'A', lastName: 'B', phone: '5551234', email: 'a@b.com' }).success).toBe(true);
     expect(onboardingProfileSchema.safeParse({ firstName: '', lastName: 'B', phone: '5551234', email: 'a@b.com' }).success).toBe(false);
-    expect(onboardingProfileSchema.safeParse({ firstName: 'A', lastName: 'B', phone: '12', email: 'a@b.com' }).success).toBe(false);
+    // phone is now optional (collected later), so it no longer gates onboarding
+    expect(onboardingProfileSchema.safeParse({ firstName: 'A', lastName: 'B', email: 'a@b.com' }).success).toBe(true);
     expect(onboardingProfileSchema.safeParse({ firstName: 'A', lastName: 'B', phone: '5551234', email: 'nope' }).success).toBe(false);
   });
   it('profileUpdateSchema requires name + phone (no email)', () => {
