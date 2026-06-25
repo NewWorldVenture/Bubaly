@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
+import { AvatarPicker } from '@/components/ui/avatar-picker';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { ROLE_LABELS, INVITABLE_ROLES, isAdmin } from '@/lib/constants/roles';
@@ -40,15 +41,15 @@ export function SettingsModule() {
   // Account profile (name + phone) live in `profiles`, not in useApp() — load it
   // once so the form prefills the values captured during onboarding.
   const [profileLoaded, setProfileLoaded] = useState(false);
-  const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', phone: '' });
+  const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', phone: '', avatarUrl: '' });
   useEffect(() => {
     let active = true;
     (async () => {
       const supabase = createClient();
-      const { data } = await supabase.from('profiles').select('full_name, phone').eq('id', userId).maybeSingle();
+      const { data } = await supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', userId).maybeSingle();
       if (!active) return;
       const { firstName, lastName } = splitFullName(data?.full_name ?? selfMember?.display_name ?? '');
-      setProfileForm({ firstName, lastName, phone: data?.phone ?? '' });
+      setProfileForm({ firstName, lastName, phone: data?.phone ?? '', avatarUrl: data?.avatar_url ?? '' });
       setProfileLoaded(true);
     })();
     return () => { active = false; };
@@ -110,6 +111,13 @@ export function SettingsModule() {
       <Card>
         <h2 className="mb-4 text-base font-semibold">Your profile</h2>
         <form onSubmit={saveProfile} className="space-y-4">
+          {profileLoaded && (
+            <AvatarPicker
+              defaultValue={profileForm.avatarUrl}
+              displayName={`${profileForm.firstName} ${profileForm.lastName}`.trim()}
+              onChange={(url) => setProfileForm((f) => ({ ...f, avatarUrl: url }))}
+            />
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="First name" required>
               {(id) => (
@@ -125,7 +133,7 @@ export function SettingsModule() {
                   placeholder="Rivera" disabled={!profileLoaded} />
               )}
             </Field>
-            <Field label="Contact phone" required>
+            <Field label="Contact phone">
               {(id) => (
                 <Input id={id} type="tel" inputMode="tel" value={profileForm.phone}
                   onChange={(e) => setProfileForm((f) => ({ ...f, phone: e.target.value }))}

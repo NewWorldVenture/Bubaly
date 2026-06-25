@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Wallet grandparent gifting flow. Keep this updated as you ship.
+Last updated after onboarding avatar/phone production-readiness (avatars bucket, 0089). Keep this updated as you ship.
 
 > ## 🏦 FAMILY WALLET — PROGRAM MAP (read this first if you're continuing the wallet)
 > A parent-controlled financial OS built as an **immutable ledger** (balances are derived by
@@ -48,6 +48,28 @@ Last updated after the Wallet grandparent gifting flow. Keep this updated as you
 > NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY. Also ensure CRON_SECRET is set (allowance/autopilot crons).
 >
 > **Per-session wallet detail is in the 2026-06-25a..f entries below.**
+
+> **Session update (2026-06-25g) — ONBOARDING AVATAR/PHONE: production-ready (PR #142).**
+> The international-phone + avatar-picker feature (files `lib/utils/phone.ts`,
+> `components/ui/phone-input.tsx`, `lib/storage/avatars.ts`, `components/ui/avatar-picker.tsx`,
+> wizard/validation/profiles wiring) was already on `main`; the one missing piece —
+> the Storage bucket the uploader needs — is now shipped, plus avatar editing beyond
+> onboarding. Branch `claude/onboarding-phone-avatar`.
+> - **Migration `0089_avatars_bucket.sql`** — creates the PUBLIC `avatars` bucket
+>   (5 MB, image MIME allow-list) + storage.objects RLS: public SELECT; INSERT/UPDATE/
+>   DELETE scoped to the uploader's own `{user_id}/` folder. **No manual setup now.**
+>   ⚠️ APPLY 0089 TO PROD.
+> - **Avatar editing in Settings** — `AvatarPicker` gained an optional `onChange`
+>   (additive; onboarding's hidden-input/FormData path unchanged). Settings "Your
+>   profile" now loads + edits `avatar_url` and saves it through
+>   `updateMyProfileAction` → `saveUserProfile` (already supported `avatarUrl`).
+>   `profileUpdateSchema` now carries `avatarUrl` and makes **phone optional**
+>   (frictionless — matches onboarding); the Settings phone field dropped its
+>   required marker.
+> - Verified: tsc + lint clean · `npm run build` ✓ · **full suite 978/978**.
+> - PR #142's branch (`claude/connect-8ysp00`) is a 120-commit divergent branch off an
+>   ancient base — NOT cleanly mergeable; its feature is delivered on `main` via this
+>   clean change, so #142 can be closed as superseded.
 
 > **Session update (2026-06-25f) — WALLET PHASE 6: PER-CHILD PAGE + ACTIVITY LEDGER.**
 > Two more no-Stripe screens, all reads derived from the immutable ledger. NO migration.

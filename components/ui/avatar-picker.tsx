@@ -43,13 +43,16 @@ interface AvatarPickerProps {
   defaultValue?: string;
   /** Used to render initials in the live preview when no avatar is set */
   displayName?: string;
+  /** Notified whenever the selection changes (for controlled/state-driven forms). */
+  onChange?: (url: string) => void;
 }
 
-export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayName = '' }: AvatarPickerProps) {
-  const [selected, setSelected] = useState(defaultValue);
+export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayName = '', onChange }: AvatarPickerProps) {
+  const [selected, setSelectedState] = useState(defaultValue);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const setSelected = (v: string) => { setSelectedState(v); onChange?.(v); };
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

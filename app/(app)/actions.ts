@@ -9,7 +9,7 @@ import { saveUserProfile } from '@/lib/server/profiles';
 /** Updates the signed-in user's account profile (name + contact phone). Keeps
  *  their family_members display name in sync with the first name. */
 export async function updateMyProfileAction(input: {
-  firstName: string; lastName: string; phone: string;
+  firstName: string; lastName: string; phone: string; avatarUrl?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const parsed = profileUpdateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid details' };

@@ -44,7 +44,8 @@ export type OnboardingProfileInput = z.infer<typeof onboardingProfileSchema>;
 export const profileUpdateSchema = z.object({
   firstName: z.string().trim().min(1, 'Enter your first name').max(60),
   lastName: z.string().trim().min(1, 'Enter your last name').max(60),
-  phone: z.string().trim().min(7, 'Enter a valid phone number').max(30),
+  phone: z.string().trim().max(30).optional().default(''),
+  avatarUrl: z.string().max(5000).optional().default(''),
 });
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
 
