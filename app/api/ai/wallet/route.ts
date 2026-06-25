@@ -3,7 +3,7 @@ import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { planLevel } from '@/lib/constants/plans';
-import { walletTierForPlanLevel, aiCoachLevel } from '@/lib/wallet/tiers';
+import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { buildWalletCoachPrompt, parseWalletCoach, type CoachChild, type CoachGoal } from '@/lib/wallet/coach';
 
@@ -22,6 +22,25 @@ export async function POST() {
     const tier = walletTierForPlanLevel(planLevel(sub?.plan ?? null));
     if (aiCoachLevel(tier) === 'none') {
       return NextResponse.json({ error: 'The AI Money Coach is available on the Basic and Plus plans.' }, { status: 403 });
+    }
+
+    // Per-day metering: the limited (Basic) tier is capped at AI_COACH_DAILY_LIMIT
+    // calls/day. We count today's `ai_coach_call` audit rows for this family.
+    const dailyLimit = AI_COACH_DAILY_LIMIT[tier];
+    if (Number.isFinite(dailyLimit)) {
+      const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+      const { count: usedToday } = await supabase
+        .from('wallet_audit_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('family_id', familyId)
+        .eq('action', 'ai_coach_call')
+        .gte('created_at', startOfDay.toISOString());
+      if ((usedToday ?? 0) >= dailyLimit) {
+        return NextResponse.json(
+          { error: `You've reached today's AI Money Coach limit (${dailyLimit}/day on your plan). Upgrade to Plus for unlimited coaching.` },
+          { status: 429 },
+        );
+      }
     }
 
     const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }, { data: goals }] = await Promise.all([
@@ -68,6 +87,14 @@ export async function POST() {
     if (!coaching.headline && coaching.insights.length === 0) {
       return NextResponse.json({ error: 'Could not generate coaching right now. Please try again.' }, { status: 502 });
     }
+
+    // Record this call for per-day metering (only matters for the metered tier,
+    // but logging always keeps the count honest if the plan changes mid-day).
+    await supabase.from('wallet_audit_logs').insert({
+      family_id: familyId, actor_user_id: ctx.user.id, action: 'ai_coach_call',
+      entity_type: 'ai_wallet_coach', detail: 'AI Money Coach generated',
+    });
+
     return NextResponse.json({ coaching, tier });
   } catch (err) {
     console.error('Wallet coach error:', err);

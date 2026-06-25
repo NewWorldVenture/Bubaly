@@ -239,3 +239,19 @@ export async function adminUpdateTicketStatusAction(ticketId: string, status: Ti
   revalidatePath('/admin/support');
   return { ok: true };
 }
+
+/** Toggle a global feature flag (e.g. wallet_virtual_ledger_enabled, stripe_*).
+ *  Super-admin only; the single source of truth for what the wallet exposes. */
+export async function adminToggleFeatureFlagAction(key: string, enabled: boolean): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+  if (!key || key.length > 100) return { ok: false, error: 'Invalid flag key' };
+
+  const supabase = createServiceClient();
+  const { error } = await supabase.from('feature_flags').update({ enabled }).eq('key', key);
+  if (error) return { ok: false, error: error.message };
+
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'feature_flags', resourceId: key, metadata: { enabled } });
+  revalidatePath('/admin/wallet');
+  return { ok: true };
+}
