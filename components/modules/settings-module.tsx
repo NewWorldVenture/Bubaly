@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
 import { AvatarPicker } from '@/components/ui/avatar-picker';
+import { PhoneInput } from '@/components/ui/phone-input';
+import { guessDialCodeFromPhone, extractLocalNumber, COUNTRY_DIAL_CODES } from '@/lib/utils/phone';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { ROLE_LABELS, INVITABLE_ROLES, isAdmin } from '@/lib/constants/roles';
@@ -55,6 +57,11 @@ export function SettingsModule() {
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  // Pre-select the country dial code from the stored E.164 number (PhoneInput
+  // falls back to its own locale guess when there's no saved number).
+  const savedDialCode = guessDialCodeFromPhone(profileForm.phone);
+  const savedCountryCode = COUNTRY_DIAL_CODES.find((c) => c.dialCode === savedDialCode)?.code;
 
   async function chooseDashboard(view: DashboardView) {
     if (view === dashboardView || savingDashboard) return;
@@ -133,11 +140,19 @@ export function SettingsModule() {
                   placeholder="Rivera" disabled={!profileLoaded} />
               )}
             </Field>
-            <Field label="Contact phone">
-              {(id) => (
-                <Input id={id} type="tel" inputMode="tel" value={profileForm.phone}
-                  onChange={(e) => setProfileForm((f) => ({ ...f, phone: e.target.value }))}
-                  placeholder="(555) 123-4567" disabled={!profileLoaded} />
+            <Field label="Contact phone" hint="Optional">
+              {() => (
+                profileLoaded ? (
+                  <PhoneInput
+                    defaultDialCode={savedDialCode}
+                    defaultCountryCode={savedCountryCode}
+                    defaultLocalNumber={extractLocalNumber(profileForm.phone, savedDialCode)}
+                    onChange={(e164) => setProfileForm((f) => ({ ...f, phone: e164 }))}
+                  />
+                ) : (
+                  <Input type="tel" inputMode="tel" value={profileForm.phone}
+                    placeholder="(555) 123-4567" disabled />
+                )
               )}
             </Field>
             <Field label="Email" hint="Managed by your sign-in">
