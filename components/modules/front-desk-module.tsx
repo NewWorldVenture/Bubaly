@@ -589,32 +589,79 @@ function FrontDeskSettingsModal({ familyId, settings, onClose, onSaved }: {
   );
 }
 
+const VALID_CLASS = new Set(Object.keys(CLASS_CONFIG));
+const VALID_PRIORITY = new Set(['low', 'normal', 'high', 'urgent']);
+
 function LogCallModal({ familyId, userId, onClose, onSaved }: {
   familyId: string; userId: string; onClose: () => void; onSaved: () => void;
 }) {
-  const { error: toastError } = useToast();
+  const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  // Controlled fields so "Analyze with AI" can populate them.
+  const [callerName, setCallerName] = useState('');
+  const [callerNumber, setCallerNumber] = useState('');
+  const [status, setStatus] = useState('screened');
+  const [classification, setClassification] = useState('unknown');
+  const [priority, setPriority] = useState('normal');
+  const [summary, setSummary] = useState('');
+  const [transcript, setTranscript] = useState('');
+  const [actionItems, setActionItems] = useState<string[]>([]);
+
+  // The AI Call Guardian brain: read the transcript, classify the caller, extract
+  // a summary + action items + priority. Fills the form for one-tap review & save.
+  async function analyze() {
+    if (!transcript.trim() || analyzing) return;
+    setAnalyzing(true);
+    try {
+      const res = await fetch('/api/ai/assist', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemPrompt: `You are an AI call-screening assistant for a family. Read the call transcript or voicemail and respond with ONLY a JSON object (no markdown, no prose) of this exact shape:
+{"summary": string, "classification": one of ["important","known","unknown","spam","robocall","telemarketer"], "priority": one of ["low","normal","high","urgent"], "action_items": string[]}
+Keep the summary to one sentence. action_items are concrete follow-ups for the family (empty array if none).`,
+          messages: [{ role: 'user', content: `${callerName ? `Caller: ${callerName}\n` : ''}${callerNumber ? `Number: ${callerNumber}\n` : ''}Transcript:\n${transcript}` }],
+          maxTokens: 400,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toastError(data.error ?? 'Could not analyze the call.'); return; }
+      let parsed: { summary?: string; classification?: string; priority?: string; action_items?: unknown };
+      try {
+        const raw = String(data.message ?? '').replace(/```json\s*|\s*```/g, '').trim();
+        parsed = JSON.parse(raw);
+      } catch {
+        // Fall back to using the raw text as the summary if it isn't valid JSON.
+        setSummary(String(data.message ?? '').slice(0, 500));
+        success('AI summary added');
+        return;
+      }
+      if (parsed.summary) setSummary(String(parsed.summary).slice(0, 500));
+      if (parsed.classification && VALID_CLASS.has(parsed.classification)) setClassification(parsed.classification);
+      if (parsed.priority && VALID_PRIORITY.has(parsed.priority)) setPriority(parsed.priority);
+      if (Array.isArray(parsed.action_items)) setActionItems(parsed.action_items.map(String).filter(Boolean).slice(0, 10));
+      success('AI analyzed the call');
+    } catch {
+      toastError('Could not reach the AI. Please try again.');
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (loading) return;
-    const form = new FormData(e.currentTarget);
-    const caller_name = String(form.get('caller_name') ?? '').trim() || null;
-    const caller_number = String(form.get('caller_number') ?? '').trim() || null;
-    const status = String(form.get('status') ?? 'screened');
-    const classification = String(form.get('classification') ?? 'unknown');
-    const priority = String(form.get('priority') ?? 'normal');
-    const ai_summary = String(form.get('ai_summary') ?? '').trim() || null;
-    const transcript = String(form.get('transcript') ?? '').trim() || null;
-
-    if (!caller_name && !caller_number) return toastError('Add a caller name or number');
+    if (!callerName.trim() && !callerNumber.trim()) return toastError('Add a caller name or number');
 
     setLoading(true);
     const supabase = createClient();
     const { error } = await supabase.from('call_logs').insert({
       family_id: familyId, created_by: userId,
-      caller_name, caller_number, status, classification, priority,
-      ai_summary, transcript, direction: 'inbound', is_read: false,
+      caller_name: callerName.trim() || null, caller_number: callerNumber.trim() || null,
+      status, classification, priority,
+      ai_summary: summary.trim() || null, transcript: transcript.trim() || null,
+      action_items: actionItems,
+      direction: 'inbound', is_read: false,
     });
     setLoading(false);
     if (error) return toastError(describeDbError(error));
@@ -625,26 +672,51 @@ function LogCallModal({ familyId, userId, onClose, onSaved }: {
     <Modal open title="Log a Call" onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Caller name">{id => <Input id={id} name="caller_name" placeholder="Dr. Smith's office" />}</Field>
-          <Field label="Number">{id => <Input id={id} name="caller_number" placeholder="+1 555 …" />}</Field>
+          <Field label="Caller name">{id => <Input id={id} value={callerName} onChange={e => setCallerName(e.target.value)} placeholder="Dr. Smith's office" />}</Field>
+          <Field label="Number">{id => <Input id={id} value={callerNumber} onChange={e => setCallerNumber(e.target.value)} placeholder="+1 555 …" />}</Field>
         </div>
+
+        <Field label="Transcript / Voicemail / Notes">
+          {id => <Textarea id={id} value={transcript} onChange={e => setTranscript(e.target.value)} rows={3} placeholder="Paste the voicemail or what was discussed…" />}
+        </Field>
+        <button type="button" onClick={analyze} disabled={!transcript.trim() || analyzing}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand/10 px-3 py-2 text-xs font-semibold text-brand hover:bg-brand/20 transition disabled:opacity-50">
+          {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+          {analyzing ? 'Analyzing…' : 'Analyze with AI'}
+        </button>
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="Status">
-            {id => <Select id={id} name="status">{Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>}
+            {id => <Select id={id} value={status} onChange={e => setStatus(e.target.value)}>{Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>}
           </Field>
           <Field label="Classification">
-            {id => <Select id={id} name="classification">{Object.entries(CLASS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>}
+            {id => <Select id={id} value={classification} onChange={e => setClassification(e.target.value)}>{Object.entries(CLASS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>}
           </Field>
         </div>
         <Field label="Priority">
-          {id => <Select id={id} name="priority"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></Select>}
+          {id => <Select id={id} value={priority} onChange={e => setPriority(e.target.value)}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></Select>}
         </Field>
         <Field label="AI summary">
-          {id => <Input id={id} name="ai_summary" placeholder="Confirming Emma's appointment for Thursday 3pm" />}
+          {id => <Input id={id} value={summary} onChange={e => setSummary(e.target.value)} placeholder="Confirming Emma's appointment for Thursday 3pm" />}
         </Field>
-        <Field label="Transcript / Notes">
-          {id => <Textarea id={id} name="transcript" rows={3} placeholder="What was discussed…" />}
-        </Field>
+
+        {actionItems.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">Action items (AI)</p>
+            <div className="space-y-1">
+              {actionItems.map((a, i) => (
+                <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/8 border border-amber-500/20 px-2.5 py-1.5">
+                  <CheckCircle2 className="h-3 w-3 text-amber-400 flex-shrink-0" />
+                  <span className="flex-1 text-[11px] text-fg/90">{a}</span>
+                  <button type="button" onClick={() => setActionItems(items => items.filter((_, j) => j !== i))} className="text-muted hover:text-red-400">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={loading}>{loading ? 'Saving…' : 'Log Call'}</Button>
