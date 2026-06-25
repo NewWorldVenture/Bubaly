@@ -128,6 +128,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     layout: 'grid',
     items: [
       { href: '/dashboard/billing', label: 'Finances', icon: CreditCard, minLevel: 0 },
+      { href: '/dashboard/wallet', label: 'Family Wallet', icon: Wallet, minLevel: 1 },
       { href: '/dashboard/expenses', label: 'Expense Splitting', icon: DollarSign, minLevel: 1 },
       { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: RefreshCw, minLevel: 1 },
       { href: '/dashboard/insurance', label: 'Insurance Hub', icon: ShieldAlert, minLevel: 1 },
@@ -150,7 +151,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/autonomous-family-management', label: 'Autonomous AI', icon: Bot, minLevel: 2 },
       { href: '/dashboard/family-ai-assistant', label: 'AI Assistant', icon: Sparkles, minLevel: 2 },
       { href: '/dashboard/family-digital-twin', label: 'Digital Twin', icon: Brain, minLevel: 2 },
-      { href: '/dashboard/family-cfo', label: 'Family CFO', icon: Wallet, minLevel: 2 },
+      { href: '/dashboard/family-cfo', label: 'Family CFO', icon: BarChart3, minLevel: 2 },
       { href: '/dashboard/family-coo', label: 'Family COO', icon: ClipboardList, minLevel: 2 },
       { href: '/dashboard/family-health', label: 'Health Coordinator', icon: HeartPulse, minLevel: 2 },
       { href: '/dashboard/family-school', label: 'School Hub', icon: GraduationCap, minLevel: 2 },

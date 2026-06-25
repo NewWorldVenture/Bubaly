@@ -617,6 +617,22 @@ export interface Database {
         { id?: string; family_id: string; name: string; target_amount: number; current_amount?: number; target_date?: string | null; emoji?: string | null; created_by?: string | null },
         Partial<{ name: string; target_amount: number; current_amount: number; target_date: string | null; emoji: string | null }>
       >;
+      // ── Wallet ──────────────────────────────────────────────
+      wallet_buckets: T<
+        { id: string; family_id: string; member_id: string; bucket: string; balance_cents: number; target_cents: number | null; emoji: string | null; sort_order: number; created_at: string; updated_at: string },
+        { id?: string; family_id: string; member_id: string; bucket: string; balance_cents?: number; target_cents?: number | null; emoji?: string | null; sort_order?: number },
+        Partial<{ bucket: string; balance_cents: number; target_cents: number | null; emoji: string | null; sort_order: number }>
+      >;
+      wallet_rules: T<
+        { id: string; family_id: string; member_id: string; bucket: string; pct: number; created_at: string; updated_at: string },
+        { id?: string; family_id: string; member_id: string; bucket: string; pct: number },
+        Partial<{ bucket: string; pct: number }>
+      >;
+      wallet_transactions: T<
+        { id: string; family_id: string; member_id: string; bucket: string; amount_cents: number; kind: string; description: string | null; reference_id: string | null; created_by: string | null; created_at: string },
+        { id?: string; family_id: string; member_id: string; bucket: string; amount_cents: number; kind: string; description?: string | null; reference_id?: string | null; created_by?: string | null },
+        Partial<{ bucket: string; amount_cents: number; kind: string; description: string | null }>
+      >;
       // ── Health ──────────────────────────────────────────────
       health_metrics: T<
         { id: string; family_id: string; member_id: string; type: MetricType; value: number; unit: string | null; recorded_at: string; created_at: string },
