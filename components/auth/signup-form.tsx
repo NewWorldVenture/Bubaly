@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MailCheck } from 'lucide-react';
+import { MailCheck, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Field } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { signUpSchema, fieldErrors } from '@/lib/validation';
-import { GoogleIcon } from '@/components/auth/google-icon';
+import { OAuthButtons } from '@/components/auth/oauth-buttons';
+import { LegalConsent } from '@/components/auth/legal-consent';
 
 export function SignupForm() {
   const router = useRouter();
@@ -17,24 +18,8 @@ export function SignupForm() {
   const { error: toastError } = useToast();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
+  const [showEmail, setShowEmail] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
-
-  async function signUpWithGoogle() {
-    setGoogleLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
-        queryParams: { access_type: 'offline', prompt: 'consent' },
-      },
-    });
-    if (error) {
-      toastError(error.message);
-      setGoogleLoading(false);
-    }
-  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -63,7 +48,6 @@ export function SignupForm() {
         },
       });
       if (error) throw error;
-      // If email confirmation is required, there's no active session yet.
       if (!data.session) {
         setCheckEmail(true);
         return;
@@ -95,20 +79,23 @@ export function SignupForm() {
   const plan = params.get('plan');
 
   return (
-    <div className="glass-card p-7 animate-fade-in">
-      <h1 className="text-2xl font-semibold tracking-tight">Create your family</h1>
-      <p className="mt-1 text-sm text-muted">
-        Start free{plan ? ` on the ${plan} plan` : ''} — no credit card required.
-      </p>
+    <div className="glass-card p-7 animate-fade-in sm:p-8">
+      {/* Hero */}
+      <div className="text-center">
+        <span className="ai-orb mx-auto flex h-16 w-16 items-center justify-center">
+          <Sparkles className="h-7 w-7 text-brand" />
+        </span>
+        <h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">A safe place for your family</h1>
+        <p className="mt-2 text-sm text-muted">
+          One calm home for your calendar, lists, meals, and more
+          {plan ? ` — start on the ${plan} plan, free` : ' — free to start, no credit card'}.
+        </p>
+      </div>
 
-      <button
-        onClick={signUpWithGoogle}
-        disabled={googleLoading}
-        className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-surface/60 px-4 py-2.5 text-sm font-medium transition hover:bg-elevated disabled:opacity-60"
-      >
-        <GoogleIcon />
-        {googleLoading ? 'Redirecting…' : 'Sign up with Google'}
-      </button>
+      {/* Primary options */}
+      <div className="mt-7">
+        <OAuthButtons next="/onboarding" />
+      </div>
 
       <div className="relative my-5 flex items-center gap-3">
         <div className="flex-1 border-t border-border" />
@@ -116,19 +103,32 @@ export function SignupForm() {
         <div className="flex-1 border-t border-border" />
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        <Field label="Your name" error={errors.fullName} required>
-          {(id) => <Input id={id} name="fullName" autoComplete="name" placeholder="Jordan Rivera" autoFocus />}
-        </Field>
-        <Field label="Email" error={errors.email} required>
-          {(id) => <Input id={id} name="email" type="email" autoComplete="email" placeholder="you@example.com" />}
-        </Field>
-        <Field label="Password" error={errors.password} hint="At least 8 characters" required>
-          {(id) => <Input id={id} name="password" type="password" autoComplete="new-password" placeholder="••••••••" />}
-        </Field>
-        <Button type="submit" loading={loading} className="w-full">Create account</Button>
-      </form>
-      <p className="mt-6 text-center text-sm text-muted">
+      {!showEmail ? (
+        <button
+          type="button"
+          onClick={() => setShowEmail(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface/60 px-4 py-3 text-sm font-semibold transition hover:bg-elevated"
+        >
+          Continue with email
+        </button>
+      ) : (
+        <form onSubmit={onSubmit} className="space-y-4 animate-fade-in" noValidate>
+          <Field label="Your name" error={errors.fullName} required>
+            {(id) => <Input id={id} name="fullName" autoComplete="name" placeholder="Jordan Rivera" autoFocus />}
+          </Field>
+          <Field label="Email" error={errors.email} required>
+            {(id) => <Input id={id} name="email" type="email" autoComplete="email" placeholder="you@example.com" />}
+          </Field>
+          <Field label="Password" error={errors.password} hint="At least 8 characters" required>
+            {(id) => <Input id={id} name="password" type="password" autoComplete="new-password" placeholder="••••••••" />}
+          </Field>
+          <Button type="submit" loading={loading} className="w-full">Create account</Button>
+        </form>
+      )}
+
+      <LegalConsent />
+
+      <p className="mt-5 text-center text-sm text-muted">
         Already have an account?{' '}
         <Link href="/login" className="font-medium text-brand hover:underline">Sign in</Link>
       </p>

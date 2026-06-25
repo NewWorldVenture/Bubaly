@@ -8,7 +8,8 @@ import { Input, Field } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { signInSchema, fieldErrors } from '@/lib/validation';
-import { GoogleIcon } from '@/components/auth/google-icon';
+import { OAuthButtons } from '@/components/auth/oauth-buttons';
+import { LegalConsent } from '@/components/auth/legal-consent';
 import { resolveLandingPathAction } from '@/app/(auth)/actions';
 
 export function LoginForm() {
@@ -17,7 +18,6 @@ export function LoginForm() {
   const { error: toastError } = useToast();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -47,35 +47,14 @@ export function LoginForm() {
     }
   }
 
-  async function signInWithGoogle() {
-    setGoogleLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-        queryParams: { access_type: 'offline', prompt: 'consent' },
-      },
-    });
-    if (error) {
-      toastError(error.message);
-      setGoogleLoading(false);
-    }
-  }
-
   return (
-    <div className="glass-card p-7 animate-fade-in">
-      <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
+    <div className="glass-card p-7 animate-fade-in sm:p-8">
+      <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
       <p className="mt-1 text-sm text-muted">Sign in to your family.</p>
 
-      <button
-        onClick={signInWithGoogle}
-        disabled={googleLoading}
-        className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-surface/60 px-4 py-2.5 text-sm font-medium transition hover:bg-elevated disabled:opacity-60"
-      >
-        <GoogleIcon />
-        {googleLoading ? 'Redirecting…' : 'Continue with Google'}
-      </button>
+      <div className="mt-6">
+        <OAuthButtons />
+      </div>
 
       <div className="relative my-5 flex items-center gap-3">
         <div className="flex-1 border-t border-border" />
@@ -92,7 +71,10 @@ export function LoginForm() {
         </Field>
         <Button type="submit" loading={loading} className="w-full">Sign in</Button>
       </form>
-      <p className="mt-6 text-center text-sm text-muted">
+
+      <LegalConsent className="mt-5 text-center text-xs leading-5 text-muted" />
+
+      <p className="mt-5 text-center text-sm text-muted">
         New here?{' '}
         <Link href="/signup" className="font-medium text-brand hover:underline">Create an account</Link>
       </p>

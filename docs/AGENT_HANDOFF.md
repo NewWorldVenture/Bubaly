@@ -1,7 +1,66 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-24, session `claude/connect-8ysp00` — Audit-fix pass: error handling, loading feedback, validation, duplicate-click guards across 10 modules. Keep this updated as you ship.
+Last updated: 2026-06-24, session `claude/connect-8ysp00` — World-class onboarding: Google+Apple+email sign-up screen + 4 legal pages + footer. Keep this updated as you ship.
+
+> **Session update (2026-06-24, branch `claude/connect-8ysp00`, pushed direct to `main`) — WORLD-CLASS SIGN-UP SCREEN (Google + Apple + email) + LEGAL PAGES + FOOTER.**
+>
+> **Task:** Build a world-class, low-friction onboarding entry modeled on the Claude/reference sign-in screens — include Google + Apple + email options (the "Apple storyboard" options), and the Claude-style legal footer linking to REAL pages. Build the legal pages (didn't exist) leveraging cozi.com-style family-organizer content. 100% Supabase-wired + production-ready.
+>
+> **BUILT — Auth sign-up/sign-in redesign (Apple OAuth added):**
+> - **`components/auth/oauth-buttons.tsx`** (NEW) — shared `<OAuthButtons next?>`:
+>   "Continue with Google" + "Continue with Apple" via `supabase.auth.signInWithOAuth`.
+>   Apple is NEW (`provider:'apple'`). Per-provider spinner, duplicate-click guard,
+>   friendly toast when a provider isn't enabled in Supabase yet. Passes `next` →
+>   `/auth/callback?next=…` (callback already honors `next`).
+> - **`components/auth/apple-icon.tsx`** (NEW) — Apple logo SVG (uses `currentColor`).
+> - **`components/auth/legal-consent.tsx`** (NEW) — the "By continuing, you agree to
+>   Bubaly's Terms / Acceptable Use, and acknowledge our Privacy Policy" line; links
+>   to the real legal pages. Mirrors the reference screen's footer.
+> - **`components/auth/signup-form.tsx`** — rebuilt to the reference layout: `.ai-orb`
+>   hero + "A safe place for your family" headline → OAuthButtons (Google/Apple) → "or"
+>   → progressive "Continue with email" (reveals name/email/password only when chosen,
+>   reducing friction) → LegalConsent → "Already have an account? Sign in". Email
+>   signup path unchanged (supabase signUp → `/onboarding`).
+> - **`components/auth/login-form.tsx`** — now uses the shared OAuthButtons (so Apple
+>   appears on sign-in too) + LegalConsent. Password path unchanged.
+>
+> **⚠️ ACTION FOR PROD — enable Apple as a Supabase auth provider** (Dashboard →
+> Authentication → Providers → Apple: add Services ID, Team ID, Key ID, private key,
+> and the `…/auth/v1/callback` return URL). Until then the Apple button shows a clean
+> "isn't enabled yet — try email" toast (never a crash). Google already works.
+>
+> **BUILT — 4 world-class legal pages (`app/(marketing)/…`, cozi-style family content):**
+> - **`components/marketing/legal.tsx`** (NEW) — reusable `<LegalPage>`: hero + sticky
+>   table-of-contents sidebar + numbered anchored sections (`scroll-mt`), supports
+>   paragraph + bullet-list blocks, theme-aware, responsive (TOC hidden on mobile),
+>   ends with a support/contact card.
+> - **`/privacy`** — Privacy Policy (overview, what we collect, **children's privacy /
+>   COPPA**, how we use, **AI data use**, sharing/no-sell, security/RLS, your rights,
+>   retention, changes).
+> - **`/terms`** — Terms of Service (acceptance, accounts/family admin, acceptable use,
+>   your content, AI features, plans/billing/trials, termination, disclaimers, changes).
+> - **`/cookies`** — Cookie Policy (what/how/managing/changes; no ad trackers).
+> - **`/acceptable-use`** — AUP (respect families, content standards incl. child safety,
+>   protect the service, responsible AI, enforcement).
+> - All four are `CTASection`-capped, added to **`middleware.ts` PUBLIC**
+>   (`/terms /privacy /cookies /acceptable-use`), and surfaced in
+>   **`components/marketing/site-footer.tsx`** (new "Legal" column + a bottom legal bar
+>   with © year + Privacy/Terms/Acceptable Use/Cookies).
+>
+> **100% Supabase-wired:** auth uses the existing Supabase client + `/auth/callback`
+> code-exchange; no new tables/migration. Legal pages are static content.
+>
+> **Verification:** `tsc` clean · `next lint` clean on all new/changed files ·
+> `npm run build` **exit 0** (all of `/privacy /terms /cookies /acceptable-use` +
+> `/signup /login` registered) · `vitest` **920 passing**. **Pushed directly to `main`.**
+>
+> **NEXT (onboarding polish, optional):** (1) enable Apple provider in Supabase (above);
+> (2) the 5-step wizard (`components/onboarding/onboarding-wizard.tsx`) is already
+> world-class + Supabase-wired (draft + sessionStorage + progress + back nav +
+> `finalizeOnboardingAction`) — could add animated step transitions + a "skip for now"
+> on the details step; (3) a lightweight cookie-consent banner that links to `/cookies`;
+> (4) render published testimonials on `/` and add a `/legal` index page.
 
 > **Session update (2026-06-24, branch `claude/connect-8ysp00`, pushed direct to `main`) — AUDIT FIXES: ERROR HANDLING + LOADING FEEDBACK + VALIDATION + DUPLICATE-CLICK GUARDS.**
 >
