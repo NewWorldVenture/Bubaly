@@ -124,6 +124,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     layout: 'grid',
     items: [
       { href: '/dashboard/billing', label: 'Finances', icon: CreditCard, minLevel: 0 },
+      { href: '/wallet', label: 'Family Wallet', icon: Wallet, minLevel: 0 },
       { href: '/dashboard/expenses', label: 'Expense Splitting', icon: DollarSign, minLevel: 1 },
       { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: RefreshCw, minLevel: 1 },
       { href: '/dashboard/insurance', label: 'Insurance Hub', icon: ShieldAlert, minLevel: 1 },
