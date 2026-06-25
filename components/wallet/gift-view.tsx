@@ -5,12 +5,13 @@
 // immutable ledger. 100% Supabase-wired through the wallet server actions.
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Gift, Plus, Copy, Check, X, Link2 } from 'lucide-react';
+import { Gift, Plus, Copy, Check, X, Link2, QrCode as QrIcon } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Field, Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/states';
+import { QrCode } from '@/components/ui/qr-code';
 import { useToast } from '@/components/ui/toast';
 import { formatCents } from '@/lib/wallet/ledger';
 import { occasionLabel, parseSuggestedAmounts, giftPath, GIFT_OCCASIONS } from '@/lib/wallet/gift';
@@ -91,6 +92,7 @@ export function GiftView({ links, pending, childOptions, canManage }: {
 function GiftLinkCard({ link }: { link: GiftLinkRow }) {
   const { success } = useToast();
   const [copied, setCopied] = useState(false);
+  const [showQr, setShowQr] = useState(false);
   const url = typeof window !== 'undefined' ? `${window.location.origin}${giftPath(link.token)}` : giftPath(link.token);
 
   async function copy() {
@@ -102,16 +104,39 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4">
-      <div className="grid h-9 w-9 place-items-center rounded-xl bg-surface text-muted"><Link2 className="h-4 w-4" /></div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">{link.childName ?? 'Child'} · {occasionLabel(link.occasion)}</p>
-        <p className="truncate text-xs text-muted">{giftPath(link.token)}{link.isActive ? '' : ' · inactive'}</p>
+    <>
+      <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4">
+        <div className="grid h-9 w-9 place-items-center rounded-xl bg-surface text-muted"><Link2 className="h-4 w-4" /></div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">{link.childName ?? 'Child'} · {occasionLabel(link.occasion)}</p>
+          <p className="truncate text-xs text-muted">{giftPath(link.token)}{link.isActive ? '' : ' · inactive'}</p>
+        </div>
+        <button onClick={() => setShowQr(true)} aria-label="Show QR code"
+          className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand transition">
+          <QrIcon className="h-3.5 w-3.5" /> <span className="hidden sm:inline">QR</span>
+        </button>
+        <button onClick={copy} className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand transition">
+          {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy'}
+        </button>
       </div>
-      <button onClick={copy} className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand transition">
-        {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy'}
-      </button>
-    </div>
+      {showQr && (
+        <Modal open title="Scan to gift" onClose={() => setShowQr(false)}>
+          <div className="flex flex-col items-center gap-4">
+            <p className="text-center text-sm text-muted">
+              {link.childName ?? 'Child'} · {occasionLabel(link.occasion)}. Point a phone camera at this code
+              to open the gift page.
+            </p>
+            <div className="rounded-2xl bg-white p-4">
+              <QrCode value={url} size={220} />
+            </div>
+            <p className="break-all text-center text-[11px] text-muted">{url}</p>
+            <button onClick={copy} className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 transition">
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied!' : 'Copy link'}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 
