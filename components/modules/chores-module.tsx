@@ -16,6 +16,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { payChoreRewardAction } from '@/app/(app)/wallet/actions';
+import { formatCents } from '@/lib/wallet/ledger';
 import type { Tables } from '@/lib/database.types';
 
 type Chore = Tables<'chores'>;
@@ -82,6 +84,7 @@ export function ChoresModule() {
   const manager = isManager(role);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [paying, setPaying] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('all');
 
   const { data, loading, error, refresh } = useRealtimeQuery<Assignment>({
@@ -141,6 +144,15 @@ export function ChoresModule() {
     setBusy(null);
     if (error) return toastError(describeDbError(error));
     success(next === 'submitted' ? 'Submitted for approval!' : 'Marked open'); void refresh();
+  }
+
+  async function payChore(a: Assignment) {
+    if (paying) return;
+    setPaying(a.id);
+    const res = await payChoreRewardAction({ choreAssignmentId: a.id });
+    setPaying(null);
+    if (!res.ok) return toastError(res.error ?? 'Payment failed');
+    success('Paid to wallet!'); void refresh();
   }
 
   async function approve(a: Assignment) {
@@ -260,6 +272,10 @@ export function ChoresModule() {
                         <div className="flex justify-end">
                           {submitted && manager
                             ? <button onClick={() => approve(a)} disabled={!!busy} className="rounded-md bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400 hover:bg-green-500/30 transition">Approve</button>
+                            : done && manager && (a.chore?.cash_cents ?? 0) > 0 && !a.cash_awarded_cents
+                            ? <button onClick={() => payChore(a)} disabled={!!paying} className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold transition', paying === a.id ? 'bg-amber-500/20 text-amber-400 animate-pulse' : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30')}>Pay {formatCents(a.chore!.cash_cents!)}</button>
+                            : done && (a.chore?.cash_cents ?? 0) > 0 && !!a.cash_awarded_cents
+                            ? <span className="text-[10px] font-semibold text-green-400">Paid ✓</span>
                             : <button className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>}
                         </div>
                       </div>
@@ -300,6 +316,10 @@ export function ChoresModule() {
                         <div className="flex-shrink-0">
                           {submitted && manager
                             ? <button onClick={() => approve(a)} disabled={!!busy} className="rounded-md bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400 hover:bg-green-500/30 transition">Approve</button>
+                            : done && manager && (a.chore?.cash_cents ?? 0) > 0 && !a.cash_awarded_cents
+                            ? <button onClick={() => payChore(a)} disabled={!!paying} className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold transition', paying === a.id ? 'bg-amber-500/20 text-amber-400 animate-pulse' : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30')}>Pay {formatCents(a.chore!.cash_cents!)}</button>
+                            : done && (a.chore?.cash_cents ?? 0) > 0 && !!a.cash_awarded_cents
+                            ? <span className="text-[10px] font-semibold text-green-400">Paid ✓</span>
                             : <button className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>}
                         </div>
                       </div>
