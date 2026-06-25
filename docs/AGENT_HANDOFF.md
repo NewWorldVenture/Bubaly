@@ -1,7 +1,131 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after wallet Send Money + chore pay button (2026-06-25h). Keep this updated as you ship.
+Last updated: Bubaly Money — full Stripe integration complete (2026-06-25i). Keep this updated as you ship.
+
+> **Session update (2026-06-25i) — BUBALY MONEY: COMPLETE STRIPE INTEGRATION (production-ready).**
+> The full Bubaly Money pillar is now wired to Supabase and Stripe.
+> Branch `claude/continuation-an1mam`. TypeScript builds clean throughout.
+>
+> **What was built (3 commits: 086c801, 04c0f22, 0ae7f18):**
+>
+> ### DB Schema — Migration `0090_bubaly_money_stripe.sql`
+> 12 new tables: `stripe_connected_accounts`, `stripe_capabilities`, `stripe_issuing_cards`,
+> `stripe_authorizations`, `stripe_webhook_events`, `stripe_checkout_sessions`,
+> `stripe_cardholders`, `card_controls`, `stripe_customers`, `card_designs`,
+> plus column extension for `gift_payments.stripe_ref` and `wallet_audit_logs.detail`.
+> ⚠️ **APPLY MIGRATION 0090 TO PROD BEFORE ENABLING STRIPE.**
+>
+> ### Stripe Libraries (`lib/stripe/`)
+> - `capabilities.ts` — `getOrRefreshCapabilities()` (30-min DB cache), `detectPlatformCapabilities()`,
+>   `EMPTY_CAPABILITIES` fallback. Fixed 0-arg `accounts.retrieve` with `as unknown as` cast.
+> - `connect.ts` — `getOrCreateConnectAccount()`, `createAccountLink()`, `syncConnectAccount()`,
+>   `getOrCreateCustomer()`. All accept `SupabaseClient` (untyped — Stripe tables not in generated types).
+> - `issuing.ts` — `getOrCreateCardholder()`, `createCard()`, `freezeCard()`, `unfreezeCard()`,
+>   `cancelCard()`, `updateCardControls()`. Fixed Stripe SDK type issues with `as unknown as`.
+> - `checkout.ts` — `createGiftCheckoutSession()`, `createTopupCheckoutSession()`, `retrieveCheckoutSession()`.
+>
+> ### `withStripeTables()` Pattern (`lib/supabase/stripe-tables.ts`)
+> Intersection type that allows `db.from('stripe_...')` calls without modifying `database.types.ts`.
+> **CRITICAL**: Always use `supabase.from()` for regular (typed) tables. Only use `db.from()` for
+> Stripe tables. Mixing them loses column-level type safety. StripeTables includes:
+> `stripe_connected_accounts`, `stripe_capabilities`, `stripe_issuing_cards`, `stripe_authorizations`,
+> `stripe_webhook_events`, `stripe_checkout_sessions`, `stripe_cardholders`, `card_controls`,
+> `stripe_customers`, `card_designs`.
+>
+> ### Enum Type Casts
+> Migration 0090 adds `'gift'`, `'topup'` to `WalletTxnType` and `'credited'` to `WalletTxnStatus`,
+> but generated `database.types.ts` is not regenerated yet. Use:
+> - `type: 'gift' as unknown as WalletTxnType`
+> - `status: 'credited' as unknown as WalletTxnStatus`
+> - `(gift.status as string) === 'credited'` for comparisons
+>
+> ### Money Pages (`app/(app)/money/`)
+> | Route | File | Notes |
+> |---|---|---|
+> | `/money` | `page.tsx` | Full dashboard, topup modal with fee breakdown |
+> | `/money/setup` | `setup/page.tsx` | Connect onboarding flow |
+> | `/money/cards` | `cards/page.tsx` | Card manager with design picker |
+> | `/money/cards/[cardId]` | `cards/[cardId]/page.tsx` | Card detail + spend controls |
+> | `/money/activity` | `activity/page.tsx` | Wallet ledger + card auths |
+> | `/money/reports` | `reports/page.tsx` | Spending summary + category breakdown |
+> | `/money/babysitters` | `babysitters/page.tsx` | Caregiver payment logger |
+> | `/money/settings` | `settings/page.tsx` | Stripe account + capability matrix |
+>
+> ### Server Actions (`app/(app)/money/actions.ts`)
+> - `activateMoneyAction` — creates Stripe Connect account
+> - `getConnectOnboardingUrlAction` — generates KYC onboarding link
+> - `syncConnectAccountAction` — syncs account status from Stripe
+> - `refreshCapabilitiesAction` — clears capability cache and refreshes
+> - `createCardAction` — creates cardholder + issues virtual/physical card
+> - `freezeCardAction`, `unfreezeCardAction`, `cancelCardAction`
+> - `updateCardControlsAction` — updates spend limits, blocked categories, toggles
+> - `createTopupSessionAction` — creates Stripe Checkout session for parent topup
+> - `payBabysitterAction` — logs caregiver payment to audit log
+>
+> ### Webhook Route (`app/api/webhooks/stripe/route.ts`)
+> Handles: `checkout.session.completed` (gift + topup), `customer.subscription.*`,
+> `account.updated`, `issuing_authorization.updated`. Idempotent via `stripe_webhook_events`
+> UNIQUE constraint + `ignoreDuplicates: true`. Passes original `supabase` to `handleEvent`;
+> `handleEvent` creates its own `db = withStripeTables(supabase)` internally.
+>
+> ### Issuing Authorization (`app/api/issuing/authorization/route.ts`)
+> Real-time `issuing_authorization.request` handler. Evaluates in <2s:
+> blocked MCC categories → ATM restriction → per-transaction limit → balance check →
+> parent approval threshold. On decline: inserts notification for parent.
+> Must be registered at `https://yourdomain.com/api/issuing/authorization` in Stripe dashboard
+> under Connect > Issuing settings.
+>
+> ### Gift Checkout Flow
+> `submitGiftPledgeAction` (`app/gift/actions.ts`): creates `gift_payments` record, then
+> when `STRIPE_SECRET_KEY` is set creates Stripe Checkout session with `gift_payment_id` in
+> metadata. Returns `{ ok: true, checkoutUrl }`. Client redirects to Stripe. On completion,
+> webhook's `handleMoneyCheckout('gift')` credits wallet and marks gift `credited`.
+> Falls back to pledge-mode (family manually approves) when Stripe not configured.
+>
+> Gift success page: `app/gift/success/page.tsx` (looks up gift_payment by stripe_ref).
+> Gift cancelled page: `app/gift/cancelled/page.tsx`.
+>
+> ### Components (`components/money/`)
+> - `MoneyDashboard` — client, shows wallets, recent txns, auths, topup modal w/ fee breakdown
+> - `MoneyNav` — tab bar (Overview/Cards/Babysitters/Activity/Reports/Settings)
+> - `CardManager` — card list, order flow, freeze/cancel actions
+> - `CardDetail` — card visual, spend controls form, auth history
+> - `StripeSetup` — step progress, auto-polls syncConnectAccount every 5s after Stripe return
+> - `CapabilityGate` — wraps features requiring specific Stripe capabilities
+> - `BabysitterView` — caregiver payment modal + history
+>
+> ### UX Details
+> - All `alert()` calls replaced with `useToast()` across all money components
+> - Topup modal shows fee breakdown (child receives / processing fee / service fee / you pay)
+> - Public gift form shows fee breakdown with collapsible detail; button shows total charge
+> - `?topup=success` query param → toast on redirect back from Stripe Checkout
+> - Setup page auto-polls 6×5s for account approval after returning from Stripe KYC
+>
+> ### Required ENV Vars
+> ```
+> STRIPE_SECRET_KEY=sk_live_...
+> STRIPE_PUBLISHABLE_KEY=pk_live_...
+> STRIPE_WEBHOOK_SECRET=whsec_...
+> STRIPE_ISSUING_WEBHOOK_SECRET=whsec_... (optional, falls back to STRIPE_WEBHOOK_SECRET)
+> NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
+> NEXT_PUBLIC_APP_URL=https://bubaly.com
+> ```
+>
+> ### Remaining / Next Steps
+> 1. **Regenerate `database.types.ts`** after running migration 0090 on prod Supabase instance
+>    (`supabase gen types typescript --linked > lib/database.types.ts`). This removes all the
+>    `as unknown as WalletTxnType` casts.
+> 2. **Register Issuing webhook** in Stripe Dashboard → Connect → Issuing → Authorization endpoint
+> 3. **Register main webhook** at `/api/webhooks/stripe` for checkout + subscription events
+> 4. **Admin card designs** — `card_designs` table exists, needs an admin UI to add custom designs
+> 5. **`/admin/stripe` console** — exists at `app/(app)/admin/stripe/page.tsx`, shows all accounts
+> 6. **Push notifications** — currently Supabase notifications table only; integrate with push
+>    provider (Expo/FCM) to send native alerts on card declines
+> 7. **Allowance cron** — `/api/cron/wallet-allowance` already built; ensure CRON_SECRET is set
+> 8. **QR codes for gift links** — no `qrcode` dep yet; add to gift-view.tsx
+> 9. **Physical card shipping address** — `createCardAction` uses placeholder address; add
+>    shipping address form to CardManager for physical card orders
 
 > ## 🏦 FAMILY WALLET — PROGRAM MAP (read this first if you're continuing the wallet)
 > A parent-controlled financial OS built as an **immutable ledger** (balances are derived by
