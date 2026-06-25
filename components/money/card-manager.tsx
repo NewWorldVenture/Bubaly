@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { CreditCard, Plus, Lock, Unlock, X, Settings, ChevronDown, ChevronUp, Snowflake, CheckCircle2 } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { freezeCardAction, unfreezeCardAction, cancelCardAction, createCardAction } from '@/app/(app)/money/actions';
 import type { CardControls } from '@/lib/stripe/issuing';
@@ -62,6 +63,7 @@ export function CardManager({ cards, wallets, manager, isReady, designs }: Props
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showOrder, setShowOrder] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
+  const { success: toastSuccess, error: toastError } = useToast();
 
   // Order card form state
   const [orderWallet, setOrderWallet] = useState(wallets[0]?.id ?? '');
@@ -70,15 +72,12 @@ export function CardManager({ cards, wallets, manager, isReady, designs }: Props
   const [dailyLimit, setDailyLimit] = useState('');
   const [memberName, setMemberName] = useState('');
 
-  function toastError(msg: string) {
-    alert(`Error: ${msg}`);
-  }
-
   async function handleFreeze(cardId: string) {
     setBusy(cardId + '_freeze');
     const res = await freezeCardAction({ cardId });
     setBusy(null);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    toastSuccess('Card frozen');
     startTransition(() => router.refresh());
   }
 
@@ -87,6 +86,7 @@ export function CardManager({ cards, wallets, manager, isReady, designs }: Props
     const res = await unfreezeCardAction({ cardId });
     setBusy(null);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    toastSuccess('Card unfrozen');
     startTransition(() => router.refresh());
   }
 
@@ -96,6 +96,7 @@ export function CardManager({ cards, wallets, manager, isReady, designs }: Props
     setBusy(null);
     setCancelConfirm(null);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    toastSuccess('Card cancelled');
     startTransition(() => router.refresh());
   }
 
@@ -123,6 +124,7 @@ export function CardManager({ cards, wallets, manager, isReady, designs }: Props
     });
     setBusy(null);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    toastSuccess(`Card created for ${memberName.trim()}`);
     setShowOrder(false);
     startTransition(() => router.refresh());
   }

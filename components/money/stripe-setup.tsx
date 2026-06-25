@@ -32,11 +32,33 @@ export function MoneySetup({ account, returnedFromStripe, refreshRequested }: Pr
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [synced, setSynced] = useState(false);
+  const [polling, setPolling] = useState(false);
 
-  // Auto-sync when returning from Stripe
+  // Auto-sync when returning from Stripe; poll up to 6×5s for fast approval detection
   useEffect(() => {
     if ((returnedFromStripe || refreshRequested) && account?.account_id && !account.charges_enabled) {
-      handleSync();
+      let attempts = 0;
+      const MAX = 6;
+      setPolling(true);
+
+      async function trySync() {
+        attempts++;
+        const res = await syncConnectAccountAction();
+        if (res.ok && res.chargesEnabled) {
+          setPolling(false);
+          setSynced(true);
+          router.push('/money');
+          return;
+        }
+        if (attempts < MAX) {
+          setTimeout(trySync, 5000);
+        } else {
+          setPolling(false);
+          router.refresh();
+        }
+      }
+
+      trySync();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -117,7 +139,14 @@ export function MoneySetup({ account, returnedFromStripe, refreshRequested }: Pr
         </div>
       )}
 
-      {synced && account?.charges_enabled && (
+      {polling && (
+        <div className="flex items-center gap-3 rounded-xl border border-brand/20 bg-brand/5 p-4 text-sm">
+          <RefreshCw className="h-4 w-4 animate-spin text-brand" />
+          <p className="text-fg">Checking your account status with Stripe…</p>
+        </div>
+      )}
+
+      {synced && (
         <div className="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm dark:border-green-800 dark:bg-green-950/30">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
           <p className="text-green-800 dark:text-green-300">Your account is approved! Redirecting to Bubaly Money…</p>

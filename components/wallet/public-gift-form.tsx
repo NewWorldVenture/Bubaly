@@ -30,6 +30,10 @@ export function PublicGiftForm({ token, suggestedCents, childName }: {
     const res = await submitGiftPledgeAction({ token, giverName: name, amountCents: effectiveCents, message });
     setLoading(false);
     if (!res.ok) return setError(res.error ?? 'Could not send your gift.');
+    if (res.checkoutUrl) {
+      window.location.href = res.checkoutUrl;
+      return;
+    }
     setDone(true);
   }
 

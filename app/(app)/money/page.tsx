@@ -10,7 +10,12 @@ import { MoneyDashboard } from '@/components/money/money-dashboard';
 
 export const metadata: Metadata = { title: 'Bubaly Money' };
 
-export default async function MoneyPage() {
+export default async function MoneyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ topup?: string }>;
+}) {
+  const { topup } = await searchParams;
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const manager = isManager(ctx.active.role);
@@ -94,6 +99,7 @@ export default async function MoneyPage() {
       tier={tier}
       capabilities={capabilities}
       connectedAccount={connectedAccount ?? null}
+      topupSuccess={topup === 'success'}
       wallets={walletViews}
       recentTransactions={(recentTxns ?? []).map((t) => ({
         id: t.id,

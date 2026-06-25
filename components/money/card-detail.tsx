@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useToast } from '@/components/ui/toast';
 import { ArrowLeft, Snowflake, Unlock, X, CheckCircle2, XCircle, Save } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { formatCents } from '@/lib/wallet/ledger';
@@ -54,6 +55,7 @@ export function CardDetail({ card, controls, authorizations }: Props) {
   const [, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState(false);
+  const { success: toastSuccess, error: toastError } = useToast();
 
   // Controls form state
   const [daily, setDaily] = useState(controls?.daily_limit_cents ? String(controls.daily_limit_cents / 100) : '');
@@ -66,13 +68,12 @@ export function CardDetail({ card, controls, authorizations }: Props) {
   const [threshold, setThreshold] = useState(controls?.parent_approval_threshold_cents ? String(controls.parent_approval_threshold_cents / 100) : '');
   const [saved, setSaved] = useState(false);
 
-  function toastError(msg: string) { alert(`Error: ${msg}`); }
-
   async function handleFreeze() {
     setBusy('freeze');
     const res = await freezeCardAction({ cardId: card.cardId });
     setBusy(null);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    toastSuccess('Card frozen');
     startTransition(() => router.refresh());
   }
 
@@ -81,6 +82,7 @@ export function CardDetail({ card, controls, authorizations }: Props) {
     const res = await unfreezeCardAction({ cardId: card.cardId });
     setBusy(null);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    toastSuccess('Card unfrozen');
     startTransition(() => router.refresh());
   }
 
@@ -108,6 +110,7 @@ export function CardDetail({ card, controls, authorizations }: Props) {
     const res = await updateCardControlsAction({ cardId: card.cardId, controls: updated });
     setBusy(null);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    toastSuccess('Spending controls saved');
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   }

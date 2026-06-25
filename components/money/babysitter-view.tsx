@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, DollarSign, Clock } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { formatCents } from '@/lib/wallet/ledger';
 import { payBabysitterAction } from '@/app/(app)/money/actions';
@@ -27,6 +28,7 @@ type Props = {
 export function BabysitterView({ manager, caregivers, paymentLogs }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const { success: toastSuccess, error: toastError } = useToast();
   const [showPay, setShowPay] = useState(false);
   const [payTo, setPayTo] = useState(caregivers[0]?.id ?? '');
   const [amount, setAmount] = useState('');
@@ -36,8 +38,9 @@ export function BabysitterView({ manager, caregivers, paymentLogs }: Props) {
 
   async function handlePay() {
     const cents = Math.round(parseFloat(amount) * 100);
-    if (!cents || cents < 100) { alert('Minimum payment is $1.00'); return; }
+    if (!cents || cents < 100) { toastError('Minimum payment is $1.00'); return; }
     setBusy(true);
+    const caregiver = caregivers.find((c) => c.id === payTo);
     const res = await payBabysitterAction({
       memberId: payTo,
       amountCents: cents,
@@ -45,7 +48,8 @@ export function BabysitterView({ manager, caregivers, paymentLogs }: Props) {
       note: note.trim() || undefined,
     });
     setBusy(false);
-    if (!res.ok) { alert(res.error ?? 'Failed'); return; }
+    if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    toastSuccess(`Payment logged for ${caregiver?.name ?? 'caregiver'}`);
     setShowPay(false);
     setAmount('');
     setHours('');

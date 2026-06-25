@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CreditCard, Wallet, TrendingUp, ArrowUpRight, ArrowDownLeft,
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils/cn';
 import { formatCents } from '@/lib/wallet/ledger';
 import { MoneyNav } from '@/components/money/money-nav';
 import { CapabilityGate } from '@/components/money/capability-gate';
+import { useToast } from '@/components/ui/toast';
 import type { StripeCapabilityMatrix } from '@/lib/stripe/capabilities';
 import type { WalletTier } from '@/lib/wallet/fees';
 import {
@@ -58,14 +59,8 @@ type Props = {
   wallets: WalletView[];
   recentTransactions: TxnView[];
   recentAuthorizations: AuthView[];
+  topupSuccess?: boolean;
 };
-
-function toastError(msg: string) {
-  // Simple fallback toast — matches the pattern used elsewhere in the codebase
-  if (typeof window !== 'undefined') {
-    alert(`Error: ${msg}`);
-  }
-}
 
 export function MoneyDashboard({
   manager,
@@ -75,10 +70,23 @@ export function MoneyDashboard({
   wallets,
   recentTransactions,
   recentAuthorizations,
+  topupSuccess = false,
 }: Props) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
+  const { success: toastSuccess, error: toastError } = useToast();
+
+  useEffect(() => {
+    if (topupSuccess) {
+      toastSuccess('Funds added! The wallet balance will update shortly.');
+      // Remove the query param without a full page reload
+      const url = new URL(window.location.href);
+      url.searchParams.delete('topup');
+      window.history.replaceState({}, '', url.toString());
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [topupFor, setTopupFor] = useState<WalletView | null>(null);
   const [topupAmount, setTopupAmount] = useState('');
 
@@ -102,6 +110,7 @@ export function MoneyDashboard({
     const res = await syncConnectAccountAction();
     setBusy(null);
     if (!res.ok) { toastError(res.error ?? 'Sync failed'); return; }
+    toastSuccess('Account synced');
     startTransition(() => router.refresh());
   }
 
@@ -109,6 +118,7 @@ export function MoneyDashboard({
     setBusy('caps');
     await refreshCapabilitiesAction();
     setBusy(null);
+    toastSuccess('Capabilities refreshed');
     startTransition(() => router.refresh());
   }
 
