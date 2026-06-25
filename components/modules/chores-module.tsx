@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Plus, CheckCircle2, Circle, MoreHorizontal, Filter, SlidersHorizontal } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, MoreHorizontal, Filter, SlidersHorizontal, Wallet } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -16,6 +16,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { formatCents } from '@/lib/wallet/ledger';
+import { payChoreRewardAction } from '@/app/(app)/wallet/actions';
 import type { Tables } from '@/lib/database.types';
 
 type Chore = Tables<'chores'>;
@@ -83,6 +85,7 @@ export function ChoresModule() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('all');
+  const [paidIds, setPaidIds] = useState<Set<string>>(new Set());
 
   const { data, loading, error, refresh } = useRealtimeQuery<Assignment>({
     table: 'chore_assignments', familyId, deps: [familyId],
@@ -153,6 +156,24 @@ export function ChoresModule() {
     success('Approved!'); void refresh();
   }
 
+  async function payChore(a: Assignment) {
+    if (busy) return;
+    setBusy(a.id);
+    const res = await payChoreRewardAction({ choreAssignmentId: a.id });
+    setBusy(null);
+    if (!res.ok) {
+      if (res.error === 'This chore was already paid.') {
+        setPaidIds((prev) => new Set([...prev, a.id]));
+        return toastError('Already paid to wallet.');
+      }
+      return toastError(res.error ?? 'Could not pay chore reward.');
+    }
+    setPaidIds((prev) => new Set([...prev, a.id]));
+    const amount = a.cash_awarded_cents ?? a.chore?.cash_cents ?? 0;
+    success(`${formatCents(amount)} added to wallet!`);
+    void refresh();
+  }
+
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
@@ -220,7 +241,7 @@ export function ChoresModule() {
           {/* Data table / card list */}
           <div className="mt-4 overflow-hidden rounded-xl border border-border bg-surface/30">
             {/* Desktop table header */}
-            <div className="hidden lg:grid grid-cols-[1fr_140px_130px_100px_120px_40px] border-b border-border bg-surface/40 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <div className="hidden lg:grid grid-cols-[1fr_140px_130px_100px_120px_90px] border-b border-border bg-surface/40 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
               <div>Task</div><div>Assigned To</div><div>Due Date</div><div>Priority</div><div>Status</div><div />
             </div>
 
@@ -239,9 +260,12 @@ export function ChoresModule() {
                     const { label: dueLabel, urgent } = fmtDue(a.due_at);
                     const done = ['approved', 'done'].includes(a.status);
                     const submitted = a.status === 'submitted';
+                    const cashCents = a.cash_awarded_cents ?? a.chore?.cash_cents ?? 0;
+                    const alreadyPaid = paidIds.has(a.id);
+                    const canPay = done && manager && cashCents > 0 && !alreadyPaid;
                     return (
                       <div key={a.id}
-                        className="grid grid-cols-[1fr_140px_130px_100px_120px_40px] items-center px-4 py-3 transition hover:bg-surface/20">
+                        className="grid grid-cols-[1fr_140px_130px_100px_120px_90px] items-center px-4 py-3 transition hover:bg-surface/20">
                         <div className="flex items-center gap-3 min-w-0">
                           <button onClick={() => toggle(a)} disabled={!!busy || done} className="flex-shrink-0">
                             {done ? <CheckCircle2 className="h-4 w-4 text-green-400" />
@@ -257,9 +281,13 @@ export function ChoresModule() {
                         <div className={cn('text-xs font-medium', urgent ? 'text-red-400' : 'text-muted')}>{dueLabel}</div>
                         <div>{a.chore?.priority ? <span className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize', PRIORITY_STYLES[a.chore.priority])}>{a.chore.priority}</span> : <span className="text-xs text-muted">—</span>}</div>
                         <div><span className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold', STATUS_STYLES[a.status] ?? '')}>{STATUS_LABELS[a.status] ?? a.status}</span></div>
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-1">
                           {submitted && manager
                             ? <button onClick={() => approve(a)} disabled={!!busy} className="rounded-md bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400 hover:bg-green-500/30 transition">Approve</button>
+                            : canPay
+                            ? <button onClick={() => payChore(a)} disabled={busy === a.id} className="flex items-center gap-1 rounded-md bg-brand/15 px-2 py-0.5 text-[10px] font-semibold text-brand hover:bg-brand/25 transition"><Wallet className="h-3 w-3" /> Pay {formatCents(cashCents)}</button>
+                            : alreadyPaid && done && cashCents > 0
+                            ? <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">Paid ✓</span>
                             : <button className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>}
                         </div>
                       </div>
@@ -274,6 +302,9 @@ export function ChoresModule() {
                     const { label: dueLabel, urgent } = fmtDue(a.due_at);
                     const done = ['approved', 'done'].includes(a.status);
                     const submitted = a.status === 'submitted';
+                    const cashCents = a.cash_awarded_cents ?? a.chore?.cash_cents ?? 0;
+                    const alreadyPaid = paidIds.has(a.id);
+                    const canPay = done && manager && cashCents > 0 && !alreadyPaid;
                     return (
                       <div key={a.id} className="flex items-start gap-3 px-4 py-3 transition hover:bg-surface/20">
                         <button onClick={() => toggle(a)} disabled={!!busy || done} className="mt-0.5 flex-shrink-0">
@@ -300,6 +331,10 @@ export function ChoresModule() {
                         <div className="flex-shrink-0">
                           {submitted && manager
                             ? <button onClick={() => approve(a)} disabled={!!busy} className="rounded-md bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400 hover:bg-green-500/30 transition">Approve</button>
+                            : canPay
+                            ? <button onClick={() => payChore(a)} disabled={busy === a.id} className="flex items-center gap-1 rounded-md bg-brand/15 px-2 py-0.5 text-[10px] font-semibold text-brand hover:bg-brand/25 transition"><Wallet className="h-3 w-3" /> Pay {formatCents(cashCents)}</button>
+                            : alreadyPaid && done && cashCents > 0
+                            ? <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">Paid ✓</span>
                             : <button className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>}
                         </div>
                       </div>

@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after onboarding avatar/phone production-readiness (avatars bucket, 0089). Keep this updated as you ship.
+Last updated after wallet Send Money + chore pay button (2026-06-25h). Keep this updated as you ship.
 
 > ## 🏦 FAMILY WALLET — PROGRAM MAP (read this first if you're continuing the wallet)
 > A parent-controlled financial OS built as an **immutable ledger** (balances are derived by
@@ -27,7 +27,7 @@ Last updated after onboarding avatar/phone production-readiness (avatars bucket,
 >   `app/(app)/wallet/actions.ts` + public `app/gift/actions.ts`. ~115 wallet tests; suite green.
 >
 > **TODO (no Stripe needed — build next, all reuse `creditChildWallet` + immutable ledger):**
-> 1. Chore→wallet "Pay" button on chore approval (action `payChoreRewardAction` already exists).
+> 1. ✅ DONE 2026-06-25h: Chore→wallet "Pay" button (chores-module) + Wallet "Send Money" modal.
 > 2. `/wallet/babysitters` (tables `babysitter_profiles`/`babysitter_payments` exist) +
 >    `/wallet/settings` (split rules per child via `wallet_rules`).
 > 3. `/admin/wallet` console (wallet status, pending approvals, audit, reconciliation, flags).
@@ -48,6 +48,38 @@ Last updated after onboarding avatar/phone production-readiness (avatars bucket,
 > NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY. Also ensure CRON_SECRET is set (allowance/autopilot crons).
 >
 > **Per-session wallet detail is in the 2026-06-25a..f entries below.**
+
+> **Session update (2026-06-25h) — WALLET: CHORE PAY BUTTON + SEND MONEY.**
+> Two no-Stripe wallet features completing the "Family Pay ID / Gifting" spec item. NO migration.
+> Branch `claude/continuation-an1mam`.
+>
+> **1. Chore→Wallet Pay button (`components/modules/chores-module.tsx`):**
+>   - When a chore is `approved`/`done` AND `chore.cash_cents > 0`, a parent now sees a
+>     brand-colored **"Pay {amount} to wallet"** button (Wallet icon) in both the desktop
+>     table row and mobile card row. Previously the `payChoreRewardAction` existed with no UI.
+>   - Calls `payChoreRewardAction({ choreAssignmentId })` (server action in `wallet/actions.ts`).
+>     The action is already idempotent (checks for existing wallet_transaction by related_id).
+>   - On success → "Paid ✓" emerald badge; on "already paid" error → also shows "Paid ✓".
+>     Local `paidIds` Set tracks paid-this-session; page refresh picks up any pre-paid chores
+>     (they simply have no cash balance left to pay again).
+>   - Imports: `formatCents` from `lib/wallet/ledger`, `payChoreRewardAction`, `Wallet` icon.
+>
+> **2. Wallet "Send Money" modal (`components/wallet/wallet-dashboard.tsx`):**
+>   - New **"Send Money"** button (SendHorizonal icon) in the wallet dashboard header, visible
+>     to managers when child wallets exist.
+>   - Opens `SendMoneyModal`: recipient picker (all children with current balances shown),
+>     amount input with quick-pick ($5/$10/$20/$50), reason dropdown (Birthday / Great job! /
+>     Weekly bonus / Holiday / Special occasion), free-text note.
+>   - Builds a rich `description` from reason + note and calls `addFundsAction` (the existing
+>     wallet top-up action) — no new action or migration needed.
+>   - `SEND_REASONS` constant at module level for the dropdown options.
+>   - Also added `SendHorizonal` to the lucide import and `<Plus>` icon to the existing
+>     "Add funds" button for visual consistency.
+>
+> Verified: tsc + lint clean · `npm run build` ✓ · **full suite 978/978**.
+>
+> **WALLET — remaining (next agent):** /wallet/babysitters + /wallet/settings; /admin/wallet;
+> per-day AI-coach metering; QR codes for gift links.
 
 > **Session update (2026-06-25g) — ONBOARDING AVATAR/PHONE: production-ready (PR #142).**
 > The international-phone + avatar-picker feature (files `lib/utils/phone.ts`,

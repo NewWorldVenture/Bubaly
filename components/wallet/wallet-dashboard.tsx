@@ -2,12 +2,12 @@
 
 // Family Wallet dashboard — mobile-first "financial OS" view. Shows the family
 // total, each child's balance + buckets, recent ledger activity, and a parent
-// "Add funds" flow. Balances are derived (never stored) via lib/wallet/ledger.
+// "Add funds" / "Send Money" flow. Balances are derived (never stored) via lib/wallet/ledger.
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Wallet, PiggyBank, ShoppingBag, HeartHandshake, TrendingUp, Plus, X, ArrowDownLeft, ArrowUpRight, Sparkles,
+  Wallet, PiggyBank, ShoppingBag, HeartHandshake, TrendingUp, Plus, X, ArrowDownLeft, ArrowUpRight, Sparkles, SendHorizonal,
 } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,15 @@ import { computeFunding, serviceFeeLabel, type WalletTier } from '@/lib/wallet/f
 import { WALLET_TIERS, aiCoachLevel } from '@/lib/wallet/tiers';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { addFundsAction } from '@/app/(app)/wallet/actions';
+
+const SEND_REASONS = [
+  { value: '', label: 'No specific reason' },
+  { value: 'Birthday gift', label: '🎂 Birthday gift' },
+  { value: 'Great job!', label: '⭐ Great job!' },
+  { value: 'Weekly bonus', label: '💰 Weekly bonus' },
+  { value: 'Holiday gift', label: '🎁 Holiday gift' },
+  { value: 'Special occasion', label: '✨ Special occasion' },
+];
 
 type Coaching = { headline: string; insights: string[]; suggestion: string };
 
@@ -61,6 +70,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
   recent: RecentTxn[];
 }) {
   const [addFor, setAddFor] = useState<ChildWalletView | null>(null);
+  const [sendFor, setSendFor] = useState<ChildWalletView | null>(null);
   const [coach, setCoach] = useState<Coaching | null>(null);
   const [coachLoading, setCoachLoading] = useState(false);
   const { error: toastError } = useToast();
@@ -84,9 +94,18 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
   return (
     <div className="module-page">
       <PageHeader title="Family Wallet" description="Spend, save, give, and invest — for the whole family."
-        action={hasCoach ? (
-          <Button variant="ghost" onClick={runCoach} loading={coachLoading}><Sparkles className="h-4 w-4" /> Money Coach</Button>
-        ) : undefined}
+        action={
+          <div className="flex items-center gap-2">
+            {canManage && childWallets.length > 0 && (
+              <Button variant="ghost" onClick={() => setSendFor(childWallets[0]!)}>
+                <SendHorizonal className="h-4 w-4" /> Send Money
+              </Button>
+            )}
+            {hasCoach && (
+              <Button variant="ghost" onClick={runCoach} loading={coachLoading}><Sparkles className="h-4 w-4" /> Money Coach</Button>
+            )}
+          </div>
+        }
       />
       <WalletSubnav />
 
@@ -198,6 +217,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
       </div>
 
       {addFor && <AddFundsModal child={addFor} onClose={() => setAddFor(null)} />}
+      {sendFor && <SendMoneyModal child={sendFor} childOptions={childWallets} onClose={() => setSendFor(null)} />}
     </div>
   );
 }
@@ -241,7 +261,95 @@ function AddFundsModal({ child, onClose }: { child: ChildWalletView; onClose: ()
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
-          <Button type="submit" loading={loading}>Add funds</Button>
+          <Button type="submit" loading={loading}><Plus className="h-4 w-4" /> Add funds</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function SendMoneyModal({ child, childOptions, onClose }: {
+  child: ChildWalletView; childOptions: ChildWalletView[]; onClose: () => void;
+}) {
+  const router = useRouter();
+  const { success, error: toastError } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [recipientId, setRecipientId] = useState(child.id);
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+
+  const recipient = childOptions.find((c) => c.id === recipientId) ?? child;
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const dollars = Number(amount);
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    const description = [reason || null, note.trim() || null].filter(Boolean).join(' · ') || `Sent to ${recipient.name}`;
+    setLoading(true);
+    const res = await addFundsAction({ childWalletId: recipientId, amountCents: Math.round(dollars * 100), description });
+    setLoading(false);
+    if (!res.ok) return toastError(res.error ?? 'Could not send money');
+    success(`${formatCents(Math.round(dollars * 100))} sent to ${recipient.name}!`);
+    onClose();
+    router.refresh();
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Send Money">
+      <form onSubmit={submit} className="space-y-4">
+        <div className="rounded-xl border border-brand/20 bg-brand/5 p-3 text-xs text-muted">
+          Funds are split across the recipient&apos;s buckets using their allocation rule.
+        </div>
+
+        {childOptions.length > 1 && (
+          <Field label="Send to">
+            {(id) => (
+              <select id={id} value={recipientId} onChange={(e) => setRecipientId(e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm">
+                {childOptions.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} · {formatCents(c.total)}</option>
+                ))}
+              </select>
+            )}
+          </Field>
+        )}
+
+        <Field label="Amount (USD)">
+          {(id) => (
+            <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" autoFocus
+              value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="20.00" />
+          )}
+        </Field>
+
+        <div className="flex flex-wrap gap-2">
+          {[5, 10, 20, 50].map((q) => (
+            <button key={q} type="button" onClick={() => setAmount(String(q))}
+              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand transition">
+              ${q}
+            </button>
+          ))}
+        </div>
+
+        <Field label="Reason (optional)">
+          {(id) => (
+            <select id={id} value={reason} onChange={(e) => setReason(e.target.value)}
+              className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm">
+              {SEND_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          )}
+        </Field>
+
+        <Field label="Note (optional)">
+          {(id) => (
+            <Input id={id} value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. Great work this week!" maxLength={120} />
+          )}
+        </Field>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
+          <Button type="submit" loading={loading}><SendHorizonal className="h-4 w-4" /> Send</Button>
         </div>
       </form>
     </Modal>
