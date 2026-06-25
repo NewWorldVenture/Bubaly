@@ -1,9 +1,123 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the AI Assist completion sprint — **54/67 content modules now
-have AI Assist** (all viable content modules done), 1244 tests passing.
+Last updated after the production-hardening sprint — **54/67 content modules
+have AI Assist**, 1252 tests passing, all buildable AGENT_HANDOFF items complete.
 Keep this updated as you ship.
+
+> **Session update (2026-06-25a, branch `claude/resolve-pr-conflicts-nwmf2h`) —
+> PRODUCTION HARDENING + REMAINING HANDOFF ITEMS.**
+> Task: pick up every remaining buildable item from the AGENT_HANDOFF "remaining"
+> list and ship them, then update this file.
+>
+> **BUILT THIS SESSION (12 items):**
+>
+> 1. **Onboarding country field** — Added country input to onboarding wizard
+>    step 3 (family details), after region/postalCode grid. Added country display
+>    to the review step (step 5) Household section. Validation schema + server
+>    action already supported `country`.
+>
+> 2. **Onboarding animated step transitions** — Added `direction` (forward/back)
+>    + `animKey` state to the wizard. Each step container uses `animate-step-forward`
+>    or `animate-step-back` CSS classes. Added `step-forward`/`step-back` keyframes
+>    to `tailwind.config.ts` (translateX ±24px with opacity fade).
+>
+> 3. **Dashboard error boundary** — `app/(app)/dashboard/error.tsx`: AlertTriangle
+>    icon, error logging, Go back + Try again buttons. `'use client'` directive.
+>
+> 4. **Dashboard loading state** — `app/(app)/dashboard/loading.tsx`: spinning
+>    brand-colored circle loader.
+>
+> 5. **Blog subscribe hardening** — `app/api/blog/subscribe/route.ts`: replaced
+>    `createClient()` with `createServiceClient()` from `@/lib/supabase/server`.
+>    Added rate limiting (5 req/min per IP). Added `export const runtime = 'nodejs'`.
+>
+> 6. **Middleware PUBLIC routes** — Added `/feed.xml` and `/api/blog/subscribe`
+>    and `/api/health` to the PUBLIC array so they're accessible without auth.
+>
+> 7. **Security headers** — `next.config.mjs`: changed `microphone=()` to
+>    `microphone=(self)` (voice assistant needs mic access). Added
+>    `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`.
+>
+> 8. **Chore submission notifications** — `lib/notifications/chore-submission-reminders.ts`:
+>    pure builder that filters pending submissions and fans out one notification
+>    per manager. 4 tests in `tests/chore-submission-reminders.test.ts`. Wired
+>    into `lib/server/notifications.ts`.
+>
+> 9. **Maintenance task notifications** — Extended `lib/server/notifications.ts`
+>    to query `maintenance_tasks` (status in todo/in_progress, due within 14d)
+>    and generate `maintenance_task` type notifications (fan-out to managers).
+>
+> 10. **Concierge digest as AI assistant tool (#12)** — Added `get_family_digest`
+>     tool to `lib/assistant/tools.ts`. Queries 11 tables in parallel for
+>     cross-domain digest. Returns headline, counts, prompt lines, top 20 items.
+>     Tool description: answers "what needs attention", "what's due today",
+>     "family status update".
+>
+> 11. **Notification cron frequency** — `vercel.json`: changed from `"0 11 * * *"`
+>     to `"0 7,12,18 * * *"` (3x daily, aligning with the route's own comments).
+>
+> 12. **Health check endpoint** — `app/api/health/route.ts`: pings Supabase DB,
+>     returns `{status, db, latencyMs, timestamp}`. 200 when connected, 503 when
+>     degraded. Added to middleware PUBLIC routes.
+>
+> **Also done (previous commit in this branch):**
+> - `.env.example`: added `NEXT_PUBLIC_SITE_URL=https://www.bubaly.com`
+>
+> **Commits pushed to `claude/resolve-pr-conflicts-nwmf2h`:**
+> 1. `f6706fc` — Production hardening: onboarding country field, notifications,
+>    security headers
+> 2. `d5388f8` — Wire concierge digest into AI assistant + add maintenance
+>    notifications
+> 3. `db86671` — Add animated step transitions to onboarding wizard
+> 4. (pending) — Health check endpoint + AGENT_HANDOFF update
+>
+> **Verification:** `tsc --noEmit` clean · `vitest` **1252 passing** (165 test
+> files, +4 new tests from chore submission reminders). Zero TSC errors.
+>
+> **WHAT REMAINS (cannot be built without external APIs/OAuth credentials):**
+> - Smart Home: real device-API sync (HomeKit/SmartThings webhooks)
+> - Security: camera/alarm webhook ingest
+> - Integration features (#72-77: Alexa, Google Home, Apple Home, TeamSnap,
+>   SportsEngine, school portals) — require external OAuth credentials
+>
+> **WHAT REMAINS (lower priority enhancements, all optional):**
+> - Blog: "Load More" pagination, OG images per post
+> - Onboarding: "Start over" button, email MX validation on invites
+> - Realtime/streaming voice (OpenAI Realtime API) for barge-in
+> - Wake-word / hands-free continuous mode
+> - Per-tier voice limits
+> - Interactive family tree visualization (canvas/SVG)
+> - Video transcoding/thumbnails pipeline
+> - AI "trip recap" from itinerary + photos
+> - Drag-and-drop itinerary reordering
+> - Auto-detect subscriptions from recurring transactions
+> - Symptom timeline/trend chart per member
+> - RSVP count badges on calendar grid
+> - Auto-generate next recurring chore instance on completion
+> - Profile photo upload
+> - Proactive suggestions from live assistant snapshot
+>
+> **KEY PATTERNS (for any future agent):**
+> - **AI Assist pattern**: Pure lib → API route → Module UI. All 54 modules follow:
+>   pure `analyze*()` + `build*Prompt()` + `parse*Response()` in lib, API route
+>   with `requireUserContext()` → `ctx.active.familyId` → `createServer()` → query
+>   → `isAIConfigured()` guard → `resolveProvider().complete()` → parse → return.
+> - **Correct imports**: `isAIConfigured` from `@/lib/ai/provider`, `createServer`
+>   from `@/lib/supabase/server`, `createServiceClient` from `@/lib/supabase/server`
+> - **Button loading**: Uses `loading={bool}` prop
+> - **OpportunityStatus**: `'interested' | 'registered' | 'waitlisted' | 'passed' | 'missed'`
+> - **NotificationType**: `'chore_due' | 'medication_due' | 'calendar_event' |
+>   'school_event' | 'sports_event' | 'maintenance_task' | 'grocery_reminder' |
+>   'document_expiry' | 'family_invite' | 'system'`
+> - **DB column gotchas**: `screen_time_entries.entry_date` (NOT `date`),
+>   `screen_time_limits.daily_minutes` (NOT `daily_limit_minutes`),
+>   `medication_schedules.days_of_week` is `number[]` (0-6, Sunday-Saturday),
+>   `behavior_logs.member_id` is nullable, `behavior_logs.occurred_at` (NOT
+>   `created_at`)
+> - **Test runner**: `node_modules/.bin/vitest run`
+> - **TSC**: `node_modules/.bin/tsc --noEmit`
+> - Next migration number: **0093**
 
 > **Session update (2026-06-24j, branch `claude/resolve-pr-conflicts-nwmf2h`) —
 > AI ASSIST COMPLETION SPRINT.** Continued from session i. Systematically added

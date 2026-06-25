@@ -25,7 +25,8 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   // Provider webhooks (signature-verified) and the signed unsubscribe link must
   // be reachable without a session.
   '/api/webhooks',
-  '/api/marketing/unsubscribe'];
+  '/api/marketing/unsubscribe',
+  '/api/health'];
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next({ request: req });
