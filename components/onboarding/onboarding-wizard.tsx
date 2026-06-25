@@ -98,6 +98,8 @@ export function OnboardingWizard(
 
   const [draft, setDraft] = useState<DraftState>(() => loadDraft(initialProfile));
   const [loading, setLoading] = useState(false);
+  const [direction, setDirection] = useState<'forward' | 'back'>('forward');
+  const [animKey, setAnimKey] = useState(0);
 
   const step = draft.step;
 
@@ -110,13 +112,17 @@ export function OnboardingWizard(
   }, []);
 
   const goTo = useCallback((s: number) => {
+    setDirection(s > step ? 'forward' : 'back');
+    setAnimKey((k) => k + 1);
     updateDraft((d) => ({ ...d, step: s }));
-  }, [updateDraft]);
+  }, [updateDraft, step]);
 
   // Step 1 — Profile
   function captureProfile(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    setDirection('forward');
+    setAnimKey((k) => k + 1);
     updateDraft((d) => ({
       ...d,
       profile: {
@@ -133,6 +139,8 @@ export function OnboardingWizard(
   function captureFamily(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    setDirection('forward');
+    setAnimKey((k) => k + 1);
     updateDraft((d) => ({
       ...d,
       family: {
@@ -156,6 +164,8 @@ export function OnboardingWizard(
   function captureDetails(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    setDirection('forward');
+    setAnimKey((k) => k + 1);
     updateDraft((d) => ({
       ...d,
       details: {
@@ -270,7 +280,7 @@ export function OnboardingWizard(
 
       {/* Step 1: Profile */}
       {step === 1 && (
-        <div className="glass-card p-7">
+        <div key={animKey} className={`glass-card p-7 ${direction === 'forward' ? 'animate-step-forward' : 'animate-step-back'}`}>
           <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
             <User className="h-6 w-6" />
           </div>
@@ -317,7 +327,7 @@ export function OnboardingWizard(
 
       {/* Step 2: Family name */}
       {step === 2 && (
-        <div className="glass-card p-7">
+        <div key={animKey} className={`glass-card p-7 ${direction === 'forward' ? 'animate-step-forward' : 'animate-step-back'}`}>
           <BackButton to={1} />
           <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
             <Home className="h-6 w-6" />
@@ -344,7 +354,7 @@ export function OnboardingWizard(
 
       {/* Step 3: Family details */}
       {step === 3 && (
-        <div className="glass-card p-7">
+        <div key={animKey} className={`glass-card p-7 ${direction === 'forward' ? 'animate-step-forward' : 'animate-step-back'}`}>
           <BackButton to={2} />
           <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
             <Users className="h-6 w-6" />
@@ -419,7 +429,7 @@ export function OnboardingWizard(
 
       {/* Step 4: Add family members */}
       {step === 4 && (
-        <div className="space-y-5">
+        <div key={animKey} className={`space-y-5 ${direction === 'forward' ? 'animate-step-forward' : 'animate-step-back'}`}>
           <div className="glass-card p-7">
             <BackButton to={3} />
             <h1 className="text-2xl font-semibold tracking-tight">Add your family</h1>
@@ -512,7 +522,7 @@ export function OnboardingWizard(
 
       {/* Step 5: Review & finalize */}
       {step === 5 && (
-        <div className="glass-card p-7">
+        <div key={animKey} className={`glass-card p-7 ${direction === 'forward' ? 'animate-step-forward' : 'animate-step-back'}`}>
           <BackButton to={4} />
           <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
             <Check className="h-6 w-6" />
