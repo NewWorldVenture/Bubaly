@@ -462,6 +462,11 @@ export interface Database {
         { id?: string; family_id: string; user_id?: string | null; action: string; feature_key?: string | null; metadata?: Json },
         Partial<{ metadata: Json }>
       >;
+      family_dashboard_settings: T<
+        { family_id: string; allow_child_customization: boolean; lock_to_family_default: boolean; updated_by: string | null } & Stamps,
+        { family_id: string; allow_child_customization?: boolean; lock_to_family_default?: boolean; updated_by?: string | null },
+        Partial<{ allow_child_customization: boolean; lock_to_family_default: boolean; updated_by: string | null }>
+      >;
       family_tree_nodes: T<
         { id: string; family_id: string; parent_node_id: string | null; member_id: string | null; name: string; relationship: string; birth_year: number | null; death_year: number | null; birth_place: string | null; photo_url: string | null; bio: string | null; metadata: Json; created_by: string | null } & Stamps,
         { id?: string; family_id: string; parent_node_id?: string | null; member_id?: string | null; name: string; relationship?: string; birth_year?: number | null; death_year?: number | null; birth_place?: string | null; photo_url?: string | null; bio?: string | null; metadata?: Json; created_by?: string | null },
