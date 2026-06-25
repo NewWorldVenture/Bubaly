@@ -1,7 +1,51 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-25 — AI Front Desk (Call Guardian + Receptionist) shipped. Keep this updated as you ship.
+Last updated: 2026-06-25 — Family Wallet program map 100% COMPLETE (all no-Stripe items shipped). Keep this updated as you ship.
+
+> **Session update (2026-06-25j) — FAMILY WALLET: ALL NO-STRIPE ITEMS COMPLETE**
+>
+> Pushed to `main` (commits `a111bf0`, `4907343`, `365a9e3`). tsc clean · build
+> exit 0 · 978/978 tests pass on every commit. The Family Wallet program map is
+> now 100% done except the Stripe layer (which needs business/legal approval).
+>
+> ## ✅ /wallet/babysitters
+> - Actions (parent-only): `saveBabysitterAction`, `archiveBabysitterAction`,
+>   `recordBabysitterPaymentAction` — reuse `babysitter_profiles` + `babysitter_payments`.
+> - `components/wallet/babysitters-view.tsx`: sitter cards (rate/contact/total paid),
+>   add/edit modal, record-payment modal (hours × rate + tip auto-compute or manual
+>   override), recent-payments list. Payments recorded `completed` in ledger mode.
+>
+> ## ✅ /wallet/settings (split rules per child)
+> - `saveWalletRuleAction`: validates bucket split sums to 100%, upserts `wallet_rules`
+>   (split, auto_accept_gifts, require_approval_over_cents) — drives `creditChildWallet`.
+> - `components/wallet/wallet-settings-view.tsx`: per-child allocation editor with live
+>   split bar (Spend/Save/Give/Invest %), auto-accept-gifts toggle, approval threshold.
+>
+> ## ✅ /admin/wallet (super-admin console)
+> - Aggregates ALL families via service client: active wallets, child wallets, pending
+>   gifts, pending approvals, total credit/debit ledger volume + net outstanding,
+>   feature flags, recent audit. `adminToggleFeatureFlagAction` (audit-logged).
+>   Stripe flags visually marked "needs approval". Added to ADMIN_NAV.
+>
+> ## ✅ Per-day AI coach metering
+> - `/api/ai/wallet` enforces `AI_COACH_DAILY_LIMIT` (Basic 5/day, Plus ∞): counts
+>   today's `ai_coach_call` wallet_audit_logs rows, 429s when exceeded, logs each call.
+>
+> ## ✅ QR codes for gift links
+> - Added `qrcode` dep + `components/ui/qr-code.tsx` (inline SVG, no network — token
+>   stays on device). Gift cards gained a "QR" button → scannable modal + copy.
+>
+> **Wallet subnav is now: Overview · Goals · Allowance · Gifts · Babysitters · Activity · Settings.**
+>
+> ## Family Wallet — ONLY remaining work needs STRIPE (business/legal approval, can't
+> run in this env): the full `lib/stripe/*` service layer, Connect onboarding, Treasury
+> financial accounts, Issuing virtual/physical cards, the `issuing_authorization.request`
+> webhook, gift Checkout (run `computeFunding` before pledge), `/admin/stripe`,
+> `/admin/card-designs`. New stripe_* tables + flip the seeded `feature_flags` (all
+> stripe_* are OFF). ENV needed: STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY,
+> STRIPE_WEBHOOK_SECRET, STRIPE_CONNECT_CLIENT_ID, STRIPE_TREASURY_ENABLED,
+> STRIPE_ISSUING_ENABLED, STRIPE_CARD_CUSTOMIZATION_ENABLED, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.
 
 > **Session update (2026-06-25i) — AI FRONT DESK: CALL GUARDIAN + RECEPTIONIST (Task #27)**
 >
@@ -168,13 +212,12 @@ Last updated: 2026-06-25 — AI Front Desk (Call Guardian + Receptionist) shippe
 >   detail + add funds). Subnav: `components/wallet/wallet-subnav.tsx`. Server actions in
 >   `app/(app)/wallet/actions.ts` + public `app/gift/actions.ts`. ~115 wallet tests; suite green.
 >
-> **TODO (no Stripe needed — build next, all reuse `creditChildWallet` + immutable ledger):**
-> 1. Chore→wallet "Pay" button on chore approval (action `payChoreRewardAction` already exists).
-> 2. `/wallet/babysitters` (tables `babysitter_profiles`/`babysitter_payments` exist) +
->    `/wallet/settings` (split rules per child via `wallet_rules`).
-> 3. `/admin/wallet` console (wallet status, pending approvals, audit, reconciliation, flags).
-> 4. Per-day AI-coach metering (`AI_COACH_DAILY_LIMIT`, basic 5/day — count today's calls).
-> 5. QR codes for gift links (no `qrcode` dep yet).
+> **TODO (no Stripe needed):** ✅✅✅ ALL DONE as of 2026-06-25j — see that entry at the top.
+> 1. ✅ Chore→wallet "Pay" button (2026-06-25h).
+> 2. ✅ `/wallet/babysitters` + `/wallet/settings` (2026-06-25j).
+> 3. ✅ `/admin/wallet` console (2026-06-25j).
+> 4. ✅ Per-day AI-coach metering (2026-06-25j).
+> 5. ✅ QR codes for gift links — `qrcode` dep added (2026-06-25j).
 > ✅ DONE 2026-06-25f: `/wallet/children/[childId]` per-child detail + `/wallet/activity` full ledger.
 >
 > **TODO (REQUIRES STRIPE — business/legal approval needed, can't run in this env):** Stripe service
