@@ -1,7 +1,20 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-24, session `claude/connect-8ysp00` — App-wide error-message hardening (describeDbError across all 43 remaining modules). Keep this updated as you ship.
+Last updated: 2026-06-24, session `claude/connect-8ysp00` — Cookie-consent notice completing the legal/onboarding theme. Keep this updated as you ship.
+
+> **Session update (2026-06-24, branch `claude/connect-8ysp00`, pushed direct to `main`) — COOKIE-CONSENT NOTICE (completes the legal/onboarding initiative).**
+> - **`components/marketing/cookie-consent.tsx`** (NEW) — lightweight, non-blocking
+>   cookie notice for the public marketing site. Since Bubaly uses only essential +
+>   privacy-respecting analytics cookies (no ad trackers), it's an acknowledgement, not
+>   a consent gate: "Got it" + "Learn more", remembered in `localStorage`
+>   (`bubaly-cookie-consent`), renders nothing until mounted (no hydration flash),
+>   links to `/cookies` + `/privacy`. Mounted in `app/(marketing)/layout.tsx` beside
+>   `ExitIntent`. Uses `animate-fade-in-up`; theme-aware; bottom-right on desktop,
+>   full-width bottom on mobile.
+> - No migration, no Supabase change. `tsc`/`lint` clean, `build` exit 0.
+
+> **Session update (2026-06-24, branch `claude/connect-8ysp00`, pushed direct to `main`) — APP-WIDE FRIENDLY ERROR MESSAGES (describeDbError across ALL remaining modules).**
 
 > **Session update (2026-06-24, branch `claude/connect-8ysp00`, pushed direct to `main`) — APP-WIDE FRIENDLY ERROR MESSAGES (describeDbError across ALL remaining modules).**
 >
