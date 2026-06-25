@@ -42,7 +42,7 @@ export type SuggestionDraft = {
 export type RenewalSignal = { id: string; label: string; expiresOn: string };
 export type AppointmentSignal = { id: string; title: string; startsAt: string; memberId: string | null; hasReminder: boolean };
 export type ChoreSignal = { id: string; title: string; dueAt: string | null; memberId: string | null };
-export type BirthdaySignal = { memberId: string; name: string; birthday: string }; // birthday = YYYY-MM-DD (year ignored)
+export type BirthdaySignal = { memberId: string; name: string; birthday: string; giftIdeas?: string[] }; // birthday = YYYY-MM-DD (year ignored); giftIdeas from their wishlist
 export type GrocerySignal = { id: string; name: string; addedAt: string };
 export type EventSignal = { id: string; title: string; startsAt: string; endsAt: string | null; memberId: string | null };
 export type SubscriptionSignal = { id: string; name: string; costCents: number; cadence: string; nextCharge: string | null; lastUsed: string | null; status: string };
@@ -160,21 +160,26 @@ export function birthdaySuggestions(s: FamilySnapshot): SuggestionDraft[] {
   return s.birthdays
     .map((b) => ({ b, d: daysUntilBirthday(s.today, b.birthday) }))
     .filter(({ d }) => d >= 0 && d <= 14)
-    .map(({ b, d }) => ({
-      kind: 'birthday',
-      title: d === 0 ? `${b.name}'s birthday is today! 🎉` : `${b.name}'s birthday in ${d} day${d === 1 ? '' : 's'}`,
-      detail: 'Plan a gift, a cake, or a celebration.',
-      confidence: d <= 7 ? 88 : 78,
-      urgency: clampUrgency(d <= 2 ? 3 : d <= 7 ? 2 : 1),
-      actionType: 'plan_celebration',
-      actionLabel: 'Plan celebration',
-      payload: { memberId: b.memberId, name: b.name },
-      sourceKind: 'family_members',
-      sourceId: b.memberId,
-      memberId: b.memberId,
-      dedupeKey: `birthday:${b.memberId}`,
-      expiresAt: null,
-    }));
+    .map(({ b, d }) => {
+      const ideas = (b.giftIdeas ?? []).slice(0, 3);
+      return {
+        kind: 'birthday',
+        title: d === 0 ? `${b.name}'s birthday is today! 🎉` : `${b.name}'s birthday in ${d} day${d === 1 ? '' : 's'}`,
+        detail: ideas.length > 0
+          ? `Gift ideas from their wish list: ${ideas.join(', ')}.`
+          : 'Plan a gift, a cake, or a celebration.',
+        confidence: d <= 7 ? 88 : 78,
+        urgency: clampUrgency(d <= 2 ? 3 : d <= 7 ? 2 : 1),
+        actionType: 'plan_celebration',
+        actionLabel: ideas.length > 0 ? 'See gift ideas' : 'Plan celebration',
+        payload: { memberId: b.memberId, name: b.name, giftIdeas: ideas },
+        sourceKind: 'family_members',
+        sourceId: b.memberId,
+        memberId: b.memberId,
+        dedupeKey: `birthday:${b.memberId}`,
+        expiresAt: null,
+      };
+    });
 }
 
 export function grocerySuggestions(s: FamilySnapshot): SuggestionDraft[] {

@@ -91,6 +91,18 @@ describe('birthdaySuggestions', () => {
     expect(out.map((o) => o.memberId)).toEqual(['m1']);
     expect(out[0].urgency).toBe(3);
   });
+  it('surfaces wish-list gift ideas when present (Family Memory)', () => {
+    const out = birthdaySuggestions(base({ birthdays: [
+      { memberId: 'm1', name: 'Mia', birthday: '2015-06-26', giftIdeas: ['Lego set', 'Art kit'] },
+    ] }));
+    expect(out[0].detail).toContain('Lego set');
+    expect(out[0].actionLabel).toBe('See gift ideas');
+    expect(out[0].payload.giftIdeas).toEqual(['Lego set', 'Art kit']);
+  });
+  it('falls back to a generic plan message without ideas', () => {
+    const out = birthdaySuggestions(base({ birthdays: [{ memberId: 'm1', name: 'Mia', birthday: '2015-06-26' }] }));
+    expect(out[0].detail).toMatch(/Plan a gift/);
+  });
 });
 
 describe('grocerySuggestions', () => {
