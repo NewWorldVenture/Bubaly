@@ -12,6 +12,10 @@ import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
 import { Rocket, Gauge, ShieldCheck } from 'lucide-react';
 import { successProbability } from '@/lib/autopilot/engine';
+import { planLevel } from '@/lib/constants/plans';
+import { tierForPlanLevel, FIXED_FEATURES } from '@/lib/dashboard/registry';
+import { resolvePrimary, availableFeatures, lockedFeatures } from '@/lib/dashboard/layout';
+import { DashboardQuickActions } from '@/components/dashboard/quick-actions';
 
 function greeting() {
   const h = new Date().getHours();
@@ -127,17 +131,6 @@ function buildActionCards(data: {
   return cards.slice(0, 5);
 }
 
-const QUICK_LINKS = [
-  { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, bg: 'bg-blue-500/10 text-blue-400' },
-  { href: '/dashboard/chores', label: 'Tasks', icon: CheckSquare, bg: 'bg-violet-500/10 text-violet-400' },
-  { href: '/dashboard/grocery', label: 'Grocery', icon: ShoppingCart, bg: 'bg-emerald-500/10 text-emerald-400' },
-  { href: '/dashboard/health', label: 'Health', icon: HeartPulse, bg: 'bg-rose-500/10 text-rose-400' },
-  { href: '/dashboard/home', label: 'Home', icon: Home, bg: 'bg-orange-500/10 text-orange-400' },
-  { href: '/dashboard/school', label: 'School', icon: GraduationCap, bg: 'bg-indigo-500/10 text-indigo-400' },
-  { href: '/dashboard/sports', label: 'Sports', icon: Trophy, bg: 'bg-yellow-500/10 text-yellow-400' },
-  { href: '/dashboard/health', label: 'Medical', icon: HeartPulse, bg: 'bg-pink-500/10 text-pink-400' },
-];
-
 export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const familyId = ctx.active.familyId;
   const me = ctx.active.member;
@@ -164,6 +157,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { count: unreadCommsCount },
     { data: activeConcierge },
     { count: unreadCallsCount },
+    { data: layoutRows },
+    { data: walletSub },
   ] = await Promise.all([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
@@ -207,6 +202,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .order('created_at', { ascending: false }).limit(2),
     supabase.from('call_logs').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('is_read', false),
+    supabase.from('dashboard_layouts').select('feature_keys, scope, user_id')
+      .eq('family_id', familyId).is('deleted_at', null).in('scope', ['user', 'family']),
+    supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']).maybeSingle(),
   ]);
 
   const openSuggestions = (autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number }[];
@@ -215,6 +213,17 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const autopilotHandled = autopilotHandledCount ?? 0;
   const topSuggestions = openSuggestions.slice(0, 3);
   const showAutopilot = openSuggestions.length > 0 || autopilotHandled > 0;
+
+  // ── Customizable, tier-aware quick actions ──
+  const dashTier = tierForPlanLevel(planLevel(walletSub?.plan ?? null));
+  const layouts = (layoutRows ?? []) as { feature_keys: string[]; scope: string; user_id: string | null }[];
+  const myLayout = layouts.find((l) => l.scope === 'user' && l.user_id === ctx.user.id);
+  const familyLayout = layouts.find((l) => l.scope === 'family');
+  const savedKeys = myLayout?.feature_keys ?? familyLayout?.feature_keys ?? null;
+  const primaryButtons = resolvePrimary(savedKeys, dashTier);
+  const primaryKeys = primaryButtons.map((f) => f.key);
+  const availableButtons = availableFeatures(dashTier);
+  const lockedButtons = lockedFeatures(dashTier);
 
   const actionCards = buildActionCards({
     pendingChores: pendingChores ?? 0,
@@ -439,26 +448,13 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         </div>
       )}
 
-      {/* Quick links grid */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">Quick Access</h2>
-        </div>
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-4">
-          {QUICK_LINKS.slice(0, 8).map(({ href, label, icon: Icon, bg }) => (
-            <Link
-              key={href + label}
-              href={href}
-              className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 py-4 text-center transition hover:bg-elevated hover:border-brand/20"
-            >
-              <div className={cn('grid h-9 w-9 place-items-center rounded-xl', bg)}>
-                <Icon className="h-4 w-4" />
-              </div>
-              <span className="text-[11px] font-semibold">{label}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
+      {/* Customizable, tier-aware quick actions */}
+      <DashboardQuickActions
+        fixed={FIXED_FEATURES}
+        primaryKeys={primaryKeys}
+        available={availableButtons}
+        locked={lockedButtons}
+      />
 
       {/* Empty state when no cards */}
       {actionCards.length === 0 && !hasEvents && (
