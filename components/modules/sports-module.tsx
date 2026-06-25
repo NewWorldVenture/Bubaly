@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Calendar, ChevronRight, Filter, MoreHorizontal, Plus, Sparkles, Trophy, Users, Zap } from 'lucide-react';
+import { Calendar, ChevronRight, MoreHorizontal, Plus, Sparkles, Trophy, Users, Zap } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -171,10 +171,6 @@ export function SportsModule() {
             {TABS.map((t) => (
               <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>
             ))}
-          </div>
-          <div className="flex gap-2 pb-1">
-            <button className="btn-inline"><Filter className="h-3 w-3" /> Filter</button>
-            <button className="btn-inline"><MoreHorizontal className="h-3 w-3" /> More</button>
           </div>
         </div>
 

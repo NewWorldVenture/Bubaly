@@ -106,6 +106,20 @@ export function GroceryModule() {
     setAddingItem(''); void refresh();
   }
 
+  async function shareList() {
+    const pending = items.filter(i => !i.is_checked);
+    if (pending.length === 0) return toastError('Nothing to share — the list is all checked off!');
+    const text = `🛒 Grocery list\n\n${pending.map(i => `• ${i.name}${i.quantity ? ` (${i.quantity})` : ''}`).join('\n')}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Grocery list', text });
+      } else {
+        await navigator.clipboard.writeText(text);
+        success('List copied to clipboard');
+      }
+    } catch { /* user cancelled share, or clipboard unavailable */ }
+  }
+
   function toggleCollapse(cat: string) {
     setCollapsed(prev => {
       const next = new Set(prev);
@@ -157,8 +171,7 @@ export function GroceryModule() {
               </button>
             ))}
             <div className="ml-auto flex items-center gap-2">
-              <button className="text-xs text-brand hover:underline">Share List</button>
-              <Button variant="outline" size="sm">More</Button>
+              <button onClick={shareList} className="text-xs text-brand hover:underline">Share List</button>
             </div>
           </div>
 

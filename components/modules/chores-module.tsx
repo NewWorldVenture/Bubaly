@@ -86,6 +86,9 @@ export function ChoresModule() {
   const [busy, setBusy] = useState<string | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('all');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | 'low' | 'medium' | 'high'>('all');
+  const [sortBy, setSortBy] = useState<'due' | 'priority' | 'title'>('due');
+  const [menu, setMenu] = useState<'filter' | 'sort' | null>(null);
 
   const { data, loading, error, refresh } = useRealtimeQuery<Assignment>({
     table: 'chore_assignments', familyId, deps: [familyId],
@@ -105,14 +108,26 @@ export function ChoresModule() {
   const completed = data.filter(a => ['approved', 'done'].includes(a.status));
 
   const filtered = useMemo(() => {
+    let list: Assignment[];
     switch (tab) {
-      case 'mine': return data.filter(a => a.member_id === selfMemberId && !['approved', 'done'].includes(a.status));
-      case 'assigned': return data.filter(a => a.member_id !== selfMemberId && !['approved', 'done'].includes(a.status));
-      case 'chores': return data.filter(a => !['approved', 'done'].includes(a.status));
-      case 'completed': return completed;
-      default: return data.filter(a => !['approved', 'done'].includes(a.status));
+      case 'mine': list = data.filter(a => a.member_id === selfMemberId && !['approved', 'done'].includes(a.status)); break;
+      case 'assigned': list = data.filter(a => a.member_id !== selfMemberId && !['approved', 'done'].includes(a.status)); break;
+      case 'chores': list = data.filter(a => !['approved', 'done'].includes(a.status)); break;
+      case 'completed': list = completed; break;
+      default: list = data.filter(a => !['approved', 'done'].includes(a.status));
     }
-  }, [data, tab, selfMemberId, completed]);
+    if (priorityFilter !== 'all') list = list.filter(a => (a.chore?.priority ?? 'medium') === priorityFilter);
+    const prioRank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    list = [...list].sort((a, b) => {
+      if (sortBy === 'title') return (a.chore?.title ?? '').localeCompare(b.chore?.title ?? '');
+      if (sortBy === 'priority') return (prioRank[a.chore?.priority ?? 'medium'] ?? 1) - (prioRank[b.chore?.priority ?? 'medium'] ?? 1);
+      // 'due' — soonest first, undated last
+      const da = a.due_at ? new Date(a.due_at).getTime() : Infinity;
+      const db = b.due_at ? new Date(b.due_at).getTime() : Infinity;
+      return da - db;
+    });
+    return list;
+  }, [data, tab, selfMemberId, completed, priorityFilter, sortBy]);
 
   const dueToday = data.filter(a => {
     if (!a.due_at || ['approved', 'done'].includes(a.status)) return false;
@@ -220,12 +235,47 @@ export function ChoresModule() {
               ))}
             </div>
             <div className="ml-auto flex items-center gap-2">
-              <button className="btn-inline">
-                <Filter className="h-3 w-3" /> Filter
-              </button>
-              <button className="btn-inline">
-                <SlidersHorizontal className="h-3 w-3" /> Sort
-              </button>
+              <div className="relative">
+                <button onClick={() => setMenu(m => m === 'filter' ? null : 'filter')}
+                  className={cn('btn-inline', priorityFilter !== 'all' && 'text-brand')}>
+                  <Filter className="h-3 w-3" /> {priorityFilter === 'all' ? 'Filter' : `${priorityFilter[0].toUpperCase()}${priorityFilter.slice(1)}`}
+                </button>
+                {menu === 'filter' && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setMenu(null)} />
+                    <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg">
+                      {(['all', 'high', 'medium', 'low'] as const).map(p => (
+                        <button key={p} onClick={() => { setPriorityFilter(p); setMenu(null); }}
+                          className={cn('flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-surface transition',
+                            priorityFilter === p && 'text-brand font-semibold')}>
+                          <span className="capitalize">{p === 'all' ? 'All priorities' : p}</span>
+                          {priorityFilter === p && <CheckCircle2 className="h-3.5 w-3.5" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="relative">
+                <button onClick={() => setMenu(m => m === 'sort' ? null : 'sort')} className="btn-inline">
+                  <SlidersHorizontal className="h-3 w-3" /> Sort
+                </button>
+                {menu === 'sort' && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setMenu(null)} />
+                    <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg">
+                      {([['due', 'Due date'], ['priority', 'Priority'], ['title', 'Name (A–Z)']] as const).map(([key, label]) => (
+                        <button key={key} onClick={() => { setSortBy(key); setMenu(null); }}
+                          className={cn('flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-surface transition',
+                            sortBy === key && 'text-brand font-semibold')}>
+                          <span>{label}</span>
+                          {sortBy === key && <CheckCircle2 className="h-3.5 w-3.5" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -360,7 +410,7 @@ export function ChoresModule() {
           <div className="sidebar-card">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-sm font-semibold">My Chores</p>
-              <button className="text-xs text-brand hover:underline">View all</button>
+              <button onClick={() => setTab('mine')} className="text-xs text-brand hover:underline">View all</button>
             </div>
             <div className="space-y-2">
               {data.filter(a => a.member_id === selfMember.id && !['approved', 'done'].includes(a.status)).slice(0, 4).map(a => {
@@ -406,7 +456,7 @@ export function ChoresModule() {
               </div>
             ))}
           </div>
-          <button className="mt-3 text-xs text-brand hover:underline">View full report →</button>
+          <button onClick={() => setTab('completed')} className="mt-3 text-xs text-brand hover:underline">View full report →</button>
         </div>
       </div>
 

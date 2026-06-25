@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Activity, ChevronRight, Dumbbell, Filter, Heart, MoreHorizontal, Plus, Sparkles, Zap, Thermometer, CheckCircle2, Trash2, Target, Loader2 } from 'lucide-react';
+import { Activity, ChevronRight, Dumbbell, Heart, Plus, Sparkles, Zap, Thermometer, CheckCircle2, Trash2, Target, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -514,7 +514,6 @@ export function HealthModule() {
               <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>
             ))}
           </div>
-          <div className="shrink-0 pb-1"><button className="btn-inline"><Filter className="h-3 w-3" /> Filter</button></div>
         </div>
 
         {/* Stats grid */}

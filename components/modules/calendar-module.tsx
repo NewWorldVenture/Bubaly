@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
@@ -126,6 +126,8 @@ export function CalendarModule() {
   const [selected, setSelected] = useState<Event | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [filterMember, setFilterMember] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [catMenu, setCatMenu] = useState(false);
   const [view, setView] = useState<'week' | 'month' | 'agenda'>('week');
   const [gcalConnected, setGcalConnected] = useState<boolean | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -161,9 +163,11 @@ export function CalendarModule() {
 
   const memberById = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
 
-  const filtered = useMemo(() =>
-    filterMember === 'all' ? data : data.filter(e => e.assignee_id === filterMember),
-    [data, filterMember]);
+  const filtered = useMemo(() => {
+    let list = filterMember === 'all' ? data : data.filter(e => e.assignee_id === filterMember);
+    if (filterCategory !== 'all') list = list.filter(e => e.category === filterCategory);
+    return list;
+  }, [data, filterMember, filterCategory]);
 
   const allDay = filtered.filter(e => e.all_day);
   const timed = filtered.filter(e => !e.all_day);
@@ -287,9 +291,27 @@ export function CalendarModule() {
                 ))}
               </div>
 
-              <button className="btn-inline">
-                <Filter className="h-3.5 w-3.5" /> Filters
-              </button>
+              <div className="relative">
+                <button onClick={() => setCatMenu(v => !v)}
+                  className={cn('btn-inline', filterCategory !== 'all' && 'text-brand')}>
+                  <Filter className="h-3.5 w-3.5" /> {filterCategory === 'all' ? 'Filters' : filterCategory[0].toUpperCase() + filterCategory.slice(1)}
+                </button>
+                {catMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setCatMenu(false)} />
+                    <div className="absolute right-0 z-20 mt-1 max-h-64 w-44 overflow-y-auto rounded-xl border border-border bg-elevated shadow-lg">
+                      {(['all', 'general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'] as const).map(c => (
+                        <button key={c} onClick={() => { setFilterCategory(c); setCatMenu(false); }}
+                          className={cn('flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-surface transition capitalize',
+                            filterCategory === c && 'text-brand font-semibold')}>
+                          {c === 'all' ? 'All categories' : c}
+                          {filterCategory === c && <Check className="h-3.5 w-3.5" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -508,7 +530,7 @@ export function CalendarModule() {
             );
           })}
           {upcoming.length > 0 && (
-            <button className="mt-1 text-xs text-brand hover:underline">View full agenda →</button>
+            <button onClick={() => setView('agenda')} className="mt-1 text-xs text-brand hover:underline">View full agenda →</button>
           )}
         </div>
       </div>

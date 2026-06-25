@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { BookOpen, Calendar, ChevronRight, Filter, GraduationCap, MoreHorizontal, Plus, Sparkles } from 'lucide-react';
+import { BookOpen, Calendar, ChevronRight, GraduationCap, MoreHorizontal, Plus, Sparkles } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -297,10 +297,6 @@ export function SchoolModule() {
         {/* Tab bar */}
         <div className="flex items-center justify-between border-b border-border">
           <div className="tab-bar">{TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>)}</div>
-          <div className="flex gap-2 pb-1">
-            <button className="btn-inline"><Filter className="h-3 w-3" /> Filter</button>
-            <button className="btn-inline"><MoreHorizontal className="h-3 w-3" /> More</button>
-          </div>
         </div>
 
         {/* Stats grid */}

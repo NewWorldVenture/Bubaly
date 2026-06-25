@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Sparkles, Activity, Check, X as XIcon } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -75,6 +76,14 @@ export function MealsModule() {
       const byId = new Map((meals ?? []).map(m => [m.id, m]));
       return { data: data.map(p => ({ ...p, meal: byId.get(p.meal_id ?? '') ?? null })), error: null };
     },
+  });
+
+  // Real shopping-list preview from the family's grocery list (unchecked items).
+  const { data: groceryItems } = useRealtimeQuery<{ id: string; name: string; quantity: string | null; is_checked: boolean }>({
+    table: 'grocery_items', familyId, deps: [familyId],
+    fetcher: async (supabase) => supabase.from('grocery_items')
+      .select('id, name, quantity, is_checked').eq('family_id', familyId)
+      .order('created_at', { ascending: false }).limit(60),
   });
 
   // Build cell lookup: date+type → plan
@@ -217,7 +226,7 @@ export function MealsModule() {
           </div>
 
           <div className="mt-3 flex justify-end">
-            <button className="text-xs text-brand hover:underline">Edit Meal Plan ✏️</button>
+            <button onClick={() => setAutoPlanOpen(true)} className="text-xs text-brand hover:underline">Auto-plan the week ✨</button>
           </div>
         </div>
 
@@ -294,23 +303,28 @@ export function MealsModule() {
 
       {/* Right sidebar */}
       <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
-        {/* Shopping List */}
+        {/* Shopping List — real grocery items */}
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold">Shopping List</p>
-            <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand">14 items</span>
+            <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand">{groceryItems.length} items</span>
           </div>
-          <div className="space-y-1.5">
-            {['Chicken Breast', 'Salmon Fillets', 'Eggs', 'Avocados', 'Spinach', 'Tomatoes', 'Bananas', 'Greek Yogurt'].map((item, i) => (
-              <label key={item} className="flex items-center gap-2 cursor-pointer group">
-                <div className={cn('flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border', [2, 3, 6].includes(i) ? 'bg-brand border-brand' : 'border-border group-hover:border-brand/50')}>
-                  {[2, 3, 6].includes(i) && <Check className="h-2.5 w-2.5 text-brand-fg" />}
+          {groceryItems.length === 0 ? (
+            <p className="text-xs text-muted">Your grocery list is empty. Add items in the Grocery module.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {groceryItems.slice(0, 8).map(item => (
+                <div key={item.id} className="flex items-center gap-2">
+                  <div className={cn('flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border', item.is_checked ? 'bg-brand border-brand' : 'border-border')}>
+                    {item.is_checked && <Check className="h-2.5 w-2.5 text-brand-fg" />}
+                  </div>
+                  <span className={cn('flex-1 text-xs', item.is_checked ? 'text-muted line-through' : 'text-fg')}>{item.name}</span>
+                  {item.quantity && <span className="text-[10px] text-muted">{item.quantity}</span>}
                 </div>
-                <span className={cn('text-xs', [2, 3, 6].includes(i) ? 'text-muted line-through' : 'text-fg')}>{item}</span>
-              </label>
-            ))}
-          </div>
-          <button className="mt-3 text-xs text-brand hover:underline">View full list →</button>
+              ))}
+            </div>
+          )}
+          <Link href="/dashboard/grocery" className="mt-3 inline-block text-xs text-brand hover:underline">View full list →</Link>
         </div>
 
         {/* Nutrition (real, AI-analyzed) */}
@@ -328,7 +342,7 @@ export function MealsModule() {
               </div>
             ))}
           </div>
-          <button className="mt-3 text-xs text-brand hover:underline">Explore more ideas →</button>
+          <Link href="/dashboard/recipes" className="mt-3 inline-block text-xs text-brand hover:underline">Explore more ideas →</Link>
         </div>
       </div>
 
