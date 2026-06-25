@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Plus, CheckCircle2, Circle, MoreHorizontal, Filter, SlidersHorizontal } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Trash2, Filter, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -180,6 +180,17 @@ export function ChoresModule() {
     success('Approved!'); void refresh();
   }
 
+  async function removeChore(a: Assignment) {
+    if (busy) return;
+    if (typeof window !== 'undefined' && !window.confirm(`Delete "${a.chore?.title ?? 'this task'}"?`)) return;
+    setBusy(a.id);
+    const supabase = createClient();
+    const { error } = await supabase.from('chore_assignments').delete().eq('id', a.id);
+    setBusy(null);
+    if (error) return toastError(describeDbError(error));
+    success('Task deleted'); void refresh();
+  }
+
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
@@ -326,7 +337,9 @@ export function ChoresModule() {
                             ? <button onClick={() => payChore(a)} disabled={!!paying} className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold transition', paying === a.id ? 'bg-amber-500/20 text-amber-400 animate-pulse' : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30')}>Pay {formatCents(a.chore!.cash_cents!)}</button>
                             : done && (a.chore?.cash_cents ?? 0) > 0 && !!a.cash_awarded_cents
                             ? <span className="text-[10px] font-semibold text-green-400">Paid ✓</span>
-                            : <button className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>}
+                            : manager
+                            ? <button onClick={() => removeChore(a)} disabled={!!busy} className="rounded p-1 text-muted hover:text-red-400 transition" title="Delete task"><Trash2 className="h-4 w-4" /></button>
+                            : null}
                         </div>
                       </div>
                     );
@@ -370,7 +383,9 @@ export function ChoresModule() {
                             ? <button onClick={() => payChore(a)} disabled={!!paying} className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold transition', paying === a.id ? 'bg-amber-500/20 text-amber-400 animate-pulse' : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30')}>Pay {formatCents(a.chore!.cash_cents!)}</button>
                             : done && (a.chore?.cash_cents ?? 0) > 0 && !!a.cash_awarded_cents
                             ? <span className="text-[10px] font-semibold text-green-400">Paid ✓</span>
-                            : <button className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>}
+                            : manager
+                            ? <button onClick={() => removeChore(a)} disabled={!!busy} className="rounded p-1 text-muted hover:text-red-400 transition" title="Delete task"><Trash2 className="h-4 w-4" /></button>
+                            : null}
                         </div>
                       </div>
                     );
