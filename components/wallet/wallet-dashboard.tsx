@@ -5,6 +5,7 @@
 // "Add funds" flow. Balances are derived (never stored) via lib/wallet/ledger.
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Wallet, PiggyBank, ShoppingBag, HeartHandshake, TrendingUp, Plus, X, ArrowDownLeft, ArrowUpRight, Sparkles,
 } from 'lucide-react';
@@ -163,6 +164,9 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
                   </div>
                 ))}
               </div>
+              <Link href={`/wallet/children/${c.id}`} className="mt-3 block text-center text-xs font-semibold text-brand hover:underline">
+                View details &amp; history →
+              </Link>
             </div>
           ))}
         </div>

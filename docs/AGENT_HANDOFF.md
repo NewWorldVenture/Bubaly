@@ -21,18 +21,19 @@ Last updated after the Wallet grandparent gifting flow. Keep this updated as you
 >   `payChoreRewardAction`, `saveAllowanceRuleAction`, `toggleAllowanceRuleAction`.
 > - **AI coach** — `lib/wallet/coach.ts` + `/api/ai/wallet` (tier-gated).
 > - **Screens** — `/wallet` (dashboard + add funds), `/wallet/goals` (create/fund/forecast),
->   `/wallet/allowance` (editor), `/wallet/gift` (links + approve) + PUBLIC `/gift/[token]`.
->   Subnav: `components/wallet/wallet-subnav.tsx`. Server actions in `app/(app)/wallet/actions.ts`
->   + public `app/gift/actions.ts`. ~110 wallet tests; full suite green.
+>   `/wallet/allowance` (editor), `/wallet/gift` (links + approve) + PUBLIC `/gift/[token]`,
+>   **`/wallet/activity`** (full ledger, filters), **`/wallet/children/[childId]`** (per-child
+>   detail + add funds). Subnav: `components/wallet/wallet-subnav.tsx`. Server actions in
+>   `app/(app)/wallet/actions.ts` + public `app/gift/actions.ts`. ~115 wallet tests; suite green.
 >
 > **TODO (no Stripe needed — build next, all reuse `creditChildWallet` + immutable ledger):**
 > 1. Chore→wallet "Pay" button on chore approval (action `payChoreRewardAction` already exists).
-> 2. `/wallet/children/[childId]` per-child detail (balance, buckets, history, goals, controls).
-> 3. `/wallet/babysitters` (tables `babysitter_profiles`/`babysitter_payments` exist) + `/wallet/activity`
->    (full ledger) + `/wallet/settings` (split rules per child via `wallet_rules`).
-> 4. `/admin/wallet` console (wallet status, pending approvals, audit, reconciliation, flags).
-> 5. Per-day AI-coach metering (`AI_COACH_DAILY_LIMIT`, basic 5/day — count today's calls).
-> 6. QR codes for gift links (no `qrcode` dep yet).
+> 2. `/wallet/babysitters` (tables `babysitter_profiles`/`babysitter_payments` exist) +
+>    `/wallet/settings` (split rules per child via `wallet_rules`).
+> 3. `/admin/wallet` console (wallet status, pending approvals, audit, reconciliation, flags).
+> 4. Per-day AI-coach metering (`AI_COACH_DAILY_LIMIT`, basic 5/day — count today's calls).
+> 5. QR codes for gift links (no `qrcode` dep yet).
+> ✅ DONE 2026-06-25f: `/wallet/children/[childId]` per-child detail + `/wallet/activity` full ledger.
 >
 > **TODO (REQUIRES STRIPE — business/legal approval needed, can't run in this env):** Stripe service
 > layer `lib/stripe/*` (idempotency keys), Connect onboarding, Treasury financial accounts, Issuing
@@ -46,7 +47,22 @@ Last updated after the Wallet grandparent gifting flow. Keep this updated as you
 > STRIPE_TREASURY_ENABLED, STRIPE_ISSUING_ENABLED, STRIPE_CARD_CUSTOMIZATION_ENABLED,
 > NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY. Also ensure CRON_SECRET is set (allowance/autopilot crons).
 >
-> **Per-session wallet detail is in the 2026-06-25a..e entries below.**
+> **Per-session wallet detail is in the 2026-06-25a..f entries below.**
+
+> **Session update (2026-06-25f) — WALLET PHASE 6: PER-CHILD PAGE + ACTIVITY LEDGER.**
+> Two more no-Stripe screens, all reads derived from the immutable ledger. NO migration.
+> Branch `claude/family-wallet`.
+> - **`lib/wallet/activity.ts`** (pure; 5 tests `tests/wallet-activity.test.ts`):
+>   `txnTypeLabel`, `signedAmountCents` (credit +/ debit −), `filterTxns`
+>   (child/type/direction), `groupByDay` (newest day first), `netCents`.
+> - **`/wallet/activity`** (`components/wallet/activity-view.tsx`) — full family ledger:
+>   filter by child / type / direction, grouped by day, net total for the view. Added
+>   **Activity** to `wallet-subnav.tsx`.
+> - **`/wallet/children/[childId]`** (`components/wallet/child-detail-view.tsx`) — per-child
+>   detail: total + 4 bucket balances (`balanceFromLedger`/`bucketBalances`), that child's
+>   goals with progress bars, full history grouped by day, manager-only **Add funds** modal
+>   (reuses `addFundsAction`). Dashboard child cards now link to it ("View details & history →").
+> - Verified: tsc + lint clean · `npm run build` ✓ · **full suite 978/978**.
 
 > **Session update (2026-06-25e) — WALLET PHASE 5: GRANDPARENT GIFTING (public + approve).**
 > The headline relative-gifting flow, fully working in ledger mode (no Stripe needed). NO
