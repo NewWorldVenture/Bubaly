@@ -18,6 +18,8 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { fmtRelative } from '@/lib/utils/format';
 import { formatCents, type BucketKind } from '@/lib/wallet/ledger';
+import { computeFunding, serviceFeeLabel, type WalletTier } from '@/lib/wallet/fees';
+import { WALLET_TIERS } from '@/lib/wallet/tiers';
 import { addFundsAction } from '@/app/(app)/wallet/actions';
 
 export type ChildWalletView = {
@@ -46,14 +48,16 @@ const BUCKET_META: { kind: BucketKind; label: string; icon: typeof PiggyBank; co
   { kind: 'invest', label: 'Invest', icon: TrendingUp, color: 'text-violet-400' },
 ];
 
-export function WalletDashboard({ familyTotal, mode, canManage, childWallets, recent }: {
+export function WalletDashboard({ familyTotal, mode, tier, canManage, childWallets, recent }: {
   familyTotal: number;
   mode: string;
+  tier: WalletTier;
   canManage: boolean;
   childWallets: ChildWalletView[];
   recent: RecentTxn[];
 }) {
   const [addFor, setAddFor] = useState<ChildWalletView | null>(null);
+  const sampleGift = computeFunding(5000, tier); // $50 gift fee preview
 
   return (
     <div className="module-page">
@@ -68,6 +72,20 @@ export function WalletDashboard({ familyTotal, mode, canManage, childWallets, re
         <p className="text-xs text-muted">
           {mode === 'treasury' ? 'Stripe Treasury account' : 'Virtual ledger · parent-managed'}
         </p>
+      </div>
+
+      {/* Plan & gifting-fee transparency (fees disclosed before any payment) */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface/40 p-4 text-xs">
+        <div>
+          <span className="font-semibold">{WALLET_TIERS[tier].label} plan</span>
+          <span className="text-muted"> · Bubaly service fee: {serviceFeeLabel(tier)}</span>
+        </div>
+        <div className="text-muted">
+          A {formatCents(5000)} gift costs the sender{' '}
+          <span className="font-semibold text-fg">{formatCents(sampleGift.totalChargedCents)}</span>{' '}
+          (processing {formatCents(sampleGift.processingCents)}
+          {sampleGift.serviceFeeCents > 0 ? ` + fee ${formatCents(sampleGift.serviceFeeCents)}` : ', no Bubaly fee'}); the child receives the full {formatCents(5000)}.
+        </div>
       </div>
 
       {childWallets.length === 0 ? (
