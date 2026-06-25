@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import {
   Phone, MessageSquare, Mail, Instagram, BookOpen, Trophy,
   FileText, Plus, Search, Wand2, X, Archive,
-  CheckCircle, Sparkles, ArrowLeft,
+  CheckCircle, Sparkles, ArrowLeft, Bell, Copy, Check, Reply, Send, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -282,7 +282,8 @@ export function InboxModule() {
       {/* Detail panel */}
       {selected && (
         <div className="fixed inset-0 z-50 bg-background flex flex-col lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
-          <CommDetail comm={selected} onClose={() => setSelected(null)} onArchive={() => void archive(selected)} />
+          <CommDetail comm={selected} familyId={familyId} userId={userId}
+            onClose={() => setSelected(null)} onArchive={() => void archive(selected)} onRefresh={refreshComms} />
         </div>
       )}
 
@@ -348,9 +349,103 @@ export function InboxModule() {
   );
 }
 
-function CommDetail({ comm, onClose, onArchive }: { comm: Comm; onClose: () => void; onArchive: () => void }) {
+function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
+  comm: Comm; familyId: string; userId: string;
+  onClose: () => void; onArchive: () => void; onRefresh: () => void;
+}) {
+  const { success, error: toastError } = useToast();
   const ch = CHANNELS[comm.channel] ?? CHANNELS.other;
   const actions = comm.action_items as string[];
+
+  const [draft, setDraft] = useState('');
+  const [drafting, setDrafting] = useState(false);
+  const [sendingReply, setSendingReply] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [addedItems, setAddedItems] = useState<Set<number>>(new Set());
+  const [busyItem, setBusyItem] = useState<number | null>(null);
+
+  const canReply = comm.direction === 'inbound';
+
+  // ── AI Message Agent: draft a reply ──────────────────────────────────────
+  async function generateReply() {
+    if (drafting) return;
+    setDrafting(true);
+    try {
+      const contextLines = [
+        comm.contact?.name ? `From: ${comm.contact.name}` : null,
+        comm.subject ? `Subject: ${comm.subject}` : null,
+        comm.body ? `Message: ${comm.body}` : (comm.summary ? `Summary: ${comm.summary}` : null),
+        `Channel: ${ch.label}`,
+      ].filter(Boolean).join('\n');
+      const res = await fetch('/api/ai/assist', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemPrompt: `You are a family's AI message agent. Draft a brief, warm, polite reply to the message below on the family's behalf. Match the tone to the channel (${ch.label}). Keep it natural and ready to send — no placeholders, no "[Name]", no preamble. Just the reply text.`,
+          messages: [{ role: 'user', content: contextLines }],
+          maxTokens: 300,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toastError(data.error ?? 'Could not draft a reply.'); return; }
+      setDraft((data.message ?? '').trim());
+    } catch {
+      toastError('Could not reach the AI. Please try again.');
+    } finally {
+      setDrafting(false);
+    }
+  }
+
+  async function copyDraft() {
+    try {
+      await navigator.clipboard.writeText(draft);
+      setCopied(true); success('Reply copied');
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard unavailable */ }
+  }
+
+  // Log the drafted reply as an outbound message in the thread.
+  async function logReply() {
+    if (!draft.trim() || sendingReply) return;
+    setSendingReply(true);
+    const supabase = createClient();
+    const { error } = await supabase.from('family_communications').insert({
+      family_id: familyId, created_by: userId,
+      contact_id: comm.contact_id,
+      thread_id: comm.thread_id ?? comm.id,
+      channel: comm.channel,
+      direction: 'outbound',
+      subject: comm.subject ? `Re: ${comm.subject}` : null,
+      body: draft.trim(),
+      category: comm.category,
+      status: 'replied',
+    });
+    if (!error) {
+      await supabase.from('family_communications').update({ status: 'replied' }).eq('id', comm.id);
+    }
+    setSendingReply(false);
+    if (error) { toastError(describeDbError(error)); return; }
+    success('Reply logged to the thread');
+    setDraft('');
+    onRefresh();
+  }
+
+  // ── Action item → reminder (one tap) ─────────────────────────────────────
+  async function addReminder(text: string, i: number) {
+    if (busyItem !== null) return;
+    setBusyItem(i);
+    const supabase = createClient();
+    const { error } = await supabase.from('family_reminders').insert({
+      family_id: familyId, created_by: userId,
+      title: text.slice(0, 200),
+      notes: comm.contact?.name ? `From ${comm.contact.name} · ${ch.label}` : `From ${ch.label}`,
+      kind: 'task', priority: comm.priority === 'urgent' ? 'high' : 'normal',
+      status: 'pending', ai_suggested: true,
+    });
+    setBusyItem(null);
+    if (error) { toastError(describeDbError(error)); return; }
+    setAddedItems(prev => new Set(prev).add(i));
+    success('Added to reminders');
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -415,13 +510,55 @@ function CommDetail({ comm, onClose, onArchive }: { comm: Comm; onClose: () => v
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Action Items</p>
             </div>
             <div className="space-y-1.5">
-              {actions.map((a, i) => (
-                <div key={i} className="flex items-start gap-2 rounded-lg bg-amber-500/8 border border-amber-500/20 px-3 py-2">
-                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-                  <span className="text-xs text-fg/90">{a}</span>
-                </div>
-              ))}
+              {actions.map((a, i) => {
+                const added = addedItems.has(i);
+                return (
+                  <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/8 border border-amber-500/20 px-3 py-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                    <span className="flex-1 text-xs text-fg/90">{a}</span>
+                    <button onClick={() => addReminder(a, i)} disabled={added || busyItem !== null}
+                      className={cn('flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition flex-shrink-0',
+                        added ? 'text-green-400' : 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25')}>
+                      {added ? <><Check className="h-3 w-3" /> Added</>
+                        : busyItem === i ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : <><Bell className="h-3 w-3" /> Remind</>}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
+          </div>
+        )}
+
+        {/* AI Message Agent — draft a reply */}
+        {canReply && (
+          <div className="rounded-xl border border-border bg-surface/40 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Reply className="h-3.5 w-3.5 text-brand" />
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">AI Reply Agent</span>
+              </div>
+              <button onClick={generateReply} disabled={drafting}
+                className="flex items-center gap-1 rounded-md bg-brand/10 px-2 py-1 text-[10px] font-semibold text-brand hover:bg-brand/20 transition disabled:opacity-60">
+                {drafting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                {drafting ? 'Drafting…' : draft ? 'Redraft' : 'Draft reply'}
+              </button>
+            </div>
+            <textarea value={draft} onChange={e => setDraft(e.target.value)}
+              placeholder="Tap “Draft reply” for an AI-written response you can edit, copy, or log…"
+              rows={draft ? 5 : 2}
+              className="w-full resize-none rounded-lg border border-border bg-background/60 p-2.5 text-xs leading-relaxed placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
+            {draft && (
+              <div className="mt-2 flex items-center justify-end gap-2">
+                <button onClick={copyDraft} className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium hover:border-brand/40 hover:text-brand transition">
+                  {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />} {copied ? 'Copied' : 'Copy'}
+                </button>
+                <button onClick={logReply} disabled={sendingReply}
+                  className="flex items-center gap-1 rounded-md bg-brand px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-brand/90 transition disabled:opacity-60">
+                  {sendingReply ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />} Log reply
+                </button>
+              </div>
+            )}
           </div>
         )}
 

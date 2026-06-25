@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import {
   Phone, PhoneIncoming, PhoneOff, PhoneForwarded, Voicemail, ShieldCheck,
   ShieldAlert, Ban, Clock, Search, X, ArrowLeft, Settings as SettingsIcon,
-  Sparkles, CheckCircle2, PhoneCall, UserCheck, Trash2,
+  Sparkles, CheckCircle2, PhoneCall, UserCheck, Trash2, Bell, Check, Loader2, CalendarPlus,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -308,7 +308,7 @@ export function FrontDeskModule() {
       {/* Detail panel */}
       {selected && (
         <div className="fixed inset-0 z-50 bg-background flex flex-col lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
-          <CallDetail call={selected} onClose={() => setSelected(null)} onDelete={() => void deleteCall(selected)} canDelete={manager} />
+          <CallDetail call={selected} familyId={familyId} userId={userId} onClose={() => setSelected(null)} onDelete={() => void deleteCall(selected)} canDelete={manager} />
         </div>
       )}
 
@@ -366,12 +366,35 @@ export function FrontDeskModule() {
   );
 }
 
-function CallDetail({ call, onClose, onDelete, canDelete }: {
-  call: Call; onClose: () => void; onDelete: () => void; canDelete: boolean;
+function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
+  call: Call; familyId: string; userId: string; onClose: () => void; onDelete: () => void; canDelete: boolean;
 }) {
+  const { success, error: toastError } = useToast();
   const st = STATUS_CONFIG[call.status] ?? STATUS_CONFIG.screened;
   const cls = CLASS_CONFIG[call.classification] ?? CLASS_CONFIG.unknown;
   const actions = call.action_items as string[];
+  const [addedItems, setAddedItems] = useState<Set<number>>(new Set());
+  const [busyItem, setBusyItem] = useState<number | null>(null);
+
+  const callerLabel = call.contact?.name ?? call.caller_name ?? call.caller_number ?? 'caller';
+
+  // One-tap: turn a call action item into a family reminder.
+  async function addReminder(text: string, i: number) {
+    if (busyItem !== null) return;
+    setBusyItem(i);
+    const supabase = createClient();
+    const { error } = await supabase.from('family_reminders').insert({
+      family_id: familyId, created_by: userId,
+      title: text.slice(0, 200),
+      notes: `From call with ${callerLabel}`,
+      kind: 'task', priority: call.priority === 'urgent' ? 'high' : 'normal',
+      status: 'pending', ai_suggested: true,
+    });
+    setBusyItem(null);
+    if (error) { toastError(describeDbError(error)); return; }
+    setAddedItems(prev => new Set(prev).add(i));
+    success('Added to reminders');
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -437,12 +460,22 @@ function CallDetail({ call, onClose, onDelete, canDelete }: {
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Action Items</p>
             </div>
             <div className="space-y-1.5">
-              {actions.map((a, i) => (
-                <div key={i} className="flex items-start gap-2 rounded-lg bg-amber-500/8 border border-amber-500/20 px-3 py-2">
-                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-                  <span className="text-xs text-fg/90">{a}</span>
-                </div>
-              ))}
+              {actions.map((a, i) => {
+                const added = addedItems.has(i);
+                return (
+                  <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/8 border border-amber-500/20 px-3 py-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                    <span className="flex-1 text-xs text-fg/90">{a}</span>
+                    <button onClick={() => addReminder(a, i)} disabled={added || busyItem !== null}
+                      className={cn('flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition flex-shrink-0',
+                        added ? 'text-green-400' : 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25')}>
+                      {added ? <><Check className="h-3 w-3" /> Added</>
+                        : busyItem === i ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : <><Bell className="h-3 w-3" /> Remind</>}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

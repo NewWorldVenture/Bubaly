@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Sparkles, Send, Plus, Plane, UtensilsCrossed, Heart, Zap,
   PartyPopper, MapPin, Calendar, CheckCircle2, Clock,
-  ChevronRight, Trash2, ArrowLeft, Star, DollarSign,
+  ChevronRight, Trash2, ArrowLeft, Star, DollarSign, CalendarPlus, Check, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -90,21 +90,21 @@ export function ConciergeModule() {
     setSending(true);
 
     try {
-      const res = await fetch('/api/ai/chat', {
+      const res = await fetch('/api/ai/assist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          familyId,
           messages: nextMessages.map(m => ({ role: m.role, content: m.content })),
-          systemPrompt: `You are a luxury family concierge AI. You help families plan memorable experiences, make reservations, coordinate schedules, and arrange special moments. Be warm, enthusiastic, and practical. When you have enough information, suggest specific options, provide helpful tips, and offer to save the plan. Keep responses concise and actionable. Family name: ${family?.name ?? 'this family'}.`,
+          systemPrompt: `You are a luxury family concierge AI for the ${family?.name ?? 'family'} household. You help families plan memorable experiences, make reservations, coordinate schedules, and arrange special moments. Be warm, enthusiastic, and practical. Ask one clarifying question at a time when you need a key detail (budget, dates, party size). When you have enough information, suggest specific options with helpful tips, and offer to save the plan. Keep responses concise and actionable.`,
+          maxTokens: 700,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'AI error');
-      const assistantMsg: ChatMessage = { role: 'assistant', content: data.message ?? data.content ?? 'I couldn\'t generate a response.' };
+      const assistantMsg: ChatMessage = { role: 'assistant', content: data.message ?? 'I couldn\'t generate a response.' };
       setMessages(prev => [...prev, assistantMsg]);
-    } catch (err) {
-      toastError('Could not reach AI. Please try again.');
+    } catch {
+      toastError('Could not reach the concierge AI. Please try again.');
     } finally {
       setSending(false);
     }
@@ -339,7 +339,7 @@ export function ConciergeModule() {
       {/* ── Sidebar ── */}
       <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
         {selectedPlan ? (
-          <PlanDetail plan={selectedPlan} onClose={() => setSelectedPlan(null)} onDelete={deletePlan} onRefresh={refreshPlans} />
+          <PlanDetail plan={selectedPlan} familyId={familyId} userId={userId} onClose={() => setSelectedPlan(null)} onDelete={deletePlan} onRefresh={refreshPlans} />
         ) : (
           <>
             <div className="sidebar-card">
@@ -397,11 +397,13 @@ export function ConciergeModule() {
 }
 
 // ─── Plan Detail ──────────────────────────────────────────────────────────────
-function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
-  plan: Plan; onClose: () => void; onDelete: (p: Plan) => void; onRefresh: () => void;
+function PlanDetail({ plan, familyId, userId, onClose, onDelete, onRefresh }: {
+  plan: Plan; familyId: string; userId: string; onClose: () => void; onDelete: (p: Plan) => void; onRefresh: () => void;
 }) {
-  const { error: toastError } = useToast();
+  const { success, error: toastError } = useToast();
   const [editStatus, setEditStatus] = useState(plan.status);
+  const [addedToCal, setAddedToCal] = useState(false);
+  const [addingCal, setAddingCal] = useState(false);
   const cfg = KIND_CONFIG[plan.kind] ?? KIND_CONFIG.general;
 
   async function updateStatus(status: string) {
@@ -410,6 +412,28 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
     const { error } = await supabase.from('concierge_plans').update({ status }).eq('id', plan.id);
     if (error) toastError(describeDbError(error));
     else onRefresh();
+  }
+
+  // One-tap: put a dated plan on the family calendar (all-day) so it's not lost.
+  async function addToCalendar() {
+    if (!plan.planned_for || addingCal) return;
+    setAddingCal(true);
+    const supabase = createClient();
+    const descParts = [plan.description, plan.location ? `Location: ${plan.location}` : null,
+      plan.budget_cents ? `Budget: ${fmtCents(plan.budget_cents)}` : null].filter(Boolean);
+    const { error } = await supabase.from('calendar_events').insert({
+      family_id: familyId, created_by: userId,
+      title: plan.title,
+      description: descParts.length ? descParts.join('\n') : null,
+      location: plan.location,
+      category: 'general',
+      starts_at: new Date(`${plan.planned_for}T00:00:00`).toISOString(),
+      all_day: true,
+    });
+    setAddingCal(false);
+    if (error) { toastError(describeDbError(error)); return; }
+    setAddedToCal(true);
+    success('Added to your calendar');
   }
 
   return (
@@ -435,9 +459,18 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
         </div>
 
         {plan.planned_for && (
-          <div className="flex items-center gap-2 text-xs">
-            <Calendar className="h-3.5 w-3.5 text-muted" />
-            <span>{fmtDate(plan.planned_for)}</span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs">
+              <Calendar className="h-3.5 w-3.5 text-muted" />
+              <span>{fmtDate(plan.planned_for)}</span>
+            </div>
+            <button onClick={addToCalendar} disabled={addedToCal || addingCal}
+              className={cn('flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition flex-shrink-0',
+                addedToCal ? 'text-green-400' : 'bg-brand/10 text-brand hover:bg-brand/20')}>
+              {addedToCal ? <><Check className="h-3 w-3" /> On calendar</>
+                : addingCal ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <><CalendarPlus className="h-3 w-3" /> Add to calendar</>}
+            </button>
           </div>
         )}
         {plan.location && (
