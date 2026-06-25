@@ -1,7 +1,113 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Bubaly Money — full Stripe integration complete (2026-06-25i). Keep this updated as you ship.
+Last updated: AI Call Guardian™ — complete (2026-06-25j). Keep this updated as you ship.
+
+> **Session update (2026-06-25j) — AI CALL GUARDIAN™: COMPLETE (production-ready).**
+> Full intelligent call screening, routing, and scam protection platform.
+> Branch `claude/continuation-an1mam`. Commit `637bc1b`. TypeScript builds clean (0 errors).
+>
+> **What was built (1 commit, 25 files, +4684 lines):**
+>
+> ### DB Schema — Migration `0091_ai_call_guardian.sql`
+> Enums: `guardian_trust_level` (7 levels), `guardian_routing_mode` (6 modes), `guardian_comm_type`.
+> Tables: `guardian_contacts`, `guardian_member_profiles`, `guardian_routing_rules`,
+> `guardian_communications`, `guardian_screening_sessions`, `guardian_suggestions`,
+> `guardian_escalations`, `guardian_audit_log`.
+> Full RLS on all tables via `is_family_member(family_id)`. Indexes on phone+family, call_sid.
+> ⚠️ **APPLY MIGRATION 0091 TO PROD BEFORE USING GUARDIAN.**
+>
+> ### Guardian Libraries (`lib/guardian/`)
+> - **`trust.ts`** — `TrustLevel` type (7 values: immediate_family → blocked), `TRUST_LABELS`,
+>   `TRUST_ICONS`, `TRUST_COLORS`, `TRUST_BG_COLORS`, `TRUST_RANK`. Helpers:
+>   `shouldRingImmediately()`, `isBlocked()`, `requiresScreening()`, `trustFromSpamScore()`,
+>   `explainTrustDecision()`.
+> - **`scam.ts`** — `ScamType` union (14 types: robocall, irs_scam, warranty, grandparent, etc.),
+>   `ScamDetectionResult`, `ROBOCALL_PATTERNS` (regex array), `detectScamFromText()` (deterministic),
+>   `detectScamWithAI()` (Anthropic claude-haiku / OpenAI fallback), `SCAM_TYPE_LABELS`.
+> - **`rules.ts`** — `GuardianRule`, `RuleMatchContext`, `RuleMatchResult` types.
+>   `evaluateRules()` iterates rules in priority order, returns first match.
+>   `buildRuleContext()` constructs context from call data + timezone. `timeInRange()` handles overnight.
+> - **`pipeline.ts`** — `RoutingMode` (6 values), `ROUTING_MODE_LABELS`, `ROUTING_MODE_DESCRIPTIONS`,
+>   `MemberProfile`, `PipelineInput`, `PipelineResult`. `runDecisionPipeline()` orchestrates:
+>   ID → Trust → Risk → Intent → Urgency → Context → Rules → AI Decision → Action.
+>   Emergency override (urgent + trusted → immediate_ring regardless of other rules).
+> - **`ai-screen.ts`** — `ScreeningTurn`, `ScreeningDecision` types. `buildSystemPrompt()` builds
+>   executive-assistant AI persona. `screeningTurn()` processes multi-turn dialogue via
+>   Anthropic/OpenAI. `buildInitialGreeting()`, `buildVoicemailPrompt()`, `summarizeScreening()`.
+>   Decision JSON: `{action, urgency, risk, intent, summary, callerName, shouldNotifyParents}`.
+> - **`twilio.ts`** — Raw `fetch` to Twilio REST API v2010-04-01 (no npm dep). TwiML builders:
+>   `twimlSay`, `twimlGather`, `twimlRecord`, `twimlDial`, `twimlHangup`, `twimlPause`, `wrapTwiml`.
+>   `sendSms()`, `initiateCall()`, `updateCall()`. `validateTwilioSignature()` (HMAC-SHA1).
+>   `lookupCallerName()` (Twilio Lookup API). `formatPhone()` (E.164 → (555) 123-4567). `isTwilioConfigured()`.
+>
+> ### `withGuardianTables()` Pattern (`lib/supabase/guardian-tables.ts`)
+> Same pattern as `withStripeTables`. All 8 guardian tables typed. Cast helper:
+> ```typescript
+> const db = withGuardianTables(supabase);
+> const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
+> ```
+> **CRITICAL**: Use `gFrom` for all guardian tables. Use raw `supabase.from()` for standard tables.
+> Module-level functions (like `endScreening`, `updateCommStatus`) must create their own `db`/`gFrom`
+> — they can't close over `gFrom` from inside `POST()`.
+>
+> ### API Routes (`app/api/guardian/`)
+> | Route | Purpose |
+> |---|---|
+> | `inbound/voice/route.ts` | Twilio call webhook → runs pipeline → TwiML in <5s |
+> | `inbound/sms/route.ts` | Twilio SMS webhook → scam detect + notify family |
+> | `screen/route.ts` | Twilio Gather callback → multi-turn AI screening |
+> | `status/voicemail/route.ts` | Twilio recording callback → updates comm record |
+> | `escalate/route.ts` | Emergency escalation: push + SMS + outbound call to all parents |
+> | `escalate/twiml/route.ts` | TwiML for outbound emergency alert calls (GET + POST) |
+>
+> ### App Pages (`app/(app)/guardian/`)
+> | Route | Notes |
+> |---|---|
+> | `/guardian` | Main dashboard: stats, escalations, context switcher, AI suggestions, recent comms |
+> | `/guardian/contacts` | Trust graph: grouped by trust level, full CRUD + trust picker |
+> | `/guardian/history` | Paginated communication log: date-grouped, filterable |
+> | `/guardian/rules` | Rules editor: priority-ordered, toggle/delete, new rule modal |
+> | `/guardian/settings` | Per-member routing profile, AI persona, context overrides |
+>
+> ### Server Actions (`app/(app)/guardian/actions.ts`)
+> All write audit log entries to `guardian_audit_log`. Key actions:
+> `upsertContactAction`, `deleteContactAction`, `updateContactTrustAction`,
+> `upsertMemberProfileAction`, `updateContextAction`, `createRuleAction`,
+> `toggleRuleAction`, `deleteRuleAction`, `reviewSuggestionAction`,
+> `acknowledgeEscalationAction`. Uses `ctx.user.id` and `ctx.active.member.id`.
+>
+> ### Components (`components/guardian/`)
+> - `guardian-dashboard.tsx` — stats row, escalations, context switcher, AI suggestions, comms feed
+> - `contact-list.tsx` — CRUD with trust picker, grouped by trust level, ContactModal
+> - `call-history.tsx` — date-grouped list, expandable detail, filter tabs
+> - `routing-settings.tsx` — 3-tab: Routing Rules / AI Persona / Context Modes
+> - `rules-editor.tsx` — priority-ordered rule list, NewRuleModal with all condition fields
+>
+> ### Required ENV Vars
+> ```
+> TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+> TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+> TWILIO_FROM_NUMBER=+15551234567
+> ANTHROPIC_API_KEY=sk-ant-...  (primary AI — uses claude-haiku-4-5-20251001)
+> OPENAI_API_KEY=sk-...  (fallback AI — uses gpt-4o-mini)
+> GUARDIAN_INTERNAL_SECRET=any-random-secret  (protects /api/guardian/escalate)
+> NEXT_PUBLIC_APP_URL=https://bubaly.com
+> ```
+>
+> ### Remaining / Next Steps for AI Call Guardian
+> 1. **Apply migration 0091** to prod Supabase instance
+> 2. **Buy Twilio numbers** and configure webhooks:
+>    - Voice: `https://bubaly.com/api/guardian/inbound/voice`
+>    - SMS: `https://bubaly.com/api/guardian/inbound/sms`
+> 3. **Guardian number assignment UI** — assign a Twilio number to each member profile
+>    (currently done manually via DB; add UI in settings page)
+> 4. **Seasonal intelligence** — time-of-year routing adjustments (holidays, school year) not built
+> 5. **WhatsApp routing** — `guardian_comm_type` enum has `whatsapp_*` types; webhook not built yet
+> 6. **Push notifications** — notifications table inserts work; wire to FCM/Expo for native alerts
+> 7. **AI learning loop** — `guardian_suggestions` proposes rule changes; parent approves in dashboard.
+>    Could add automatic learning from approved/rejected suggestions.
+> 8. **Regenerate `database.types.ts`** after applying migration 0091
 
 > **Session update (2026-06-25i) — BUBALY MONEY: COMPLETE STRIPE INTEGRATION (production-ready).**
 > The full Bubaly Money pillar is now wired to Supabase and Stripe.
