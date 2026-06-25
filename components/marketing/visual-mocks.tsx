@@ -2,7 +2,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import {
   Apple,
-  Bell,
   Bot,
   CalendarDays,
   Check,
@@ -18,7 +17,6 @@ import {
   Monitor,
   PlayCircle,
   Shield,
-  ShoppingCart,
   Sparkles,
   Star,
   Tablet,
@@ -515,32 +513,30 @@ export function DeviceShowcase() {
         One seamless experience across all your devices
       </h2>
 
-      {/* Device grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 lg:gap-5">
         {devices.map((device) => (
           <div key={device} className="device-card group flex flex-col items-center gap-3">
-            <div className="dark"><DeviceArtwork device={device} /></div>
-            <span className="text-sm font-medium text-white/75 transition group-hover:text-white">{device}</span>
+            <DeviceArtwork device={device} />
+            <span className="text-sm font-medium text-[rgb(var(--canvas-fg)/0.75)] transition group-hover:text-[rgb(var(--canvas-fg))]">{device}</span>
           </div>
         ))}
       </div>
 
-      {/* Security badges */}
       <div className="mt-10 grid gap-5 pt-2 sm:grid-cols-3">
         {[
           { icon: Shield, text: 'Bank-level security' },
           { icon: Shield, text: 'End-to-end encrypted' },
           { icon: Heart, text: 'Your data, your family' },
         ].map(({ icon: Icon, text }) => (
-          <div key={text} className="flex items-center justify-center gap-2 text-sm text-white/65">
+          <div key={text} className="flex items-center justify-center gap-2 text-sm text-[rgb(var(--canvas-fg)/0.65)]">
             <Icon className="h-5 w-5 text-emerald-400" />
             {text}
           </div>
         ))}
       </div>
 
-      <div className="mt-8 rounded-xl border border-white/[0.045] bg-white/[0.025] px-5 py-6">
-        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-lg font-black text-white/62 sm:gap-x-14 sm:text-xl">
+      <div className="mt-8 rounded-xl border border-[rgba(var(--showcase-border))] bg-[rgb(var(--showcase-bg)/var(--showcase-alpha))] px-5 py-6">
+        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-lg font-black text-[rgb(var(--canvas-fg)/0.62)] sm:gap-x-14 sm:text-xl">
           <span className="font-serif">Forbes</span>
           <span><span className="mr-1 text-emerald-400">TC</span>TechCrunch</span>
           <span className="text-sm leading-none">GOOD<br />MORNING<br />AMERICA</span>
@@ -555,27 +551,162 @@ export function DeviceShowcase() {
 
 type DeviceName = 'iPhone' | 'Android' | 'iPad' | 'Web App' | 'Apple Watch' | 'Smart Display';
 
-function MiniAppScreen({ compact = false }: { compact?: boolean }) {
+function ScheduleScreen() {
   return (
-    <div className={cn('h-full w-full overflow-hidden rounded-[inherit] bg-[#09111d] p-2', compact && 'p-1.5')}>
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-[inherit] bg-[#080e18] p-2">
       <div className="flex items-center justify-between">
-        <span className={cn('font-bold text-white', compact ? 'text-[4px]' : 'text-[6px]')}>Bubaly</span>
+        <span className="text-[6px] font-bold text-white">Bubaly</span>
         <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
       </div>
-      <div className="mt-2 grid grid-cols-3 gap-1">
-        {[CalendarDays, CheckSquare2, ShoppingCart].map((Icon, index) => (
-          <span key={index} className="grid aspect-square place-items-center rounded-sm bg-white/[0.07]">
-            <Icon className={cn(index === 0 ? 'text-violet-400' : index === 1 ? 'text-emerald-400' : 'text-orange-400', compact ? 'h-2 w-2' : 'h-3 w-3')} />
-          </span>
+      <div className="mt-1.5 rounded-md bg-gradient-to-r from-violet-500/20 to-blue-500/20 px-1.5 py-1">
+        <div className="flex items-center gap-1">
+          <Sparkles className="h-2.5 w-2.5 text-violet-400" />
+          <span className="text-[5px] font-semibold text-white">3 events today</span>
+        </div>
+      </div>
+      <div className="mt-1.5 flex-1 space-y-1">
+        {[
+          { time: '8:00', title: 'Dentist Appt', color: 'bg-rose-400' },
+          { time: '3:30', title: 'Soccer', color: 'bg-emerald-400' },
+          { time: '6:00', title: 'Family Dinner', color: 'bg-violet-400' },
+        ].map(({ time, title, color }) => (
+          <div key={title} className="flex items-center gap-1 rounded-sm bg-white/[0.05] p-1">
+            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', color)} />
+            <span className="text-[4.5px] text-white/50">{time}</span>
+            <span className="truncate text-[4.5px] font-medium text-white/80">{title}</span>
+          </div>
         ))}
       </div>
-      <div className="mt-2 space-y-1">
-        {[55, 82, 68].map((width, index) => (
-          <span key={width} className="flex items-center gap-1 rounded-sm bg-white/[0.045] p-1">
-            <span className={cn('rounded-full', index === 0 ? 'bg-blue-400' : index === 1 ? 'bg-rose-400' : 'bg-emerald-400', compact ? 'h-1 w-1' : 'h-1.5 w-1.5')} />
-            <span className="h-0.5 rounded-full bg-white/30" style={{ width: `${width}%` }} />
-          </span>
+      <div className="mt-auto flex justify-around border-t border-white/[0.08] pt-1.5">
+        {[Home, CalendarDays, CheckSquare2].map((Icon, i) => (
+          <Icon key={i} className={cn('h-2.5 w-2.5', i === 0 ? 'text-violet-400' : 'text-white/30')} />
         ))}
+      </div>
+    </div>
+  );
+}
+
+function TasksScreen() {
+  return (
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-[inherit] bg-[#080e18] p-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[6px] font-bold text-white">Bubaly</span>
+        <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
+      </div>
+      <p className="mt-1.5 text-[5px] font-semibold text-white/70">Today&apos;s Tasks</p>
+      <div className="mt-1 flex-1 space-y-1">
+        {[
+          { text: 'Pack lunches', done: true },
+          { text: 'Walk the dog', done: true },
+          { text: 'Grocery pickup', done: false },
+          { text: 'Start laundry', done: false },
+        ].map(({ text, done }) => (
+          <div key={text} className="flex items-center gap-1 rounded-sm bg-white/[0.05] p-1">
+            {done ? (
+              <CheckCircle2 className="h-2 w-2 shrink-0 text-emerald-400" />
+            ) : (
+              <Circle className="h-2 w-2 shrink-0 text-white/25" />
+            )}
+            <span className={cn('text-[4.5px]', done ? 'text-white/40 line-through' : 'text-white/80')}>{text}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-auto flex justify-around border-t border-white/[0.08] pt-1.5">
+        {[Home, CalendarDays, CheckSquare2].map((Icon, i) => (
+          <Icon key={i} className={cn('h-2.5 w-2.5', i === 2 ? 'text-emerald-400' : 'text-white/30')} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DashboardScreen() {
+  return (
+    <div className="h-full w-full overflow-hidden rounded-[inherit] bg-[#080e18] p-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[6px] font-bold text-white">Bubaly</span>
+        <span className="h-2 w-2 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
+      </div>
+      <div className="mt-1.5 grid grid-cols-4 gap-1">
+        {[
+          { value: '5', label: 'Events', color: 'text-violet-400' },
+          { value: '3', label: 'Tasks', color: 'text-emerald-400' },
+          { value: '72°', label: 'Weather', color: 'text-blue-400' },
+          { value: '2', label: 'Alerts', color: 'text-rose-400' },
+        ].map(({ value, label, color }) => (
+          <div key={label} className="rounded-md bg-white/[0.06] px-0.5 py-1 text-center">
+            <p className={cn('text-[7px] font-bold', color)}>{value}</p>
+            <p className="text-[4px] text-white/40">{label}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+        <div className="space-y-0.5">
+          <p className="text-[5px] font-semibold text-white/60">Schedule</p>
+          {[
+            { title: 'Dentist 8:00', color: 'bg-rose-400' },
+            { title: 'Soccer 3:30', color: 'bg-emerald-400' },
+            { title: 'Dinner 6:00', color: 'bg-violet-400' },
+          ].map(({ title, color }) => (
+            <div key={title} className="flex items-center gap-1 rounded-sm bg-white/[0.04] px-1 py-0.5">
+              <span className={cn('h-1 w-1 shrink-0 rounded-full', color)} />
+              <span className="text-[4px] text-white/70">{title}</span>
+            </div>
+          ))}
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-[5px] font-semibold text-white/60">Tasks</p>
+          {[
+            { text: 'Pack lunches', done: true },
+            { text: 'Walk dog', done: true },
+            { text: 'Groceries', done: false },
+          ].map(({ text, done }) => (
+            <div key={text} className="flex items-center gap-1 rounded-sm bg-white/[0.04] px-1 py-0.5">
+              <span className={cn('h-1 w-1 shrink-0 rounded-full', done ? 'bg-emerald-400' : 'bg-white/20')} />
+              <span className={cn('text-[4px]', done ? 'text-white/40' : 'text-white/70')}>{text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WebAppScreen() {
+  return (
+    <div className="h-full w-full overflow-hidden rounded-[inherit] bg-[#080e18] p-1">
+      <div className="flex h-full gap-0.5">
+        <div className="flex w-3.5 shrink-0 flex-col items-center gap-1.5 rounded-sm bg-white/[0.06] py-1.5">
+          {[Home, CalendarDays, CheckSquare2, UtensilsCrossed].map((Icon, i) => (
+            <Icon key={i} className={cn('h-1.5 w-1.5', i === 0 ? 'text-violet-400' : 'text-white/30')} />
+          ))}
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <div className="flex items-center justify-between px-0.5">
+            <span className="text-[4.5px] font-bold text-white">Dashboard</span>
+            <span className="h-1 w-1 rounded-full bg-gradient-to-br from-blue-400 to-violet-500" />
+          </div>
+          <div className="mt-0.5 grid grid-cols-3 gap-0.5 px-0.5">
+            {[
+              { v: '5', l: 'Events', c: 'text-violet-400' },
+              { v: '3', l: 'Tasks', c: 'text-emerald-400' },
+              { v: '72°', l: 'Weather', c: 'text-blue-400' },
+            ].map(({ v, l, c }) => (
+              <div key={l} className="rounded-sm bg-white/[0.06] py-0.5 text-center">
+                <p className={cn('text-[5px] font-bold', c)}>{v}</p>
+                <p className="text-[3px] text-white/40">{l}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-0.5 space-y-[2px] px-0.5">
+            {['Dentist 8:00', 'Soccer 3:30', 'Dinner 6:00'].map((item, i) => (
+              <div key={item} className="flex items-center gap-0.5 rounded-sm bg-white/[0.04] px-0.5 py-[2px]">
+                <span className={cn('h-1 w-1 shrink-0 rounded-full', i === 0 ? 'bg-rose-400' : i === 1 ? 'bg-emerald-400' : 'bg-violet-400')} />
+                <span className="text-[3.5px] text-white/70">{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -584,8 +715,8 @@ function MiniAppScreen({ compact = false }: { compact?: boolean }) {
 function DeviceArtwork({ device }: { device: DeviceName }) {
   if (device === 'iPhone' || device === 'Android') {
     return (
-      <div className={cn('device-art relative h-32 w-[70px] rounded-[17px] border-[4px] border-[#333742] bg-black p-1 shadow-2xl sm:h-36 sm:w-[78px]', device === 'Android' && 'rounded-[13px]')}>
-        <MiniAppScreen />
+      <div className={cn('device-art relative h-32 w-[70px] rounded-[17px] border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-36 sm:w-[78px]', device === 'Android' && 'rounded-[13px]')}>
+        {device === 'iPhone' ? <ScheduleScreen /> : <TasksScreen />}
         <span className={cn('absolute left-1/2 top-1.5 -translate-x-1/2 bg-black', device === 'iPhone' ? 'h-2 w-7 rounded-full' : 'h-2 w-2 rounded-full')} />
       </div>
     );
@@ -593,8 +724,8 @@ function DeviceArtwork({ device }: { device: DeviceName }) {
 
   if (device === 'iPad') {
     return (
-      <div className="device-art h-28 w-[132px] rounded-xl border-[5px] border-[#333742] bg-black p-1.5 shadow-2xl sm:h-32 sm:w-[148px]">
-        <MiniAppScreen />
+      <div className="device-art h-28 w-[132px] rounded-xl border-[5px] border-[rgb(var(--device-bezel))] bg-black p-1.5 shadow-2xl sm:h-32 sm:w-[148px]">
+        <DashboardScreen />
       </div>
     );
   }
@@ -602,11 +733,11 @@ function DeviceArtwork({ device }: { device: DeviceName }) {
   if (device === 'Web App') {
     return (
       <div className="device-art flex h-32 w-full max-w-[160px] flex-col justify-center sm:h-36">
-        <div className="h-[92px] rounded-lg border-[4px] border-[#333742] bg-black p-1 shadow-2xl sm:h-[104px]">
-          <MiniAppScreen compact />
+        <div className="h-[92px] rounded-lg border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-[104px]">
+          <WebAppScreen />
         </div>
-        <div className="mx-auto h-3 w-8 bg-[#333742]" />
-        <div className="mx-auto h-1.5 w-16 rounded-full bg-[#454a57]" />
+        <div className="mx-auto h-3 w-8 bg-[rgb(var(--device-bezel))]" />
+        <div className="mx-auto h-1.5 w-16 rounded-full bg-[rgb(var(--device-accent))]" />
       </div>
     );
   }
@@ -614,27 +745,39 @@ function DeviceArtwork({ device }: { device: DeviceName }) {
   if (device === 'Apple Watch') {
     return (
       <div className="device-art flex h-32 flex-col items-center justify-center sm:h-36">
-        <div className="h-8 w-9 rounded-t-lg bg-[#353943]" />
-        <div className="relative h-[66px] w-[62px] rounded-[17px] border-[4px] border-[#454a55] bg-black p-1.5 shadow-2xl">
-          <div className="grid h-full place-items-center rounded-xl bg-[#0b1320]">
-            <Bell className="h-5 w-5 text-violet-400" />
-            <span className="absolute bottom-2 text-[6px] font-bold text-white">9:41</span>
+        <div className="h-8 w-9 rounded-t-lg bg-[rgb(var(--device-band))]" />
+        <div className="relative h-[66px] w-[62px] rounded-[17px] border-[4px] border-[rgb(var(--device-accent))] bg-black p-1 shadow-2xl">
+          <div className="flex h-full flex-col items-center justify-center rounded-xl bg-[#0b1320] px-1">
+            <span className="text-[11px] font-bold tracking-tight text-white">9:41</span>
+            <div className="mt-1 flex items-center gap-2">
+              <div className="text-center">
+                <CloudSun className="mx-auto h-2.5 w-2.5 text-blue-400" />
+                <span className="text-[4px] text-white/50">72°</span>
+              </div>
+              <div className="text-center">
+                <Heart className="mx-auto h-2.5 w-2.5 text-rose-400" />
+                <span className="text-[4px] text-white/50">65</span>
+              </div>
+            </div>
+            <div className="mt-1 w-full rounded bg-violet-500/25 px-1 py-0.5 text-center">
+              <span className="text-[4px] font-medium text-violet-300">Dentist 8:00</span>
+            </div>
           </div>
         </div>
-        <div className="h-8 w-9 rounded-b-lg bg-[#353943]" />
+        <div className="h-8 w-9 rounded-b-lg bg-[rgb(var(--device-band))]" />
       </div>
     );
   }
 
   return (
     <div className="device-art flex h-32 w-full max-w-[160px] flex-col items-center justify-center sm:h-36">
-      <div className="relative h-[92px] w-full overflow-hidden rounded-xl border-[5px] border-[#333742] bg-black shadow-2xl sm:h-[104px]">
+      <div className="relative h-[92px] w-full overflow-hidden rounded-xl border-[5px] border-[rgb(var(--device-bezel))] bg-black shadow-2xl sm:h-[104px]">
         <Image src="/images/family-ai-lifestyle.png" alt="Bubaly smart display" fill sizes="160px" className="object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/65 to-transparent" />
         <span className="absolute bottom-2 left-2 text-[7px] font-bold text-white">Good evening, family</span>
       </div>
-      <div className="h-3 w-8 bg-[#333742]" />
-      <div className="h-1.5 w-16 rounded-full bg-[#454a57]" />
+      <div className="h-3 w-8 bg-[rgb(var(--device-bezel))]" />
+      <div className="h-1.5 w-16 rounded-full bg-[rgb(var(--device-accent))]" />
     </div>
   );
 }

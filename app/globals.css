@@ -60,6 +60,10 @@
   --showcase-bg: 255 255 255;
   --showcase-alpha: 0.045;
   --showcase-border: 255 255 255 / 0.10;
+  /* Device mockup hardware colours. */
+  --device-bezel: 51 55 66;
+  --device-band: 53 57 67;
+  --device-accent: 69 74 87;
 }
 
 .light {
@@ -95,6 +99,10 @@
   --showcase-bg: 16 22 40;
   --showcase-alpha: 0.04;
   --showcase-border: 16 22 40 / 0.10;
+  /* Silver-tone device hardware in light mode. */
+  --device-bezel: 176 183 196;
+  --device-band: 190 196 207;
+  --device-accent: 168 174 185;
 }
 
 * {
