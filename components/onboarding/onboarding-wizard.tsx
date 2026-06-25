@@ -41,7 +41,7 @@ interface DraftState {
   family: { name: string; timezone: string };
   details: {
     householdAdults: number; householdChildren: number; childAges: string;
-    region: string; postalCode: string; goals: string[];
+    region: string; postalCode: string; country: string; goals: string[];
     referralSource: string; referralDetail: string;
   };
   members: DraftMember[];
@@ -62,7 +62,7 @@ function defaultDraft(initial?: InitialProfile): DraftState {
     family: { name: '', timezone: guessTz },
     details: {
       householdAdults: 2, householdChildren: 0, childAges: '',
-      region: '', postalCode: '', goals: [],
+      region: '', postalCode: '', country: '', goals: [],
       referralSource: '', referralDetail: '',
     },
     members: [],
@@ -165,6 +165,7 @@ export function OnboardingWizard(
         childAges: String(form.get('childAges') ?? ''),
         region: String(form.get('region') ?? ''),
         postalCode: String(form.get('postalCode') ?? ''),
+        country: String(form.get('country') ?? ''),
         referralSource: String(form.get('referralSource') ?? ''),
         referralDetail: String(form.get('referralDetail') ?? ''),
       },
@@ -217,6 +218,7 @@ export function OnboardingWizard(
         childAges: parseChildAges(draft.details.childAges),
         region: draft.details.region,
         postalCode: draft.details.postalCode,
+        country: draft.details.country,
         goals: draft.details.goals,
         referralSource: draft.details.referralSource,
         referralDetail: draft.details.referralDetail,
@@ -392,6 +394,9 @@ export function OnboardingWizard(
                 {(id) => <Input id={id} name="postalCode" defaultValue={draft.details.postalCode} placeholder="94016" />}
               </Field>
             </div>
+            <Field label="Country" hint="Optional">
+              {(id) => <Input id={id} name="country" defaultValue={draft.details.country} placeholder="United States" />}
+            </Field>
 
             <Field label="How did you hear about us?">
               {(id) => (
@@ -548,6 +553,11 @@ export function OnboardingWizard(
                 {draft.details.householdAdults} adult{draft.details.householdAdults !== 1 ? 's' : ''},
                 {' '}{draft.details.householdChildren} child{draft.details.householdChildren !== 1 ? 'ren' : ''}
               </p>
+              {(draft.details.region || draft.details.postalCode || draft.details.country) && (
+                <p className="text-xs text-muted">
+                  {[draft.details.region, draft.details.postalCode, draft.details.country].filter(Boolean).join(', ')}
+                </p>
+              )}
               {draft.details.goals.length > 0 && (
                 <p className="text-xs text-muted">Goals: {draft.details.goals.join(', ')}</p>
               )}

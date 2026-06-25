@@ -4,7 +4,9 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
 const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/ai', '/mobile', '/faq', '/blog', '/contact', '/login', '/signup', '/auth',
-  '/join', '/offline',
+  '/join', '/offline', '/feed.xml',
+  // Blog subscription endpoint (public — visitors subscribe without logging in).
+  '/api/blog/subscribe',
   // Public survey response pages (NPS/CSAT/CES) — respondents may be anonymous.
   '/s',
   // Public reviews wall + submission page — no login required.

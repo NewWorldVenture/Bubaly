@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, NotificationType } from '@/lib/database.types';
 import { renewalReminders, opportunityReminders } from '@/lib/notifications/deadline-reminders';
 import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
+import { choreSubmissionReminders } from '@/lib/notifications/chore-submission-reminders';
 
 type DB = SupabaseClient<Database>;
 
@@ -58,6 +59,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     { data: meds },
     { data: medSchedules },
     { data: medDoses },
+    { data: submissions },
+    { data: maintenance },
   ] = await Promise.all([
     supabase.from('family_members').select('id, user_id, display_name, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
@@ -66,13 +69,13 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     supabase.from('sports_events').select('id, title, starts_at, member_id, sport, location').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
     supabase.from('reminders').select('id, title, remind_at, member_id, is_done').eq('family_id', familyId).eq('is_done', false).gte('remind_at', nowIso).lte('remind_at', in24),
     supabase.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', nowIso).lte('expires_at', in14d),
-    // Renewals within ~90d (per-item reminder window applied in code) and open signups within 7d.
     supabase.from('renewals').select('id, title, expires_at, reminder_days, status').eq('family_id', familyId).eq('status', 'active').gte('expires_at', todayKey).lte('expires_at', renewalMaxKey),
     supabase.from('opportunities').select('id, title, deadline, status').eq('family_id', familyId).in('status', ['interested', 'waitlisted']).not('deadline', 'is', null).gte('deadline', todayKey).lte('deadline', signupMaxKey),
-    // Active meds + their schedules + today's logged doses → "dose due today" reminders.
     supabase.from('medications').select('id, name, dosage, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
     supabase.from('medication_schedules').select('id, medication_id, time_of_day, days_of_week, starts_on, ends_on').eq('family_id', familyId),
     supabase.from('medication_doses').select('schedule_id, scheduled_for, status').eq('family_id', familyId).gte('scheduled_for', todayStartIso),
+    supabase.from('chore_submissions').select('id, assignment_id, chore_id, member_id, status').eq('family_id', familyId).eq('status', 'pending'),
+    supabase.from('maintenance_tasks').select('id, title, due_at, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', in14d),
   ]);
 
   const userByMember = new Map((members ?? []).map((m) => [m.id, m.user_id]));
@@ -145,6 +148,17 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     }
   }
 
+  for (const mt of maintenance ?? []) {
+    const when = mt.due_at ? timeLabel(mt.due_at, true) : 'soon';
+    if (managers.length === 0) {
+      candidates.push({ type: 'maintenance_task', related_type: 'maintenance_tasks', related_id: mt.id, user_id: null, title: `Maintenance due: ${mt.title}`, body: `Due ${when}` });
+    } else {
+      for (const m of managers) {
+        candidates.push({ type: 'maintenance_task', related_type: 'maintenance_tasks', related_id: `${mt.id}:${m.id}`, user_id: m.user_id, title: `Maintenance due: ${mt.title}`, body: `Due ${when}` });
+      }
+    }
+  }
+
   // Renewals approaching their per-item reminder window, and signups whose
   // registration deadline is within a week → alert managers (pure builders).
   for (const row of renewalReminders(renewalsDue ?? [], managerLites, todayKey)) {
@@ -152,6 +166,27 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   }
   for (const row of opportunityReminders(signupsDue ?? [], managerLites, todayKey)) {
     candidates.push(row);
+  }
+
+  // Chore submissions awaiting parent review → alert managers.
+  if ((submissions ?? []).length > 0) {
+    const subChoreIds = [...new Set((submissions ?? []).map((s) => s.chore_id).filter(Boolean))] as string[];
+    const { data: subChoreRows } = subChoreIds.length
+      ? await supabase.from('chores').select('id, title').in('id', subChoreIds)
+      : { data: [] as { id: string; title: string }[] };
+    const subChoreTitle = new Map((subChoreRows ?? []).map((c) => [c.id, c.title]));
+    const memberNameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
+    const subInputs = (submissions ?? []).map((s) => ({
+      id: s.id,
+      assignment_id: s.assignment_id,
+      member_id: s.member_id,
+      status: s.status,
+      chore_title: (s.chore_id && subChoreTitle.get(s.chore_id)) || 'Task',
+      member_name: memberNameById.get(s.member_id) || 'A member',
+    }));
+    for (const row of choreSubmissionReminders(subInputs, managerLites)) {
+      candidates.push(row);
+    }
   }
 
   // ── Generic items: dedup permanently against notifications for the same item.
