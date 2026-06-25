@@ -361,3 +361,120 @@ export async function dismissGiftAction(input: { giftPaymentId: string }): Promi
   revalidatePath('/wallet/gift');
   return { ok: true };
 }
+
+// ─── Babysitters ────────────────────────────────────────────────────────────
+
+/** Create or update a babysitter profile (parent-only). */
+export async function saveBabysitterAction(input: {
+  id?: string; name: string; phone?: string; email?: string; rateCents?: number; notes?: string;
+}): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can manage babysitters.' };
+  const name = input.name.trim();
+  if (!name) return { ok: false, error: 'Enter a name.' };
+  if (name.length > 120) return { ok: false, error: 'Name is too long.' };
+  if (input.rateCents != null && (!Number.isFinite(input.rateCents) || input.rateCents < 0)) {
+    return { ok: false, error: 'Rate must be a positive amount.' };
+  }
+  const supabase = await createServer();
+  const familyId = ctx.active.familyId;
+
+  if (input.id) {
+    const { error } = await supabase.from('babysitter_profiles').update({
+      name, phone: input.phone?.trim() || null, email: input.email?.trim() || null,
+      rate_cents: input.rateCents ?? null, notes: input.notes?.trim() || null,
+    }).eq('id', input.id).eq('family_id', familyId);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase.from('babysitter_profiles').insert({
+      family_id: familyId, name, phone: input.phone?.trim() || null, email: input.email?.trim() || null,
+      rate_cents: input.rateCents ?? null, notes: input.notes?.trim() || null, created_by: ctx.user.id,
+    });
+    if (error) return { ok: false, error: error.message };
+  }
+  revalidatePath('/wallet/babysitters');
+  return { ok: true };
+}
+
+/** Archive (soft-delete) a babysitter profile. */
+export async function archiveBabysitterAction(input: { id: string }): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can manage babysitters.' };
+  const supabase = await createServer();
+  const { error } = await supabase.from('babysitter_profiles')
+    .update({ is_active: false }).eq('id', input.id).eq('family_id', ctx.active.familyId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/wallet/babysitters');
+  return { ok: true };
+}
+
+/** Record a babysitter payment (tracking + receipt). Hours × rate + tip = amount.
+ *  Marked completed immediately in ledger mode (no real payout rail yet). */
+export async function recordBabysitterPaymentAction(input: {
+  babysitterId: string; hours?: number; rateCents?: number; tipCents?: number; amountCents: number; eventId?: string;
+}): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can record payments.' };
+  if (!Number.isFinite(input.amountCents) || input.amountCents <= 0) return { ok: false, error: 'Enter a payment amount.' };
+  const supabase = await createServer();
+  const { error } = await supabase.from('babysitter_payments').insert({
+    family_id: ctx.active.familyId,
+    babysitter_id: input.babysitterId,
+    event_id: input.eventId ?? null,
+    hours: input.hours ?? null,
+    rate_cents: input.rateCents ?? null,
+    tip_cents: input.tipCents ?? 0,
+    amount_cents: input.amountCents,
+    status: 'completed',
+    created_by: ctx.user.id,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from('wallet_audit_logs').insert({
+    family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'babysitter_paid',
+    entity_type: 'babysitter_payments', detail: `Recorded babysitter payment of $${(input.amountCents / 100).toFixed(2)}`,
+  });
+  revalidatePath('/wallet/babysitters');
+  return { ok: true };
+}
+
+// ─── Wallet Settings (split rules per child) ─────────────────────────────────
+
+/** Update a child's allocation rule: bucket split (must sum to 100), gift
+ *  auto-accept, and the approval threshold. Family-default when childWalletId is null. */
+export async function saveWalletRuleAction(input: {
+  childWalletId: string;
+  split: { spend: number; save: number; give: number; invest: number };
+  autoAcceptGifts: boolean;
+  requireApprovalOverCents: number;
+}): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can change wallet settings.' };
+  const familyId = ctx.active.familyId;
+
+  const sum = input.split.spend + input.split.save + input.split.give + input.split.invest;
+  if (sum !== 100) return { ok: false, error: 'Split percentages must add up to 100%.' };
+  if (Object.values(input.split).some((v) => v < 0 || v > 100)) return { ok: false, error: 'Each bucket must be 0–100%.' };
+  if (!Number.isFinite(input.requireApprovalOverCents) || input.requireApprovalOverCents < 0) {
+    return { ok: false, error: 'Approval threshold must be a positive amount.' };
+  }
+
+  const supabase = await createServer();
+  // Verify the child wallet belongs to this family before writing.
+  const { data: cw } = await supabase.from('child_wallets')
+    .select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
+  if (!cw) return { ok: false, error: 'Child wallet not found.' };
+
+  const { error } = await supabase.from('wallet_rules').upsert({
+    family_id: familyId,
+    child_wallet_id: input.childWalletId,
+    split: normalizeSplit(input.split) as unknown as Split,
+    auto_accept_gifts: input.autoAcceptGifts,
+    require_approval_over_cents: input.requireApprovalOverCents,
+    created_by: ctx.user.id,
+  }, { onConflict: 'family_id,child_wallet_id' });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/wallet/settings');
+  return { ok: true };
+}
