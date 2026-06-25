@@ -1,7 +1,45 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Bubaly Family Wallet (virtual-ledger MVP). Keep this updated as you ship.
+Last updated after the Wallet monetization (fees + tiers) + allowance/chore automation. Keep this updated as you ship.
+
+> **Session update (2026-06-25b) — WALLET PHASE 2: FEES, TIERS, ALLOWANCE + CHORE LEDGER.**
+> Built the published business model (per the product screenshots) + the ledger
+> automation the tier matrix calls for. NO migration (reuses 0088). Branch `claude/festive-bohr-m4cbeg`.
+>
+> **MONETIZATION (pure + tested, matches the screenshots exactly):**
+> - **`lib/wallet/fees.ts`** (13 tests w/ tiers): `computeFunding(cents, tier)` →
+>   processing (Stripe 2.9% + $0.30) + Bubaly service fee (free 99c / basic 49c / plus 0) →
+>   total charged; child always gets the FULL gift. Verified: $50 gift = $52.74 (free) /
+>   $51.75 (plus). `processingFeeCents`, `totalFeesCents`, `serviceFeeLabel`.
+> - **`lib/wallet/tiers.ts`**: the Free/Basic/Plus matrix (wallet/gifts/chores all tiers;
+>   allowances Basic+; aiCoach none→limited→unlimited w/ `AI_COACH_DAILY_LIMIT`; physical
+>   cards none→optional→included; serviceFee full→reduced→none). `walletFeatureEnabled`,
+>   `walletTierForPlanLevel(planLevel)`.
+> - Wallet dashboard now shows a **Plan & gifting-fee disclosure** panel (fees disclosed
+>   before payment — compliance).
+>
+> **LEDGER AUTOMATION (writes immutable wallet_transactions via the shared helper):**
+> - **`lib/wallet/server.ts`** — `creditChildWallet(supabase, {...})`: the ONE credit path —
+>   loads the child's split rule, `allocate`s, inserts one completed credit per bucket, audit-logs.
+>   Reused by top-up, allowance, chores.
+> - **`lib/wallet/allowance.ts`** (8 tests): pure cadence math — `nextRunDate` (weekly/biweekly/
+>   monthly w/ month-length clamp), `isAllowanceDue`, `rollForward` (pays once, lands in future).
+> - **`app/api/cron/wallet-allowance`** — Bearer CRON_SECRET; runs due `allowance_rules`,
+>   credits via `creditChildWallet`, advances next_run_on. **Skips Free-plan families** (allowances
+>   are Basic+). Registered in `vercel.json` at `0 7 * * *`. **ACTION: set CRON_SECRET in prod.**
+> - **Wallet actions** added: `payChoreRewardAction(choreAssignmentId)` (parent-gated; credits the
+>   child from the chore's cash reward; idempotent — one credit per assignment via a related_id
+>   marker) and `saveAllowanceRuleAction` (Basic+ gated, create/update allowance_rules).
+> - Verified: tsc + lint clean · `npm run build` ✓ (wallet-allowance cron) · **full suite 959/959**
+>   (21 new wallet tests).
+>
+> **WALLET NEXT (still open from the spec, build ON the ledger):** allowance-rule + chore-pay UI
+> (actions exist — add the screens); gift links public page + Stripe Checkout w/ the fee breakdown
+> from `computeFunding`; goal funding (goal_transfer) + AI coach (`/api/ai/wallet`, gate via
+> `AI_COACH_DAILY_LIMIT`); the Stripe service layer + Issuing authorization webhook (see prior entry);
+> remaining /wallet/* + /admin/* pages. Revenue streams from the screenshots (card issuance/
+> replacement/designs, instant-transfer fee, marketplace referrals) layer on once Stripe is live.
 
 > **Session update (2026-06-25a) — BUBALY FAMILY WALLET: virtual-ledger MVP.**
 > Built the foundation of the family financial OS. The spec is huge (Stripe

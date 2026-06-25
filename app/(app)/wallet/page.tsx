@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
+import { planLevel } from '@/lib/constants/plans';
+import { walletTierForPlanLevel } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { WalletDashboard, type ChildWalletView } from '@/components/wallet/wallet-dashboard';
@@ -24,12 +26,14 @@ export default async function WalletPage() {
     return <WalletActivation canActivate={manager} />;
   }
 
-  const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }] = await Promise.all([
+  const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }, { data: sub }] = await Promise.all([
     supabase.from('child_wallets').select('id, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
     supabase.from('wallet_buckets').select('id, child_wallet_id, kind, label, sort_order').eq('family_id', familyId),
     supabase.from('wallet_transactions').select('id, child_wallet_id, bucket_id, type, status, direction, amount_cents, description, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(2000),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
+    supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']).maybeSingle(),
   ]);
+  const tier = walletTierForPlanLevel(planLevel(sub?.plan ?? null));
 
   const bucketKindById = new Map((buckets ?? []).map((b) => [b.id, b.kind as BucketKind]));
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
@@ -72,6 +76,7 @@ export default async function WalletPage() {
     <WalletDashboard
       familyTotal={familyTotal}
       mode={wallet.mode}
+      tier={tier}
       canManage={manager}
       childWallets={childViews}
       recent={recent}

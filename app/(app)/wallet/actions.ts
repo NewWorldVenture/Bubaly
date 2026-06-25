@@ -5,6 +5,10 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
+import { creditChildWallet } from '@/lib/wallet/server';
+import { nextRunDate, type Cadence } from '@/lib/wallet/allowance';
+import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
+import { planLevel } from '@/lib/constants/plans';
 
 const WALLET_TERMS_VERSION = '2026-06-25';
 
@@ -131,6 +135,85 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
     family_id: familyId, actor_user_id: userId, action: 'funds_added', entity_type: 'child_wallets', entity_id: cw.id,
     detail: `Added ${amount} cents`, metadata: { split, parts },
   });
+
+  revalidatePath('/wallet');
+  return { ok: true };
+}
+
+/** Resolve the family's wallet tier from its active subscription plan. */
+async function familyWalletTier(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string) {
+  const { data: sub } = await supabase
+    .from('subscriptions').select('plan, status').eq('family_id', familyId)
+    .in('status', ['active', 'trialing']).maybeSingle();
+  return walletTierForPlanLevel(planLevel(sub?.plan ?? null));
+}
+
+/**
+ * Pay a child for an approved chore — credits their wallet from the chore's cash
+ * reward, allocated across buckets (immutable ledger). Idempotent per assignment
+ * via a marker on the assignment row.
+ */
+export async function payChoreRewardAction(input: { choreAssignmentId: string }): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can pay chore rewards.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+
+  const { data: assignment } = await supabase
+    .from('chore_assignments')
+    .select('id, member_id, family_id, cash_awarded_cents, chores(title, cash_cents)')
+    .eq('id', input.choreAssignmentId).eq('family_id', familyId).maybeSingle();
+  if (!assignment) return { ok: false, error: 'Chore not found.' };
+
+  const chore = (assignment as unknown as { chores: { title: string; cash_cents: number | null } | null }).chores;
+  const amount = assignment.cash_awarded_cents ?? chore?.cash_cents ?? 0;
+  if (amount <= 0) return { ok: false, error: 'This chore has no cash reward.' };
+
+  // Already paid? (one wallet credit per assignment)
+  const { data: existing } = await supabase
+    .from('wallet_transactions').select('id')
+    .eq('family_id', familyId).eq('related_type', 'chore_assignments').eq('related_id', assignment.id).limit(1);
+  if ((existing ?? []).length > 0) return { ok: false, error: 'This chore was already paid.' };
+
+  const { data: cw } = await supabase
+    .from('child_wallets').select('id').eq('family_id', familyId).eq('member_id', assignment.member_id).maybeSingle();
+  if (!cw) return { ok: false, error: 'This child has no wallet. Activate the Family Wallet first.' };
+
+  const res = await creditChildWallet(supabase, {
+    familyId, childWalletId: cw.id, amountCents: amount, type: 'chore_reward',
+    description: `Chore: ${chore?.title ?? 'completed'}`, createdBy: ctx.user.id,
+    relatedType: 'chore_assignments', relatedId: assignment.id,
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+
+  revalidatePath('/wallet');
+  return { ok: true };
+}
+
+/** Create or update an allowance rule (Basic+ feature). */
+export async function saveAllowanceRuleAction(input: {
+  id?: string; childWalletId: string; amountCents: number; cadence: Cadence;
+}): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can set allowances.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+
+  const tier = await familyWalletTier(supabase, familyId);
+  if (!walletFeatureEnabled(tier, 'allowances')) {
+    return { ok: false, error: 'Automated allowances are a Basic plan feature. Upgrade to enable them.' };
+  }
+  const amount = Math.trunc(input.amountCents);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Enter an allowance greater than $0.' };
+
+  const next = nextRunDate(new Date().toISOString().slice(0, 10), input.cadence);
+  const { error } = input.id
+    ? await supabase.from('allowance_rules')
+        .update({ amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next })
+        .eq('id', input.id).eq('family_id', familyId)
+    : await supabase.from('allowance_rules')
+        .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id });
+  if (error) return { ok: false, error: error.message };
 
   revalidatePath('/wallet');
   return { ok: true };
