@@ -1,7 +1,47 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-25 — AI Communications Hub + AI Concierge + Chore Pay button shipped. Keep this updated as you ship.
+Last updated: 2026-06-25 — AI Front Desk (Call Guardian + Receptionist) shipped. Keep this updated as you ship.
+
+> **Session update (2026-06-25i) — AI FRONT DESK: CALL GUARDIAN + RECEPTIONIST (Task #27)**
+>
+> Pushed to `main` (commit `ac17828`). tsc clean · build exit 0 · 978/978 tests pass.
+> This delivers product-design-image #1 (AI Call Guardian) + #4 (AI Receptionist/Front Desk).
+>
+> ## Migration `0092_front_desk.sql` ⚠️ APPLY TO PROD
+> - **`front_desk_settings`** (PK family_id): `enabled`, `greeting`, `screening_mode`
+>   (off/smart/strict/allowlist), `voicemail_enabled`, `forward_number`, quiet hours,
+>   `block_spam`, `block_unknown`, `blocked_numbers`/`allowed_numbers` (JSONB).
+>   RLS: members read; **owner/admin write only**.
+> - **`call_logs`**: caller name/number, `status` (screened/answered/voicemail/blocked/
+>   missed/forwarded), `classification` (important/known/unknown/spam/robocall/
+>   telemarketer), `priority`, `transcript`, `ai_summary`, `action_items` (JSONB),
+>   `voicemail_url`, `duration_secs`, `is_read`, `contact_id`→family_contacts. Member RLS
+>   (owner/admin delete) + realtime.
+>
+> ## Files
+> - **`components/modules/front-desk-module.tsx`** (~660 lines) — Guardian status banner,
+>   stats, search + filter tabs, call list, CallDetail panel (AI summary, voicemail
+>   `<audio>` player, action items, transcript, linked contact), manager-only Settings
+>   modal (toggles built inline, upserts `front_desk_settings`), Log Call modal.
+> - **`app/(app)/dashboard/front-desk/page.tsx`** — `requireFeature('/dashboard/front-desk')`.
+> - Nav: "AI Front Desk" added to Suggested (PhoneCall icon). `plans.ts` level 1.
+>   `feature-catalog.ts`: `ai-concierge` + `ai-front-desk` in Suggested,
+>   `communications-hub` in Family & Home (replaced stale "Magazines→inbox" entry).
+> - `ai-home-dashboard.tsx`: Front Desk widget (unread-call badge) added → the quick
+>   row is now Front Desk / Inbox / Concierge (3-up `sm:grid-cols-3`).
+>
+> ## ⚠️ IMPORTANT — these are MANUAL-ENTRY / UI-complete, telephony NOT wired
+> The Front Desk + Communications Hub + Concierge are **100% Supabase-wired for data**
+> (CRUD, RLS, realtime, AI summary fields), but there is **NO live PSTN/telephony or
+> messaging provider** behind them yet. To make calls actually flow you need a
+> Twilio (or similar) integration:
+>   - Inbound call webhook → create `call_logs` row, run AI screening, TTS the
+>     `greeting`, record + transcribe voicemail → fill `transcript`/`ai_summary`/`action_items`.
+>   - A real family phone number (Twilio number) provisioned per family.
+>   - SMS/WhatsApp/email providers (Twilio/SendGrid/Meta) → `family_communications` rows.
+> Until then, the modules work via manual "Log Call"/"Log Message" + AI Import (paste→parse).
+> This is the correct MVP shape (mirrors the wallet's virtual-ledger-before-Stripe pattern).
 
 > **Session update (2026-06-25h) — AI COMMUNICATIONS HUB + AI CONCIERGE + CHORE PAY BUTTON (Tasks #22–25)**
 >
@@ -64,13 +104,15 @@ Last updated: 2026-06-25 — AI Communications Hub + AI Concierge + Chore Pay bu
 >   - QR codes for gift links (no dep yet — copy-to-share works)
 >   - Full Stripe service layer (needs Stripe approval — see 2026-06-25a)
 > - **Apple OAuth** — still needs enabling in Supabase Dashboard
-> - **Production migrations to apply:** 0088, 0089, 0090, 0091
+> - **Production migrations to apply:** 0088, 0089, 0090, 0091, 0092
 > - **Potential next features from the master prompt:**
->   - AI Call Guardian (smart call screening, PSTN integration)
->   - AI Front Desk receptionist (one family phone number, routes calls)
->   - Richer Communications Hub: real SMS/email/WhatsApp integration (Twilio/SendGrid)
+>   - ✅ AI Call Guardian + AI Front Desk receptionist UI — DONE (0092, see 2026-06-25i).
+>     REMAINING: live telephony (Twilio inbound webhook, TTS greeting, voicemail
+>     transcription, per-family number provisioning).
+>   - Richer Communications Hub: real SMS/email/WhatsApp integration (Twilio/SendGrid/Meta)
 >   - Concierge booking API integrations (OpenTable, Google Maps Places, etc.)
->   - Call Guardian migration and voicemail module
+>   - AI Message Agent (auto-reply to SMS/WhatsApp/IG/email) — product image #3, needs
+>     the messaging-provider integration above before it can auto-respond.
 
 > **Session update (2026-06-25, pushed direct to `main`, commit `bd30c43`) — INTERNATIONAL PHONE IN SETTINGS PROFILE EDITOR.**
 >
