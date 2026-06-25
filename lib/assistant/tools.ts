@@ -5,6 +5,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { ToolSpec } from '@/lib/ai/provider';
+import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
 
 type DB = SupabaseClient<Database>;
 
@@ -434,6 +435,99 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
             posted_at: a.created_at,
             author: a.author_member_id ? byId.get(a.author_member_id) ?? null : null,
           })),
+        };
+      },
+    },
+
+    // ── Cross-domain digest (concierge) ────────────────────────────────────
+    {
+      name: 'get_family_digest',
+      description: 'Get a cross-domain digest of everything the family needs to attend to: overdue bills, medications due today, upcoming maintenance, expiring warranties/pantry, trips, signups, screen time limits exceeded, and behavior incidents. Use this to answer "what needs attention", "what\'s due today", or "give me a family status update".',
+      input_schema: { type: 'object', properties: {} },
+      execute: async () => {
+        const now = new Date();
+        const nowIso = now.toISOString();
+        const in30 = new Date(now.getTime() + 30 * 86400000).toISOString();
+        const todayKey = nowIso.slice(0, 10);
+        const dayOfWeek = now.getDay();
+
+        const [
+          { data: bills },
+          { data: meds },
+          { data: medScheds },
+          { data: maint },
+          { data: warranties },
+          { data: trips },
+          { data: pantry },
+          { data: signups },
+          { data: stEntries },
+          { data: stLimits },
+          { data: behavior },
+        ] = await Promise.all([
+          supabase.from('bills').select('name, amount, due_date, status').eq('family_id', ctx.familyId).neq('status', 'paid').lte('due_date', in30.slice(0, 10)),
+          supabase.from('medications').select('id, name, member_id, is_active').eq('family_id', ctx.familyId).eq('is_active', true),
+          supabase.from('medication_schedules').select('medication_id, time_of_day, days_of_week, ends_on').eq('family_id', ctx.familyId),
+          supabase.from('maintenance_tasks').select('title, due_at, status').eq('family_id', ctx.familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null),
+          supabase.from('home_warranties').select('name, expires_on').eq('family_id', ctx.familyId).not('expires_on', 'is', null),
+          supabase.from('vacations').select('title, start_date, end_date, destination, status').eq('family_id', ctx.familyId).not('status', 'in', '("completed","cancelled")'),
+          supabase.from('pantry_items').select('name, expires_at').eq('family_id', ctx.familyId).not('expires_at', 'is', null),
+          supabase.from('opportunities').select('title, deadline, status').eq('family_id', ctx.familyId).not('status', 'in', '("passed","missed")').not('deadline', 'is', null),
+          supabase.from('screen_time_entries').select('member_id, minutes').eq('family_id', ctx.familyId).eq('entry_date', todayKey),
+          supabase.from('screen_time_limits').select('member_id, daily_minutes').eq('family_id', ctx.familyId),
+          supabase.from('behavior_logs').select('member_id, kind').eq('family_id', ctx.familyId).gte('occurred_at', `${todayKey}T00:00:00Z`),
+        ]);
+
+        const memberById = new Map(ctx.members.map((m) => [m.id, m.display_name]));
+
+        const todayMeds = (meds ?? []).filter((med) => {
+          const sched = (medScheds ?? []).find((s) => s.medication_id === med.id);
+          if (!sched) return false;
+          if (sched.ends_on && sched.ends_on < todayKey) return false;
+          if (sched.days_of_week?.length && !sched.days_of_week.includes(dayOfWeek)) return false;
+          return true;
+        });
+
+        const stUsage = new Map<string, number>();
+        for (const e of stEntries ?? []) {
+          if (!e.member_id) continue;
+          stUsage.set(e.member_id, (stUsage.get(e.member_id) ?? 0) + e.minutes);
+        }
+        const stLimitMap = new Map((stLimits ?? []).map((l) => [l.member_id, l.daily_minutes]));
+        const screenTime = [...stUsage.entries()]
+          .filter(([mid]) => stLimitMap.has(mid))
+          .map(([mid, used]) => ({ member: memberById.get(mid) ?? mid, usedMinutes: used, limitMinutes: stLimitMap.get(mid)! }));
+
+        const behaviorCounts = new Map<string, { count: number; latestKind: string | null }>();
+        for (const b of behavior ?? []) {
+          if (!b.member_id) continue;
+          const existing = behaviorCounts.get(b.member_id);
+          if (existing) { existing.count++; existing.latestKind = b.kind ?? existing.latestKind; }
+          else behaviorCounts.set(b.member_id, { count: 1, latestKind: b.kind ?? null });
+        }
+
+        const snap: ConciergeSnapshot = {
+          now: nowIso,
+          bills: (bills ?? []).map((b) => ({ name: b.name, amount: b.amount, dueDate: b.due_date, status: b.status })),
+          medications: todayMeds.map((m) => {
+            const sched = (medScheds ?? []).find((s) => s.medication_id === m.id);
+            return { name: m.name, member: m.member_id ? memberById.get(m.member_id) : undefined, timeOfDay: sched?.time_of_day };
+          }),
+          maintenance: (maint ?? []).map((t) => ({ title: t.title, dueAt: t.due_at })),
+          warranties: (warranties ?? []).map((w) => ({ name: w.name, expiresOn: w.expires_on })),
+          trips: (trips ?? []).map((t) => ({ title: t.title, startDate: t.start_date, endDate: t.end_date, destination: t.destination })),
+          pantry: (pantry ?? []).map((p) => ({ name: p.name, expiresAt: p.expires_at })),
+          signups: (signups ?? []).map((s) => ({ title: s.title, deadline: s.deadline, status: s.status })),
+          screenTime,
+          behaviorIncidents: [...behaviorCounts.entries()].map(([mid, d]) => ({ member: memberById.get(mid) ?? mid, count: d.count, latestKind: d.latestKind })),
+        };
+
+        const digest = buildConciergeDigest(snap);
+        return {
+          ok: true,
+          headline: digest.headline,
+          counts: digest.counts,
+          lines: digestToPromptLines(digest),
+          items: digest.items.slice(0, 20).map((it) => ({ domain: it.domain, urgency: it.urgency, title: it.title, detail: it.detail })),
         };
       },
     },
