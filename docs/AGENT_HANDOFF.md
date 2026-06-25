@@ -3,6 +3,51 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the Wallet grandparent gifting flow. Keep this updated as you ship.
 
+> ## 🏦 FAMILY WALLET — PROGRAM MAP (read this first if you're continuing the wallet)
+> A parent-controlled financial OS built as an **immutable ledger** (balances are derived by
+> summing `wallet_transactions`; corrections are reversal rows, never edits). Runs in
+> **virtual-ledger MVP mode** with zero Stripe dependency; Stripe layers plug in later.
+>
+> **DONE (merged to main, 6 PRs #144–#148):**
+> - **Schema** — migration `0088_family_wallet.sql`: 14 family-scoped tables + global
+>   `feature_flags` (seeded). Detail in the 2026-06-25a entry. ⚠️ APPLY 0088 TO PROD.
+> - **Money math** — `lib/wallet/ledger.ts` (`allocate`, `balanceFromLedger`, `bucketBalances`,
+>   `reversalOf`, `goalProgress`, `weeksToGoal`, `formatCents`). THE source of truth, pure+tested.
+> - **Credits** — `lib/wallet/server.ts` `creditChildWallet()` is the ONE write path (allocate →
+>   per-bucket completed credits → audit). Reused by top-up / allowance / chore / gift.
+> - **Monetization** — `lib/wallet/fees.ts` (`computeFunding`, matches the pricing screenshots:
+>   $50 gift = $52.74 free / $51.75 plus) + `lib/wallet/tiers.ts` (Free/Basic/Plus matrix).
+> - **Automation** — allowance cron `/api/cron/wallet-allowance` (Basic+); actions
+>   `payChoreRewardAction`, `saveAllowanceRuleAction`, `toggleAllowanceRuleAction`.
+> - **AI coach** — `lib/wallet/coach.ts` + `/api/ai/wallet` (tier-gated).
+> - **Screens** — `/wallet` (dashboard + add funds), `/wallet/goals` (create/fund/forecast),
+>   `/wallet/allowance` (editor), `/wallet/gift` (links + approve) + PUBLIC `/gift/[token]`.
+>   Subnav: `components/wallet/wallet-subnav.tsx`. Server actions in `app/(app)/wallet/actions.ts`
+>   + public `app/gift/actions.ts`. ~110 wallet tests; full suite green.
+>
+> **TODO (no Stripe needed — build next, all reuse `creditChildWallet` + immutable ledger):**
+> 1. Chore→wallet "Pay" button on chore approval (action `payChoreRewardAction` already exists).
+> 2. `/wallet/children/[childId]` per-child detail (balance, buckets, history, goals, controls).
+> 3. `/wallet/babysitters` (tables `babysitter_profiles`/`babysitter_payments` exist) + `/wallet/activity`
+>    (full ledger) + `/wallet/settings` (split rules per child via `wallet_rules`).
+> 4. `/admin/wallet` console (wallet status, pending approvals, audit, reconciliation, flags).
+> 5. Per-day AI-coach metering (`AI_COACH_DAILY_LIMIT`, basic 5/day — count today's calls).
+> 6. QR codes for gift links (no `qrcode` dep yet).
+>
+> **TODO (REQUIRES STRIPE — business/legal approval needed, can't run in this env):** Stripe service
+> layer `lib/stripe/*` (idempotency keys), Connect onboarding, Treasury financial accounts, Issuing
+> cardholders + virtual/physical cards, the real-time `issuing_authorization.request` webhook
+> (check card status + bucket balance + parent rules + blocked MCCs, ATM off by default),
+> gift Checkout (run `computeFunding` for fees BEFORE the pledge), `/admin/stripe`, `/admin/card-designs`.
+> New tables then: stripe_customers, stripe_connected_accounts, stripe_financial_accounts,
+> stripe_cardholders, stripe_issuing_cards, stripe_authorizations, card_controls, card_designs,
+> stripe_webhook_events. Gate everything behind the `feature_flags` (all stripe_* seeded OFF).
+> ENV: STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_CONNECT_CLIENT_ID,
+> STRIPE_TREASURY_ENABLED, STRIPE_ISSUING_ENABLED, STRIPE_CARD_CUSTOMIZATION_ENABLED,
+> NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY. Also ensure CRON_SECRET is set (allowance/autopilot crons).
+>
+> **Per-session wallet detail is in the 2026-06-25a..e entries below.**
+
 > **Session update (2026-06-25e) — WALLET PHASE 5: GRANDPARENT GIFTING (public + approve).**
 > The headline relative-gifting flow, fully working in ledger mode (no Stripe needed). NO
 > migration. Branch `claude/festive-bohr-m4cbeg`.
