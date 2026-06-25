@@ -1,7 +1,58 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-25 — Family Wallet program map 100% COMPLETE (all no-Stripe items shipped). Keep this updated as you ship.
+Last updated: 2026-06-25 — AI surfaces (Concierge/Comms Hub/Front Desk) made fully actionable + frictionless. Keep this updated as you ship.
+
+> **Session update (2026-06-25k) — AI SURFACES MADE ACTIONABLE + FRICTIONLESS (opus-4-8)**
+>
+> Pushed to `main` (commits `1aa0b34`, `1c0ed7b`, `2ed3643`). tsc clean · build
+> exit 0 · 978/978 tests pass on every commit. Turned the three AI surfaces from
+> display-only into working, AI-powered workflows — and fixed a real bug.
+>
+> ## 🐞 FIXED: Concierge chat was broken
+> It POSTed `{ familyId, messages, systemPrompt }` to `/api/ai/chat`, which expects
+> `{ conversationId, message }` and returns an SSE stream — so every concierge
+> message errored. Root-caused + fixed.
+>
+> ## NEW endpoint: `/api/ai/assist` (app/api/ai/assist/route.ts)
+> Non-streaming "messages → one reply" JSON completion (distinct from the agentic
+> SSE `/api/ai/chat`). `requireUserContext` + `isAIConfigured` + rate-limit (30/min);
+> sanitizes/clamps message count (30) & length (8k); body `{ systemPrompt?, messages,
+> maxTokens? }` → `{ message }`. Uses `provider.complete`. This is the shared brain
+> for Concierge chat, the AI Message Agent, and Front Desk call analysis.
+>
+> ## AI Message Agent — Communications Hub (`inbox-module.tsx` CommDetail)
+> - "AI Reply Agent": one tap drafts a warm, channel-aware reply via `/api/ai/assist`;
+>   user edits → Copy or **Log reply** (writes an OUTBOUND `family_communications`
+>   row, `thread_id` = original's thread/id, marks original `replied`).
+> - Action items each get a one-tap **Remind** → inserts `family_reminders`
+>   (ai_suggested, priority mirrors the message). Inline "Added ✓".
+>
+> ## AI Front Desk (`front-desk-module.tsx`)
+> - **CallDetail** action items get the same one-tap **Remind** → `family_reminders`.
+> - **LogCallModal** is now a controlled form with **"Analyze with AI"**: paste a
+>   transcript/voicemail → `/api/ai/assist` (strict-JSON prompt) classifies the caller
+>   (important/known/unknown/spam/robocall/telemarketer), writes a 1-line summary, sets
+>   priority, and extracts action items (removable chips) → saved to `call_logs`.
+>   Resilient parse (strips ```code fences```, validates enums, falls back to raw text).
+>
+> ## AI Concierge (`concierge-module.tsx`)
+> - Chat now uses `/api/ai/assist` (the fix above).
+> - **PlanDetail**: dated plans get a one-tap **Add to calendar** → all-day
+>   `calendar_events` row (title + location + budget/notes in description).
+>
+> Everything is 100% Supabase-wired. NO new migration (reuses family_communications,
+> call_logs, family_reminders, calendar_events). Added dep this session: none new here
+> (qrcode was 2026-06-25j).
+>
+> ## STILL genuinely blocked (need external accounts/approval — can't run in this env):
+> - **Live telephony** for the Front Desk: Twilio inbound webhook → create `call_logs`,
+>   TTS the `greeting`, record+transcribe voicemail. Needs a Twilio number per family.
+>   (The AI analysis above already does the "screening brain" for any text we receive.)
+> - **Live messaging** for the Comms Hub: Twilio/SendGrid/Meta to actually SEND the
+>   drafted replies + ingest inbound SMS/email/WhatsApp into `family_communications`.
+>   (The AI Message Agent already drafts + logs; wiring the send is the last mile.)
+> - **Stripe** for the wallet (see 2026-06-25a/j). All else is done.
 
 > **Session update (2026-06-25j) — FAMILY WALLET: ALL NO-STRIPE ITEMS COMPLETE**
 >
