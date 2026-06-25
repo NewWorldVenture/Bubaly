@@ -2,7 +2,7 @@ import Link from 'next/link';
 import {
   Sparkles, Calendar, CheckSquare, ShoppingCart, HeartPulse,
   ArrowRight, Bell, ChevronRight, Home, Pill, GraduationCap,
-  Trophy, Sun, Clock, Users,
+  Trophy, Sun, Clock, Users, MessageSquare, Plane,
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
 import type { UserContext } from '@/lib/supabase/auth';
@@ -161,6 +161,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { data: recentActivity },
     { data: autopilotOpen },
     { count: autopilotHandledCount },
+    { count: unreadCommsCount },
+    { data: activeConcierge },
   ] = await Promise.all([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
@@ -197,9 +199,15 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .order('urgency', { ascending: false }).order('confidence', { ascending: false }).limit(20),
     supabase.from('autopilot_suggestions').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).in('status', ['auto_executed', 'executed', 'approved']),
+    supabase.from('family_communications').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).eq('status', 'unread'),
+    supabase.from('concierge_plans').select('id, title, kind, status')
+      .eq('family_id', familyId).in('status', ['planning', 'booked', 'confirmed'])
+      .order('created_at', { ascending: false }).limit(2),
   ]);
 
   const openSuggestions = (autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number }[];
+  const concierge = (activeConcierge ?? []) as { id: string; title: string; kind: string; status: string }[];
   const autopilotProbability = successProbability(openSuggestions.map((s) => ({ urgency: s.urgency as 1 | 2 | 3, confidence: s.confidence } as never)));
   const autopilotHandled = autopilotHandledCount ?? 0;
   const topSuggestions = openSuggestions.slice(0, 3);
@@ -292,6 +300,39 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           )}
         </Link>
       )}
+
+      {/* Communications + Concierge widgets */}
+      <div className="grid grid-cols-2 gap-3">
+        <Link href="/dashboard/inbox"
+          className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated hover:border-brand/20">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-500/10">
+            <MessageSquare className="h-5 w-5 text-blue-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Inbox</p>
+            <p className="text-xs text-muted">
+              {(unreadCommsCount ?? 0) > 0 ? `${unreadCommsCount} unread` : 'No new messages'}
+            </p>
+          </div>
+          {(unreadCommsCount ?? 0) > 0 && (
+            <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white shrink-0">
+              {unreadCommsCount}
+            </span>
+          )}
+        </Link>
+        <Link href="/dashboard/concierge"
+          className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated hover:border-brand/20">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-500/10">
+            <Plane className="h-5 w-5 text-violet-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Concierge</p>
+            <p className="truncate text-xs text-muted">
+              {concierge.length > 0 ? concierge[0].title : 'Plan something fun'}
+            </p>
+          </div>
+        </Link>
+      </div>
 
       {/* AI Action Cards */}
       {actionCards.length > 0 && (

@@ -768,6 +768,21 @@ export interface Database {
         { id?: string; family_id: string; name: string; relationship?: string | null; category?: string; phone?: string | null; phone_alt?: string | null; email?: string | null; address?: string | null; notes?: string | null; photo_url?: string | null; is_emergency?: boolean; birthday_month?: number | null; birthday_day?: number | null; specialty?: string | null; organization?: string | null; created_by?: string | null },
         Partial<{ name: string; relationship: string | null; category: string; phone: string | null; phone_alt: string | null; email: string | null; address: string | null; notes: string | null; is_emergency: boolean; birthday_month: number | null; birthday_day: number | null; specialty: string | null; organization: string | null; updated_at: string }>
       >;
+      concierge_sessions: T<
+        { id: string; family_id: string; created_by: string | null; title: string; kind: string; status: string; notes: string | null; ai_summary: string | null; messages: unknown[]; created_at: string; updated_at: string },
+        { id?: string; family_id: string; created_by?: string | null; title?: string; kind?: string; status?: string; notes?: string | null; ai_summary?: string | null; messages?: unknown[] },
+        Partial<{ title: string; kind: string; status: string; notes: string | null; ai_summary: string | null; messages: unknown[]; updated_at: string }>
+      >;
+      concierge_plans: T<
+        { id: string; family_id: string; session_id: string | null; created_by: string | null; title: string; kind: string; description: string | null; ai_suggestion: string | null; status: string; planned_for: string | null; budget_cents: number | null; location: string | null; members: unknown[]; links: unknown[]; created_at: string; updated_at: string },
+        { id?: string; family_id: string; session_id?: string | null; created_by?: string | null; title: string; kind?: string; description?: string | null; ai_suggestion?: string | null; status?: string; planned_for?: string | null; budget_cents?: number | null; location?: string | null; members?: unknown[]; links?: unknown[] },
+        Partial<{ title: string; kind: string; description: string | null; ai_suggestion: string | null; status: string; planned_for: string | null; budget_cents: number | null; location: string | null; members: unknown[]; links: unknown[]; updated_at: string }>
+      >;
+      family_communications: T<
+        { id: string; family_id: string; contact_id: string | null; thread_id: string | null; channel: string; direction: string; subject: string | null; body: string | null; summary: string | null; action_items: unknown[]; category: string; status: string; priority: string; received_at: string; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; contact_id?: string | null; thread_id?: string | null; channel?: string; direction?: string; subject?: string | null; body?: string | null; summary?: string | null; action_items?: unknown[]; category?: string; status?: string; priority?: string; received_at?: string; created_by?: string | null },
+        Partial<{ contact_id: string | null; subject: string | null; body: string | null; summary: string | null; action_items: unknown[]; category: string; status: string; priority: string; received_at: string; updated_at: string }>
+      >;
       family_reminders: T<
         { id: string; family_id: string; created_by: string | null; assigned_to_id: string | null; member_id: string | null; title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; recurrence_time: string | null; recurrence_days: number[] | null; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; ai_suggested: boolean; tags: string[]; created_at: string; updated_at: string },
         { id?: string; family_id: string; created_by?: string | null; assigned_to_id?: string | null; member_id?: string | null; title: string; notes?: string | null; kind?: string; remind_at?: string | null; location_name?: string | null; recurrence?: string; priority?: string; status?: string; ai_suggested?: boolean },
