@@ -1,8 +1,53 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-<<<<<<< Updated upstream
-Last updated: 2026-06-25 — dead-button sweep: every interactive control now works (or is gone). Keep this updated as you ship.
+Last updated: 2026-06-25 — Family Trust & Permissions Engine shipped (new core platform layer). Keep this updated as you ship.
+
+> ## 🛡️ FAMILY TRUST & PERMISSIONS ENGINE — PLATFORM MAP (read first if continuing Trust)
+> A foundational platform layer (alongside Identity, Memory, AI, Automation) that
+> governs every AI action, member capability, delegation, and approval. Least-privilege
+> by default, fully overridable, explainable, 100% Supabase-wired. **⚠️ APPLY 0093 TO PROD.**
+>
+> ### Shipped (2026-06-25m)
+> - **Migration `0093_trust_engine.sql`** — 7 tables: `trust_policies` (Household Policy
+>   Engine), `permission_grants` (per-member domain×capability overrides), `trust_delegations`
+>   (auto-expiring), `approval_requests` (inbox + multi-approver workflow), `trust_scores`
+>   (dynamic), `emergency_sessions` (time-boxed elevation), `trust_audit_logs` (explainability,
+>   append-only). RLS: members read; parent/adult write; audit insert-only. Realtime on all.
+> - **`lib/trust/engine.ts`** — PURE, deterministic, **20 unit tests** (`tests/trust-engine.test.ts`).
+>   `TRUST_DOMAINS` (32), `CAPABILITIES` (10), `ROLE_DEFAULTS` matrix, `HIGH_STAKES_AI_DOMAINS`.
+>   `evaluateAction(input): Decision` — order: emergency override → explicit deny grant →
+>   highest-priority matching policy (conditions: maxAmountCents, minConfidence, time window, tags)
+>   → allow grant / active delegation → role default → **fallback deny**. + `computeTrustScore()`/`trustBand()`.
+> - **`lib/trust/server.ts`** — `evaluateTrust(supabase, familyId, req)`: loads policies/grants/
+>   delegations/emergency, runs the engine, writes a `trust_audit_logs` row, OPENS an
+>   `approval_requests` row when require_approval. Returns `{decision, approvalId}`. **THE entry
+>   point every privileged/AI action should call.** `roleOf()` maps a role string → TrustRole.
+> - **Server actions** `app/(app)/dashboard/trust/actions.ts` — policies (save/toggle/delete),
+>   grants (allow/deny/clear), delegations (create/revoke), `decideApprovalAction` (multi-approver
+>   tally), emergency activate/end. Manager-gated + audit-logged.
+> - **UX** `/dashboard/trust` (`components/modules/trust-module.tsx`) — 6 tabs: Approvals inbox,
+>   Policies (visual rule builder w/ conditions + approval models), Permissions matrix (tap to
+>   override role defaults), Delegations (time-boxed), Emergency Operations Mode, Audit trail.
+>   Free for all (foundational safety); nav Suggested; `plans.ts` level 0.
+> - **AI integration (FIRST agent wired)** — `/api/ai/import` confirm path calls `evaluateTrust`
+>   per action (maps action→domain): allow→execute, require_approval→queued, deny→blocked.
+>
+> ### Trust — remaining for the next agent (engine + UX done; this is rollout + depth)
+> 1. **Wire `evaluateTrust` into OTHER AI routes** (one call each): `/api/ai/chat` tool execution,
+>    autopilot execution, wallet money-movement, front-desk/comms auto-actions. Map to domain +
+>    capability='automate' and branch on `decision.effect`.
+> 2. **Approval → execution loop**: when an `approval_requests` row is approved, EXECUTE the stored
+>    `payload` (re-run `runAction`). Today approval records the decision but doesn't auto-execute.
+> 3. **Relationship graph** (Parent→Child, Coach→Child) — `family_tree_nodes` exists; add
+>    `trust_relationships` or derive, feed relationship-based perms.
+> 4. **External org permissions** (schools/doctors/leagues) — `family_contacts` has the categories.
+> 5. **Trust-score worker** — recompute `trust_scores` from audit outcomes (`computeTrustScore` ready);
+>    surface in UI + let scores modulate automation thresholds.
+> 6. **Privacy controls UX** — per-member visibility toggles (medical/financial/location/…).
+> 7. **Seed default policies** on family creation (`is_system=true` rows).
+> 8. **Richer roles** (grandparent/babysitter/nanny/pet_caregiver…): extend ROLE_DEFAULTS + the
+>    member_role enum if the product wants the full spec list (engine TrustRole is the 6-role enum today).
 
 > **Session update (2026-06-25l) — DEAD-BUTTON SWEEP + REAL DATA (opus-4-8)**
 >
@@ -273,8 +318,6 @@ Last updated: 2026-06-25 — dead-button sweep: every interactive control now wo
 > duplicate work (this session initially rebuilt the avatars bucket before
 > discovering it was already merged). Migration numbers are a common collision
 > point; check the latest `supabase/migrations/` before adding one.
-=======
-Last updated after customizable tier-aware dashboard buttons. Keep this updated as you ship.
 
 > **Session update (2026-06-25f) — CUSTOMIZABLE TIER-AWARE DASHBOARD BUTTONS.**
 > The AI home "Quick Access" grid is now user-customizable + tier-aware, Supabase-backed.
@@ -309,7 +352,6 @@ Last updated after customizable tier-aware dashboard buttons. Keep this updated 
 > + gate in the action); device-specific layouts (schema supports `device_context`, UI sends 'all');
 > stricter RLS so a user can only write their own row (currently family-isolation RLS + action-layer
 > ownership). Registry `requiredTier` could read live admin overrides via `resolveFeatureTiers`.
->>>>>>> Stashed changes
 
 > ## 🏦 FAMILY WALLET — PROGRAM MAP (read this first if you're continuing the wallet)
 > A parent-controlled financial OS built as an **immutable ledger** (balances are derived by
