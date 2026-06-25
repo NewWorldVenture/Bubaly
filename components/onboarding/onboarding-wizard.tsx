@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { PhoneInput } from '@/components/ui/phone-input';
+import { AvatarPicker } from '@/components/ui/avatar-picker';
 import { useToast } from '@/components/ui/toast';
 import { ROLE_LABELS, ROLE_DESCRIPTIONS } from '@/lib/constants/roles';
 import type { MemberRole } from '@/lib/constants/roles';
@@ -21,11 +23,23 @@ import {
   type DraftMember,
 } from '@/lib/onboarding/draft';
 import { finalizeOnboardingAction } from '@/app/onboarding/actions';
+import {
+  COUNTRY_DIAL_CODES,
+  guessCountryDialCode,
+  guessDialCodeFromPhone,
+  extractLocalNumber,
+} from '@/lib/utils/phone';
 
 const TOTAL_STEPS = 5;
 const STORAGE_KEY = 'onboarding-draft';
 
-export type InitialProfile = { firstName: string; lastName: string; phone: string; email: string };
+export type InitialProfile = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  avatarUrl?: string;
+};
 
 function timezones(): string[] {
   try {
@@ -37,7 +51,15 @@ function timezones(): string[] {
 }
 
 interface DraftState {
-  profile: { firstName: string; lastName: string; phone: string; email: string };
+  profile: {
+    firstName: string;
+    lastName: string;
+    phone: string;       // E.164 combined value
+    dialCode: string;    // stored for back-navigation re-population
+    countryCode: string; // ISO alpha-2, stored for back-navigation
+    email: string;
+    avatarUrl: string;
+  };
   family: { name: string; timezone: string };
   details: {
     householdAdults: number; householdChildren: number; childAges: string;
@@ -52,12 +74,31 @@ function defaultDraft(initial?: InitialProfile): DraftState {
   const guessTz = (() => {
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'America/New_York'; }
   })();
+  const storedDialCode = guessDialCodeFromPhone(initial?.phone);
+  const dialCode = storedDialCode || guessCountryDialCode();
+  const countryCode = (() => {
+    if (storedDialCode) {
+      return COUNTRY_DIAL_CODES.find((c) => c.dialCode === dialCode)?.code ?? 'US';
+    }
+    try {
+      const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+      const region = locale.includes('-') ? locale.split('-').pop()?.toUpperCase() : undefined;
+      if (region) {
+        const m = COUNTRY_DIAL_CODES.find((c) => c.code === region);
+        if (m) return m.code;
+      }
+    } catch { /* ignore */ }
+    return 'US';
+  })();
   return {
     profile: {
       firstName: initial?.firstName ?? '',
       lastName: initial?.lastName ?? '',
       phone: initial?.phone ?? '',
+      dialCode,
+      countryCode,
       email: initial?.email ?? '',
+      avatarUrl: initial?.avatarUrl ?? '',
     },
     family: { name: '', timezone: guessTz },
     details: {
@@ -71,14 +112,23 @@ function defaultDraft(initial?: InitialProfile): DraftState {
 }
 
 function loadDraft(initial?: InitialProfile): DraftState {
+  const defaults = defaultDraft(initial);
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (raw) {
       const saved = JSON.parse(raw) as DraftState;
-      if (saved.step >= 1 && saved.step <= TOTAL_STEPS) return saved;
+      if (saved.step >= 1 && saved.step <= TOTAL_STEPS) {
+        // Deep merge: carry new fields (dialCode, countryCode, avatarUrl) from defaults
+        // when an older draft doesn't have them yet.
+        return {
+          ...defaults,
+          ...saved,
+          profile: { ...defaults.profile, ...saved.profile },
+        };
+      }
     }
   } catch { /* ignore corrupt data */ }
-  return defaultDraft(initial);
+  return defaults;
 }
 
 function saveDraft(draft: DraftState) {
@@ -122,8 +172,11 @@ export function OnboardingWizard(
       profile: {
         firstName: String(form.get('firstName') ?? '').trim(),
         lastName: String(form.get('lastName') ?? '').trim(),
-        phone: String(form.get('phone') ?? '').trim(),
+        phone: String(form.get('phone') ?? '').trim(),        // E.164 from PhoneInput hidden input
+        dialCode: String(form.get('dialCode') ?? d.profile.dialCode),
+        countryCode: String(form.get('countryCode') ?? d.profile.countryCode),
         email: String(form.get('email') ?? '').trim(),
+        avatarUrl: String(form.get('avatarUrl') ?? d.profile.avatarUrl),
       },
       step: 2,
     }));
@@ -209,7 +262,13 @@ export function OnboardingWizard(
   async function onFinalize() {
     setLoading(true);
     const res = await finalizeOnboardingAction({
-      profile: draft.profile,
+      profile: {
+        firstName: draft.profile.firstName,
+        lastName: draft.profile.lastName,
+        phone: draft.profile.phone,
+        email: draft.profile.email,
+        avatarUrl: draft.profile.avatarUrl || undefined,
+      },
       family: draft.family,
       details: {
         householdAdults: draft.details.householdAdults,
@@ -248,6 +307,9 @@ export function OnboardingWizard(
     );
   }
 
+  // Derive the local number (without dial code) for PhoneInput re-population on back navigation
+  const storedLocalNumber = extractLocalNumber(draft.profile.phone, draft.profile.dialCode);
+
   return (
     <div className="animate-fade-in">
       {/* Progress */}
@@ -273,19 +335,54 @@ export function OnboardingWizard(
             <User className="h-6 w-6" />
           </div>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight">Tell us about you</h1>
-          <p className="mt-1 text-sm text-muted">This is your account profile — your family will see your name.</p>
-          <form onSubmit={captureProfile} className="mt-6 space-y-4">
+          <p className="mt-1 text-sm text-muted">This is your account profile — your family will see your name and photo.</p>
+
+          <form onSubmit={captureProfile} className="mt-6 space-y-5">
+            {/* Avatar picker */}
+            <AvatarPicker
+              defaultValue={draft.profile.avatarUrl}
+              displayName={`${draft.profile.firstName} ${draft.profile.lastName}`.trim() || 'You'}
+            />
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="First name" required>
-                {(id) => <Input id={id} name="firstName" defaultValue={draft.profile.firstName} placeholder="Jordan" autoFocus required />}
+                {(id) => (
+                  <Input
+                    id={id}
+                    name="firstName"
+                    defaultValue={draft.profile.firstName}
+                    placeholder="Jordan"
+                    autoFocus
+                    required
+                  />
+                )}
               </Field>
               <Field label="Last name" required>
-                {(id) => <Input id={id} name="lastName" defaultValue={draft.profile.lastName} placeholder="Rivera" required />}
+                {(id) => (
+                  <Input
+                    id={id}
+                    name="lastName"
+                    defaultValue={draft.profile.lastName}
+                    placeholder="Rivera"
+                    required
+                  />
+                )}
               </Field>
             </div>
-            <Field label="Contact phone" hint="For account security and important family alerts" required>
-              {(id) => <Input id={id} name="phone" type="tel" inputMode="tel" defaultValue={draft.profile.phone} placeholder="(555) 123-4567" required />}
+
+            <Field
+              label="Contact phone"
+              hint="Optional — used for account security and important family alerts"
+            >
+              {() => (
+                <PhoneInput
+                  defaultDialCode={draft.profile.dialCode}
+                  defaultCountryCode={draft.profile.countryCode}
+                  defaultLocalNumber={storedLocalNumber}
+                />
+              )}
             </Field>
+
             <Field
               label="Email"
               hint={emailLocked ? 'Managed by your Google sign-in' : 'Where we send invites and notifications'}
@@ -306,6 +403,7 @@ export function OnboardingWizard(
                 />
               )}
             </Field>
+
             <Button type="submit" className="w-full">
               Continue <ArrowRight className="h-4 w-4" />
             </Button>
@@ -522,10 +620,30 @@ export function OnboardingWizard(
                 <h3 className="text-sm font-semibold">Your profile</h3>
                 <button type="button" onClick={() => goTo(1)} className="text-xs text-brand hover:underline">Edit</button>
               </div>
-              <p className="mt-1 text-sm text-muted">
-                {draft.profile.firstName} {draft.profile.lastName} · {draft.profile.email}
-              </p>
-              {draft.profile.phone && <p className="text-sm text-muted">{draft.profile.phone}</p>}
+              <div className="mt-2 flex items-center gap-3">
+                {draft.profile.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={draft.profile.avatarUrl}
+                    alt="Your avatar"
+                    className="h-10 w-10 rounded-full object-cover"
+                  />
+                ) : (
+                  <Avatar
+                    name={`${draft.profile.firstName} ${draft.profile.lastName}`.trim() || 'You'}
+                    size={40}
+                  />
+                )}
+                <div>
+                  <p className="text-sm font-medium">
+                    {draft.profile.firstName} {draft.profile.lastName}
+                  </p>
+                  <p className="text-xs text-muted">{draft.profile.email}</p>
+                  {draft.profile.phone && (
+                    <p className="text-xs text-muted">{draft.profile.phone}</p>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Family summary */}

@@ -20,7 +20,7 @@ type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string
  * goes back a step.
  */
 export async function saveOnboardingProfileAction(input: {
-  firstName: string; lastName: string; phone: string; email: string;
+  firstName: string; lastName: string; phone: string; email: string; avatarUrl?: string;
 }): Promise<Result> {
   const parsed = onboardingProfileSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid details' };
@@ -29,8 +29,8 @@ export async function saveOnboardingProfileAction(input: {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return { ok: false, error: 'Not signed in' };
 
-  const { firstName, lastName, phone, email } = parsed.data;
-  const res = await saveUserProfile(auth.user.id, { firstName, lastName, phone, email });
+  const { firstName, lastName, phone, email, avatarUrl } = parsed.data;
+  const res = await saveUserProfile(auth.user.id, { firstName, lastName, phone, email, avatarUrl: avatarUrl || null });
   if (!res.ok) return res;
 
   await logAudit(supabase, {
@@ -222,7 +222,7 @@ export async function inviteMemberAction(input: {
  * inserting the parent member ourselves.
  */
 export async function finalizeOnboardingAction(input: {
-  profile: { firstName: string; lastName: string; phone: string; email: string };
+  profile: { firstName: string; lastName: string; phone: string; email: string; avatarUrl?: string };
   family: { name: string; timezone: string };
   details: {
     householdAdults: number; householdChildren: number; childAges: number[];
@@ -243,12 +243,13 @@ export async function finalizeOnboardingAction(input: {
 
   const { profile, family, details, members } = parsed.data;
 
-  // 1. Save profile (name, phone, email)
+  // 1. Save profile (name, phone, email, optional avatar)
   const profileRes = await saveUserProfile(auth.user.id, {
     firstName: profile.firstName,
     lastName: profile.lastName,
     phone: profile.phone,
     email: profile.email,
+    avatarUrl: profile.avatarUrl || null,
   });
   if (!profileRes.ok) return profileRes;
 

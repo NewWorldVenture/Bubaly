@@ -17,12 +17,12 @@ import { joinName, normalizePhone } from '@/lib/onboarding/profile';
  */
 export async function saveUserProfile(
   userId: string,
-  input: { firstName: string; lastName: string; phone: string; email?: string | null },
+  input: { firstName: string; lastName: string; phone: string; email?: string | null; avatarUrl?: string | null },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const svc = createServiceClient();
 
   const row: {
-    id: string; full_name: string; display_name: string; phone: string; email?: string;
+    id: string; full_name: string; display_name: string; phone: string; email?: string; avatar_url?: string | null;
   } = {
     id: userId,
     full_name: joinName(input.firstName, input.lastName),
@@ -30,6 +30,7 @@ export async function saveUserProfile(
     phone: normalizePhone(input.phone),
   };
   if (input.email) row.email = input.email;
+  if (input.avatarUrl !== undefined) row.avatar_url = input.avatarUrl || null;
 
   const { error } = await svc.from('profiles').upsert(row, { onConflict: 'id' });
   if (error) return { ok: false, error: error.message };

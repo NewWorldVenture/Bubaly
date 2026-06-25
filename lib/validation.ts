@@ -31,8 +31,11 @@ export const createFamilySchema = z.object({
 export const onboardingProfileSchema = z.object({
   firstName: z.string().trim().min(1, 'Enter your first name').max(60),
   lastName: z.string().trim().min(1, 'Enter your last name').max(60),
-  phone: z.string().trim().min(7, 'Enter a valid phone number').max(30),
+  // Phone is optional — international E.164 format (+{dialCode}{localDigits}), or empty.
+  phone: z.string().max(20).optional().default(''),
   email: emailSchema,
+  // data: URI (preset) or Supabase Storage public URL, or empty.
+  avatarUrl: z.string().max(5000).optional().default(''),
 });
 export type OnboardingProfileInput = z.infer<typeof onboardingProfileSchema>;
 
