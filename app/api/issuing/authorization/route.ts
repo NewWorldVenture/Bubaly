@@ -49,11 +49,15 @@ export async function POST(req: NextRequest) {
 
   // Log the authorization decision
   const meta = auth.metadata ?? {};
+  const familyId = meta.family_id ?? null;
+  const merchantName = auth.merchant_data?.name ?? 'a merchant';
+  const amountFormatted = `$${(auth.amount / 100).toFixed(2)}`;
+
   try {
     await db.from('stripe_authorizations').upsert(
       {
         authorization_id: auth.id,
-        family_id: meta.family_id ?? null,
+        family_id: familyId,
         card_id: auth.card.id,
         child_wallet_id: meta.child_wallet_id ?? null,
         status: approved ? 'approved' : 'declined',
@@ -68,7 +72,34 @@ export async function POST(req: NextRequest) {
       },
       { onConflict: 'authorization_id' },
     );
-  } catch { /* non-fatal — table may not exist yet */ }
+  } catch { /* non-fatal */ }
+
+  // Notify parents of notable events
+  if (familyId) {
+    try {
+      if (!approved && reason === 'requires_parent_approval') {
+        await supabase.from('notifications').insert({
+          family_id: familyId,
+          user_id: null,
+          type: 'system',
+          title: `Approval needed — ${amountFormatted} at ${merchantName}`,
+          body: `A purchase needs your approval. Check card controls to allow it.`,
+          related_type: 'stripe_authorizations',
+          related_id: auth.id,
+        });
+      } else if (!approved && reason === 'insufficient_balance') {
+        await supabase.from('notifications').insert({
+          family_id: familyId,
+          user_id: null,
+          type: 'system',
+          title: `Declined — low balance (${amountFormatted} at ${merchantName})`,
+          body: 'Add funds to your child\'s wallet to enable spending.',
+          related_type: 'stripe_authorizations',
+          related_id: auth.id,
+        });
+      }
+    } catch { /* non-fatal */ }
+  }
 
   return NextResponse.json({ approved });
 }

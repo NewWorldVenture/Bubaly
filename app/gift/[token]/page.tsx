@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
 import { occasionLabel, DEFAULT_SUGGESTED_CENTS } from '@/lib/wallet/gift';
+import { walletTierForPlanLevel } from '@/lib/wallet/tiers';
+import { planLevel } from '@/lib/constants/plans';
 import { PublicGiftForm } from '@/components/wallet/public-gift-form';
 
 export const metadata: Metadata = { title: 'Send a gift · Bubaly', robots: { index: false } };
@@ -30,6 +32,19 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
     if (fam?.name) familyName = fam.name;
   }
 
+  // Look up family subscription tier for fee disclosure
+  let tier: 'free' | 'basic' | 'plus' = 'free';
+  if (link?.family_id) {
+    const { data: sub } = await supabase
+      .from('subscriptions')
+      .select('plan')
+      .eq('family_id', link.family_id)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle();
+    tier = walletTierForPlanLevel(planLevel(sub?.plan ?? null));
+  }
+
+  const stripeEnabled = !!process.env.STRIPE_SECRET_KEY;
   const active = !!link && link.is_active;
 
   return (
@@ -38,7 +53,7 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
         <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🎁</div>
         <h1 className="text-2xl font-bold">Send a gift to {childName}</h1>
         <p className="mt-1 text-sm text-muted">{occasionLabel(link?.occasion ?? null)} · {familyName}</p>
-        {link?.message && <p className="mt-3 rounded-xl bg-surface/60 p-3 text-sm italic text-muted">“{link.message}”</p>}
+        {link?.message && <p className="mt-3 rounded-xl bg-surface/60 p-3 text-sm italic text-muted">&ldquo;{link.message}&rdquo;</p>}
       </div>
 
       {active ? (
@@ -46,6 +61,8 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
           token={token}
           suggestedCents={(link!.suggested_cents && link!.suggested_cents.length > 0) ? link!.suggested_cents : DEFAULT_SUGGESTED_CENTS}
           childName={childName}
+          tier={tier}
+          stripeEnabled={stripeEnabled}
         />
       ) : (
         <p className="rounded-2xl border border-border bg-surface/40 p-6 text-center text-sm text-muted">
@@ -54,8 +71,10 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
       )}
 
       <p className="max-w-xs text-center text-[11px] text-muted">
-        Bubaly is not a bank. Your gift is added to a parent-managed wallet after the family approves it.
-        No fees are charged until you confirm a payment.
+        Bubaly is not a bank. Gifts are added to a parent-managed wallet.
+        {stripeEnabled
+          ? ' A small processing fee applies on top of your gift amount.'
+          : ' No fees are charged — the family approves gifts manually.'}
       </p>
     </div>
   );

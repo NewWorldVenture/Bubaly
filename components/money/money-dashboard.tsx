@@ -13,6 +13,7 @@ import { CapabilityGate } from '@/components/money/capability-gate';
 import { useToast } from '@/components/ui/toast';
 import type { StripeCapabilityMatrix } from '@/lib/stripe/capabilities';
 import type { WalletTier } from '@/lib/wallet/fees';
+import { computeFunding } from '@/lib/wallet/fees';
 import {
   activateMoneyAction,
   syncConnectAccountAction,
@@ -335,7 +336,11 @@ export function MoneyDashboard({
       )}
 
       {/* Top-up modal */}
-      {topupFor && (
+      {topupFor && (() => {
+        const parsedAmt = parseFloat(topupAmount);
+        const amtCents = (parsedAmt > 0 && Number.isFinite(parsedAmt)) ? Math.round(parsedAmt * 100) : 0;
+        const fee = amtCents > 0 ? computeFunding(amtCents, tier) : null;
+        return (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center" onClick={() => setTopupFor(null)}>
           <div className="w-full max-w-sm rounded-t-2xl border border-border bg-bg p-6 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="mb-1 text-lg font-bold text-fg">Add funds</h3>
@@ -373,6 +378,29 @@ export function MoneyDashboard({
               </div>
             </div>
 
+            {fee && (
+              <div className="mb-4 rounded-xl bg-elevated p-3 text-xs space-y-1">
+                <div className="flex justify-between text-muted">
+                  <span>{topupFor.memberName} receives</span>
+                  <span className="font-medium text-fg">{formatCents(fee.amountCents)}</span>
+                </div>
+                <div className="flex justify-between text-muted">
+                  <span>Processing fee</span>
+                  <span>{formatCents(fee.processingCents)}</span>
+                </div>
+                {fee.serviceFeeCents > 0 && (
+                  <div className="flex justify-between text-muted">
+                    <span>Bubaly fee ({tier} plan)</span>
+                    <span>{formatCents(fee.serviceFeeCents)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-border pt-1 font-semibold text-fg">
+                  <span>You pay</span>
+                  <span>{formatCents(fee.totalChargedCents)}</span>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button
                 onClick={() => setTopupFor(null)}
@@ -390,7 +418,8 @@ export function MoneyDashboard({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
