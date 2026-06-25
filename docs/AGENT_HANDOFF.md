@@ -1,7 +1,76 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-25 — international phone input added to the Settings profile editor. Keep this updated as you ship.
+Last updated: 2026-06-25 — AI Communications Hub + AI Concierge + Chore Pay button shipped. Keep this updated as you ship.
+
+> **Session update (2026-06-25h) — AI COMMUNICATIONS HUB + AI CONCIERGE + CHORE PAY BUTTON (Tasks #22–25)**
+>
+> All pushed to `main` (commits `3e39df7` + `a827986`). TypeScript clean throughout.
+>
+> ## ✅ Task #22 — Chore → Wallet Pay Button
+> - `components/modules/chores-module.tsx` — for approved chore assignments where
+>   `cash_cents > 0` and `cash_awarded_cents IS NULL`, managers now see an amber
+>   "Pay $X" button (desktop table row + mobile card). Calls `payChoreRewardAction`
+>   (idempotent — guarded by `wallet_transactions`). Once paid shows "Paid ✓" badge.
+>   Imports `payChoreRewardAction` from `app/(app)/wallet/actions` and `formatCents`
+>   from `lib/wallet/ledger`.
+>
+> ## ✅ Task #23 — AI Family Communications Hub
+> - **Migration `0090_communications_hub.sql`** — `family_communications` table:
+>   `channel` (call/sms/email/whatsapp/instagram/school/sports/note/other),
+>   `direction` (inbound/outbound), `subject`, `body`, `summary` (AI), `action_items`
+>   (JSONB array), `category`, `status` (unread/read/replied/archived/snoozed),
+>   `priority`, `received_at`, `contact_id` → `family_contacts`, `thread_id`
+>   (self-referential for threads). Full RLS + realtime. ⚠️ APPLY 0090 TO PROD.
+> - **Rebuilt `components/modules/inbox-module.tsx`** from scratch (~500 lines):
+>   real Supabase-backed message log, filter tabs (All/Unread/School/Sports/Calls/SMS/
+>   Email/Archived), search bar, CommDetail panel (right on desktop, fullscreen on
+>   mobile), archive, contact sidebar with channel stats. Magic Import now persists to
+>   DB. Log Communication modal for manual entry.
+> - Navigation: "Magic Import" → "Communications Hub" everywhere; also added to
+>   Suggested nav group.
+>
+> ## ✅ Task #24 — AI Home Dashboard Enhancement
+> - `components/dashboard/ai-home-dashboard.tsx` — now fetches:
+>   - `unreadCommsCount` from `family_communications` (status = unread)
+>   - `activeConcierge` from `concierge_plans` (status planning/booked/confirmed)
+> - Renders an Inbox + Concierge quick-access widget row (2-column grid) between
+>   the Autopilot block and the Action Cards. Inbox shows unread badge count.
+>
+> ## ✅ Task #25 — AI Concierge Module
+> - **Migration `0091_concierge.sql`** — `concierge_sessions` (chat history) +
+>   `concierge_plans` (saved plans): kind (getaway/restaurant/date_night/activity/
+>   party/travel/shopping/service/general), status (idea/planning/booked/confirmed/
+>   completed/cancelled), budget_cents, location, planned_for, ai_suggestion.
+>   Full RLS + realtime. ⚠️ APPLY 0091 TO PROD.
+> - **`components/modules/concierge-module.tsx`** (new, ~470 lines):
+>   - Hero section with quick-action grid: Plan Getaway / Book Restaurant / Date Night
+>     / Family Activity / Plan Party / Vacation Planning / Ask Anything
+>   - Chat interface using `/api/ai/chat` with concierge system prompt
+>   - "Save Plan" button from chat (saves to `concierge_plans`)
+>   - Active Plans list + PlanDetail sidebar with status update + delete
+>   - Manual Add Plan modal (kind, status, date, budget, location, notes)
+>   - Inspiration tips in sidebar
+>   - Past plans list
+> - **`/dashboard/concierge/page.tsx`** — route, gated by `requireUserContext`
+> - Added to navigation (Suggested group, minLevel=1) + plans.ts
+>
+> ## What's pending (for the next agent)
+> - **Wallet TODO** (all low-Stripe or no-Stripe):
+>   - `/wallet/babysitters` — tables `babysitter_profiles`/`babysitter_payments` exist
+>   - `/wallet/settings` — split rules per child via `wallet_rules`
+>   - `/admin/wallet` — status, pending approvals, audit
+>   - Per-day AI-coach metering (count today's calls, limit Free to 5/day)
+>   - QR codes for gift links (no dep yet — copy-to-share works)
+>   - Full Stripe service layer (needs Stripe approval — see 2026-06-25a)
+> - **Apple OAuth** — still needs enabling in Supabase Dashboard
+> - **Production migrations to apply:** 0088, 0089, 0090, 0091
+> - **Potential next features from the master prompt:**
+>   - AI Call Guardian (smart call screening, PSTN integration)
+>   - AI Front Desk receptionist (one family phone number, routes calls)
+>   - Richer Communications Hub: real SMS/email/WhatsApp integration (Twilio/SendGrid)
+>   - Concierge booking API integrations (OpenTable, Google Maps Places, etc.)
+>   - Call Guardian migration and voicemail module
 
 > **Session update (2026-06-25, pushed direct to `main`, commit `bd30c43`) — INTERNATIONAL PHONE IN SETTINGS PROFILE EDITOR.**
 >
