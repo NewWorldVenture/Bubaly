@@ -15,6 +15,7 @@ import { successProbability } from '@/lib/autopilot/engine';
 import { planLevel } from '@/lib/constants/plans';
 import { tierForPlanLevel, FIXED_FEATURES } from '@/lib/dashboard/registry';
 import { resolvePrimary, availableFeatures, lockedFeatures } from '@/lib/dashboard/layout';
+import { normalizeSettings, canCustomizeDashboard, effectiveSavedKeys } from '@/lib/dashboard/permissions';
 import { DashboardQuickActions } from '@/components/dashboard/quick-actions';
 
 function greeting() {
@@ -215,15 +216,19 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const showAutopilot = openSuggestions.length > 0 || autopilotHandled > 0;
 
   // ── Customizable, tier-aware quick actions ──
+  const { data: dashSettingsRow } = await supabase
+    .from('family_dashboard_settings').select('allow_child_customization, lock_to_family_default').eq('family_id', familyId).maybeSingle();
+  const dashSettings = normalizeSettings(dashSettingsRow ? { allowChildCustomization: dashSettingsRow.allow_child_customization, lockToFamilyDefault: dashSettingsRow.lock_to_family_default } : null);
   const dashTier = tierForPlanLevel(planLevel(walletSub?.plan ?? null));
   const layouts = (layoutRows ?? []) as { feature_keys: string[]; scope: string; user_id: string | null }[];
   const myLayout = layouts.find((l) => l.scope === 'user' && l.user_id === ctx.user.id);
   const familyLayout = layouts.find((l) => l.scope === 'family');
-  const savedKeys = myLayout?.feature_keys ?? familyLayout?.feature_keys ?? null;
+  const savedKeys = effectiveSavedKeys(myLayout?.feature_keys ?? null, familyLayout?.feature_keys ?? null, dashSettings);
   const primaryButtons = resolvePrimary(savedKeys, dashTier);
   const primaryKeys = primaryButtons.map((f) => f.key);
   const availableButtons = availableFeatures(dashTier);
   const lockedButtons = lockedFeatures(dashTier);
+  const canCustomize = canCustomizeDashboard(manager, dashSettings);
 
   const actionCards = buildActionCards({
     pendingChores: pendingChores ?? 0,
@@ -454,6 +459,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         primaryKeys={primaryKeys}
         available={availableButtons}
         locked={lockedButtons}
+        canCustomize={canCustomize}
+        canManage={manager}
+        settings={dashSettings}
       />
 
       {/* Empty state when no cards */}

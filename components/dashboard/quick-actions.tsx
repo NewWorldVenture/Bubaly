@@ -8,21 +8,28 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Settings2, X, ChevronUp, ChevronDown, Plus, Check, RotateCcw, Search, Lock, Sparkles } from 'lucide-react';
+import { Settings2, X, ChevronUp, ChevronDown, Plus, Check, RotateCcw, Search, Lock, Sparkles, Users } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { FeatureIcon } from '@/components/dashboard/feature-icons';
 import { FEATURE_BY_KEY, MAX_DASH_BUTTONS, type DashFeature, type DashTier } from '@/lib/dashboard/registry';
-import { saveDashboardLayoutAction, resetDashboardLayoutAction, logDashboardEventAction } from '@/app/(app)/dashboard/customize-actions';
+import type { DashSettings } from '@/lib/dashboard/permissions';
+import {
+  saveDashboardLayoutAction, resetDashboardLayoutAction, logDashboardEventAction,
+  saveFamilyDefaultLayoutAction, saveDashboardSettingsAction, resetAllLayoutsAction,
+} from '@/app/(app)/dashboard/customize-actions';
 
 const TIER_LABEL: Record<DashTier, string> = { free: 'Free', basic: 'Basic', plus: 'Plus' };
 
-export function DashboardQuickActions({ fixed, primaryKeys, available, locked }: {
+export function DashboardQuickActions({ fixed, primaryKeys, available, locked, canCustomize = true, canManage = false, settings }: {
   fixed: DashFeature[];
   primaryKeys: string[];
   available: DashFeature[];      // all tier-unlocked customizable features
   locked: DashFeature[];         // above-tier features (upgrade discovery)
+  canCustomize?: boolean;        // false → child where the family disabled it, or locked-to-default
+  canManage?: boolean;           // parent/admin → family controls
+  settings?: DashSettings;
 }) {
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -30,6 +37,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked }:
   const [keys, setKeys] = useState<string[]>(primaryKeys);
   const [saving, setSaving] = useState(false);
   const [picker, setPicker] = useState<{ mode: 'add' | 'replace'; index: number } | null>(null);
+  const [familyOpen, setFamilyOpen] = useState(false);
 
   const tiles = useMemo(() => keys.map((k) => FEATURE_BY_KEY[k]).filter(Boolean), [keys]);
 
@@ -67,6 +75,13 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked }:
     router.refresh();
   }
   function cancel() { setKeys(primaryKeys); setEditing(false); }
+  async function setAsFamilyDefault() {
+    setSaving(true);
+    const res = await saveFamilyDefaultLayoutAction({ featureKeys: keys });
+    setSaving(false);
+    if (!res.ok) return toastError(res.error ?? 'Could not set family default');
+    success('Saved as the family default');
+  }
 
   const addable = available.filter((f) => !keys.includes(f.key));
 
@@ -75,11 +90,23 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked }:
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Quick Access</h2>
         {!editing ? (
-          <button onClick={() => setEditing(true)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10 transition">
-            <Settings2 className="h-3.5 w-3.5" /> Customize
-          </button>
-        ) : (
           <div className="flex items-center gap-1">
+            {canManage && (
+              <button onClick={() => setFamilyOpen(true)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted hover:bg-elevated hover:text-fg transition">
+                <Users className="h-3.5 w-3.5" /> Family
+              </button>
+            )}
+            {canCustomize ? (
+              <button onClick={() => setEditing(true)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10 transition">
+                <Settings2 className="h-3.5 w-3.5" /> Customize
+              </button>
+            ) : (
+              <span className="flex items-center gap-1 text-[11px] text-muted"><Lock className="h-3 w-3" /> Set by a parent</span>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-end gap-1">
+            {canManage && <button onClick={setAsFamilyDefault} disabled={saving} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition"><Users className="h-3.5 w-3.5" /> Set family default</button>}
             <button onClick={reset} disabled={saving} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition"><RotateCcw className="h-3.5 w-3.5" /> Reset</button>
             <button onClick={cancel} disabled={saving} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition">Cancel</button>
             <button onClick={save} disabled={saving} className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand/90 transition"><Check className="h-3.5 w-3.5" /> Save</button>
@@ -139,7 +166,62 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked }:
           onPick={pick}
         />
       )}
+
+      {familyOpen && settings && <FamilySettingsModal settings={settings} onClose={() => setFamilyOpen(false)} />}
     </div>
+  );
+}
+
+function FamilySettingsModal({ settings, onClose }: { settings: DashSettings; onClose: () => void }) {
+  const router = useRouter();
+  const { success, error: toastError } = useToast();
+  const [allowChild, setAllowChild] = useState(settings.allowChildCustomization);
+  const [lockAll, setLockAll] = useState(settings.lockToFamilyDefault);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    const res = await saveDashboardSettingsAction({ allowChildCustomization: allowChild, lockToFamilyDefault: lockAll });
+    setSaving(false);
+    if (!res.ok) return toastError(res.error ?? 'Could not save settings');
+    success('Dashboard settings saved');
+    onClose();
+    router.refresh();
+  }
+  async function resetEveryone() {
+    if (!confirm('Reset every family member’s dashboard to the default?')) return;
+    setSaving(true);
+    const res = await resetAllLayoutsAction();
+    setSaving(false);
+    if (!res.ok) return toastError(res.error ?? 'Could not reset');
+    success('Everyone’s dashboard was reset');
+    onClose();
+    router.refresh();
+  }
+
+  const Toggle = ({ on, onToggle, label, hint }: { on: boolean; onToggle: () => void; label: string; hint: string }) => (
+    <button type="button" onClick={onToggle} className="flex w-full items-start gap-3 rounded-xl border border-border bg-surface/40 p-3 text-left">
+      <span className={cn('mt-0.5 flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5 transition', on ? 'bg-brand' : 'bg-border')}>
+        <span className={cn('h-4 w-4 rounded-full bg-white transition', on && 'translate-x-4')} />
+      </span>
+      <span className="min-w-0"><p className="text-sm font-medium">{label}</p><p className="text-xs text-muted">{hint}</p></span>
+    </button>
+  );
+
+  return (
+    <Modal open onClose={onClose} title="Family dashboard settings">
+      <div className="space-y-3">
+        <Toggle on={allowChild} onToggle={() => setAllowChild((v) => !v)} label="Allow children to customize" hint="Let kid accounts personalize their own dashboard buttons." />
+        <Toggle on={lockAll} onToggle={() => setLockAll((v) => !v)} label="Use the family default for everyone" hint="Everyone sees the shared default; only parents can change it." />
+        <button onClick={resetEveryone} disabled={saving} className="flex w-full items-center gap-2 rounded-xl border border-border p-3 text-left text-sm text-muted hover:border-danger/40 hover:text-danger transition">
+          <RotateCcw className="h-4 w-4" /> Reset all members’ dashboards to default
+        </button>
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="rounded-lg px-3 py-2 text-sm text-muted hover:text-fg">Cancel</button>
+          <button onClick={save} disabled={saving} className="flex items-center gap-1 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 transition"><Check className="h-4 w-4" /> Save</button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

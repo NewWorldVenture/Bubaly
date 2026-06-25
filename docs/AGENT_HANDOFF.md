@@ -1,6 +1,20 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
+Last updated after dashboard customization permissions (child controls + family default). Keep this updated as you ship.
+
+> **Session update (2026-06-25g) — DASHBOARD CUSTOMIZATION: FAMILY PERMISSIONS.**
+> Completed §10 (role/family permissions) of the customizable-dashboard spec. Branch `claude/festive-bohr-m4cbeg`.
+> - **Migration `0094_family_dashboard_settings.sql`** — `family_dashboard_settings` (family_id PK,
+>   `allow_child_customization` bool, `lock_to_family_default` bool). RLS + trigger. ⚠️ NOT APPLIED TO PROD.
+> - **`lib/dashboard/permissions.ts`** (pure; **7 tests**): `canCustomizeDashboard`, `effectiveSavedKeys`
+>   (locked→family default always wins), `canManageFamilyDashboard`, `normalizeSettings`.
+> - **`customize-actions.ts`** — save now enforces the permission gate; new `saveDashboardSettingsAction`
+>   + `resetAllLayoutsAction` (both parent-only).
+> - **`quick-actions.tsx`** — Customize hidden for disallowed children ("Set by a parent"); parent "Family"
+>   modal (allow-child toggle, lock-to-default, reset-all) + "Set family default" in edit. Home resolves
+>   via `effectiveSavedKeys`. Verified: tsc/lint clean · build ✓ · **suite 1001/1001**.
+
 Last updated: 2026-06-25 — Family Trust & Permissions Engine shipped (new core platform layer). Keep this updated as you ship.
 
 > ## 🛡️ FAMILY TRUST & PERMISSIONS ENGINE — PLATFORM MAP (read first if continuing Trust)

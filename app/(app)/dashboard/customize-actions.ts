@@ -7,6 +7,13 @@ import { isManager } from '@/lib/constants/roles';
 import { planLevel } from '@/lib/constants/plans';
 import { tierForPlanLevel } from '@/lib/dashboard/registry';
 import { validateLayout } from '@/lib/dashboard/layout';
+import { canCustomizeDashboard, normalizeSettings, type DashSettings } from '@/lib/dashboard/permissions';
+
+async function familyDashSettings(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string): Promise<DashSettings> {
+  const { data } = await supabase.from('family_dashboard_settings')
+    .select('allow_child_customization, lock_to_family_default').eq('family_id', familyId).maybeSingle();
+  return normalizeSettings(data ? { allowChildCustomization: data.allow_child_customization, lockToFamilyDefault: data.lock_to_family_default } : null);
+}
 
 type Result = { ok: boolean; error?: string };
 type Device = 'all' | 'mobile' | 'tablet' | 'desktop';
@@ -36,7 +43,10 @@ export async function saveDashboardLayoutAction(input: { featureKeys: string[]; 
   const userId = ctx.user.id;
   const supabase = await createServer();
 
-  const tier = await userTier(supabase, familyId);
+  const [tier, settings] = await Promise.all([userTier(supabase, familyId), familyDashSettings(supabase, familyId)]);
+  if (!canCustomizeDashboard(isManager(ctx.active.role), settings)) {
+    return { ok: false, error: settings.lockToFamilyDefault ? 'Your family uses a shared dashboard set by a parent.' : 'A parent has turned off dashboard customization for children.' };
+  }
   const v = validateLayout(input.featureKeys, tier);
   if (!v.ok) return { ok: false, error: v.error };
 
@@ -106,4 +116,33 @@ export async function logDashboardEventAction(input: { action: string; featureKe
   } catch {
     return { ok: false };
   }
+}
+
+/** Save the family dashboard settings (parent/admin only). */
+export async function saveDashboardSettingsAction(input: { allowChildCustomization: boolean; lockToFamilyDefault: boolean }): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can change dashboard settings.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+  const { error } = await supabase.from('family_dashboard_settings').upsert(
+    { family_id: familyId, allow_child_customization: !!input.allowChildCustomization, lock_to_family_default: !!input.lockToFamilyDefault, updated_by: ctx.user.id },
+    { onConflict: 'family_id' },
+  );
+  if (error) return { ok: false, error: error.message };
+  await logEvent(supabase, familyId, ctx.user.id, 'settings_changed', null, { ...input });
+  revalidatePath('/dashboard');
+  return { ok: true };
+}
+
+/** Reset ALL members' personal layouts to the default (parent/admin only). */
+export async function resetAllLayoutsAction(): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can reset everyone’s dashboard.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+  const { error } = await supabase.from('dashboard_layouts').delete().eq('family_id', familyId).eq('scope', 'user');
+  if (error) return { ok: false, error: error.message };
+  await logEvent(supabase, familyId, ctx.user.id, 'reset_all');
+  revalidatePath('/dashboard');
+  return { ok: true };
 }
