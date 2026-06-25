@@ -20,6 +20,7 @@ import { fmtRelative } from '@/lib/utils/format';
 import { formatCents, type BucketKind } from '@/lib/wallet/ledger';
 import { computeFunding, serviceFeeLabel, type WalletTier } from '@/lib/wallet/fees';
 import { WALLET_TIERS, aiCoachLevel } from '@/lib/wallet/tiers';
+import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { addFundsAction } from '@/app/(app)/wallet/actions';
 
 type Coaching = { headline: string; insights: string[]; suggestion: string };
@@ -86,6 +87,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
           <Button variant="ghost" onClick={runCoach} loading={coachLoading}><Sparkles className="h-4 w-4" /> Money Coach</Button>
         ) : undefined}
       />
+      <WalletSubnav />
 
       {coach && (
         <div className="mb-5 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-5">

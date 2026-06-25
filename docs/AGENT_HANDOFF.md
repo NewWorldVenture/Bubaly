@@ -1,7 +1,30 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the AI Family Financial Coach. Keep this updated as you ship.
+Last updated after the Wallet Goals + Allowance screens. Keep this updated as you ship.
+
+> **Session update (2026-06-25d) — WALLET PHASE 4: GOALS + ALLOWANCE SCREENS + SUBNAV.**
+> Built the UI for the goal/allowance actions + a wallet section nav. NO migration.
+> Branch `claude/festive-bohr-m4cbeg`.
+> - **`components/wallet/wallet-subnav.tsx`** — Overview / Goals / Allowance tabs (added to all
+>   three wallet screens).
+> - **`/wallet/goals`** (`goals-view.tsx`): create goals (child or family), fund child goals from
+>   the Save bucket with progress bars + reached state. Actions added to `wallet/actions.ts`:
+>   `createGoalAction`, `fundGoalAction` (immutable `goal_transfer` debit against the save bucket;
+>   refuses to overdraw; increments `wallet_goals.saved_cents`, marks `reached`).
+> - **`/wallet/allowance`** (`allowance-view.tsx`): per-child allowance editor (amount + cadence),
+>   pause/resume. Basic+ gated (Free sees an upgrade prompt). Actions: `saveAllowanceRuleAction`
+>   (existed) + new `toggleAllowanceRuleAction`. The cron pays them automatically.
+> - Verified: tsc + lint clean · `npm run build` ✓ (/wallet/goals, /wallet/allowance) · suite 965/965.
+>
+> **WALLET — remaining from the spec (next agent):** gift-link management + PUBLIC `/wallet/gift/[token]`
+> page (record a `gift_payments` pledge → parent approves → `creditChildWallet`; add QR); chore-pay UI
+> (action `payChoreRewardAction` exists — surface a "Pay to wallet" button on chore approval); per-child
+> page `/wallet/children/[childId]`; /wallet/cards(/order) + /wallet/babysitters + /wallet/activity +
+> /wallet/settings; /admin/wallet + /admin/stripe + /admin/card-designs; per-day AI-coach metering
+> (`AI_COACH_DAILY_LIMIT`); and the full Stripe service layer + Issuing authorization webhook (needs
+> Stripe approval — see the 2026-06-25a entry). All money movement reuses `creditChildWallet` /
+> immutable `wallet_transactions`.
 
 > **Session update (2026-06-25c) — WALLET: AI FAMILY FINANCIAL COACH.**
 > Built the headline AI feature from the tier matrix (Free none / Basic limited / Plus
