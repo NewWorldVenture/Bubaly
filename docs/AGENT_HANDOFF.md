@@ -1,41 +1,42 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-26 — Child wallet detail overhaul (Smart Split donut, Virtual Card, AI Coach, Quick Actions), Wallet spending analytics (This Month + 6-month trend), Goals view redesign (kind emojis, target dates, visual progress). All 1068 tests pass. Keep this updated as you ship.
+Last updated: 2026-06-26 — Session 2 adds child-specific AI coach, goal savings forecast, allowance-request flow. All pushed to branch `claude/connect-8ysp00` (PR #162). 1068 tests pass. Keep this updated as you ship.
 
-> **Session update (2026-06-26) — WALLET UX: CHILD DETAIL OVERHAUL + ANALYTICS (fable-5)**
-> Pushed to `main`. tsc clean · build exit 0 · 1068 tests pass. Built from the Bubaly wallet design mocks.
+> **Session update (2026-06-26) — WALLET DEPTH: CHILD AI COACH + GOAL FORECASTS + ALLOWANCE REQUEST (fable-5)**
+> Branch `claude/connect-8ysp00` · PR #162. tsc clean · 1068 tests pass · build exit 0.
 >
-> ### Child Wallet Detail (`/wallet/children/[childId]`) — world-class redesign
-> - **`components/wallet/child-detail-view.tsx`** — complete rewrite:
->   - **Hero header**: large Avatar (with color), name, total balance, sub-stats (spendable / saved), quick action buttons (Request · Add Funds · Send / Cards)
->   - **Smart Split Donut** (`SmartSplitDonut`): CSS `conic-gradient` from -90deg showing actual bucket allocation (spend/save/give/invest), inner "donut hole" with total. Target-split text shown below legend.
->   - **Virtual VISA Card** (`VirtualCardPlaceholder`): dark blue/indigo gradient card with child name, Bubaly Family label, Spend balance prominent, masked card number, "Coming soon" CTA, VISA logotype. Swapped for real card when Stripe Issuing is approved.
->   - **AI Money Coach** (`AICoachCard`): inline "Ask AI Coach" button calls `/api/ai/wallet` (existing family-wide endpoint). Shows headline + insights + suggestion with a refresh button. Dismissible.
->   - **Quick Actions**: Request to Spend modal (pre-filled child, shows approval threshold note), Add Funds modal (shows bucket split), Send to Sibling modal (parent-only, picks from sibling wallets).
->   - **Goals section**: Active goals in `GoalCard` with % badge + remaining + `target_date` days-left, "reached" badges. Reached goals collapsible with `<details>`.
->   - **Bucket breakdown**: 4 cards (Spend/Save/Give/Invest) showing balance + target% + live progress bar (width = actual% of total, colored with bucket ring color).
->   - **Activity feed**: grouped by day with bucket-kind icons, `requires_parent_approval` shown in amber with Clock icon. "Show X more days" expand button. Link to `/wallet/activity`.
-> - **`app/(app)/wallet/children/[childId]/page.tsx`** — richer data: fetches wallet rule (split + approval threshold), sibling wallets (for Send), member `color` (correct column name, not `avatar_color`). Passes `siblings` prop.
+> ### Child-specific AI Money Coach (`/api/ai/wallet/child/[childId]`)
+> - **NEW route** `app/api/ai/wallet/child/[childId]/route.ts` — child-scoped POST endpoint:
+>   - Verifies child wallet belongs to the family (security + RLS)
+>   - Same tier gate + daily metering (shares `ai_coach_call` counter with family coach)
+>   - Fetches ONLY that child's buckets + txns + goals (8-week save rate)
+>   - Calls `buildChildCoachPrompt` → personal insights for one child's money habits
+> - **`lib/wallet/coach.ts`** — new `CoachChildDetail` type + `buildChildCoachPrompt` function (PURE, uses same `parseWalletCoach` parse path)
+> - **`components/wallet/child-detail-view.tsx`** — `AICoachCard` now accepts `childId` prop and calls `/api/ai/wallet/child/${childId}`; `ChildDetailView` passes `child.id`
 >
-> ### Wallet Dashboard Analytics
-> - **`app/(app)/wallet/page.tsx`** — computes `WalletAnalytics` server-side from the already-fetched `txns`: this-month credits/debits/net, credits-by-type breakdown, 6-month trend (credits + debits per month).
-> - **`components/wallet/wallet-dashboard.tsx`** — new `SpendingAnalytics` component: "This Month" (Money In / Money Out / Net 3-chip strip), horizontal bar breakdown "Where money came from" (allowance/chore/gift/top-up with % bars), 6-month stacked bar chart (green = credits, red/rose = debits). Renders only when `analytics` has activity.
+> ### Goal Savings Rate + Weeks-to-Goal Forecast
+> - **`app/(app)/wallet/goals/page.tsx`** — added 5th parallel query: recent save-bucket credits (last 8 weeks) per child; computes `weeklyRateCents` + `weeksToGoal` per goal server-side
+> - **`components/wallet/goals-view.tsx`** — `GoalView` type adds `weeklyRateCents?` + `weeksToGoal?`; `GoalCard` shows `~Xw away` forecast badge (brand color, TrendingUp icon) alongside the calendar deadline
 >
-> ### Goals View Redesign
-> - **`components/wallet/goals-view.tsx`** — redesigned `GoalCard`: goal kind emoji (bike🚲/vacation✈️/college🎓/etc), days-remaining from `target_date` (amber if <30 days), remaining amount, smooth 700ms progress bar. `FundGoalModal` has mini progress card + "Full remaining" quick-amount button. `CreateGoalModal` uses emoji grid for kind selection + `target_date` date input.
-> - **`app/(app)/wallet/goals/page.tsx`** — passes `targetDate` from DB.
+> ### Child→Parent Allowance Request Flow
+> - **`app/(app)/wallet/actions.ts`** — two new server actions:
+>   - `requestAllowanceAction({ childWalletId, amountCents, reason? })` — any member can request; writes a `parent_approvals` row with `kind='allowance_request'`, `ref_type='child_wallets'`, `ref_id=childWalletId`. No transaction yet.
+>   - `decideAllowanceRequestAction({ approvalId, decision, note? })` — manager-only; on 'approved' immediately credits the child wallet via `creditChildWallet` (smart-split allocated); on 'rejected' just closes the request.
+> - **`app/(app)/wallet/page.tsx`** — `pendingApprovals` mapping updated: `allowance_request` rows use `ref_id` directly as `childWalletId`; both kinds now pass `childWalletId` in the view type
+> - **`components/wallet/wallet-dashboard.tsx`** — `PendingApproval` type adds `childWalletId`; `ApprovalRow` routes approve/reject to the correct action based on `approval.kind`; shows green Plus icon + "Allowance request" label for the new kind
+> - **`components/wallet/child-detail-view.tsx`** — `RequestAllowanceModal` (amount + quick-amounts + optional reason); hero card has secondary "Ask for more allowance" dashed button below the 3-button grid; `RequestAllowanceModal` rendered at the bottom
 >
-> ### Activity / Ledger
-> - **`lib/wallet/activity.ts`** — added `transfer` label.
-> - **`components/wallet/activity-view.tsx`** — added `transfer` and `card_refund` to filter dropdown.
+> ### Prior session items (already shipped)
+> - Child wallet detail overhaul: Smart Split donut, Virtual Card, AI Coach, Quick Actions, Activity feed
+> - Wallet Dashboard analytics: This Month stats + 6-month stacked bar chart
+> - Goals view redesign: kind emojis, target dates, FundGoalModal improvements
+> - Activity filter: added `transfer` + `card_refund` types
 >
 > ### Remaining wallet depth (next agent)
-> - AI Money Coach child-specific endpoint (current coach is family-wide; add `/api/ai/wallet/child/[id]` for child-specific insights using just that child's ledger + goals)
-> - Trust audit log surfacing in activity feed (show trust decision badges on spend rows)
-> - Child→parent "request more allowance" direction (currently only spend-request flows)
-> - Savings rate + weeks-to-goal forecast in goals view (needs recent credit query per child)
-> - Virtual card → real Stripe Issuing card (Stripe approval gated — placeholder is ready to swap)
+> - **Trust audit log surfacing** in activity feed: store `trust_basis`/`trust_effect` in `wallet_transactions.metadata` at write time (update `requestSpendAction` → `debitSpendBucket` call to include trust decision in metadata), then show a badge in `TxnRow` based on `metadata.trust_basis`. Old rows won't have it (forward-only).
+> - **Virtual card → real Stripe Issuing card**: placeholder in `VirtualCardPlaceholder` is ready to swap; blocked on Stripe Issuing approval
+> - **⚠️ MIGRATIONS NOT APPLIED TO PROD**: `0093_trust_engine.sql`, `0094_family_dashboard_settings.sql`, `0095_wallet_transfers.sql`, `0096_family_economy.sql`
 
 > ## 🪙 FAMILY ECONOMY — custom currencies (PR pending) — non-cash points/tokens
 > Branch `claude/family-economy`. A parallel NON-CASH economy: parents define custom currencies
