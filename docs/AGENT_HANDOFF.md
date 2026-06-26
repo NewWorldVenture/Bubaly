@@ -30,6 +30,13 @@ Last updated: Dramatic UI upgrade — wallet/money visual allocation + dark-mode
 >   uses — transaction icons, auth indicators, amounts, the Real-time badge (now pulses),
 >   and babysitter payment history.
 >
+> ### Guardian dashboard refresh fix (real bug)
+> `components/guardian/guardian-dashboard.tsx` — acknowledge-escalation, apply/skip
+> suggestion, and context-change handlers toasted success but never refreshed, so the red
+> escalation banner + suggestion cards lingered and the status chip didn't move until a
+> manual reload. Added `router.refresh()` after each. (The contacts/rules editors already
+> use optimistic local state; routing-settings is a controlled form — both fine as-is.)
+>
 > ### Frictionless money modals (consistency pass)
 > - **Goals**: Fund modal gains round-amount quick chips (capped to remaining) + a
 >   "Finish it · $X" button that funds the exact remaining balance in one tap.
