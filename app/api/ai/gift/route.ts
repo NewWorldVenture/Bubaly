@@ -1,0 +1,74 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { resolveProvider } from '@/lib/ai/provider';
+import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { buildGiftAssistPrompt, parseGiftSuggestions } from '@/lib/wallet/gift-ai';
+
+// POST /api/ai/gift — PUBLIC AI Gift Assistant for the gift-link page.
+// Givers aren't signed in, so this is unauthenticated: it's rate-limited per IP
+// and only ever reads a single gift link by its (already-secret) token. It
+// returns warm message drafts + suggested amounts; it never writes anything.
+export const runtime = 'nodejs';
+
+export async function POST(req: NextRequest) {
+  // Tight limit: a public, model-backed endpoint. 5 requests/minute/IP.
+  const ip = clientIp(req.headers);
+  const limited = rateLimit(`ai-gift:${ip}`, { limit: 5, windowMs: 60_000 });
+  if (!limited.ok) {
+    return NextResponse.json(
+      { error: 'Please wait a moment before asking for more ideas.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
+  }
+
+  let body: { token?: string; relationship?: string };
+  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Bad request' }, { status: 400 }); }
+  const token = typeof body.token === 'string' ? body.token : '';
+  if (!token) return NextResponse.json({ error: 'Missing gift link.' }, { status: 400 });
+  const relationship = typeof body.relationship === 'string' ? body.relationship.slice(0, 40).trim() || null : null;
+
+  const supabase = createServiceClient();
+  const { data: link } = await supabase
+    .from('gift_links')
+    .select('id, is_active, occasion, child_wallet_id, family_id')
+    .eq('token', token)
+    .maybeSingle();
+  if (!link || !link.is_active) return NextResponse.json({ error: 'This gift link is no longer active.' }, { status: 404 });
+
+  // Resolve the child's first name + their top active goal (kept minimal).
+  let childName = 'the child';
+  let goalTitle: string | null = null;
+  let goalSavedCents: number | null = null;
+  let goalTargetCents: number | null = null;
+
+  if (link.child_wallet_id) {
+    const [{ data: cw }, { data: goal }] = await Promise.all([
+      supabase.from('child_wallets').select('member_id').eq('id', link.child_wallet_id).maybeSingle(),
+      supabase.from('wallet_goals')
+        .select('title, saved_cents, target_cents')
+        .eq('family_id', link.family_id).eq('child_wallet_id', link.child_wallet_id).eq('status', 'active')
+        .order('target_cents', { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    if (cw?.member_id) {
+      const { data: m } = await supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle();
+      if (m?.display_name) childName = m.display_name.split(' ')[0] || m.display_name;
+    }
+    if (goal) { goalTitle = goal.title; goalSavedCents = goal.saved_cents; goalTargetCents = goal.target_cents; }
+  }
+
+  try {
+    const { system, user } = buildGiftAssistPrompt({
+      childName, occasion: link.occasion, relationship, goalTitle, goalSavedCents, goalTargetCents,
+    });
+    const provider = await resolveProvider();
+    const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 500 });
+    const suggestions = parseGiftSuggestions(completion.text || '');
+    if (suggestions.messages.length === 0) {
+      return NextResponse.json({ error: 'Could not think of ideas right now. Please try again.' }, { status: 502 });
+    }
+    return NextResponse.json(suggestions);
+  } catch (err) {
+    console.error('AI gift assistant error:', err);
+    return NextResponse.json({ error: 'Could not generate ideas right now.' }, { status: 500 });
+  }
+}

@@ -3,7 +3,7 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the Card Spending-Control editor. Keep this updated as you ship.
 
-> ## 🎛️ CARD SPENDING-CONTROL EDITOR (PR pending) — per-card parent controls
+> ## 🎛️ CARD SPENDING-CONTROL EDITOR (PR #158) — per-card parent controls
 > Branch `claude/card-spending-controls`. Completes the card story from Stripe Money (#155):
 > parents set a per-card **limit + window + blocked categories** (freeze already shipped).
 > **No migration** (uses the columns from 0090). Mirrors to Stripe + enforced by the auth webhook.
@@ -20,7 +20,19 @@ Last updated after the Card Spending-Control editor. Keep this updated as you sh
 >   ALSO enforced live by `decideAuthorization` in the auth webhook.
 > - Verified: tsc clean · eslint clean · build exit 0 · suite **1046/1046** (11 new).
 > - Remaining big wallet features (need direction): Family Economy / custom currencies, Pay-ID handles,
->   AI Investing for kids. (AI Gift Assistant shipped separately in PR #157.)
+>   AI Investing for kids.
+
+> ## ✨ AI GIFT ASSISTANT (✅ MERGED via PR #157) — public gift-link helper
+> Branch `claude/ai-gift-assistant`. Helps a relative on a public gift link write a warm message +
+> pick a tasteful amount. **No Stripe; fully testable.** **No migration.**
+> - **`lib/wallet/gift-ai.ts`** (PURE + **10 tests**) — `buildGiftAssistPrompt(input)` (childName,
+>   occasion, relationship, top active goal) + `parseGiftSuggestions(raw)` → `{messages[], amountsCents[]}`.
+>   Amounts clamped to `MIN_GIFT_CENTS`($5)–`MAX_GIFT_CENTS`($500), deduped, ≤3 each; messages ≤280 chars.
+> - **`app/api/ai/gift/route.ts`** — PUBLIC POST (givers aren't signed in). **Rate-limited 5/min/IP**
+>   (`lib/server/rate-limit.ts`), reads one gift link by token (service client), resolves child first
+>   name + top goal, calls `resolveProvider().complete()`, returns suggestions. Writes nothing.
+> - **`components/wallet/public-gift-form.tsx`** — "✨ Help me write something" button → tappable
+>   message drafts (tap to fill the note) + suggested-amount chips. Friendly, frictionless.
 
 > ## 💳 BUBALY MONEY — STRIPE FINANCIAL MODE (Phase 2) — read first if continuing Money
 > **✅ MERGED TO MAIN via PR #155** (`claude/stripe-money-mode`). Builds the REAL Stripe layer on top of the
