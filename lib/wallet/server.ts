@@ -127,3 +127,63 @@ export async function creditChildWallet(supabase: DB, params: {
 
   return { ok: true, credited: amount };
 }
+
+/**
+ * Available (completed) balance in a single bucket for a child wallet, derived
+ * straight from the ledger. Pending / requires_parent_approval rows do NOT count
+ * — only `completed` moves a balance. Used to validate spend + transfers so a
+ * wallet can never overdraw.
+ */
+export async function bucketBalanceCents(supabase: DB, params: {
+  familyId: string; childWalletId: string; kind: 'spend' | 'save' | 'give' | 'invest';
+}): Promise<{ bucketId: string | null; available: number }> {
+  const { data: bucket } = await supabase.from('wallet_buckets')
+    .select('id').eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId).eq('kind', params.kind).maybeSingle();
+  if (!bucket?.id) return { bucketId: null, available: 0 };
+  const { data: txns } = await supabase.from('wallet_transactions')
+    .select('direction, amount_cents, status').eq('family_id', params.familyId).eq('bucket_id', bucket.id);
+  const available = (txns ?? []).reduce(
+    (s, t) => s + (t.status === 'completed' ? (t.direction === 'credit' ? t.amount_cents : -t.amount_cents) : 0), 0,
+  );
+  return { bucketId: bucket.id, available };
+}
+
+export type DebitResult = { ok: boolean; error?: string; txnId?: string };
+
+/**
+ * Debit a child's Spend bucket. When `requiresApproval` is true the row is
+ * written as `requires_parent_approval` (held — does not yet reduce the balance)
+ * and returned so a parent_approvals row can point at it; otherwise it posts
+ * `completed` immediately. The single place spend leaves a wallet.
+ */
+export async function debitSpendBucket(supabase: DB, params: {
+  familyId: string; childWalletId: string; amountCents: number; type: WalletTxnType;
+  description: string; createdBy: string | null; approvedBy?: string | null;
+  requiresApproval?: boolean; relatedType?: string | null; relatedId?: string | null;
+  metadata?: Record<string, unknown>;
+}): Promise<DebitResult> {
+  const amount = Math.trunc(params.amountCents);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Amount must be greater than 0' };
+
+  const { bucketId, available } = await bucketBalanceCents(supabase, { familyId: params.familyId, childWalletId: params.childWalletId, kind: 'spend' });
+  if (!params.requiresApproval && amount > available) {
+    return { ok: false, error: `Only ${(available / 100).toFixed(2)} available in Spend.` };
+  }
+
+  const { data, error } = await supabase.from('wallet_transactions').insert({
+    family_id: params.familyId, child_wallet_id: params.childWalletId, bucket_id: bucketId,
+    type: params.type, status: params.requiresApproval ? 'requires_parent_approval' : 'completed',
+    direction: 'debit', amount_cents: amount, description: params.description,
+    related_type: params.relatedType ?? null, related_id: params.relatedId ?? null,
+    created_by: params.createdBy, approved_by: params.requiresApproval ? null : (params.approvedBy ?? params.createdBy),
+    metadata: (params.metadata ?? {}) as Database['public']['Tables']['wallet_transactions']['Insert']['metadata'],
+  }).select('id').single();
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from('wallet_audit_logs').insert({
+    family_id: params.familyId, actor_user_id: params.createdBy, action: `debit_${params.type}`,
+    entity_type: 'child_wallets', entity_id: params.childWalletId,
+    detail: `${params.description} (${amount}c)${params.requiresApproval ? ' — pending approval' : ''}`,
+  });
+  return { ok: true, txnId: data.id };
+}

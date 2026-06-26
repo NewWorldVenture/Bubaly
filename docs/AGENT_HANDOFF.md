@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after Pay-ID handles. Keep this updated as you ship.
+Last updated after Pay-ID handles + Wallet Send-Money/Approvals. Keep this updated as you ship.
 
 > ## 🔖 PAY-ID HANDLES (PR #159) — memorable gifting links
 > Branch `claude/pay-id-handles`. A short handle (e.g. `mia`) resolves at
@@ -22,6 +22,7 @@ Last updated after Pay-ID handles. Keep this updated as you ship.
 > - DB types extended (`pay_handles`). Verified: tsc clean · eslint clean · build OK
 >   (`/pay/[handle]` registered) · suite **1053/1053** (8 new).
 > - Remaining big wallet features: Family Economy ✅ (#160), AI Investing for kids (#161).
+> - NOTE: main also shipped Wallet Send-Money / Request-to-Spend / Pending-Approvals + Trust Engine rollout.
 
 > ## 🪙 FAMILY ECONOMY — custom currencies (PR pending) — non-cash points/tokens
 > Branch `claude/family-economy`. A parallel NON-CASH economy: parents define custom currencies
@@ -186,7 +187,6 @@ Last updated after Pay-ID handles. Keep this updated as you ship.
 >   modal (allow-child toggle, lock-to-default, reset-all) + "Set family default" in edit. Home resolves
 >   via `effectiveSavedKeys`. Verified: tsc/lint clean · build ✓ · **suite 1001/1001**.
 
-Last updated: 2026-06-25 — Family Trust & Permissions Engine shipped (new core platform layer). Keep this updated as you ship.
 
 > ## 🛡️ FAMILY TRUST & PERMISSIONS ENGINE — PLATFORM MAP (read first if continuing Trust)
 > A foundational platform layer (alongside Identity, Memory, AI, Automation) that
@@ -218,21 +218,59 @@ Last updated: 2026-06-25 — Family Trust & Permissions Engine shipped (new core
 > - **AI integration (FIRST agent wired)** — `/api/ai/import` confirm path calls `evaluateTrust`
 >   per action (maps action→domain): allow→execute, require_approval→queued, deny→blocked.
 >
+> ### Trust — rollout progress (2026-06-26, opus-4-8)
+> - ✅ **`/api/ai/chat` tool execution wired** — `lib/assistant/trust-wrapper.ts` wraps every WRITE
+>   tool (`wrapToolsWithTrust`): each execute() runs `evaluateTrust` (domain map + capability
+>   `automate`); allow→execute, require_approval→opens approval + returns "⏳ Sent for parent
+>   approval" chip, deny→blocked. Read tools pass through untouched. Wired in `app/api/ai/chat/route.ts`.
+> - ✅ **Approval → execution loop CLOSED** — `decideApprovalAction` now reads the approval's stored
+>   `payload` and, once fully approved, calls `runAction(...)` to actually execute it, then stamps
+>   `executed_at` + `execution_result` and writes an audit row. `lib/ai/actions.ts#runAction` was
+>   extended to handle ALL assistant tool names (add_chore/add_todo/add_note/add_goal/
+>   create_announcement/add_reminder/add_grocery_item + both `{item}`/`{name}` arg shapes).
+> - ✅ **Wallet money-movement wired** — `requestSpendAction` + `sendMoneyAction` (see Wallet update
+>   below) call `evaluateTrust` (domain `finances`). Spend requests only HARD-block on an *explicit*
+>   deny (deny grant / policy) — a role-default "no" escalates to parent approval (kids can always ask).
+>
 > ### Trust — remaining for the next agent (engine + UX done; this is rollout + depth)
-> 1. **Wire `evaluateTrust` into OTHER AI routes** (one call each): `/api/ai/chat` tool execution,
->    autopilot execution, wallet money-movement, front-desk/comms auto-actions. Map to domain +
+> 1. **Wire `evaluateTrust` into the LAST routes**: autopilot execution, front-desk/comms
+>    auto-actions. (chat, magic-import, wallet money-movement now done.) Map to domain +
 >    capability='automate' and branch on `decision.effect`.
-> 2. **Approval → execution loop**: when an `approval_requests` row is approved, EXECUTE the stored
->    `payload` (re-run `runAction`). Today approval records the decision but doesn't auto-execute.
-> 3. **Relationship graph** (Parent→Child, Coach→Child) — `family_tree_nodes` exists; add
+> 2. **Relationship graph** (Parent→Child, Coach→Child) — `family_tree_nodes` exists; add
 >    `trust_relationships` or derive, feed relationship-based perms.
-> 4. **External org permissions** (schools/doctors/leagues) — `family_contacts` has the categories.
-> 5. **Trust-score worker** — recompute `trust_scores` from audit outcomes (`computeTrustScore` ready);
+> 3. **External org permissions** (schools/doctors/leagues) — `family_contacts` has the categories.
+> 4. **Trust-score worker** — recompute `trust_scores` from audit outcomes (`computeTrustScore` ready);
 >    surface in UI + let scores modulate automation thresholds.
-> 6. **Privacy controls UX** — per-member visibility toggles (medical/financial/location/…).
-> 7. **Seed default policies** on family creation (`is_system=true` rows).
-> 8. **Richer roles** (grandparent/babysitter/nanny/pet_caregiver…): extend ROLE_DEFAULTS + the
+> 5. **Privacy controls UX** — per-member visibility toggles (medical/financial/location/…).
+> 6. **Seed default policies** on family creation (`is_system=true` rows).
+> 7. **Richer roles** (grandparent/babysitter/nanny/pet_caregiver…): extend ROLE_DEFAULTS + the
 >    member_role enum if the product wants the full spec list (engine TrustRole is the 6-role enum today).
+
+> **Session update (2026-06-26) — WALLET: SEND MONEY + REQUEST-TO-SPEND + PENDING APPROVALS (opus-4-8)**
+> Built the money-movement flows that headline the Bubaly design mocks, on top of the existing
+> immutable-ledger wallet. tsc clean · build exit 0 · 1018 tests pass (+4 new). **⚠️ APPLY 0095 TO PROD.**
+>
+> - **Migration `0095_wallet_transfers.sql`** — adds the `transfer` ledger type (distinct from
+>   within-wallet `bucket_transfer`) + an index on `parent_approvals(family_id, ref_type, ref_id)`.
+>   Also added `'transfer'` to `WalletTxnType` in `lib/database.types.ts`.
+> - **`lib/wallet/server.ts`** — new `bucketBalanceCents()` (derive a single bucket's available
+>   balance from the ledger) + `debitSpendBucket()` (the ONE place spend leaves a wallet; writes a
+>   `completed` debit, or a held `requires_parent_approval` debit when approval is needed). Mirrors
+>   `creditChildWallet`. Never overdraws (validates against live Spend balance).
+> - **`app/(app)/wallet/actions.ts`** — 3 new actions, all Trust-wired (domain `finances`):
+>   `requestSpendAction` (under threshold + parent → posts immediately; else opens a `parent_approvals`
+>   row → Pending Approvals), `decideSpendRequestAction` (approve → completes the held debit, re-checking
+>   balance; reject → cancels it), `sendMoneyAction` (parent moves money child→child; money-conserving
+>   debit+credit with a reversal rollback if the credit leg fails).
+> - **UX `components/wallet/wallet-dashboard.tsx`** — quick-action bar (Send money / Request to spend /
+>   Add funds), a **Pending Approvals** inbox with inline Approve/Reject (amber card, managers act),
+>   per-child "Spend" request button, + `RequestSpendModal` / `SendMoneyModal`. Page fetches pending
+>   `parent_approvals` and resolves each to its child via the txn.
+> - **Tests** `tests/wallet-transfer.test.ts` (4) — pins the invariants: a held request moves nothing
+>   until completed; transfers conserve total money; a reversal restores a failed transfer.
+> - **Remaining wallet depth (next agent):** virtual-card display (VISA mock in designs, needs Stripe
+>   Issuing — gated), spending-breakdown donut by category, child→parent "request money" direction,
+>   and surfacing `trust_audit_logs` spend decisions in the wallet activity feed.
 
 > **Session update (2026-06-25l) — DEAD-BUTTON SWEEP + REAL DATA (opus-4-8)**
 >

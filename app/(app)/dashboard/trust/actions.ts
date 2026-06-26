@@ -5,6 +5,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { CAPABILITIES, TRUST_DOMAINS, type Capability } from '@/lib/trust/engine';
+import { runAction } from '@/lib/ai/actions';
 import type { Json } from '@/lib/database.types';
 
 type Result = { ok: boolean; error?: string };
@@ -164,7 +165,7 @@ export async function decideApprovalAction(input: { id: string; decision: 'appro
   const supabase = await createServer();
 
   const { data: appr } = await supabase.from('approval_requests')
-    .select('id, status, required_approvals, approvals, domain, capability, policy_id')
+    .select('id, status, required_approvals, approvals, domain, capability, policy_id, payload')
     .eq('id', input.id).eq('family_id', ctx.active.familyId).maybeSingle();
   if (!appr) return { ok: false, error: 'Approval request not found.' };
   if (appr.status !== 'pending') return { ok: false, error: 'This request was already decided.' };
@@ -198,6 +199,28 @@ export async function decideApprovalAction(input: { id: string; decision: 'appro
     reason: input.note?.trim() || `Approval ${input.decision} by ${ctx.active.member.display_name}`,
     policy_id: appr.policy_id ?? null, approval_id: appr.id,
   });
+
+  // Auto-execute the stored payload when the request reaches fully approved.
+  if (status === 'approved') {
+    const payload = appr.payload as { name?: string; args?: Record<string, unknown> } | null;
+    if (payload?.name) {
+      const result = await runAction(
+        { supabase, familyId: ctx.active.familyId, userId: ctx.user.id },
+        { name: payload.name, args: (payload.args ?? {}) as Record<string, any> },
+      );
+      await supabase.from('approval_requests').update({
+        executed_at: new Date().toISOString(),
+        execution_result: result.ok ? 'executed' : `error: ${result.error ?? 'unknown'}`,
+      }).eq('id', input.id);
+      await supabase.from('trust_audit_logs').insert({
+        family_id: ctx.active.familyId, actor_kind: 'ai_agent', actor_id: 'system',
+        domain: appr.domain, capability: appr.capability,
+        decision: result.ok ? 'executed' : 'deny',
+        reason: result.ok ? `Executed approved action: ${payload.name}` : `Execution failed: ${result.error}`,
+        approval_id: appr.id,
+      });
+    }
+  }
 
   revalidatePath('/dashboard/trust');
   return { ok: true };
