@@ -23,6 +23,7 @@ export default async function WalletGoalsPage() {
   const goalViews: GoalView[] = (goals ?? []).map((g) => ({
     id: g.id, title: g.title, kind: g.kind,
     targetCents: g.target_cents, savedCents: g.saved_cents,
+    targetDate: g.target_date ?? null,
     childName: g.child_wallet_id ? nameByWallet.get(g.child_wallet_id) ?? null : null,
     isChildGoal: !!g.child_wallet_id, status: g.status,
   }));

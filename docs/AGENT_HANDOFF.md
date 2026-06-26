@@ -1,7 +1,41 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-26 — Wallet Send-Money/Request-to-Spend/Pending-Approvals shipped + Trust Engine rollout (chat tools, approval→exec loop, wallet money-movement). Also: Family Economy (custom currencies). Keep this updated as you ship.
+Last updated: 2026-06-26 — Child wallet detail overhaul (Smart Split donut, Virtual Card, AI Coach, Quick Actions), Wallet spending analytics (This Month + 6-month trend), Goals view redesign (kind emojis, target dates, visual progress). All 1068 tests pass. Keep this updated as you ship.
+
+> **Session update (2026-06-26) — WALLET UX: CHILD DETAIL OVERHAUL + ANALYTICS (fable-5)**
+> Pushed to `main`. tsc clean · build exit 0 · 1068 tests pass. Built from the Bubaly wallet design mocks.
+>
+> ### Child Wallet Detail (`/wallet/children/[childId]`) — world-class redesign
+> - **`components/wallet/child-detail-view.tsx`** — complete rewrite:
+>   - **Hero header**: large Avatar (with color), name, total balance, sub-stats (spendable / saved), quick action buttons (Request · Add Funds · Send / Cards)
+>   - **Smart Split Donut** (`SmartSplitDonut`): CSS `conic-gradient` from -90deg showing actual bucket allocation (spend/save/give/invest), inner "donut hole" with total. Target-split text shown below legend.
+>   - **Virtual VISA Card** (`VirtualCardPlaceholder`): dark blue/indigo gradient card with child name, Bubaly Family label, Spend balance prominent, masked card number, "Coming soon" CTA, VISA logotype. Swapped for real card when Stripe Issuing is approved.
+>   - **AI Money Coach** (`AICoachCard`): inline "Ask AI Coach" button calls `/api/ai/wallet` (existing family-wide endpoint). Shows headline + insights + suggestion with a refresh button. Dismissible.
+>   - **Quick Actions**: Request to Spend modal (pre-filled child, shows approval threshold note), Add Funds modal (shows bucket split), Send to Sibling modal (parent-only, picks from sibling wallets).
+>   - **Goals section**: Active goals in `GoalCard` with % badge + remaining + `target_date` days-left, "reached" badges. Reached goals collapsible with `<details>`.
+>   - **Bucket breakdown**: 4 cards (Spend/Save/Give/Invest) showing balance + target% + live progress bar (width = actual% of total, colored with bucket ring color).
+>   - **Activity feed**: grouped by day with bucket-kind icons, `requires_parent_approval` shown in amber with Clock icon. "Show X more days" expand button. Link to `/wallet/activity`.
+> - **`app/(app)/wallet/children/[childId]/page.tsx`** — richer data: fetches wallet rule (split + approval threshold), sibling wallets (for Send), member `color` (correct column name, not `avatar_color`). Passes `siblings` prop.
+>
+> ### Wallet Dashboard Analytics
+> - **`app/(app)/wallet/page.tsx`** — computes `WalletAnalytics` server-side from the already-fetched `txns`: this-month credits/debits/net, credits-by-type breakdown, 6-month trend (credits + debits per month).
+> - **`components/wallet/wallet-dashboard.tsx`** — new `SpendingAnalytics` component: "This Month" (Money In / Money Out / Net 3-chip strip), horizontal bar breakdown "Where money came from" (allowance/chore/gift/top-up with % bars), 6-month stacked bar chart (green = credits, red/rose = debits). Renders only when `analytics` has activity.
+>
+> ### Goals View Redesign
+> - **`components/wallet/goals-view.tsx`** — redesigned `GoalCard`: goal kind emoji (bike🚲/vacation✈️/college🎓/etc), days-remaining from `target_date` (amber if <30 days), remaining amount, smooth 700ms progress bar. `FundGoalModal` has mini progress card + "Full remaining" quick-amount button. `CreateGoalModal` uses emoji grid for kind selection + `target_date` date input.
+> - **`app/(app)/wallet/goals/page.tsx`** — passes `targetDate` from DB.
+>
+> ### Activity / Ledger
+> - **`lib/wallet/activity.ts`** — added `transfer` label.
+> - **`components/wallet/activity-view.tsx`** — added `transfer` and `card_refund` to filter dropdown.
+>
+> ### Remaining wallet depth (next agent)
+> - AI Money Coach child-specific endpoint (current coach is family-wide; add `/api/ai/wallet/child/[id]` for child-specific insights using just that child's ledger + goals)
+> - Trust audit log surfacing in activity feed (show trust decision badges on spend rows)
+> - Child→parent "request more allowance" direction (currently only spend-request flows)
+> - Savings rate + weeks-to-goal forecast in goals view (needs recent credit query per child)
+> - Virtual card → real Stripe Issuing card (Stripe approval gated — placeholder is ready to swap)
 
 > ## 🪙 FAMILY ECONOMY — custom currencies (PR pending) — non-cash points/tokens
 > Branch `claude/family-economy`. A parallel NON-CASH economy: parents define custom currencies

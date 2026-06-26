@@ -29,6 +29,13 @@ import {
 
 type Coaching = { headline: string; insights: string[]; suggestion: string };
 
+export type WalletAnalytics = {
+  thisMonthIn: number;
+  thisMonthOut: number;
+  creditsByType: Record<string, number>;
+  monthlyTrend: { label: string; credits: number; debits: number }[];
+};
+
 export type ChildWalletView = {
   id: string;
   name: string;
@@ -64,7 +71,7 @@ const BUCKET_META: { kind: BucketKind; label: string; icon: typeof PiggyBank; co
   { kind: 'invest', label: 'Invest', icon: TrendingUp, color: 'text-violet-400' },
 ];
 
-export function WalletDashboard({ familyTotal, mode, tier, canManage, childWallets, recent, pendingApprovals }: {
+export function WalletDashboard({ familyTotal, mode, tier, canManage, childWallets, recent, pendingApprovals, analytics }: {
   familyTotal: number;
   mode: string;
   tier: WalletTier;
@@ -72,6 +79,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
   childWallets: ChildWalletView[];
   recent: RecentTxn[];
   pendingApprovals: PendingApproval[];
+  analytics?: WalletAnalytics;
 }) {
   const [addFor, setAddFor] = useState<ChildWalletView | null>(null);
   const [sendOpen, setSendOpen] = useState(false);
@@ -134,6 +142,11 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
           {mode === 'treasury' ? 'Stripe Treasury account' : 'Virtual ledger · parent-managed'}
         </p>
       </div>
+
+      {/* Spending analytics — this month at a glance */}
+      {analytics && (analytics.thisMonthIn > 0 || analytics.thisMonthOut > 0) && (
+        <SpendingAnalytics analytics={analytics} />
+      )}
 
       {/* Quick actions — Send / Request, mirroring the in-app money flows */}
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -256,6 +269,104 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
       {addFor && <AddFundsModal child={addFor} onClose={() => setAddFor(null)} />}
       {requestFor && <RequestSpendModal child={requestFor} onClose={() => setRequestFor(null)} />}
       {sendOpen && <SendMoneyModal wallets={childWallets} onClose={() => setSendOpen(false)} />}
+    </div>
+  );
+}
+
+// ─── Credit type labels + colors for analytics breakdown ─────────────────────
+
+const CREDIT_TYPE_META: Record<string, { label: string; color: string }> = {
+  parent_top_up: { label: 'Parent top-up', color: 'bg-brand' },
+  allowance: { label: 'Allowance', color: 'bg-violet-500' },
+  chore_reward: { label: 'Chore reward', color: 'bg-emerald-500' },
+  gift_received: { label: 'Gift', color: 'bg-rose-500' },
+  transfer: { label: 'Transfer', color: 'bg-amber-500' },
+};
+
+function SpendingAnalytics({ analytics }: { analytics: WalletAnalytics }) {
+  const { thisMonthIn, thisMonthOut, creditsByType, monthlyTrend } = analytics;
+  const net = thisMonthIn - thisMonthOut;
+  const maxMonthlyTotal = Math.max(...monthlyTrend.map((m) => m.credits + m.debits), 1);
+
+  // Sort credit types by amount descending
+  const creditEntries = Object.entries(creditsByType)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1]);
+  const totalIn = thisMonthIn || 1;
+
+  return (
+    <div className="mb-5 rounded-2xl border border-border bg-surface/40 p-4">
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted">This Month</h2>
+
+      {/* In / Out / Net strip */}
+      <div className="mb-4 grid grid-cols-3 gap-2">
+        <div className="rounded-xl bg-emerald-500/10 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500">Money In</p>
+          <p className="mt-0.5 text-base font-black text-emerald-500">{formatCents(thisMonthIn)}</p>
+        </div>
+        <div className="rounded-xl bg-rose-500/10 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-500">Money Out</p>
+          <p className="mt-0.5 text-base font-black text-rose-500">{formatCents(thisMonthOut)}</p>
+        </div>
+        <div className={cn('rounded-xl p-3', net >= 0 ? 'bg-brand/10' : 'bg-amber-500/10')}>
+          <p className={cn('text-[10px] font-semibold uppercase tracking-wide', net >= 0 ? 'text-brand' : 'text-amber-500')}>Net</p>
+          <p className={cn('mt-0.5 text-base font-black', net >= 0 ? 'text-brand' : 'text-amber-500')}>
+            {net >= 0 ? '+' : '−'}{formatCents(Math.abs(net))}
+          </p>
+        </div>
+      </div>
+
+      {/* Credits breakdown */}
+      {creditEntries.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">Where money came from</p>
+          <div className="space-y-1.5">
+            {creditEntries.map(([type, amount]) => {
+              const meta = CREDIT_TYPE_META[type];
+              const pct = Math.round((amount / totalIn) * 100);
+              return (
+                <div key={type} className="flex items-center gap-2">
+                  <span className="w-24 flex-shrink-0 truncate text-xs text-muted">{meta?.label ?? type.replace(/_/g, ' ')}</span>
+                  <div className="flex-1 overflow-hidden rounded-full bg-border/30 h-2">
+                    <div className={cn('h-full rounded-full transition-all duration-500', meta?.color ?? 'bg-brand')} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="w-14 flex-shrink-0 text-right text-xs font-semibold">{formatCents(amount)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 6-month bar chart */}
+      <div>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">6-month trend</p>
+        <div className="flex items-end gap-1.5 h-16">
+          {monthlyTrend.map((m) => {
+            const totalH = ((m.credits + m.debits) / maxMonthlyTotal) * 100;
+            const creditH = m.credits + m.debits > 0 ? (m.credits / (m.credits + m.debits)) * totalH : 0;
+            const debitH = totalH - creditH;
+            return (
+              <div key={m.label} className="flex flex-1 flex-col items-center gap-0.5">
+                <div className="flex w-full flex-col-reverse items-center justify-end gap-px" style={{ height: '48px' }}>
+                  {debitH > 0 && (
+                    <div className="w-full rounded-t-none rounded-b-sm bg-rose-500/40 transition-all duration-500" style={{ height: `${debitH}%`, minHeight: debitH > 0 ? 2 : 0 }} />
+                  )}
+                  {creditH > 0 && (
+                    <div className="w-full rounded-t-sm bg-emerald-500/50 transition-all duration-500" style={{ height: `${creditH}%`, minHeight: creditH > 0 ? 2 : 0 }} />
+                  )}
+                  {totalH === 0 && <div className="w-full rounded-sm bg-border/30" style={{ height: '4px' }} />}
+                </div>
+                <p className="text-[9px] text-muted">{m.label}</p>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-1.5 flex items-center gap-3 text-[9px] text-muted">
+          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-emerald-500/50" /> In</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-rose-500/40" /> Out</span>
+        </div>
+      </div>
     </div>
   );
 }

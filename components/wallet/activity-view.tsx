@@ -11,7 +11,7 @@ type Row = ActivityTxn & { childName: string | null };
 
 const TYPES: { value: string; label: string }[] = [
   { value: '', label: 'All types' },
-  ...['parent_top_up', 'allowance', 'chore_reward', 'gift_received', 'goal_transfer', 'babysitter_payment', 'card_spend', 'adjustment', 'reversal'].map((v) => ({ value: v, label: txnTypeLabel(v) })),
+  ...['parent_top_up', 'allowance', 'chore_reward', 'gift_received', 'transfer', 'goal_transfer', 'babysitter_payment', 'card_spend', 'card_refund', 'adjustment', 'reversal'].map((v) => ({ value: v, label: txnTypeLabel(v) })),
 ];
 
 function dayLabel(date: string): string {

@@ -6,7 +6,7 @@ import { planLevel } from '@/lib/constants/plans';
 import { walletTierForPlanLevel } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
-import { WalletDashboard, type ChildWalletView } from '@/components/wallet/wallet-dashboard';
+import { WalletDashboard, type ChildWalletView, type WalletAnalytics } from '@/components/wallet/wallet-dashboard';
 
 export const metadata: Metadata = { title: 'Family Wallet' };
 
@@ -90,6 +90,34 @@ export default async function WalletPage() {
     };
   });
 
+  // Spending analytics — computed from the already-fetched ledger data.
+  const now = new Date();
+  const thisMonthYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const completedTxns = (txns ?? []).filter((t) => t.status === 'completed');
+  const thisMonthTxns = completedTxns.filter((t) => t.created_at.slice(0, 7) === thisMonthYM);
+
+  const thisMonthIn = thisMonthTxns.filter((t) => t.direction === 'credit').reduce((s, t) => s + t.amount_cents, 0);
+  const thisMonthOut = thisMonthTxns.filter((t) => t.direction === 'debit').reduce((s, t) => s + t.amount_cents, 0);
+
+  const creditsByType: Record<string, number> = {};
+  for (const t of thisMonthTxns.filter((t) => t.direction === 'credit')) {
+    creditsByType[t.type] = (creditsByType[t.type] ?? 0) + t.amount_cents;
+  }
+
+  const monthlyTrend: WalletAnalytics['monthlyTrend'] = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleDateString('en-US', { month: 'short' });
+    const mTxns = completedTxns.filter((t) => t.created_at.slice(0, 7) === ym);
+    return {
+      label,
+      credits: mTxns.filter((t) => t.direction === 'credit').reduce((s, t) => s + t.amount_cents, 0),
+      debits: mTxns.filter((t) => t.direction === 'debit').reduce((s, t) => s + t.amount_cents, 0),
+    };
+  }).reverse();
+
+  const analytics: WalletAnalytics = { thisMonthIn, thisMonthOut, creditsByType, monthlyTrend };
+
   return (
     <WalletDashboard
       familyTotal={familyTotal}
@@ -99,6 +127,7 @@ export default async function WalletPage() {
       childWallets={childViews}
       recent={recent}
       pendingApprovals={pendingApprovals}
+      analytics={analytics}
     />
   );
 }
