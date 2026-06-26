@@ -3,6 +3,14 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after dashboard customization permissions (child controls + family default). Keep this updated as you ship.
 
+> **Session update (2026-06-26d) — GLOBAL CAPTURE SHORTCUT.**
+> Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1059/1059** (+5). No migration.
+> - **`lib/capture/shortcut.ts`** (pure, **5 tests**): `isTypingTarget`, `isOpenCaptureKey` (bare "c", no
+>   modifiers), `isSaveHotkey` (⌘/Ctrl+Enter).
+> - **`quick-capture.tsx`** — press **C** anywhere outside a text field to open the capture sheet (global
+>   keydown listener, guarded by `isTypingTarget`); **⌘/Ctrl+Enter** saves from within the sheet (works in
+>   the note textarea too via `form.requestSubmit()`); FAB tooltip "Quick capture (press C)".
+>
 > **Session update (2026-06-26c) — SHARED CAPTURE ENGINE + /capture actually creates records.**
 > Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1049/1049**. No migration.
 > - **`lib/capture/save.ts`** — new `saveCapture(supabase, {kind,text,familyId,userId,memberId})`: the single

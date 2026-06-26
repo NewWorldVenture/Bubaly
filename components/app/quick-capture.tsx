@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, CheckSquare, StickyNote, CalendarPlus, ShoppingCart, X, CalendarClock, Sparkles } from 'lucide-react';
 import { useApp } from './app-context';
 import { createClient } from '@/lib/supabase/client';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import { parseEvent, parseDueDate, suggestKind, splitItems } from '@/lib/capture/parse';
 import { saveCapture } from '@/lib/capture/save';
+import { isOpenCaptureKey, isSaveHotkey, isTypingTarget } from '@/lib/capture/shortcut';
 
 /** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
 function formatWhen(startsAt: Date, allDay: boolean): string {
@@ -43,6 +44,19 @@ export function QuickCapture() {
   const [saving, setSaving] = useState(false);
 
   function reset() { setText(''); setType('task'); }
+
+  // Global shortcut: press "c" anywhere (outside a text field) to open capture.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (open || !isOpenCaptureKey(e)) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (isTypingTarget(el?.tagName, el?.isContentEditable)) return;
+      e.preventDefault();
+      setOpen(true);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -100,13 +114,18 @@ export function QuickCapture() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Quick capture"
+        title="Quick capture (press C)"
         className="fixed bottom-20 right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-brand text-white shadow-glow transition hover:brightness-110 active:scale-95 lg:bottom-6 lg:right-6"
       >
         <Plus className="h-7 w-7" />
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Quick capture">
-        <form onSubmit={save} className="space-y-4">
+        <form
+          onSubmit={save}
+          onKeyDown={(e) => { if (isSaveHotkey(e)) { e.preventDefault(); e.currentTarget.requestSubmit(); } }}
+          className="space-y-4"
+        >
           <div className="grid grid-cols-4 gap-2">
             {TYPES.map((t) => (
               <button
