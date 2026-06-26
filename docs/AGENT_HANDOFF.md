@@ -3,6 +3,13 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after dashboard customization permissions (child controls + family default). Keep this updated as you ship.
 
+> **Session update (2026-06-26h) — SHELL-PRESERVING ERROR BOUNDARY FOR THE APP.**
+> Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ (167 pages) · **suite 1068/1068**. No migration.
+> - **`app/(app)/error.tsx`** — new error boundary inside the authenticated route group, so a single page
+>   error renders a friendly inline card (AlertTriangle + "Try again"/reset + "Go home" + digest reference)
+>   WITHIN the app shell (sidebar/nav preserved), instead of bubbling to the bare full-screen `app/error.tsx`.
+>   Directly improves the failure mode behind IMG_8275-class crashes.
+>
 > **Session update (2026-06-26g) — HOME "ASK BUBALY ANYTHING" BAR.**
 > Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1068/1068** (+2). No migration.
 > - **`components/dashboard/home-ask-bar.tsx`** (client) — an ask-anything input on the home dashboard
