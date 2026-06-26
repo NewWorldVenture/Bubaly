@@ -10,8 +10,20 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/toast';
+import { useApp } from '@/components/app/app-context';
+import { createClient } from '@/lib/supabase/client';
+import { saveCapture, type CaptureSaveResult } from '@/lib/capture/save';
+import type { CaptureKind } from '@/lib/capture/parse';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
+
+// Routed destinations that we can create directly (the rest just navigate).
+const URL_TO_KIND: Record<string, CaptureKind> = {
+  '/dashboard/grocery': 'shopping',
+  '/dashboard/calendar': 'event',
+  '/dashboard/notes': 'note',
+  '/dashboard/chores': 'task',
+};
 
 const QUICK_ROUTES = [
   { icon: Calendar, label: 'Calendar', href: '/dashboard/calendar', hint: 'Add event' },
@@ -46,29 +58,55 @@ function routeCapture(text: string): { destination: string; url: string } {
 export function CaptureShell() {
   const router = useRouter();
   const { error: toastError } = useToast();
+  const { familyId, userId, selfMember } = useApp();
   const [mode, setMode] = useState<CaptureMode>('type');
   const [text, setText] = useState('');
   const [routing, setRouting] = useState(false);
   const [routed, setRouted] = useState<{ destination: string; url: string } | null>(null);
+  const [created, setCreated] = useState<(CaptureSaveResult & { destination: string }) | null>(null);
   const [recording, setRecording] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
   function handleInput(value: string) {
     setText(value);
     setRouted(null);
+    setCreated(null);
   }
 
-  function handleSubmit() {
-    if (!text.trim()) return;
+  async function handleSubmit() {
+    const value = text.trim();
+    if (!value) return;
     setRouting(true);
-    setTimeout(() => {
-      setRouted(routeCapture(text));
-      setRouting(false);
-    }, 500);
+    const route = routeCapture(value);
+    const kind = URL_TO_KIND[route.url];
+    // When the routed destination is something we can create directly, capture
+    // it for real (with natural-language times / due dates / multi-item lists)
+    // instead of just navigating to an empty page.
+    if (kind) {
+      try {
+        const res = await saveCapture(createClient(), { kind, text: value, familyId, userId, memberId: selfMember?.id ?? null });
+        setCreated({ ...res, destination: route.destination });
+      } catch (err) {
+        toastError(err instanceof Error ? err.message : 'Could not save');
+      } finally {
+        setRouting(false);
+      }
+      return;
+    }
+    setRouted(route);
+    setRouting(false);
   }
 
   function goToDestination() {
-    if (routed) router.push(routed.url);
+    if (created) router.push(created.href);
+    else if (routed) router.push(routed.url);
+  }
+
+  function captureAnother() {
+    setCreated(null);
+    setText('');
+    setMode('type');
+    textRef.current?.focus();
   }
 
   function startVoice() {
@@ -162,8 +200,30 @@ export function CaptureShell() {
           )}
         </div>
 
-        {/* AI route result */}
-        {routed ? (
+        {/* Created confirmation */}
+        {created ? (
+          <div className="mb-4 overflow-hidden rounded-2xl border border-emerald-500/30 bg-emerald-500/5">
+            <div className="flex items-center gap-3 p-4">
+              <Sparkles className="h-5 w-5 shrink-0 text-emerald-500" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold">
+                  {created.count > 1 ? `Added ${created.count} items` : 'Added'} to <span className="text-emerald-600">{created.destination}</span>
+                </p>
+                {created.title && <p className="truncate text-xs text-muted">{created.title}</p>}
+              </div>
+            </div>
+            <div className="flex gap-2 border-t border-emerald-500/20 p-3">
+              <button type="button" onClick={goToDestination}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600/90">
+                View in {created.destination} <ArrowRight className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={captureAnother}
+                className="flex items-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-elevated">
+                Capture another
+              </button>
+            </div>
+          </div>
+        ) : routed ? (
           <div className="mb-4 overflow-hidden rounded-2xl border border-brand/30 bg-brand/5">
             <div className="flex items-center gap-3 p-4">
               <Sparkles className="h-5 w-5 shrink-0 text-brand" />
@@ -187,7 +247,7 @@ export function CaptureShell() {
           <button type="button" disabled={!text.trim() || routing} onClick={handleSubmit}
             className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-sm font-bold text-white transition hover:bg-brand/90 disabled:opacity-40">
             {routing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-            {routing ? 'Routing with AI…' : 'Let AI Route This'}
+            {routing ? 'Capturing…' : 'Capture with AI'}
           </button>
         )}
 

@@ -10,6 +10,7 @@ import { Input, Textarea, Field } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import { parseEvent, parseDueDate, suggestKind, splitItems } from '@/lib/capture/parse';
+import { saveCapture } from '@/lib/capture/save';
 
 /** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
 function formatWhen(startsAt: Date, allDay: boolean): string {
@@ -33,21 +34,6 @@ const TYPES: { key: CaptureType; label: string; icon: typeof Plus; placeholder: 
   { key: 'shopping', label: 'Shopping', icon: ShoppingCart, placeholder: 'e.g. Milk' },
 ];
 
-/** Get-or-create the family's default list for a list-backed table. */
-async function defaultTodoListId(supabase: ReturnType<typeof createClient>, familyId: string, userId: string): Promise<string | null> {
-  const { data: existing } = await supabase.from('todo_lists').select('id').eq('family_id', familyId).is('archived_at', null).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (existing) return existing.id;
-  const { data: created } = await supabase.from('todo_lists').insert({ family_id: familyId, name: 'To-Do', created_by: userId }).select('id').maybeSingle();
-  return created?.id ?? null;
-}
-
-async function defaultGroceryListId(supabase: ReturnType<typeof createClient>, familyId: string, userId: string): Promise<string | null> {
-  const { data: existing } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId).eq('is_archived', false).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (existing) return existing.id;
-  const { data: created } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Shopping List', created_by: userId }).select('id').maybeSingle();
-  return created?.id ?? null;
-}
-
 export function QuickCapture() {
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -65,38 +51,8 @@ export function QuickCapture() {
     setSaving(true);
     const supabase = createClient();
     try {
-      if (type === 'note') {
-        const { error } = await supabase.from('notes').insert({ family_id: familyId, body: value, created_by: userId });
-        if (error) throw error;
-      } else if (type === 'event') {
-        const parsed = parseEvent(value);
-        const { error } = await supabase.from('calendar_events').insert({
-          family_id: familyId, title: parsed.title, starts_at: parsed.startsAt.toISOString(),
-          all_day: parsed.allDay, category: 'general', created_by: userId,
-        });
-        if (error) throw error;
-      } else if (type === 'task') {
-        const listId = await defaultTodoListId(supabase, familyId, userId);
-        if (!listId) throw new Error('Could not find a to-do list');
-        const { title, dueDate } = parseDueDate(value);
-        const { error } = await supabase.from('todo_items').insert({
-          family_id: familyId, list_id: listId, title, due_date: dueDate, created_by: userId,
-          assigned_to_id: selfMember?.id ?? null,
-        });
-        if (error) throw error;
-      } else {
-        const listId = await defaultGroceryListId(supabase, familyId, userId);
-        if (!listId) throw new Error('Could not find a grocery list');
-        const items = splitItems(value);
-        const rows = (items.length ? items : [value]).map((name) => ({ family_id: familyId, list_id: listId, name, created_by: userId }));
-        const { error } = await supabase.from('grocery_items').insert(rows);
-        if (error) throw error;
-        success(rows.length > 1 ? `${rows.length} items added` : 'Shopping saved');
-        reset();
-        setOpen(false);
-        return;
-      }
-      success(`${TYPES.find((t) => t.key === type)!.label} saved`);
+      const res = await saveCapture(supabase, { kind: type, text: value, familyId, userId, memberId: selfMember?.id ?? null });
+      success(res.count > 1 ? `${res.count} items added` : `${TYPES.find((t) => t.key === type)!.label} saved`);
       reset();
       setOpen(false);
     } catch (err) {

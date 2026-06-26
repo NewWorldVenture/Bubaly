@@ -3,6 +3,19 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after dashboard customization permissions (child controls + family default). Keep this updated as you ship.
 
+> **Session update (2026-06-26c) — SHARED CAPTURE ENGINE + /capture actually creates records.**
+> Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1049/1049**. No migration.
+> - **`lib/capture/save.ts`** — new `saveCapture(supabase, {kind,text,familyId,userId,memberId})`: the single
+>   persistence path (get-or-create default list + insert) reusing `lib/capture/parse.ts`. Returns
+>   `{kind,count,title,href}`. Both capture surfaces now share it (no more duplicated insert logic).
+> - **`components/app/quick-capture.tsx`** — refactored to delegate to `saveCapture` (removed its own list
+>   helpers + per-kind branches). Behavior unchanged.
+> - **`components/capture/capture-shell.tsx`** (the full-page `/capture`, primary mobile Capture tab) — was
+>   "AI routes you to a page" and **created nothing**. Now, when the routed destination is one of the four
+>   creatable kinds (grocery/calendar/notes/chores), it actually **creates the record** via `saveCapture`
+>   (natural-language time / due date / multi-item) and shows a green "Added → View in X / Capture another"
+>   confirmation. Broader routes (meals/trips/health/documents/assistant) still navigate as before.
+>
 > **Session update (2026-06-26b) — FRICTIONLESS QUICK CAPTURE (natural-language event times).**
 > No migration needed — works in prod immediately (writes existing `calendar_events`). Branch
 > `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1038/1038** (+14).
