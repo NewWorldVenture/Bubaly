@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { Wallet } from 'lucide-react';
+import Link from 'next/link';
+import { Wallet, ShieldCheck } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { AdminWalletClient, type FlagRow, type AuditRow } from './admin-wallet-client';
 
@@ -38,14 +39,20 @@ export default async function AdminWalletPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-          <Wallet className="h-6 w-6 text-brand" /> Family Wallet
-        </h1>
-        <p className="mt-1 text-sm text-muted">
-          Oversight for the virtual-ledger Family Wallet across every family — activation, pending
-          approvals, ledger volume, feature flags, and recent audit activity.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
+            <Wallet className="h-6 w-6 text-brand" /> Family Wallet
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            Oversight for the virtual-ledger Family Wallet across every family — activation, pending
+            approvals, ledger volume, feature flags, and recent audit activity.
+          </p>
+        </div>
+        <Link href="/admin/wallet/reconciliation"
+          className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-border bg-surface/40 px-4 py-2 text-sm font-semibold transition hover:border-brand/40 hover:text-brand">
+          <ShieldCheck className="h-4 w-4" /> Reconciliation
+        </Link>
       </div>
       <AdminWalletClient
         stats={{
