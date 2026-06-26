@@ -1,7 +1,51 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Card Spending-Control editor. Keep this updated as you ship.
+Last updated after Family Economy (custom currencies). Keep this updated as you ship.
+
+> ## 🪙 FAMILY ECONOMY — custom currencies (PR pending) — non-cash points/tokens
+> Branch `claude/family-economy`. A parallel NON-CASH economy: parents define custom currencies
+> ("Stars ⭐", "Screen-time ⏰"), kids EARN tokens and SPEND them on family rewards. Separate from
+> the cash wallet. ⚠️ **Migration `0096_family_economy.sql` NOT APPLIED TO PROD.**
+> - **`lib/economy/ledger.ts`** (PURE + **8 tests**) — immutable-ledger math: `balanceFrom`,
+>   `signedAmount`, `canAfford`, `normalizeTokenAmount`, `normalizeEmoji`, `formatTokens`.
+> - **Migration 0096** — `family_currencies`, `currency_transactions` (immutable token ledger,
+>   amount>0, direction signs it), `economy_rewards` (catalog, cost/stock), `economy_redemptions`
+>   (pending→fulfilled/rejected; debits on approval). Family-scoped RLS + triggers. Enums
+>   `economy_direction`, `redemption_status`. DB types: `EconomyDirection`, `EconomyRedemptionStatus`
+>   (note: a separate `RedemptionStatus` already exists for the points/rewards system — don't merge them).
+> - **`app/(app)/economy/actions.ts`** — `createCurrencyAction`, `setCurrencyActiveAction`,
+>   `awardTokensAction` (credit), `createRewardAction`, `setRewardActiveAction`,
+>   `requestRedemptionAction` (affordability pre-check), `decideRedemptionAction` (final balance check
+>   → debit txn + status, decrements limited stock). Manager-gated where appropriate.
+> - **`/economy`** (`components/economy/economy-view.tsx`) — tabs: Balances · Store (redeem) ·
+>   Requests (parent approve/reject) · Manage (create currency/reward, award tokens). Nav +
+>   feature-catalog entry added (`/economy`, free).
+> - Verified: tsc clean · eslint clean · build OK (`/economy` registered) · suite **1064/1064** (8 new).
+
+> ## 📈 AI INVESTING FOR KIDS — BUILD SPEC (next; not yet built)
+> Educational, **simulated** "Invest" experience (NO real brokerage — keep it clearly educational; no
+> FDIC/return promises per compliance). The wallet already has an `invest` bucket per child (0088).
+> Suggested build:
+> - **Migration** `0097_kid_investing.sql`: `invest_holdings` (family_id, child_wallet_id, symbol,
+>   display_name, shares numeric, avg_cost_cents) + `invest_orders` (buy/sell, symbol, shares,
+>   price_cents_at_order, status, requires parent approval) + optional `invest_watchlist`. Family RLS.
+>   Prices are EDUCATIONAL/simulated — store a `price_cents` snapshot; a daily cron can nudge prices or
+>   pull delayed quotes if a provider is added later. NO real trades.
+> - **`lib/invest/portfolio.ts`** (PURE + tests): `positionValue`, `portfolioValue`, `gainLoss(%)`,
+>   `projectGrowth(principal, monthly, years, ratePct)` (compound-interest teaching tool),
+>   `allocationBreakdown`. All from holdings + a price map.
+> - **Funding link to the ledger**: a "buy" debits the child's INVEST bucket
+>   (`lib/wallet/server.ts` pattern: a `wallet_transactions` debit, type 'goal_transfer'/'adjustment'),
+>   a "sell" credits it back. Keep the wallet ledger the source of truth for cash; holdings track shares.
+> - **AI**: `/api/ai/invest` (authed, tier+metered like `/api/ai/wallet`) — an age-appropriate
+>   "explain this company / why diversify / what is compound interest" coach + a suggested starter
+>   portfolio. Pure prompt/parse in `lib/invest/coach.ts` with tests. NO buy/sell advice framed as
+>   financial advice — educational only.
+> - **UI** `/wallet/invest` (or `/invest`): holdings list w/ value + gain/loss, a simulated
+>   buy/sell (parent-approved), a compound-growth projector slider, AI explainer. Hide any wording
+>   implying guaranteed returns; show an "educational simulation" disclaimer.
+> - Gate behind a feature flag if desired; manager approval required for orders.
 
 > ## 🎛️ CARD SPENDING-CONTROL EDITOR (PR #158) — per-card parent controls
 > Branch `claude/card-spending-controls`. Completes the card story from Stripe Money (#155):

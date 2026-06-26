@@ -105,6 +105,7 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   // ── Finances & Admin ───────────────────────────────────────
   F('finances', 'Finances', 'Finances & Admin', 'free', '/dashboard/billing'),
   F('family-wallet', 'Family Wallet', 'Finances & Admin', 'free', '/wallet'),
+  F('family-economy', 'Family Economy', 'Finances & Admin', 'free', '/economy'),
   F('expense-splitting', 'Expense Splitting', 'Finances & Admin', 'basic', '/dashboard/expenses'),
   F('subscription-tracking', 'Subscription Tracking', 'Finances & Admin', 'basic', '/dashboard/subscriptions'),
   F('insurance-hub', 'Insurance Hub', 'Finances & Admin', 'basic', '/dashboard/insurance'),
