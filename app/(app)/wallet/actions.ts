@@ -594,7 +594,8 @@ export async function requestSpendAction(input: {
   const debit = await debitSpendBucket(supabase, {
     familyId, childWalletId: cw.id, amountCents: amount, type: 'card_spend',
     description, createdBy: ctx.user.id, requiresApproval: needsApproval,
-    relatedType: 'spend_request', metadata: { requested_by_member: ctx.active.member.id },
+    relatedType: 'spend_request',
+    metadata: { requested_by_member: ctx.active.member.id, trust_basis: decision.basis, trust_effect: decision.effect },
   });
   if (!debit.ok) return { ok: false, error: debit.error };
 
@@ -717,6 +718,85 @@ export async function sendMoneyAction(input: {
     }
     return { ok: false, error: credit.error };
   }
+
+  revalidatePath('/wallet');
+  return { ok: true };
+}
+
+/**
+ * Child-initiated request for a parent to add more money. Creates a
+ * `parent_approvals` row (kind: 'allowance_request') that shows up in the
+ * Pending Approvals section of the wallet dashboard. The actual top-up happens
+ * when a parent calls decideAllowanceRequestAction with 'approved'.
+ */
+export async function requestAllowanceAction(input: {
+  childWalletId: string; amountCents: number; reason?: string;
+}): Promise<Result> {
+  const ctx = await requireUserContext();
+  const familyId = ctx.active.familyId;
+  const amount = Math.trunc(input.amountCents);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Enter an amount greater than $0.' };
+  const supabase = await createServer();
+
+  const { data: cw } = await supabase
+    .from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
+  if (!cw) return { ok: false, error: 'Wallet not found.' };
+
+  const { error } = await supabase.from('parent_approvals').insert({
+    family_id: familyId, kind: 'allowance_request',
+    ref_type: 'child_wallets', ref_id: cw.id,
+    amount_cents: amount, status: 'pending',
+    requested_by: ctx.user.id, note: input.reason?.trim() || null,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/wallet');
+  return { ok: true };
+}
+
+/**
+ * Parent decision on a child's allowance request. On 'approved', credits the
+ * child's wallet immediately (allocated across their smart-split buckets).
+ */
+export async function decideAllowanceRequestAction(input: {
+  approvalId: string; decision: 'approved' | 'rejected'; note?: string;
+}): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can decide allowance requests.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+
+  const { data: appr } = await supabase.from('parent_approvals')
+    .select('id, status, kind, ref_type, ref_id, amount_cents, note').eq('id', input.approvalId).eq('family_id', familyId).maybeSingle();
+  if (!appr) return { ok: false, error: 'Request not found.' };
+  if (appr.status !== 'pending') return { ok: false, error: 'This request was already decided.' };
+  if (appr.kind !== 'allowance_request') return { ok: false, error: 'Wrong request kind.' };
+  if (appr.ref_type !== 'child_wallets' || !appr.ref_id) return { ok: false, error: 'Malformed request.' };
+
+  if (input.decision === 'approved') {
+    const amount = appr.amount_cents ?? 0;
+    if (amount <= 0) return { ok: false, error: 'Invalid amount on this request.' };
+
+    const res = await creditChildWallet(supabase, {
+      familyId, childWalletId: appr.ref_id, amountCents: amount, type: 'parent_top_up',
+      description: `Allowance request approved${input.note ? `: ${input.note.trim()}` : ''}`,
+      createdBy: ctx.user.id,
+    });
+    if (!res.ok) return { ok: false, error: res.error };
+  }
+
+  await supabase.from('parent_approvals').update({
+    status: input.decision, decided_by: ctx.user.id,
+    decided_at: new Date().toISOString(),
+    note: input.note?.trim() || appr.note || null,
+  }).eq('id', appr.id);
+
+  await supabase.from('wallet_audit_logs').insert({
+    family_id: familyId, actor_user_id: ctx.user.id,
+    action: `allowance_${input.decision}`,
+    entity_type: 'parent_approvals', entity_id: appr.id,
+    detail: `Allowance request ${input.decision}`,
+  });
 
   revalidatePath('/wallet');
   return { ok: true };

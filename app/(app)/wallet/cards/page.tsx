@@ -3,25 +3,39 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { getMoneyCapabilities } from '@/lib/stripe/capabilities';
+import { syncConnectedAccount } from '@/lib/stripe/connect';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { MoneyCardsView, type CardChild, type IssuedCard } from '@/components/wallet/money-cards-view';
 
 export const metadata: Metadata = { title: 'Wallet Cards' };
 export const dynamic = 'force-dynamic';
 
-export default async function WalletCardsPage() {
+export default async function WalletCardsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ setup?: string }>;
+}) {
+  const { setup } = await searchParams;
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
+  const svc = createServiceClient();
 
   const { data: wallet } = await supabase
     .from('family_wallets').select('id, is_active').eq('family_id', familyId).maybeSingle();
   if (!wallet || !wallet.is_active) return <WalletActivation canActivate={isManager(ctx.active.role)} />;
 
-  // Capability detection reads global flags + server env — graceful fallback.
-  const caps = await getMoneyCapabilities(createServiceClient());
+  const caps = await getMoneyCapabilities(svc);
 
-  // Family Stripe state (RLS-readable by members).
+  // If returning from Stripe onboarding, pull the latest status before rendering.
+  if (setup === 'complete' || setup === 'refresh') {
+    const { data: existingAcct } = await svc.from('stripe_connected_accounts')
+      .select('stripe_account_id').eq('family_id', familyId).maybeSingle();
+    if (existingAcct?.stripe_account_id) {
+      await syncConnectedAccount(svc, familyId, existingAcct.stripe_account_id).catch(() => {});
+    }
+  }
+
   const [{ data: account }, { data: childWallets }, { data: members }, { data: cards }] = await Promise.all([
     supabase.from('stripe_connected_accounts')
       .select('status, charges_enabled, details_submitted, card_issuing_enabled').eq('family_id', familyId).maybeSingle(),
@@ -33,7 +47,7 @@ export default async function WalletCardsPage() {
   ]);
 
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
-  const children: CardChild[] = (childWallets ?? []).map((cw) => {
+  const childList: CardChild[] = (childWallets ?? []).map((cw) => {
     const m = memberById.get(cw.member_id);
     return { id: cw.id, name: m?.display_name ?? 'Child', color: m?.color ?? null };
   });
@@ -50,7 +64,8 @@ export default async function WalletCardsPage() {
       }}
       accountReady={!!account?.card_issuing_enabled}
       onboardingStarted={!!account}
-      childWallets={children}
+      justCompletedSetup={setup === 'complete'}
+      childWallets={childList}
       cards={issued}
       canManage={isManager(ctx.active.role)}
     />
