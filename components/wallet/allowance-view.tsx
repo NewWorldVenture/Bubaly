@@ -23,6 +23,12 @@ export type AllowanceRow = {
   amountCents: number; cadence: 'weekly' | 'biweekly' | 'monthly'; isActive: boolean; nextRunOn: string | null;
 };
 
+function fmtNextRun(date: string): string {
+  const d = new Date(date + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return date;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow[]; enabled: boolean; canManage: boolean }) {
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -64,7 +70,7 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
                 {r.ruleId ? (
                   <p className="text-xs text-muted">
                     {formatCents(r.amountCents)} · {r.cadence}
-                    {r.isActive ? (r.nextRunOn ? ` · next ${r.nextRunOn}` : '') : ' · paused'}
+                    {r.isActive ? (r.nextRunOn ? ` · next ${fmtNextRun(r.nextRunOn)}` : '') : ' · paused'}
                   </p>
                 ) : (
                   <p className="text-xs text-muted">No allowance set</p>
@@ -116,6 +122,14 @@ function AllowanceModal({ row, onClose }: { row: AllowanceRow; onClose: () => vo
     <Modal open onClose={onClose} title={`Allowance — ${row.name}`}>
       <form onSubmit={submit} className="space-y-4">
         <Field label="Amount (USD)">{(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" autoFocus />}</Field>
+        <div className="flex flex-wrap gap-2">
+          {[5, 10, 20].map((q) => (
+            <button key={q} type="button" onClick={() => setAmount(String(q))}
+              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand transition">
+              ${q}
+            </button>
+          ))}
+        </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium">How often?</label>
           <div className="flex gap-2">
