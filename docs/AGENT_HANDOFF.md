@@ -3,6 +3,28 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after dashboard customization permissions (child controls + family default). Keep this updated as you ship.
 
+> **Session update (2026-06-26a) — PRODUCTION BUG SWEEP (from live bubaly.com screenshots).**
+> Fixed three reported production issues. Branch `claude/festive-bohr-m4cbeg`. Verified: tsc clean ·
+> lint clean (only pre-existing `<img>` warns) · **suite 1024/1024**.
+> 1. **CRASH: "Could not find the table 'public.family_communications' in the schema cache"** (IMG_8275).
+>    Root cause: migration `0090_communications_hub.sql` is **not applied to prod** so the inbox crashed
+>    with an `ErrorState`. Fix = graceful degradation, not a schema change:
+>    - New pure helper **`isMissingRelationError(error)`** in `lib/supabase/errors.ts` (detects PGRST205/
+>      PGRST204, Postgres 42P01/42703, "schema cache", "could not find … table", "does not exist"). **3 tests**.
+>    - `components/modules/inbox-module.tsx` fetcher now returns `{ data: [], error: null }` on a
+>      missing-relation error → inbox shows its empty state instead of crashing.
+>    - `components/dashboard/ai-home-dashboard.tsx` already degrades (counts `?? 0`; Supabase queries
+>      resolve rather than throw, so `Promise.all` never rejects). No change needed there.
+>    - ⚠️ **STILL APPLY 0090 (+ 0085–0089, 0093, 0094) TO PROD** to actually enable the Communications Hub.
+> 2. **Quick Capture modal action row cut off on mobile** (IMG_8276). `components/ui/modal.tsx` is a
+>    bottom sheet on mobile (`items-end`); uniform `p-4` let Save/Cancel hide under the home indicator.
+>    Fix: bottom padding now `pb-[max(1rem,env(safe-area-inset-bottom))]` (desktop unchanged at `sm:p-6`).
+>    Helps **every** modal in the app, not just Quick Capture.
+> 3. **Wallet not discoverable** (IMG_8277 note "wire Wallet into main navigation"). It existed only in
+>    the buried "Finances & Admin" group → promoted "Family Wallet" into the top **Suggested** nav group
+>    (after Rewards) in `lib/constants/navigation.ts`. Still listed in Finances too (matches the
+>    Communications-Hub dual-listing pattern).
+>
 > **Session update (2026-06-25g) — DASHBOARD CUSTOMIZATION: FAMILY PERMISSIONS.**
 > Completed §10 (role/family permissions) of the customizable-dashboard spec. Branch `claude/festive-bohr-m4cbeg`.
 > - **Migration `0094_family_dashboard_settings.sql`** — `family_dashboard_settings` (family_id PK,

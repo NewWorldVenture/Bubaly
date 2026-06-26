@@ -9,7 +9,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, isMissingRelationError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -68,7 +68,9 @@ export function InboxModule() {
       const { data: rows, error } = await supabase
         .from('family_communications').select('*')
         .eq('family_id', familyId).order('received_at', { ascending: false }).limit(200);
-      if (error) return { data: null, error };
+      // Degrade gracefully when the Communications Hub migration hasn't been
+      // applied to this database yet — show an empty inbox instead of crashing.
+      if (error) return isMissingRelationError(error) ? { data: [], error: null } : { data: null, error };
       if (!rows?.length) return { data: [], error: null };
       const contactIds = [...new Set(rows.map(r => r.contact_id).filter(Boolean))] as string[];
       const { data: cts } = contactIds.length

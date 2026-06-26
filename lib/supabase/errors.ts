@@ -65,3 +65,27 @@ export function describeDbError(error: unknown, fallback = 'Something went wrong
 
   return raw.trim() || fallback;
 }
+
+/**
+ * True when an error means the table/column/relation isn't present yet — e.g. a
+ * migration hasn't been applied to this database. PostgREST reports these as
+ * "Could not find the table '…' in the schema cache" (PGRST205/PGRST204) or
+ * Postgres 42P01 (undefined_table) / 42703 (undefined_column). Callers can use
+ * this to degrade gracefully (treat as empty) instead of surfacing a crash.
+ */
+export function isMissingRelationError(error: unknown): boolean {
+  if (!error) return false;
+  const obj: DbErrorLike =
+    typeof error === 'object' ? (error as DbErrorLike) : { message: String(error) };
+  const code = (obj?.code ?? '').toString();
+  const msg = (obj?.message ?? '').toString().toLowerCase();
+  return (
+    code === 'PGRST205' ||
+    code === 'PGRST204' ||
+    code === '42P01' ||
+    code === '42703' ||
+    msg.includes('schema cache') ||
+    (msg.includes('could not find') && msg.includes('table')) ||
+    msg.includes('does not exist')
+  );
+}
