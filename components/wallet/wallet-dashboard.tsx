@@ -54,12 +54,29 @@ type RecentTxn = {
   created_at: string;
 };
 
-const BUCKET_META: { kind: BucketKind; label: string; icon: typeof PiggyBank; color: string }[] = [
-  { kind: 'spend', label: 'Spend', icon: ShoppingBag, color: 'text-blue-400' },
-  { kind: 'save', label: 'Save', icon: PiggyBank, color: 'text-emerald-400' },
-  { kind: 'give', label: 'Give', icon: HeartHandshake, color: 'text-rose-400' },
-  { kind: 'invest', label: 'Invest', icon: TrendingUp, color: 'text-violet-400' },
+const BUCKET_META: { kind: BucketKind; label: string; icon: typeof PiggyBank; color: string; bar: string }[] = [
+  { kind: 'spend', label: 'Spend', icon: ShoppingBag, color: 'text-blue-400', bar: 'bg-blue-400' },
+  { kind: 'save', label: 'Save', icon: PiggyBank, color: 'text-emerald-400', bar: 'bg-emerald-400' },
+  { kind: 'give', label: 'Give', icon: HeartHandshake, color: 'text-rose-400', bar: 'bg-rose-400' },
+  { kind: 'invest', label: 'Invest', icon: TrendingUp, color: 'text-violet-400', bar: 'bg-violet-400' },
 ];
+
+/** A thin proportional bar showing how a balance is split across the 4 buckets.
+ *  Gives parents an at-a-glance read of where money sits without doing math. */
+function AllocationBar({ buckets, total }: { buckets: Record<BucketKind, number>; total: number }) {
+  if (total <= 0) {
+    return <div className="h-2 w-full rounded-full bg-bg/60" aria-hidden />;
+  }
+  return (
+    <div className="flex h-2 w-full overflow-hidden rounded-full bg-bg/60" role="img" aria-label="Balance allocation across buckets">
+      {BUCKET_META.map((b) => {
+        const pct = ((buckets[b.kind] ?? 0) / total) * 100;
+        if (pct <= 0) return null;
+        return <div key={b.kind} className={cn('h-full', b.bar)} style={{ width: `${pct}%` }} title={`${b.label}: ${Math.round(pct)}%`} />;
+      })}
+    </div>
+  );
+}
 
 export function WalletDashboard({ familyTotal, mode, tier, canManage, childWallets, recent, coachCallsToday, coachDailyLimit, coachLevel }: {
   familyTotal: number;
@@ -80,6 +97,15 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
   const sampleGift = computeFunding(5000, tier); // $50 gift fee preview
   const hasCoach = coachLevel !== 'none';
   const coachAtLimit = coachDailyLimit !== null && coachCallsToday >= coachDailyLimit;
+
+  // Aggregate every child's buckets into a family-wide allocation picture.
+  const familyBuckets = childWallets.reduce<Record<BucketKind, number>>(
+    (acc, c) => {
+      for (const b of BUCKET_META) acc[b.kind] += c.buckets[b.kind] ?? 0;
+      return acc;
+    },
+    { spend: 0, save: 0, give: 0, invest: 0, goal: 0 },
+  );
 
   async function runCoach() {
     setCoachLoading(true);
@@ -149,6 +175,20 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
         <p className="text-xs text-muted">
           {mode === 'treasury' ? 'Stripe Treasury account' : 'Virtual ledger · parent-managed'}
         </p>
+        {familyTotal > 0 && (
+          <div className="mt-4">
+            <AllocationBar buckets={familyBuckets} total={familyTotal} />
+            <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
+              {BUCKET_META.map((b) => (
+                <div key={b.kind} className="flex items-center gap-1.5 text-xs">
+                  <span className={cn('h-2.5 w-2.5 rounded-full', b.bar)} />
+                  <span className="text-muted">{b.label}</span>
+                  <span className="font-semibold">{formatCents(familyBuckets[b.kind] ?? 0)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Plan & gifting-fee transparency (fees disclosed before any payment) */}
@@ -171,21 +211,24 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {childWallets.map((c) => (
-            <div key={c.id} className="rounded-2xl border border-border bg-surface/40 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
+            <div key={c.id} className="group rounded-2xl border border-border bg-surface/40 p-4 transition-colors hover:border-brand/30 hover:bg-surface/60">
+              <div className="flex items-center justify-between gap-2">
+                <Link href={`/wallet/children/${c.id}`} className="flex min-w-0 flex-1 items-center gap-2.5">
                   <Avatar name={c.name} color={c.color ?? undefined} size={36} className="rounded-full" />
-                  <div>
-                    <p className="text-sm font-semibold">{c.name}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold group-hover:text-brand transition-colors">{c.name}</p>
                     <p className="text-lg font-black leading-tight">{formatCents(c.total)}</p>
                   </div>
-                </div>
+                </Link>
                 {canManage && (
-                  <button onClick={() => setAddFor(c)}
-                    className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
+                  <button onClick={() => setAddFor(c)} aria-label={`Add funds to ${c.name}`}
+                    className="flex flex-shrink-0 items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
                     <Plus className="h-3.5 w-3.5" /> Add
                   </button>
                 )}
+              </div>
+              <div className="mt-3">
+                <AllocationBar buckets={c.buckets} total={c.total} />
               </div>
               <div className="mt-3 grid grid-cols-4 gap-2">
                 {BUCKET_META.map((b) => (
@@ -196,7 +239,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
                   </div>
                 ))}
               </div>
-              <Link href={`/wallet/children/${c.id}`} className="mt-3 block text-center text-xs font-semibold text-brand hover:underline">
+              <Link href={`/wallet/children/${c.id}`} className="mt-3 flex items-center justify-center gap-1 text-xs font-semibold text-brand opacity-80 transition-opacity hover:opacity-100">
                 View details &amp; history →
               </Link>
             </div>
