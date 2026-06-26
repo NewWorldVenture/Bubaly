@@ -73,17 +73,29 @@ export default async function WalletPage() {
 
   const familyTotal = childViews.reduce((s, c) => s + c.total, 0);
 
-  // Pending spend-request approvals → display rows (resolve which child via the txn).
+  // Pending approvals → display rows.
+  // 'card_spend' rows: ref_id is a wallet_transaction ID → find child via txn.
+  // 'allowance_request' rows: ref_type='child_wallets', ref_id is the child wallet ID directly.
   const txnById = new Map((txns ?? []).map((t) => [t.id, t]));
   const childNameByWalletId = new Map(
     (childWallets ?? []).map((cw) => [cw.id, memberById.get(cw.member_id)?.display_name ?? 'Child']),
   );
   const pendingApprovals = (approvals ?? []).map((a) => {
+    if (a.kind === 'allowance_request') {
+      // ref_id is the child_wallet_id
+      return {
+        id: a.id, kind: a.kind,
+        childName: a.ref_id ? childNameByWalletId.get(a.ref_id) ?? null : null,
+        childWalletId: a.ref_id ?? null,
+        amount_cents: a.amount_cents ?? 0,
+        note: a.note, created_at: a.created_at,
+      };
+    }
     const txn = a.ref_id ? txnById.get(a.ref_id) : null;
     return {
-      id: a.id,
-      kind: a.kind,
+      id: a.id, kind: a.kind,
       childName: txn?.child_wallet_id ? childNameByWalletId.get(txn.child_wallet_id) ?? null : null,
+      childWalletId: txn?.child_wallet_id ?? null,
       amount_cents: a.amount_cents ?? txn?.amount_cents ?? 0,
       note: a.note ?? txn?.description ?? null,
       created_at: a.created_at,

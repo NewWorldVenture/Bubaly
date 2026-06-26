@@ -24,7 +24,7 @@ import { computeFunding, serviceFeeLabel, type WalletTier } from '@/lib/wallet/f
 import { WALLET_TIERS, aiCoachLevel } from '@/lib/wallet/tiers';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import {
-  addFundsAction, requestSpendAction, decideSpendRequestAction, sendMoneyAction,
+  addFundsAction, requestSpendAction, decideSpendRequestAction, sendMoneyAction, decideAllowanceRequestAction,
 } from '@/app/(app)/wallet/actions';
 
 type Coaching = { headline: string; insights: string[]; suggestion: string };
@@ -59,6 +59,7 @@ export type PendingApproval = {
   id: string;
   kind: string;
   childName: string | null;
+  childWalletId: string | null;
   amount_cents: number;
   note: string | null;
   created_at: string;
@@ -371,27 +372,38 @@ function SpendingAnalytics({ analytics }: { analytics: WalletAnalytics }) {
   );
 }
 
-/** One pending spend-request row with inline Approve / Reject (managers only). */
+/** One pending approval row with inline Approve / Reject (managers only). */
 function ApprovalRow({ approval, canDecide }: { approval: PendingApproval; canDecide: boolean }) {
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [busy, setBusy] = useState<'approved' | 'rejected' | null>(null);
+  const isAllowanceReq = approval.kind === 'allowance_request';
 
   async function decide(decision: 'approved' | 'rejected') {
     setBusy(decision);
-    const res = await decideSpendRequestAction({ approvalId: approval.id, decision });
+    const res = isAllowanceReq
+      ? await decideAllowanceRequestAction({ approvalId: approval.id, decision })
+      : await decideSpendRequestAction({ approvalId: approval.id, decision });
     setBusy(null);
     if (!res.ok) return toastError(res.error ?? 'Could not update request');
-    success(decision === 'approved' ? 'Approved' : 'Declined');
+    success(decision === 'approved' ? (isAllowanceReq ? 'Funds added' : 'Approved') : 'Declined');
     router.refresh();
   }
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-bg/40 px-3 py-2.5">
-      <div className="grid h-8 w-8 place-items-center rounded-lg bg-amber-500/10 text-amber-500"><HandCoins className="h-4 w-4" /></div>
+      <div className={cn('grid h-8 w-8 place-items-center rounded-lg', isAllowanceReq ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500')}>
+        {isAllowanceReq ? <Plus className="h-4 w-4" /> : <HandCoins className="h-4 w-4" />}
+      </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{approval.note || 'Spend request'}</p>
-        <p className="text-[11px] text-muted">{approval.childName ? `${approval.childName} · ` : ''}{fmtRelative(approval.created_at)}</p>
+        <p className="truncate text-sm font-medium">
+          {isAllowanceReq ? 'Allowance request' : (approval.note || 'Spend request')}
+        </p>
+        <p className="text-[11px] text-muted">
+          {approval.childName ? `${approval.childName} · ` : ''}
+          {isAllowanceReq && approval.note ? `${approval.note} · ` : ''}
+          {fmtRelative(approval.created_at)}
+        </p>
       </div>
       <span className="shrink-0 text-sm font-bold">{formatCents(approval.amount_cents)}</span>
       {canDecide && (

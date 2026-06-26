@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils/cn';
 import { fmtRelative } from '@/lib/utils/format';
 import { formatCents, goalProgress, type BucketKind, type Split } from '@/lib/wallet/ledger';
 import { txnTypeLabel, signedAmountCents, groupByDay, type ActivityTxn } from '@/lib/wallet/activity';
-import { addFundsAction, requestSpendAction, sendMoneyAction } from '@/app/(app)/wallet/actions';
+import { addFundsAction, requestSpendAction, sendMoneyAction, requestAllowanceAction } from '@/app/(app)/wallet/actions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -504,6 +504,60 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
   );
 }
 
+// ─── Request Allowance modal ──────────────────────────────────────────────────
+
+function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () => void }) {
+  const router = useRouter();
+  const { success, error: toastError } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const dollars = Number(amount);
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    setLoading(true);
+    const res = await requestAllowanceAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), reason: reason.trim() || undefined });
+    setLoading(false);
+    if (!res.ok) return toastError(res.error ?? 'Could not send request');
+    success('Request sent to a parent');
+    onClose();
+    router.refresh();
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Request allowance — ${child.name}`}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
+          A parent will see your request and can add funds directly to your wallet.
+        </p>
+        <Field label="Amount (USD)">
+          {(id) => (
+            <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" autoFocus
+              value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" />
+          )}
+        </Field>
+        <div className="flex flex-wrap gap-2">
+          {[5, 10, 20, 50].map((q) => (
+            <button key={q} type="button" onClick={() => setAmount(String(q))}
+              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand transition">
+              ${q}
+            </button>
+          ))}
+        </div>
+        <Field label="Reason (optional)">
+          {(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Birthday money, extra chores…" maxLength={120} />}
+        </Field>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
+          <Button type="submit" loading={loading}><Banknote className="h-4 w-4" /> Send request</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export function ChildDetailView({
@@ -518,6 +572,7 @@ export function ChildDetailView({
   const [adding, setAdding] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [sending, setSending] = useState(false);
+  const [requestingAllowance, setRequestingAllowance] = useState(false);
   const [activityExpanded, setActivityExpanded] = useState(false);
 
   const groups = groupByDay(history);
@@ -576,6 +631,14 @@ export function ChildDetailView({
             </Link>
           )}
         </div>
+
+        {/* Secondary: request allowance (visible to all — child or parent can ask) */}
+        <button
+          onClick={() => setRequestingAllowance(true)}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/60 py-2 text-xs font-medium text-muted transition hover:border-brand/40 hover:text-brand"
+        >
+          <Banknote className="h-3.5 w-3.5" /> Ask for more allowance
+        </button>
       </div>
 
       {/* ── Smart Split donut ─────────────────────────────────────────────────── */}
@@ -695,6 +758,7 @@ export function ChildDetailView({
       {adding && <AddFundsModal child={child} onClose={() => setAdding(false)} />}
       {requesting && <RequestSpendModal child={child} onClose={() => setRequesting(false)} />}
       {sending && siblings.length > 0 && <SendToSiblingModal child={child} siblings={siblings} onClose={() => setSending(false)} />}
+      {requestingAllowance && <RequestAllowanceModal child={child} onClose={() => setRequestingAllowance(false)} />}
     </div>
   );
 }
