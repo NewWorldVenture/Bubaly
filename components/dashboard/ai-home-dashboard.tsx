@@ -17,6 +17,7 @@ import { tierForPlanLevel, FIXED_FEATURES } from '@/lib/dashboard/registry';
 import { resolvePrimary, availableFeatures, lockedFeatures } from '@/lib/dashboard/layout';
 import { normalizeSettings, canCustomizeDashboard, effectiveSavedKeys } from '@/lib/dashboard/permissions';
 import { DashboardQuickActions } from '@/components/dashboard/quick-actions';
+import { HomeAskBar } from '@/components/dashboard/home-ask-bar';
 
 function greeting() {
   const h = new Date().getHours();
@@ -255,6 +256,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           <Sparkles className="h-3.5 w-3.5" /> Ask AI
         </Link>
       </div>
+
+      {/* Ask-anything bar → deep-links to the assistant (auto-sends) */}
+      <HomeAskBar />
 
       {/* Family members strip */}
       {(members ?? []).length > 1 && (

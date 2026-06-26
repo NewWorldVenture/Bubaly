@@ -68,6 +68,8 @@ export function InboxModule() {
       const { data: rows, error } = await supabase
         .from('family_communications').select('*')
         .eq('family_id', familyId).order('received_at', { ascending: false }).limit(200);
+      // useRealtimeQuery degrades missing-relation errors (e.g. the Communications
+      // Hub migration not yet applied) to an empty inbox instead of a crash.
       if (error) return { data: null, error };
       if (!rows?.length) return { data: [], error: null };
       const contactIds = [...new Set(rows.map(r => r.contact_id).filter(Boolean))] as string[];

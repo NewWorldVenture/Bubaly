@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, isMissingRelationError } from '@/lib/supabase/errors';
 
 describe('describeDbError', () => {
   it('returns a fallback for nullish input', () => {
@@ -36,5 +36,24 @@ describe('describeDbError', () => {
 
   it('handles thrown strings', () => {
     expect(describeDbError('boom', 'fb')).toBe('boom');
+  });
+});
+
+describe('isMissingRelationError', () => {
+  it('detects PostgREST schema-cache misses', () => {
+    expect(isMissingRelationError({ code: 'PGRST205', message: "Could not find the table 'public.family_communications' in the schema cache" })).toBe(true);
+    expect(isMissingRelationError({ message: "Could not find the table 'public.x' in the schema cache" })).toBe(true);
+    expect(isMissingRelationError({ code: 'PGRST204', message: 'column not found' })).toBe(true);
+  });
+
+  it('detects Postgres undefined_table / undefined_column codes', () => {
+    expect(isMissingRelationError({ code: '42P01', message: 'relation "foo" does not exist' })).toBe(true);
+    expect(isMissingRelationError({ code: '42703', message: 'column "bar" does not exist' })).toBe(true);
+  });
+
+  it('is false for ordinary errors and nullish input', () => {
+    expect(isMissingRelationError(null)).toBe(false);
+    expect(isMissingRelationError({ code: '42501', message: 'permission denied' })).toBe(false);
+    expect(isMissingRelationError({ message: 'duplicate key value' })).toBe(false);
   });
 });

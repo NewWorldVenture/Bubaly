@@ -1,6 +1,16 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
+Last updated after the production bug sweep + frictionless Quick Capture (PR #163). Keep this updated as you ship.
+
+> ## 🛟 PRODUCTION BUG SWEEP + QUICK CAPTURE (PR #163)
+> Branch `claude/festive-bohr-m4cbeg`. Stops live crashes + frictionless Quick Capture. No migration.
+> - `lib/supabase/errors.ts` missing-relation detection + `useRealtimeQuery` swallows it → all ~69
+>   realtime modules degrade to empty state (not a crash) when a feature's migration hasn't reached prod.
+>   (Aligned with main's `isMissingTableError`.) `/api/cron/wallet-allowance` returns 200 pre-0088.
+> - **`lib/capture/parse.ts`** (PURE + 25 tests) — natural-language Quick Capture (events/tasks/shopping).
+> - Modal safe-area padding fix; Family Wallet promoted into Suggested nav.
+
 Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionless Stripe cards, reconciliation, iOS-zoom + missing-table fixes, Wallet promoted in nav. Branch `claude/connect-8ysp00` (PR #162). 1079 tests pass · build clean. Keep this updated as you ship.
 
 > **Session 3 (2026-06-26) — TREASURY · SEND MONEY · STRIPE CARDS · RECONCILIATION · PROD UX FIXES · NAV**
