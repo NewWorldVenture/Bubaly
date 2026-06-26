@@ -258,7 +258,7 @@ export function MoneyDashboard({
                     <div key={txn.id} className="flex items-center gap-3 px-4 py-3">
                       <div className={cn(
                         'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
-                        txn.direction === 'credit' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600',
+                        txn.direction === 'credit' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500',
                       )}>
                         {txn.direction === 'credit'
                           ? <ArrowDownLeft className="h-4 w-4" />
@@ -270,7 +270,7 @@ export function MoneyDashboard({
                       </div>
                       <span className={cn(
                         'text-sm font-semibold',
-                        txn.direction === 'credit' ? 'text-green-600' : 'text-red-500',
+                        txn.direction === 'credit' ? 'text-emerald-500' : 'text-rose-500',
                       )}>
                         {txn.direction === 'credit' ? '+' : '-'}{formatCents(txn.amountCents)}
                       </span>
@@ -287,8 +287,8 @@ export function MoneyDashboard({
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-base font-semibold text-fg">Card activity</h2>
                 <CapabilityGate capability={capabilities.realtimeAuthorizations}>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> Real-time
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-500">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Real-time
                   </span>
                 </CapabilityGate>
               </div>
@@ -297,7 +297,7 @@ export function MoneyDashboard({
                   <div key={auth.id} className="flex items-center gap-3 px-4 py-3">
                     <div className={cn(
                       'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white',
-                      auth.decision === 'approved' ? 'bg-green-500' : 'bg-red-500',
+                      auth.decision === 'approved' ? 'bg-emerald-500' : 'bg-rose-500',
                     )}>
                       {auth.decision === 'approved'
                         ? <CheckCircle2 className="h-4 w-4" />
@@ -309,7 +309,7 @@ export function MoneyDashboard({
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-semibold text-fg">{formatCents(auth.amountCents)}</p>
-                      <p className={cn('text-xs font-medium', auth.decision === 'approved' ? 'text-green-600' : 'text-red-500')}>
+                      <p className={cn('text-xs font-medium', auth.decision === 'approved' ? 'text-emerald-500' : 'text-rose-500')}>
                         {auth.decision ?? auth.status}
                       </p>
                     </div>
