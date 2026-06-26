@@ -38,6 +38,9 @@ Last updated: Dramatic UI upgrade — wallet/money visual allocation + dark-mode
 > use optimistic local state; routing-settings is a controlled form — both fine as-is.)
 >
 > ### Frictionless money modals (consistency pass)
+> - **Wallet settings**: one-tap split presets (Balanced / Save-focused / Spend-focused /
+>   Even) so parents don't hand-tune four percentages to 100; active preset highlighted.
+>   Note: `Split` type is 4 keys (no `goal`), unlike `BucketKind` which has 5.
 > - **Goals**: Fund modal gains round-amount quick chips (capped to remaining) + a
 >   "Finish it · $X" button that funds the exact remaining balance in one tap.
 > - **Allowance**: $5/$10/$20 quick chips in the modal; the next-payment date is now
