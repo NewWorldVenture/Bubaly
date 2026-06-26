@@ -31,6 +31,8 @@ export type WalletTxnStatus =
 export type StripeAccountStatus = 'pending' | 'restricted' | 'enabled' | 'disabled';
 export type InvestOrderSide = 'buy' | 'sell';
 export type InvestOrderStatus = 'pending' | 'filled' | 'rejected' | 'cancelled';
+export type EconomyDirection = 'credit' | 'debit';
+export type EconomyRedemptionStatus = 'pending' | 'approved' | 'fulfilled' | 'rejected' | 'cancelled';
 export type SubscriptionStatus =
   | 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid';
 export type AccountType = 'checking' | 'savings' | 'credit' | 'investment' | 'retirement';
@@ -469,6 +471,26 @@ export interface Database {
         { id: string; family_id: string; child_wallet_id: string; asset_id: string; side: InvestOrderSide; shares: number; price_cents: number; amount_cents: number; status: InvestOrderStatus; txn_id: string | null; requested_by: string | null; decided_by: string | null; decided_at: string | null } & Stamps,
         { id?: string; family_id: string; child_wallet_id: string; asset_id: string; side: InvestOrderSide; shares: number; price_cents: number; amount_cents: number; status?: InvestOrderStatus; txn_id?: string | null; requested_by?: string | null; decided_by?: string | null; decided_at?: string | null },
         Partial<{ status: InvestOrderStatus; txn_id: string | null; decided_by: string | null; decided_at: string | null }>
+      >;
+      family_currencies: T<
+        { id: string; family_id: string; name: string; emoji: string; unit_label: string | null; is_active: boolean; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; emoji?: string; unit_label?: string | null; is_active?: boolean; sort_order?: number; created_by?: string | null },
+        Partial<{ name: string; emoji: string; unit_label: string | null; is_active: boolean; sort_order: number }>
+      >;
+      currency_transactions: T<
+        { id: string; family_id: string; currency_id: string; member_id: string; direction: EconomyDirection; amount: number; reason: string | null; related_type: string | null; related_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; currency_id: string; member_id: string; direction: EconomyDirection; amount: number; reason?: string | null; related_type?: string | null; related_id?: string | null; created_by?: string | null },
+        Partial<{ reason: string | null }>
+      >;
+      economy_rewards: T<
+        { id: string; family_id: string; currency_id: string; title: string; emoji: string; cost: number; stock: number | null; is_active: boolean; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; currency_id: string; title: string; emoji?: string; cost: number; stock?: number | null; is_active?: boolean; sort_order?: number; created_by?: string | null },
+        Partial<{ title: string; emoji: string; cost: number; stock: number | null; is_active: boolean; sort_order: number }>
+      >;
+      economy_redemptions: T<
+        { id: string; family_id: string; reward_id: string | null; currency_id: string; member_id: string; title: string; cost: number; status: EconomyRedemptionStatus; txn_id: string | null; requested_by: string | null; decided_by: string | null; decided_at: string | null; note: string | null } & Stamps,
+        { id?: string; family_id: string; reward_id?: string | null; currency_id: string; member_id: string; title: string; cost: number; status?: EconomyRedemptionStatus; txn_id?: string | null; requested_by?: string | null; decided_by?: string | null; decided_at?: string | null; note?: string | null },
+        Partial<{ status: EconomyRedemptionStatus; txn_id: string | null; decided_by: string | null; decided_at: string | null; note: string | null }>
       >;
       stripe_connected_accounts: T<
         { id: string; family_id: string; stripe_account_id: string; status: StripeAccountStatus; charges_enabled: boolean; payouts_enabled: boolean; details_submitted: boolean; treasury_enabled: boolean; card_issuing_enabled: boolean; requirements_due: Json; onboarded_by: string | null } & Stamps,
