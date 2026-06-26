@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Target, PiggyBank, ShoppingBag, HandHeart, TrendingUp, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
@@ -12,13 +13,16 @@ import { formatCents, goalProgress, type BucketKind } from '@/lib/wallet/ledger'
 import { txnTypeLabel, signedAmountCents, groupByDay, type ActivityTxn } from '@/lib/wallet/activity';
 import { addFundsAction } from '@/app/(app)/wallet/actions';
 
-const BUCKET_META: Record<BucketKind, { label: string; icon: typeof PiggyBank; cls: string }> = {
-  spend: { label: 'Spend', icon: ShoppingBag, cls: 'text-sky-500' },
-  save: { label: 'Save', icon: PiggyBank, cls: 'text-emerald-500' },
-  give: { label: 'Give', icon: HandHeart, cls: 'text-rose-500' },
-  invest: { label: 'Invest', icon: TrendingUp, cls: 'text-violet-500' },
-  goal: { label: 'Goals', icon: Target, cls: 'text-amber-500' },
+const BUCKET_META: Record<BucketKind, { label: string; icon: typeof PiggyBank; cls: string; bar: string }> = {
+  spend: { label: 'Spend', icon: ShoppingBag, cls: 'text-sky-500', bar: 'bg-sky-500' },
+  save: { label: 'Save', icon: PiggyBank, cls: 'text-emerald-500', bar: 'bg-emerald-500' },
+  give: { label: 'Give', icon: HandHeart, cls: 'text-rose-500', bar: 'bg-rose-500' },
+  invest: { label: 'Invest', icon: TrendingUp, cls: 'text-violet-500', bar: 'bg-violet-500' },
+  goal: { label: 'Goals', icon: Target, cls: 'text-amber-500', bar: 'bg-amber-500' },
 };
+
+const VISIBLE_BUCKETS: BucketKind[] = ['spend', 'save', 'give', 'invest'];
+const QUICK_AMOUNTS = [5, 10, 20, 50];
 
 type Goal = { id: string; title: string; target_cents: number; saved_cents: number; status: string };
 
@@ -28,6 +32,7 @@ export function ChildDetailView({ child, goals, history, canManage }: {
   history: ActivityTxn[];
   canManage: boolean;
 }) {
+  const router = useRouter();
   const { success, error: toastError } = useToast();
   const [adding, setAdding] = useState(false);
   const [amount, setAmount] = useState('');
@@ -42,7 +47,8 @@ export function ChildDetailView({ child, goals, history, canManage }: {
     const res = await addFundsAction({ childWalletId: child.id, amountCents: cents, description: 'Parent top-up' });
     setBusy(false);
     if (!res.ok) return toastError(res.error ?? 'Could not add funds');
-    success('Funds added'); setAmount(''); setAdding(false);
+    success(`Added ${formatCents(cents)} to ${child.name}`); setAmount(''); setAdding(false);
+    router.refresh();
   }
 
   return (
@@ -57,9 +63,20 @@ export function ChildDetailView({ child, goals, history, canManage }: {
         {canManage && <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add funds</Button>}
       </div>
 
+      {/* Allocation bar — instant read of where the balance sits */}
+      {child.total > 0 && (
+        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-border/40" role="img" aria-label={`${child.name}'s balance allocation`}>
+          {VISIBLE_BUCKETS.map((k) => {
+            const pct = ((child.buckets[k] ?? 0) / child.total) * 100;
+            if (pct <= 0) return null;
+            return <div key={k} className={`h-full ${BUCKET_META[k].bar}`} style={{ width: `${pct}%` }} title={`${BUCKET_META[k].label}: ${Math.round(pct)}%`} />;
+          })}
+        </div>
+      )}
+
       {/* Buckets */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {(['spend', 'save', 'give', 'invest'] as BucketKind[]).map((k) => {
+        {VISIBLE_BUCKETS.map((k) => {
           const m = BUCKET_META[k];
           return (
             <div key={k} className="rounded-2xl border border-border bg-surface/40 p-4">
@@ -129,7 +146,15 @@ export function ChildDetailView({ child, goals, history, canManage }: {
       {adding && (
         <Modal open onClose={() => setAdding(false)} title={`Add funds to ${child.name}'s wallet`}>
           <form onSubmit={addFunds} className="space-y-3">
-            <Field label="Amount ($)">{(id) => <Input id={id} type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />}</Field>
+            <Field label="Amount ($)">{(id) => <Input id={id} type="number" step="0.01" min="0" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="20.00" autoFocus />}</Field>
+            <div className="flex flex-wrap gap-2">
+              {QUICK_AMOUNTS.map((q) => (
+                <button key={q} type="button" onClick={() => setAmount(String(q))}
+                  className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand transition">
+                  ${q}
+                </button>
+              ))}
+            </div>
             <p className="text-xs text-muted">Allocated across Spend / Save / Give / Invest by this child&apos;s split rule.</p>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setAdding(false)}>Cancel</Button>
