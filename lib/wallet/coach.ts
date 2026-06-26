@@ -1,7 +1,6 @@
-// lib/wallet/coach.ts — AI Family Financial Coach prompt/parse. PURE + tested.
-// The route assembles a money snapshot (balances + goals with forecasts), these
-// build the prompt and parse the structured reply, so the logic is unit-tested
-// without a network. Goal forecasts come from lib/wallet/ledger (weeksToGoal).
+// lib/wallet/coach.ts — AI Financial Coach prompt/parse. PURE + tested.
+// Family-wide coach: buildWalletCoachPrompt / parseWalletCoach.
+// Child-specific coach: buildChildCoachPrompt (same parse).
 import { formatCents } from '@/lib/wallet/ledger';
 
 export type CoachChild = { name: string; totalCents: number; saveCents: number };
@@ -39,6 +38,62 @@ Rules:
   });
 
   const user = `Family: ${input.familyName}\n\nChildren:\n${kids.join('\n') || '- (no child wallets yet)'}\n\nGoals:\n${goals.join('\n') || '- (no goals yet)'}\n\nReturn the coaching JSON now.`;
+  return { system, user };
+}
+
+// ─── Child-specific coach ─────────────────────────────────────────────────────
+
+export type CoachChildDetail = {
+  name: string;
+  totalCents: number;
+  buckets: { spend: number; save: number; give: number; invest: number };
+  weeklyCreditCents: number;
+  goals: CoachGoal[];
+};
+
+export function buildChildCoachPrompt(input: CoachChildDetail): { system: string; user: string } {
+  const system = `You are the Bubaly Family Financial Coach — warm, encouraging, and concrete, teaching healthy money habits. You receive ONE child's wallet snapshot and return STRUCTURED JSON only (no markdown, no code fences). Start with { end with }.
+
+Shape:
+{
+  "headline": "one warm, specific sentence about this child's money momentum",
+  "insights": ["data-grounded observation", "another"],
+  "suggestion": "one concrete next step (a savings move, spending habit, or goal nudge)"
+}
+
+Rules:
+- Reference real numbers. Use the child's name. Reference goal forecasts when present.
+- 2-4 insights. Celebrate saving and giving; never shame spending.
+- Family-friendly and age-appropriate. Never give regulated investment advice or promise returns.`;
+
+  const buckets = [
+    `Spend: ${formatCents(input.buckets.spend)}`,
+    `Save: ${formatCents(input.buckets.save)}`,
+    `Give: ${formatCents(input.buckets.give)}`,
+    `Invest: ${formatCents(input.buckets.invest)}`,
+  ].join(', ');
+
+  const weeklyRate = input.weeklyCreditCents > 0
+    ? `~${formatCents(Math.round(input.weeklyCreditCents))}/week`
+    : 'no recent contributions';
+
+  const goals = input.goals.length > 0
+    ? input.goals.map((g) => {
+        const fc = g.weeksToGoal === 0 ? 'reached!' : g.weeksToGoal == null ? 'no contributions yet' : `~${g.weeksToGoal} weeks away`;
+        return `- "${g.title}": ${formatCents(g.savedCents)} / ${formatCents(g.targetCents)} (${fc})`;
+      }).join('\n')
+    : '- (no goals yet)';
+
+  const user = `Child: ${input.name}
+Total balance: ${formatCents(input.totalCents)}
+Buckets: ${buckets}
+Recent savings rate: ${weeklyRate}
+
+Goals:
+${goals}
+
+Return the coaching JSON now.`;
+
   return { system, user };
 }
 

@@ -170,7 +170,7 @@ function VirtualCardPlaceholder({ child }: { child: Child }) {
 
 // ─── AI Money Coach card ──────────────────────────────────────────────────────
 
-function AICoachCard() {
+function AICoachCard({ childId }: { childId: string }) {
   const { error: toastError } = useToast();
   const [coaching, setCoaching] = useState<Coaching | null>(null);
   const [loading, setLoading] = useState(false);
@@ -179,7 +179,7 @@ function AICoachCard() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/ai/wallet', { method: 'POST' });
+      const res = await fetch(`/api/ai/wallet/child/${childId}`, { method: 'POST' });
       const json = (await res.json()) as { coaching?: Coaching; error?: string };
       if (!res.ok || !json.coaching) throw new Error(json.error || 'Could not get coaching');
       setCoaching(json.coaching);
@@ -189,7 +189,7 @@ function AICoachCard() {
     } finally {
       setLoading(false);
     }
-  }, [toastError]);
+  }, [childId, toastError]);
 
   if (dismissed) return null;
 
@@ -600,7 +600,7 @@ export function ChildDetailView({
       <VirtualCardPlaceholder child={child} />
 
       {/* ── AI Money Coach ────────────────────────────────────────────────────── */}
-      <AICoachCard />
+      <AICoachCard childId={child.id} />
 
       {/* ── Savings Goals ─────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-border bg-surface/40 p-4">

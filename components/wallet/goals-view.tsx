@@ -36,6 +36,7 @@ export type GoalView = {
   id: string; title: string; kind: string;
   targetCents: number; savedCents: number; targetDate: string | null;
   childName: string | null; isChildGoal: boolean; status: string;
+  weeklyRateCents?: number; weeksToGoal?: number | null;
 };
 export type ChildOption = { id: string; name: string };
 
@@ -105,6 +106,11 @@ function GoalCard({ goal, canManage, onFund }: { goal: GoalView; canManage: bool
     : null;
   const remaining = Math.max(0, goal.targetCents - goal.savedCents);
 
+  // Forecast label derived from server-computed weeksToGoal
+  const forecastLabel = !reached && goal.weeksToGoal != null
+    ? (goal.weeksToGoal === 0 ? null : `~${goal.weeksToGoal}w away`)
+    : null;
+
   return (
     <div className={cn('rounded-2xl border p-4', reached ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border bg-surface/40')}>
       <div className="flex items-start justify-between gap-2">
@@ -119,13 +125,21 @@ function GoalCard({ goal, canManage, onFund }: { goal: GoalView; canManage: bool
             <p className="mt-0.5 text-[11px] text-muted">
               {goal.childName ? `${goal.childName} · ` : 'Family · '}{kindMeta.label}
             </p>
-            {goal.targetDate && !reached && (
-              <p className={cn('flex items-center gap-1 mt-0.5 text-[10px] font-medium',
-                daysLeft != null && daysLeft < 30 ? 'text-amber-500' : 'text-muted')}>
-                <CalendarDays className="h-3 w-3" />
-                {daysLeft != null ? (daysLeft > 0 ? `${daysLeft} days left` : 'Past target') : 'No deadline'}
-              </p>
-            )}
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              {goal.targetDate && !reached && (
+                <p className={cn('flex items-center gap-1 text-[10px] font-medium',
+                  daysLeft != null && daysLeft < 30 ? 'text-amber-500' : 'text-muted')}>
+                  <CalendarDays className="h-3 w-3" />
+                  {daysLeft != null ? (daysLeft > 0 ? `${daysLeft}d left` : 'Past target') : 'No deadline'}
+                </p>
+              )}
+              {forecastLabel && (
+                <p className="flex items-center gap-1 text-[10px] font-medium text-brand">
+                  <TrendingUp className="h-3 w-3" />
+                  {forecastLabel}
+                </p>
+              )}
+            </div>
           </div>
         </div>
         {canManage && goal.isChildGoal && !reached && (
