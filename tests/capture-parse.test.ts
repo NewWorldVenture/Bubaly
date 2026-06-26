@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseEvent, suggestKind } from '@/lib/capture/parse';
+import { parseEvent, parseDueDate, suggestKind } from '@/lib/capture/parse';
 
 // Fixed reference: Friday 2026-06-26, 10:00 local.
 const NOW = new Date(2026, 5, 26, 10, 0, 0, 0);
@@ -100,6 +100,23 @@ describe('parseEvent — fallbacks', () => {
   it('never returns an empty title', () => {
     const r = parseEvent('tomorrow', NOW);
     expect(r.title.length).toBeGreaterThan(0);
+  });
+});
+
+describe('parseDueDate', () => {
+  it('sets a due date from a day reference and cleans the title', () => {
+    expect(parseDueDate('Pay rent friday', NOW)).toEqual({ title: 'Pay rent', dueDate: '2026-07-03' });
+    expect(parseDueDate('Renew passport in 2 weeks', NOW)).toEqual({ title: 'Renew passport', dueDate: '2026-07-10' });
+    expect(parseDueDate('Trash tomorrow', NOW)).toEqual({ title: 'Trash', dueDate: '2026-06-27' });
+  });
+
+  it('strips a trailing time alongside the day', () => {
+    expect(parseDueDate('Submit report friday at 5pm', NOW)).toEqual({ title: 'Submit report', dueDate: '2026-07-03' });
+  });
+
+  it('does not set a due date for a bare time or no day', () => {
+    expect(parseDueDate('Call the plumber', NOW)).toEqual({ title: 'Call the plumber', dueDate: null });
+    expect(parseDueDate('Standup at 9am', NOW)).toEqual({ title: 'Standup at 9am', dueDate: null });
   });
 });
 

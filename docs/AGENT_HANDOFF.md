@@ -14,6 +14,9 @@ Last updated after dashboard customization permissions (child controls + family 
 > - **`components/app/quick-capture.tsx`** — the event path now schedules at the parsed time + `all_day`
 >   (was always "starts now" with the raw text as title). Added a **live preview** ("📅 Tomorrow at 3:00 PM ·
 >   "Dentist"") that updates as you type, with a hint when no time is detected.
+> - **`parseDueDate(input)`** (pure, **3 tests**) → task captures now set `todo_items.due_date` from a day
+>   reference ("Pay rent friday" → task due 2026-07-03, title "Pay rent"). Only a *day* sets a due date
+>   (date-only column); a bare clock time does not. Live "Due Fri, Jul 3" preview in the sheet.
 > - **`suggestKind(input)`** (pure, **4 tests**) + a **non-disruptive type suggestion chip**: when the text
 >   looks like a different kind than selected (e.g. "Buy milk" while on Task), the sheet offers a one-tap
 >   "Looks like a shopping — tap to switch." It never auto-switches (would steal focus / remount the field),

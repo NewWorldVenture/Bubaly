@@ -9,7 +9,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
-import { parseEvent, suggestKind } from '@/lib/capture/parse';
+import { parseEvent, parseDueDate, suggestKind } from '@/lib/capture/parse';
 
 /** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
 function formatWhen(startsAt: Date, allDay: boolean): string {
@@ -78,8 +78,9 @@ export function QuickCapture() {
       } else if (type === 'task') {
         const listId = await defaultTodoListId(supabase, familyId, userId);
         if (!listId) throw new Error('Could not find a to-do list');
+        const { title, dueDate } = parseDueDate(value);
         const { error } = await supabase.from('todo_items').insert({
-          family_id: familyId, list_id: listId, title: value, created_by: userId,
+          family_id: familyId, list_id: listId, title, due_date: dueDate, created_by: userId,
           assigned_to_id: selfMember?.id ?? null,
         });
         if (error) throw error;
@@ -104,6 +105,15 @@ export function QuickCapture() {
   const eventPreview = useMemo(() => {
     if (type !== 'event' || !text.trim()) return null;
     return parseEvent(text);
+  }, [type, text]);
+
+  // Live due-date preview for tasks — "Pay rent friday" → Due Fri, Jul 3.
+  const taskPreview = useMemo(() => {
+    if (type !== 'task' || !text.trim()) return null;
+    const { title, dueDate } = parseDueDate(text);
+    if (!dueDate) return null;
+    const [y, m, d] = dueDate.split('-').map(Number);
+    return { title, when: formatWhen(new Date(y, m - 1, d), true) };
   }, [type, text]);
 
   // Non-disruptive type suggestion: offer a one-tap switch when the text looks
@@ -159,6 +169,16 @@ export function QuickCapture() {
               ? <Textarea id={id} value={text} onChange={(e) => setText(e.target.value)} rows={4} placeholder={active.placeholder} autoFocus />
               : <Input id={id} value={text} onChange={(e) => setText(e.target.value)} placeholder={active.placeholder} autoFocus />}
           </Field>
+
+          {type === 'task' && taskPreview && (
+            <p className="flex items-center gap-1.5 text-xs font-medium text-brand">
+              <CalendarClock className="h-3.5 w-3.5" />
+              Due {taskPreview.when}
+              {taskPreview.title && taskPreview.title !== text.trim() && (
+                <span className="text-muted">· “{taskPreview.title}”</span>
+              )}
+            </p>
+          )}
 
           {type === 'event' && (
             eventPreview?.matched ? (

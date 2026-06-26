@@ -125,6 +125,37 @@ export function parseEvent(input: string, now: Date = new Date()): ParsedEvent {
   return { title: title || raw, startsAt, allDay, matched: Boolean(day || time) };
 }
 
+/** Local YYYY-MM-DD (date-only, no timezone shift). */
+function toYMD(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export type ParsedTask = {
+  /** Input with a recognized day (and any trailing time) removed. */
+  title: string;
+  /** Local YYYY-MM-DD due date, or null when no day reference was found. */
+  dueDate: string | null;
+};
+
+/**
+ * Parse a free-text task into a title + optional due date. Only a *day*
+ * reference (today/tomorrow/weekday/in N days) sets a due date — a bare clock
+ * time alone does not, since `todo_items.due_date` is date-only. The recognized
+ * phrase is stripped from the title.
+ */
+export function parseDueDate(input: string, now: Date = new Date()): ParsedTask {
+  const raw = input.trim();
+  const day = parseDay(raw, now);
+  if (!day) return { title: raw, dueDate: null };
+  const time = parseTime(raw);
+  let title = stripPhrase(raw, day.match);
+  if (time) title = stripPhrase(title, time.match);
+  return { title: title || raw, dueDate: toYMD(day.date) };
+}
+
 export type CaptureKind = 'task' | 'note' | 'event' | 'shopping';
 
 /**
