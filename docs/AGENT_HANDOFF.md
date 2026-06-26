@@ -3,6 +3,18 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after dashboard customization permissions (child controls + family default). Keep this updated as you ship.
 
+> **Session update (2026-06-26b) — FRICTIONLESS QUICK CAPTURE (natural-language event times).**
+> No migration needed — works in prod immediately (writes existing `calendar_events`). Branch
+> `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1038/1038** (+14).
+> - **`lib/capture/parse.ts`** (pure, deterministic via injected `now`; **14 tests** `tests/capture-parse.test.ts`):
+>   `parseEvent(input, now)` → `{title, startsAt, allDay, matched}`. Understands clock times (`3pm`,
+>   `3:30 pm`, `15:30`, `noon`/`midnight`; past-today rolls to tomorrow), day refs (`today`, `tonight`→7pm,
+>   `tomorrow`, bare/`this`/`next` weekday → coming occurrence, `in N days/weeks`), strips the recognized
+>   phrase from the title, and falls back to `{now, allDay:false, matched:false}` when nothing matches.
+> - **`components/app/quick-capture.tsx`** — the event path now schedules at the parsed time + `all_day`
+>   (was always "starts now" with the raw text as title). Added a **live preview** ("📅 Tomorrow at 3:00 PM ·
+>   "Dentist"") that updates as you type, with a hint when no time is detected.
+>
 > **Session update (2026-06-26a) — PRODUCTION BUG SWEEP (from live bubaly.com screenshots).**
 > Fixed three reported production issues. Branch `claude/festive-bohr-m4cbeg`. Verified: tsc clean ·
 > lint clean (only pre-existing `<img>` warns) · **suite 1024/1024**.

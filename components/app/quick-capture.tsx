@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, CheckSquare, StickyNote, CalendarPlus, ShoppingCart, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Plus, CheckSquare, StickyNote, CalendarPlus, ShoppingCart, X, CalendarClock } from 'lucide-react';
 import { useApp } from './app-context';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
@@ -9,6 +9,20 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { parseEvent } from '@/lib/capture/parse';
+
+/** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
+function formatWhen(startsAt: Date, allDay: boolean): string {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = new Date(startsAt); day.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((day.getTime() - today.getTime()) / 86400000);
+  const dayLabel = diffDays === 0 ? 'Today'
+    : diffDays === 1 ? 'Tomorrow'
+    : startsAt.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  if (allDay) return dayLabel;
+  const time = startsAt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${dayLabel} at ${time}`;
+}
 
 type CaptureType = 'task' | 'note' | 'event' | 'shopping';
 
@@ -55,8 +69,10 @@ export function QuickCapture() {
         const { error } = await supabase.from('notes').insert({ family_id: familyId, body: value, created_by: userId });
         if (error) throw error;
       } else if (type === 'event') {
+        const parsed = parseEvent(value);
         const { error } = await supabase.from('calendar_events').insert({
-          family_id: familyId, title: value, starts_at: new Date().toISOString(), category: 'general', created_by: userId,
+          family_id: familyId, title: parsed.title, starts_at: parsed.startsAt.toISOString(),
+          all_day: parsed.allDay, category: 'general', created_by: userId,
         });
         if (error) throw error;
       } else if (type === 'task') {
@@ -84,6 +100,11 @@ export function QuickCapture() {
   }
 
   const active = TYPES.find((t) => t.key === type)!;
+  // Live "when" preview for events — parses "tomorrow at 3pm" as you type.
+  const eventPreview = useMemo(() => {
+    if (type !== 'event' || !text.trim()) return null;
+    return parseEvent(text);
+  }, [type, text]);
 
   return (
     <>
@@ -118,7 +139,19 @@ export function QuickCapture() {
               : <Input id={id} value={text} onChange={(e) => setText(e.target.value)} placeholder={active.placeholder} autoFocus />}
           </Field>
 
-          {type === 'event' && <p className="text-xs text-muted">Starts now — adjust the time later in Calendar.</p>}
+          {type === 'event' && (
+            eventPreview?.matched ? (
+              <p className="flex items-center gap-1.5 text-xs font-medium text-brand">
+                <CalendarClock className="h-3.5 w-3.5" />
+                {formatWhen(eventPreview.startsAt, eventPreview.allDay)}
+                {eventPreview.title && eventPreview.title !== text.trim() && (
+                  <span className="text-muted">· “{eventPreview.title}”</span>
+                )}
+              </p>
+            ) : (
+              <p className="text-xs text-muted">Tip: add a time like “tomorrow at 3pm” and we’ll schedule it.</p>
+            )
+          )}
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}><X className="h-4 w-4" /> Cancel</Button>
