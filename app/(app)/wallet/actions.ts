@@ -534,7 +534,8 @@ export async function requestSpendAction(input: {
   const debit = await debitSpendBucket(supabase, {
     familyId, childWalletId: cw.id, amountCents: amount, type: 'card_spend',
     description, createdBy: ctx.user.id, requiresApproval: needsApproval,
-    relatedType: 'spend_request', metadata: { requested_by_member: ctx.active.member.id },
+    relatedType: 'spend_request',
+    metadata: { requested_by_member: ctx.active.member.id, trust_basis: decision.basis, trust_effect: decision.effect },
   });
   if (!debit.ok) return { ok: false, error: debit.error };
 

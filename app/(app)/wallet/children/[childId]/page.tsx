@@ -22,7 +22,7 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
     supabase.from('family_members').select('display_name, color').eq('id', cw.member_id).maybeSingle(),
     supabase.from('wallet_buckets').select('id, kind').eq('family_id', familyId).eq('child_wallet_id', cw.id),
     supabase.from('wallet_transactions')
-      .select('id, child_wallet_id, type, status, direction, amount_cents, description, created_at, bucket_id')
+      .select('id, child_wallet_id, type, status, direction, amount_cents, description, created_at, bucket_id, metadata')
       .eq('family_id', familyId).eq('child_wallet_id', cw.id)
       .order('created_at', { ascending: false }).limit(200),
     supabase.from('wallet_goals')
@@ -59,6 +59,7 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
     direction: t.direction, amount_cents: t.amount_cents, description: t.description,
     created_at: t.created_at,
     bucket_kind: t.bucket_id ? bucketKindById.get(t.bucket_id) ?? null : null,
+    metadata: t.metadata as Record<string, unknown> | null,
   }));
 
   // Sibling wallets (other active child wallets) for Send Money

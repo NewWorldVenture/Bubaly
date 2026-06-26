@@ -36,7 +36,7 @@ type Goal = {
 
 type Sibling = { id: string; name: string; color: string | null };
 
-type HistoryTxn = ActivityTxn & { bucket_kind?: BucketKind | null };
+type HistoryTxn = ActivityTxn & { bucket_kind?: BucketKind | null; metadata?: Record<string, unknown> | null };
 
 type Child = {
   id: string; name: string; color: string | null; total: number;
@@ -307,12 +307,26 @@ const TXN_TYPE_ICON: Record<string, typeof ArrowDownLeft> = {
   reversal: Check,
 };
 
+const TRUST_BASIS_LABEL: Record<string, string> = {
+  role_default: 'Auto',
+  allow_grant: 'Allowed',
+  policy: 'Policy',
+  delegation: 'Delegated',
+  emergency: 'Emergency',
+};
+
 function TxnRow({ tx }: { tx: HistoryTxn }) {
   const signed = signedAmountCents(tx);
   const credit = signed >= 0;
   const Icon = TXN_TYPE_ICON[tx.type] ?? (credit ? ArrowDownLeft : ArrowUpRight);
   const meta = tx.bucket_kind ? BUCKET_META[tx.bucket_kind] : null;
   const isPending = tx.status === 'requires_parent_approval';
+
+  // Trust badge: only on completed card_spend rows that have a trust_basis stored
+  const trustBasis = tx.status === 'completed' && tx.type === 'card_spend' && tx.metadata?.trust_basis
+    ? String(tx.metadata.trust_basis)
+    : null;
+  const trustLabel = trustBasis ? (TRUST_BASIS_LABEL[trustBasis] ?? null) : null;
 
   return (
     <div className="flex items-center gap-3 px-3 py-2.5">
@@ -330,6 +344,7 @@ function TxnRow({ tx }: { tx: HistoryTxn }) {
           {meta && <span className={cn('flex items-center gap-0.5', meta.color)}><meta.icon className="h-3 w-3" /> {meta.label} · </span>}
           {txnTypeLabel(tx.type)} · {fmtRelative(tx.created_at)}
           {isPending && <span className="text-amber-500"> · Pending approval</span>}
+          {trustLabel && <span className="ml-1 rounded bg-border/60 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted">{trustLabel}</span>}
         </p>
       </div>
       <span className={cn('flex-shrink-0 text-sm font-semibold',
