@@ -25,7 +25,7 @@ export type NotificationType =
   | 'maintenance_task' | 'grocery_reminder' | 'document_expiry' | 'family_invite' | 'system';
 export type WalletTxnType =
   | 'gift_received' | 'parent_top_up' | 'allowance' | 'chore_reward' | 'babysitter_payment'
-  | 'card_spend' | 'card_refund' | 'goal_transfer' | 'bucket_transfer' | 'withdrawal' | 'fee' | 'adjustment' | 'reversal';
+  | 'card_spend' | 'card_refund' | 'goal_transfer' | 'bucket_transfer' | 'transfer' | 'withdrawal' | 'fee' | 'adjustment' | 'reversal';
 export type WalletTxnStatus =
   | 'pending' | 'requires_parent_approval' | 'processing' | 'completed' | 'failed' | 'reversed' | 'cancelled';
 export type StripeAccountStatus = 'pending' | 'restricted' | 'enabled' | 'disabled';
