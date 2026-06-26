@@ -18,6 +18,9 @@ Last updated after dashboard customization permissions (child controls + family 
 >      and the hook handles it.)
 >    - `components/dashboard/ai-home-dashboard.tsx` already degrades (counts `?? 0`; Supabase queries
 >      resolve rather than throw, so `Promise.all` never rejects). No change needed there.
+>    - **`/api/cron/wallet-allowance`** treats a missing-relation error on `allowance_rules` as a clean
+>      no-op (200 `{skipped:'wallet_not_deployed'}`) instead of a 500, so the nightly cron isn't flagged
+>      as failed before migration 0088 reaches prod. (Audited all 8 crons — the others query core tables.)
 >    - ⚠️ **STILL APPLY 0090 (+ 0085–0089, 0093, 0094) TO PROD** to actually enable the Communications Hub.
 > 2. **Quick Capture modal action row cut off on mobile** (IMG_8276). `components/ui/modal.tsx` is a
 >    bottom sheet on mobile (`items-end`); uniform `p-4` let Save/Cancel hide under the home indicator.

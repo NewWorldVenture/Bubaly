@@ -4,6 +4,7 @@ import { creditChildWallet } from '@/lib/wallet/server';
 import { rollForward } from '@/lib/wallet/allowance';
 import { planLevel } from '@/lib/constants/plans';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
+import { isMissingRelationError } from '@/lib/supabase/errors';
 import type { Split } from '@/lib/wallet/ledger';
 
 export const runtime = 'nodejs';
@@ -27,6 +28,11 @@ export async function GET(req: NextRequest) {
       .eq('is_active', true)
       .lte('next_run_on', today)
       .limit(2000);
+    // If the wallet migration hasn't reached this database yet, there's simply
+    // nothing to run — report a clean no-op so the cron isn't flagged as failed.
+    if (error && isMissingRelationError(error)) {
+      return NextResponse.json({ ok: true, skipped: 'wallet_not_deployed' });
+    }
     if (error) throw error;
 
     // Resolve each family's plan once to gate the Basic+ feature.
