@@ -3,6 +3,15 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after dashboard customization permissions (child controls + family default). Keep this updated as you ship.
 
+> **Session update (2026-06-26e) — ASSISTANT "?q=" DEEP LINK (closes the capture→AI loop).**
+> Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1062/1062** (+3). No migration.
+> - Bug: the `/capture` shell routes ambiguous text to `/dashboard/assistant?q=…`, but the assistant
+>   **ignored `q`** — the user had to retype. Now it auto-sends.
+> - **`lib/ai/prefill.ts`** (pure, **3 tests**): `parsePrefillQuery(search, max)` → trimmed/clamped `q` or null.
+> - **`assistant-module.tsx`** — on mount, if `?q=` is present, it auto-sends that question once and strips
+>   `q` from the URL (`history.replaceState`) so refresh/back doesn't resend. Reads `window.location.search`
+>   (not `useSearchParams`) to avoid a Suspense-boundary build constraint.
+>
 > **Session update (2026-06-26d) — GLOBAL CAPTURE SHORTCUT.**
 > Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1059/1059** (+5). No migration.
 > - **`lib/capture/shortcut.ts`** (pure, **5 tests**): `isTypingTarget`, `isOpenCaptureKey` (bare "c", no
