@@ -1,12 +1,30 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { CreditCard, Plus, Lock, Unlock, X, Settings, ChevronDown, ChevronUp, Snowflake, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { freezeCardAction, unfreezeCardAction, cancelCardAction, createCardAction } from '@/app/(app)/money/actions';
 import type { CardControls } from '@/lib/stripe/issuing';
+
+// Parents type their billing/shipping address once; we remember it in the
+// browser so every future card order is prefilled (frictionless re-order).
+const ADDR_STORAGE_KEY = 'bubaly.card.address';
+type SavedAddr = { line1: string; city: string; state: string; zip: string };
+
+function loadSavedAddr(): SavedAddr | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(ADDR_STORAGE_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as Partial<SavedAddr>;
+    if (p && typeof p.line1 === 'string') {
+      return { line1: p.line1 ?? '', city: p.city ?? '', state: p.state ?? '', zip: p.zip ?? '' };
+    }
+  } catch { /* ignore corrupt storage */ }
+  return null;
+}
 
 const DEFAULT_CONTROLS: CardControls = {
   allowOnline: true,
@@ -76,6 +94,17 @@ export function CardManager({ cards, wallets, manager, isReady, designs }: Props
   const [addrState, setAddrState] = useState('');
   const [addrZip, setAddrZip] = useState('');
 
+  // Prefill the address form from the last order the moment it opens.
+  useEffect(() => {
+    if (!showOrder) return;
+    const saved = loadSavedAddr();
+    if (!saved) return;
+    setAddrLine1((v) => v || saved.line1);
+    setAddrCity((v) => v || saved.city);
+    setAddrState((v) => v || saved.state);
+    setAddrZip((v) => v || saved.zip);
+  }, [showOrder]);
+
   async function handleFreeze(cardId: string) {
     setBusy(cardId + '_freeze');
     const res = await freezeCardAction({ cardId });
@@ -136,6 +165,13 @@ export function CardManager({ cards, wallets, manager, isReady, designs }: Props
     });
     setBusy(null);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    // Remember the address so the next card order is prefilled.
+    try {
+      window.localStorage.setItem(ADDR_STORAGE_KEY, JSON.stringify({
+        line1: billingAddress.line1, city: billingAddress.city,
+        state: billingAddress.state, zip: billingAddress.postalCode,
+      } satisfies SavedAddr));
+    } catch { /* storage unavailable */ }
     toastSuccess(`Card created for ${memberName.trim()}`);
     setShowOrder(false);
     setAddrLine1(''); setAddrCity(''); setAddrState(''); setAddrZip('');
@@ -409,8 +445,10 @@ export function CardManager({ cards, wallets, manager, isReady, designs }: Props
                       placeholder="ZIP"
                     />
                   </div>
-                  {orderType === 'physical' && (
-                    <p className="text-xs text-muted">Physical card will be mailed to this address (US only).</p>
+                  {orderType === 'physical' ? (
+                    <p className="text-xs text-muted">Physical card will be mailed to this address (US only). Saved for next time.</p>
+                  ) : (
+                    <p className="text-xs text-muted">Used for card verification. Saved for next time.</p>
                   )}
                 </div>
               </div>
