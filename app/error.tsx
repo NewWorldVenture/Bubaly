@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 export default function GlobalError({
@@ -19,12 +20,18 @@ export default function GlobalError({
     <div className="flex min-h-[60dvh] flex-col items-center justify-center px-6 text-center">
       <h1 className="text-2xl font-semibold">Something went wrong</h1>
       <p className="mt-2 max-w-md text-sm text-muted">
-        We hit an unexpected error. Your data is safe — try again, and if it keeps happening let us
-        know.
+        We hit an unexpected error. Your data is safe — try again, and if it keeps happening you have
+        a couple of ways forward below.
       </p>
-      <Button className="mt-6" onClick={reset}>
-        Try again
-      </Button>
+      <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+        <Button onClick={reset}>Try again</Button>
+        <Link href="/dashboard"><Button variant="outline">Go to dashboard</Button></Link>
+      </div>
+      {error.digest && (
+        <p className="mt-4 text-xs text-muted">
+          Reference: <code className="rounded bg-elevated px-1.5 py-0.5">{error.digest}</code>
+        </p>
+      )}
     </div>
   );
 }
