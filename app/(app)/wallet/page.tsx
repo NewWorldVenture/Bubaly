@@ -26,12 +26,13 @@ export default async function WalletPage() {
     return <WalletActivation canActivate={manager} />;
   }
 
-  const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }, { data: sub }] = await Promise.all([
+  const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }, { data: sub }, { data: approvals }] = await Promise.all([
     supabase.from('child_wallets').select('id, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
     supabase.from('wallet_buckets').select('id, child_wallet_id, kind, label, sort_order').eq('family_id', familyId),
     supabase.from('wallet_transactions').select('id, child_wallet_id, bucket_id, type, status, direction, amount_cents, description, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(2000),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
     supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']).maybeSingle(),
+    supabase.from('parent_approvals').select('id, kind, ref_id, amount_cents, note, requested_by, created_at').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(50),
   ]);
   const tier = walletTierForPlanLevel(planLevel(sub?.plan ?? null));
 
@@ -72,6 +73,23 @@ export default async function WalletPage() {
 
   const familyTotal = childViews.reduce((s, c) => s + c.total, 0);
 
+  // Pending spend-request approvals → display rows (resolve which child via the txn).
+  const txnById = new Map((txns ?? []).map((t) => [t.id, t]));
+  const childNameByWalletId = new Map(
+    (childWallets ?? []).map((cw) => [cw.id, memberById.get(cw.member_id)?.display_name ?? 'Child']),
+  );
+  const pendingApprovals = (approvals ?? []).map((a) => {
+    const txn = a.ref_id ? txnById.get(a.ref_id) : null;
+    return {
+      id: a.id,
+      kind: a.kind,
+      childName: txn?.child_wallet_id ? childNameByWalletId.get(txn.child_wallet_id) ?? null : null,
+      amount_cents: a.amount_cents ?? txn?.amount_cents ?? 0,
+      note: a.note ?? txn?.description ?? null,
+      created_at: a.created_at,
+    };
+  });
+
   return (
     <WalletDashboard
       familyTotal={familyTotal}
@@ -80,6 +98,7 @@ export default async function WalletPage() {
       canManage={manager}
       childWallets={childViews}
       recent={recent}
+      pendingApprovals={pendingApprovals}
     />
   );
 }

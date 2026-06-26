@@ -3,6 +3,7 @@ import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
 import { buildAssistantTools } from '@/lib/assistant/tools';
+import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import type { Database } from '@/lib/database.types';
 
 export const runtime = 'nodejs';
@@ -79,7 +80,8 @@ export async function POST(req: NextRequest) {
     ];
 
     const provider = await resolveProvider();
-    const tools = buildAssistantTools(supabase, { familyId, userId: ctx.user.id, members: memberRows, tz });
+    const rawTools = buildAssistantTools(supabase, { familyId, userId: ctx.user.id, members: memberRows, tz });
+    const tools = wrapToolsWithTrust(rawTools, supabase, familyId, ctx.active.role);
 
     // Stream the run as Server-Sent Events: `action` chips as tools fire,
     // `delta` chunks as the reply streams, then a final `done` (after persisting).
