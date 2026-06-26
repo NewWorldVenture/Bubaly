@@ -150,11 +150,28 @@ function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void 
     router.refresh();
   }
 
+  // Round-number quick funds that don't overshoot the remaining amount.
+  const quickCents = [500, 1000, 2000, 5000].filter((c) => c <= remaining);
+
   return (
     <Modal open onClose={onClose} title={`Fund — ${goal.title}`}>
       <form onSubmit={submit} className="space-y-4">
         <p className="text-xs text-muted">Moves money from {goal.childName}&apos;s Save bucket into this goal. {formatCents(remaining)} to go.</p>
         <Field label="Amount (USD)">{(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" autoFocus />}</Field>
+        <div className="flex flex-wrap gap-2">
+          {quickCents.map((c) => (
+            <button key={c} type="button" onClick={() => setAmount(String(c / 100))}
+              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand transition">
+              {formatCents(c)}
+            </button>
+          ))}
+          {remaining > 0 && (
+            <button type="button" onClick={() => setAmount(String(remaining / 100))}
+              className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 px-3 py-1.5 text-sm font-semibold text-emerald-500 hover:bg-emerald-500/10 transition">
+              Finish it · {formatCents(remaining)}
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-2 text-xs text-muted"><PiggyBank className="h-3.5 w-3.5" /> Saved {formatCents(goal.savedCents)} of {formatCents(goal.targetCents)}</div>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
