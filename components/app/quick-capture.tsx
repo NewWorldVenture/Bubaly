@@ -9,7 +9,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
-import { parseEvent, parseDueDate, suggestKind } from '@/lib/capture/parse';
+import { parseEvent, parseDueDate, suggestKind, splitItems } from '@/lib/capture/parse';
 
 /** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
 function formatWhen(startsAt: Date, allDay: boolean): string {
@@ -87,8 +87,14 @@ export function QuickCapture() {
       } else {
         const listId = await defaultGroceryListId(supabase, familyId, userId);
         if (!listId) throw new Error('Could not find a grocery list');
-        const { error } = await supabase.from('grocery_items').insert({ family_id: familyId, list_id: listId, name: value, created_by: userId });
+        const items = splitItems(value);
+        const rows = (items.length ? items : [value]).map((name) => ({ family_id: familyId, list_id: listId, name, created_by: userId }));
+        const { error } = await supabase.from('grocery_items').insert(rows);
         if (error) throw error;
+        success(rows.length > 1 ? `${rows.length} items added` : 'Shopping saved');
+        reset();
+        setOpen(false);
+        return;
       }
       success(`${TYPES.find((t) => t.key === type)!.label} saved`);
       reset();
@@ -114,6 +120,13 @@ export function QuickCapture() {
     if (!dueDate) return null;
     const [y, m, d] = dueDate.split('-').map(Number);
     return { title, when: formatWhen(new Date(y, m - 1, d), true) };
+  }, [type, text]);
+
+  // Live item-count preview for shopping — "milk, eggs and bread" → 3 items.
+  const shoppingItems = useMemo(() => {
+    if (type !== 'shopping' || !text.trim()) return null;
+    const items = splitItems(text);
+    return items.length > 1 ? items : null;
   }, [type, text]);
 
   // Non-disruptive type suggestion: offer a one-tap switch when the text looks
@@ -169,6 +182,14 @@ export function QuickCapture() {
               ? <Textarea id={id} value={text} onChange={(e) => setText(e.target.value)} rows={4} placeholder={active.placeholder} autoFocus />
               : <Input id={id} value={text} onChange={(e) => setText(e.target.value)} placeholder={active.placeholder} autoFocus />}
           </Field>
+
+          {type === 'shopping' && shoppingItems && (
+            <p className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-brand">
+              <ShoppingCart className="h-3.5 w-3.5" />
+              Adds {shoppingItems.length} items:
+              <span className="text-muted">{shoppingItems.join(', ')}</span>
+            </p>
+          )}
 
           {type === 'task' && taskPreview && (
             <p className="flex items-center gap-1.5 text-xs font-medium text-brand">

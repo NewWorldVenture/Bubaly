@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseEvent, parseDueDate, suggestKind } from '@/lib/capture/parse';
+import { parseEvent, parseDueDate, suggestKind, splitItems } from '@/lib/capture/parse';
 
 // Fixed reference: Friday 2026-06-26, 10:00 local.
 const NOW = new Date(2026, 5, 26, 10, 0, 0, 0);
@@ -117,6 +117,26 @@ describe('parseDueDate', () => {
   it('does not set a due date for a bare time or no day', () => {
     expect(parseDueDate('Call the plumber', NOW)).toEqual({ title: 'Call the plumber', dueDate: null });
     expect(parseDueDate('Standup at 9am', NOW)).toEqual({ title: 'Standup at 9am', dueDate: null });
+  });
+});
+
+describe('splitItems', () => {
+  it('splits comma lists and drops a leading buy verb', () => {
+    expect(splitItems('Buy milk, eggs, bread')).toEqual(['milk', 'eggs', 'bread']);
+    expect(splitItems('milk; eggs; bread')).toEqual(['milk', 'eggs', 'bread']);
+  });
+
+  it('treats "and" as a separator only when a comma is present', () => {
+    expect(splitItems('milk, eggs and bread')).toEqual(['milk', 'eggs', 'bread']);
+    expect(splitItems('macaroni and cheese')).toEqual(['macaroni and cheese']);
+  });
+
+  it('trims, dedupes case-insensitively, and drops blanks', () => {
+    expect(splitItems('Milk,  milk , , Eggs')).toEqual(['Milk', 'Eggs']);
+  });
+
+  it('returns a single item for a plain entry', () => {
+    expect(splitItems('paper towels')).toEqual(['paper towels']);
   });
 });
 

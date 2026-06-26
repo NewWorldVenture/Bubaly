@@ -156,6 +156,31 @@ export function parseDueDate(input: string, now: Date = new Date()): ParsedTask 
   return { title: title || raw, dueDate: toYMD(day.date) };
 }
 
+/**
+ * Split a shopping capture into individual items. Splits on commas, semicolons,
+ * newlines and `&`, drops a leading "buy/get/pick up" verb, trims, and dedupes
+ * (case-insensitive). The word "and" is treated as a separator ONLY when the
+ * input already contains a comma (the "milk, eggs and bread" list style) — this
+ * avoids wrongly splitting compound item names like "macaroni and cheese".
+ */
+export function splitItems(input: string): string[] {
+  const t = input.trim().replace(/^(buy|purchase|grab|get|pick\s*up)\b[:\s]*/i, '');
+  const sep = /,/.test(t)
+    ? /\s*(?:,|;|\n|&|\band\b)\s*/i
+    : /\s*(?:,|;|\n|&)\s*/i;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of t.split(sep)) {
+    const item = part.trim().replace(/\s{2,}/g, ' ');
+    if (!item) continue;
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
 export type CaptureKind = 'task' | 'note' | 'event' | 'shopping';
 
 /**

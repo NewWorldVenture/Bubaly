@@ -14,6 +14,9 @@ Last updated after dashboard customization permissions (child controls + family 
 > - **`components/app/quick-capture.tsx`** — the event path now schedules at the parsed time + `all_day`
 >   (was always "starts now" with the raw text as title). Added a **live preview** ("📅 Tomorrow at 3:00 PM ·
 >   "Dentist"") that updates as you type, with a hint when no time is detected.
+> - **`splitItems(input)`** (pure, **4 tests**) → a shopping capture like "milk, eggs and bread" now adds
+>   3 separate `grocery_items` in one go (drops leading buy verb, dedupes; "and" splits only when a comma
+>   is present, so "macaroni and cheese" stays one item). Live "Adds 3 items: …" preview + "N items added" toast.
 > - **`parseDueDate(input)`** (pure, **3 tests**) → task captures now set `todo_items.due_date` from a day
 >   reference ("Pay rent friday" → task due 2026-07-03, title "Pay rent"). Only a *day* sets a due date
 >   (date-only column); a bare clock time does not. Live "Due Fri, Jul 3" preview in the sheet.
