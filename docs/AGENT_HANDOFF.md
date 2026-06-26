@@ -1,7 +1,83 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after dashboard customization permissions (child controls + family default). Keep this updated as you ship.
+Last updated after Bubaly Money — Stripe Financial Mode (Phase 2). Keep this updated as you ship.
+
+> ## 💳 BUBALY MONEY — STRIPE FINANCIAL MODE (Phase 2) — read first if continuing Money
+> Branch `claude/stripe-money-mode` (PR pending). Builds the REAL Stripe layer on top of the
+> virtual ledger (0088). **Dormant until the `stripe_*` feature flags + Stripe credentials are
+> present** — capability detection falls back to the ledger so nothing breaks without them.
+> ⚠️ **Migration `0090_stripe_money.sql` NOT APPLIED TO PROD.** ⚠️ Stripe Connect/Treasury/Issuing
+> require an APPROVED Stripe account before the matching flags can be switched on.
+>
+> ### Shipped this session
+> - **Migration `0090_stripe_money.sql`** — 7 tables: `stripe_connected_accounts` (Connect/KYC),
+>   `stripe_financial_accounts` (Treasury), `stripe_cardholders`, `stripe_issuing_cards`
+>   (spend controls + freeze; **no PAN stored**), `stripe_authorizations` (real-time auth log),
+>   `stripe_card_designs` (catalog), `stripe_webhook_events` (idempotency, service-only).
+>   Family tables = members READ via `is_family_member`, writes service-role only. webhook_events =
+>   RLS on, no policy.
+> - **`lib/stripe/capabilities.ts`** (PURE + **7 tests**) — `resolveCapabilities(env, flags)` →
+>   `{mode:'ledger'|'stripe', payments, connectOnboarding, treasury, issuing, physicalCards,
+>   customCardDesigns, reason}`. Layered gating (treasury/issuing require connect; everything
+>   requires `STRIPE_SECRET_KEY`). `getMoneyCapabilities(supabase)` = async wrapper. **This is the
+>   keystone for graceful fallback — consumer pages branch on these booleans, never on Stripe jargon.**
+> - **`lib/stripe/connect.ts`** — `ensureConnectedAccount` (custom acct, requests card_payments/
+>   transfers/treasury/card_issuing), `createOnboardingLink`, `syncConnectedAccount` (mirrors
+>   charges/payouts/treasury/issuing capability state). `accountStatus()` maps → enum.
+> - **`lib/stripe/treasury.ts`** — `ensureFinancialAccount`, `syncFinancialAccountBalance` (cached
+>   for display; ledger stays source of truth).
+> - **`lib/stripe/issuing.ts`** — `ensureCardholder` (reuses verified onboarding address — we never
+>   collect/store it), `issueCard` (mirrors spending_controls), `setCardFrozen`.
+> - **`lib/stripe/webhook.ts`** — `recordEvent` (idempotency via unique stripe_event_id),
+>   `decideAuthorization(...)` PURE **7 tests** (frozen/inactive/blocked-category/insufficient-
+>   balance/exact-balance), `handleAuthorizationRequest` (real-time approve/decline against the
+>   child's SPEND bucket balance, then logs), `handleTransactionCreated` (posts the capture debit).
+> - **`lib/wallet/server.ts`** — added `childSpendableCents` (live SPEND-bucket balance from the
+>   immutable ledger) + `debitCardSpend` (idempotent card_spend debit + audit).
+> - **`app/api/webhooks/money/route.ts`** — separate signed endpoint (`STRIPE_MONEY_WEBHOOK_SECRET`,
+>   falls back to `STRIPE_WEBHOOK_SECRET`). Verifies signature, dedupes, routes auth.request /
+>   transaction.created / account.updated. Auth requests bypass dedupe (time-critical).
+> - **`app/(app)/money/actions.ts`** — `startConnectOnboardingAction`, `refreshConnectStatusAction`,
+>   `activateTreasuryAction`, `issueCardAction`, `setCardFrozenAction`. Manager-gated +
+>   capability-gated (graceful error when mode off) + audit-logged. Writes via service client.
+> - **`/wallet/cards`** (consumer, `components/wallet/money-cards-view.tsx`) — capability-aware:
+>   Mode A friendly "coming soon" (no jargon) · Mode B "Set up cards" onboarding · Mode C per-child
+>   card management with freeze. New "Cards" tab in wallet subnav.
+> - **`/admin/stripe`** (super-admin console) — runtime mode, capability table, feature-flag states,
+>   aggregate stats (onboarded families, financial accounts, active cards, declines, webhook errors),
+>   recent authorizations. Added to `ADMIN_NAV` as "Money (Stripe)".
+> - **DB types** extended for all 7 tables (+ `StripeAccountStatus`).
+> - Verified: **tsc clean · eslint clean · `npm run build` exit 0 · full suite 1035/1035** (14 new).
+>
+> ### To GO LIVE with real money (next agent / operator checklist)
+> 1. **Apply migration 0090** to prod Supabase (plus the still-pending 0073–0080, 0088, 0089, 0093, 0094).
+> 2. **Stripe account**: get **Connect + Treasury + Issuing** approved (business/legal — this is the
+>    real gate; code is ready). Confirm US Issuing program terms accepted.
+> 3. **Env vars** (Vercel, server-only): `STRIPE_SECRET_KEY` (already used by billing),
+>    `STRIPE_MONEY_WEBHOOK_SECRET` (new — for the /api/webhooks/money endpoint; if unset it falls back
+>    to `STRIPE_WEBHOOK_SECRET`). No client-exposed Stripe keys are needed for this layer.
+> 4. **Stripe webhook**: add endpoint `https://www.bubaly.com/api/webhooks/money` subscribed to
+>    `issuing_authorization.request`, `issuing_transaction.created`, `account.updated`. Copy its
+>    signing secret into `STRIPE_MONEY_WEBHOOK_SECRET`. (Real-time auth requires the .request event.)
+> 5. **Flip feature flags** (service role, `feature_flags` table) in dependency order as capabilities
+>    are approved: `stripe_connect_enabled` → `stripe_treasury_enabled` / `stripe_issuing_enabled` →
+>    `physical_cards_enabled` / `custom_card_designs_enabled` / `stripe_payments_enabled`. Until flipped,
+>    the app stays in virtual-ledger mode (verified safe).
+> 6. **Known Stripe limitations / compliance**: no FDIC/interest/investment claims in UI (none made);
+>    surcharge/fees stay in `lib/wallet/fees.ts` (disclosed before charge); cardholder address is
+>    reused from onboarding (never separately collected); full card details only via ephemeral
+>    Stripe.js reveal (never persisted — `stripe_issuing_cards` keeps last4/brand/exp only).
+>
+> ### Money — remaining (Stripe-dependent, can't run/test here without approved account + keys)
+> - Gift/top-up **Checkout** money movement (records intent today via gift_payments; wire
+>   `stripe_payments_enabled` → Checkout session → on `checkout.session.completed` call
+>   `creditChildWallet`). Reuse `lib/wallet/fees.ts` for the disclosed fee line.
+> - **Card detail reveal** (Stripe.js ephemeral keys) + **physical card ordering** UI.
+> - **`/admin/card-designs`** CRUD over `stripe_card_designs` + Stripe personalization_design submit.
+> - **Spending-control editor** (limit/window/blocked categories) on `/wallet/cards` (schema + webhook
+>   enforcement already support it; just needs the form + an `updateCardControlsAction`).
+> - Wire **`evaluateTrust`** (Trust Engine) into `issueCardAction`/money movement per Trust TODO #1.
 
 > **Session update (2026-06-25g) — DASHBOARD CUSTOMIZATION: FAMILY PERMISSIONS.**
 > Completed §10 (role/family permissions) of the customizable-dashboard spec. Branch `claude/festive-bohr-m4cbeg`.
