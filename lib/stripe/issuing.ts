@@ -6,6 +6,7 @@
 // brand, expiry); the PAN is never stored — parents reveal full details via an
 // ephemeral Stripe.js session.
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type Stripe from 'stripe';
 import type { Database } from '@/lib/database.types';
 import { getStripe } from '@/lib/stripe';
 
@@ -110,6 +111,39 @@ export async function issueCard(
     .single();
   if (error) throw new Error(`Failed to persist card: ${error.message}`);
   return { rowId: row.id, stripeCardId: card.id };
+}
+
+/** Update a card's spending controls (limit + window + blocked categories). */
+export async function updateCardControls(
+  supabase: DB,
+  params: {
+    familyId: string; cardRowId: string; stripeCardId: string; accountId: string;
+    spendLimitCents: number | null; spendWindow: string; blockedCategories: string[];
+  },
+): Promise<void> {
+  const stripe = getStripe();
+  const interval = WINDOW_INTERVAL[params.spendWindow] ?? 'per_authorization';
+  const spending_controls: Stripe.Issuing.CardUpdateParams.SpendingControls = {
+    // Empty array clears any existing limits; otherwise set the single limit.
+    spending_limits: params.spendLimitCents != null
+      ? [{ amount: params.spendLimitCents, interval }]
+      : [],
+    blocked_categories: params.blockedCategories as Stripe.Issuing.CardUpdateParams.SpendingControls.BlockedCategory[],
+  };
+  await stripe.issuing.cards.update(
+    params.stripeCardId,
+    { spending_controls },
+    { stripeAccount: params.accountId },
+  );
+  await supabase
+    .from('stripe_issuing_cards')
+    .update({
+      spend_limit_cents: params.spendLimitCents,
+      spend_window: params.spendWindow,
+      blocked_categories: params.blockedCategories,
+    })
+    .eq('id', params.cardRowId)
+    .eq('family_id', params.familyId);
 }
 
 /** Freeze / unfreeze a card (parent control). Updates Stripe + our mirror. */
