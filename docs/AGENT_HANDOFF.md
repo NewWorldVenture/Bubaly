@@ -3,6 +3,16 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after dashboard customization permissions (child controls + family default). Keep this updated as you ship.
 
+> **Session update (2026-06-26g) — HOME "ASK BUBALY ANYTHING" BAR.**
+> Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1068/1068** (+2). No migration.
+> - **`components/dashboard/home-ask-bar.tsx`** (client) — an ask-anything input on the home dashboard
+>   (under the greeting) that deep-links to `/dashboard/assistant?q=…`; the assistant auto-sends it (from
+>   the 26e prefill work), so a family asks from the home screen with no extra hop.
+> - **`lib/ai/prefill.ts`** — added `buildAssistantUrl(question, base?)` (the inverse of `parsePrefillQuery`;
+>   round-trip **tested**). Wired into the home dashboard header.
+> - Verified `/wallet` degrades to the Activation screen (not a crash) when `family_wallets` is absent, so
+>   promoting Wallet into the Suggested nav (26a) is safe pre-migration.
+>
 > **Session update (2026-06-26f) — GROCERY QUANTITY PARSING.**
 > Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1066/1066** (+4). No migration.
 > - **`parseGroceryItem(raw)`** (pure, **3 tests**) → "2 milk" / "2x soda" / "milk x2" / "eggs (12)" set the

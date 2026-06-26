@@ -15,3 +15,13 @@ export function parsePrefillQuery(search: string, max = 1000): string | null {
   const trimmed = q.trim();
   return trimmed ? trimmed.slice(0, max) : null;
 }
+
+/**
+ * Build an assistant deep link that `parsePrefillQuery` will read back, used by
+ * "ask anywhere" entry points (e.g. the home Ask bar). Returns just the base
+ * path when the question is blank.
+ */
+export function buildAssistantUrl(question: string, base = '/dashboard/assistant'): string {
+  const q = question.trim();
+  return q ? `${base}?q=${encodeURIComponent(q)}` : base;
+}
