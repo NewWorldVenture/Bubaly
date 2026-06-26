@@ -1,9 +1,9 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after Pay-ID handles + Wallet Send-Money/Approvals. Keep this updated as you ship.
+Last updated after AI Investing for kids. (main also has Pay-ID, Send-Money/Approvals, Trust rollout, Family Economy.) Keep this updated as you ship.
 
-> ## 🔖 PAY-ID HANDLES (PR #159) — memorable gifting links
+> ## 🔖 PAY-ID HANDLES (✅ MERGED #159) — memorable gifting links
 > Branch `claude/pay-id-handles`. A short handle (e.g. `mia`) resolves at
 > **`/pay/<handle>`** to a child's newest active gift link — no long tokens to copy.
 > ⚠️ **Migration `0095_pay_handles.sql` NOT APPLIED TO PROD.** (Numbers 0090–0094 are taken by
@@ -24,7 +24,34 @@ Last updated after Pay-ID handles + Wallet Send-Money/Approvals. Keep this updat
 > - Remaining big wallet features: Family Economy ✅ (#160), AI Investing for kids (#161).
 > - NOTE: main also shipped Wallet Send-Money / Request-to-Spend / Pending-Approvals + Trust Engine rollout.
 
-> ## 🪙 FAMILY ECONOMY — custom currencies (PR pending) — non-cash points/tokens
+> ## 📈 AI INVESTING FOR KIDS (PR #161) — educational, simulated
+> Branch `claude/kid-investing`. A teaching tool (NOT a brokerage): kids invest the cash in their
+> wallet INVEST bucket into SIMULATED educational assets to learn markets, diversification &
+> compound growth. No real trading / securities / guaranteed returns. ⚠️ **Migration
+> `0097_kid_investing.sql` NOT APPLIED TO PROD.**
+> - **`lib/invest/portfolio.ts`** (PURE + tests) — `positionValue`, `portfolioValue`, `gainLossCents`/
+>   `Pct`, `allocationBreakdown`, `projectGrowth` (compound teaching tool), `sharesForBudget`,
+>   `orderAmountCents`.
+> - **`lib/invest/coach.ts`** (PURE + tests) — `buildInvestCoachPrompt`/`parseInvestCoach`; system
+>   prompt HARD-FORBIDS buy/sell advice & return promises (compliance). (19 invest tests total.)
+> - **Migration 0097** — `invest_assets` (global, simulated price catalog, **seeds 5 generic
+>   educational baskets** — MARKET/TECH/GREEN/BONDS/GOLD, NOT real securities), `invest_holdings`
+>   (shares + avg cost), `invest_orders` (buy/sell, parent-approved). Family RLS; assets global-read.
+>   Enums `invest_order_side/status`; DB types `InvestOrderSide/Status`.
+> - **`app/(app)/wallet/invest/actions.ts`** — `placeInvestOrderAction` (request; buy checks INVEST
+>   bucket cash, sell checks shares), `decideInvestOrderAction` (manager; on fill moves cash through
+>   the INVEST bucket via a `wallet_transactions` adjustment + updates holdings/avg-cost). Ledger stays
+>   source of truth for cash; holdings track shares.
+> - **`/api/ai/invest`** — Money Mentor explainer, tier-gated + per-day metered like `/api/ai/wallet`
+>   (`ai_invest_call` audit rows). Educational only.
+> - **`/wallet/invest`** (`components/wallet/invest-view.tsx`) + "Invest" subnav tab — holdings +
+>   gain/loss, simulated buy/sell (parent-approved), AI "Explain", and a compound-growth projector.
+>   Prominent "educational simulation" disclaimer.
+> - Verified: tsc clean · eslint clean · build OK (`/wallet/invest` + `/api/ai/invest` registered) ·
+>   suite **1075/1075** (19 new).
+> - FUTURE: a price-update cron to nudge simulated prices over time (today prices are static); optional
+>   real delayed-quote provider behind a flag.
+> ## 🪙 FAMILY ECONOMY — custom currencies (✅ MERGED #160) — non-cash points/tokens
 > Branch `claude/family-economy`. A parallel NON-CASH economy: parents define custom currencies
 > ("Stars ⭐", "Screen-time ⏰"), kids EARN tokens and SPEND them on family rewards. Separate from
 > the cash wallet. ⚠️ **Migration `0096_family_economy.sql` NOT APPLIED TO PROD.**
@@ -67,6 +94,7 @@ Last updated after Pay-ID handles + Wallet Send-Money/Approvals. Keep this updat
 >   buy/sell (parent-approved), a compound-growth projector slider, AI explainer. Hide any wording
 >   implying guaranteed returns; show an "educational simulation" disclaimer.
 > - Gate behind a feature flag if desired; manager approval required for orders.
+>   (NOTE: the AI Investing build spec above is now SHIPPED — see the top entry / PR #161.)
 
 > ## 🎛️ CARD SPENDING-CONTROL EDITOR (PR #158) — per-card parent controls
 > Branch `claude/card-spending-controls`. Completes the card story from Stripe Money (#155):
