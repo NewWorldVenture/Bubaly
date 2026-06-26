@@ -6,7 +6,7 @@ import { planLevel } from '@/lib/constants/plans';
 import { walletTierForPlanLevel } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
-import { WalletDashboard, type ChildWalletView } from '@/components/wallet/wallet-dashboard';
+import { WalletDashboard, type ChildWalletView, type WalletAnalytics } from '@/components/wallet/wallet-dashboard';
 
 export const metadata: Metadata = { title: 'Family Wallet' };
 
@@ -73,22 +73,62 @@ export default async function WalletPage() {
 
   const familyTotal = childViews.reduce((s, c) => s + c.total, 0);
 
-  // Pending spend-request approvals → display rows (resolve which child via the txn).
+  // Pending approvals → display rows.
+  // 'card_spend' rows: ref_id is a wallet_transaction ID → find child via txn.
+  // 'allowance_request' rows: ref_type='child_wallets', ref_id is the child wallet ID directly.
   const txnById = new Map((txns ?? []).map((t) => [t.id, t]));
   const childNameByWalletId = new Map(
     (childWallets ?? []).map((cw) => [cw.id, memberById.get(cw.member_id)?.display_name ?? 'Child']),
   );
   const pendingApprovals = (approvals ?? []).map((a) => {
+    if (a.kind === 'allowance_request') {
+      // ref_id is the child_wallet_id
+      return {
+        id: a.id, kind: a.kind,
+        childName: a.ref_id ? childNameByWalletId.get(a.ref_id) ?? null : null,
+        childWalletId: a.ref_id ?? null,
+        amount_cents: a.amount_cents ?? 0,
+        note: a.note, created_at: a.created_at,
+      };
+    }
     const txn = a.ref_id ? txnById.get(a.ref_id) : null;
     return {
-      id: a.id,
-      kind: a.kind,
+      id: a.id, kind: a.kind,
       childName: txn?.child_wallet_id ? childNameByWalletId.get(txn.child_wallet_id) ?? null : null,
+      childWalletId: txn?.child_wallet_id ?? null,
       amount_cents: a.amount_cents ?? txn?.amount_cents ?? 0,
       note: a.note ?? txn?.description ?? null,
       created_at: a.created_at,
     };
   });
+
+  // Spending analytics — computed from the already-fetched ledger data.
+  const now = new Date();
+  const thisMonthYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const completedTxns = (txns ?? []).filter((t) => t.status === 'completed');
+  const thisMonthTxns = completedTxns.filter((t) => t.created_at.slice(0, 7) === thisMonthYM);
+
+  const thisMonthIn = thisMonthTxns.filter((t) => t.direction === 'credit').reduce((s, t) => s + t.amount_cents, 0);
+  const thisMonthOut = thisMonthTxns.filter((t) => t.direction === 'debit').reduce((s, t) => s + t.amount_cents, 0);
+
+  const creditsByType: Record<string, number> = {};
+  for (const t of thisMonthTxns.filter((t) => t.direction === 'credit')) {
+    creditsByType[t.type] = (creditsByType[t.type] ?? 0) + t.amount_cents;
+  }
+
+  const monthlyTrend: WalletAnalytics['monthlyTrend'] = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleDateString('en-US', { month: 'short' });
+    const mTxns = completedTxns.filter((t) => t.created_at.slice(0, 7) === ym);
+    return {
+      label,
+      credits: mTxns.filter((t) => t.direction === 'credit').reduce((s, t) => s + t.amount_cents, 0),
+      debits: mTxns.filter((t) => t.direction === 'debit').reduce((s, t) => s + t.amount_cents, 0),
+    };
+  }).reverse();
+
+  const analytics: WalletAnalytics = { thisMonthIn, thisMonthOut, creditsByType, monthlyTrend };
 
   return (
     <WalletDashboard
@@ -99,6 +139,7 @@ export default async function WalletPage() {
       childWallets={childViews}
       recent={recent}
       pendingApprovals={pendingApprovals}
+      analytics={analytics}
     />
   );
 }

@@ -9,6 +9,7 @@ import { creditChildWallet, debitSpendBucket, bucketBalanceCents } from '@/lib/w
 import { nextRunDate, type Cadence } from '@/lib/wallet/allowance';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
 import { planLevel } from '@/lib/constants/plans';
+import { normalizeHandle, handleError } from '@/lib/wallet/pay-handle';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
 
 const WALLET_TERMS_VERSION = '2026-06-25';
@@ -480,6 +481,65 @@ export async function saveWalletRuleAction(input: {
   return { ok: true };
 }
 
+// ─── Pay-ID handles ──────────────────────────────────────────────────────────
+
+/** Claim (or rename) a memorable Pay-ID handle for a child or the whole family. */
+export async function claimPayHandleAction(input: { id?: string; childWalletId: string | null; handle: string }): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can set a Pay-ID.' };
+  const familyId = ctx.active.familyId;
+
+  const err = handleError(input.handle);
+  if (err) return { ok: false, error: err };
+  const handle = normalizeHandle(input.handle);
+
+  const supabase = await createServer();
+
+  // If targeting a child, make sure the wallet belongs to this family.
+  if (input.childWalletId) {
+    const { data: cw } = await supabase
+      .from('child_wallets').select('id').eq('family_id', familyId).eq('id', input.childWalletId).maybeSingle();
+    if (!cw) return { ok: false, error: 'Child wallet not found.' };
+  }
+
+  // Globally unique: surface a friendly message if someone else holds it.
+  const { data: taken } = await supabase
+    .from('pay_handles').select('id, family_id').eq('handle', handle).maybeSingle();
+  if (taken && taken.family_id !== familyId) return { ok: false, error: 'That Pay-ID is already taken — try another.' };
+  if (taken && input.id && taken.id !== input.id) return { ok: false, error: 'That Pay-ID is already taken — try another.' };
+
+  const row = {
+    family_id: familyId, child_wallet_id: input.childWalletId, handle, is_active: true, created_by: ctx.user.id,
+  };
+  const { error } = input.id
+    ? await supabase.from('pay_handles').update({ handle, child_wallet_id: input.childWalletId, is_active: true }).eq('id', input.id).eq('family_id', familyId)
+    : await supabase.from('pay_handles').insert(row);
+  if (error) {
+    // Unique-violation fallback (race with the check above).
+    if (error.code === '23505') return { ok: false, error: 'That Pay-ID is already taken — try another.' };
+    return { ok: false, error: error.message };
+  }
+
+  await supabase.from('wallet_audit_logs').insert({
+    family_id: familyId, actor_user_id: ctx.user.id, action: 'pay_handle_claimed',
+    entity_type: 'pay_handles', detail: handle, metadata: { handle, childWalletId: input.childWalletId },
+  });
+  revalidatePath('/wallet/gift');
+  return { ok: true };
+}
+
+/** Release a Pay-ID handle (frees it for anyone to claim). */
+export async function releasePayHandleAction(input: { id: string }): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can do this.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+  const { error } = await supabase.from('pay_handles').delete().eq('id', input.id).eq('family_id', familyId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/wallet/gift');
+  return { ok: true };
+}
+
 // ─── Spend requests + approvals (the "Pending Approvals" flow) ────────────────
 
 /**
@@ -534,7 +594,8 @@ export async function requestSpendAction(input: {
   const debit = await debitSpendBucket(supabase, {
     familyId, childWalletId: cw.id, amountCents: amount, type: 'card_spend',
     description, createdBy: ctx.user.id, requiresApproval: needsApproval,
-    relatedType: 'spend_request', metadata: { requested_by_member: ctx.active.member.id },
+    relatedType: 'spend_request',
+    metadata: { requested_by_member: ctx.active.member.id, trust_basis: decision.basis, trust_effect: decision.effect },
   });
   if (!debit.ok) return { ok: false, error: debit.error };
 
@@ -657,6 +718,85 @@ export async function sendMoneyAction(input: {
     }
     return { ok: false, error: credit.error };
   }
+
+  revalidatePath('/wallet');
+  return { ok: true };
+}
+
+/**
+ * Child-initiated request for a parent to add more money. Creates a
+ * `parent_approvals` row (kind: 'allowance_request') that shows up in the
+ * Pending Approvals section of the wallet dashboard. The actual top-up happens
+ * when a parent calls decideAllowanceRequestAction with 'approved'.
+ */
+export async function requestAllowanceAction(input: {
+  childWalletId: string; amountCents: number; reason?: string;
+}): Promise<Result> {
+  const ctx = await requireUserContext();
+  const familyId = ctx.active.familyId;
+  const amount = Math.trunc(input.amountCents);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Enter an amount greater than $0.' };
+  const supabase = await createServer();
+
+  const { data: cw } = await supabase
+    .from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
+  if (!cw) return { ok: false, error: 'Wallet not found.' };
+
+  const { error } = await supabase.from('parent_approvals').insert({
+    family_id: familyId, kind: 'allowance_request',
+    ref_type: 'child_wallets', ref_id: cw.id,
+    amount_cents: amount, status: 'pending',
+    requested_by: ctx.user.id, note: input.reason?.trim() || null,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/wallet');
+  return { ok: true };
+}
+
+/**
+ * Parent decision on a child's allowance request. On 'approved', credits the
+ * child's wallet immediately (allocated across their smart-split buckets).
+ */
+export async function decideAllowanceRequestAction(input: {
+  approvalId: string; decision: 'approved' | 'rejected'; note?: string;
+}): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can decide allowance requests.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+
+  const { data: appr } = await supabase.from('parent_approvals')
+    .select('id, status, kind, ref_type, ref_id, amount_cents, note').eq('id', input.approvalId).eq('family_id', familyId).maybeSingle();
+  if (!appr) return { ok: false, error: 'Request not found.' };
+  if (appr.status !== 'pending') return { ok: false, error: 'This request was already decided.' };
+  if (appr.kind !== 'allowance_request') return { ok: false, error: 'Wrong request kind.' };
+  if (appr.ref_type !== 'child_wallets' || !appr.ref_id) return { ok: false, error: 'Malformed request.' };
+
+  if (input.decision === 'approved') {
+    const amount = appr.amount_cents ?? 0;
+    if (amount <= 0) return { ok: false, error: 'Invalid amount on this request.' };
+
+    const res = await creditChildWallet(supabase, {
+      familyId, childWalletId: appr.ref_id, amountCents: amount, type: 'parent_top_up',
+      description: `Allowance request approved${input.note ? `: ${input.note.trim()}` : ''}`,
+      createdBy: ctx.user.id,
+    });
+    if (!res.ok) return { ok: false, error: res.error };
+  }
+
+  await supabase.from('parent_approvals').update({
+    status: input.decision, decided_by: ctx.user.id,
+    decided_at: new Date().toISOString(),
+    note: input.note?.trim() || appr.note || null,
+  }).eq('id', appr.id);
+
+  await supabase.from('wallet_audit_logs').insert({
+    family_id: familyId, actor_user_id: ctx.user.id,
+    action: `allowance_${input.decision}`,
+    entity_type: 'parent_approvals', entity_id: appr.id,
+    detail: `Allowance request ${input.decision}`,
+  });
 
   revalidatePath('/wallet');
   return { ok: true };

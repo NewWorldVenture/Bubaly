@@ -6,7 +6,7 @@ import type { WalletTxnType } from '@/lib/database.types';
 const TYPE_LABEL: Record<string, string> = {
   gift_received: 'Gift', parent_top_up: 'Top-up', allowance: 'Allowance', chore_reward: 'Chore reward',
   babysitter_payment: 'Babysitter', card_spend: 'Card spend', card_refund: 'Refund', goal_transfer: 'Goal',
-  bucket_transfer: 'Transfer', withdrawal: 'Withdrawal', fee: 'Fee', adjustment: 'Adjustment', reversal: 'Reversal',
+  bucket_transfer: 'Transfer', transfer: 'Transfer', withdrawal: 'Withdrawal', fee: 'Fee', adjustment: 'Adjustment', reversal: 'Reversal',
 };
 
 export function txnTypeLabel(type: string): string {

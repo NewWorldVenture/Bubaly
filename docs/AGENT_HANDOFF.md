@@ -3,22 +3,102 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the production bug sweep + frictionless Quick Capture (PR #163). Keep this updated as you ship.
 
-> ## 🛟 PRODUCTION BUG SWEEP + QUICK CAPTURE (PR #163) — stops live crashes
-> Branch `claude/festive-bohr-m4cbeg`. Fixes live bubaly.com crashes + makes Quick Capture frictionless.
-> No migration for the parser (writes existing tables → works in prod immediately).
-> - **`lib/supabase/errors.ts` `isMissingRelationError`** — detects PostgREST schema-cache misses
->   (PGRST205/204), Postgres 42P01/42703, "does not exist". `useRealtimeQuery` now **centrally swallows
->   missing-relation errors** → all ~69 realtime modules degrade to empty state instead of full-page crash
->   when a feature's migration hasn't reached prod yet.
-> - `/api/cron/wallet-allowance` returns 200 `{skipped:'wallet_not_deployed'}` (not 500) pre-0088.
-> - **`lib/capture/parse.ts`** (PURE + **25 tests**) — natural-language Quick Capture: events
->   ("Dentist at 3pm tomorrow"), tasks ("Pay rent friday" → due date), shopping ("milk, eggs and bread"
->   → 3 items), non-disruptive type-detection chip.
-> - Modal bottom-sheet safe-area padding fix (every modal); Family Wallet promoted into Suggested nav.
-> - ⚠️ **Ops:** still apply migrations 0085–0097 to prod to actually enable the features (this just
->   stops the crashes meanwhile).
+> ## 🛟 PRODUCTION BUG SWEEP + QUICK CAPTURE (PR #163)
+> Branch `claude/festive-bohr-m4cbeg`. Stops live crashes + frictionless Quick Capture. No migration.
+> - `lib/supabase/errors.ts` missing-relation detection + `useRealtimeQuery` swallows it → all ~69
+>   realtime modules degrade to empty state (not a crash) when a feature's migration hasn't reached prod.
+>   (Aligned with main's `isMissingTableError`.) `/api/cron/wallet-allowance` returns 200 pre-0088.
+> - **`lib/capture/parse.ts`** (PURE + 25 tests) — natural-language Quick Capture (events/tasks/shopping).
+> - Modal safe-area padding fix; Family Wallet promoted into Suggested nav.
 
-> ## 🪙 FAMILY ECONOMY — custom currencies (PR pending) — non-cash points/tokens
+Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionless Stripe cards, reconciliation, iOS-zoom + missing-table fixes, Wallet promoted in nav. Branch `claude/connect-8ysp00` (PR #162). 1079 tests pass · build clean. Keep this updated as you ship.
+
+> **Session 3 (2026-06-26) — TREASURY · SEND MONEY · STRIPE CARDS · RECONCILIATION · PROD UX FIXES · NAV**
+> Branch `claude/connect-8ysp00` · PR #162. tsc clean · 1079 tests pass · build exit 0.
+>
+> ### New wallet pages (end-to-end flow, matching the 20-screen design)
+> - **`/wallet/treasury`** (`components/wallet/treasury-view.tsx`) — total family balance hero + bucket split bar, month In/Out/Net stats, per-child rows (→ child detail) with bucket bars/share %/goals badge, goals progress, savings rate, 6-month CSS trend chart, quick links. All from the immutable ledger.
+> - **`/wallet/send`** (`components/wallet/send-money-view.tsx`) — dedicated 4-step Send Money wizard (From → To → Amount → Confirm) with numpad, quick amounts, note, spend-balance validation; calls `sendMoneyAction`. NOTE: the view prop is `wallets` (NOT `children` — avoids react/no-children-prop lint).
+> - Subnav (`wallet-subnav.tsx`) now: Overview · Treasury · Send · Goals · Allowance · Gifts · Babysitters · Activity · Cards · Invest · Settings.
+>
+> ### Frictionless Stripe card setup (100% Stripe-wired)
+> - `app/(app)/wallet/cards/page.tsx` accepts `?setup=complete|refresh`; on return from Stripe hosted onboarding it auto-calls `syncConnectedAccount` before render (pulls latest status into the DB mirror), then passes `justCompletedSetup`.
+> - `components/wallet/money-cards-view.tsx` rebuilt: Mode B shows a 3-step progress wizard (Verify → Issue → Spend) + benefit grid; Mode C shows setup-success banner (auto-dismiss 6s), "Issue all" bulk prompt for children without cards, one-click virtual card + physical-card order modal (spend limit, balance-gate explainer). Server actions unchanged in `app/(app)/money/actions.ts` (issueCardAction, setCardFrozenAction, updateCardControlsAction).
+>
+> ### Wallet Reconciliation (admin, money-critical)
+> - **NEW** `lib/wallet/reconcile.ts` (PURE + 11 tests `tests/wallet-reconcile.test.ts`): `reconcileLedger(txns, now)` flags negative wallet/bucket balances, orphan reversals, reversal amount mismatches, stuck pending (>48h), bucket-sum drift. Read-only.
+> - **NEW** `/admin/wallet/reconciliation` page + `reconciliation-client.tsx`: health banner, volume stats, severity-filtered anomaly list, reversal summary. Linked from the admin wallet header.
+>
+> ### Two production bugs fixed (from user screenshots)
+> 1. **iOS Safari input auto-zoom** made the Quick Capture modal overflow (chips + Save cut off on the right). Root cause: inputs at `text-sm` (14px) on mobile → iOS zooms on focus and shifts the page. **Fix**: `app/globals.css` global rule forcing `input/textarea/select` to `font-size:16px` at `≤640px`. App-wide.
+> 2. **"Could not find the table … in schema cache"** scary error (Communications Hub/Inbox — migration not on prod). **Fix**: `lib/supabase/errors.ts` `isMissingTableError()` (PGRST205 / 42P01 / "schema cache" / "relation does not exist"); `lib/hooks/use-realtime-query.ts` degrades missing-table errors to an **empty state**. Any `useRealtimeQuery` consumer with a pending-migration table renders empty and auto-populates once migrated.
+>
+> ### Wallet wired into main navigation
+> - `lib/constants/navigation.ts` — Family Wallet promoted into the **Suggested** sidebar group (top).
+> - `lib/dashboard/registry.ts` — `DEFAULT_LAYOUT_BY_TIER`: added `wallet` to **basic** + **plus** quick-access defaults (was free-only) so paying families see Wallet on the home dashboard.
+>
+> ### ⚠️ Still un-migrated on prod (these 404 until applied — now degrade gracefully)
+> `0090_communications_hub.sql`, `0093_trust_engine.sql`, `0094_family_dashboard_settings.sql`, `0095_wallet_transfers.sql`, `0096_family_economy.sql`, + the AI Investing migration (#161). **Apply to prod** to light up Inbox, Trust, Economy, transfers, and Investing with real data.
+
+> ## 🎨 WORLD-CLASS CHILD DETAIL + ANALYTICS (PR #162) — wallet UX overhaul
+> Branch `claude/connect-8ysp00`. No migration (reads existing ledger).
+> - `/wallet/children/[childId]`: Smart Split donut (CSS conic-gradient), virtual VISA placeholder
+>   (swap-ready for Stripe Issuing), embedded AI Money Coach, quick actions (Request/Add/Send),
+>   goals w/ countdown, activity feed with bucket icons.
+> - Wallet dashboard analytics: This Month (In/Out/Net) + credits-by-source bars + 6-month stacked
+>   chart, all computed server-side from the ledger (no extra queries).
+> - Goals redesign: emoji kind grid, target-date picker, days-remaining badge, "Full remaining" fund.
+> - Verified post-merge: tsc · vitest · build. Auto-merged cleanly with main's wallet changes.
+
+> ## 🔖 PAY-ID HANDLES (✅ MERGED #159) — memorable gifting links
+> Branch `claude/pay-id-handles`. A short handle (e.g. `mia`) resolves at
+> **`/pay/<handle>`** to a child's newest active gift link — no long tokens to copy.
+> ⚠️ **Migration `0095_pay_handles.sql` NOT APPLIED TO PROD.** (Numbers 0090–0094 are taken by
+> parallel branches; this uses 0095.)
+> - **`lib/wallet/pay-handle.ts`** (PURE + **8 tests**) — `normalizeHandle` (lowercase, strip @,
+>   [a-z0-9_]), `handleError`/`isValidHandle` (3–20 chars, not reserved), `RESERVED_HANDLES`,
+>   `payHandleUrl`.
+> - **Migration 0095** — `pay_handles` (family_id, child_wallet_id nullable = family-level, handle
+>   text UNIQUE w/ format CHECK, is_active). Family-scoped RLS; public resolver reads via service role.
+> - **`app/(app)/wallet/actions.ts`** — `claimPayHandleAction` (manager; validates, global-uniqueness
+>   check + 23505 fallback, audit `pay_handle_claimed`) + `releasePayHandleAction`.
+> - **`app/pay/[handle]/page.tsx`** — public resolver: handle → newest active gift_link → redirect to
+>   `/gift/<token>`; friendly dead-end otherwise (doesn't leak handle existence).
+> - **`components/wallet/pay-handle-manager.tsx`** on `/wallet/gift` — claim (family or per-child),
+>   copy URL, release; live validation.
+> - DB types extended (`pay_handles`). Verified: tsc clean · eslint clean · build OK
+>   (`/pay/[handle]` registered) · suite **1053/1053** (8 new).
+> - Remaining big wallet features: Family Economy ✅ (#160), AI Investing for kids (#161).
+> - NOTE: main also shipped Wallet Send-Money / Request-to-Spend / Pending-Approvals + Trust Engine rollout.
+
+> ## 📈 AI INVESTING FOR KIDS (PR #161) — educational, simulated
+> Branch `claude/kid-investing`. A teaching tool (NOT a brokerage): kids invest the cash in their
+> wallet INVEST bucket into SIMULATED educational assets to learn markets, diversification &
+> compound growth. No real trading / securities / guaranteed returns. ⚠️ **Migration
+> `0097_kid_investing.sql` NOT APPLIED TO PROD.**
+> - **`lib/invest/portfolio.ts`** (PURE + tests) — `positionValue`, `portfolioValue`, `gainLossCents`/
+>   `Pct`, `allocationBreakdown`, `projectGrowth` (compound teaching tool), `sharesForBudget`,
+>   `orderAmountCents`.
+> - **`lib/invest/coach.ts`** (PURE + tests) — `buildInvestCoachPrompt`/`parseInvestCoach`; system
+>   prompt HARD-FORBIDS buy/sell advice & return promises (compliance). (19 invest tests total.)
+> - **Migration 0097** — `invest_assets` (global, simulated price catalog, **seeds 5 generic
+>   educational baskets** — MARKET/TECH/GREEN/BONDS/GOLD, NOT real securities), `invest_holdings`
+>   (shares + avg cost), `invest_orders` (buy/sell, parent-approved). Family RLS; assets global-read.
+>   Enums `invest_order_side/status`; DB types `InvestOrderSide/Status`.
+> - **`app/(app)/wallet/invest/actions.ts`** — `placeInvestOrderAction` (request; buy checks INVEST
+>   bucket cash, sell checks shares), `decideInvestOrderAction` (manager; on fill moves cash through
+>   the INVEST bucket via a `wallet_transactions` adjustment + updates holdings/avg-cost). Ledger stays
+>   source of truth for cash; holdings track shares.
+> - **`/api/ai/invest`** — Money Mentor explainer, tier-gated + per-day metered like `/api/ai/wallet`
+>   (`ai_invest_call` audit rows). Educational only.
+> - **`/wallet/invest`** (`components/wallet/invest-view.tsx`) + "Invest" subnav tab — holdings +
+>   gain/loss, simulated buy/sell (parent-approved), AI "Explain", and a compound-growth projector.
+>   Prominent "educational simulation" disclaimer.
+> - Verified: tsc clean · eslint clean · build OK (`/wallet/invest` + `/api/ai/invest` registered) ·
+>   suite **1075/1075** (19 new).
+> - FUTURE: a price-update cron to nudge simulated prices over time (today prices are static); optional
+>   real delayed-quote provider behind a flag.
+> ## 🪙 FAMILY ECONOMY — custom currencies (✅ MERGED #160) — non-cash points/tokens
 > Branch `claude/family-economy`. A parallel NON-CASH economy: parents define custom currencies
 > ("Stars ⭐", "Screen-time ⏰"), kids EARN tokens and SPEND them on family rewards. Separate from
 > the cash wallet. ⚠️ **Migration `0096_family_economy.sql` NOT APPLIED TO PROD.**
@@ -61,6 +141,7 @@ Last updated after the production bug sweep + frictionless Quick Capture (PR #16
 >   buy/sell (parent-approved), a compound-growth projector slider, AI explainer. Hide any wording
 >   implying guaranteed returns; show an "educational simulation" disclaimer.
 > - Gate behind a feature flag if desired; manager approval required for orders.
+>   (NOTE: the AI Investing build spec above is now SHIPPED — see the top entry / PR #161.)
 
 > ## 🎛️ CARD SPENDING-CONTROL EDITOR (PR #158) — per-card parent controls
 > Branch `claude/card-spending-controls`. Completes the card story from Stripe Money (#155):

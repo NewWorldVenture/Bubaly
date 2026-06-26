@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { isMissingRelationError } from '@/lib/supabase/errors';
+import { isMissingTableError } from '@/lib/supabase/errors';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 
 type Fetcher<T> = (supabase: SupabaseBrowser) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
@@ -31,11 +31,17 @@ export function useRealtimeQuery<T>({
   const refresh = useCallback(async () => {
     const supabase = createClient();
     const { data: rows, error: err } = await fetcherRef.current(supabase);
-    // Degrade gracefully when a feature's migration hasn't reached this database
-    // yet: a missing table/column is treated as "no data" (empty state) rather
-    // than a crash, so a half-rolled-out feature never breaks the screen.
-    if (err && !isMissingRelationError(err)) setError(err.message);
-    else {
+    if (err) {
+      // A not-yet-provisioned feature (pending migration) should look empty, not
+      // broken — degrade missing-table errors to an empty list instead of a
+      // scary error banner. Real errors still surface.
+      if (isMissingTableError(err)) {
+        setData([]);
+        setError(null);
+      } else {
+        setError(err.message);
+      }
+    } else {
       setData(rows ?? []);
       setError(null);
     }

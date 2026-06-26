@@ -75,6 +75,6 @@ export function tierForPlanLevel(level: number): DashTier {
 /** Tier-correct default layouts (free defaults are free-only, etc.). */
 export const DEFAULT_LAYOUT_BY_TIER: Record<DashTier, string[]> = {
   free: ['calendar', 'grocery', 'tasks', 'messages', 'notes', 'photos', 'contacts', 'wallet'],
-  basic: ['calendar', 'grocery', 'chores', 'school', 'meals', 'goals', 'recipes', 'documents'],
-  plus: ['command_center', 'briefing', 'calendar', 'chores', 'meals', 'sports', 'readiness', 'autopilot'],
+  basic: ['calendar', 'grocery', 'chores', 'school', 'meals', 'wallet', 'goals', 'recipes'],
+  plus: ['command_center', 'briefing', 'calendar', 'chores', 'meals', 'wallet', 'readiness', 'autopilot'],
 };
