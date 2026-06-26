@@ -176,6 +176,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
   { href: '/admin/billing', label: 'Billing & Payments', icon: DollarSign },
   { href: '/admin/stripe', label: 'Stripe Console', icon: CreditCard },
+  { href: '/admin/card-designs', label: 'Card Designs', icon: CreditCard },
   { href: '/admin/wallet', label: 'Wallet Console', icon: Wallet },
   { href: '/admin/integrations', label: 'Integrations', icon: Plug },
   { href: '/admin/sync', label: 'Sync Platform', icon: RefreshCw },

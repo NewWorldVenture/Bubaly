@@ -71,6 +71,10 @@ export function CardManager({ cards, wallets, manager, isReady, designs }: Props
   const [orderDesign, setOrderDesign] = useState('');
   const [dailyLimit, setDailyLimit] = useState('');
   const [memberName, setMemberName] = useState('');
+  const [addrLine1, setAddrLine1] = useState('');
+  const [addrCity, setAddrCity] = useState('');
+  const [addrState, setAddrState] = useState('');
+  const [addrZip, setAddrZip] = useState('');
 
   async function handleFreeze(cardId: string) {
     setBusy(cardId + '_freeze');
@@ -102,30 +106,39 @@ export function CardManager({ cards, wallets, manager, isReady, designs }: Props
 
   async function handleOrderCard() {
     if (!orderWallet || !memberName.trim()) { toastError('Select a child and enter a name'); return; }
+    if (!addrLine1.trim() || !addrCity.trim() || !addrState.trim() || !addrZip.trim()) {
+      toastError('Please fill in the full billing address');
+      return;
+    }
     setBusy('order');
     const controls: CardControls = {
       ...DEFAULT_CONTROLS,
       dailyLimitCents: dailyLimit ? Math.round(parseFloat(dailyLimit) * 100) : undefined,
     };
-    const wallet = wallets.find((w) => w.id === orderWallet);
+    const billingAddress = {
+      line1: addrLine1.trim(),
+      city: addrCity.trim(),
+      state: addrState.trim().toUpperCase(),
+      postalCode: addrZip.trim(),
+      country: 'US',
+    };
     const res = await createCardAction({
       childWalletId: orderWallet,
       type: orderType,
       controls,
       designId: orderDesign || undefined,
       memberName: memberName.trim(),
-      billingAddress: {
-        line1: '123 Family St',
-        city: 'San Francisco',
-        state: 'CA',
-        postalCode: '94102',
-        country: 'US',
-      },
+      billingAddress,
+      ...(orderType === 'physical' && {
+        shippingName: memberName.trim(),
+        shippingAddress: billingAddress,
+      }),
     });
     setBusy(null);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
     toastSuccess(`Card created for ${memberName.trim()}`);
     setShowOrder(false);
+    setAddrLine1(''); setAddrCity(''); setAddrState(''); setAddrZip('');
     startTransition(() => router.refresh());
   }
 
@@ -357,6 +370,48 @@ export function CardManager({ cards, wallets, manager, isReady, designs }: Props
                     className="w-full rounded-xl border border-border bg-surface pl-7 pr-3 py-2.5 text-sm outline-none focus:border-brand"
                     placeholder="No limit"
                   />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted">
+                  {orderType === 'physical' ? 'Billing & shipping address' : 'Billing address'}
+                </label>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={addrLine1}
+                    onChange={(e) => setAddrLine1(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-brand"
+                    placeholder="Street address"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={addrCity}
+                      onChange={(e) => setAddrCity(e.target.value)}
+                      className="flex-1 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-brand"
+                      placeholder="City"
+                    />
+                    <input
+                      type="text"
+                      value={addrState}
+                      onChange={(e) => setAddrState(e.target.value)}
+                      maxLength={2}
+                      className="w-16 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm uppercase outline-none focus:border-brand"
+                      placeholder="ST"
+                    />
+                    <input
+                      type="text"
+                      value={addrZip}
+                      onChange={(e) => setAddrZip(e.target.value)}
+                      maxLength={10}
+                      className="w-24 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-brand"
+                      placeholder="ZIP"
+                    />
+                  </div>
+                  {orderType === 'physical' && (
+                    <p className="text-xs text-muted">Physical card will be mailed to this address (US only).</p>
+                  )}
                 </div>
               </div>
               {designs.length > 0 && (
