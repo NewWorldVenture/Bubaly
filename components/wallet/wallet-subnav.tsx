@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Wallet, Target, CalendarClock, Gift, Receipt, Baby, CreditCard, SlidersHorizontal, Building2, Send } from 'lucide-react';
+import { Wallet, Target, CalendarClock, Gift, Receipt, Baby, CreditCard, TrendingUp, SlidersHorizontal, Building2, Send } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 const TABS = [
@@ -15,6 +15,7 @@ const TABS = [
   { href: '/wallet/babysitters', label: 'Babysitters', icon: Baby },
   { href: '/wallet/activity', label: 'Activity', icon: Receipt },
   { href: '/wallet/cards', label: 'Cards', icon: CreditCard },
+  { href: '/wallet/invest', label: 'Invest', icon: TrendingUp },
   { href: '/wallet/settings', label: 'Settings', icon: SlidersHorizontal },
 ];
 

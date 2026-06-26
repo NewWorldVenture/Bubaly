@@ -29,6 +29,8 @@ export type WalletTxnType =
 export type WalletTxnStatus =
   | 'pending' | 'requires_parent_approval' | 'processing' | 'completed' | 'failed' | 'reversed' | 'cancelled';
 export type StripeAccountStatus = 'pending' | 'restricted' | 'enabled' | 'disabled';
+export type InvestOrderSide = 'buy' | 'sell';
+export type InvestOrderStatus = 'pending' | 'filled' | 'rejected' | 'cancelled';
 export type EconomyDirection = 'credit' | 'debit';
 export type EconomyRedemptionStatus = 'pending' | 'approved' | 'fulfilled' | 'rejected' | 'cancelled';
 export type SubscriptionStatus =
@@ -459,6 +461,21 @@ export interface Database {
         { key: string; enabled: boolean; description: string | null; updated_at: string },
         { key: string; enabled?: boolean; description?: string | null },
         Partial<{ enabled: boolean; description: string | null }>
+      >;
+      invest_assets: T<
+        { id: string; symbol: string; name: string; kind: string; emoji: string; description: string | null; price_cents: number; risk_level: string; is_active: boolean; sort_order: number } & Stamps,
+        { id?: string; symbol: string; name: string; kind?: string; emoji?: string; description?: string | null; price_cents: number; risk_level?: string; is_active?: boolean; sort_order?: number },
+        Partial<{ name: string; kind: string; emoji: string; description: string | null; price_cents: number; risk_level: string; is_active: boolean; sort_order: number }>
+      >;
+      invest_holdings: T<
+        { id: string; family_id: string; child_wallet_id: string; asset_id: string; shares: number; avg_cost_cents: number } & Stamps,
+        { id?: string; family_id: string; child_wallet_id: string; asset_id: string; shares?: number; avg_cost_cents?: number },
+        Partial<{ shares: number; avg_cost_cents: number }>
+      >;
+      invest_orders: T<
+        { id: string; family_id: string; child_wallet_id: string; asset_id: string; side: InvestOrderSide; shares: number; price_cents: number; amount_cents: number; status: InvestOrderStatus; txn_id: string | null; requested_by: string | null; decided_by: string | null; decided_at: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id: string; asset_id: string; side: InvestOrderSide; shares: number; price_cents: number; amount_cents: number; status?: InvestOrderStatus; txn_id?: string | null; requested_by?: string | null; decided_by?: string | null; decided_at?: string | null },
+        Partial<{ status: InvestOrderStatus; txn_id: string | null; decided_by: string | null; decided_at: string | null }>
       >;
       family_currencies: T<
         { id: string; family_id: string; name: string; emoji: string; unit_label: string | null; is_active: boolean; sort_order: number; created_by: string | null } & Stamps,
