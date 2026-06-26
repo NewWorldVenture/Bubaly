@@ -1,7 +1,28 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after AI Investing for kids. (main also has Wallet Send-Money/Approvals + Trust Engine rollout + Family Economy.) Keep this updated as you ship.
+Last updated after AI Investing for kids. (main also has Pay-ID, Send-Money/Approvals, Trust rollout, Family Economy.) Keep this updated as you ship.
+
+> ## 🔖 PAY-ID HANDLES (✅ MERGED #159) — memorable gifting links
+> Branch `claude/pay-id-handles`. A short handle (e.g. `mia`) resolves at
+> **`/pay/<handle>`** to a child's newest active gift link — no long tokens to copy.
+> ⚠️ **Migration `0095_pay_handles.sql` NOT APPLIED TO PROD.** (Numbers 0090–0094 are taken by
+> parallel branches; this uses 0095.)
+> - **`lib/wallet/pay-handle.ts`** (PURE + **8 tests**) — `normalizeHandle` (lowercase, strip @,
+>   [a-z0-9_]), `handleError`/`isValidHandle` (3–20 chars, not reserved), `RESERVED_HANDLES`,
+>   `payHandleUrl`.
+> - **Migration 0095** — `pay_handles` (family_id, child_wallet_id nullable = family-level, handle
+>   text UNIQUE w/ format CHECK, is_active). Family-scoped RLS; public resolver reads via service role.
+> - **`app/(app)/wallet/actions.ts`** — `claimPayHandleAction` (manager; validates, global-uniqueness
+>   check + 23505 fallback, audit `pay_handle_claimed`) + `releasePayHandleAction`.
+> - **`app/pay/[handle]/page.tsx`** — public resolver: handle → newest active gift_link → redirect to
+>   `/gift/<token>`; friendly dead-end otherwise (doesn't leak handle existence).
+> - **`components/wallet/pay-handle-manager.tsx`** on `/wallet/gift` — claim (family or per-child),
+>   copy URL, release; live validation.
+> - DB types extended (`pay_handles`). Verified: tsc clean · eslint clean · build OK
+>   (`/pay/[handle]` registered) · suite **1053/1053** (8 new).
+> - Remaining big wallet features: Family Economy ✅ (#160), AI Investing for kids (#161).
+> - NOTE: main also shipped Wallet Send-Money / Request-to-Spend / Pending-Approvals + Trust Engine rollout.
 
 > ## 📈 AI INVESTING FOR KIDS (PR #161) — educational, simulated
 > Branch `claude/kid-investing`. A teaching tool (NOT a brokerage): kids invest the cash in their
