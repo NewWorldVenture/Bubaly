@@ -1,7 +1,74 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: AI Call Guardian™ — complete (2026-06-25j). Keep this updated as you ship.
+Last updated: AI Call Guardian™ Phase 2 — seasonal + learning + WhatsApp + self-serve numbers (2026-06-26k). Keep this updated as you ship.
+
+> **Session update (2026-06-26k) — AI CALL GUARDIAN™ PHASE 2: SEASONAL INTELLIGENCE,
+> ADAPTIVE LEARNING, WHATSAPP, SELF-SERVE NUMBERS (production-ready).**
+> Completes the remaining buildable items from the 2026-06-25j Guardian handoff.
+> Branch `claude/continuation-an1mam`. Commit `480a27b`.
+> Verified: tsc clean · next lint clean · `npm run build` exit 0 (all routes registered) ·
+> **full suite 998/998** (20 new guardian tests). NO new migration (reuses 0091).
+>
+> ### 1. Seasonal Intelligence — `lib/guardian/seasonal.ts` (pure, 10 tests)
+> `getSeasonalContext(date)` → active scam "season" (tax_season, medicare_enrollment,
+> holiday_giving, back_to_school, storm_recovery, none). `applySeasonalBoost(scamType,
+> confidence, date)` adds a 15–25pt confidence boost when a detected scam type is
+> "in season" (IRS/SSA in tax season, charity/gift-card over holidays, etc.).
+> **Wired into `lib/guardian/pipeline.ts`** Step 3 — boosts spamScore and appends the
+> seasonal note to the explainable-AI `reason`.
+>
+> ### 2. Adaptive AI Learning — `lib/guardian/learning.ts` (pure, 10 tests) + `learning-run.ts`
+> The headline "Adaptive AI Learning" feature. `analyzeCommunications({communications,
+> contacts})` is a pure analyzer producing `SuggestionDraft[]` with a stable `dedupeKey`:
+> - repeat scammer (≥2 scam hits) not blocked → propose block / flag_scam
+> - frequent unknown (≥4 comms, no scams) → propose add as known_contact
+> - proven-safe known_contact (≥6 safe interactions, no manual override) → propose
+>   promote to trusted_friend
+> - ≥3 late-night unknown calls → propose a Quiet Hours rule (silent_handling 22:00–07:00)
+> `learning-run.ts` `runLearningForFamily(supabase, familyId)` does the I/O: reads last
+> 60 days of comms + contacts + pending suggestions, runs the analyzer, de-dupes against
+> existing pending suggestions (reconstructs their dedupeKey), inserts the rest, audits.
+> Triggered two ways:
+> - **On demand**: `generateGuardianSuggestionsAction()` (in guardian/actions.ts), wired to
+>   a "Scan for tips" button in the dashboard suggestions panel (always visible now, even
+>   with zero pending suggestions).
+> - **Nightly cron**: `/api/cron/guardian-learning` (registered in vercel.json at `0 9 * * *`,
+>   Bearer CRON_SECRET). Also auto-dismisses expired pending suggestions. Iterates every
+>   family with Guardian activity in the last 60 days.
+>
+> ### 3. WhatsApp inbound webhook — `/api/guardian/inbound/whatsapp/route.ts`
+> Mirrors the SMS route. Strips Twilio's `whatsapp:` channel prefix from From/To, runs the
+> decision pipeline + `detectScamWithAI`, logs as `whatsapp_inbound`, notifies the family
+> (💚 icon). Register in Twilio at `https://bubaly.com/api/guardian/inbound/whatsapp`.
+>
+> ### 4. Self-serve Guardian number assignment — `components/guardian/guardian-number-form.tsx`
+> Replaces the old "contact support to assign a number" placeholder. Parents assign / change /
+> clear the Twilio number for a member directly in `/guardian/settings` via
+> `assignGuardianPhoneAction({member_id, phone})` — E.164 normalization (assumes US for
+> 10-digit), validation, and a family-wide uniqueness guard so two members can't share a
+> number. Audit-logged. Works even before Twilio env is set (assign now, route later).
+>
+> ### 5. Build fix — server/client split of scam detection
+> `detectScamWithAI` (the only thing importing `@anthropic-ai/sdk`, which pulls node:fs/
+> node:path) moved OUT of `scam.ts` into a new **server-only `lib/guardian/scam-ai.ts`**.
+> `scam.ts` is now client-safe (types, patterns, `detectScamFromText`, `SCAM_TYPE_LABELS`)
+> so `components/guardian/call-history.tsx` (client) can import `SCAM_TYPE_LABELS` without
+> breaking the build. Importers updated: sms + whatsapp routes import from `scam-ai`.
+> ⚠️ **The prior Guardian session only ran `tsc`, never `npm run build` — this latent build
+> break was caught and fixed here. Always run `npm run build` before declaring done.**
+> Also fixed pre-existing unescaped-entity lint errors in routing-settings.tsx.
+>
+> ### Note on env var name
+> Twilio code uses **`TWILIO_PHONE_NUMBER`** (not `TWILIO_FROM_NUMBER` as the 2026-06-25j
+> entry mistakenly wrote). See `lib/guardian/twilio.ts` + the settings ENV checklist.
+>
+> ### Guardian — still open (genuinely needs external ops, not code):
+> 1. Apply migration 0091 to prod Supabase + regenerate database.types.ts
+> 2. Buy Twilio numbers + register voice/sms/whatsapp webhooks
+> 3. Set CRON_SECRET in prod (the guardian-learning cron needs it — same secret as wallet)
+> 4. Push notifications: notifications-table inserts work; wire to FCM/Expo for native alerts
+>    (shared TODO with Bubaly Money)
 
 > **Session update (2026-06-25j) — AI CALL GUARDIAN™: COMPLETE (production-ready).**
 > Full intelligent call screening, routing, and scam protection platform.
