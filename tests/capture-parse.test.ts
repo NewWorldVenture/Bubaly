@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseEvent } from '@/lib/capture/parse';
+import { parseEvent, suggestKind } from '@/lib/capture/parse';
 
 // Fixed reference: Friday 2026-06-26, 10:00 local.
 const NOW = new Date(2026, 5, 26, 10, 0, 0, 0);
@@ -100,5 +100,32 @@ describe('parseEvent — fallbacks', () => {
   it('never returns an empty title', () => {
     const r = parseEvent('tomorrow', NOW);
     expect(r.title.length).toBeGreaterThan(0);
+  });
+});
+
+describe('suggestKind', () => {
+  it('detects shopping intent', () => {
+    expect(suggestKind('Buy milk', NOW)).toBe('shopping');
+    expect(suggestKind('buy milk tomorrow', NOW)).toBe('shopping'); // shopping beats the trailing day
+    expect(suggestKind('pick up dry cleaning', NOW)).toBe('shopping');
+    expect(suggestKind('grab coffee filters', NOW)).toBe('shopping');
+    expect(suggestKind('add eggs to the grocery list', NOW)).toBe('shopping');
+  });
+
+  it('detects events from a date/time', () => {
+    expect(suggestKind('Dentist at 3pm tomorrow', NOW)).toBe('event');
+    expect(suggestKind('Soccer monday', NOW)).toBe('event');
+    expect(suggestKind('pick up kids at 3pm', NOW)).toBe('event'); // time wins over soft "pick up"
+  });
+
+  it('detects notes', () => {
+    expect(suggestKind('Note: the wifi password is on the fridge', NOW)).toBe('note');
+    expect(suggestKind('a'.repeat(90), NOW)).toBe('note');
+  });
+
+  it('defaults to task', () => {
+    expect(suggestKind('Call the plumber', NOW)).toBe('task');
+    expect(suggestKind('Finish the report', NOW)).toBe('task');
+    expect(suggestKind('', NOW)).toBe('task');
   });
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Plus, CheckSquare, StickyNote, CalendarPlus, ShoppingCart, X, CalendarClock } from 'lucide-react';
+import { Plus, CheckSquare, StickyNote, CalendarPlus, ShoppingCart, X, CalendarClock, Sparkles } from 'lucide-react';
 import { useApp } from './app-context';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
@@ -9,7 +9,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
-import { parseEvent } from '@/lib/capture/parse';
+import { parseEvent, suggestKind } from '@/lib/capture/parse';
 
 /** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
 function formatWhen(startsAt: Date, allDay: boolean): string {
@@ -106,6 +106,16 @@ export function QuickCapture() {
     return parseEvent(text);
   }, [type, text]);
 
+  // Non-disruptive type suggestion: offer a one-tap switch when the text looks
+  // like a different kind than the one selected. The user taps to apply, so it
+  // never hijacks focus or the cursor mid-typing.
+  const suggested = useMemo(() => {
+    const v = text.trim();
+    if (v.length < 3) return null;
+    const guess = suggestKind(v);
+    return guess === type ? null : guess;
+  }, [text, type]);
+
   return (
     <>
       <button
@@ -132,6 +142,17 @@ export function QuickCapture() {
               </button>
             ))}
           </div>
+
+          {suggested && (
+            <button
+              type="button"
+              onClick={() => setType(suggested)}
+              className="flex w-full items-center gap-1.5 rounded-lg bg-brand/5 px-3 py-2 text-left text-xs text-brand transition hover:bg-brand/10"
+            >
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              <span>Looks like a <span className="font-semibold">{TYPES.find((t) => t.key === suggested)!.label.toLowerCase()}</span> — tap to switch.</span>
+            </button>
+          )}
 
           <Field label={active.label}>
             {(id) => type === 'note'

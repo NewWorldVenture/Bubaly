@@ -14,6 +14,11 @@ Last updated after dashboard customization permissions (child controls + family 
 > - **`components/app/quick-capture.tsx`** — the event path now schedules at the parsed time + `all_day`
 >   (was always "starts now" with the raw text as title). Added a **live preview** ("📅 Tomorrow at 3:00 PM ·
 >   "Dentist"") that updates as you type, with a hint when no time is detected.
+> - **`suggestKind(input)`** (pure, **4 tests**) + a **non-disruptive type suggestion chip**: when the text
+>   looks like a different kind than selected (e.g. "Buy milk" while on Task), the sheet offers a one-tap
+>   "Looks like a shopping — tap to switch." It never auto-switches (would steal focus / remount the field),
+>   so typing is never interrupted. Priority: explicit buy/purchase → date/time (event) → pick up/grab/get
+>   → labelled/long note → task.
 >
 > **Session update (2026-06-26a) — PRODUCTION BUG SWEEP (from live bubaly.com screenshots).**
 > Fixed three reported production issues. Branch `claude/festive-bohr-m4cbeg`. Verified: tsc clean ·

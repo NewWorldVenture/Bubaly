@@ -124,3 +124,30 @@ export function parseEvent(input: string, now: Date = new Date()): ParsedEvent {
 
   return { title: title || raw, startsAt, allDay, matched: Boolean(day || time) };
 }
+
+export type CaptureKind = 'task' | 'note' | 'event' | 'shopping';
+
+/**
+ * Best-guess capture type from free text, so the sheet can offer a one-tap
+ * switch ("looks like an event"). Priority: explicit shopping verbs →
+ * a recognized date/time (event) → other shopping cues → long/labelled note →
+ * task (default). Deliberately conservative; the user can always override.
+ */
+export function suggestKind(input: string, now: Date = new Date()): CaptureKind {
+  const t = input.trim().toLowerCase();
+  if (!t) return 'task';
+
+  // Strong, unambiguous shopping intent wins even over a trailing day.
+  if (/^(buy|purchase)\b/.test(t) || /\b(grocer(y|ies)|shopping list)\b/.test(t)) return 'shopping';
+
+  // A concrete date/time is a strong event signal.
+  if (parseEvent(input, now).matched) return 'event';
+
+  // Softer shopping cues (no time present at this point).
+  if (/^(pick up|grab|get)\b/.test(t)) return 'shopping';
+
+  // Notes: explicitly labelled or long free-form text.
+  if (/^(note|idea)\s*[:\-]/.test(t) || t.length > 80) return 'note';
+
+  return 'task';
+}
