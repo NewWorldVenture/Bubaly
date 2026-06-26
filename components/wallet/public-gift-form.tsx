@@ -101,6 +101,7 @@ export function PublicGiftForm({
           value={custom}
           onChange={(e) => { setCustom(e.target.value); setAmount(null); }}
           placeholder="Or enter a custom amount ($)"
+          aria-label="Custom gift amount in dollars"
           className="mt-2 h-10 w-full rounded-lg border border-border bg-bg px-3 text-sm"
         />
       </div>
@@ -144,12 +145,15 @@ export function PublicGiftForm({
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Your name (e.g. Grandma, Uncle John)"
+        aria-label="Your name"
+        autoComplete="name"
         className="h-10 w-full rounded-lg border border-border bg-bg px-3 text-sm"
       />
       <textarea
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         placeholder="Add a message (optional)"
+        aria-label="Message to include with your gift"
         className="min-h-[70px] w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm"
       />
 
