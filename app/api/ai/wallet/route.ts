@@ -8,8 +8,7 @@ import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type 
 import { buildWalletCoachPrompt, parseWalletCoach, type CoachChild, type CoachGoal } from '@/lib/wallet/coach';
 
 // POST /api/ai/wallet — the AI Family Financial Coach. Gated by wallet tier
-// (Free has no coach; Basic limited; Plus unlimited). Computes balances + goal
-// forecasts from the immutable ledger, then asks the configured AI provider.
+// (Free has no coach; Basic limited to AI_COACH_DAILY_LIMIT; Plus unlimited).
 export async function POST() {
   try {
     const ctx = await requireUserContext();
@@ -20,8 +19,29 @@ export async function POST() {
       .from('subscriptions').select('plan, status').eq('family_id', familyId)
       .in('status', ['active', 'trialing']).maybeSingle();
     const tier = walletTierForPlanLevel(planLevel(sub?.plan ?? null));
-    if (aiCoachLevel(tier) === 'none') {
+    const coachLevel = aiCoachLevel(tier);
+    if (coachLevel === 'none') {
       return NextResponse.json({ error: 'The AI Money Coach is available on the Basic and Plus plans.' }, { status: 403 });
+    }
+
+    // Per-day metering for the limited (Basic) tier
+    if (coachLevel === 'limited') {
+      const { AI_COACH_DAILY_LIMIT } = await import('@/lib/wallet/tiers');
+      const limit = AI_COACH_DAILY_LIMIT[tier];
+      if (Number.isFinite(limit) && limit > 0) {
+        const todayStart = new Date();
+        todayStart.setUTCHours(0, 0, 0, 0);
+        const { count } = await supabase.from('wallet_audit_logs')
+          .select('id', { count: 'exact', head: true })
+          .eq('family_id', familyId)
+          .eq('action', 'ai_coach_call')
+          .gte('created_at', todayStart.toISOString());
+        if ((count ?? 0) >= limit) {
+          return NextResponse.json({
+            error: `You've reached today's ${limit} AI coach request limit. Upgrade to Plus for unlimited coaching.`,
+          }, { status: 429 });
+        }
+      }
     }
 
     const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }, { data: goals }] = await Promise.all([
@@ -68,6 +88,16 @@ export async function POST() {
     if (!coaching.headline && coaching.insights.length === 0) {
       return NextResponse.json({ error: 'Could not generate coaching right now. Please try again.' }, { status: 502 });
     }
+
+    // Meter this call (non-fatal)
+    try {
+      await supabase.from('wallet_audit_logs').insert({
+        family_id: familyId, actor_user_id: ctx.user.id,
+        action: 'ai_coach_call', entity_type: 'family_wallets',
+        detail: JSON.stringify({ tier }),
+      });
+    } catch { /* non-fatal */ }
+
     return NextResponse.json({ coaching, tier });
   } catch (err) {
     console.error('Wallet coach error:', err);
