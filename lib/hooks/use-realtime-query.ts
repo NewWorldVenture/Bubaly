@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { isMissingRelationError } from '@/lib/supabase/errors';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 
 type Fetcher<T> = (supabase: SupabaseBrowser) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
@@ -30,7 +31,10 @@ export function useRealtimeQuery<T>({
   const refresh = useCallback(async () => {
     const supabase = createClient();
     const { data: rows, error: err } = await fetcherRef.current(supabase);
-    if (err) setError(err.message);
+    // Degrade gracefully when a feature's migration hasn't reached this database
+    // yet: a missing table/column is treated as "no data" (empty state) rather
+    // than a crash, so a half-rolled-out feature never breaks the screen.
+    if (err && !isMissingRelationError(err)) setError(err.message);
     else {
       setData(rows ?? []);
       setError(null);

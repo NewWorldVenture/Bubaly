@@ -11,8 +11,11 @@ Last updated after dashboard customization permissions (child controls + family 
 >    with an `ErrorState`. Fix = graceful degradation, not a schema change:
 >    - New pure helper **`isMissingRelationError(error)`** in `lib/supabase/errors.ts` (detects PGRST205/
 >      PGRST204, Postgres 42P01/42703, "schema cache", "could not find … table", "does not exist"). **3 tests**.
->    - `components/modules/inbox-module.tsx` fetcher now returns `{ data: [], error: null }` on a
->      missing-relation error → inbox shows its empty state instead of crashing.
+>    - **`useRealtimeQuery` (lib/hooks/use-realtime-query.ts) now centrally swallows missing-relation
+>      errors** → ALL 69 modules built on the hook degrade to their empty state instead of crashing
+>      when a feature's migration hasn't reached prod yet. (This generalizes the inbox fix to the whole
+>      class of "table from unapplied migration" crashes; the inbox fetcher just returns the raw error
+>      and the hook handles it.)
 >    - `components/dashboard/ai-home-dashboard.tsx` already degrades (counts `?? 0`; Supabase queries
 >      resolve rather than throw, so `Promise.all` never rejects). No change needed there.
 >    - ⚠️ **STILL APPLY 0090 (+ 0085–0089, 0093, 0094) TO PROD** to actually enable the Communications Hub.
