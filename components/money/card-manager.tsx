@@ -278,6 +278,8 @@ export function CardManager({ cards, wallets, manager, isReady, designs }: Props
                     )}
                     <button
                       onClick={() => setExpanded(isExpanded ? null : card.card_id)}
+                      aria-label={isExpanded ? 'Collapse card details' : 'Expand card details'}
+                      aria-expanded={isExpanded}
                       className="rounded-lg p-2 text-muted hover:bg-elevated"
                     >
                       {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}

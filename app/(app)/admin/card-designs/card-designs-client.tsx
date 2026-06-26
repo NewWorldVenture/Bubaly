@@ -55,7 +55,7 @@ function DesignModal({
       <div className="w-full max-w-md rounded-2xl border border-border bg-bg p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-bold text-fg">{design ? 'Edit design' : 'New card design'}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} aria-label="Close" title="Close" className="rounded-lg p-1.5 text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
         </div>
         <form onSubmit={submit} className="space-y-4">
           <div>

@@ -208,10 +208,10 @@ export function BabysitterWalletView({ canManage, babysitters, payments }: Props
                         <button onClick={() => openPay(b)} className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20">
                           Pay
                         </button>
-                        <button onClick={() => openEdit(b)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
+                        <button onClick={() => openEdit(b)} aria-label={`Edit ${b.name}`} title="Edit" className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
-                        <button onClick={() => deactivate(b.id, b.name)} className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400">
+                        <button onClick={() => deactivate(b.id, b.name)} aria-label={`Remove ${b.name}`} title="Remove" className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400">
                           <X className="h-3.5 w-3.5" />
                         </button>
                       </>
