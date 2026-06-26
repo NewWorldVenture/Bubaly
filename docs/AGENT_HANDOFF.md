@@ -1,7 +1,34 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after world-class child-detail + analytics (PR #162). Keep this updated as you ship.
+Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionless Stripe cards, reconciliation, iOS-zoom + missing-table fixes, Wallet promoted in nav. Branch `claude/connect-8ysp00` (PR #162). 1079 tests pass · build clean. Keep this updated as you ship.
+
+> **Session 3 (2026-06-26) — TREASURY · SEND MONEY · STRIPE CARDS · RECONCILIATION · PROD UX FIXES · NAV**
+> Branch `claude/connect-8ysp00` · PR #162. tsc clean · 1079 tests pass · build exit 0.
+>
+> ### New wallet pages (end-to-end flow, matching the 20-screen design)
+> - **`/wallet/treasury`** (`components/wallet/treasury-view.tsx`) — total family balance hero + bucket split bar, month In/Out/Net stats, per-child rows (→ child detail) with bucket bars/share %/goals badge, goals progress, savings rate, 6-month CSS trend chart, quick links. All from the immutable ledger.
+> - **`/wallet/send`** (`components/wallet/send-money-view.tsx`) — dedicated 4-step Send Money wizard (From → To → Amount → Confirm) with numpad, quick amounts, note, spend-balance validation; calls `sendMoneyAction`. NOTE: the view prop is `wallets` (NOT `children` — avoids react/no-children-prop lint).
+> - Subnav (`wallet-subnav.tsx`) now: Overview · Treasury · Send · Goals · Allowance · Gifts · Babysitters · Activity · Cards · Invest · Settings.
+>
+> ### Frictionless Stripe card setup (100% Stripe-wired)
+> - `app/(app)/wallet/cards/page.tsx` accepts `?setup=complete|refresh`; on return from Stripe hosted onboarding it auto-calls `syncConnectedAccount` before render (pulls latest status into the DB mirror), then passes `justCompletedSetup`.
+> - `components/wallet/money-cards-view.tsx` rebuilt: Mode B shows a 3-step progress wizard (Verify → Issue → Spend) + benefit grid; Mode C shows setup-success banner (auto-dismiss 6s), "Issue all" bulk prompt for children without cards, one-click virtual card + physical-card order modal (spend limit, balance-gate explainer). Server actions unchanged in `app/(app)/money/actions.ts` (issueCardAction, setCardFrozenAction, updateCardControlsAction).
+>
+> ### Wallet Reconciliation (admin, money-critical)
+> - **NEW** `lib/wallet/reconcile.ts` (PURE + 11 tests `tests/wallet-reconcile.test.ts`): `reconcileLedger(txns, now)` flags negative wallet/bucket balances, orphan reversals, reversal amount mismatches, stuck pending (>48h), bucket-sum drift. Read-only.
+> - **NEW** `/admin/wallet/reconciliation` page + `reconciliation-client.tsx`: health banner, volume stats, severity-filtered anomaly list, reversal summary. Linked from the admin wallet header.
+>
+> ### Two production bugs fixed (from user screenshots)
+> 1. **iOS Safari input auto-zoom** made the Quick Capture modal overflow (chips + Save cut off on the right). Root cause: inputs at `text-sm` (14px) on mobile → iOS zooms on focus and shifts the page. **Fix**: `app/globals.css` global rule forcing `input/textarea/select` to `font-size:16px` at `≤640px`. App-wide.
+> 2. **"Could not find the table … in schema cache"** scary error (Communications Hub/Inbox — migration not on prod). **Fix**: `lib/supabase/errors.ts` `isMissingTableError()` (PGRST205 / 42P01 / "schema cache" / "relation does not exist"); `lib/hooks/use-realtime-query.ts` degrades missing-table errors to an **empty state**. Any `useRealtimeQuery` consumer with a pending-migration table renders empty and auto-populates once migrated.
+>
+> ### Wallet wired into main navigation
+> - `lib/constants/navigation.ts` — Family Wallet promoted into the **Suggested** sidebar group (top).
+> - `lib/dashboard/registry.ts` — `DEFAULT_LAYOUT_BY_TIER`: added `wallet` to **basic** + **plus** quick-access defaults (was free-only) so paying families see Wallet on the home dashboard.
+>
+> ### ⚠️ Still un-migrated on prod (these 404 until applied — now degrade gracefully)
+> `0090_communications_hub.sql`, `0093_trust_engine.sql`, `0094_family_dashboard_settings.sql`, `0095_wallet_transfers.sql`, `0096_family_economy.sql`, + the AI Investing migration (#161). **Apply to prod** to light up Inbox, Trust, Economy, transfers, and Investing with real data.
 
 > ## 🎨 WORLD-CLASS CHILD DETAIL + ANALYTICS (PR #162) — wallet UX overhaul
 > Branch `claude/connect-8ysp00`. No migration (reads existing ledger).
