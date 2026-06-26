@@ -26,6 +26,18 @@ const BUCKETS: { key: keyof Split; label: string; color: string }[] = [
   { key: 'invest', label: 'Invest', color: 'bg-amber-500' },
 ];
 
+// One-tap presets so parents don't have to hand-tune four numbers to 100.
+const PRESETS: { label: string; split: Split }[] = [
+  { label: 'Balanced', split: { spend: 40, save: 30, give: 15, invest: 15 } },
+  { label: 'Save-focused', split: { spend: 25, save: 50, give: 10, invest: 15 } },
+  { label: 'Spend-focused', split: { spend: 60, save: 25, give: 10, invest: 5 } },
+  { label: 'Even', split: { spend: 25, save: 25, give: 25, invest: 25 } },
+];
+
+function splitsEqual(a: Split, b: Split): boolean {
+  return a.spend === b.spend && a.save === b.save && a.give === b.give && a.invest === b.invest;
+}
+
 type Props = { rules: ChildWalletRule[]; canManage: boolean };
 
 export function WalletSettingsView({ rules, canManage }: Props) {
@@ -53,6 +65,14 @@ export function WalletSettingsView({ rules, canManage }: Props) {
       if (!current) return d;
       const clamped = Math.max(0, Math.min(100, Math.round(value)));
       return { ...d, [walletId]: { ...current, split: { ...current.split, [key]: clamped } } };
+    });
+  }
+
+  function applyPreset(walletId: string, split: Split) {
+    setDrafts(d => {
+      const current = d[walletId];
+      if (!current) return d;
+      return { ...d, [walletId]: { ...current, split: { ...split } } };
     });
   }
 
@@ -143,6 +163,24 @@ export function WalletSettingsView({ rules, canManage }: Props) {
                         {total}% {overBudget ? '— must equal 100' : '✓'}
                       </span>
                     </p>
+                    <div className="mb-3 flex flex-wrap gap-1.5">
+                      {PRESETS.map((p) => {
+                        const active = splitsEqual(draft.split, p.split);
+                        return (
+                          <button
+                            key={p.label}
+                            type="button"
+                            onClick={() => applyPreset(rule.childWalletId, p.split)}
+                            className={cn(
+                              'rounded-full border px-3 py-1 text-xs font-medium transition',
+                              active ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:border-brand/40 hover:text-brand',
+                            )}
+                          >
+                            {p.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                       {BUCKETS.map((b) => (
                         <div key={b.key}>
