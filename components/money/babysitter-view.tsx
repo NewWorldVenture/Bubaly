@@ -125,7 +125,7 @@ export function BabysitterView({ manager, caregivers, paymentLogs }: Props) {
           <div className="rounded-xl border border-border bg-surface/50 divide-y divide-border">
             {paymentLogs.map((log) => (
               <div key={log.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-600">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
                   <DollarSign className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -136,7 +136,7 @@ export function BabysitterView({ manager, caregivers, paymentLogs }: Props) {
                     {new Date(log.createdAt).toLocaleDateString()}
                   </p>
                 </div>
-                <span className="text-sm font-semibold text-green-600">{formatCents(log.amountCents)}</span>
+                <span className="text-sm font-semibold text-emerald-500">{formatCents(log.amountCents)}</span>
               </div>
             ))}
           </div>
