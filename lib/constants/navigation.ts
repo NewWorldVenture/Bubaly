@@ -5,7 +5,7 @@ import {
   FolderKanban, Plug, BarChart3, Sun, CalendarDays, Stethoscope, Smile, TicketCheck,
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
-  DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet,
+  DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins,
   Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, type LucideIcon,
 } from 'lucide-react';
 
@@ -130,6 +130,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/dashboard/billing', label: 'Finances', icon: CreditCard, minLevel: 0 },
       { href: '/wallet', label: 'Family Wallet', icon: Wallet, minLevel: 0 },
+      { href: '/economy', label: 'Family Economy', icon: Coins, minLevel: 0 },
       { href: '/dashboard/expenses', label: 'Expense Splitting', icon: DollarSign, minLevel: 1 },
       { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: RefreshCw, minLevel: 1 },
       { href: '/dashboard/insurance', label: 'Insurance Hub', icon: ShieldAlert, minLevel: 1 },
@@ -180,6 +181,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
   { href: '/admin/billing', label: 'Billing & Payments', icon: DollarSign },
   { href: '/admin/wallet', label: 'Family Wallet', icon: Wallet },
+  { href: '/admin/stripe', label: 'Money (Stripe)', icon: CreditCard },
   { href: '/admin/integrations', label: 'Integrations', icon: Plug },
   { href: '/admin/sync', label: 'Sync Platform', icon: RefreshCw },
   { href: '/admin/social', label: 'Social Platform', icon: Share2 },

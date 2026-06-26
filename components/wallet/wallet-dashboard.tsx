@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Wallet, PiggyBank, ShoppingBag, HeartHandshake, TrendingUp, Plus, X, ArrowDownLeft, ArrowUpRight, Sparkles,
+  Send, HandCoins, Check, Clock,
 } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -22,7 +23,9 @@ import { formatCents, type BucketKind } from '@/lib/wallet/ledger';
 import { computeFunding, serviceFeeLabel, type WalletTier } from '@/lib/wallet/fees';
 import { WALLET_TIERS, aiCoachLevel } from '@/lib/wallet/tiers';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
-import { addFundsAction } from '@/app/(app)/wallet/actions';
+import {
+  addFundsAction, requestSpendAction, decideSpendRequestAction, sendMoneyAction,
+} from '@/app/(app)/wallet/actions';
 
 type Coaching = { headline: string; insights: string[]; suggestion: string };
 
@@ -45,6 +48,15 @@ type RecentTxn = {
   created_at: string;
 };
 
+export type PendingApproval = {
+  id: string;
+  kind: string;
+  childName: string | null;
+  amount_cents: number;
+  note: string | null;
+  created_at: string;
+};
+
 const BUCKET_META: { kind: BucketKind; label: string; icon: typeof PiggyBank; color: string }[] = [
   { kind: 'spend', label: 'Spend', icon: ShoppingBag, color: 'text-blue-400' },
   { kind: 'save', label: 'Save', icon: PiggyBank, color: 'text-emerald-400' },
@@ -52,20 +64,24 @@ const BUCKET_META: { kind: BucketKind; label: string; icon: typeof PiggyBank; co
   { kind: 'invest', label: 'Invest', icon: TrendingUp, color: 'text-violet-400' },
 ];
 
-export function WalletDashboard({ familyTotal, mode, tier, canManage, childWallets, recent }: {
+export function WalletDashboard({ familyTotal, mode, tier, canManage, childWallets, recent, pendingApprovals }: {
   familyTotal: number;
   mode: string;
   tier: WalletTier;
   canManage: boolean;
   childWallets: ChildWalletView[];
   recent: RecentTxn[];
+  pendingApprovals: PendingApproval[];
 }) {
   const [addFor, setAddFor] = useState<ChildWalletView | null>(null);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [requestFor, setRequestFor] = useState<ChildWalletView | null>(null);
   const [coach, setCoach] = useState<Coaching | null>(null);
   const [coachLoading, setCoachLoading] = useState(false);
   const { error: toastError } = useToast();
   const sampleGift = computeFunding(5000, tier); // $50 gift fee preview
   const hasCoach = aiCoachLevel(tier) !== 'none';
+  const canSend = canManage && childWallets.length >= 2;
 
   async function runCoach() {
     setCoachLoading(true);
@@ -119,6 +135,40 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
         </p>
       </div>
 
+      {/* Quick actions — Send / Request, mirroring the in-app money flows */}
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {canSend && (
+          <button onClick={() => setSendOpen(true)}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm font-semibold transition hover:border-brand/40 hover:text-brand">
+            <Send className="h-4 w-4" /> Send money
+          </button>
+        )}
+        <button onClick={() => setRequestFor(childWallets[0] ?? null)} disabled={childWallets.length === 0}
+          className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm font-semibold transition hover:border-brand/40 hover:text-brand disabled:opacity-50">
+          <HandCoins className="h-4 w-4" /> Request to spend
+        </button>
+        {canManage && (
+          <button onClick={() => setAddFor(childWallets[0] ?? null)} disabled={childWallets.length === 0}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm font-semibold transition hover:border-brand/40 hover:text-brand disabled:opacity-50">
+            <Plus className="h-4 w-4" /> Add funds
+          </button>
+        )}
+      </div>
+
+      {/* Pending approvals — the family's spend-request inbox (managers act) */}
+      {pendingApprovals.length > 0 && (
+        <div className="mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <h2 className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-amber-500">
+            <Clock className="h-3.5 w-3.5" /> Pending approvals ({pendingApprovals.length})
+          </h2>
+          <div className="space-y-2">
+            {pendingApprovals.map((a) => (
+              <ApprovalRow key={a.id} approval={a} canDecide={canManage} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Plan & gifting-fee transparency (fees disclosed before any payment) */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface/40 p-4 text-xs">
         <div>
@@ -148,12 +198,18 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
                     <p className="text-lg font-black leading-tight">{formatCents(c.total)}</p>
                   </div>
                 </div>
-                {canManage && (
-                  <button onClick={() => setAddFor(c)}
-                    className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
-                    <Plus className="h-3.5 w-3.5" /> Add
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => setRequestFor(c)}
+                    className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold transition hover:border-brand/40 hover:text-brand">
+                    <HandCoins className="h-3.5 w-3.5" /> Spend
                   </button>
-                )}
+                  {canManage && (
+                    <button onClick={() => setAddFor(c)}
+                      className="flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
+                      <Plus className="h-3.5 w-3.5" /> Add
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="mt-3 grid grid-cols-4 gap-2">
                 {BUCKET_META.map((b) => (
@@ -198,7 +254,150 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
       </div>
 
       {addFor && <AddFundsModal child={addFor} onClose={() => setAddFor(null)} />}
+      {requestFor && <RequestSpendModal child={requestFor} onClose={() => setRequestFor(null)} />}
+      {sendOpen && <SendMoneyModal wallets={childWallets} onClose={() => setSendOpen(false)} />}
     </div>
+  );
+}
+
+/** One pending spend-request row with inline Approve / Reject (managers only). */
+function ApprovalRow({ approval, canDecide }: { approval: PendingApproval; canDecide: boolean }) {
+  const router = useRouter();
+  const { success, error: toastError } = useToast();
+  const [busy, setBusy] = useState<'approved' | 'rejected' | null>(null);
+
+  async function decide(decision: 'approved' | 'rejected') {
+    setBusy(decision);
+    const res = await decideSpendRequestAction({ approvalId: approval.id, decision });
+    setBusy(null);
+    if (!res.ok) return toastError(res.error ?? 'Could not update request');
+    success(decision === 'approved' ? 'Approved' : 'Declined');
+    router.refresh();
+  }
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-bg/40 px-3 py-2.5">
+      <div className="grid h-8 w-8 place-items-center rounded-lg bg-amber-500/10 text-amber-500"><HandCoins className="h-4 w-4" /></div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{approval.note || 'Spend request'}</p>
+        <p className="text-[11px] text-muted">{approval.childName ? `${approval.childName} · ` : ''}{fmtRelative(approval.created_at)}</p>
+      </div>
+      <span className="shrink-0 text-sm font-bold">{formatCents(approval.amount_cents)}</span>
+      {canDecide && (
+        <div className="flex shrink-0 items-center gap-1">
+          <button onClick={() => decide('approved')} disabled={busy !== null}
+            className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/15 text-emerald-500 transition hover:bg-emerald-500/25 disabled:opacity-50" aria-label="Approve">
+            <Check className="h-4 w-4" />
+          </button>
+          <button onClick={() => decide('rejected')} disabled={busy !== null}
+            className="grid h-7 w-7 place-items-center rounded-lg bg-rose-500/15 text-rose-500 transition hover:bg-rose-500/25 disabled:opacity-50" aria-label="Reject">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Request to spend from a child's Spend bucket → completes or queues for approval. */
+function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose: () => void }) {
+  const router = useRouter();
+  const { success, error: toastError } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [desc, setDesc] = useState('');
+  const spendable = child.buckets.spend ?? 0;
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const dollars = Number(amount);
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    if (!desc.trim()) return toastError('What is it for?');
+    setLoading(true);
+    const res = await requestSpendAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: desc.trim() });
+    setLoading(false);
+    if (!res.ok) return toastError(res.error ?? 'Could not submit request');
+    success(res.pendingApproval ? 'Sent to a parent for approval' : 'Approved — enjoy!');
+    onClose();
+    router.refresh();
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Request to spend — ${child.name}`}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-xs text-muted">{formatCents(spendable)} available in Spend. Larger amounts need a parent&apos;s OK.</p>
+        <Field label="What for?">
+          {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="e.g. Lego set" autoFocus maxLength={120} />}
+        </Field>
+        <Field label="Amount (USD)">
+          {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="12.00" />}
+        </Field>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
+          <Button type="submit" loading={loading}><HandCoins className="h-4 w-4" /> Request</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/** Move money between two child wallets (parent-initiated, money-conserving). */
+function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onClose: () => void }) {
+  const router = useRouter();
+  const { success, error: toastError } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [from, setFrom] = useState(wallets[0]?.id ?? '');
+  const [to, setTo] = useState(wallets[1]?.id ?? '');
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const fromWallet = wallets.find((w) => w.id === from);
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (from === to) return toastError('Pick two different wallets.');
+    const dollars = Number(amount);
+    if (!Number.isFinite(dollars) || dollars <= 0) return toastError('Enter an amount greater than $0.');
+    setLoading(true);
+    const res = await sendMoneyAction({ fromChildWalletId: from, toChildWalletId: to, amountCents: Math.round(dollars * 100), note: note.trim() || undefined });
+    setLoading(false);
+    if (!res.ok) return toastError(res.error ?? 'Could not send money');
+    success('Money sent');
+    onClose();
+    router.refresh();
+  }
+
+  const selectCls = 'w-full rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm focus:border-brand/40 focus:outline-none';
+
+  return (
+    <Modal open onClose={onClose} title="Send money">
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="From">
+          {(id) => (
+            <select id={id} value={from} onChange={(e) => setFrom(e.target.value)} className={selectCls}>
+              {wallets.map((w) => <option key={w.id} value={w.id}>{w.name} — {formatCents(w.buckets.spend ?? 0)} in Spend</option>)}
+            </select>
+          )}
+        </Field>
+        <Field label="To">
+          {(id) => (
+            <select id={id} value={to} onChange={(e) => setTo(e.target.value)} className={selectCls}>
+              {wallets.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          )}
+        </Field>
+        <Field label="Amount (USD)">
+          {(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" autoFocus />}
+        </Field>
+        {fromWallet && <p className="text-xs text-muted">{formatCents(fromWallet.buckets.spend ?? 0)} available in {fromWallet.name}&apos;s Spend bucket.</p>}
+        <Field label="Note (optional)">
+          {(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Birthday gift" maxLength={120} />}
+        </Field>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="ghost" onClick={onClose}><X className="h-4 w-4" /> Cancel</Button>
+          <Button type="submit" loading={loading}><Send className="h-4 w-4" /> Send</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

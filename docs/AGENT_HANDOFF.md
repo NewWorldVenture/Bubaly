@@ -1,112 +1,174 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after dashboard customization permissions (child controls + family default). Keep this updated as you ship.
+Last updated after the production bug sweep + frictionless Quick Capture (PR #163). Keep this updated as you ship.
 
-> **Session update (2026-06-26h) — SHELL-PRESERVING ERROR BOUNDARY FOR THE APP.**
-> Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ (167 pages) · **suite 1068/1068**. No migration.
-> - **`app/(app)/error.tsx`** — new error boundary inside the authenticated route group, so a single page
->   error renders a friendly inline card (AlertTriangle + "Try again"/reset + "Go home" + digest reference)
->   WITHIN the app shell (sidebar/nav preserved), instead of bubbling to the bare full-screen `app/error.tsx`.
->   Directly improves the failure mode behind IMG_8275-class crashes.
+> ## 🛟 PRODUCTION BUG SWEEP + QUICK CAPTURE (PR #163) — stops live crashes
+> Branch `claude/festive-bohr-m4cbeg`. Fixes live bubaly.com crashes + makes Quick Capture frictionless.
+> No migration for the parser (writes existing tables → works in prod immediately).
+> - **`lib/supabase/errors.ts` `isMissingRelationError`** — detects PostgREST schema-cache misses
+>   (PGRST205/204), Postgres 42P01/42703, "does not exist". `useRealtimeQuery` now **centrally swallows
+>   missing-relation errors** → all ~69 realtime modules degrade to empty state instead of full-page crash
+>   when a feature's migration hasn't reached prod yet.
+> - `/api/cron/wallet-allowance` returns 200 `{skipped:'wallet_not_deployed'}` (not 500) pre-0088.
+> - **`lib/capture/parse.ts`** (PURE + **25 tests**) — natural-language Quick Capture: events
+>   ("Dentist at 3pm tomorrow"), tasks ("Pay rent friday" → due date), shopping ("milk, eggs and bread"
+>   → 3 items), non-disruptive type-detection chip.
+> - Modal bottom-sheet safe-area padding fix (every modal); Family Wallet promoted into Suggested nav.
+> - ⚠️ **Ops:** still apply migrations 0085–0097 to prod to actually enable the features (this just
+>   stops the crashes meanwhile).
+
+> ## 🪙 FAMILY ECONOMY — custom currencies (PR pending) — non-cash points/tokens
+> Branch `claude/family-economy`. A parallel NON-CASH economy: parents define custom currencies
+> ("Stars ⭐", "Screen-time ⏰"), kids EARN tokens and SPEND them on family rewards. Separate from
+> the cash wallet. ⚠️ **Migration `0096_family_economy.sql` NOT APPLIED TO PROD.**
+> - **`lib/economy/ledger.ts`** (PURE + **8 tests**) — immutable-ledger math: `balanceFrom`,
+>   `signedAmount`, `canAfford`, `normalizeTokenAmount`, `normalizeEmoji`, `formatTokens`.
+> - **Migration 0096** — `family_currencies`, `currency_transactions` (immutable token ledger,
+>   amount>0, direction signs it), `economy_rewards` (catalog, cost/stock), `economy_redemptions`
+>   (pending→fulfilled/rejected; debits on approval). Family-scoped RLS + triggers. Enums
+>   `economy_direction`, `redemption_status`. DB types: `EconomyDirection`, `EconomyRedemptionStatus`
+>   (note: a separate `RedemptionStatus` already exists for the points/rewards system — don't merge them).
+> - **`app/(app)/economy/actions.ts`** — `createCurrencyAction`, `setCurrencyActiveAction`,
+>   `awardTokensAction` (credit), `createRewardAction`, `setRewardActiveAction`,
+>   `requestRedemptionAction` (affordability pre-check), `decideRedemptionAction` (final balance check
+>   → debit txn + status, decrements limited stock). Manager-gated where appropriate.
+> - **`/economy`** (`components/economy/economy-view.tsx`) — tabs: Balances · Store (redeem) ·
+>   Requests (parent approve/reject) · Manage (create currency/reward, award tokens). Nav +
+>   feature-catalog entry added (`/economy`, free).
+> - Verified: tsc clean · eslint clean · build OK (`/economy` registered) · suite **1064/1064** (8 new).
+
+> ## 📈 AI INVESTING FOR KIDS — BUILD SPEC (next; not yet built)
+> Educational, **simulated** "Invest" experience (NO real brokerage — keep it clearly educational; no
+> FDIC/return promises per compliance). The wallet already has an `invest` bucket per child (0088).
+> Suggested build:
+> - **Migration** `0097_kid_investing.sql`: `invest_holdings` (family_id, child_wallet_id, symbol,
+>   display_name, shares numeric, avg_cost_cents) + `invest_orders` (buy/sell, symbol, shares,
+>   price_cents_at_order, status, requires parent approval) + optional `invest_watchlist`. Family RLS.
+>   Prices are EDUCATIONAL/simulated — store a `price_cents` snapshot; a daily cron can nudge prices or
+>   pull delayed quotes if a provider is added later. NO real trades.
+> - **`lib/invest/portfolio.ts`** (PURE + tests): `positionValue`, `portfolioValue`, `gainLoss(%)`,
+>   `projectGrowth(principal, monthly, years, ratePct)` (compound-interest teaching tool),
+>   `allocationBreakdown`. All from holdings + a price map.
+> - **Funding link to the ledger**: a "buy" debits the child's INVEST bucket
+>   (`lib/wallet/server.ts` pattern: a `wallet_transactions` debit, type 'goal_transfer'/'adjustment'),
+>   a "sell" credits it back. Keep the wallet ledger the source of truth for cash; holdings track shares.
+> - **AI**: `/api/ai/invest` (authed, tier+metered like `/api/ai/wallet`) — an age-appropriate
+>   "explain this company / why diversify / what is compound interest" coach + a suggested starter
+>   portfolio. Pure prompt/parse in `lib/invest/coach.ts` with tests. NO buy/sell advice framed as
+>   financial advice — educational only.
+> - **UI** `/wallet/invest` (or `/invest`): holdings list w/ value + gain/loss, a simulated
+>   buy/sell (parent-approved), a compound-growth projector slider, AI explainer. Hide any wording
+>   implying guaranteed returns; show an "educational simulation" disclaimer.
+> - Gate behind a feature flag if desired; manager approval required for orders.
+
+> ## 🎛️ CARD SPENDING-CONTROL EDITOR (PR #158) — per-card parent controls
+> Branch `claude/card-spending-controls`. Completes the card story from Stripe Money (#155):
+> parents set a per-card **limit + window + blocked categories** (freeze already shipped).
+> **No migration** (uses the columns from 0090). Mirrors to Stripe + enforced by the auth webhook.
+> - **`lib/wallet/card-controls.ts`** (PURE + **11 tests**) — `SPEND_WINDOWS` (per_authorization/daily/
+>   weekly/monthly/all_time), `BLOCKABLE_CATEGORIES` (curated Stripe MCC values + friendly labels/emoji),
+>   `normalizeSpendWindow`, `clampSpendLimitCents` (≤ $10k), `normalizeBlockedCategories` (known+deduped),
+>   `categoryLabel`.
+> - **`lib/stripe/issuing.ts`** — new `updateCardControls()` mirrors `spending_controls`
+>   (spending_limits + blocked_categories) to Stripe and updates our mirror row.
+> - **`app/(app)/money/actions.ts`** — `updateCardControlsAction` (manager + capability gated, inputs
+>   normalized server-side, audit-logged `card_controls_updated`).
+> - **`/wallet/cards`** — each card has a "Controls" expander: $ limit, reset window, blocked-category
+>   chips. Subtitle shows "$X / window · N blocked". Limit/window enforced by Stripe; blocked categories
+>   ALSO enforced live by `decideAuthorization` in the auth webhook.
+> - Verified: tsc clean · eslint clean · build exit 0 · suite **1046/1046** (11 new).
+> - Remaining big wallet features (need direction): Family Economy / custom currencies, Pay-ID handles,
+>   AI Investing for kids.
+
+> ## ✨ AI GIFT ASSISTANT (✅ MERGED via PR #157) — public gift-link helper
+> Branch `claude/ai-gift-assistant`. Helps a relative on a public gift link write a warm message +
+> pick a tasteful amount. **No Stripe; fully testable.** **No migration.**
+> - **`lib/wallet/gift-ai.ts`** (PURE + **10 tests**) — `buildGiftAssistPrompt(input)` (childName,
+>   occasion, relationship, top active goal) + `parseGiftSuggestions(raw)` → `{messages[], amountsCents[]}`.
+>   Amounts clamped to `MIN_GIFT_CENTS`($5)–`MAX_GIFT_CENTS`($500), deduped, ≤3 each; messages ≤280 chars.
+> - **`app/api/ai/gift/route.ts`** — PUBLIC POST (givers aren't signed in). **Rate-limited 5/min/IP**
+>   (`lib/server/rate-limit.ts`), reads one gift link by token (service client), resolves child first
+>   name + top goal, calls `resolveProvider().complete()`, returns suggestions. Writes nothing.
+> - **`components/wallet/public-gift-form.tsx`** — "✨ Help me write something" button → tappable
+>   message drafts (tap to fill the note) + suggested-amount chips. Friendly, frictionless.
+
+> ## 💳 BUBALY MONEY — STRIPE FINANCIAL MODE (Phase 2) — read first if continuing Money
+> **✅ MERGED TO MAIN via PR #155** (`claude/stripe-money-mode`). Builds the REAL Stripe layer on top of the
+> virtual ledger (0088). **Dormant until the `stripe_*` feature flags + Stripe credentials are
+> present** — capability detection falls back to the ledger so nothing breaks without them.
+> ⚠️ **Migration `0090_stripe_money.sql` NOT APPLIED TO PROD.** ⚠️ Stripe Connect/Treasury/Issuing
+> require an APPROVED Stripe account before the matching flags can be switched on.
 >
-> **Session update (2026-06-26g) — HOME "ASK BUBALY ANYTHING" BAR.**
-> Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1068/1068** (+2). No migration.
-> - **`components/dashboard/home-ask-bar.tsx`** (client) — an ask-anything input on the home dashboard
->   (under the greeting) that deep-links to `/dashboard/assistant?q=…`; the assistant auto-sends it (from
->   the 26e prefill work), so a family asks from the home screen with no extra hop.
-> - **`lib/ai/prefill.ts`** — added `buildAssistantUrl(question, base?)` (the inverse of `parsePrefillQuery`;
->   round-trip **tested**). Wired into the home dashboard header.
-> - Verified `/wallet` degrades to the Activation screen (not a crash) when `family_wallets` is absent, so
->   promoting Wallet into the Suggested nav (26a) is safe pre-migration.
+> ### Shipped this session
+> - **Migration `0090_stripe_money.sql`** — 7 tables: `stripe_connected_accounts` (Connect/KYC),
+>   `stripe_financial_accounts` (Treasury), `stripe_cardholders`, `stripe_issuing_cards`
+>   (spend controls + freeze; **no PAN stored**), `stripe_authorizations` (real-time auth log),
+>   `stripe_card_designs` (catalog), `stripe_webhook_events` (idempotency, service-only).
+>   Family tables = members READ via `is_family_member`, writes service-role only. webhook_events =
+>   RLS on, no policy.
+> - **`lib/stripe/capabilities.ts`** (PURE + **7 tests**) — `resolveCapabilities(env, flags)` →
+>   `{mode:'ledger'|'stripe', payments, connectOnboarding, treasury, issuing, physicalCards,
+>   customCardDesigns, reason}`. Layered gating (treasury/issuing require connect; everything
+>   requires `STRIPE_SECRET_KEY`). `getMoneyCapabilities(supabase)` = async wrapper. **This is the
+>   keystone for graceful fallback — consumer pages branch on these booleans, never on Stripe jargon.**
+> - **`lib/stripe/connect.ts`** — `ensureConnectedAccount` (custom acct, requests card_payments/
+>   transfers/treasury/card_issuing), `createOnboardingLink`, `syncConnectedAccount` (mirrors
+>   charges/payouts/treasury/issuing capability state). `accountStatus()` maps → enum.
+> - **`lib/stripe/treasury.ts`** — `ensureFinancialAccount`, `syncFinancialAccountBalance` (cached
+>   for display; ledger stays source of truth).
+> - **`lib/stripe/issuing.ts`** — `ensureCardholder` (reuses verified onboarding address — we never
+>   collect/store it), `issueCard` (mirrors spending_controls), `setCardFrozen`.
+> - **`lib/stripe/webhook.ts`** — `recordEvent` (idempotency via unique stripe_event_id),
+>   `decideAuthorization(...)` PURE **7 tests** (frozen/inactive/blocked-category/insufficient-
+>   balance/exact-balance), `handleAuthorizationRequest` (real-time approve/decline against the
+>   child's SPEND bucket balance, then logs), `handleTransactionCreated` (posts the capture debit).
+> - **`lib/wallet/server.ts`** — added `childSpendableCents` (live SPEND-bucket balance from the
+>   immutable ledger) + `debitCardSpend` (idempotent card_spend debit + audit).
+> - **`app/api/webhooks/money/route.ts`** — separate signed endpoint (`STRIPE_MONEY_WEBHOOK_SECRET`,
+>   falls back to `STRIPE_WEBHOOK_SECRET`). Verifies signature, dedupes, routes auth.request /
+>   transaction.created / account.updated. Auth requests bypass dedupe (time-critical).
+> - **`app/(app)/money/actions.ts`** — `startConnectOnboardingAction`, `refreshConnectStatusAction`,
+>   `activateTreasuryAction`, `issueCardAction`, `setCardFrozenAction`. Manager-gated +
+>   capability-gated (graceful error when mode off) + audit-logged. Writes via service client.
+> - **`/wallet/cards`** (consumer, `components/wallet/money-cards-view.tsx`) — capability-aware:
+>   Mode A friendly "coming soon" (no jargon) · Mode B "Set up cards" onboarding · Mode C per-child
+>   card management with freeze. New "Cards" tab in wallet subnav.
+> - **`/admin/stripe`** (super-admin console) — runtime mode, capability table, feature-flag states,
+>   aggregate stats (onboarded families, financial accounts, active cards, declines, webhook errors),
+>   recent authorizations. Added to `ADMIN_NAV` as "Money (Stripe)".
+> - **DB types** extended for all 7 tables (+ `StripeAccountStatus`).
+> - Verified: **tsc clean · eslint clean · `npm run build` exit 0 · full suite 1035/1035** (14 new).
 >
-> **Session update (2026-06-26f) — GROCERY QUANTITY PARSING.**
-> Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1066/1066** (+4). No migration.
-> - **`parseGroceryItem(raw)`** (pure, **3 tests**) → "2 milk" / "2x soda" / "milk x2" / "eggs (12)" set the
->   existing `grocery_items.quantity`; "2% milk" and plain names stay whole. Wired into `saveCapture`'s
->   shopping branch so multi-item captures get per-item quantities. +1 `saveCapture` test.
+> ### To GO LIVE with real money (next agent / operator checklist)
+> 1. **Apply migration 0090** to prod Supabase (plus the still-pending 0073–0080, 0088, 0089, 0093, 0094).
+> 2. **Stripe account**: get **Connect + Treasury + Issuing** approved (business/legal — this is the
+>    real gate; code is ready). Confirm US Issuing program terms accepted.
+> 3. **Env vars** (Vercel, server-only): `STRIPE_SECRET_KEY` (already used by billing),
+>    `STRIPE_MONEY_WEBHOOK_SECRET` (new — for the /api/webhooks/money endpoint; if unset it falls back
+>    to `STRIPE_WEBHOOK_SECRET`). No client-exposed Stripe keys are needed for this layer.
+> 4. **Stripe webhook**: add endpoint `https://www.bubaly.com/api/webhooks/money` subscribed to
+>    `issuing_authorization.request`, `issuing_transaction.created`, `account.updated`. Copy its
+>    signing secret into `STRIPE_MONEY_WEBHOOK_SECRET`. (Real-time auth requires the .request event.)
+> 5. **Flip feature flags** (service role, `feature_flags` table) in dependency order as capabilities
+>    are approved: `stripe_connect_enabled` → `stripe_treasury_enabled` / `stripe_issuing_enabled` →
+>    `physical_cards_enabled` / `custom_card_designs_enabled` / `stripe_payments_enabled`. Until flipped,
+>    the app stays in virtual-ledger mode (verified safe).
+> 6. **Known Stripe limitations / compliance**: no FDIC/interest/investment claims in UI (none made);
+>    surcharge/fees stay in `lib/wallet/fees.ts` (disclosed before charge); cardholder address is
+>    reused from onboarding (never separately collected); full card details only via ephemeral
+>    Stripe.js reveal (never persisted — `stripe_issuing_cards` keeps last4/brand/exp only).
 >
-> **Session update (2026-06-26e) — ASSISTANT "?q=" DEEP LINK (closes the capture→AI loop).**
-> Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1062/1062** (+3). No migration.
-> - Bug: the `/capture` shell routes ambiguous text to `/dashboard/assistant?q=…`, but the assistant
->   **ignored `q`** — the user had to retype. Now it auto-sends.
-> - **`lib/ai/prefill.ts`** (pure, **3 tests**): `parsePrefillQuery(search, max)` → trimmed/clamped `q` or null.
-> - **`assistant-module.tsx`** — on mount, if `?q=` is present, it auto-sends that question once and strips
->   `q` from the URL (`history.replaceState`) so refresh/back doesn't resend. Reads `window.location.search`
->   (not `useSearchParams`) to avoid a Suspense-boundary build constraint.
->
-> **Session update (2026-06-26d) — GLOBAL CAPTURE SHORTCUT.**
-> Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1059/1059** (+5). No migration.
-> - **`lib/capture/shortcut.ts`** (pure, **5 tests**): `isTypingTarget`, `isOpenCaptureKey` (bare "c", no
->   modifiers), `isSaveHotkey` (⌘/Ctrl+Enter).
-> - **`quick-capture.tsx`** — press **C** anywhere outside a text field to open the capture sheet (global
->   keydown listener, guarded by `isTypingTarget`); **⌘/Ctrl+Enter** saves from within the sheet (works in
->   the note textarea too via `form.requestSubmit()`); FAB tooltip "Quick capture (press C)".
->
-> **Session update (2026-06-26c) — SHARED CAPTURE ENGINE + /capture actually creates records.**
-> Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1049/1049**. No migration.
-> - **`lib/capture/save.ts`** — new `saveCapture(supabase, {kind,text,familyId,userId,memberId})`: the single
->   persistence path (get-or-create default list + insert) reusing `lib/capture/parse.ts`. Returns
->   `{kind,count,title,href}`. Both capture surfaces now share it (no more duplicated insert logic).
-> - **`components/app/quick-capture.tsx`** — refactored to delegate to `saveCapture` (removed its own list
->   helpers + per-kind branches). Behavior unchanged.
-> - **`components/capture/capture-shell.tsx`** (the full-page `/capture`, primary mobile Capture tab) — was
->   "AI routes you to a page" and **created nothing**. Now, when the routed destination is one of the four
->   creatable kinds (grocery/calendar/notes/chores), it actually **creates the record** via `saveCapture`
->   (natural-language time / due date / multi-item) and shows a green "Added → View in X / Capture another"
->   confirmation. Broader routes (meals/trips/health/documents/assistant) still navigate as before.
->
-> **Session update (2026-06-26b) — FRICTIONLESS QUICK CAPTURE (natural-language event times).**
-> No migration needed — works in prod immediately (writes existing `calendar_events`). Branch
-> `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1038/1038** (+14).
-> - **`lib/capture/parse.ts`** (pure, deterministic via injected `now`; **14 tests** `tests/capture-parse.test.ts`):
->   `parseEvent(input, now)` → `{title, startsAt, allDay, matched}`. Understands clock times (`3pm`,
->   `3:30 pm`, `15:30`, `noon`/`midnight`; past-today rolls to tomorrow), day refs (`today`, `tonight`→7pm,
->   `tomorrow`, bare/`this`/`next` weekday → coming occurrence, `in N days/weeks`), strips the recognized
->   phrase from the title, and falls back to `{now, allDay:false, matched:false}` when nothing matches.
-> - **`components/app/quick-capture.tsx`** — the event path now schedules at the parsed time + `all_day`
->   (was always "starts now" with the raw text as title). Added a **live preview** ("📅 Tomorrow at 3:00 PM ·
->   "Dentist"") that updates as you type, with a hint when no time is detected.
-> - **`splitItems(input)`** (pure, **4 tests**) → a shopping capture like "milk, eggs and bread" now adds
->   3 separate `grocery_items` in one go (drops leading buy verb, dedupes; "and" splits only when a comma
->   is present, so "macaroni and cheese" stays one item). Live "Adds 3 items: …" preview + "N items added" toast.
-> - **`parseDueDate(input)`** (pure, **3 tests**) → task captures now set `todo_items.due_date` from a day
->   reference ("Pay rent friday" → task due 2026-07-03, title "Pay rent"). Only a *day* sets a due date
->   (date-only column); a bare clock time does not. Live "Due Fri, Jul 3" preview in the sheet.
-> - **`suggestKind(input)`** (pure, **4 tests**) + a **non-disruptive type suggestion chip**: when the text
->   looks like a different kind than selected (e.g. "Buy milk" while on Task), the sheet offers a one-tap
->   "Looks like a shopping — tap to switch." It never auto-switches (would steal focus / remount the field),
->   so typing is never interrupted. Priority: explicit buy/purchase → date/time (event) → pick up/grab/get
->   → labelled/long note → task.
->
-> **Session update (2026-06-26a) — PRODUCTION BUG SWEEP (from live bubaly.com screenshots).**
-> Fixed three reported production issues. Branch `claude/festive-bohr-m4cbeg`. Verified: tsc clean ·
-> lint clean (only pre-existing `<img>` warns) · **suite 1024/1024**.
-> 1. **CRASH: "Could not find the table 'public.family_communications' in the schema cache"** (IMG_8275).
->    Root cause: migration `0090_communications_hub.sql` is **not applied to prod** so the inbox crashed
->    with an `ErrorState`. Fix = graceful degradation, not a schema change:
->    - New pure helper **`isMissingRelationError(error)`** in `lib/supabase/errors.ts` (detects PGRST205/
->      PGRST204, Postgres 42P01/42703, "schema cache", "could not find … table", "does not exist"). **3 tests**.
->    - **`useRealtimeQuery` (lib/hooks/use-realtime-query.ts) now centrally swallows missing-relation
->      errors** → ALL 69 modules built on the hook degrade to their empty state instead of crashing
->      when a feature's migration hasn't reached prod yet. (This generalizes the inbox fix to the whole
->      class of "table from unapplied migration" crashes; the inbox fetcher just returns the raw error
->      and the hook handles it.)
->    - `components/dashboard/ai-home-dashboard.tsx` already degrades (counts `?? 0`; Supabase queries
->      resolve rather than throw, so `Promise.all` never rejects). No change needed there.
->    - **`/api/cron/wallet-allowance`** treats a missing-relation error on `allowance_rules` as a clean
->      no-op (200 `{skipped:'wallet_not_deployed'}`) instead of a 500, so the nightly cron isn't flagged
->      as failed before migration 0088 reaches prod. (Audited all 8 crons — the others query core tables.)
->    - ⚠️ **STILL APPLY 0090 (+ 0085–0089, 0093, 0094) TO PROD** to actually enable the Communications Hub.
-> 2. **Quick Capture modal action row cut off on mobile** (IMG_8276). `components/ui/modal.tsx` is a
->    bottom sheet on mobile (`items-end`); uniform `p-4` let Save/Cancel hide under the home indicator.
->    Fix: bottom padding now `pb-[max(1rem,env(safe-area-inset-bottom))]` (desktop unchanged at `sm:p-6`).
->    Helps **every** modal in the app, not just Quick Capture.
-> 3. **Wallet not discoverable** (IMG_8277 note "wire Wallet into main navigation"). It existed only in
->    the buried "Finances & Admin" group → promoted "Family Wallet" into the top **Suggested** nav group
->    (after Rewards) in `lib/constants/navigation.ts`. Still listed in Finances too (matches the
->    Communications-Hub dual-listing pattern).
->
+> ### Money — remaining (Stripe-dependent, can't run/test here without approved account + keys)
+> - Gift/top-up **Checkout** money movement (records intent today via gift_payments; wire
+>   `stripe_payments_enabled` → Checkout session → on `checkout.session.completed` call
+>   `creditChildWallet`). Reuse `lib/wallet/fees.ts` for the disclosed fee line.
+> - **Card detail reveal** (Stripe.js ephemeral keys) + **physical card ordering** UI.
+> - **`/admin/card-designs`** CRUD over `stripe_card_designs` + Stripe personalization_design submit.
+> - **Spending-control editor** (limit/window/blocked categories) on `/wallet/cards` (schema + webhook
+>   enforcement already support it; just needs the form + an `updateCardControlsAction`).
+> - Wire **`evaluateTrust`** (Trust Engine) into `issueCardAction`/money movement per Trust TODO #1.
+
 > **Session update (2026-06-25g) — DASHBOARD CUSTOMIZATION: FAMILY PERMISSIONS.**
 > Completed §10 (role/family permissions) of the customizable-dashboard spec. Branch `claude/festive-bohr-m4cbeg`.
 > - **Migration `0094_family_dashboard_settings.sql`** — `family_dashboard_settings` (family_id PK,
@@ -119,7 +181,6 @@ Last updated after dashboard customization permissions (child controls + family 
 >   modal (allow-child toggle, lock-to-default, reset-all) + "Set family default" in edit. Home resolves
 >   via `effectiveSavedKeys`. Verified: tsc/lint clean · build ✓ · **suite 1001/1001**.
 
-Last updated: 2026-06-25 — Family Trust & Permissions Engine shipped (new core platform layer). Keep this updated as you ship.
 
 > ## 🛡️ FAMILY TRUST & PERMISSIONS ENGINE — PLATFORM MAP (read first if continuing Trust)
 > A foundational platform layer (alongside Identity, Memory, AI, Automation) that
@@ -151,21 +212,59 @@ Last updated: 2026-06-25 — Family Trust & Permissions Engine shipped (new core
 > - **AI integration (FIRST agent wired)** — `/api/ai/import` confirm path calls `evaluateTrust`
 >   per action (maps action→domain): allow→execute, require_approval→queued, deny→blocked.
 >
+> ### Trust — rollout progress (2026-06-26, opus-4-8)
+> - ✅ **`/api/ai/chat` tool execution wired** — `lib/assistant/trust-wrapper.ts` wraps every WRITE
+>   tool (`wrapToolsWithTrust`): each execute() runs `evaluateTrust` (domain map + capability
+>   `automate`); allow→execute, require_approval→opens approval + returns "⏳ Sent for parent
+>   approval" chip, deny→blocked. Read tools pass through untouched. Wired in `app/api/ai/chat/route.ts`.
+> - ✅ **Approval → execution loop CLOSED** — `decideApprovalAction` now reads the approval's stored
+>   `payload` and, once fully approved, calls `runAction(...)` to actually execute it, then stamps
+>   `executed_at` + `execution_result` and writes an audit row. `lib/ai/actions.ts#runAction` was
+>   extended to handle ALL assistant tool names (add_chore/add_todo/add_note/add_goal/
+>   create_announcement/add_reminder/add_grocery_item + both `{item}`/`{name}` arg shapes).
+> - ✅ **Wallet money-movement wired** — `requestSpendAction` + `sendMoneyAction` (see Wallet update
+>   below) call `evaluateTrust` (domain `finances`). Spend requests only HARD-block on an *explicit*
+>   deny (deny grant / policy) — a role-default "no" escalates to parent approval (kids can always ask).
+>
 > ### Trust — remaining for the next agent (engine + UX done; this is rollout + depth)
-> 1. **Wire `evaluateTrust` into OTHER AI routes** (one call each): `/api/ai/chat` tool execution,
->    autopilot execution, wallet money-movement, front-desk/comms auto-actions. Map to domain +
+> 1. **Wire `evaluateTrust` into the LAST routes**: autopilot execution, front-desk/comms
+>    auto-actions. (chat, magic-import, wallet money-movement now done.) Map to domain +
 >    capability='automate' and branch on `decision.effect`.
-> 2. **Approval → execution loop**: when an `approval_requests` row is approved, EXECUTE the stored
->    `payload` (re-run `runAction`). Today approval records the decision but doesn't auto-execute.
-> 3. **Relationship graph** (Parent→Child, Coach→Child) — `family_tree_nodes` exists; add
+> 2. **Relationship graph** (Parent→Child, Coach→Child) — `family_tree_nodes` exists; add
 >    `trust_relationships` or derive, feed relationship-based perms.
-> 4. **External org permissions** (schools/doctors/leagues) — `family_contacts` has the categories.
-> 5. **Trust-score worker** — recompute `trust_scores` from audit outcomes (`computeTrustScore` ready);
+> 3. **External org permissions** (schools/doctors/leagues) — `family_contacts` has the categories.
+> 4. **Trust-score worker** — recompute `trust_scores` from audit outcomes (`computeTrustScore` ready);
 >    surface in UI + let scores modulate automation thresholds.
-> 6. **Privacy controls UX** — per-member visibility toggles (medical/financial/location/…).
-> 7. **Seed default policies** on family creation (`is_system=true` rows).
-> 8. **Richer roles** (grandparent/babysitter/nanny/pet_caregiver…): extend ROLE_DEFAULTS + the
+> 5. **Privacy controls UX** — per-member visibility toggles (medical/financial/location/…).
+> 6. **Seed default policies** on family creation (`is_system=true` rows).
+> 7. **Richer roles** (grandparent/babysitter/nanny/pet_caregiver…): extend ROLE_DEFAULTS + the
 >    member_role enum if the product wants the full spec list (engine TrustRole is the 6-role enum today).
+
+> **Session update (2026-06-26) — WALLET: SEND MONEY + REQUEST-TO-SPEND + PENDING APPROVALS (opus-4-8)**
+> Built the money-movement flows that headline the Bubaly design mocks, on top of the existing
+> immutable-ledger wallet. tsc clean · build exit 0 · 1018 tests pass (+4 new). **⚠️ APPLY 0095 TO PROD.**
+>
+> - **Migration `0095_wallet_transfers.sql`** — adds the `transfer` ledger type (distinct from
+>   within-wallet `bucket_transfer`) + an index on `parent_approvals(family_id, ref_type, ref_id)`.
+>   Also added `'transfer'` to `WalletTxnType` in `lib/database.types.ts`.
+> - **`lib/wallet/server.ts`** — new `bucketBalanceCents()` (derive a single bucket's available
+>   balance from the ledger) + `debitSpendBucket()` (the ONE place spend leaves a wallet; writes a
+>   `completed` debit, or a held `requires_parent_approval` debit when approval is needed). Mirrors
+>   `creditChildWallet`. Never overdraws (validates against live Spend balance).
+> - **`app/(app)/wallet/actions.ts`** — 3 new actions, all Trust-wired (domain `finances`):
+>   `requestSpendAction` (under threshold + parent → posts immediately; else opens a `parent_approvals`
+>   row → Pending Approvals), `decideSpendRequestAction` (approve → completes the held debit, re-checking
+>   balance; reject → cancels it), `sendMoneyAction` (parent moves money child→child; money-conserving
+>   debit+credit with a reversal rollback if the credit leg fails).
+> - **UX `components/wallet/wallet-dashboard.tsx`** — quick-action bar (Send money / Request to spend /
+>   Add funds), a **Pending Approvals** inbox with inline Approve/Reject (amber card, managers act),
+>   per-child "Spend" request button, + `RequestSpendModal` / `SendMoneyModal`. Page fetches pending
+>   `parent_approvals` and resolves each to its child via the txn.
+> - **Tests** `tests/wallet-transfer.test.ts` (4) — pins the invariants: a held request moves nothing
+>   until completed; transfers conserve total money; a reversal restores a failed transfer.
+> - **Remaining wallet depth (next agent):** virtual-card display (VISA mock in designs, needs Stripe
+>   Issuing — gated), spending-breakdown donut by category, child→parent "request money" direction,
+>   and surfacing `trust_audit_logs` spend decisions in the wallet activity feed.
 
 > **Session update (2026-06-25l) — DEAD-BUTTON SWEEP + REAL DATA (opus-4-8)**
 >

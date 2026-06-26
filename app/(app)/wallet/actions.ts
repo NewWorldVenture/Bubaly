@@ -5,10 +5,11 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
-import { creditChildWallet } from '@/lib/wallet/server';
+import { creditChildWallet, debitSpendBucket, bucketBalanceCents } from '@/lib/wallet/server';
 import { nextRunDate, type Cadence } from '@/lib/wallet/allowance';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
 import { planLevel } from '@/lib/constants/plans';
+import { evaluateTrust, roleOf } from '@/lib/trust/server';
 
 const WALLET_TERMS_VERSION = '2026-06-25';
 
@@ -476,5 +477,187 @@ export async function saveWalletRuleAction(input: {
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/wallet/settings');
+  return { ok: true };
+}
+
+// ─── Spend requests + approvals (the "Pending Approvals" flow) ────────────────
+
+/**
+ * Request to spend from a child's Spend bucket. Money movement is governed by
+ * the Trust Engine and the wallet's per-child approval threshold:
+ *   • Under threshold AND requester is a parent → posts a completed debit.
+ *   • Otherwise → posts a held (requires_parent_approval) debit + a
+ *     parent_approvals row that shows up in the family's Pending Approvals.
+ * Never overdraws: the requested amount must fit the current Spend balance.
+ */
+export async function requestSpendAction(input: {
+  childWalletId: string; amountCents: number; description: string;
+}): Promise<Result & { pendingApproval?: boolean }> {
+  const ctx = await requireUserContext();
+  const familyId = ctx.active.familyId;
+  const amount = Math.trunc(input.amountCents);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Enter an amount greater than $0.' };
+  const description = input.description.trim() || 'Purchase';
+  const supabase = await createServer();
+
+  // The child wallet must belong to this family; load its approval threshold.
+  const [{ data: cw }, { data: rule }] = await Promise.all([
+    supabase.from('child_wallets').select('id, member_id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle(),
+    supabase.from('wallet_rules').select('require_approval_over_cents').eq('family_id', familyId).eq('child_wallet_id', input.childWalletId).maybeSingle(),
+  ]);
+  if (!cw) return { ok: false, error: 'That wallet was not found.' };
+
+  // Can't request more than is available in Spend.
+  const { available } = await bucketBalanceCents(supabase, { familyId, childWalletId: cw.id, kind: 'spend' });
+  if (amount > available) return { ok: false, error: `Only ${(available / 100).toFixed(2)} available in Spend.` };
+
+  const threshold = rule?.require_approval_over_cents ?? 5000;
+  const manager = isManager(ctx.active.role);
+
+  // Trust Engine governs the money movement (domain finances / capability automate).
+  const { decision } = await evaluateTrust(supabase, familyId, {
+    actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+    domain: 'finances', capability: 'automate',
+    title: `Spend ${(amount / 100).toFixed(2)} — ${description}`,
+    context: { amountCents: amount },
+    openApproval: false, // the wallet owns its own approval row below
+  });
+  // Only an EXPLICIT denial (a deny grant or a household policy) hard-blocks a
+  // request. A role-default "no" just means the child needs a parent's OK — they
+  // can always *ask*, which is the whole point of a spend request.
+  const explicitlyDenied = decision.effect === 'deny' && (decision.basis === 'deny_grant' || decision.basis === 'policy');
+  if (explicitlyDenied) return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+
+  // A parent under threshold (and not forced to review by a policy) spends directly.
+  const needsApproval = !manager || amount > threshold || decision.effect !== 'allow';
+
+  const debit = await debitSpendBucket(supabase, {
+    familyId, childWalletId: cw.id, amountCents: amount, type: 'card_spend',
+    description, createdBy: ctx.user.id, requiresApproval: needsApproval,
+    relatedType: 'spend_request', metadata: { requested_by_member: ctx.active.member.id },
+  });
+  if (!debit.ok) return { ok: false, error: debit.error };
+
+  if (needsApproval) {
+    await supabase.from('parent_approvals').insert({
+      family_id: familyId, kind: 'card_spend', ref_type: 'wallet_transactions', ref_id: debit.txnId ?? null,
+      amount_cents: amount, status: 'pending', requested_by: ctx.user.id, note: description,
+    });
+    revalidatePath('/wallet');
+    return { ok: true, pendingApproval: true };
+  }
+
+  revalidatePath('/wallet');
+  return { ok: true };
+}
+
+/**
+ * Approve or reject a pending spend request. On approve the held debit posts
+ * (re-checking the balance so it can never overdraw); on reject it's cancelled.
+ */
+export async function decideSpendRequestAction(input: {
+  approvalId: string; decision: 'approved' | 'rejected'; note?: string;
+}): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can decide spend requests.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+
+  const { data: appr } = await supabase.from('parent_approvals')
+    .select('id, status, ref_type, ref_id, amount_cents').eq('id', input.approvalId).eq('family_id', familyId).maybeSingle();
+  if (!appr) return { ok: false, error: 'Request not found.' };
+  if (appr.status !== 'pending') return { ok: false, error: 'This request was already decided.' };
+  if (appr.ref_type !== 'wallet_transactions' || !appr.ref_id) return { ok: false, error: 'Request is missing its transaction.' };
+
+  const { data: txn } = await supabase.from('wallet_transactions')
+    .select('id, child_wallet_id, amount_cents, status').eq('id', appr.ref_id).eq('family_id', familyId).maybeSingle();
+  if (!txn) return { ok: false, error: 'Transaction not found.' };
+
+  if (input.decision === 'approved') {
+    // Re-validate against the live Spend balance so a stale request can't overdraw.
+    if (txn.child_wallet_id) {
+      const { available } = await bucketBalanceCents(supabase, { familyId, childWalletId: txn.child_wallet_id, kind: 'spend' });
+      if (txn.amount_cents > available) return { ok: false, error: `Not enough left in Spend (${(available / 100).toFixed(2)}).` };
+    }
+    const { error: e } = await supabase.from('wallet_transactions')
+      .update({ status: 'completed', approved_by: ctx.user.id }).eq('id', txn.id);
+    if (e) return { ok: false, error: e.message };
+  } else {
+    const { error: e } = await supabase.from('wallet_transactions')
+      .update({ status: 'cancelled' }).eq('id', txn.id);
+    if (e) return { ok: false, error: e.message };
+  }
+
+  await supabase.from('parent_approvals').update({
+    status: input.decision, decided_by: ctx.user.id, decided_at: new Date().toISOString(),
+    note: input.note?.trim() || null,
+  }).eq('id', appr.id);
+
+  await supabase.from('wallet_audit_logs').insert({
+    family_id: familyId, actor_user_id: ctx.user.id, action: `spend_${input.decision}`,
+    entity_type: 'wallet_transactions', entity_id: txn.id,
+    detail: `Spend request ${input.decision}`,
+  });
+
+  revalidatePath('/wallet');
+  return { ok: true };
+}
+
+/**
+ * Send money between child wallets (parent-initiated). Money-conserving: debits
+ * the sender's Spend bucket and credits the recipient (allocated by their split).
+ * Goes through the Trust Engine and never overdraws the sender.
+ */
+export async function sendMoneyAction(input: {
+  fromChildWalletId: string; toChildWalletId: string; amountCents: number; note?: string;
+}): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can move money between wallets.' };
+  const familyId = ctx.active.familyId;
+  const amount = Math.trunc(input.amountCents);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Enter an amount greater than $0.' };
+  if (input.fromChildWalletId === input.toChildWalletId) return { ok: false, error: 'Pick two different wallets.' };
+  const supabase = await createServer();
+
+  const { data: wallets } = await supabase.from('child_wallets')
+    .select('id, member_id').eq('family_id', familyId).in('id', [input.fromChildWalletId, input.toChildWalletId]);
+  if ((wallets ?? []).length !== 2) return { ok: false, error: 'One of those wallets was not found.' };
+
+  const { decision } = await evaluateTrust(supabase, familyId, {
+    actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+    domain: 'finances', capability: 'automate',
+    title: `Transfer ${(amount / 100).toFixed(2)} between wallets`,
+    context: { amountCents: amount }, openApproval: false,
+  });
+  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+
+  const note = input.note?.trim() || 'Transfer';
+  // Debit the sender's Spend bucket (validates available balance).
+  const debit = await debitSpendBucket(supabase, {
+    familyId, childWalletId: input.fromChildWalletId, amountCents: amount, type: 'transfer',
+    description: `Sent: ${note}`, createdBy: ctx.user.id,
+    relatedType: 'child_wallets', relatedId: input.toChildWalletId,
+  });
+  if (!debit.ok) return { ok: false, error: debit.error };
+
+  // Credit the recipient (allocated across their buckets).
+  const credit = await creditChildWallet(supabase, {
+    familyId, childWalletId: input.toChildWalletId, amountCents: amount, type: 'transfer',
+    description: `Received: ${note}`, createdBy: ctx.user.id,
+    relatedType: 'child_wallets', relatedId: input.fromChildWalletId,
+  });
+  if (!credit.ok) {
+    // Roll back the debit with a reversal so money is conserved on failure.
+    if (debit.txnId) {
+      await supabase.from('wallet_transactions').insert({
+        family_id: familyId, child_wallet_id: input.fromChildWalletId, type: 'reversal',
+        status: 'completed', direction: 'credit', amount_cents: amount,
+        description: 'Reversed failed transfer', reverses_id: debit.txnId, created_by: ctx.user.id, approved_by: ctx.user.id,
+      });
+    }
+    return { ok: false, error: credit.error };
+  }
+
+  revalidatePath('/wallet');
   return { ok: true };
 }

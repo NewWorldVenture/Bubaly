@@ -25,9 +25,12 @@ export type NotificationType =
   | 'maintenance_task' | 'grocery_reminder' | 'document_expiry' | 'family_invite' | 'system';
 export type WalletTxnType =
   | 'gift_received' | 'parent_top_up' | 'allowance' | 'chore_reward' | 'babysitter_payment'
-  | 'card_spend' | 'card_refund' | 'goal_transfer' | 'bucket_transfer' | 'withdrawal' | 'fee' | 'adjustment' | 'reversal';
+  | 'card_spend' | 'card_refund' | 'goal_transfer' | 'bucket_transfer' | 'transfer' | 'withdrawal' | 'fee' | 'adjustment' | 'reversal';
 export type WalletTxnStatus =
   | 'pending' | 'requires_parent_approval' | 'processing' | 'completed' | 'failed' | 'reversed' | 'cancelled';
+export type StripeAccountStatus = 'pending' | 'restricted' | 'enabled' | 'disabled';
+export type EconomyDirection = 'credit' | 'debit';
+export type EconomyRedemptionStatus = 'pending' | 'approved' | 'fulfilled' | 'rejected' | 'cancelled';
 export type SubscriptionStatus =
   | 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid';
 export type AccountType = 'checking' | 'savings' | 'credit' | 'investment' | 'retirement';
@@ -451,6 +454,61 @@ export interface Database {
         { key: string; enabled: boolean; description: string | null; updated_at: string },
         { key: string; enabled?: boolean; description?: string | null },
         Partial<{ enabled: boolean; description: string | null }>
+      >;
+      family_currencies: T<
+        { id: string; family_id: string; name: string; emoji: string; unit_label: string | null; is_active: boolean; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; emoji?: string; unit_label?: string | null; is_active?: boolean; sort_order?: number; created_by?: string | null },
+        Partial<{ name: string; emoji: string; unit_label: string | null; is_active: boolean; sort_order: number }>
+      >;
+      currency_transactions: T<
+        { id: string; family_id: string; currency_id: string; member_id: string; direction: EconomyDirection; amount: number; reason: string | null; related_type: string | null; related_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; currency_id: string; member_id: string; direction: EconomyDirection; amount: number; reason?: string | null; related_type?: string | null; related_id?: string | null; created_by?: string | null },
+        Partial<{ reason: string | null }>
+      >;
+      economy_rewards: T<
+        { id: string; family_id: string; currency_id: string; title: string; emoji: string; cost: number; stock: number | null; is_active: boolean; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; currency_id: string; title: string; emoji?: string; cost: number; stock?: number | null; is_active?: boolean; sort_order?: number; created_by?: string | null },
+        Partial<{ title: string; emoji: string; cost: number; stock: number | null; is_active: boolean; sort_order: number }>
+      >;
+      economy_redemptions: T<
+        { id: string; family_id: string; reward_id: string | null; currency_id: string; member_id: string; title: string; cost: number; status: EconomyRedemptionStatus; txn_id: string | null; requested_by: string | null; decided_by: string | null; decided_at: string | null; note: string | null } & Stamps,
+        { id?: string; family_id: string; reward_id?: string | null; currency_id: string; member_id: string; title: string; cost: number; status?: EconomyRedemptionStatus; txn_id?: string | null; requested_by?: string | null; decided_by?: string | null; decided_at?: string | null; note?: string | null },
+        Partial<{ status: EconomyRedemptionStatus; txn_id: string | null; decided_by: string | null; decided_at: string | null; note: string | null }>
+      >;
+      stripe_connected_accounts: T<
+        { id: string; family_id: string; stripe_account_id: string; status: StripeAccountStatus; charges_enabled: boolean; payouts_enabled: boolean; details_submitted: boolean; treasury_enabled: boolean; card_issuing_enabled: boolean; requirements_due: Json; onboarded_by: string | null } & Stamps,
+        { id?: string; family_id: string; stripe_account_id: string; status?: StripeAccountStatus; charges_enabled?: boolean; payouts_enabled?: boolean; details_submitted?: boolean; treasury_enabled?: boolean; card_issuing_enabled?: boolean; requirements_due?: Json; onboarded_by?: string | null },
+        Partial<{ status: StripeAccountStatus; charges_enabled: boolean; payouts_enabled: boolean; details_submitted: boolean; treasury_enabled: boolean; card_issuing_enabled: boolean; requirements_due: Json }>
+      >;
+      stripe_financial_accounts: T<
+        { id: string; family_id: string; connected_account_id: string; stripe_financial_account_id: string; status: string; cached_balance_cents: number; cached_at: string | null } & Stamps,
+        { id?: string; family_id: string; connected_account_id: string; stripe_financial_account_id: string; status?: string; cached_balance_cents?: number; cached_at?: string | null },
+        Partial<{ status: string; cached_balance_cents: number; cached_at: string | null }>
+      >;
+      stripe_cardholders: T<
+        { id: string; family_id: string; member_id: string; child_wallet_id: string | null; stripe_cardholder_id: string; status: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; child_wallet_id?: string | null; stripe_cardholder_id: string; status?: string; created_by?: string | null },
+        Partial<{ status: string }>
+      >;
+      stripe_issuing_cards: T<
+        { id: string; family_id: string; child_wallet_id: string; cardholder_id: string; stripe_card_id: string; type: 'virtual' | 'physical'; status: 'pending' | 'active' | 'inactive' | 'canceled'; last4: string | null; brand: string | null; exp_month: number | null; exp_year: number | null; design_id: string | null; spend_limit_cents: number | null; spend_window: string; blocked_categories: string[]; is_frozen: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id: string; cardholder_id: string; stripe_card_id: string; type?: 'virtual' | 'physical'; status?: 'pending' | 'active' | 'inactive' | 'canceled'; last4?: string | null; brand?: string | null; exp_month?: number | null; exp_year?: number | null; design_id?: string | null; spend_limit_cents?: number | null; spend_window?: string; blocked_categories?: string[]; is_frozen?: boolean; created_by?: string | null },
+        Partial<{ status: 'pending' | 'active' | 'inactive' | 'canceled'; last4: string | null; brand: string | null; exp_month: number | null; exp_year: number | null; design_id: string | null; spend_limit_cents: number | null; spend_window: string; blocked_categories: string[]; is_frozen: boolean }>
+      >;
+      stripe_authorizations: T<
+        { id: string; family_id: string; card_id: string | null; child_wallet_id: string | null; stripe_authorization_id: string; amount_cents: number; merchant_name: string | null; merchant_category: string | null; outcome: 'approved' | 'declined'; decline_reason: string | null; txn_id: string | null } & Stamps,
+        { id?: string; family_id: string; card_id?: string | null; child_wallet_id?: string | null; stripe_authorization_id: string; amount_cents?: number; merchant_name?: string | null; merchant_category?: string | null; outcome: 'approved' | 'declined'; decline_reason?: string | null; txn_id?: string | null },
+        Partial<{ outcome: 'approved' | 'declined'; decline_reason: string | null; txn_id: string | null }>
+      >;
+      stripe_card_designs: T<
+        { id: string; name: string; description: string | null; preview_url: string | null; stripe_personalization_design_id: string | null; status: string; is_active: boolean; sort_order: number } & Stamps,
+        { id?: string; name: string; description?: string | null; preview_url?: string | null; stripe_personalization_design_id?: string | null; status?: string; is_active?: boolean; sort_order?: number },
+        Partial<{ name: string; description: string | null; preview_url: string | null; stripe_personalization_design_id: string | null; status: string; is_active: boolean; sort_order: number }>
+      >;
+      stripe_webhook_events: T<
+        { id: string; stripe_event_id: string; type: string; status: string; error: string | null; payload_summary: Json; created_at: string },
+        { id?: string; stripe_event_id: string; type: string; status?: string; error?: string | null; payload_summary?: Json },
+        Partial<{ status: string; error: string | null }>
       >;
       dashboard_layouts: T<
         { id: string; family_id: string; user_id: string | null; scope: 'user' | 'family'; device_context: 'all' | 'mobile' | 'tablet' | 'desktop'; feature_keys: string[]; is_active: boolean; created_by: string | null; updated_by: string | null; metadata: Json; deleted_at: string | null } & Stamps,
