@@ -1,7 +1,35 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Card Spending-Control editor. Keep this updated as you ship.
+Last updated after AI Investing for kids. Keep this updated as you ship.
+
+> ## 📈 AI INVESTING FOR KIDS (PR pending) — educational, simulated
+> Branch `claude/kid-investing`. A teaching tool (NOT a brokerage): kids invest the cash in their
+> wallet INVEST bucket into SIMULATED educational assets to learn markets, diversification &
+> compound growth. No real trading / securities / guaranteed returns. ⚠️ **Migration
+> `0097_kid_investing.sql` NOT APPLIED TO PROD.**
+> - **`lib/invest/portfolio.ts`** (PURE + tests) — `positionValue`, `portfolioValue`, `gainLossCents`/
+>   `Pct`, `allocationBreakdown`, `projectGrowth` (compound teaching tool), `sharesForBudget`,
+>   `orderAmountCents`.
+> - **`lib/invest/coach.ts`** (PURE + tests) — `buildInvestCoachPrompt`/`parseInvestCoach`; system
+>   prompt HARD-FORBIDS buy/sell advice & return promises (compliance). (19 invest tests total.)
+> - **Migration 0097** — `invest_assets` (global, simulated price catalog, **seeds 5 generic
+>   educational baskets** — MARKET/TECH/GREEN/BONDS/GOLD, NOT real securities), `invest_holdings`
+>   (shares + avg cost), `invest_orders` (buy/sell, parent-approved). Family RLS; assets global-read.
+>   Enums `invest_order_side/status`; DB types `InvestOrderSide/Status`.
+> - **`app/(app)/wallet/invest/actions.ts`** — `placeInvestOrderAction` (request; buy checks INVEST
+>   bucket cash, sell checks shares), `decideInvestOrderAction` (manager; on fill moves cash through
+>   the INVEST bucket via a `wallet_transactions` adjustment + updates holdings/avg-cost). Ledger stays
+>   source of truth for cash; holdings track shares.
+> - **`/api/ai/invest`** — Money Mentor explainer, tier-gated + per-day metered like `/api/ai/wallet`
+>   (`ai_invest_call` audit rows). Educational only.
+> - **`/wallet/invest`** (`components/wallet/invest-view.tsx`) + "Invest" subnav tab — holdings +
+>   gain/loss, simulated buy/sell (parent-approved), AI "Explain", and a compound-growth projector.
+>   Prominent "educational simulation" disclaimer.
+> - Verified: tsc clean · eslint clean · build OK (`/wallet/invest` + `/api/ai/invest` registered) ·
+>   suite **1075/1075** (19 new).
+> - FUTURE: a price-update cron to nudge simulated prices over time (today prices are static); optional
+>   real delayed-quote provider behind a flag.
 
 > ## 🎛️ CARD SPENDING-CONTROL EDITOR (PR #158) — per-card parent controls
 > Branch `claude/card-spending-controls`. Completes the card story from Stripe Money (#155):
