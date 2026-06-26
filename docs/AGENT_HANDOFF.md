@@ -30,6 +30,14 @@ Last updated: Dramatic UI upgrade — wallet/money visual allocation + dark-mode
 >   uses — transaction icons, auth indicators, amounts, the Real-time badge (now pulses),
 >   and babysitter payment history.
 >
+> ### Frictionless money modals (consistency pass)
+> - **Goals**: Fund modal gains round-amount quick chips (capped to remaining) + a
+>   "Finish it · $X" button that funds the exact remaining balance in one tap.
+> - **Allowance**: $5/$10/$20 quick chips in the modal; the next-payment date is now
+>   formatted human-readably ("Jul 3") instead of a raw `2026-07-03` string.
+> - Quick-amount chips now appear consistently across Add Funds (dashboard + child detail),
+>   Send Money, Goal Fund, and Allowance modals.
+>
 > ### Accessibility
 > - aria-labels/titles on icon-only buttons across wallet/money: babysitter edit/remove,
 >   card-design modal close, card expand (`aria-expanded`), child "Add funds".
