@@ -125,6 +125,18 @@ body {
   overscroll-behavior: none;
 }
 
+/* Prevent iOS Safari from auto-zooming (and visually shifting the page off to
+   the right) when a form control with a <16px font is focused. Any focusable
+   input/textarea/select must render at ≥16px on small screens. Tailwind's
+   `text-sm` controls still look small on desktop where this rule doesn't apply. */
+@media (max-width: 640px) {
+  input:not([type='checkbox']):not([type='radio']),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 /* Ambient brand wash behind the app. */
 body::before {
   content: '';
