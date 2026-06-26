@@ -408,6 +408,11 @@ export interface Database {
         { id?: string; family_id: string; child_wallet_id?: string | null; title: string; kind?: string; target_cents: number; saved_cents?: number; target_date?: string | null; status?: string; image_url?: string | null; created_by?: string | null },
         Partial<{ title: string; kind: string; target_cents: number; saved_cents: number; target_date: string | null; status: string; image_url: string | null }>
       >;
+      pay_handles: T<
+        { id: string; family_id: string; child_wallet_id: string | null; handle: string; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id?: string | null; handle: string; is_active?: boolean; created_by?: string | null },
+        Partial<{ child_wallet_id: string | null; handle: string; is_active: boolean }>
+      >;
       gift_links: T<
         { id: string; family_id: string; child_wallet_id: string | null; token: string; occasion: string | null; message: string | null; suggested_cents: number[]; is_active: boolean; expires_at: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; child_wallet_id?: string | null; token: string; occasion?: string | null; message?: string | null; suggested_cents?: number[]; is_active?: boolean; expires_at?: string | null; created_by?: string | null },

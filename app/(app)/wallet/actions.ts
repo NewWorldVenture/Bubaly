@@ -9,6 +9,7 @@ import { creditChildWallet } from '@/lib/wallet/server';
 import { nextRunDate, type Cadence } from '@/lib/wallet/allowance';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
 import { planLevel } from '@/lib/constants/plans';
+import { normalizeHandle, handleError } from '@/lib/wallet/pay-handle';
 
 const WALLET_TERMS_VERSION = '2026-06-25';
 
@@ -476,5 +477,64 @@ export async function saveWalletRuleAction(input: {
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/wallet/settings');
+  return { ok: true };
+}
+
+// ─── Pay-ID handles ──────────────────────────────────────────────────────────
+
+/** Claim (or rename) a memorable Pay-ID handle for a child or the whole family. */
+export async function claimPayHandleAction(input: { id?: string; childWalletId: string | null; handle: string }): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can set a Pay-ID.' };
+  const familyId = ctx.active.familyId;
+
+  const err = handleError(input.handle);
+  if (err) return { ok: false, error: err };
+  const handle = normalizeHandle(input.handle);
+
+  const supabase = await createServer();
+
+  // If targeting a child, make sure the wallet belongs to this family.
+  if (input.childWalletId) {
+    const { data: cw } = await supabase
+      .from('child_wallets').select('id').eq('family_id', familyId).eq('id', input.childWalletId).maybeSingle();
+    if (!cw) return { ok: false, error: 'Child wallet not found.' };
+  }
+
+  // Globally unique: surface a friendly message if someone else holds it.
+  const { data: taken } = await supabase
+    .from('pay_handles').select('id, family_id').eq('handle', handle).maybeSingle();
+  if (taken && taken.family_id !== familyId) return { ok: false, error: 'That Pay-ID is already taken — try another.' };
+  if (taken && input.id && taken.id !== input.id) return { ok: false, error: 'That Pay-ID is already taken — try another.' };
+
+  const row = {
+    family_id: familyId, child_wallet_id: input.childWalletId, handle, is_active: true, created_by: ctx.user.id,
+  };
+  const { error } = input.id
+    ? await supabase.from('pay_handles').update({ handle, child_wallet_id: input.childWalletId, is_active: true }).eq('id', input.id).eq('family_id', familyId)
+    : await supabase.from('pay_handles').insert(row);
+  if (error) {
+    // Unique-violation fallback (race with the check above).
+    if (error.code === '23505') return { ok: false, error: 'That Pay-ID is already taken — try another.' };
+    return { ok: false, error: error.message };
+  }
+
+  await supabase.from('wallet_audit_logs').insert({
+    family_id: familyId, actor_user_id: ctx.user.id, action: 'pay_handle_claimed',
+    entity_type: 'pay_handles', detail: handle, metadata: { handle, childWalletId: input.childWalletId },
+  });
+  revalidatePath('/wallet/gift');
+  return { ok: true };
+}
+
+/** Release a Pay-ID handle (frees it for anyone to claim). */
+export async function releasePayHandleAction(input: { id: string }): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can do this.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+  const { error } = await supabase.from('pay_handles').delete().eq('id', input.id).eq('family_id', familyId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/wallet/gift');
   return { ok: true };
 }
