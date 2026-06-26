@@ -1,7 +1,44 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Admin wallet family drilldown (2026-06-26n). Keep this updated as you ship.
+Last updated: Frictionless polish — card address prefill, gift share/QR, a11y (2026-06-26o). Keep this updated as you ship.
+
+> **Session update (2026-06-26o) — FRICTIONLESS POLISH + ROADMAP AUDIT (production-ready).**
+> Branch `claude/continuation-an1mam`. Commits `b150415`, `4639520`, `f67a3be`.
+> Verified: tsc clean · `npm run build` exit 0 · **full suite 998/998**.
+>
+> **Audit result:** every roadmap item across Wallet, Bubaly Money, and AI Call Guardian
+> is genuinely BUILT and Supabase-wired. Confirmed during this session:
+> - **Push notifications are fully wired in code** — `lib/server/push.ts`
+>   (`dispatchPendingPushes`, `sendPushToUser/Users`) delivers Web Push (VAPID) + native
+>   FCM; called from `/api/cron/notifications`, `/api/notifications/generate`, and admin.
+>   `push_devices` table + subscribe/unsubscribe routes exist. Reminders due within 24h
+>   are picked up by `generateFamilyNotifications` → notification row → push.
+>   **The only thing left for push is setting the prod env keys** (VAPID_*, FCM_SERVER_KEY).
+> - **Card designs are wired end-to-end** — admin creates at `/admin/card-designs` →
+>   `/money/cards` reads `is_active` designs → CardManager shows them in the order flow.
+>
+> **Frictionless UX added this session (all zero-migration, client-side):**
+> 1. **Card order address prefill** (`components/money/card-manager.tsx`) — the
+>    billing/shipping address is remembered in `localStorage` (`bubaly.card.address`)
+>    and prefilled on every subsequent card order. Form shows "Saved for next time".
+> 2. **Gift link native share + download QR** (`components/wallet/gift-view.tsx`) — the
+>    headline grandparent-gifting flow now has a Web Share API button (renders only when
+>    `navigator.share` exists) and a "Download QR" button that saves the code as a PNG
+>    (print on a card / text to relatives). Copy-link remains the universal fallback.
+> 3. **Public gift form a11y** (`components/wallet/public-gift-form.tsx`) — aria-labels +
+>    `autoComplete="name"` on the name / message / custom-amount inputs (was placeholder-only).
+>
+> ### Remaining — ALL external ops (cannot be done in this env):
+> 1. Apply migrations 0088–0091 to prod Supabase, then regenerate `lib/database.types.ts`
+>    (`supabase gen types typescript --linked`) — removes the `as unknown as` casts and the
+>    `withStripeTables`/`withGuardianTables` shims.
+> 2. Set prod env: `VAPID_PUBLIC_KEY`/`NEXT_PUBLIC_VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`
+>    (+ optional `FCM_SERVER_KEY`) to turn on push delivery; `CRON_SECRET` for all crons;
+>    the `STRIPE_*` and `TWILIO_*`/`ANTHROPIC_API_KEY` keys per the per-pillar checklists below.
+> 3. Buy Twilio numbers + register voice/sms/whatsapp webhooks at bubaly.com.
+> 4. Register Stripe Issuing + main webhooks in the Stripe Dashboard.
+> 5. Apply migration 0089 (avatars bucket) so photo uploads work (preset avatars already do).
 
 > **Session update (2026-06-26n) — ADMIN WALLET FAMILY DRILLDOWN (production-ready).**
 > Branch `claude/continuation-an1mam`. Commit `c89ecdb`.
