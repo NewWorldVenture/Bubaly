@@ -1,7 +1,43 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Wallet — babysitters, settings, AI coach metering, admin console (2026-06-26l). Keep this updated as you ship.
+Last updated: Physical card address form + admin card designs (2026-06-26m). Keep this updated as you ship.
+
+> **Session update (2026-06-26m) — MONEY: PHYSICAL CARD SHIPPING ADDRESS + ADMIN CARD DESIGNS (production-ready).**
+> Branch `claude/continuation-an1mam`. Commit `8aae3fc`.
+> Verified: tsc clean · `npm run build` exit 0 (all routes registered).
+>
+> ### 1. Physical card shipping address form (`components/money/card-manager.tsx`)
+> The hardcoded `'123 Family St'` placeholder billing address is replaced with a real
+> user-entry form (street address, city, state 2-char, ZIP, US-only for now).
+> - Form shows in the Order Card modal for ALL card types (billing address is required
+>   by Stripe for cardholder creation on both virtual and physical cards).
+> - Label changes dynamically: "Billing address" for virtual, "Billing & shipping address"
+>   for physical.
+> - For physical cards, the address is also passed as `shippingName`/`shippingAddress` to
+>   `createCardAction`, so Stripe ships the card to the right place.
+> - Validates all four address fields before submitting; clears fields on success.
+>
+> ### 2. `/admin/card-designs` — Admin card designs UI
+> Full CRUD admin page for the `card_designs` table (added in migration 0090).
+> - **Server page:** `app/(app)/admin/card-designs/page.tsx` — loads all designs ordered by
+>   `sort_order`, renders the client component.
+> - **Client component:** `app/(app)/admin/card-designs/card-designs-client.tsx` — table view
+>   with toggle active/inactive, edit, delete. DesignModal handles create + edit.
+> - **Actions:** `app/(app)/admin/card-designs/actions.ts` — `upsertCardDesignAction`,
+>   `toggleCardDesignAction`, `deleteCardDesignAction` (all guarded by `isSuperAdmin`).
+> - Each design: name, Stripe personalization design ID (optional — leave blank for platform
+>   default), physical-only flag, sort_order, active/inactive toggle.
+> - Added "Card Designs" to `ADMIN_NAV` in `lib/constants/navigation.ts`.
+>
+> ### Remaining (external ops only — cannot be done in code):
+> 1. Apply migration 0091 to prod Supabase + regenerate database.types.ts
+> 2. Apply migration 0090 to prod Supabase
+> 3. Apply migration 0089 (avatars bucket) to prod Supabase
+> 4. Buy Twilio numbers + register voice/sms/whatsapp webhooks
+> 5. Set CRON_SECRET in prod Vercel
+> 6. Register Stripe Issuing and main webhooks in Stripe Dashboard
+> 7. Wire push notifications (FCM/Expo) to notifications table inserts
 
 > **Session update (2026-06-26l) — WALLET: BABYSITTERS, SETTINGS, AI COACH METERING, ADMIN CONSOLE (production-ready).**
 > Completes the remaining no-Stripe wallet TODO items from the 2026-06-25h handoff.
