@@ -1,7 +1,51 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Frictionless polish — card address prefill, gift share/QR, a11y (2026-06-26o). Keep this updated as you ship.
+Last updated: Dramatic UI upgrade — wallet/money visual allocation + dark-mode + a11y (2026-06-26p). Keep this updated as you ship.
+
+> **Session update (2026-06-26p) — DRAMATIC UI UPGRADE: VISUAL ALLOCATION, DARK-MODE, A11y (production-ready).**
+> Branch `claude/continuation-an1mam`. Commits `b150415`→`HEAD` (~8 commits).
+> Verified: tsc clean · `npm run build` exit 0 · **full suite 998/998**.
+> Goal: make the financial surfaces world-class and frictionless (user directive).
+>
+> ### Wallet dashboard (`components/wallet/wallet-dashboard.tsx`)
+> - **Color-coded allocation bars** (the Greenlight/Acorns pattern): the family total
+>   card now shows an aggregated proportional bar across spend/save/give/invest plus a
+>   per-bucket legend with totals; each child card gets its own proportional bar so
+>   parents *see* where money sits without doing math. New `AllocationBar` helper +
+>   `bar` colors added to `BUCKET_META`. `familyBuckets` aggregates all children
+>   (note: `BucketKind` includes a 5th `goal` key — include it in any `Record<BucketKind,number>` literal).
+> - **Larger clickable child cards** — name+balance is a `<Link>` to the child detail
+>   (bigger tap target), hover affordance on the card, Add button keeps its own target + aria-label.
+>
+> ### Child detail (`components/wallet/child-detail-view.tsx`)
+> - Same allocation bar in the header for visual consistency.
+> - Added \$5/\$10/\$20/\$50 quick-amount chips to its Add Funds modal (parity with dashboard).
+> - **Fixed a real friction bug**: Add Funds didn't `router.refresh()`, so the new balance
+>   only showed after a manual reload. Now refreshes + the toast names the amount/child.
+>
+> ### Money dashboard + babysitter view (`components/money/*`)
+> - Swapped light-only Tailwind classes (`bg-green-100`/`text-green-600`) that looked
+>   washed-out in dark mode for the theme-adaptive `emerald/rose-500/10` tokens the wallet
+>   uses — transaction icons, auth indicators, amounts, the Real-time badge (now pulses),
+>   and babysitter payment history.
+>
+> ### Accessibility
+> - aria-labels/titles on icon-only buttons across wallet/money: babysitter edit/remove,
+>   card-design modal close, card expand (`aria-expanded`), child "Add funds".
+> - aria-labels + autoComplete on the public gift form inputs.
+>
+> ### Earlier this session (frictionless polish):
+> - **Card order address prefill** (`card-manager.tsx`) — billing/shipping address is
+>   remembered in `localStorage` (`bubaly.card.address`) and prefilled on every future order.
+> - **Gift link native share + download QR** (`gift-view.tsx`) — Web Share API button +
+>   "Download QR" PNG export on the headline grandparent-gifting flow.
+>
+> **Roadmap status: complete.** Every feature across Wallet, Bubaly Money, and AI Call
+> Guardian is built + Supabase-wired. Push notifications are fully coded
+> (`lib/server/push.ts` + crons); only prod env keys remain. See the external-ops list below.
+
+> **Session update (2026-06-26o) — FRICTIONLESS POLISH + ROADMAP AUDIT (production-ready).**
 
 > **Session update (2026-06-26o) — FRICTIONLESS POLISH + ROADMAP AUDIT (production-ready).**
 > Branch `claude/continuation-an1mam`. Commits `b150415`, `4639520`, `f67a3be`.
