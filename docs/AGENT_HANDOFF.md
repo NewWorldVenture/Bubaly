@@ -1,8 +1,85 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-26 — Session 2 adds child-specific AI coach, goal savings forecast, allowance-request flow. All pushed to branch `claude/connect-8ysp00` (PR #162). 1068 tests pass. Keep this updated as you ship.
+Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money page, frictionless Stripe card setup, end-to-end wallet flow. Branch `claude/connect-8ysp00` (PR #162). 1068 tests pass · build clean. Keep this updated as you ship.
 
+> **Session update (2026-06-26) — SESSION 3: FAMILY TREASURY + SEND MONEY + FRICTIONLESS STRIPE CARDS**
+> Branch `claude/connect-8ysp00` · PR #162 · commit `c698d61`. tsc clean · 1068 tests pass · build exit 0.
+>
+> ### Family Treasury Page (`/wallet/treasury`)
+> - **NEW page** `app/(app)/wallet/treasury/page.tsx` — server page fetching all wallet data:
+>   - All child wallets + ledger balances + bucket breakdown
+>   - Monthly cash flow (this month's credits vs debits)
+>   - Goals overview (total saved vs targets across all active goals)
+>   - 6-month rolling trend data (credits and debits per month)
+> - **NEW component** `components/wallet/treasury-view.tsx`:
+>   - Hero: Total family balance with brand gradient card and horizontal bucket split bar
+>   - Month stats: In / Out / Net in 3-column stat cards
+>   - Per-child section: clickable rows → child detail page, with bucket breakdown bar, share % of family, goals progress badge
+>   - Goals summary section: aggregate progress bar + pct toward targets
+>   - Savings rate section: Save bucket total + Give bucket total
+>   - 6-month trend chart (pure CSS bar chart, no external library)
+>   - Quick links: Allowance, Goals, Gift Links, Activity
+>
+> ### Send Money Dedicated Page (`/wallet/send`)
+> - **NEW page** `app/(app)/wallet/send/page.tsx` — fetches all child wallets + spend balances
+> - **NEW component** `components/wallet/send-money-view.tsx`:
+>   - 4-step wizard: From → To → Amount → Confirm
+>   - Step 1 (From): Avatar cards showing each child's available balance
+>   - Step 2 (To): Filtered sibling picker (excludes sender)
+>   - Step 3 (Amount): Large amount display, numpad (0-9 + del + decimal), quick-amounts ($5/$10/$20/$50), optional note field; validates against spend balance
+>   - Step 4 (Confirm): Summary card showing sender → recipient with amount and note; calls `sendMoneyAction`
+>   - `wallets` prop (not `children` — avoids react/no-children-prop lint error)
+>
+> ### Frictionless Stripe Card Setup
+> - **Updated** `app/(app)/wallet/cards/page.tsx`:
+>   - Accepts `searchParams` with `?setup=complete` or `?setup=refresh`
+>   - On return from Stripe hosted onboarding: auto-calls `syncConnectedAccount` before rendering (pulls latest Stripe status into DB mirror)
+>   - Passes `justCompletedSetup` flag to MoneyCardsView
+> - **Rebuilt** `components/wallet/money-cards-view.tsx`:
+>   - Mode A (no Stripe config): friendly "coming soon" placeholder — unchanged
+>   - Mode B (setup needed): **3-step progress indicator** (Verify → Issue → Spend), benefit feature grid, primary CTA "Get started — 5 mins" / "Continue setup" if partially done
+>   - Mode C (account ready): 
+>     - Setup success banner (auto-dismisses after 6s) when returning from Stripe onboarding
+>     - "Issue all" bulk prompt for children without cards
+>     - Per-child card section: Virtual card one-click + Physical card order modal
+>     - Physical card order modal: spend limit field, explains balance gate behavior, calls `issueCardAction` with type='physical'
+>     - Improved card row: card art chip, freeze/unfreeze, controls editor
+>
+> ### Wallet Subnav Update
+> - `components/wallet/wallet-subnav.tsx`: added Treasury (Building2) and Send (Send) tabs between Overview and Goals
+>
+> ### Design Reference (20-screen design image)
+> The user provided a design reference with 20 screens. Status vs. codebase:
+> - ✅ Dashboard (Parent) — `/wallet`
+> - ✅ **Family Treasury** — `/wallet/treasury` (NEW this session)
+> - ✅ **Send Money** — `/wallet/send` (NEW this session, was modal-only before)
+> - ✅ Child Wallet — `/wallet/children/[childId]`
+> - ✅ Gift Link — `/wallet/gift`
+> - ✅ Gift Checkout Guest — `/gift/[token]` (public form)
+> - ✅ Chore/Mission Detail — `/dashboard/chores` (missions module)
+> - ✅ Cards Overview — `/wallet/cards` (frictionless setup improved this session)
+> - ✅ Order Card — via cards page (physical card modal added this session)
+> - ✅ Card Controls — per-card controls editor in cards page
+> - ✅ Transaction Activity — `/wallet/activity`
+> - ✅ Babysitter Payment — `/wallet/babysitters`
+> - ✅ Goals — `/wallet/goals`
+> - ✅ AI Coach — child-scoped in child-detail-view
+> - ✅ Add Money — modal in wallet dashboard
+> - ✅ Allowance Settings — `/wallet/allowance`
+> - ✅ Family Economy (token system) — `/economy`
+> - ✅ Admin Capabilities — admin area
+> - ✅ Admin Reminders — dashboard/reminders
+> - ⚠️ Subscription/Plus tier page — `/dashboard/subscriptions` exists but could be wallet-specific
+> - ⚠️ Admin Reconciliation — no dedicated reconciliation page (audit logs exist)
+>
+> ### Remaining items for next agent
+> - **Subscription Plus page for wallet** — could build `/wallet/upgrade` with wallet-specific tier features
+> - **Admin Reconciliation page** — `/admin/wallet/reconciliation` with ledger integrity checks
+> - **Virtual card PAN reveal** — Stripe Elements iframe for showing card number/CVV to cardholder (security-sensitive, needs Stripe Elements integration)
+> - **AI Kids Investing** — spec in this doc; not yet built
+> - **⚠️ MIGRATIONS NOT APPLIED TO PROD**: `0093_trust_engine.sql`, `0094_family_dashboard_settings.sql`, `0095_wallet_transfers.sql`, `0096_family_economy.sql`
+>
 > **Session update (2026-06-26) — WALLET DEPTH: CHILD AI COACH + GOAL FORECASTS + ALLOWANCE REQUEST (fable-5)**
 > Branch `claude/connect-8ysp00` · PR #162. tsc clean · 1068 tests pass · build exit 0.
 >
