@@ -143,13 +143,13 @@ export default async function AdminWalletPage() {
         ) : (
           <div className="divide-y divide-border">
             {topFamilyList.map(([familyId, count]) => (
-              <div key={familyId} className="flex items-center justify-between px-5 py-3 text-sm">
+              <a key={familyId} href={`/admin/wallet/${familyId}`} className="flex items-center justify-between px-5 py-3 text-sm hover:bg-elevated transition-colors">
                 <div>
                   <span className="font-medium text-fg">{familyNameById.get(familyId) ?? 'Unknown family'}</span>
                   <span className="ml-2 font-mono text-[10px] text-muted">{familyId.slice(0, 8)}</span>
                 </div>
-                <span className="font-semibold text-fg">{count} txns</span>
-              </div>
+                <span className="font-semibold text-fg">{count} txns →</span>
+              </a>
             ))}
           </div>
         )}
