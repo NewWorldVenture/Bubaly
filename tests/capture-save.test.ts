@@ -69,6 +69,15 @@ describe('saveCapture', () => {
     expect((row[0] as Record<string, unknown>).name).toBe('milk');
   });
 
+  it('parses quantities on shopping items', async () => {
+    const { client, inserts } = makeFakeSupabase();
+    const res = await saveCapture(client, { ...BASE, kind: 'shopping', text: '2 milk, eggs x12' });
+    expect(res.count).toBe(2);
+    const rows = inserts.find((i) => i.table === 'grocery_items')!.payload as Record<string, unknown>[];
+    expect(rows[0]).toMatchObject({ name: 'milk', quantity: '2' });
+    expect(rows[1]).toMatchObject({ name: 'eggs', quantity: '12' });
+  });
+
   it('rejects empty input', async () => {
     const { client } = makeFakeSupabase();
     await expect(saveCapture(client, { ...BASE, kind: 'note', text: '   ' })).rejects.toThrow();

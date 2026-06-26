@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseEvent, parseDueDate, suggestKind, splitItems } from '@/lib/capture/parse';
+import { parseEvent, parseDueDate, suggestKind, splitItems, parseGroceryItem } from '@/lib/capture/parse';
 
 // Fixed reference: Friday 2026-06-26, 10:00 local.
 const NOW = new Date(2026, 5, 26, 10, 0, 0, 0);
@@ -137,6 +137,22 @@ describe('splitItems', () => {
 
   it('returns a single item for a plain entry', () => {
     expect(splitItems('paper towels')).toEqual(['paper towels']);
+  });
+});
+
+describe('parseGroceryItem', () => {
+  it('parses leading counts', () => {
+    expect(parseGroceryItem('2 milk')).toEqual({ name: 'milk', quantity: '2' });
+    expect(parseGroceryItem('12 eggs')).toEqual({ name: 'eggs', quantity: '12' });
+    expect(parseGroceryItem('2x soda')).toEqual({ name: 'soda', quantity: '2' });
+  });
+  it('parses trailing counts', () => {
+    expect(parseGroceryItem('milk x2')).toEqual({ name: 'milk', quantity: '2' });
+    expect(parseGroceryItem('eggs (12)')).toEqual({ name: 'eggs', quantity: '12' });
+  });
+  it('leaves plain names and "2% milk" untouched', () => {
+    expect(parseGroceryItem('bananas')).toEqual({ name: 'bananas', quantity: null });
+    expect(parseGroceryItem('2% milk')).toEqual({ name: '2% milk', quantity: null });
   });
 });
 

@@ -181,6 +181,35 @@ export function splitItems(input: string): string[] {
   return out;
 }
 
+/**
+ * Pull a quantity out of a single grocery item. Recognizes a few unambiguous
+ * forms — "2 milk", "2x milk", "milk x2", "eggs (12)" — and leaves everything
+ * else (including "2% milk") as a plain name. Returns the cleaned name and the
+ * quantity as a string (matching `grocery_items.quantity`), or null.
+ */
+export function parseGroceryItem(raw: string): { name: string; quantity: string | null } {
+  const s = raw.trim();
+  if (!s) return { name: raw.trim(), quantity: null };
+
+  // Trailing "x2" / "× 2" (requires a space before x so we don't split words).
+  let m = s.match(/\s+[x×]\s*(\d{1,3})\s*$/i);
+  if (m) return { name: s.slice(0, m.index).trim() || s, quantity: m[1] };
+
+  // Trailing "(12)" / "(12 oz)".
+  m = s.match(/\s*\((\d{1,3}[^)]*)\)\s*$/);
+  if (m) return { name: s.slice(0, m.index).trim() || s, quantity: m[1].trim() };
+
+  // Leading "2x milk".
+  m = s.match(/^(\d{1,3})\s*[x×]\s+(.+)$/i);
+  if (m) return { name: m[2].trim(), quantity: m[1] };
+
+  // Leading "3 apples" (the remainder must start with a letter, so "2% milk" stays whole).
+  m = s.match(/^(\d{1,3})\s+(.+)$/);
+  if (m && /[a-z]/i.test(m[2])) return { name: m[2].trim(), quantity: m[1] };
+
+  return { name: s, quantity: null };
+}
+
 export type CaptureKind = 'task' | 'note' | 'event' | 'shopping';
 
 /**

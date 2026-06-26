@@ -3,6 +3,12 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after dashboard customization permissions (child controls + family default). Keep this updated as you ship.
 
+> **Session update (2026-06-26f) — GROCERY QUANTITY PARSING.**
+> Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1066/1066** (+4). No migration.
+> - **`parseGroceryItem(raw)`** (pure, **3 tests**) → "2 milk" / "2x soda" / "milk x2" / "eggs (12)" set the
+>   existing `grocery_items.quantity`; "2% milk" and plain names stay whole. Wired into `saveCapture`'s
+>   shopping branch so multi-item captures get per-item quantities. +1 `saveCapture` test.
+>
 > **Session update (2026-06-26e) — ASSISTANT "?q=" DEEP LINK (closes the capture→AI loop).**
 > Branch `claude/festive-bohr-m4cbeg`. tsc/lint clean · build ✓ · **suite 1062/1062** (+3). No migration.
 > - Bug: the `/capture` shell routes ambiguous text to `/dashboard/assistant?q=…`, but the assistant

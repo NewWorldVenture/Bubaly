@@ -4,7 +4,7 @@
 // multi-item shopping). Persistence lives here; the parsing lives in ./parse.
 
 import type { SupabaseBrowser } from '@/lib/supabase/types';
-import { parseEvent, parseDueDate, splitItems, type CaptureKind } from './parse';
+import { parseEvent, parseDueDate, splitItems, parseGroceryItem, type CaptureKind } from './parse';
 
 export type CaptureSaveResult = {
   kind: CaptureKind;
@@ -87,9 +87,9 @@ export async function saveCapture(supabase: SupabaseBrowser, input: CaptureSaveI
   const listId = await defaultGroceryListId(supabase, familyId, userId);
   if (!listId) throw new Error('Could not find a grocery list');
   const items = splitItems(value);
-  const names = items.length ? items : [value];
+  const parsed = (items.length ? items : [value]).map(parseGroceryItem);
   const { error } = await supabase.from('grocery_items')
-    .insert(names.map((name) => ({ family_id: familyId, list_id: listId, name, created_by: userId })));
+    .insert(parsed.map((p) => ({ family_id: familyId, list_id: listId, name: p.name, quantity: p.quantity, created_by: userId })));
   if (error) throw error;
-  return { kind, count: names.length, title: names.join(', '), href: '/dashboard/grocery' };
+  return { kind, count: parsed.length, title: parsed.map((p) => p.name).join(', '), href: '/dashboard/grocery' };
 }
