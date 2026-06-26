@@ -31,6 +31,10 @@
     {
       "path": "/api/cron/wallet-allowance",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/guardian-learning",
+      "schedule": "0 9 * * *"
     }
   ]
 }

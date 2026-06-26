@@ -3,8 +3,9 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { RoutingSettings } from '@/components/guardian/routing-settings';
+import { GuardianNumberForm } from '@/components/guardian/guardian-number-form';
 import { Settings, ArrowLeft } from 'lucide-react';
-import { isTwilioConfigured, formatPhone } from '@/lib/guardian/twilio';
+import { isTwilioConfigured } from '@/lib/guardian/twilio';
 
 export const metadata: Metadata = { title: 'Settings · AI Call Guardian · Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,7 @@ export default async function GuardianSettingsPage() {
   ]);
 
   const twilioEnabled = isTwilioConfigured();
-  const guardianPhone = (profile as { guardian_phone?: string } | null)?.guardian_phone;
+  const guardianPhone = (profile as { guardian_phone?: string } | null)?.guardian_phone ?? null;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6">
@@ -48,29 +49,12 @@ export default async function GuardianSettingsPage() {
         </div>
       </div>
 
-      {/* Phone number info */}
-      <div className="rounded-2xl border border-border bg-surface/40 p-4 space-y-2">
-        <h3 className="text-sm font-semibold">Your Guardian Number</h3>
-        {twilioEnabled && guardianPhone ? (
-          <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-500/10 text-lg">📞</div>
-            <div>
-              <p className="text-lg font-bold text-emerald-400">{formatPhone(guardianPhone)}</p>
-              <p className="text-xs text-muted">Share this number — Bubaly answers for you</p>
-            </div>
-          </div>
-        ) : !twilioEnabled ? (
-          <p className="text-sm text-muted">
-            Set up Twilio (<code className="rounded bg-elevated px-1 text-xs">TWILIO_ACCOUNT_SID</code>,{' '}
-            <code className="rounded bg-elevated px-1 text-xs">TWILIO_AUTH_TOKEN</code>,{' '}
-            <code className="rounded bg-elevated px-1 text-xs">TWILIO_PHONE_NUMBER</code>) to get a Guardian number.
-          </p>
-        ) : (
-          <p className="text-sm text-muted">
-            No Guardian number assigned yet. Contact support to assign a Twilio number to your profile.
-          </p>
-        )}
-      </div>
+      {/* Guardian number — self-serve assignment */}
+      <GuardianNumberForm
+        memberId={memberId}
+        initialPhone={guardianPhone}
+        twilioEnabled={twilioEnabled}
+      />
 
       {/* ENV vars checklist */}
       <div className="rounded-2xl border border-border bg-surface/40 p-4 space-y-2">

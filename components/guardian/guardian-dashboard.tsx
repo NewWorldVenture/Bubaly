@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Shield, Phone, MessageSquare, AlertTriangle, CheckCircle, Clock, TrendingUp, Users, Zap } from 'lucide-react';
+import { Shield, Phone, MessageSquare, AlertTriangle, CheckCircle, Clock, TrendingUp, Users, Zap, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { TRUST_LABELS, TRUST_COLORS, TRUST_ICONS } from '@/lib/guardian/trust';
 import { ROUTING_MODE_LABELS } from '@/lib/guardian/pipeline';
 import { formatPhone } from '@/lib/guardian/twilio';
-import { updateContextAction, reviewSuggestionAction, acknowledgeEscalationAction } from '@/app/(app)/guardian/actions';
+import { updateContextAction, reviewSuggestionAction, acknowledgeEscalationAction, generateGuardianSuggestionsAction } from '@/app/(app)/guardian/actions';
 import { useToast } from '@/components/ui/toast';
 import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
@@ -88,6 +88,19 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
   const { success: toastSuccess, error: toastError } = useToast();
   const [contextLoading, setContextLoading] = useState<string | null>(null);
   const [suggestionLoading, setSuggestionLoading] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+
+  async function handleScan() {
+    setScanning(true);
+    const res = await generateGuardianSuggestionsAction();
+    setScanning(false);
+    if (res.ok) {
+      const n = res.data?.created ?? 0;
+      toastSuccess(n > 0 ? `Found ${n} new suggestion${n === 1 ? '' : 's'}` : 'All caught up — no new suggestions');
+    } else {
+      toastError(res.error);
+    }
+  }
 
   async function handleContextChange(memberId: string, context: string) {
     setContextLoading(memberId);
@@ -180,7 +193,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
           <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">Your Status</h3>
           {memberProfiles.map((profile) => (
             <div key={profile.id} className="space-y-2">
-              <p className="text-sm font-medium">{profile.ai_persona_name}'s Status</p>
+              <p className="text-sm font-medium">{profile.ai_persona_name}&apos;s Status</p>
               <div className="flex flex-wrap gap-2">
                 {CONTEXT_OPTIONS.map((opt) => (
                   <button
@@ -204,14 +217,32 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
         </div>
       )}
 
-      {/* AI Suggestions */}
-      {pendingSuggestions.length > 0 && (
-        <div className="rounded-2xl border border-purple-500/30 bg-purple-500/5 p-4 space-y-3">
+      {/* AI Suggestions — Adaptive AI Learning */}
+      <div className="rounded-2xl border border-purple-500/30 bg-purple-500/5 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-purple-400" />
             <h3 className="text-sm font-semibold text-purple-300">Bubaly Suggestions</h3>
           </div>
-          <p className="text-xs text-muted">Bubaly noticed patterns and has suggestions — you decide what to apply.</p>
+          <button
+            onClick={handleScan}
+            disabled={scanning}
+            className="flex items-center gap-1.5 rounded-lg bg-purple-500/15 px-2.5 py-1.5 text-xs font-semibold text-purple-300 hover:bg-purple-500/25 transition disabled:opacity-50"
+          >
+            <Sparkles className={cn('h-3.5 w-3.5', scanning && 'animate-pulse')} />
+            {scanning ? 'Scanning…' : 'Scan for tips'}
+          </button>
+        </div>
+        <p className="text-xs text-muted">
+          Bubaly learns from your call patterns and proposes changes — you decide what to apply. Nothing
+          changes until you approve it.
+        </p>
+        {pendingSuggestions.length === 0 ? (
+          <p className="rounded-xl border border-border bg-elevated px-3 py-4 text-center text-xs text-muted">
+            No suggestions right now. Tap <span className="font-medium text-purple-300">Scan for tips</span> to
+            check your recent activity.
+          </p>
+        ) : (
           <div className="space-y-2">
             {pendingSuggestions.map((s) => (
               <div key={s.id} className="rounded-xl border border-border bg-elevated p-3 flex items-start gap-3">
@@ -243,8 +274,8 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Recent communications feed */}
       <div className="rounded-2xl border border-border bg-surface/40">

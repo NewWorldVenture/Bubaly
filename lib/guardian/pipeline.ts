@@ -4,7 +4,8 @@
 import type { TrustLevel } from './trust';
 import { trustFromSpamScore, explainTrustDecision } from './trust';
 import { evaluateRules, buildRuleContext, type GuardianRule } from './rules';
-import { detectScamFromText } from './scam';
+import { detectScamFromText, type ScamType } from './scam';
+import { applySeasonalBoost } from './seasonal';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type RoutingMode =
@@ -174,13 +175,18 @@ export async function runDecisionPipeline(
   // Step 3: Quick scam check on any initial transcript
   let scamDetected = false;
   let scamType: string | null = null;
+  let seasonalNote = '';
   if (initialTranscript) {
     const scamResult = detectScamFromText(initialTranscript, callerPhone ?? undefined);
     if (scamResult.isScam) {
+      // Seasonal Intelligence — boost confidence for scams that are "in season"
+      // (IRS in tax season, charity/gift-card over the holidays, etc.).
+      const seasonal = applySeasonalBoost(scamResult.scamType as ScamType | null, scamResult.confidence);
       scamDetected = true;
       scamType = scamResult.scamType;
-      spamScore = Math.max(spamScore, scamResult.confidence);
-      if (scamResult.confidence >= 80) trust = 'suspected_spam';
+      spamScore = Math.max(spamScore, seasonal.confidence);
+      if (seasonal.boosted) seasonalNote = seasonal.note;
+      if (seasonal.confidence >= 80) trust = 'suspected_spam';
     }
   }
 
@@ -218,9 +224,10 @@ export async function runDecisionPipeline(
   );
   if (shouldEscalate) routingMode = 'immediate_ring';
 
-  const reason = ruleResult.matched
+  let reason = ruleResult.matched
     ? ruleResult.reason
     : explainTrustDecision(trust, contact?.name ?? callerName, spamScore);
+  if (seasonalNote) reason = `${reason} ${seasonalNote}`;
 
   return {
     routingMode,

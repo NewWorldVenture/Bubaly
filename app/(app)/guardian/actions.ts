@@ -6,6 +6,7 @@ import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { revalidatePath } from 'next/cache';
 import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
+import { runLearningForFamily } from '@/lib/guardian/learning-run';
 
 type ActionResult<T = void> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -175,6 +176,66 @@ export async function updateContextAction(
   return { ok: true };
 }
 
+/**
+ * Assign (or clear) the Bubaly Guardian phone number for a member.
+ * Normalizes to E.164 and enforces uniqueness across the family's profiles.
+ */
+export async function assignGuardianPhoneAction(input: {
+  member_id: string;
+  phone: string;
+}): Promise<ActionResult<{ phone: string | null }>> {
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+  const db = withGuardianTables(supabase);
+  const familyId = ctx.active.familyId;
+
+  // Normalize: strip everything but digits/+, coerce to E.164 (assume US if 10 digits).
+  const raw = input.phone.trim();
+  let phone: string | null = null;
+  if (raw) {
+    const digits = raw.replace(/[^\d+]/g, '');
+    if (digits.startsWith('+')) phone = digits;
+    else if (digits.length === 10) phone = `+1${digits}`;
+    else if (digits.length === 11 && digits.startsWith('1')) phone = `+${digits}`;
+    else phone = `+${digits.replace(/^\+/, '')}`;
+    if (!/^\+\d{8,15}$/.test(phone)) {
+      return { ok: false, error: 'Enter a valid phone number (e.g. (555) 123-4567).' };
+    }
+  }
+
+  // Guard against assigning the same Guardian number to two members.
+  if (phone) {
+    const { data: clash } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+      .select('member_id')
+      .eq('family_id', familyId)
+      .eq('guardian_phone', phone)
+      .neq('member_id', input.member_id)
+      .maybeSingle();
+    if (clash) return { ok: false, error: 'That number is already assigned to another family member.' };
+  }
+
+  const { error } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+    .upsert(
+      { family_id: familyId, member_id: input.member_id, guardian_phone: phone },
+      { onConflict: 'family_id,member_id' },
+    );
+
+  if (error) return { ok: false, error: error.message };
+
+  await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
+    family_id: familyId,
+    actor_user_id: ctx.user.id,
+    actor: 'parent',
+    action: phone ? 'profile.guardian_phone_assigned' : 'profile.guardian_phone_cleared',
+    entity_type: 'guardian_member_profiles',
+    detail: { member_id: input.member_id, guardian_phone: phone },
+  });
+
+  revalidatePath('/guardian/settings');
+  revalidatePath('/guardian');
+  return { ok: true, data: { phone } };
+}
+
 // ── Rules ────────────────────────────────────────────────────────────────────
 
 export async function createRuleAction(input: {
@@ -265,6 +326,18 @@ export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
 }
 
 // ── Suggestions ─────────────────────────────────────────────────────────────
+
+/**
+ * Run the Adaptive AI Learning loop on demand (parent taps "Scan for tips").
+ * Analyzes recent communications and proposes parent-approvable changes.
+ */
+export async function generateGuardianSuggestionsAction(): Promise<ActionResult<{ created: number }>> {
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+  const result = await runLearningForFamily(supabase, ctx.active.familyId);
+  revalidatePath('/guardian');
+  return { ok: true, data: { created: result.created } };
+}
 
 export async function reviewSuggestionAction(
   suggestionId: string,

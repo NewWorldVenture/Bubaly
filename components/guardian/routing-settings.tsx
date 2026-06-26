@@ -216,7 +216,7 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
           </div>
           <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-3">
             <p className="text-xs text-blue-300">
-              <strong>Privacy note:</strong> The AI never shares family addresses, children's names, schedules, or any personal information with callers.
+              <strong>Privacy note:</strong> The AI never shares family addresses, children&apos;s names, schedules, or any personal information with callers.
             </p>
           </div>
         </div>
@@ -226,7 +226,7 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
       {activeTab === 'context' && (
         <div className="space-y-3">
           <p className="text-sm text-muted">
-            Override routing when you're in a specific context. These take priority over trust-level defaults.
+            Override routing when you&apos;re in a specific context. These take priority over trust-level defaults.
           </p>
           {CONTEXT_OPTIONS.map((opt) => {
             const currentMode = (form.context_overrides[opt.value] ?? 'ai_handle_first') as RoutingMode;
