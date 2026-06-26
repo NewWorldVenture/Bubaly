@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
-import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
+import { allocate, normalizeSplit, isValidSplit, type Split } from '@/lib/wallet/ledger';
 import { creditChildWallet } from '@/lib/wallet/server';
 import { nextRunDate, type Cadence } from '@/lib/wallet/allowance';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
@@ -359,5 +359,39 @@ export async function dismissGiftAction(input: { giftPaymentId: string }): Promi
     .update({ status: 'cancelled' }).eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/wallet/gift');
+  return { ok: true };
+}
+
+/**
+ * Set how a child's incoming money is auto-split across Spend/Save/Give/Invest.
+ * Persists the percentages on `wallet_rules.split` (must total 100). New credits
+ * via `creditChildWallet` immediately allocate by this rule — no back-fill of the
+ * immutable ledger. Parent/guardian only.
+ */
+export async function saveWalletSplitAction(input: { childWalletId: string; split: Split }): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can change allocation.' };
+  if (!isValidSplit(input.split)) return { ok: false, error: 'Percentages must be whole numbers that total 100%.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+
+  // Confirm the child wallet belongs to this family.
+  const { data: cw } = await supabase
+    .from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
+  if (!cw) return { ok: false, error: 'That wallet was not found.' };
+
+  const { error } = await supabase.from('wallet_rules').upsert(
+    { family_id: familyId, child_wallet_id: input.childWalletId, split: input.split as unknown as Record<string, number> },
+    { onConflict: 'family_id,child_wallet_id' },
+  );
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from('wallet_audit_logs').insert({
+    family_id: familyId, actor_user_id: ctx.user.id, action: 'split_updated',
+    entity_type: 'wallet_rules', entity_id: input.childWalletId, detail: 'Updated allocation split', metadata: { split: input.split },
+  });
+
+  revalidatePath('/wallet/settings');
+  revalidatePath('/wallet');
   return { ok: true };
 }

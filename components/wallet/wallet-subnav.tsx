@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Wallet, Target, CalendarClock, Gift, Receipt } from 'lucide-react';
+import { Wallet, Target, CalendarClock, Gift, Receipt, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 const TABS = [
@@ -11,6 +11,7 @@ const TABS = [
   { href: '/wallet/allowance', label: 'Allowance', icon: CalendarClock },
   { href: '/wallet/gift', label: 'Gifts', icon: Gift },
   { href: '/wallet/activity', label: 'Activity', icon: Receipt },
+  { href: '/wallet/settings', label: 'Allocation', icon: SlidersHorizontal },
 ];
 
 export function WalletSubnav() {

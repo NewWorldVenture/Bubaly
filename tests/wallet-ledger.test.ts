@@ -1,9 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
-  DEFAULT_SPLIT, isValidSplit, normalizeSplit, allocate, signedValue,
+  DEFAULT_SPLIT, isValidSplit, normalizeSplit, splitTotal, allocate, signedValue,
   balanceFromLedger, bucketBalances, reversalOf, goalProgress, weeksToGoal, formatCents,
   type LedgerEntry, type Split,
 } from '@/lib/wallet/ledger';
+
+describe('splitTotal', () => {
+  it('sums buckets and tolerates partials', () => {
+    expect(splitTotal({ spend: 40, save: 40, give: 10, invest: 10 })).toBe(100);
+    expect(splitTotal({ spend: 50, save: 30 })).toBe(80);
+    expect(splitTotal(null)).toBe(0);
+  });
+});
 
 describe('isValidSplit / normalizeSplit', () => {
   it('accepts splits summing to 100', () => {

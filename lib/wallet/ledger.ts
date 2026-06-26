@@ -35,6 +35,12 @@ export function normalizeSplit(split: Partial<Split> | null | undefined): Split 
   return isValidSplit(split) ? split : DEFAULT_SPLIT;
 }
 
+/** Sum of a (possibly in-progress) split's buckets — for live "must total 100%" UI. */
+export function splitTotal(split: Partial<Split> | null | undefined): number {
+  const s = split ?? {};
+  return (s.spend ?? 0) + (s.save ?? 0) + (s.give ?? 0) + (s.invest ?? 0);
+}
+
 /**
  * Split an amount (cents) across buckets by percentage, conserving every cent.
  * Floors each bucket, then hands out the leftover cents one at a time in

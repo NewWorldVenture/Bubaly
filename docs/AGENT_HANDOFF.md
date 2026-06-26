@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after onboarding avatar/phone production-readiness (avatars bucket, 0089). Keep this updated as you ship.
+Last updated after the Wallet allocation-split editor (/wallet/settings). Keep this updated as you ship.
 
 > ## 🏦 FAMILY WALLET — PROGRAM MAP (read this first if you're continuing the wallet)
 > A parent-controlled financial OS built as an **immutable ledger** (balances are derived by
@@ -23,17 +23,23 @@ Last updated after onboarding avatar/phone production-readiness (avatars bucket,
 > - **Screens** — `/wallet` (dashboard + add funds), `/wallet/goals` (create/fund/forecast),
 >   `/wallet/allowance` (editor), `/wallet/gift` (links + approve) + PUBLIC `/gift/[token]`,
 >   **`/wallet/activity`** (full ledger, filters), **`/wallet/children/[childId]`** (per-child
->   detail + add funds). Subnav: `components/wallet/wallet-subnav.tsx`. Server actions in
->   `app/(app)/wallet/actions.ts` + public `app/gift/actions.ts`. ~115 wallet tests; suite green.
+>   detail + add funds), **`/wallet/settings`** (per-child allocation-split editor). Subnav:
+>   `components/wallet/wallet-subnav.tsx`. Server actions in `app/(app)/wallet/actions.ts`
+>   + public `app/gift/actions.ts`. ~116 wallet tests; suite green (979).
 >
 > **TODO (no Stripe needed — build next, all reuse `creditChildWallet` + immutable ledger):**
 > 1. Chore→wallet "Pay" button on chore approval (action `payChoreRewardAction` already exists).
-> 2. `/wallet/babysitters` (tables `babysitter_profiles`/`babysitter_payments` exist) +
->    `/wallet/settings` (split rules per child via `wallet_rules`).
+> 2. `/wallet/babysitters` (tables `babysitter_profiles`/`babysitter_payments` exist).
 > 3. `/admin/wallet` console (wallet status, pending approvals, audit, reconciliation, flags).
 > 4. Per-day AI-coach metering (`AI_COACH_DAILY_LIMIT`, basic 5/day — count today's calls).
 > 5. QR codes for gift links (no `qrcode` dep yet).
+> 6. **Family Economy** (from the spec screenshots) — parent-defined currencies (Stars/Points/
+>    Chore Bucks/Game Tokens) with exchange rates (100 Stars = $5 or 30 min gaming). New tables;
+>    NOT started. The wallet's Points bucket + rewards ledger are the closest existing primitives.
 > ✅ DONE 2026-06-25f: `/wallet/children/[childId]` per-child detail + `/wallet/activity` full ledger.
+> ✅ DONE 2026-06-25h: `/wallet/settings` allocation-split editor (parents set each child's
+>    Spend/Save/Give/Invest %, live-validated to 100, $100 preview; `saveWalletSplitAction` upserts
+>    `wallet_rules.split` + audit). This is the spec's "auto-split / Done. No work." mechanic.
 >
 > **TODO (REQUIRES STRIPE — business/legal approval needed, can't run in this env):** Stripe service
 > layer `lib/stripe/*` (idempotency keys), Connect onboarding, Treasury financial accounts, Issuing
@@ -47,7 +53,28 @@ Last updated after onboarding avatar/phone production-readiness (avatars bucket,
 > STRIPE_TREASURY_ENABLED, STRIPE_ISSUING_ENABLED, STRIPE_CARD_CUSTOMIZATION_ENABLED,
 > NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY. Also ensure CRON_SECRET is set (allowance/autopilot crons).
 >
-> **Per-session wallet detail is in the 2026-06-25a..f entries below.**
+> **Per-session wallet detail is in the 2026-06-25a..h entries below.**
+
+> **Session update (2026-06-25h) — WALLET: ALLOCATION-SPLIT EDITOR (/wallet/settings).**
+> The spec's core "auto-split / Done. No work." mechanic — parents set how every dollar a
+> child receives is divided. NO migration (reuses `wallet_rules.split`). Branch
+> `claude/wallet-split-settings`.
+> - **`lib/wallet/ledger.ts`** gained `splitTotal()` (running sum for live "must total 100%"
+>   UI); tested in `tests/wallet-ledger.test.ts` (+1, suite 979).
+> - **`saveWalletSplitAction`** (`app/(app)/wallet/actions.ts`) — manager-only; validates with
+>   `isValidSplit` (whole numbers, total 100), upserts `wallet_rules.split` (onConflict
+>   family_id,child_wallet_id), writes a `wallet_audit_logs` `split_updated` row. New credits
+>   immediately allocate by the new rule via `creditChildWallet`; the immutable ledger is never
+>   back-filled.
+> - **`/wallet/settings`** (`components/wallet/settings-view.tsx`) — per-child card with 4
+>   number inputs (Save/Spend/Give/Invest), a live total badge (green at 100%), a $100 `allocate`
+>   preview per bucket, a "Balanced (40/40/10/10)" reset, and a Save button disabled until valid
+>   & changed. Read-only for non-managers. Added **Allocation** to the wallet subnav.
+> - Verified: tsc + lint clean · `npm run build` ✓ (`/wallet/settings`) · suite **979/979**.
+> - **Spec coverage note (from the ChatGPT screenshots):** Money Hub ✅, Auto-split ✅ (now
+>   editable), Envelopes=goals ✅, AI Goal Tracker ✅, Gifting ✅, AI Coach ✅. Still ⬜:
+>   **Family Economy** (custom currencies + exchange rates), chore→wallet Pay button, Pay-ID
+>   handles, AI Gift Assistant/Concierge, AI Investing.
 
 > **Session update (2026-06-25g) — ONBOARDING AVATAR/PHONE: production-ready (PR #142).**
 > The international-phone + avatar-picker feature (files `lib/utils/phone.ts`,
