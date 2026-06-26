@@ -28,7 +28,8 @@ export default async function WalletCardsPage() {
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
     supabase.from('stripe_issuing_cards')
-      .select('id, child_wallet_id, type, status, last4, brand, is_frozen').eq('family_id', familyId),
+      .select('id, child_wallet_id, type, status, last4, brand, is_frozen, spend_limit_cents, spend_window, blocked_categories')
+      .eq('family_id', familyId),
   ]);
 
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
@@ -39,6 +40,7 @@ export default async function WalletCardsPage() {
   const issued: IssuedCard[] = (cards ?? []).map((c) => ({
     id: c.id, childWalletId: c.child_wallet_id, type: c.type, status: c.status,
     last4: c.last4, brand: c.brand, isFrozen: c.is_frozen,
+    spendLimitCents: c.spend_limit_cents, spendWindow: c.spend_window, blockedCategories: c.blocked_categories ?? [],
   }));
 
   return (

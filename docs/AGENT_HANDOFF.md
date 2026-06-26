@@ -3,7 +3,7 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after Pay-ID handles. Keep this updated as you ship.
 
-> ## 🔖 PAY-ID HANDLES (PR pending) — memorable gifting links
+> ## 🔖 PAY-ID HANDLES (PR #159) — memorable gifting links
 > Branch `claude/pay-id-handles`. A short handle (e.g. `mia`) resolves at
 > **`/pay/<handle>`** to a child's newest active gift link — no long tokens to copy.
 > ⚠️ **Migration `0095_pay_handles.sql` NOT APPLIED TO PROD.** (Numbers 0090–0094 are taken by
@@ -21,9 +21,72 @@ Last updated after Pay-ID handles. Keep this updated as you ship.
 >   copy URL, release; live validation.
 > - DB types extended (`pay_handles`). Verified: tsc clean · eslint clean · build OK
 >   (`/pay/[handle]` registered) · suite **1053/1053** (8 new).
-> - Remaining big wallet features: Family Economy / custom currencies, AI Investing for kids.
+> - Remaining big wallet features: Family Economy ✅ (#160), AI Investing for kids (#161).
 
-> ## ✨ AI GIFT ASSISTANT (PR pending) — public gift-link helper
+> ## 🪙 FAMILY ECONOMY — custom currencies (PR pending) — non-cash points/tokens
+> Branch `claude/family-economy`. A parallel NON-CASH economy: parents define custom currencies
+> ("Stars ⭐", "Screen-time ⏰"), kids EARN tokens and SPEND them on family rewards. Separate from
+> the cash wallet. ⚠️ **Migration `0096_family_economy.sql` NOT APPLIED TO PROD.**
+> - **`lib/economy/ledger.ts`** (PURE + **8 tests**) — immutable-ledger math: `balanceFrom`,
+>   `signedAmount`, `canAfford`, `normalizeTokenAmount`, `normalizeEmoji`, `formatTokens`.
+> - **Migration 0096** — `family_currencies`, `currency_transactions` (immutable token ledger,
+>   amount>0, direction signs it), `economy_rewards` (catalog, cost/stock), `economy_redemptions`
+>   (pending→fulfilled/rejected; debits on approval). Family-scoped RLS + triggers. Enums
+>   `economy_direction`, `redemption_status`. DB types: `EconomyDirection`, `EconomyRedemptionStatus`
+>   (note: a separate `RedemptionStatus` already exists for the points/rewards system — don't merge them).
+> - **`app/(app)/economy/actions.ts`** — `createCurrencyAction`, `setCurrencyActiveAction`,
+>   `awardTokensAction` (credit), `createRewardAction`, `setRewardActiveAction`,
+>   `requestRedemptionAction` (affordability pre-check), `decideRedemptionAction` (final balance check
+>   → debit txn + status, decrements limited stock). Manager-gated where appropriate.
+> - **`/economy`** (`components/economy/economy-view.tsx`) — tabs: Balances · Store (redeem) ·
+>   Requests (parent approve/reject) · Manage (create currency/reward, award tokens). Nav +
+>   feature-catalog entry added (`/economy`, free).
+> - Verified: tsc clean · eslint clean · build OK (`/economy` registered) · suite **1064/1064** (8 new).
+
+> ## 📈 AI INVESTING FOR KIDS — BUILD SPEC (next; not yet built)
+> Educational, **simulated** "Invest" experience (NO real brokerage — keep it clearly educational; no
+> FDIC/return promises per compliance). The wallet already has an `invest` bucket per child (0088).
+> Suggested build:
+> - **Migration** `0097_kid_investing.sql`: `invest_holdings` (family_id, child_wallet_id, symbol,
+>   display_name, shares numeric, avg_cost_cents) + `invest_orders` (buy/sell, symbol, shares,
+>   price_cents_at_order, status, requires parent approval) + optional `invest_watchlist`. Family RLS.
+>   Prices are EDUCATIONAL/simulated — store a `price_cents` snapshot; a daily cron can nudge prices or
+>   pull delayed quotes if a provider is added later. NO real trades.
+> - **`lib/invest/portfolio.ts`** (PURE + tests): `positionValue`, `portfolioValue`, `gainLoss(%)`,
+>   `projectGrowth(principal, monthly, years, ratePct)` (compound-interest teaching tool),
+>   `allocationBreakdown`. All from holdings + a price map.
+> - **Funding link to the ledger**: a "buy" debits the child's INVEST bucket
+>   (`lib/wallet/server.ts` pattern: a `wallet_transactions` debit, type 'goal_transfer'/'adjustment'),
+>   a "sell" credits it back. Keep the wallet ledger the source of truth for cash; holdings track shares.
+> - **AI**: `/api/ai/invest` (authed, tier+metered like `/api/ai/wallet`) — an age-appropriate
+>   "explain this company / why diversify / what is compound interest" coach + a suggested starter
+>   portfolio. Pure prompt/parse in `lib/invest/coach.ts` with tests. NO buy/sell advice framed as
+>   financial advice — educational only.
+> - **UI** `/wallet/invest` (or `/invest`): holdings list w/ value + gain/loss, a simulated
+>   buy/sell (parent-approved), a compound-growth projector slider, AI explainer. Hide any wording
+>   implying guaranteed returns; show an "educational simulation" disclaimer.
+> - Gate behind a feature flag if desired; manager approval required for orders.
+
+> ## 🎛️ CARD SPENDING-CONTROL EDITOR (PR #158) — per-card parent controls
+> Branch `claude/card-spending-controls`. Completes the card story from Stripe Money (#155):
+> parents set a per-card **limit + window + blocked categories** (freeze already shipped).
+> **No migration** (uses the columns from 0090). Mirrors to Stripe + enforced by the auth webhook.
+> - **`lib/wallet/card-controls.ts`** (PURE + **11 tests**) — `SPEND_WINDOWS` (per_authorization/daily/
+>   weekly/monthly/all_time), `BLOCKABLE_CATEGORIES` (curated Stripe MCC values + friendly labels/emoji),
+>   `normalizeSpendWindow`, `clampSpendLimitCents` (≤ $10k), `normalizeBlockedCategories` (known+deduped),
+>   `categoryLabel`.
+> - **`lib/stripe/issuing.ts`** — new `updateCardControls()` mirrors `spending_controls`
+>   (spending_limits + blocked_categories) to Stripe and updates our mirror row.
+> - **`app/(app)/money/actions.ts`** — `updateCardControlsAction` (manager + capability gated, inputs
+>   normalized server-side, audit-logged `card_controls_updated`).
+> - **`/wallet/cards`** — each card has a "Controls" expander: $ limit, reset window, blocked-category
+>   chips. Subtitle shows "$X / window · N blocked". Limit/window enforced by Stripe; blocked categories
+>   ALSO enforced live by `decideAuthorization` in the auth webhook.
+> - Verified: tsc clean · eslint clean · build exit 0 · suite **1046/1046** (11 new).
+> - Remaining big wallet features (need direction): Family Economy / custom currencies, Pay-ID handles,
+>   AI Investing for kids.
+
+> ## ✨ AI GIFT ASSISTANT (✅ MERGED via PR #157) — public gift-link helper
 > Branch `claude/ai-gift-assistant`. Helps a relative on a public gift link write a warm message +
 > pick a tasteful amount. **No Stripe; fully testable.** **No migration.**
 > - **`lib/wallet/gift-ai.ts`** (PURE + **10 tests**) — `buildGiftAssistPrompt(input)` (childName,
@@ -34,9 +97,6 @@ Last updated after Pay-ID handles. Keep this updated as you ship.
 >   name + top goal, calls `resolveProvider().complete()`, returns suggestions. Writes nothing.
 > - **`components/wallet/public-gift-form.tsx`** — "✨ Help me write something" button → tappable
 >   message drafts (tap to fill the note) + suggested-amount chips. Friendly, frictionless.
-> - Verified: tsc clean · eslint clean · build OK (`/api/ai/gift` registered) · suite **1045/1045** (10 new).
-> - Standing big wallet features still open (need product direction): card spending-control editor
->   (Stripe-gated), Family Economy / custom currencies, Pay-ID handles, AI Investing for kids.
 
 > ## 💳 BUBALY MONEY — STRIPE FINANCIAL MODE (Phase 2) — read first if continuing Money
 > **✅ MERGED TO MAIN via PR #155** (`claude/stripe-money-mode`). Builds the REAL Stripe layer on top of the
