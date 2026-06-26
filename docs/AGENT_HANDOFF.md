@@ -1,7 +1,22 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after Bubaly Money — Stripe Financial Mode (Phase 2). Keep this updated as you ship.
+Last updated after the AI Gift Assistant. Keep this updated as you ship.
+
+> ## ✨ AI GIFT ASSISTANT (PR pending) — public gift-link helper
+> Branch `claude/ai-gift-assistant`. Helps a relative on a public gift link write a warm message +
+> pick a tasteful amount. **No Stripe; fully testable.** **No migration.**
+> - **`lib/wallet/gift-ai.ts`** (PURE + **10 tests**) — `buildGiftAssistPrompt(input)` (childName,
+>   occasion, relationship, top active goal) + `parseGiftSuggestions(raw)` → `{messages[], amountsCents[]}`.
+>   Amounts clamped to `MIN_GIFT_CENTS`($5)–`MAX_GIFT_CENTS`($500), deduped, ≤3 each; messages ≤280 chars.
+> - **`app/api/ai/gift/route.ts`** — PUBLIC POST (givers aren't signed in). **Rate-limited 5/min/IP**
+>   (`lib/server/rate-limit.ts`), reads one gift link by token (service client), resolves child first
+>   name + top goal, calls `resolveProvider().complete()`, returns suggestions. Writes nothing.
+> - **`components/wallet/public-gift-form.tsx`** — "✨ Help me write something" button → tappable
+>   message drafts (tap to fill the note) + suggested-amount chips. Friendly, frictionless.
+> - Verified: tsc clean · eslint clean · build OK (`/api/ai/gift` registered) · suite **1045/1045** (10 new).
+> - Standing big wallet features still open (need product direction): card spending-control editor
+>   (Stripe-gated), Family Economy / custom currencies, Pay-ID handles, AI Investing for kids.
 
 > ## 💳 BUBALY MONEY — STRIPE FINANCIAL MODE (Phase 2) — read first if continuing Money
 > **✅ MERGED TO MAIN via PR #155** (`claude/stripe-money-mode`). Builds the REAL Stripe layer on top of the
