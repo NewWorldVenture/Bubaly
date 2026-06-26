@@ -1,7 +1,26 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after Bubaly Money — Stripe Financial Mode (Phase 2). Keep this updated as you ship.
+Last updated after the Card Spending-Control editor. Keep this updated as you ship.
+
+> ## 🎛️ CARD SPENDING-CONTROL EDITOR (PR pending) — per-card parent controls
+> Branch `claude/card-spending-controls`. Completes the card story from Stripe Money (#155):
+> parents set a per-card **limit + window + blocked categories** (freeze already shipped).
+> **No migration** (uses the columns from 0090). Mirrors to Stripe + enforced by the auth webhook.
+> - **`lib/wallet/card-controls.ts`** (PURE + **11 tests**) — `SPEND_WINDOWS` (per_authorization/daily/
+>   weekly/monthly/all_time), `BLOCKABLE_CATEGORIES` (curated Stripe MCC values + friendly labels/emoji),
+>   `normalizeSpendWindow`, `clampSpendLimitCents` (≤ $10k), `normalizeBlockedCategories` (known+deduped),
+>   `categoryLabel`.
+> - **`lib/stripe/issuing.ts`** — new `updateCardControls()` mirrors `spending_controls`
+>   (spending_limits + blocked_categories) to Stripe and updates our mirror row.
+> - **`app/(app)/money/actions.ts`** — `updateCardControlsAction` (manager + capability gated, inputs
+>   normalized server-side, audit-logged `card_controls_updated`).
+> - **`/wallet/cards`** — each card has a "Controls" expander: $ limit, reset window, blocked-category
+>   chips. Subtitle shows "$X / window · N blocked". Limit/window enforced by Stripe; blocked categories
+>   ALSO enforced live by `decideAuthorization` in the auth webhook.
+> - Verified: tsc clean · eslint clean · build exit 0 · suite **1046/1046** (11 new).
+> - Remaining big wallet features (need direction): Family Economy / custom currencies, Pay-ID handles,
+>   AI Investing for kids. (AI Gift Assistant shipped separately in PR #157.)
 
 > ## 💳 BUBALY MONEY — STRIPE FINANCIAL MODE (Phase 2) — read first if continuing Money
 > **✅ MERGED TO MAIN via PR #155** (`claude/stripe-money-mode`). Builds the REAL Stripe layer on top of the

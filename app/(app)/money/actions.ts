@@ -14,7 +14,8 @@ import { isManager } from '@/lib/constants/roles';
 import { getMoneyCapabilities } from '@/lib/stripe/capabilities';
 import { ensureConnectedAccount, createOnboardingLink, syncConnectedAccount } from '@/lib/stripe/connect';
 import { ensureFinancialAccount } from '@/lib/stripe/treasury';
-import { ensureCardholder, issueCard, setCardFrozen } from '@/lib/stripe/issuing';
+import { ensureCardholder, issueCard, setCardFrozen, updateCardControls } from '@/lib/stripe/issuing';
+import { clampSpendLimitCents, normalizeSpendWindow, normalizeBlockedCategories } from '@/lib/wallet/card-controls';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -151,5 +152,44 @@ export async function setCardFrozenAction(input: { cardId: string; frozen: boole
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not update the card.' };
+  }
+}
+
+/** Update a card's spending controls: limit + window + blocked categories. */
+export async function updateCardControlsAction(input: {
+  cardId: string; spendLimitCents: number | null; spendWindow: string; blockedCategories: string[];
+}): Promise<Result> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can set spending controls.' };
+  const svc = createServiceClient();
+  const caps = await getMoneyCapabilities(svc);
+  if (!caps.issuing) return { ok: false, error: 'Cards are not available yet.' };
+
+  const { data: card } = await svc.from('stripe_issuing_cards')
+    .select('id, stripe_card_id').eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle();
+  if (!card) return { ok: false, error: 'Card not found.' };
+  const { data: acct } = await svc.from('stripe_connected_accounts')
+    .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
+  if (!acct) return { ok: false, error: 'No account configured.' };
+
+  // Normalize all inputs server-side so a bad client can't set out-of-range values.
+  const spendLimitCents = clampSpendLimitCents(input.spendLimitCents);
+  const spendWindow = normalizeSpendWindow(input.spendWindow);
+  const blockedCategories = normalizeBlockedCategories(input.blockedCategories);
+
+  try {
+    await updateCardControls(svc, {
+      familyId: ctx.active.familyId, cardRowId: card.id, stripeCardId: card.stripe_card_id,
+      accountId: acct.stripe_account_id, spendLimitCents, spendWindow, blockedCategories,
+    });
+    await svc.from('wallet_audit_logs').insert({
+      family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_controls_updated',
+      entity_type: 'stripe_issuing_cards', entity_id: card.id,
+      metadata: { spendLimitCents, spendWindow, blockedCount: blockedCategories.length },
+    });
+    revalidatePath('/wallet');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not update controls.' };
   }
 }
