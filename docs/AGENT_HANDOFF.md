@@ -1,7 +1,34 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Physical card address form + admin card designs (2026-06-26m). Keep this updated as you ship.
+Last updated: Admin wallet family drilldown (2026-06-26n). Keep this updated as you ship.
+
+> **Session update (2026-06-26n) — ADMIN WALLET FAMILY DRILLDOWN (production-ready).**
+> Branch `claude/continuation-an1mam`. Commit `c89ecdb`.
+> Verified: tsc clean · `npm run build` exit 0 (all routes registered).
+>
+> ### `/admin/wallet/[familyId]` — Per-family wallet detail page
+> Clicking any family in the "Most Active Families" list on `/admin/wallet` now links to a
+> full per-family drilldown page. Shows:
+> - Family total balance and per-child wallet balances with all 4 bucket breakdowns
+>   (spend/save/give/invest) computed from the immutable ledger
+> - Pending parent approvals (amber alert panel)
+> - Recent transactions (last 30) with type badge, description, child name, status, date
+> - Family members with roles
+> - Wallet audit log (last 50 actions)
+> - Back link to the main Wallet Console
+>
+> Also: top-families rows in `/admin/wallet` are now `<Link>` elements (→ drilldown).
+>
+> ### All remaining code-buildable items are now done
+> Everything left is external ops:
+> 1. Apply migration 0091 to prod Supabase + regenerate database.types.ts
+> 2. Apply migration 0090 to prod Supabase
+> 3. Apply migration 0089 (avatars bucket) to prod Supabase
+> 4. Buy Twilio numbers + register voice/sms/whatsapp webhooks
+> 5. Set CRON_SECRET in prod Vercel (guardian-learning + wallet-allowance crons)
+> 6. Register Stripe Issuing and main webhooks in Stripe Dashboard
+> 7. Wire push notifications (FCM/Expo) to notifications table inserts
 
 > **Session update (2026-06-26m) — MONEY: PHYSICAL CARD SHIPPING ADDRESS + ADMIN CARD DESIGNS (production-ready).**
 > Branch `claude/continuation-an1mam`. Commit `8aae3fc`.
