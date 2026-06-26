@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Shield, Phone, MessageSquare, AlertTriangle, CheckCircle, Clock, TrendingUp, Users, Zap, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { TRUST_LABELS, TRUST_COLORS, TRUST_ICONS } from '@/lib/guardian/trust';
@@ -85,6 +86,7 @@ const CONTEXT_OPTIONS = [
 ];
 
 export function GuardianDashboard({ recentComms, suggestions, escalations, memberProfiles, stats, isTwilioConfigured }: Props) {
+  const router = useRouter();
   const { success: toastSuccess, error: toastError } = useToast();
   const [contextLoading, setContextLoading] = useState<string | null>(null);
   const [suggestionLoading, setSuggestionLoading] = useState<string | null>(null);
@@ -97,6 +99,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
     if (res.ok) {
       const n = res.data?.created ?? 0;
       toastSuccess(n > 0 ? `Found ${n} new suggestion${n === 1 ? '' : 's'}` : 'All caught up — no new suggestions');
+      if (n > 0) router.refresh();
     } else {
       toastError(res.error);
     }
@@ -106,7 +109,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
     setContextLoading(memberId);
     const res = await updateContextAction(memberId, context);
     setContextLoading(null);
-    if (res.ok) toastSuccess(`Status updated to ${CONTEXT_OPTIONS.find(c => c.value === context)?.label}`);
+    if (res.ok) { toastSuccess(`Status updated to ${CONTEXT_OPTIONS.find(c => c.value === context)?.label}`); router.refresh(); }
     else toastError(res.error);
   }
 
@@ -114,13 +117,13 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
     setSuggestionLoading(id);
     const res = await reviewSuggestionAction(id, decision);
     setSuggestionLoading(null);
-    if (res.ok) toastSuccess(decision === 'approved' ? 'Applied!' : 'Dismissed');
+    if (res.ok) { toastSuccess(decision === 'approved' ? 'Applied!' : 'Dismissed'); router.refresh(); }
     else toastError(res.error);
   }
 
   async function handleAcknowledge(id: string) {
     const res = await acknowledgeEscalationAction(id);
-    if (res.ok) toastSuccess('Escalation acknowledged');
+    if (res.ok) { toastSuccess('Escalation acknowledged'); router.refresh(); }
     else toastError(res.error);
   }
 
