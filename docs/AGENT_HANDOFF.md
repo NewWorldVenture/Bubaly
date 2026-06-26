@@ -4,7 +4,7 @@ Living context doc so another agent can continue without re-deriving everything.
 Last updated after Bubaly Money — Stripe Financial Mode (Phase 2). Keep this updated as you ship.
 
 > ## 💳 BUBALY MONEY — STRIPE FINANCIAL MODE (Phase 2) — read first if continuing Money
-> Branch `claude/stripe-money-mode` (PR pending). Builds the REAL Stripe layer on top of the
+> **✅ MERGED TO MAIN via PR #155** (`claude/stripe-money-mode`). Builds the REAL Stripe layer on top of the
 > virtual ledger (0088). **Dormant until the `stripe_*` feature flags + Stripe credentials are
 > present** — capability detection falls back to the ledger so nothing breaks without them.
 > ⚠️ **Migration `0090_stripe_money.sql` NOT APPLIED TO PROD.** ⚠️ Stripe Connect/Treasury/Issuing
