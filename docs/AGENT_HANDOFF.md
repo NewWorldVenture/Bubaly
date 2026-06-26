@@ -1,7 +1,64 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: AI Call Guardian™ Phase 2 — seasonal + learning + WhatsApp + self-serve numbers (2026-06-26k). Keep this updated as you ship.
+Last updated: Wallet — babysitters, settings, AI coach metering, admin console (2026-06-26l). Keep this updated as you ship.
+
+> **Session update (2026-06-26l) — WALLET: BABYSITTERS, SETTINGS, AI COACH METERING, ADMIN CONSOLE (production-ready).**
+> Completes the remaining no-Stripe wallet TODO items from the 2026-06-25h handoff.
+> Branch `claude/continuation-an1mam`. Commit `848762c`.
+> Verified: tsc clean · lint clean · `npm run build` exit 0 (all routes registered) · **full suite 998/998**.
+>
+> ### 1. `/wallet/babysitters` — Babysitter profile management + payment log
+> Full CRUD for babysitter profiles stored in `babysitter_profiles` table (name, phone, email,
+> hourly rate, notes). Payment logger writes to `babysitter_payments` table (hours × rate + tip =
+> total). Each babysitter card shows expandable payment history + total paid. Log entries are also
+> written to `wallet_audit_logs` (action=`babysitter_paid`) for audit purposes.
+> **New server actions in `app/(app)/wallet/actions.ts`:**
+> `upsertBabysitterAction`, `deactivateBabysitterAction` (soft-delete), `logBabysitterPaymentAction`.
+> **New component:** `components/wallet/babysitter-wallet-view.tsx`.
+> **New page:** `app/(app)/wallet/babysitters/page.tsx`.
+>
+> ### 2. `/wallet/settings` — Per-child allocation split rules
+> Editable per-child bucket split (spend/save/give/invest, must sum to 100) with:
+> - Live color-coded split bar visualization
+> - Auto-accept gifts toggle (skip parent approval for incoming gifts)
+> - Approval threshold (require approval over $X per transaction)
+> Upserts to `wallet_rules` table with `onConflict: 'family_id,child_wallet_id'`.
+> **New server action:** `updateWalletRuleAction`.
+> **New component:** `components/wallet/wallet-settings-view.tsx`.
+> **New page:** `app/(app)/wallet/settings/page.tsx`.
+>
+> ### 3. AI Coach daily metering — `/api/ai/wallet`
+> The `AI_COACH_DAILY_LIMIT` constant in `lib/wallet/tiers.ts` (5/day for Basic) is now enforced.
+> Logic: count today's `ai_coach_call` entries in `wallet_audit_logs` for the family; return 429
+> if at or over the limit. Each successful coach response appends an audit log row.
+> Plus tier (unlimited) is not counted. Free tier is blocked before counting.
+>
+> ### 4. `/admin/wallet` — Platform wallet admin console
+> Service-client (no family auth required) showing:
+> - Active family wallet count + child wallet count
+> - Pending parent_approvals (amber alert if any)
+> - Recent completed transactions
+> - Top families by transaction volume
+> - Recent wallet_audit_logs tail
+> Added `Wallet Console` to `ADMIN_NAV` in `lib/constants/navigation.ts`.
+>
+> ### Wallet subnav updated
+> `components/wallet/wallet-subnav.tsx` now includes Babysitters and Settings tabs.
+>
+> ### Wallet — still open (all require no Stripe)
+> 1. QR codes for gift links — no `qrcode` dep yet; links are copy-to-share. Add a QR library
+>    (e.g. `qrcode` npm package → render an SVG in gift-view.tsx).
+> 2. Per-day AI coach call count shown to user — currently we enforce the limit server-side but
+>    don't show the user "X of 5 used today" on the dashboard. Add to wallet-dashboard.tsx.
+> 3. `/admin/wallet` family drilldown — clicking a family ID shows that family's full ledger.
+>    Currently shows only the UUID, no names.
+>
+> ### Guardian — still open (genuinely needs external ops, not code):
+> 1. Apply migration 0091 to prod Supabase + regenerate database.types.ts
+> 2. Buy Twilio numbers + register voice/sms/whatsapp webhooks
+> 3. Set CRON_SECRET in prod (the guardian-learning cron needs it — same secret as wallet)
+> 4. Push notifications: notifications-table inserts work; wire to FCM/Expo for native alerts
 
 > **Session update (2026-06-26k) — AI CALL GUARDIAN™ PHASE 2: SEASONAL INTELLIGENCE,
 > ADAPTIVE LEARNING, WHATSAPP, SELF-SERVE NUMBERS (production-ready).**
