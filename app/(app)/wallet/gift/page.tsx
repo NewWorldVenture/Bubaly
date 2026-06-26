@@ -1,10 +1,21 @@
 import type { Metadata } from 'next';
+import QRCode from 'qrcode';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
+import { giftPath } from '@/lib/wallet/gift';
 import { GiftView, type GiftLinkRow, type PendingGift, type ChildOpt } from '@/components/wallet/gift-view';
 
 export const metadata: Metadata = { title: 'Wallet Gifts' };
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
+
+async function makeQr(token: string): Promise<string | null> {
+  try {
+    const url = `${APP_URL}${giftPath(token)}`;
+    return await QRCode.toDataURL(url, { width: 200, margin: 1, color: { dark: '#000000', light: '#ffffff' } });
+  } catch { return null; }
+}
 
 export default async function WalletGiftPage() {
   const ctx = await requireUserContext();
@@ -21,10 +32,14 @@ export default async function WalletGiftPage() {
   const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));
   const nameByWallet = new Map((childWallets ?? []).map((c) => [c.id, nameByMember.get(c.member_id) ?? 'Child']));
 
-  const linkRows: GiftLinkRow[] = (links ?? []).map((l) => ({
-    id: l.id, token: l.token, occasion: l.occasion, isActive: l.is_active,
-    childName: l.child_wallet_id ? nameByWallet.get(l.child_wallet_id) ?? null : null,
-  }));
+  const linkRows: GiftLinkRow[] = await Promise.all(
+    (links ?? []).map(async (l) => ({
+      id: l.id, token: l.token, occasion: l.occasion, isActive: l.is_active,
+      childName: l.child_wallet_id ? nameByWallet.get(l.child_wallet_id) ?? null : null,
+      qrDataUri: await makeQr(l.token),
+    })),
+  );
+
   const pendingGifts: PendingGift[] = (pending ?? []).map((p) => ({
     id: p.id, giverName: p.giver_name, amountCents: p.amount_cents, message: p.message, occasion: p.occasion,
     childName: p.child_wallet_id ? nameByWallet.get(p.child_wallet_id) ?? null : null,

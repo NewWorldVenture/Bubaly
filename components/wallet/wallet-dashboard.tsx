@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils/cn';
 import { fmtRelative } from '@/lib/utils/format';
 import { formatCents, type BucketKind } from '@/lib/wallet/ledger';
 import { computeFunding, serviceFeeLabel, type WalletTier } from '@/lib/wallet/fees';
-import { WALLET_TIERS, aiCoachLevel } from '@/lib/wallet/tiers';
+import { WALLET_TIERS, type CoachLevel } from '@/lib/wallet/tiers';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { addFundsAction } from '@/app/(app)/wallet/actions';
 
@@ -61,13 +61,16 @@ const BUCKET_META: { kind: BucketKind; label: string; icon: typeof PiggyBank; co
   { kind: 'invest', label: 'Invest', icon: TrendingUp, color: 'text-violet-400' },
 ];
 
-export function WalletDashboard({ familyTotal, mode, tier, canManage, childWallets, recent }: {
+export function WalletDashboard({ familyTotal, mode, tier, canManage, childWallets, recent, coachCallsToday, coachDailyLimit, coachLevel }: {
   familyTotal: number;
   mode: string;
   tier: WalletTier;
   canManage: boolean;
   childWallets: ChildWalletView[];
   recent: RecentTxn[];
+  coachCallsToday: number;
+  coachDailyLimit: number | null;
+  coachLevel: CoachLevel;
 }) {
   const [addFor, setAddFor] = useState<ChildWalletView | null>(null);
   const [sendFor, setSendFor] = useState<ChildWalletView | null>(null);
@@ -75,7 +78,8 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
   const [coachLoading, setCoachLoading] = useState(false);
   const { error: toastError } = useToast();
   const sampleGift = computeFunding(5000, tier); // $50 gift fee preview
-  const hasCoach = aiCoachLevel(tier) !== 'none';
+  const hasCoach = coachLevel !== 'none';
+  const coachAtLimit = coachDailyLimit !== null && coachCallsToday >= coachDailyLimit;
 
   async function runCoach() {
     setCoachLoading(true);
@@ -102,7 +106,16 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
               </Button>
             )}
             {hasCoach && (
-              <Button variant="ghost" onClick={runCoach} loading={coachLoading}><Sparkles className="h-4 w-4" /> Money Coach</Button>
+              <div className="flex flex-col items-end gap-0.5">
+                <Button variant="ghost" onClick={runCoach} loading={coachLoading} disabled={coachAtLimit}>
+                  <Sparkles className="h-4 w-4" /> Money Coach
+                </Button>
+                {coachDailyLimit !== null && coachLevel === 'limited' && (
+                  <span className={cn('text-[10px] font-medium', coachAtLimit ? 'text-red-400' : 'text-muted')}>
+                    {coachCallsToday}/{coachDailyLimit} today
+                  </span>
+                )}
+              </div>
             )}
           </div>
         }

@@ -27,6 +27,7 @@ export default async function AdminWalletPage() {
     { data: pendingApprovals },
     { data: recentAuditLogs },
     { data: topFamilies },
+    { data: familyNames },
   ] = await Promise.all([
     supabase.from('family_wallets').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('child_wallets').select('id', { count: 'exact', head: true }).eq('is_active', true),
@@ -37,10 +38,14 @@ export default async function AdminWalletPage() {
     supabase.from('wallet_audit_logs').select('id, family_id, action, detail, created_at')
       .order('created_at', { ascending: false }).limit(25),
     supabase.from('wallet_transactions').select('family_id').eq('status', 'completed').limit(5000),
+    supabase.from('families').select('id, name').limit(500),
   ]);
 
   // Tally total volume
   const totalCreditCents = (recentTxns ?? []).filter((t) => t.direction === 'credit').reduce((s, t) => s + t.amount_cents, 0);
+
+  // Build family name lookup
+  const familyNameById = new Map((familyNames ?? []).map((f) => [f.id, f.name]));
 
   // Count activity per family for top families
   const familyActivity = new Map<string, number>();
@@ -139,7 +144,10 @@ export default async function AdminWalletPage() {
           <div className="divide-y divide-border">
             {topFamilyList.map(([familyId, count]) => (
               <div key={familyId} className="flex items-center justify-between px-5 py-3 text-sm">
-                <span className="font-mono text-xs text-muted">{familyId.slice(0, 8)}…</span>
+                <div>
+                  <span className="font-medium text-fg">{familyNameById.get(familyId) ?? 'Unknown family'}</span>
+                  <span className="ml-2 font-mono text-[10px] text-muted">{familyId.slice(0, 8)}</span>
+                </div>
                 <span className="font-semibold text-fg">{count} txns</span>
               </div>
             ))}

@@ -5,7 +5,7 @@
 // immutable ledger. 100% Supabase-wired through the wallet server actions.
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Gift, Plus, Copy, Check, X, Link2 } from 'lucide-react';
+import { Gift, Plus, Copy, Check, X, Link2, QrCode } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
@@ -17,7 +17,7 @@ import { occasionLabel, parseSuggestedAmounts, giftPath, GIFT_OCCASIONS } from '
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { createGiftLinkAction, approveGiftAction, dismissGiftAction } from '@/app/(app)/wallet/actions';
 
-export type GiftLinkRow = { id: string; token: string; occasion: string | null; isActive: boolean; childName: string | null };
+export type GiftLinkRow = { id: string; token: string; occasion: string | null; isActive: boolean; childName: string | null; qrDataUri: string | null };
 export type PendingGift = { id: string; giverName: string | null; amountCents: number; message: string | null; occasion: string | null; childName: string | null };
 export type ChildOpt = { id: string; name: string };
 
@@ -91,6 +91,7 @@ export function GiftView({ links, pending, childOptions, canManage }: {
 function GiftLinkCard({ link }: { link: GiftLinkRow }) {
   const { success } = useToast();
   const [copied, setCopied] = useState(false);
+  const [showQr, setShowQr] = useState(false);
   const url = typeof window !== 'undefined' ? `${window.location.origin}${giftPath(link.token)}` : giftPath(link.token);
 
   async function copy() {
@@ -102,15 +103,31 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4">
-      <div className="grid h-9 w-9 place-items-center rounded-xl bg-surface text-muted"><Link2 className="h-4 w-4" /></div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">{link.childName ?? 'Child'} · {occasionLabel(link.occasion)}</p>
-        <p className="truncate text-xs text-muted">{giftPath(link.token)}{link.isActive ? '' : ' · inactive'}</p>
+    <div className="rounded-2xl border border-border bg-surface/40 overflow-hidden">
+      <div className="flex items-center gap-3 p-4">
+        <div className="grid h-9 w-9 place-items-center rounded-xl bg-surface text-muted"><Link2 className="h-4 w-4" /></div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">{link.childName ?? 'Child'} · {occasionLabel(link.occasion)}</p>
+          <p className="truncate text-xs text-muted">{giftPath(link.token)}{link.isActive ? '' : ' · inactive'}</p>
+        </div>
+        <div className="flex items-center gap-1">
+          {link.qrDataUri && (
+            <button onClick={() => setShowQr((v) => !v)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:border-brand/40 hover:text-brand transition" title="Show QR code">
+              <QrCode className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button onClick={copy} className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand transition">
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
       </div>
-      <button onClick={copy} className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand transition">
-        {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy'}
-      </button>
+      {showQr && link.qrDataUri && (
+        <div className="border-t border-border p-4 flex flex-col items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={link.qrDataUri} alt="Gift link QR code" width={160} height={160} className="rounded-lg" />
+          <p className="text-xs text-muted text-center">Scan to open the gift page · {giftPath(link.token)}</p>
+        </div>
+      )}
     </div>
   );
 }
