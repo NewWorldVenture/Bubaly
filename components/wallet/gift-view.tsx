@@ -3,9 +3,9 @@
 // Gift management — create shareable gift links per child and approve the gifts
 // relatives send. Approving credits the child's wallet (gift_received) via the
 // immutable ledger. 100% Supabase-wired through the wallet server actions.
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Gift, Plus, Copy, Check, X, Link2, QrCode } from 'lucide-react';
+import { Gift, Plus, Copy, Check, X, Link2, QrCode, Share2, Download } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
@@ -92,7 +92,12 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
   const { success } = useToast();
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [canShare, setCanShare] = useState(false);
   const url = typeof window !== 'undefined' ? `${window.location.origin}${giftPath(link.token)}` : giftPath(link.token);
+  const shareTitle = `A gift for ${link.childName ?? 'our child'}`;
+
+  // Web Share API is only available in secure contexts on supporting browsers.
+  useEffect(() => { setCanShare(typeof navigator !== 'undefined' && typeof navigator.share === 'function'); }, []);
 
   async function copy() {
     try {
@@ -100,6 +105,23 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
       setCopied(true); success('Link copied');
       setTimeout(() => setCopied(false), 1500);
     } catch { /* clipboard unavailable */ }
+  }
+
+  async function share() {
+    try {
+      await navigator.share({ title: shareTitle, text: `${shareTitle} — gift in seconds:`, url });
+    } catch { /* user cancelled or unsupported */ }
+  }
+
+  function downloadQr() {
+    if (!link.qrDataUri) return;
+    const a = document.createElement('a');
+    a.href = link.qrDataUri;
+    a.download = `gift-${link.childName ? link.childName.toLowerCase().replace(/\s+/g, '-') : link.token.slice(0, 8)}-qr.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    success('QR code downloaded');
   }
 
   return (
@@ -116,16 +138,24 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
               <QrCode className="h-3.5 w-3.5" />
             </button>
           )}
+          {canShare && (
+            <button onClick={share} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:border-brand/40 hover:text-brand transition" title="Share link">
+              <Share2 className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button onClick={copy} className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand transition">
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy'}
           </button>
         </div>
       </div>
       {showQr && link.qrDataUri && (
-        <div className="border-t border-border p-4 flex flex-col items-center gap-2">
+        <div className="border-t border-border p-4 flex flex-col items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={link.qrDataUri} alt="Gift link QR code" width={160} height={160} className="rounded-lg" />
           <p className="text-xs text-muted text-center">Scan to open the gift page · {giftPath(link.token)}</p>
+          <button onClick={downloadQr} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted hover:border-brand/40 hover:text-brand transition">
+            <Download className="h-3.5 w-3.5" /> Download QR
+          </button>
         </div>
       )}
     </div>
