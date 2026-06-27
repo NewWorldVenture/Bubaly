@@ -228,6 +228,18 @@ export function ExpensesModule() {
                 </div>
               )}
             </Field>
+            {(() => {
+              const cents = Math.round((parseFloat(form.amount || '0') || 0) * 100);
+              const count = form.participants.length || members.length;
+              if (cents <= 0 || count <= 0) return null;
+              return (
+                <p className="flex items-center gap-1.5 rounded-lg bg-brand/5 px-3 py-2 text-xs text-muted">
+                  <Scale className="h-3.5 w-3.5 text-brand" />
+                  Splitting <span className="font-semibold text-fg">{usd(cents)}</span> between {count} {count === 1 ? 'person' : 'people'} ·{' '}
+                  <span className="font-semibold text-fg">~{usd(Math.round(cents / count))} each</span>
+                </p>
+              );
+            })()}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
               <Button type="submit" loading={saving}>Split it</Button>
