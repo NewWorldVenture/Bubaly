@@ -1,7 +1,62 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Dramatic UI upgrade — wallet/money visual allocation + dark-mode + a11y (2026-06-26p). Keep this updated as you ship.
+Last updated: Programmatic SEO/AEO page generator (2026-06-26q). Keep this updated as you ship.
+
+> **Session update (2026-06-26q) — PROGRAMMATIC SEO/AEO PAGE GENERATOR (production-ready).**
+> Branch `claude/continuation-an1mam`. Commit `a0d0c93`.
+> Verified: tsc clean · `npm run build` exit 0 (all routes registered) · **full suite 1019/1019**.
+>
+> Build ONE page template for a topic, then generate SEO + AEO landing pages across every
+> U.S. state in one click — managed centrally from the marketing console. Editing the template
+> instantly re-renders every page it produced, because pages store only `{slug, variables}`
+> and content is DERIVED from the template at render time (never materialized).
+>
+> ### ⚠️ EXTERNAL OP REQUIRED FIRST
+> **Apply migration `0092_programmatic_seo.sql` to prod Supabase**, then regenerate
+> `lib/database.types.ts` (removes the `withSeoTables` cast shim). Until applied, the admin +
+> public routes will error against prod (the tables don't exist yet).
+>
+> ### Files
+> - **Migration `0092`** — `seo_page_templates` + `seo_pages`. RLS: public SELECT of
+>   published pages / active templates; writes are service-role only. `set_updated_at` triggers.
+> - **`lib/seo/template.ts`** (pure, 14 tests in `tests/seo-template.test.ts`) — the engine:
+>   `interpolate(str, vars)` ({var} + `:upper`/`:lower`/`:slug` filters; unknown vars collapse
+>   to ''), `slugify`, `resolveSlug`, `renderParagraphs`, `renderPage(template, vars)` → fully
+>   resolved content. THE source of truth; reuse for any new dimension.
+> - **`lib/seo/states.ts`** — 50 states + DC; `stateVars(s)` → `{state, state_abbr, state_slug}`.
+> - **`lib/seo/icons.ts`** — feature-block icon name → lucide (fallback Sparkles).
+> - **`lib/supabase/seo-tables.ts`** — `withSeoTables()` cast helper + row types (same pattern
+>   as `withStripeTables`/`withGuardianTables`).
+> - **`app/(marketing)/[...slug]/page.tsx`** — PUBLIC catch-all. Renders published pages with the
+>   exact Bubaly look (marketing layout's SiteHeader/Footer + `Section`/`FeatureCard`/
+>   `FAQAccordion`), canonical + OG/Twitter metadata, and **JSON-LD WebPage + FAQPage** (AEO).
+>   Explicit marketing routes (/features, /blog/*, …) take precedence over the catch-all; unknown
+>   paths 404. `force-dynamic`. Best-effort view counter on `seo_pages.views`.
+> - **`app/(app)/admin/marketing/seo-pages/`** — `page.tsx` (loads templates+pages via service
+>   client), `seo-pages-client.tsx` (template editor w/ **live Google + page preview**, repeatable
+>   feature/FAQ/static-var rows; one-click multi-state **Generate** modal with All-50/region
+>   quick-picks + publish toggle; per-page bulk publish/unpublish/delete; "Publish all"),
+>   `actions.ts` (`upsertTemplateAction`, `deleteTemplateAction`, `generatePagesAction` [idempotent
+>   — skips existing slugs], `setPageStatusAction`, `deletePagesAction`,
+>   `setTemplatePagesStatusAction`; all guarded by `isSuperAdmin` + service client).
+>   Added to the **Content & SEO** group of `marketing-subnav.tsx` as "SEO Pages".
+> - **`app/sitemap.ts`** — now async; appends every published `seo_pages` slug.
+>
+> ### How it works (admin flow)
+> 1. `/admin/marketing/seo-pages` → **New template**. The editor pre-fills a complete
+>    "Family Organizer in {state}" example. Variables available: `{state}`, `{state_abbr}`,
+>    `{state_slug}`, `{year}`, plus any static vars you add (e.g. `product=Bubaly`). Live preview
+>    shows the Google result + rendered hero/features/FAQ for California.
+> 2. Save → **Generate pages** → pick states (All 50+DC, region quick-picks, or individual) →
+>    Publish immediately (or leave as draft) → Generate. Creates one `seo_pages` row per state.
+> 3. Pages go live at `/{resolved-slug}` (e.g. `/family-organizer/california`) and enter the sitemap.
+>
+> ### Extending beyond states (documented for next agent)
+> The variable system is generic (`seo_pages.variables` jsonb). To add a new dimension (cities,
+> topics, competitors), add a dataset like `states.ts`, a `<thing>Vars()` mapper, and a branch in
+> `generatePagesAction` (+ a picker in the Generate modal). `renderPage` already handles arbitrary
+> vars. Could also support a cartesian product (state × city) for deeper long-tail coverage.
 
 > **Session update (2026-06-26p) — DRAMATIC UI UPGRADE: VISUAL ALLOCATION, DARK-MODE, A11y (production-ready).**
 > Branch `claude/continuation-an1mam`. Commits `b150415`→`HEAD` (~8 commits).
