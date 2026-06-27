@@ -87,6 +87,15 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 > but absent from the module's create/edit form = a dead AI-reminder path. Three found+fixed this session
 > (documents.expires_at, family_members.birthday, medications.refill_on).
 
+> **Session update (2026-06-27) — APPOINTMENTS: structured provider/location now captured.**
+> The briefing reads `appointments.provider` + `location` ("…with {provider} @ {location}"), but the
+> health module's appointment form crammed both into the free-text `notes` column — so the structured
+> columns the briefing reads stayed null and never showed. Fixed in `components/modules/health-module.tsx`:
+> replaced the single "Notes (Provider, Location)" input with dedicated **Provider** + **Location** fields
+> (and a real **Notes** field); `apptForm` state, the insert, and the reset all updated. No migration
+> (columns existed). Concierge-digest input seam audited clean: `bills.due_date`, `home_warranties.expires_on`,
+> `pantry_items.expires_at`, `maintenance_tasks.due_at` all already settable. tsc clean · build 0 · **1061/1061**.
+
 > **Session update (2026-06-27) — FAMILY FRONT DESK (the AI concierge hub).**
 > Packages the scattered concierge capabilities into one branded surface — the "Family AI Front Desk"
 > from the product vision (every call answered / email understood / form processed). The capabilities

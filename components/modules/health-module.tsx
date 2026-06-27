@@ -104,7 +104,7 @@ export function HealthModule() {
   const [coachOpen, setCoachOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [apptForm, setApptForm] = useState({ title: '', starts_at: '', member_id: '', notes: '' });
+  const [apptForm, setApptForm] = useState({ title: '', starts_at: '', member_id: '', provider: '', location: '', notes: '' });
   const [metricForm, setMetricForm] = useState({ member_id: '', type: 'steps' as MetricType, value: '', recorded_at: '' });
   const [workoutForm, setWorkoutForm] = useState({ member_id: '', activity: '', duration_minutes: '', calories: '', distance: '', notes: '', recorded_at: '' });
   const [symptomForm, setSymptomForm] = useState({ member_id: '', symptom: '', severity: '3', body_area: '', notes: '', started_at: '' });
@@ -347,6 +347,8 @@ export function HealthModule() {
       title: apptForm.title,
       starts_at: new Date(apptForm.starts_at).toISOString(),
       member_id: apptForm.member_id || null,
+      provider: apptForm.provider.trim() || null,
+      location: apptForm.location.trim() || null,
       notes: apptForm.notes || null,
       created_by: userId,
     });
@@ -354,7 +356,7 @@ export function HealthModule() {
     if (err) { toastError('Failed to save appointment'); return; }
     success('Appointment added!');
     setApptOpen(false);
-    setApptForm({ title: '', starts_at: '', member_id: '', notes: '' });
+    setApptForm({ title: '', starts_at: '', member_id: '', provider: '', location: '', notes: '' });
   }
 
   async function saveMetric() {
@@ -821,7 +823,11 @@ export function HealthModule() {
               </div>
             </div>
           )}</Field>
-          <Field label="Notes (Provider, Location)">{(id) => <Input id={id} value={apptForm.notes} onChange={(e) => setApptForm((f) => ({ ...f, notes: e.target.value }))} placeholder="e.g. Dr. Martinez · Oak Medical" />}</Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Provider">{(id) => <Input id={id} value={apptForm.provider} onChange={(e) => setApptForm((f) => ({ ...f, provider: e.target.value }))} placeholder="e.g. Dr. Martinez" />}</Field>
+            <Field label="Location">{(id) => <Input id={id} value={apptForm.location} onChange={(e) => setApptForm((f) => ({ ...f, location: e.target.value }))} placeholder="e.g. Oak Medical" />}</Field>
+          </div>
+          <Field label="Notes">{(id) => <Input id={id} value={apptForm.notes} onChange={(e) => setApptForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Optional details" />}</Field>
           <Button onClick={saveAppointment} disabled={saving || !apptForm.title || !apptForm.starts_at} loading={saving} className="w-full">{saving ? 'Saving...' : 'Add Appointment'}</Button>
         </div>
       </Modal>
