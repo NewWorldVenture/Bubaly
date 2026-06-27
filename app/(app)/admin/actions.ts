@@ -127,6 +127,48 @@ export async function adminUpdateMemberAction(memberId: string, input: { display
   return { ok: true };
 }
 
+/** Saves the Bubaly Stripe configuration (Super Admin → Stripe Setup). */
+export async function saveStripeSettingsAction(input: {
+  enabled: boolean;
+  publishableKey: string | null;
+  secretKey: string | null;
+  webhookSecret: string | null;
+  connectAccountId: string | null;
+  serviceFeeCents: number;
+  serviceFeePriceId: string | null;
+}): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+
+  const feeCents = Number.isFinite(input.serviceFeeCents) && input.serviceFeeCents >= 0 ? Math.trunc(input.serviceFeeCents) : 90;
+  const user = await getUser();
+  const supabase = createServiceClient();
+  const clean = (v: string | null) => (v && v.trim() ? v.trim() : null);
+
+  // Secrets: a blank field means "keep the existing value" so the admin can
+  // tweak the fee without re-pasting keys.
+  const { data: current } = await supabase.from('stripe_settings').select('secret_key, webhook_secret').eq('id', 'singleton').maybeSingle();
+  const keepOr = (next: string | null, prev: string | null | undefined) => clean(next) ?? prev ?? null;
+
+  const { error } = await supabase.from('stripe_settings').upsert({
+    id: 'singleton',
+    enabled: input.enabled,
+    publishable_key: clean(input.publishableKey),
+    secret_key: keepOr(input.secretKey, current?.secret_key),
+    webhook_secret: keepOr(input.webhookSecret, current?.webhook_secret),
+    connect_account_id: clean(input.connectAccountId),
+    service_fee_cents: feeCents,
+    service_fee_price_id: clean(input.serviceFeePriceId),
+    updated_by: user?.id ?? null,
+  }, { onConflict: 'id' });
+  if (error) return { ok: false, error: error.message };
+
+  // Audit without leaking secret values.
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'stripe_settings', resourceId: 'singleton', metadata: { enabled: input.enabled, service_fee_cents: feeCents, has_secret: Boolean(clean(input.secretKey)) } });
+  revalidatePath('/admin/stripe');
+  return { ok: true };
+}
+
 /** Re-sends an existing pending invite's email. */
 export async function adminResendInviteAction(inviteId: string): Promise<Result> {
   const guard = await assertSuperAdmin();

@@ -326,6 +326,11 @@ export interface Database {
         { id?: string; family_id: string; created_by?: string | null; for_member_id?: string | null; for_name?: string | null; title: string; url?: string | null; price_cents?: number | null; occasion?: string | null; reason?: string | null; source?: RelationshipGiftSource; wishlist_item_id?: string | null; status?: RelationshipGiftStatus },
         Partial<{ for_member_id: string | null; for_name: string | null; title: string; url: string | null; price_cents: number | null; occasion: string | null; reason: string | null; source: RelationshipGiftSource; wishlist_item_id: string | null; status: RelationshipGiftStatus }>
       >;
+      stripe_settings: T<
+        { id: string; enabled: boolean; publishable_key: string | null; secret_key: string | null; webhook_secret: string | null; connect_account_id: string | null; service_fee_cents: number; service_fee_price_id: string | null; updated_by: string | null } & Stamps,
+        { id?: string; enabled?: boolean; publishable_key?: string | null; secret_key?: string | null; webhook_secret?: string | null; connect_account_id?: string | null; service_fee_cents?: number; service_fee_price_id?: string | null; updated_by?: string | null },
+        Partial<{ enabled: boolean; publishable_key: string | null; secret_key: string | null; webhook_secret: string | null; connect_account_id: string | null; service_fee_cents: number; service_fee_price_id: string | null; updated_by: string | null }>
+      >;
       family_announcements: T<
         { id: string; family_id: string; author_id: string | null; author_member_id: string | null; title: string; body: string | null; is_pinned: boolean } & Stamps,
         { id?: string; family_id: string; author_id?: string | null; author_member_id?: string | null; title: string; body?: string | null; is_pinned?: boolean },

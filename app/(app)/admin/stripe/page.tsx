@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getMoneyCapabilities, type MoneyCapabilities } from '@/lib/stripe/capabilities';
+import { StripeSetupForm } from '@/components/admin/stripe-setup-form';
 
 export const metadata: Metadata = { title: 'Admin · Money', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -37,6 +38,7 @@ function CapRow({ label, on }: { label: string; on: boolean }) {
 export default async function AdminStripeMoneyPage() {
   const supabase = createServiceClient();
   const caps: MoneyCapabilities = await getMoneyCapabilities(supabase);
+  const { data: stripeCfg } = await supabase.from('stripe_settings').select('*').eq('id', 'singleton').maybeSingle();
 
   const [
     { data: flags }, { data: accounts }, { count: financialCount },
@@ -65,6 +67,20 @@ export default async function AdminStripeMoneyPage() {
         <h1 className="text-2xl font-bold">Money — Stripe Financial Mode</h1>
         <p className="mt-1 text-sm text-muted">Platform oversight for Bubaly Money. Capability detection decides ledger vs Stripe mode at runtime.</p>
       </div>
+
+      {/* Configurable Bubaly Stripe account + service fee */}
+      <StripeSetupForm
+        initial={{
+          enabled: stripeCfg?.enabled ?? false,
+          publishableKey: stripeCfg?.publishable_key ?? '',
+          connectAccountId: stripeCfg?.connect_account_id ?? '',
+          serviceFeeCents: stripeCfg?.service_fee_cents ?? 90,
+          serviceFeePriceId: stripeCfg?.service_fee_price_id ?? '',
+          hasSecret: Boolean(stripeCfg?.secret_key),
+          hasWebhook: Boolean(stripeCfg?.webhook_secret),
+          envSecretSet: Boolean(process.env.STRIPE_SECRET_KEY),
+        }}
+      />
 
       {/* Runtime mode */}
       <Card className="p-5">

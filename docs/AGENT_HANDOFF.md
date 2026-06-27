@@ -3,6 +3,28 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the production bug sweep + frictionless Quick Capture (PR #163). Keep this updated as you ship.
 
+> ## 💳 STRIPE SETUP + $0.90 SERVICE FEE (new, branch `claude/festive-bohr-m4cbeg`)
+> The Bubaly Stripe account is now configurable in Super Admin, and a configurable per-transaction service
+> fee (default **$0.90**) is collected to Bubaly. tsc/lint clean · build ✓ · **1186 tests** (+8). No prod break.
+> - **Migration `0099_stripe_settings.sql`** ⚠️ NOT APPLIED TO PROD — `stripe_settings` singleton
+>   (`id='singleton'`): enabled, publishable_key, secret_key, webhook_secret, connect_account_id,
+>   **service_fee_cents (default 90)**, service_fee_price_id, updated_by. RLS ON with **no policies** →
+>   service-role only (secrets never reach the browser via PostgREST).
+> - **`lib/stripe/service-fee.ts`** (PURE, **8 tests**): `DEFAULT_SERVICE_FEE_CENTS=90`, `resolveServiceFeeCents`,
+>   `serviceFeeEnabled`, `serviceFeeAddInvoiceItems` (checkout one-time fee), `serviceFeeApplicationAmount`
+>   (Connect `application_fee_amount` for wallet money-movement).
+> - **`lib/stripe/settings.ts`** — `getStripeSettings()` (service-role, env fallback) + `effectiveSecretKey/
+>   WebhookSecret/PublishableKey`. **`lib/stripe.ts` `stripeFromKey()`** builds a client from the configured key.
+> - **Super Admin → Stripe Setup** — `components/admin/stripe-setup-form.tsx` rendered at the top of
+>   `/admin/stripe` (also linked from `/admin/settings`). Editable **service fee ($)** field + fee Price ID +
+>   keys (secrets masked, blank = keep) + connect account + enable toggle. `saveStripeSettingsAction`
+>   (super-admin, audited, no secret leakage).
+> - **Wiring** — `/api/billing/checkout` uses the configured secret key and adds the fee via
+>   `subscription_data.add_invoice_items` (one-time, doesn't touch the recurring item so the webhook's
+>   `items.data[0]` plan mapping stays correct). **Backward-safe:** no settings row → env key + fee off →
+>   identical to today. **Next:** wire `serviceFeeApplicationAmount` into wallet/Connect PaymentIntents when
+>   that path goes live; optionally make the fee recurring (needs webhook plan-resolution hardening first).
+>
 > ## 💞 RELATIONSHIP HELPER (new feature, branch `claude/festive-bohr-m4cbeg`)
 > Track anniversaries / birthdays / date nights, store partner preferences, keep a gift-idea list, and get
 > AI nudges + tailored gift ideas grounded in the partner's wishlist. tsc/lint clean · build ✓ · **1172 tests** (+19).
