@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { saveCapture } from '@/lib/capture/save';
+import { saveCapture, tableForKind, undoCapture } from '@/lib/capture/save';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 
 // A tiny chainable fake of the Supabase browser client: records every insert
@@ -81,5 +81,56 @@ describe('saveCapture', () => {
   it('rejects empty input', async () => {
     const { client } = makeFakeSupabase();
     await expect(saveCapture(client, { ...BASE, kind: 'note', text: '   ' })).rejects.toThrow();
+  });
+
+  it('returns an undo descriptor with the right table per kind', async () => {
+    const cases: { kind: 'note' | 'event' | 'task' | 'shopping'; text: string; table: string }[] = [
+      { kind: 'note', text: 'a note', table: 'notes' },
+      { kind: 'event', text: 'Dentist at 3pm', table: 'calendar_events' },
+      { kind: 'task', text: 'Pay rent', table: 'todo_items' },
+      { kind: 'shopping', text: 'milk', table: 'grocery_items' },
+    ];
+    for (const c of cases) {
+      const { client } = makeFakeSupabase();
+      const res = await saveCapture(client, { ...BASE, kind: c.kind, text: c.text });
+      expect(res.undo.table).toBe(c.table);
+      expect(Array.isArray(res.undo.ids)).toBe(true);
+    }
+  });
+});
+
+describe('tableForKind', () => {
+  it('maps every capture kind to its table', () => {
+    expect(tableForKind('note')).toBe('notes');
+    expect(tableForKind('event')).toBe('calendar_events');
+    expect(tableForKind('task')).toBe('todo_items');
+    expect(tableForKind('shopping')).toBe('grocery_items');
+  });
+});
+
+describe('undoCapture', () => {
+  function makeDeleteFake() {
+    const deletes: { table: string; ids: unknown }[] = [];
+    let curTable = '';
+    const b: Record<string, unknown> = {};
+    Object.assign(b, {
+      delete: () => b,
+      in: (_col: string, ids: unknown) => { deletes.push({ table: curTable, ids }); return b; },
+      then: (resolve: (v: { error: null }) => void) => resolve({ error: null }),
+    });
+    const client = { from: (t: string) => { curTable = t; return b; } } as unknown as SupabaseBrowser;
+    return { client, deletes };
+  }
+
+  it('deletes the created rows from the right table', async () => {
+    const { client, deletes } = makeDeleteFake();
+    await undoCapture(client, { table: 'grocery_items', ids: ['a', 'b'] });
+    expect(deletes).toEqual([{ table: 'grocery_items', ids: ['a', 'b'] }]);
+  });
+
+  it('is a no-op when there are no ids', async () => {
+    const { client, deletes } = makeDeleteFake();
+    await undoCapture(client, { table: 'notes', ids: [] });
+    expect(deletes).toEqual([]);
   });
 });
