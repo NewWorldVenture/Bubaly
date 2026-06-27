@@ -6,7 +6,7 @@ import { useState, useRef } from 'react';
 import {
   Mic, Type, Camera, FileText, Sparkles, X, ArrowRight,
   Calendar, CheckSquare, ShoppingCart, Home, HeartPulse, Plane,
-  Loader2, ChevronDown, Undo2,
+  Loader2, ChevronDown, Undo2, SlidersHorizontal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/toast';
@@ -289,6 +289,13 @@ export function CaptureShell() {
                 <span className="text-[10px] text-muted">{hint}</span>
               </Link>
             ))}
+            {/* Customize → opens the (Supabase-persisted) Quick Access editor on Home. */}
+            <Link href="/dashboard?customize=1"
+              className="flex flex-col items-center gap-1.5 rounded-2xl border border-dashed border-border bg-surface/40 p-3 text-center transition hover:border-brand/40 hover:bg-elevated">
+              <SlidersHorizontal className="h-6 w-6 text-brand" />
+              <span className="text-xs font-semibold">Customize</span>
+              <span className="text-[10px] text-muted">Edit shortcuts</span>
+            </Link>
           </div>
         </div>
       </div>

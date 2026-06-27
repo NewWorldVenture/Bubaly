@@ -1,9 +1,30 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after Social Feed URL-unfurl ingestion (PR pending). Keep this updated as you ship.
+Last updated after Quick-Access pinned Social Feed + Capture Customize + super-admin upsell (PR pending). Keep this updated as you ship.
 
-> ## 🔗 SOCIAL FEED — URL-UNFURL INGESTION (PR pending, branch `claude/loving-mccarthy-e1ahq8`)
+> ## 🧭 QUICK ACCESS / CAPTURE POLISH + SUPER-ADMIN UPSELL (PR pending, branch `claude/loving-mccarthy-e1ahq8`)
+> Three screenshot-driven asks (Home Quick Access + Capture screen):
+> 1. **Social Feed pinned in Quick Access by default** — saved layouts override the registry default,
+>    so adding `social_feed` to defaults didn't guarantee it showed. Instead it's now a **pinned tile**
+>    in `components/dashboard/quick-actions.tsx` (always rendered right after the customizable tiles,
+>    Rss icon → `/dashboard/social-feed`, non-removable; shows a "Pinned" badge in edit mode). Reverted
+>    the #179 registry approach: `social_feed` removed from `DASH_FEATURES` + `DEFAULT_LAYOUT_BY_TIER`
+>    (back to originals) so it isn't double-rendered.
+> 2. **Capture "Customize" button** — `components/capture/capture-shell.tsx` "Or jump directly to" grid
+>    gets a **Customize** tile → `/dashboard?customize=1`. `quick-actions.tsx` reads `useSearchParams`
+>    and auto-opens the Quick Access editor when `?customize=1` (and the user `canCustomize`). The editor
+>    persists to `dashboard_layouts` via `saveDashboardLayoutAction` — i.e. **fully Supabase-wired**.
+> 3. **Super-admin upsell restored (REVERSES part of #179)** — `ai-home-dashboard.tsx` no longer forces
+>    `dashTier='plus'` for super-admins; Quick Access now reflects the **real plan tier** so the
+>    "Unlock more" green box stays visible with locked tiles that route to **`/pricing`** (the existing
+>    `UnlockMore` behavior). Super-admins (incl. `Daniel.Hughen@gmail.com`) still get full feature
+>    ACCESS via the sidebar nav (`featureAccessByTier(..., isSuperAdmin)` → visible) — the home upsell is
+>    intentionally the discovery/upgrade surface. (Per the latest request: green box locked + → payment,
+>    while access remains through nav.)
+> - Verified: tsc clean · eslint clean · suite **1288/1288** · build ✓ (`/dashboard` 9.64 kB, `/capture` 5.27 kB).
+
+> ## 🔗 SOCIAL FEED — URL-UNFURL INGESTION (#180 — MERGED)
 > Closes the biggest open gap: the feed had no UN-gated way to get content in (live per-platform
 > OAuth ingestion needs API keys). Now you can **paste ANY link** — a video, post, or article — and
 > it becomes a real feed item. 100% Supabase-wired, no third-party keys required.
