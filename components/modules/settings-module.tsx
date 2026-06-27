@@ -290,10 +290,11 @@ function EditMemberModal({ member, isSelf, onClose }: {
     const form = new FormData(e.currentTarget);
     const display_name = String(form.get('display_name') ?? '').trim();
     const role = String(form.get('role') ?? member.role) as MemberRole;
+    const birthday = String(form.get('birthday') ?? '').trim();
     if (!display_name) { toastError('Name is required'); return; }
     setSaving(true);
     const { error } = await createClient().from('family_members')
-      .update({ display_name, role }).eq('id', member.id);
+      .update({ display_name, role, birthday: birthday || null }).eq('id', member.id);
     setSaving(false);
     if (error) return toastError(describeDbError(error));
     success('Member updated');
@@ -315,6 +316,9 @@ function EditMemberModal({ member, isSelf, onClose }: {
               ))}
             </Select>
           )}
+        </Field>
+        <Field label="Birthday" hint="Powers birthday reminders, gift ideas, and celebrations.">
+          {(id) => <Input id={id} name="birthday" type="date" defaultValue={member.birthday ?? ''} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
