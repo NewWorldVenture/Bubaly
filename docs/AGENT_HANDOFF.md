@@ -17,6 +17,11 @@ Last updated: 2026-06-27 — Home dashboard reminder-attention card (after #173 
 >   namespaced so they never collide). The dashboard fetches the week's upcoming reminders (future, ≤7d,
 >   mine-or-family) and renders the merged feed — reminders get a sky Bell + time, events a muted Calendar;
 >   each row links to its module. (PR #174.)
+> - **AI assistant now creates real reminders**: the `add_reminder` tool in `lib/assistant/tools.ts` was
+>   writing to the **legacy `reminders` table** (invisible in the app). Repointed it at **`family_reminders`**
+>   (core table 0014 — no migration), enriched with optional `priority` / `recurrence` / `assignee`, marked
+>   `ai_suggested`. AI-made reminders now appear in the module, notifications, the dashboard attention card,
+>   and Coming Up — closing the loop. **3 tests** (`tests/assistant-add-reminder.test.ts`). (PR #174.)
 >
 > ## ⏰ REMINDERS — recurrence + filtering + notifications (#173, MERGED → main `327ee14`)
 > #167 (iOS-parity reminder details: lists/url/early-reminder/flag/subtasks/image/tags via migration 0100)
