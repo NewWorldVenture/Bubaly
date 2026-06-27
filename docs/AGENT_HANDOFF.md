@@ -36,6 +36,10 @@ Last updated: Family Front Desk — the AI concierge hub (2026-06-27). Keep this
 >   `autopilot_suggestions` (status auto_executed/executed/approved, by resolved_at desc) with kind icon,
 >   relative time, and an "Auto" badge for auto-executed items — proof the concierge is working (the AI
 >   Family Memory teaser, links to `/dashboard/family-memory`). Only renders when there's history.
+> - **Marketing parity:** `app/(marketing)/ai/page.tsx` gained a **"Your Family Front Desk"** section — a
+>   9-card concierge grid (Phone/Email/SMS/Document/Scheduling/Automation/Memory/Personal Assistant/
+>   Executive Dashboard) mirroring the in-app hub + the vision screenshots, using the shared `FeatureCard`.
+>   Static, zero-risk. The public story now matches the product.
 > - Verified: tsc clean · build exit 0 · **1056/1056**. No migration, no new env. Production-ready now.
 
 > **Session update (2026-06-27) — BRAND REALIGNMENT: "Less Managing Life. More Living It."**

@@ -1,7 +1,24 @@
 import type { Metadata } from 'next';
-import { Sparkles, Calendar, CheckSquare, ShoppingCart, Bell, UtensilsCrossed } from 'lucide-react';
-import { Section, SectionHeading } from '@/components/marketing/sections';
+import {
+  Sparkles, Calendar, CheckSquare, ShoppingCart, Bell, UtensilsCrossed,
+  Phone, Mail, MessageSquare, FileText, CalendarClock, BookHeart, Sun, Gauge, Zap,
+} from 'lucide-react';
+import { Section, SectionHeading, FeatureCard } from '@/components/marketing/sections';
 import { CTASection } from '@/components/marketing/cta';
+
+// The Family Front Desk concierge — mirrors the in-app /dashboard/front-desk hub
+// so the public story matches the product.
+const CONCIERGE = [
+  { icon: Phone, title: 'AI Phone Concierge', description: 'Answers calls, schedules appointments, routes requests, and escalates only when it’s really you they need.' },
+  { icon: Mail, title: 'AI Email Concierge', description: 'Reads email, extracts the actions, files documents, and updates your calendars and task lists.' },
+  { icon: MessageSquare, title: 'AI SMS Concierge', description: 'Handles texts from schools, coaches, and service providers with the same intelligence as your calls.' },
+  { icon: FileText, title: 'AI Document Concierge', description: 'Understands permission slips, medical forms, invoices, and registrations — and files them automatically.' },
+  { icon: CalendarClock, title: 'AI Scheduling Agent', description: 'Negotiates meeting and appointment times across each person’s calendar based on real availability.' },
+  { icon: Zap, title: 'AI Automation Engine', description: 'Converts every inbound message into the right task, event, reminder, shopping item, or archived record.' },
+  { icon: BookHeart, title: 'AI Family Memory', description: 'A searchable timeline of every interaction, document, event, and decision — so nothing is ever lost.' },
+  { icon: Sun, title: 'AI Personal Assistant', description: 'Delivers each family member a personalized daily briefing instead of making them go digging.' },
+  { icon: Gauge, title: 'AI Executive Dashboard', description: 'Shows parents only what needs a decision today, with one-tap approval for the routine stuff.' },
+];
 
 export const metadata: Metadata = {
   title: 'Family AI Assistant',
@@ -53,6 +70,20 @@ export default function AIPage() {
           </p>
         </div>
       </Section>
+      {/* Family Front Desk — the full concierge */}
+      <Section className="pt-4">
+        <SectionHeading
+          eyebrow="Your Family Front Desk"
+          title="One front desk for your whole family"
+          description="Bubaly answers, reads, files, schedules, and remembers — so the invisible work of family life is handled before it reaches you."
+        />
+        <div className="mx-auto mt-12 grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {CONCIERGE.map((c) => (
+            <FeatureCard key={c.title} icon={c.icon} title={c.title} description={c.description} />
+          ))}
+        </div>
+      </Section>
+
       <CTASection title="Meet your family’s assistant" subtitle="Try it free for 14 days." />
     </>
   );
