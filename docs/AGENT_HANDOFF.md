@@ -53,6 +53,11 @@ Last updated: Dramatic UI upgrade — wallet/money visual allocation + dark-mode
 >   one-tap relative presets (In 1 hour / Tonight 6pm / Tomorrow 9am / This weekend / Next
 >   week). Input is now controlled (`remindAt` state) so presets + manual edits stay in sync;
 >   `toLocalInput()` formats a Date to the local `datetime-local` string.
+> - **Chores** (`components/modules/chores-module.tsx`) — same one-tap due-date presets
+>   (Today / Tomorrow / This weekend / Next week) under the assignment due-date field;
+>   `toLocalDate()` helper. (NOTE: `toLocalInput`/`toLocalDate` + the QUICK_* preset arrays
+>   are now duplicated in reminders + chores — a future cleanup could extract them to a
+>   shared `lib/utils/dates.ts`.)
 > - **Expense splitting** (`components/modules/expenses-module.tsx`) — added a live
 >   Splitwise-style "Splitting $X between N people · ~$Y each" preview in the split form
 >   so parents see the per-person share before saving.
