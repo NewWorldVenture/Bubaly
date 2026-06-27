@@ -25,11 +25,15 @@ export const PLATFORMS: PlatformMeta[] = [
 
 const PLATFORM_BY_KEY = new Map(PLATFORMS.map((p) => [p.key, p]));
 
+/** Generic saved-link "platform" for the URL-unfurl path (not a source chip). */
+export const WEB_META: PlatformMeta = { key: 'web' as Platform, label: 'Web', tint: 'text-muted' };
+
 export function isPlatform(v: unknown): v is Platform {
   return typeof v === 'string' && PLATFORM_BY_KEY.has(v as Platform);
 }
 
 export function platformMeta(key: string): PlatformMeta {
+  if (key === 'web') return WEB_META;
   return PLATFORM_BY_KEY.get(key as Platform) ?? { key: key as Platform, label: key, tint: 'text-muted' };
 }
 

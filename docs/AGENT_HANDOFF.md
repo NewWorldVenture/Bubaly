@@ -1,9 +1,32 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after Social Feed access + super-admin full-unlock (PR pending). Keep this updated as you ship.
+Last updated after Social Feed URL-unfurl ingestion (PR pending). Keep this updated as you ship.
 
-> ## 🔓 SOCIAL FEED ACCESS + SUPER-ADMIN FULL UNLOCK (PR pending, branch `claude/loving-mccarthy-e1ahq8`)
+> ## 🔗 SOCIAL FEED — URL-UNFURL INGESTION (PR pending, branch `claude/loving-mccarthy-e1ahq8`)
+> Closes the biggest open gap: the feed had no UN-gated way to get content in (live per-platform
+> OAuth ingestion needs API keys). Now you can **paste ANY link** — a video, post, or article — and
+> it becomes a real feed item. 100% Supabase-wired, no third-party keys required.
+> - **`lib/social/unfurl.ts`** (PURE, **18 tests** in `tests/social-unfurl.test.ts`): `detectPlatform`
+>   (host → platform, unknown → `web`), `isSafePublicUrl` (SSRF guard: http(s) only, blocks
+>   localhost/private/link-local), `normalizeUrl` (drops hash + tracking params → canonical, stable
+>   idempotency key), `parseMeta` (OpenGraph/Twitter-card/`<title>` extraction, order-independent),
+>   `inferKind`, `resolveImage`, `decodeEntities`, `buildItemFromHtml(url, html)` → `UnfurlDraft`.
+> - **`addByUrlAction(url)`** in `social-feed/actions.ts`: validates URL (SSRF-safe), server-fetches the
+>   HTML (real UA, 12s timeout, 600KB cap, html content-type check), unfurls → inserts into
+>   `social_reader_items` with `external_id = canonical url` (idempotent; re-adding a link is a no-op).
+> - **`social-feed-module.tsx`**: a prominent **"Paste any link…" bar** above the feed tabs (Enter or
+>   Add → unfurl → appears); opening a post now marks-read + refreshes so the unread ring clears;
+>   empty state nudges paste-a-link. Generic links render with a calm **"Web"** badge (`WEB_META` in
+>   `lib/social/feed.ts`; `platformMeta('web')`).
+> - **Still integration-gated (separate, optional):** LIVE auto-pull per platform (IG/YouTube/etc.)
+>   needs OAuth/API keys; the worker would call the same insert path (`addFeedItemAction`/`addByUrlAction`),
+>   `external_id` keeps it idempotent. URL-unfurl is the real, shipping ingestion today.
+> - ⚠️ **Migration `0101_social_feed.sql` still NOT applied to prod** — apply it in Supabase so
+>   `social_reader_sources` / `social_reader_items` exist; until then the page renders an empty state.
+> - Verified: tsc clean · eslint clean · suite **1279/1279** (18 new) · build ✓ (`/dashboard/social-feed` 8.83 kB).
+
+> ## 🔓 SOCIAL FEED ACCESS + SUPER-ADMIN FULL UNLOCK (#179 — MERGED)
 > Follow-up to the Social Feed ship (#176, MERGED). Fixes the live `/dashboard/social-feed` 404
 > (route was only on the unmerged branch — now on main, deploys via Vercel), surfaces it in Quick
 > Access, and makes super-admins fully unlocked on the Home dashboard.
@@ -22,6 +45,7 @@ Last updated after Social Feed access + super-admin full-unlock (PR pending). Ke
 > - ⚠️ **Migration `0101_social_feed.sql` still NOT applied to prod** — the route renders (empty state)
 >   but `social_reader_*` tables must be created in Supabase prod before sources/items persist.
 > - Verified: tsc clean · eslint clean · suite **1261/1261** · build ✓ (`/dashboard/social-feed` registered).
+> - (Note: PR #179 also carried the pre-existing "Public marketing forms" `/f/[id]` work that was on the branch.)
 
 > ## 📰 SOCIAL FEED — "All your social feeds. One place." (#176 — MERGED)
 > Branch `claude/social-feed`. A calm, ad-free CONSUMPTION feed at **`/dashboard/social-feed`** —

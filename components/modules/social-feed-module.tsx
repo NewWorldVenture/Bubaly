@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Search, MoreHorizontal, Bookmark, Filter, Play, Star, Heart, Video,
-  Image as ImageIcon, Link2, BadgeCheck, X, Rss, Trash2,
+  Image as ImageIcon, Link2, BadgeCheck, X, Rss, Trash2, Sparkles, Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/states';
@@ -20,6 +20,7 @@ import {
 } from '@/lib/social/feed';
 import {
   addSourceAction, removeSourceAction, toggleFavoriteAction, markReadAction, markAllReadAction,
+  addByUrlAction,
 } from '@/app/(app)/dashboard/social-feed/actions';
 
 export type FeedSource = { id: string; platform: string; displayName: string; handle: string | null; accountCount: number; category: string };
@@ -74,6 +75,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
   const [quick, setQuick] = useState<QuickFilter | null>(null);
   const [query, setQuery] = useState('');
   const [showAdd, setShowAdd] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
 
   const counts = useMemo(() => quickFilterCounts(items.map((i) => ({
@@ -106,6 +108,18 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
     setBusy(null);
     if (!res.ok) return toastError(res.error ?? 'Something went wrong');
     if (ok) success(ok);
+    router.refresh();
+  }
+
+  async function addLink() {
+    const url = linkUrl.trim();
+    if (!url) return;
+    setBusy('addlink');
+    const res = await addByUrlAction({ url });
+    setBusy(null);
+    if (!res.ok) return toastError(res.error ?? 'Could not add that link');
+    setLinkUrl('');
+    success('Added to your feed');
     router.refresh();
   }
 
@@ -152,6 +166,21 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
             </div>
           </div>
 
+          {/* Paste-a-link bar — the ungated "add to feed" path: unfurls any URL. */}
+          <form
+            onSubmit={(e) => { e.preventDefault(); void addLink(); }}
+            className="mb-3 flex items-center gap-2 rounded-2xl border border-brand/30 bg-brand/5 p-2.5">
+            <Link2 className="ml-1 hidden h-4 w-4 shrink-0 text-brand sm:block" />
+            <input
+              value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} inputMode="url"
+              placeholder="Paste any link — a video, post, or article — to add it to your feed"
+              className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
+            <Button type="submit" disabled={!linkUrl.trim() || busy === 'addlink'}>
+              {busy === 'addlink' ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1 h-4 w-4" />}
+              Add
+            </Button>
+          </form>
+
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="flex gap-1 overflow-x-auto no-scrollbar">
               {TABS.map((t) => (
@@ -170,7 +199,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
           </div>
 
           {empty ? (
-            <EmptyState icon={Rss} title="Your feed is empty" description="Connect your favorite social accounts and your family's posts, videos and updates land here — ad-free." action={<Button onClick={() => setShowAdd(true)}><Plus className="mr-1 h-4 w-4" /> Add your first source</Button>} />
+            <EmptyState icon={Rss} title="Your feed is empty" description="Paste any link above — a video, post, or article — to add it instantly, or connect your favorite accounts. It all lands here, ad-free." action={<Button onClick={() => setShowAdd(true)}><Plus className="mr-1 h-4 w-4" /> Add your first source</Button>} />
           ) : feed.length === 0 ? (
             <EmptyState icon={Filter} title="Nothing matches" description="Try a different tab or clear the filter." />
           ) : (
@@ -178,7 +207,10 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
               {feed.map((item) => (
                 <FeedCard key={item.id} item={item} busy={busy}
                   onFavorite={() => run(`fav-${item.id}`, () => toggleFavoriteAction({ id: item.id, favorite: !item.isFavorite }))}
-                  onOpen={() => { if (!item.isRead) void markReadAction({ id: item.id, read: true }); if (item.permalink) window.open(item.permalink, '_blank', 'noopener'); }} />
+                  onOpen={() => {
+                    if (item.permalink) window.open(item.permalink, '_blank', 'noopener');
+                    if (!item.isRead) void markReadAction({ id: item.id, read: true }).then(() => router.refresh());
+                  }} />
               ))}
             </div>
           )}
