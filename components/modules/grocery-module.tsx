@@ -7,7 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
-import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
@@ -128,7 +128,7 @@ export function GroceryModule() {
     });
   }
 
-  if (listLoading || loading) return <LoadingBlock />;
+  if (listLoading || loading) return <SkeletonList count={6} />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   // Donut data for sidebar

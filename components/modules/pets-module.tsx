@@ -15,7 +15,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import {
@@ -84,7 +84,7 @@ export function PetsModule() {
 
   const petById = (id: string) => pets.data.find((p) => p.id === id);
 
-  if (pets.loading) return <LoadingBlock />;
+  if (pets.loading) return <SkeletonList />;
 
   return (
     <div className="space-y-6">

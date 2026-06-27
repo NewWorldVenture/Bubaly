@@ -14,7 +14,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -272,7 +272,7 @@ export function RelationshipModule() {
     }
   }
 
-  if (dl) return <LoadingBlock label="Loading your relationship helper…" />;
+  if (dl) return <SkeletonList count={5} />;
   if (de) return <ErrorState message={typeof de === 'string' ? de : 'Failed to load'} />;
 
   return (

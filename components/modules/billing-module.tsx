@@ -27,7 +27,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
-import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
@@ -761,7 +761,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const hasPaidPlan = slugToStripePlan(subscription?.plan) !== null && ['active', 'trialing', 'past_due'].includes(status);
   const subCanceling = Boolean(subscription?.cancel_at_period_end) && hasPaidPlan;
 
-  if (anyLoading) return <LoadingBlock />;
+  if (anyLoading) return <SkeletonList />;
   if (anyError) return <ErrorState message={anyError} onRetry={refreshAll} />;
 
   // ── Render helpers ──────────────────────────────────────────────────────
@@ -1178,7 +1178,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
             <CreditCard className="h-5 w-5 text-brand" />
             <h2 className="font-semibold">Bubaly Subscription</h2>
           </div>
-          {subLoading ? <LoadingBlock /> : (
+          {subLoading ? <SkeletonList /> : (
             <>
               <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>

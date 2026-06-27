@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -154,7 +154,7 @@ export function ShoppingModule() {
     });
   }
 
-  if (listsLoading) return <LoadingBlock />;
+  if (listsLoading) return <SkeletonList />;
 
   return (
     <div className="module-with-sidebar">
@@ -240,7 +240,7 @@ export function ShoppingModule() {
             )}
 
             {/* Items by category */}
-            {itemsLoading ? <LoadingBlock /> : byCategory.length === 0 ? (
+            {itemsLoading ? <SkeletonList /> : byCategory.length === 0 ? (
               <EmptyState icon={ShoppingCart} title="List is empty"
                 description="Add items below to get started." />
             ) : (

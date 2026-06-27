@@ -17,7 +17,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { successProbability, confidenceTier } from '@/lib/autopilot/engine';
@@ -109,7 +109,7 @@ export function AutopilotModule() {
     void refresh();
   }
 
-  if (loading && !scannedOnce) return <LoadingBlock />;
+  if (loading && !scannedOnce) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   return (

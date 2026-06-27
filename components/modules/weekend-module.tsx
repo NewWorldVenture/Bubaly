@@ -9,7 +9,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Input, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS, categoryMeta, priceRange, isValidZip, PLAN_STATUSES } from '@/lib/weekend/meta';
 import type { Tables, WeekendPlanStatus, WeekendFeedKind } from '@/lib/database.types';
 
@@ -208,7 +208,7 @@ export function WeekendModule() {
       )}
 
       {/* discovered events grouped by day */}
-      {loading ? <LoadingBlock /> : grouped.length === 0 ? (
+      {loading ? <SkeletonList /> : grouped.length === 0 ? (
         <EmptyState icon={Sparkles} title="No upcoming events yet" description="Enter your ZIP code and tap Find events to pull real local happenings from Ticketmaster." />
       ) : (
         <div className="space-y-6">

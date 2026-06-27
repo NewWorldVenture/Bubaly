@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { VISIT_KINDS, visitKindMeta, sortByVisitDate, upcomingFollowUps, daysUntilFollowUp, type VisitKind } from '@/lib/health/visits';
 import type { Tables } from '@/lib/database.types';
@@ -111,7 +111,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
       )}
 
       {loading ? (
-        <LoadingBlock />
+        <SkeletonList />
       ) : scoped.length === 0 ? (
         <EmptyState icon={Stethoscope} title="No visits logged" description="Add a doctor, dentist, or vaccination visit to build your family's health history." />
       ) : (

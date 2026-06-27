@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
-import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import {
   PANTRY_LOCATIONS, locationMeta, expiryStatus, isLowStock, expiringSoon,
@@ -89,7 +89,7 @@ export function PantryModule() {
     success(`Added ${items.length} item${items.length > 1 ? 's' : ''} to your grocery list`);
   }
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   return (

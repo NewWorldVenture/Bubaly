@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { DEVICE_TYPES, DEVICE_INTEGRATIONS, DEVICE_STATUSES, integrationLabel, summarizeDevices, groupByRoom, type DeviceLike } from '@/lib/home/devices';
 import type { Tables } from '@/lib/database.types';
 
@@ -58,7 +58,7 @@ export function DevicesModule() {
     setForm({ id: d.id, name: d.name, type: d.type, room: d.room ?? '', brand: d.brand ?? '', integration: d.integration, status: d.status, last_state: d.last_state ?? '', note: d.note ?? '' });
   }
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
 
   return (
     <div className="space-y-5">

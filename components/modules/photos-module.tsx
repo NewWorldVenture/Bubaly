@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -155,7 +155,7 @@ export function PhotosModule() {
     cover: allPhotos.find((p) => p.album_id === a.id)?.url,
   }));
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
 
   return (
     <div ref={dropRef} className="module-page transition-colors border-2 border-transparent rounded-2xl">
