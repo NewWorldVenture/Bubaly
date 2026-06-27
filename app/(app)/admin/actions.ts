@@ -8,6 +8,8 @@ import { logAudit } from '@/lib/server/audit';
 import { sendReactEmail, APP_URL } from '@/lib/email';
 import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
+import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
+import { stripeFromKey } from '@/lib/stripe';
 import type { MemberRole } from '@/lib/constants/roles';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
@@ -167,6 +169,22 @@ export async function saveStripeSettingsAction(input: {
   await adminAuditLog({ familyId: null, action: 'update', resource: 'stripe_settings', resourceId: 'singleton', metadata: { enabled: input.enabled, service_fee_cents: feeCents, has_secret: Boolean(clean(input.secretKey)) } });
   revalidatePath('/admin/stripe');
   return { ok: true };
+}
+
+/** Verifies the configured Stripe secret key by retrieving the account. */
+export async function testStripeConnectionAction(): Promise<Result<{ livemode: boolean; currencies: number }>> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+  try {
+    const settings = await getStripeSettings();
+    const key = effectiveSecretKey(settings);
+    if (!key) return { ok: false, error: 'No Stripe secret key configured.' };
+    // balance.retrieve needs no id and fails fast on a bad/expired key.
+    const balance = await stripeFromKey(key).balance.retrieve();
+    return { ok: true, data: { livemode: balance.livemode, currencies: balance.available.length } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not connect to Stripe.' };
+  }
 }
 
 /** Re-sends an existing pending invite's email. */

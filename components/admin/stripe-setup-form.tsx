@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CreditCard, KeyRound, Percent, Save } from 'lucide-react';
+import { CreditCard, KeyRound, Percent, Save, Plug, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input, Field } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
-import { saveStripeSettingsAction } from '@/app/(app)/admin/actions';
+import { saveStripeSettingsAction, testStripeConnectionAction } from '@/app/(app)/admin/actions';
 
 export type StripeSetupInitial = {
   enabled: boolean;
@@ -32,6 +32,18 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
   const [connectAccountId, setConnectAccountId] = useState(initial.connectAccountId);
   const [secretKey, setSecretKey] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function testConnection() {
+    setTesting(true);
+    setTestResult(null);
+    const res = await testStripeConnectionAction();
+    setTesting(false);
+    if (!res.ok) { setTestResult({ ok: false, text: res.error }); return; }
+    const d = res.data!;
+    setTestResult({ ok: true, text: `Connected · ${d.livemode ? 'LIVE' : 'test'} mode · ${d.currencies} settlement currenc${d.currencies === 1 ? 'y' : 'ies'}` });
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -104,12 +116,23 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
           </Field>
         </div>
 
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           <Button type="submit" disabled={saving} className="gap-1.5">
             {saving ? 'Saving…' : <><Save className="h-4 w-4" /> Save Stripe Setup</>}
           </Button>
-          <span className="inline-flex items-center gap-1 text-xs text-muted"><KeyRound className="h-3.5 w-3.5" /> Secrets are stored server-side and never sent back to the browser.</span>
+          <Button type="button" variant="outline" onClick={testConnection} disabled={testing} className="gap-1.5">
+            {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />} Test connection
+          </Button>
         </div>
+
+        {testResult && (
+          <p className={`flex items-center gap-1.5 text-sm ${testResult.ok ? 'text-success' : 'text-danger'}`}>
+            {testResult.ok ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
+            {testResult.text}
+          </p>
+        )}
+
+        <p className="inline-flex items-center gap-1 text-xs text-muted"><KeyRound className="h-3.5 w-3.5" /> Secrets are stored server-side and never sent back to the browser. Test uses the saved key — save before testing a new one.</p>
       </form>
     </Card>
   );

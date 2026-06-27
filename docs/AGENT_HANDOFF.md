@@ -21,7 +21,9 @@ Last updated after the production bug sweep + frictionless Quick Capture (PR #16
 >   (super-admin, audited, no secret leakage).
 > - **Wiring** — `/api/billing/checkout` uses the configured secret key and adds the fee via
 >   `subscription_data.add_invoice_items` (one-time, doesn't touch the recurring item so the webhook's
->   `items.data[0]` plan mapping stays correct). **Backward-safe:** no settings row → env key + fee off →
+>   `items.data[0]` plan mapping stays correct). **`testStripeConnectionAction`** + a "Test connection"
+>   button validate the configured key (`balance.retrieve`, shows live/test mode + settlement currencies).
+>   **Backward-safe:** no settings row → env key + fee off →
 >   identical to today. **Next:** wire `serviceFeeApplicationAmount` into wallet/Connect PaymentIntents when
 >   that path goes live; optionally make the fee recurring (needs webhook plan-resolution hardening first).
 >
