@@ -5,6 +5,20 @@ Last updated: Capture — AI routing, direct-file, photo/scan, tier-gated button
 
 ## ▶ CURRENT STATE (read this first)
 - **Active branch:** `claude/continuation-an1mam` (all work below is committed + pushed here).
+
+> **Session update (2026-06-26t) — EDITABLE FAMILY MEMBERS (Settings + Admin), Supabase-wired.**
+> Both member screens are now editable (name / role / color).
+> - **Settings → Family members** (`components/modules/settings-module.tsx`): admins get a
+>   pencil per member → `EditMemberModal` (name, role select, color swatches) → updates
+>   `family_members` via the RLS-scoped browser client → reload. Own role is locked (anti-lockout);
+>   name/color stay editable. `MEMBER_COLORS` palette.
+> - **Admin → Users & Families** (`components/admin/member-row-actions.tsx`): the row `…` menu
+>   now has "Edit name & role" → `EditMemberModal` → new `adminUpdateMemberAction({memberId,
+>   displayName?, role?})` in `app/(app)/admin/actions.ts` (super-admin guarded, service client,
+>   validates role against `EDITABLE_ROLES`, audit-logs `update`, revalidates). The page passes
+>   `name`/`role` into `<MemberRowActions>`.
+> - Verified: tsc clean · build exit 0 · **1047/1047**. No migration (uses existing tables/RLS).
+
 - **Health:** `tsc --noEmit` clean · `npm run build` exit 0 · **full suite 1039/1039 green**.
   Always run all three before declaring done. `npm run build` catches things `tsc` misses
   (e.g. "Server Actions must be async" — a `'use server'` file may only export async fns).
