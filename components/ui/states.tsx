@@ -14,6 +14,15 @@ export function LoadingBlock({ label = 'Loading…' }: { label?: string }) {
   );
 }
 
+/**
+ * A single shimmering placeholder block. Compose these in route-level
+ * `loading.tsx` files (or anywhere mid-fetch) to show the page's shape
+ * instantly instead of a blank screen or a centered spinner.
+ */
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cn('animate-pulse rounded-md bg-border/40', className)} aria-hidden />;
+}
+
 /** Empty state used across every module so blank lists never look broken. */
 export function EmptyState({
   icon: Icon,
