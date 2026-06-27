@@ -264,7 +264,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                           </td>
                           <td className="px-3 py-2.5 text-muted">{fmtDate(u.joinedAt, 'MMM d, yyyy')}</td>
                           <td className="px-3 py-2.5">
-                            <MemberRowActions memberId={u.member.id} name={u.name} role={u.role} />
+                            <MemberRowActions memberId={u.member.id} name={u.name} role={u.role} familyId={u.family?.id ?? null} plan={u.plan} />
                           </td>
                         </tr>
                       ))}

@@ -9,6 +9,7 @@ import { sendReactEmail, APP_URL } from '@/lib/email';
 import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
 import type { MemberRole } from '@/lib/constants/roles';
+import type { PlanId } from '@/lib/constants/plans';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -141,6 +142,35 @@ export async function adminUpdateMemberAction(input: {
 
   await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: input.memberId, metadata: patch });
   revalidatePath('/admin/users');
+  return { ok: true };
+}
+
+const ALLOWED_PLANS: PlanId[] = ['free', 'family', 'family_annual', 'basic', 'basic_annual', 'plus', 'plus_annual'];
+
+/**
+ * Manually set a family's plan (admin override / comp — no charge). Updates the
+ * family's subscription row (or creates one), status 'active'. Affects the whole
+ * family's tier gating.
+ */
+export async function adminUpdateFamilyPlanAction(input: { familyId: string; plan: PlanId }): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+  if (!ALLOWED_PLANS.includes(input.plan)) return { ok: false, error: 'Invalid plan.' };
+
+  const supabase = createServiceClient();
+  const { data: existing } = await supabase.from('subscriptions').select('id').eq('family_id', input.familyId).maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase.from('subscriptions').update({ plan: input.plan, status: 'active' }).eq('id', existing.id);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase.from('subscriptions').insert({ family_id: input.familyId, plan: input.plan, status: 'active' });
+    if (error) return { ok: false, error: error.message };
+  }
+
+  await adminAuditLog({ familyId: input.familyId, action: 'update', resource: 'subscriptions', metadata: { plan: input.plan } });
+  revalidatePath('/admin/users');
+  revalidatePath('/admin/subscriptions');
   return { ok: true };
 }
 
