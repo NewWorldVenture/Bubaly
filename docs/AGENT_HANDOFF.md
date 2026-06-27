@@ -25,6 +25,9 @@ Last updated: Family Front Desk — the AI concierge hub (2026-06-27). Keep this
 > - **Registered:** `lib/constants/feature-catalog.ts` (`front-desk`, plus), `lib/constants/plans.ts`
 >   ROUTE_PLAN_LEVEL (`/dashboard/front-desk: 2`), `lib/constants/navigation.ts` (flagship — first item in
 >   the "Family AI OS" group, `Headset` icon, minLevel 2).
+> - **Self-populating:** `DecisionQueue` POSTs `/api/autopilot/scan` once on mount (mirrors the Autopilot
+>   module) so the desk is never hollow on first open; shows a "Checking your family…" state during the
+>   first scan and a manual **Re-scan** button in the header. Scan is idempotent (dedupe_key).
 > - Verified: tsc clean · build exit 0 · **1056/1056**. No migration, no new env. Production-ready now.
 
 > **Session update (2026-06-27) — BRAND REALIGNMENT: "Less Managing Life. More Living It."**

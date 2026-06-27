@@ -5,9 +5,9 @@
 // `autopilot_suggestions` table — the same store Family Autopilot writes to — so
 // approving here executes the action and clears it everywhere. Reversible
 // reminder execution mirrors the Autopilot module so the two stay consistent.
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  ShieldCheck, AlertTriangle, Check, X, Sparkles, CircleDot,
+  ShieldCheck, AlertTriangle, Check, X, Sparkles, CircleDot, RefreshCw,
   CalendarClock, FileClock, Cake, ShoppingCart, ListChecks, CalendarX,
   Wallet, HeartPulse, Pill, UtensilsCrossed,
 } from 'lucide-react';
@@ -38,6 +38,8 @@ function startOfToday(): string {
 export function DecisionQueue() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
+  const [scanning, setScanning] = useState(false);
+  const [scannedOnce, setScannedOnce] = useState(false);
 
   const { data, loading, error, refresh } = useRealtimeQuery<Suggestion>({
     table: 'autopilot_suggestions',
@@ -47,6 +49,33 @@ export function DecisionQueue() {
       supabase.from('autopilot_suggestions').select('*').eq('family_id', familyId)
         .order('urgency', { ascending: false }).order('confidence', { ascending: false }),
   });
+
+  async function runScan() {
+    setScanning(true);
+    try {
+      const res = await fetch('/api/autopilot/scan', { method: 'POST' });
+      const json = (await res.json()) as { autoExecuted?: number; error?: string };
+      if (!res.ok) throw new Error(json.error || 'Scan failed');
+      if (json.autoExecuted && json.autoExecuted > 0) {
+        success(`Bubaly handled ${json.autoExecuted} thing${json.autoExecuted === 1 ? '' : 's'} for you`);
+      }
+      void refresh();
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Scan failed');
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  // Populate the desk the moment it opens — the front desk should never look
+  // empty just because no scan has run yet.
+  useEffect(() => {
+    if (!scannedOnce && familyId) {
+      setScannedOnce(true);
+      void runScan();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [familyId, scannedOnce]);
 
   const open = useMemo(() => data.filter((s) => s.status === 'open'), [data]);
   const decideItems = useMemo(
@@ -103,14 +132,29 @@ export function DecisionQueue() {
             Only the decisions that are actually yours to make — one tap each.
           </p>
         </div>
-        {handledToday.length > 0 && (
-          <span className="hidden shrink-0 items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 sm:flex">
-            <Sparkles className="h-3.5 w-3.5" /> {handledToday.length} handled today
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {handledToday.length > 0 && (
+            <span className="hidden items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 sm:flex">
+              <Sparkles className="h-3.5 w-3.5" /> {handledToday.length} handled today
+            </span>
+          )}
+          <button onClick={runScan} disabled={scanning} aria-label="Re-scan"
+            className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-60">
+            <RefreshCw className={cn('h-3.5 w-3.5', scanning && 'animate-spin')} />
+            <span className="hidden sm:inline">{scanning ? 'Scanning…' : 'Re-scan'}</span>
+          </button>
+        </div>
       </div>
 
-      {decideItems.length === 0 ? (
+      {decideItems.length === 0 && scanning ? (
+        <div className="flex flex-col items-center rounded-xl border border-border bg-surface/30 py-10 text-center">
+          <RefreshCw className="h-8 w-8 animate-spin text-brand/70" />
+          <p className="mt-3 text-sm font-semibold">Checking your family…</p>
+          <p className="mt-1 max-w-sm text-xs text-muted">
+            Bubaly is scanning calendars, documents, renewals, and routines for anything that needs you.
+          </p>
+        </div>
+      ) : decideItems.length === 0 ? (
         <div className="flex flex-col items-center rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] py-10 text-center">
           <ShieldCheck className="h-10 w-10 text-emerald-400/80" />
           <p className="mt-3 text-sm font-semibold">You’re all caught up</p>
