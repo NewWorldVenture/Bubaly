@@ -75,6 +75,24 @@ export async function upsertTemplateAction(input: TemplateInput): Promise<Result
   return { ok: true, id: (data as { id: string }).id };
 }
 
+/** Clone a template (without its pages) as a fast starting point for a variation. */
+export async function duplicateTemplateAction(input: { id: string }): Promise<Result & { id?: string }> {
+  const { supabase, userId } = await guard();
+  const { data: src, error: sErr } = await supabase
+    .from('seo_page_templates').select('*').eq('id', input.id).maybeSingle();
+  if (sErr) return { ok: false, error: sErr.message };
+  if (!src) return { ok: false, error: 'Template not found.' };
+  const t = src as SeoPageTemplateRow;
+  const { id, created_at, updated_at, created_by, ...rest } = t;
+  void id; void created_at; void updated_at; void created_by;
+  const { data, error } = await (supabase.from('seo_page_templates') as ReturnType<typeof supabase.from>)
+    .insert({ ...rest, name: `${t.name} (copy)`, is_active: false, created_by: userId })
+    .select('id').single();
+  if (error) return { ok: false, error: error.message };
+  revalidate();
+  return { ok: true, id: (data as { id: string }).id };
+}
+
 export async function deleteTemplateAction(input: { id: string }): Promise<Result> {
   const { supabase } = await guard();
   // Cascade deletes the template's pages (FK on delete cascade).

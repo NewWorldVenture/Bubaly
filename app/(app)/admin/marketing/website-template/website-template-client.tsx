@@ -4,14 +4,14 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Pencil, Trash2, X, Globe, Eye, Sparkles, ExternalLink,
-  ChevronDown, ChevronRight, Wand2, Check,
+  ChevronDown, ChevronRight, Wand2, Check, Copy,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { renderPage, type SeoTemplate, type FeatureBlock, type FaqItem } from '@/lib/seo/template';
 import { US_STATES, stateVars } from '@/lib/seo/states';
 import {
-  upsertTemplateAction, deleteTemplateAction, generatePagesAction,
+  upsertTemplateAction, deleteTemplateAction, duplicateTemplateAction, generatePagesAction,
   setPageStatusAction, deletePagesAction, setTemplatePagesStatusAction,
 } from './actions';
 
@@ -123,6 +123,15 @@ function TemplateCard({ template, onEdit, onGenerate }: { template: TemplateView
     router.refresh();
   }
 
+  async function duplicate() {
+    setBusy(true);
+    const res = await duplicateTemplateAction({ id: template.id });
+    setBusy(false);
+    if (!res.ok) return toastError(res.error ?? 'Failed');
+    success('Template duplicated (inactive) — edit and activate it');
+    router.refresh();
+  }
+
   return (
     <div className="rounded-2xl border border-border bg-surface/40 overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 p-4">
@@ -147,6 +156,7 @@ function TemplateCard({ template, onEdit, onGenerate }: { template: TemplateView
             </button>
           )}
           <button onClick={onEdit} aria-label="Edit template" title="Edit" className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
+          <button onClick={duplicate} disabled={busy} aria-label="Duplicate template" title="Duplicate" className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg disabled:opacity-50"><Copy className="h-4 w-4" /></button>
           <button onClick={remove} disabled={busy} aria-label="Delete template" title="Delete" className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"><Trash2 className="h-4 w-4" /></button>
         </div>
       </div>
