@@ -12,7 +12,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -147,7 +147,7 @@ export function DocumentsModule() {
     setOpen(false); setForm({ title: '', category: 'other', member_id: '' }); setFile(null); refresh();
   }
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} />;
 
   const displayDocs = data.slice(0, 8);

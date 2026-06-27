@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { isAdmin } from '@/lib/constants/roles';
@@ -108,7 +108,7 @@ export function AnnouncementsModule() {
       />
 
       {loading ? (
-        <LoadingBlock />
+        <SkeletonList />
       ) : error ? (
         <ErrorState message="Could not load announcements." />
       ) : (announcements ?? []).length === 0 ? (

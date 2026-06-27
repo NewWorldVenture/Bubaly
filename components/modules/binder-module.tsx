@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { BINDER_CATEGORIES, binderCategoryLabel, maskValue, groupByCategory, type InfoLike } from '@/lib/home/binder';
 import type { Tables } from '@/lib/database.types';
@@ -55,7 +55,7 @@ export function BinderModule() {
     setForm({ id: i.id, category: i.category, label: i.label, value: i.value ?? '', note: i.note ?? '', is_sensitive: i.is_sensitive });
   }
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
 
   return (
     <div className="space-y-5">

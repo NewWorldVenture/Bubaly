@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock } from '@/components/ui/states';
+import { SkeletonList } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import {
   fetchForecast, geocodeCity, reverseGeocode, weatherInfo,
@@ -245,7 +245,7 @@ export function WeatherModule() {
       </div>
 
       {loading ? (
-        <LoadingBlock />
+        <SkeletonList />
       ) : error ? (
         <div className="rounded-2xl border border-danger/30 bg-danger/10 p-6 text-center text-sm text-danger">{error}</div>
       ) : !active ? (

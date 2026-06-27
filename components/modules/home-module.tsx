@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
-import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { isManager } from '@/lib/constants/roles';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
@@ -138,7 +138,7 @@ export function HomeModule() {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
-  if (assetsLoading || tasksLoading || docsLoading) return <LoadingBlock />;
+  if (assetsLoading || tasksLoading || docsLoading) return <SkeletonList />;
   if (assetsError) return <ErrorState message={assetsError} onRetry={refreshAssets} />;
   if (tasksError) return <ErrorState message={tasksError} onRetry={refreshTasks} />;
   if (docsError) return <ErrorState message={docsError} onRetry={refreshDocs} />;

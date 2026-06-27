@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { SavingsCoachCard } from '@/components/modules/savings-coach-card';
 import { usd } from '@/lib/finance/splits';
@@ -79,7 +79,7 @@ export function SubscriptionsModule() {
     setForm({ id: s.id, name: s.name, cost: (s.cost_cents / 100).toString(), cadence: s.cadence, category: s.category ?? 'Other', status: s.status, next_charge: s.next_charge ?? '', last_used: s.last_used ?? '', note: s.note ?? '' });
   }
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
 
   return (
     <div className="space-y-5">

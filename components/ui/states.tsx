@@ -40,6 +40,55 @@ export function EmptyState({
   );
 }
 
+/**
+ * Skeleton primitive — a shimmering placeholder block. Prefer these over a bare
+ * spinner for content areas: matching the eventual layout makes load feel faster
+ * and avoids layout shift. Respects reduced-motion (the pulse is a CSS animation
+ * Tailwind disables under `motion-reduce`).
+ */
+export function Skeleton({ className }: { className?: string }) {
+  return <div aria-hidden className={cn('animate-pulse rounded-lg bg-elevated/70 motion-reduce:animate-none', className)} />;
+}
+
+/** A few stacked text-line skeletons. */
+export function SkeletonText({ lines = 3, className }: { lines?: number; className?: string }) {
+  return (
+    <div className={cn('space-y-2', className)} role="status" aria-label="Loading">
+      {Array.from({ length: lines }).map((_, i) => (
+        <Skeleton key={i} className={cn('h-4', i === lines - 1 ? 'w-2/3' : 'w-full')} />
+      ))}
+    </div>
+  );
+}
+
+/** A card-shaped skeleton (icon + title + lines), matching the app's card rhythm. */
+export function SkeletonCard({ className }: { className?: string }) {
+  return (
+    <div className={cn('rounded-2xl border border-border bg-surface/40 p-4', className)} role="status" aria-label="Loading">
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-10 w-10 rounded-xl" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-4 w-1/3" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
+      </div>
+      <div className="mt-4 space-y-2">
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-5/6" />
+      </div>
+    </div>
+  );
+}
+
+/** A list of card skeletons for list/grid screens while data loads. */
+export function SkeletonList({ count = 3, className }: { count?: number; className?: string }) {
+  return (
+    <div className={cn('space-y-3', className)}>
+      {Array.from({ length: count }).map((_, i) => <SkeletonCard key={i} />)}
+    </div>
+  );
+}
+
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div className="rounded-2xl border border-danger/30 bg-danger/5 px-5 py-6 text-center">

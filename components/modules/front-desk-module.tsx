@@ -17,7 +17,7 @@ import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { PageHeader } from '@/components/app/page-header';
-import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -144,7 +144,7 @@ export function FrontDeskModule() {
     void markRead(call);
   }
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   const TABS: { key: FilterTab; label: string }[] = [

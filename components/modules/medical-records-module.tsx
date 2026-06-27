@@ -15,7 +15,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { ProviderInfoSheet, CheckInSheet } from '@/components/medical/print-sheet';
@@ -236,7 +236,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       : { ...blankProfile, member_id: memberId });
   }
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} />;
 
   return (

@@ -17,7 +17,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -120,7 +120,7 @@ export function TodosModule() {
     });
   }
 
-  if (listsLoading) return <LoadingBlock />;
+  if (listsLoading) return <SkeletonList />;
 
   return (
     <div className="module-with-sidebar">
@@ -235,7 +235,7 @@ export function TodosModule() {
             </div>
 
             {/* Items */}
-            {itemsLoading ? <LoadingBlock /> : filtered.length === 0 ? (
+            {itemsLoading ? <SkeletonList /> : filtered.length === 0 ? (
               <EmptyState icon={CheckSquare} title={filter === 'done' ? 'No completed items' : 'Nothing here yet'}
                 description={filter === 'all' ? 'Add your first task above.' : `No ${filter} tasks.`}
                 action={filter === 'all' ? <Button onClick={() => setNewItemOpen(true)}><Plus className="h-4 w-4" /> Add Task</Button> : undefined} />
