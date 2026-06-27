@@ -216,11 +216,14 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
       <Container className="pb-16 pt-10">
         {/* Hero */}
         <section className="mx-auto max-w-3xl text-center">
-          <h1 className="text-5xl font-black leading-[1.08] sm:text-6xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-violet-300/80">
+            Less Life Admin. More Living Life.
+          </p>
+          <h1 className="mt-3 text-5xl font-black leading-[1.08] sm:text-6xl">
             Bubaly Pricing
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-white/65">
-            Start free. Upgrade when your family is ready.
+            Start free. Upgrade when your family is ready. Every plan gives you back time, attention, and peace of mind.
           </p>
 
           {/* Billing toggle */}
