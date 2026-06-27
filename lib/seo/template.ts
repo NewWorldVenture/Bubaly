@@ -58,6 +58,22 @@ export function interpolate(str: string | null | undefined, vars: Vars): string 
   return out.replace(/[ \t]{2,}/g, ' ').replace(/ +([.,!?])/g, '$1').trim();
 }
 
+/**
+ * The static slug prefix of a pattern — every segment before the first that
+ * contains a {variable}. e.g. 'family-organizer/{state_slug}' → 'family-organizer'.
+ * This is the URL of the template's hub/index page. Returns '' when the very
+ * first segment is already a variable (no usable hub).
+ */
+export function hubSlug(pattern: string): string {
+  const out: string[] = [];
+  for (const seg of pattern.split('/')) {
+    if (seg.includes('{')) break;
+    const s = slugify(seg);
+    if (s) out.push(s);
+  }
+  return out.join('/');
+}
+
 /** Resolve a slug_pattern against vars → a normalized path without a leading slash. */
 export function resolveSlug(pattern: string, vars: Vars): string {
   const interpolated = interpolate(pattern, vars);

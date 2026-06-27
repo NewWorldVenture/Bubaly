@@ -6,6 +6,7 @@ import {
   renderParagraphs,
   renderPage,
   mergeVars,
+  hubSlug,
   type SeoTemplate,
 } from '@/lib/seo/template';
 import { US_STATES, stateVars } from '@/lib/seo/states';
@@ -38,6 +39,17 @@ describe('interpolate', () => {
 
   it('returns empty string for null input', () => {
     expect(interpolate(null, vars)).toBe('');
+  });
+});
+
+describe('hubSlug', () => {
+  it('returns the static prefix before the first variable segment', () => {
+    expect(hubSlug('family-organizer/{state_slug}')).toBe('family-organizer');
+    expect(hubSlug('apps/family/{state}')).toBe('apps/family');
+    expect(hubSlug('best-{state}-app')).toBe('');
+  });
+  it('returns empty when the first segment is a variable', () => {
+    expect(hubSlug('{state_slug}/family')).toBe('');
   });
 });
 
