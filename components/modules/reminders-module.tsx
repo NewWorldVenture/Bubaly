@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import {
   Bell, Plus, Check, Clock, MapPin, Repeat, Pill, CreditCard,
   GraduationCap, CheckSquare, Trash2, Edit2, Sparkles, X,
-  AlertTriangle, Calendar, User, AlarmClock, Loader2,
+  AlertTriangle, Calendar, User, AlarmClock, Loader2, Search,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -81,6 +81,7 @@ export function RemindersModule() {
 
   const [tab, setTab] = useState<'active' | 'completed' | 'all'>('active');
   const [filterKind, setFilterKind] = useState('all');
+  const [query, setQuery] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Reminder | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -98,8 +99,10 @@ export function RemindersModule() {
     if (tab === 'active') rows = rows.filter((r) => r.status === 'active' || r.status === 'snoozed');
     if (tab === 'completed') rows = rows.filter((r) => r.status === 'completed' || r.status === 'dismissed');
     if (filterKind !== 'all') rows = rows.filter((r) => r.kind === filterKind);
+    const q = query.trim().toLowerCase();
+    if (q) rows = rows.filter((r) => `${r.title} ${r.notes ?? ''}`.toLowerCase().includes(q));
     return rows;
-  }, [reminders, tab, filterKind]);
+  }, [reminders, tab, filterKind, query]);
 
   const overdue = reminders.filter(isOverdue);
   const activeCount = reminders.filter((r) => r.status === 'active').length;
@@ -239,12 +242,26 @@ export function RemindersModule() {
             </button>
           ))}
         </div>
-        {/* Kind filter */}
-        <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)}
-          className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
-          <option value="all">All types</option>
-          {KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          {/* Search */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search reminders…"
+              className="w-40 rounded-xl border border-border bg-surface/60 py-2 pl-8 pr-7 text-xs outline-none transition focus:border-brand/50 sm:w-52" />
+            {query && (
+              <button onClick={() => setQuery('')} aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:text-fg">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          {/* Kind filter */}
+          <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)}
+            className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
+            <option value="all">All types</option>
+            {KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* Reminder list */}

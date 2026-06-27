@@ -6,6 +6,26 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 ## ▶ CURRENT STATE (read this first)
 - **Active branch:** `claude/continuation-an1mam` (all work below is committed + pushed here).
 
+> ### ⚠️ KNOWN ISSUE — TWO REMINDER TABLES (split-brain; needs a product decision)
+> There are two reminder stores and they don't talk to each other:
+> - **`reminders`** — written by Autopilot (`autopilot-module`, `lib/autopilot/scan.ts`), the Front Desk
+>   **decision queue** (`components/front-desk/decision-queue.tsx`), and the AI assistant
+>   (`lib/ai/actions.ts`, `lib/assistant/tools.ts`). Read by the **briefing** (`api/ai/briefing`,
+>   `weekly-briefing`, `briefing-module`), **notifications** (`lib/server/notifications.ts`), the
+>   **kitchen display**, **readiness**, and **health module**. Schema: `is_done`, `remind_at`, `title`,
+>   `notes`, `member_id`, `related_type`, `related_id`.
+> - **`family_reminders`** — the dedicated **Reminders page** (`components/modules/reminders-module.tsx`),
+>   the family dashboard card, and **Capture** (`app/(app)/capture/actions.ts`). Schema: `status`
+>   (active/snoozed/completed/dismissed), `kind`, `priority`, `remind_at`, `notes`, `completed_at`,
+>   `snoozed_until`.
+> **Consequence:** approving "Add renewal reminder" in the Front Desk creates a `reminders` row that
+> NEVER appears on the Reminders page (it reads `family_reminders`); conversely manual Reminders-page
+> entries don't feed the briefing/notifications/display. **Not fixed** — unifying is a schema decision
+> (could be intentional: ambient AI reminders vs. the rich manual feature). Options: (a) Reminders page
+> also reads `reminders` as a read-only "From Bubaly" section; (b) point AI/autopilot writes at
+> `family_reminders` (richer schema) and migrate readers; (c) DB migration unifying the two. Pick with
+> the product owner before touching — many surfaces depend on `reminders`.
+
 > **Session update (2026-06-27) — FAMILY MEMORY: actually searchable.**
 > The Family Memory page header had long promised "a searchable timeline" but had NO search box —
 > it just rendered a list. Now it's real (the AI Family Memory capability from the vision).
