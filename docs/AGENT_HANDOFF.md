@@ -1,7 +1,26 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Website Template (programmatic SEO) — renamed + custom dimension (2026-06-26r). Keep this updated as you ship.
+Last updated: Capture quick-buttons — tier-gated + customizable (2026-06-26s). Keep this updated as you ship.
+
+> **Session update (2026-06-26s) — CAPTURE QUICK-JUMP BUTTONS: TIER-GATED + CUSTOMIZABLE.**
+> Branch `claude/continuation-an1mam`. Verified: tsc clean · build exit 0 · **1029/1029**.
+> The `/capture` screen's "Or jump directly to" buttons were hardcoded (Calendar/Tasks/
+> Grocery/Home/Health/Trip). Now:
+> - **`lib/capture/quick-routes.ts`** — a 16-route catalog, each with a `minLevel`
+>   (0 Free / 1 Basic+ / 2 Plus+) mirroring the sidebar nav gating. Helpers:
+>   `availableQuickRoutes(level)`, `defaultQuickRouteKeys(level, count=6)`,
+>   `resolveQuickRoutes(savedKeys, level)` (keeps saved order, drops now-locked/unknown keys,
+>   falls back to tier default). Pure + 8 tests (`tests/capture-quick-routes.test.ts`).
+> - **`app/(app)/capture/page.tsx`** — resolves the family plan level from `subscriptions`
+>   and passes it to `CaptureShell`. By default only tier-accessible routes show; **locked
+>   features are never offered**.
+> - **`components/capture/capture-shell.tsx`** — `CaptureShell({ planLevel })`. A "Customize"
+>   button opens a sheet (toggle which buttons show + ▲▼ reorder). Saved per-user in
+>   `localStorage` (`bubaly.capture.quickRoutes`); re-validated against the tier on load.
+>   Empty selection → tier default. (Persistence is localStorage/per-device — could later
+>   move to a `user_preferences` jsonb column for cross-device sync; that needs a migration,
+>   `user_preferences` currently only has `notification_prefs`.)
 
 > **Session update (2026-06-26r) — WEBSITE TEMPLATE: LABEL + CUSTOM DIMENSION.**
 > Branch `claude/continuation-an1mam`. Verified: tsc clean · build exit 0 · **1021/1021**.
