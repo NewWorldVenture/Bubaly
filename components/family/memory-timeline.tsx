@@ -9,21 +9,14 @@ import { Camera, Quote, Plane, Award, BookHeart, Star, Search, X } from 'lucide-
 import { MiniEmpty } from '@/components/family/shell';
 import { DeleteButton } from '@/components/family/record-actions';
 import { fmtDate } from '@/lib/utils/format';
+import { filterMemories, type SearchableMemory } from '@/lib/family/memory-search';
 import { cn } from '@/lib/utils/cn';
 
 const KIND_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   photo: Camera, quote: Quote, trip: Plane, achievement: Award, journal: BookHeart, milestone: Star,
 };
 
-export type MemoryRow = {
-  id: string;
-  kind: string;
-  title: string;
-  body: string | null;
-  memory_date: string;
-  member_id: string | null;
-  is_favorite: boolean | null;
-};
+export type MemoryRow = SearchableMemory;
 
 export function MemoryTimeline({
   memories, members,
@@ -35,16 +28,11 @@ export function MemoryTimeline({
   const [favOnly, setFavOnly] = useState(false);
   const nameById = useMemo(() => new Map(members.map((m) => [m.id, m.display_name])), [members]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return memories.filter((m) => {
-      if (favOnly && !m.is_favorite) return false;
-      if (!q) return true;
-      const who = m.member_id ? (nameById.get(m.member_id) ?? '') : '';
-      return [m.title, m.body ?? '', m.kind, who, m.memory_date]
-        .join(' ').toLowerCase().includes(q);
-    });
-  }, [memories, query, favOnly, nameById]);
+  const filtered = useMemo(
+    () => filterMemories(memories, { query, favoritesOnly: favOnly },
+      (id) => (id ? nameById.get(id) ?? '' : '')),
+    [memories, query, favOnly, nameById],
+  );
 
   if (memories.length === 0) {
     return <MiniEmpty icon={Camera} text="No memories yet — capture your first above." />;

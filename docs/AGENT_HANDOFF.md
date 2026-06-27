@@ -45,6 +45,14 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 > side-effecting execution. 'ask'-tier (uncertain/urgent) items are excluded, so they still need an
 > individual decision. tsc clean · build 0 · **1056/1056**. No migration.
 
+> **Session update (2026-06-27) — MEMORY SEARCH extracted + unit-tested.**
+> Moved the Family Memory timeline's filtering out of the React component into a pure helper
+> **`lib/family/memory-search.ts`** (`memoryMatches` / `filterMemories`, with a `nameOf` resolver so
+> search covers "who"). `components/family/memory-timeline.tsx` is now a thin shell over it; `MemoryRow`
+> aliases the helper's `SearchableMemory`. **`tests/memory-search.test.ts`** (5 tests: empty query,
+> title/body/kind/date, member-name, favoritesOnly, list filter+order). Suite **1056 → 1061**. Pure
+> refactor, no behavior change, no migration.
+
 > **Session update (2026-06-27) — FAMILY FRONT DESK (the AI concierge hub).**
 > Packages the scattered concierge capabilities into one branded surface — the "Family AI Front Desk"
 > from the product vision (every call answered / email understood / form processed). The capabilities
@@ -191,7 +199,7 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 >   `components/admin/family-row-actions.tsx`.
 > - Verified: tsc clean · build exit 0 · **1047/1047**. No migration (uses existing tables/RLS).
 
-- **Health:** `tsc --noEmit` clean · `npm run build` exit 0 · **full suite 1056/1056 green**.
+- **Health:** `tsc --noEmit` clean · `npm run build` exit 0 · **full suite 1061/1061 green**.
   Always run all three before declaring done. `npm run build` catches things `tsc` misses
   (e.g. "Server Actions must be async" — a `'use server'` file may only export async fns).
 - **Conventions that bite if ignored:**
