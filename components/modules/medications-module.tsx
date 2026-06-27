@@ -31,7 +31,7 @@ type Dose = Tables<'medication_doses'>;
 const WHOLE_FAMILY = '__family__';
 const ADHERENCE_WINDOW_DAYS = 30;
 
-const blankMed = { id: '', member_id: '', name: '', dosage: '', instructions: '', is_active: true };
+const blankMed = { id: '', member_id: '', name: '', dosage: '', instructions: '', is_active: true, refill_on: '', refill_reminder_days: 7 };
 const blankSchedule = { time_of_day: '08:00', days_of_week: [0, 1, 2, 3, 4, 5, 6] as number[], starts_on: localDateKey(new Date()), ends_on: '' };
 
 function AdherenceRing({ rate, size = 96 }: { rate: number | null; size?: number }) {
@@ -167,7 +167,7 @@ export function MedicationsModule() {
   // ── Medication CRUD ───────────────────────────────────────
   function openNewMed() { setMedForm(blankMed); setMedModalOpen(true); }
   function openEditMed(m: Medication) {
-    setMedForm({ id: m.id, member_id: m.member_id ?? '', name: m.name, dosage: m.dosage ?? '', instructions: m.instructions ?? '', is_active: m.is_active });
+    setMedForm({ id: m.id, member_id: m.member_id ?? '', name: m.name, dosage: m.dosage ?? '', instructions: m.instructions ?? '', is_active: m.is_active, refill_on: m.refill_on ?? '', refill_reminder_days: m.refill_reminder_days ?? 7 });
     setMedModalOpen(true);
   }
 
@@ -182,6 +182,8 @@ export function MedicationsModule() {
       dosage: medForm.dosage.trim() || null,
       instructions: medForm.instructions.trim() || null,
       is_active: medForm.is_active,
+      refill_on: medForm.refill_on || null,
+      refill_reminder_days: Math.max(0, Math.min(90, Number(medForm.refill_reminder_days) || 0)),
     };
     const { error: err } = medForm.id
       ? await sb.from('medications').update(fields).eq('id', medForm.id)
@@ -435,6 +437,14 @@ export function MedicationsModule() {
           <Field label="Instructions">
             {(id) => <Textarea id={id} value={medForm.instructions} onChange={(e) => setMedForm((f) => ({ ...f, instructions: e.target.value }))} placeholder="e.g. Take with food" />}
           </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Refill due" hint="Bubaly reminds you before it runs out.">
+              {(id) => <Input id={id} type="date" value={medForm.refill_on} onChange={(e) => setMedForm((f) => ({ ...f, refill_on: e.target.value }))} />}
+            </Field>
+            <Field label="Remind days ahead">
+              {(id) => <Input id={id} type="number" min={0} max={90} value={medForm.refill_reminder_days} onChange={(e) => setMedForm((f) => ({ ...f, refill_reminder_days: Number(e.target.value) }))} />}
+            </Field>
+          </div>
           <label className="flex items-center gap-2 text-sm text-fg">
             <input type="checkbox" checked={medForm.is_active} onChange={(e) => setMedForm((f) => ({ ...f, is_active: e.target.checked }))} className="h-4 w-4 rounded border-border" />
             Active
