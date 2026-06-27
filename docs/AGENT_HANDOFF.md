@@ -28,6 +28,13 @@ Last updated: Capture quick-buttons — tier-gated, customizable, Supabase-synce
 >   `user_preferences` (reusable for future UI prefs). **APPLY 0093 TO PROD** for cross-device
 >   sync; until then it degrades to localStorage. `database.types.ts` already updated with the
 >   column, so no regen needed for this one.
+> - **Capture Photo & Scan now functional** (were stubs): Photo opens the camera/file picker
+>   (`capture=environment`), previews, uploads to the `family-media` bucket + inserts
+>   `family_photos`, routes to `/dashboard/photos`. Scan picks image/PDF → `uploadFamilyDocument`
+>   (documents bucket) + inserts `documents` (title from filename, category `other`) → routes to
+>   `/dashboard/documents`. Rolls back the storage object on a failed insert; revokes object
+>   URLs. `CaptureShell` now also takes `familyId`/`userId` from the server page. No new
+>   migration (reuses existing `family-media`/`documents` buckets + tables).
 
 > **Session update (2026-06-26r) — WEBSITE TEMPLATE: LABEL + CUSTOM DIMENSION.**
 > Branch `claude/continuation-an1mam`. Verified: tsc clean · build exit 0 · **1021/1021**.
