@@ -5,7 +5,7 @@ import {
   FolderKanban, Plug, BarChart3, Sun, CalendarDays, Stethoscope, Smile, TicketCheck,
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
-  DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins,
+  DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
   Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, type LucideIcon,
 } from 'lucide-react';
 
@@ -79,6 +79,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/pets', label: 'Pets', icon: PawPrint, minLevel: 0 },
       { href: '/dashboard/locator', label: 'Family Map', icon: MapPin, minLevel: 1 },
       { href: '/dashboard/social', label: 'Social Command', icon: Share2, minLevel: 1 },
+      { href: '/dashboard/social-feed', label: 'Social Feed', icon: Rss, minLevel: 0 },
       { href: '/dashboard/grocery', label: 'Groceries', icon: ShoppingCart, minLevel: 0 },
       { href: '/dashboard/reminders', label: 'Reminders', icon: Bell, minLevel: 0 },
       { href: '/dashboard/weather', label: 'Weather', icon: CloudSun, minLevel: 0 },
