@@ -24,7 +24,9 @@ Last updated after the production bug sweep + frictionless Quick Capture (PR #16
 >   `items.data[0]` plan mapping stays correct). **`testStripeConnectionAction`** + a "Test connection"
 >   button validate the configured key (`balance.retrieve`, shows live/test mode + settlement currencies).
 >   **Backward-safe:** no settings row → env key + fee off →
->   identical to today. **Next:** wire `serviceFeeApplicationAmount` into wallet/Connect PaymentIntents when
+>   identical to today. **Disclosure:** `/dashboard/billing` shows "A one-time $X Bubaly service fee is added
+>   at checkout." (server reads the non-secret fee config; only when enabled) → `BillingModule` prop. **Next:**
+>   wire `serviceFeeApplicationAmount` into wallet/Connect PaymentIntents when
 >   that path goes live; optionally make the fee recurring (needs webhook plan-resolution hardening first).
 >
 > ## 💞 RELATIONSHIP HELPER (new feature, branch `claude/festive-bohr-m4cbeg`)

@@ -483,7 +483,7 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
 
 // ── Main Module ─────────────────────────────────────────────────────────────
 
-export function BillingModule() {
+export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: string | null } = {}) {
   const { familyId, userId, role } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
@@ -1214,6 +1214,9 @@ export function BillingModule() {
                   downgrade, or switch billing interval at any time. */}
               {admin && (
                 <PlanManager currentSlug={subscription?.plan ?? null} highlight={needLevel} pending={pending} onChoose={changePlan} />
+              )}
+              {admin && serviceFeeNotice && (
+                <p className="mt-3 text-center text-xs text-muted">{serviceFeeNotice}</p>
               )}
 
               {/* Cancel control for paying families that aren't already canceling. */}
