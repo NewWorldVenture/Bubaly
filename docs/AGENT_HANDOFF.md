@@ -1,7 +1,26 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-27 — Home dashboard reminder-attention card (after #173 MERGED). Keep this updated as you ship.
+Last updated after the Social Feed (consumption) — PR pending. Keep this updated as you ship.
+
+> ## 📰 SOCIAL FEED — "All your social feeds. One place." (PR pending)
+> Branch `claude/social-feed`. A calm, ad-free CONSUMPTION feed at **`/dashboard/social-feed`** —
+> DISTINCT from the existing publishing "Social Command" (`/dashboard/social`). Families connect
+> SOURCES (IG/FB/YouTube/TikTok/X/LinkedIn/Reddit/WhatsApp/Pinterest) → posts land as ITEMS to
+> favorite / mark-read / filter. ⚠️ **Migration `0101_social_feed.sql` NOT APPLIED TO PROD.**
+> - Tables renamed `social_reader_sources` / `social_reader_items` (the names `social_feed_*` were
+>   ALREADY taken by Social Command — do not reuse). Enums `social_item_kind`, `social_category`.
+> - **`lib/social/feed.ts`** (PURE + **14 tests**) — `PLATFORMS` metadata, `buildFeed` (sort+tab+
+>   quickfilter), `quickFilterCounts`, `applyTab`/`applyQuickFilter`.
+> - **`app/(app)/dashboard/social-feed/{page,actions}`** — RLS-scoped; actions: add/remove source,
+>   toggle favorite, mark read / mark-all-read, addFeedItem (manual = the ingestion insert path).
+> - **`components/modules/social-feed-module.tsx`** — mirrors the mock: hero + platform chips, feed
+>   cards (media/video/photo/link, bookmark, open), tabs All/Favorites/Family/Friends/Groups, right
+>   rail Your Sources + Activity + Quick Filters, "Less scrolling. More connecting." Nav + catalog added.
+> - **Integration-gated (like Stripe):** LIVE per-platform ingestion needs OAuth/API keys per network.
+>   Next: an ingestion worker calling `addFeedItemAction`'s insert path with `external_id` (unique index
+>   makes it idempotent). UI + store are complete and real today.
+> - Verified: tsc clean · eslint clean · build ✓ (`/dashboard/social-feed` registered) · suite 1254/1254 (14 new).
 
 > ## 🏠 HOME DASHBOARD — REMINDER ATTENTION CARD (new, branch `claude/festive-bohr-m4cbeg`)
 > Now that `family_reminders` is a first-class notifying service (#173, merged), the home dashboard
