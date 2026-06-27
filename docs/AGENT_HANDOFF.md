@@ -9,6 +9,13 @@ Last updated: Website Template (programmatic SEO) — renamed + custom dimension
 >   **`/admin/marketing/website-template`** (route renamed from `seo-pages`; component
 >   `WebsiteTemplateClient`; subnav label "Website Template" in the Content & SEO group).
 >   Public routes, engine, and tables are unchanged.
+> - **Programmatic OG images**: `app/(marketing)/[...slug]/opengraph-image.tsx` renders a branded
+>   1200×630 social card per page/hub via `next/og` ImageResponse (Bubaly wordmark + eyebrow + H1
+>   on a brand gradient). `nodejs` runtime; reads the page/template via the service client +
+>   `renderPage`. Next merges it into each route's OG/Twitter meta (twitter card is
+>   `summary_large_image`). Falls back to generic copy if the slug doesn't resolve. Brand `#7c5dff`.
+>   (Bulk custom-dimension values: the Generate modal textarea already accepts pasted
+>   comma/newline lists — no separate CSV uploader needed.)
 > - **Analytics panel**: the admin now shows a stat row (templates / total pages / published /
 >   total views) + a "Top performing pages" list ranked by the per-page `views` counter (pure
 >   server-side aggregation, no extra query).
