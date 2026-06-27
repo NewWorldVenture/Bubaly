@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
 import { detectPlatformCapabilities, capabilityLabel } from '@/lib/stripe/capabilities';
 import { CheckCircle2, Clock, AlertCircle, XCircle, CreditCard, Users, Zap } from 'lucide-react';
+import { FeatureFlagsPanel, type FlagRow } from '@/components/admin/feature-flags-panel';
 
 export const metadata: Metadata = { title: 'Stripe Admin — Bubaly' };
 
@@ -15,6 +16,7 @@ export default async function AdminStripePage() {
     { data: checkouts },
     { data: webhookEvents },
     { data: recentAuths },
+    { data: flagRows },
     platformCaps,
   ] = await Promise.all([
     db.from('stripe_connected_accounts').select('family_id, status, charges_enabled, payouts_enabled, created_at', { count: 'exact' }).order('created_at', { ascending: false }).limit(20),
@@ -22,8 +24,10 @@ export default async function AdminStripePage() {
     db.from('stripe_checkout_sessions').select('id, type, status, amount_cents, created_at').order('created_at', { ascending: false }).limit(10),
     db.from('stripe_webhook_events').select('id, type, status, created_at').order('created_at', { ascending: false }).limit(20),
     db.from('stripe_authorizations').select('id, status, decision, amount_cents, merchant_name, authorized_at').order('authorized_at', { ascending: false }).limit(10),
+    supabase.from('feature_flags').select('key, enabled, description').order('key'),
     detectPlatformCapabilities(),
   ]);
+  const featureFlags = (flagRows ?? []) as FlagRow[];
 
   const approvedAccounts = ((accounts ?? []) as Array<{ charges_enabled: boolean }>).filter((a) => a.charges_enabled).length;
 
@@ -84,6 +88,14 @@ export default async function AdminStripePage() {
           ))}
         </div>
       </section>
+
+      {/* Feature flags — editable in-app (no more "toggle it in the database") */}
+      {featureFlags.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-base font-semibold text-fg">Feature flags</h2>
+          <FeatureFlagsPanel flags={featureFlags} />
+        </section>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

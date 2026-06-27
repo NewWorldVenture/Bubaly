@@ -178,6 +178,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/stripe', label: 'Stripe Console', icon: CreditCard },
   { href: '/admin/card-designs', label: 'Card Designs', icon: CreditCard },
   { href: '/admin/wallet', label: 'Wallet Console', icon: Wallet },
+  { href: '/admin/feature-flags', label: 'Feature Flags', icon: SlidersHorizontal },
   { href: '/admin/integrations', label: 'Integrations', icon: Plug },
   { href: '/admin/sync', label: 'Sync Platform', icon: RefreshCw },
   { href: '/admin/social', label: 'Social Platform', icon: Share2 },
