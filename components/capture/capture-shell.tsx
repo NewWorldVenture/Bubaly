@@ -2,25 +2,30 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Mic, Type, Camera, FileText, Sparkles, X, ArrowRight,
-  Calendar, CheckSquare, ShoppingCart, Home, HeartPulse, Plane,
-  Loader2, ChevronDown,
+  Loader2, ChevronDown, Settings2, GripVertical, Plus, Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/toast';
+import {
+  availableQuickRoutes, resolveQuickRoutes, defaultQuickRouteKeys, type QuickRoute,
+} from '@/lib/capture/quick-routes';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
 
-const QUICK_ROUTES = [
-  { icon: Calendar, label: 'Calendar', href: '/dashboard/calendar', hint: 'Add event' },
-  { icon: CheckSquare, label: 'Tasks', href: '/dashboard/chores', hint: 'Create task' },
-  { icon: ShoppingCart, label: 'Grocery', href: '/dashboard/grocery', hint: 'Add to list' },
-  { icon: Home, label: 'Home', href: '/dashboard/home', hint: 'Home task' },
-  { icon: HeartPulse, label: 'Health', href: '/dashboard/health', hint: 'Log health' },
-  { icon: Plane, label: 'Trip', href: '/dashboard/trips', hint: 'Plan trip' },
-];
+const ROUTES_STORAGE_KEY = 'bubaly.capture.quickRoutes';
+
+function loadSavedKeys(): string[] | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(ROUTES_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.every((k) => typeof k === 'string') ? parsed : null;
+  } catch { return null; }
+}
 
 function routeCapture(text: string): { destination: string; url: string } {
   const lower = text.toLowerCase();
@@ -43,7 +48,7 @@ function routeCapture(text: string): { destination: string; url: string } {
   return { destination: 'AI Assistant', url: `/dashboard/assistant?q=${encodeURIComponent(text)}` };
 }
 
-export function CaptureShell() {
+export function CaptureShell({ planLevel = 0 }: { planLevel?: number }) {
   const router = useRouter();
   const { error: toastError } = useToast();
   const [mode, setMode] = useState<CaptureMode>('type');
@@ -52,6 +57,20 @@ export function CaptureShell() {
   const [routed, setRouted] = useState<{ destination: string; url: string } | null>(null);
   const [recording, setRecording] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
+
+  // Quick-jump buttons: tier-gated catalog + the user's saved customization.
+  const available = useMemo(() => availableQuickRoutes(planLevel), [planLevel]);
+  const [savedKeys, setSavedKeys] = useState<string[] | null>(null);
+  const [customizing, setCustomizing] = useState(false);
+  useEffect(() => { setSavedKeys(loadSavedKeys()); }, []);
+  const quickRoutes = useMemo(() => resolveQuickRoutes(savedKeys, planLevel), [savedKeys, planLevel]);
+
+  function saveRoutes(keys: string[]) {
+    // An empty selection means "use the tier default" rather than no buttons.
+    const next = keys.length > 0 ? keys : defaultQuickRouteKeys(planLevel);
+    setSavedKeys(next);
+    try { window.localStorage.setItem(ROUTES_STORAGE_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+  }
 
   function handleInput(value: string) {
     setText(value);
@@ -193,16 +212,125 @@ export function CaptureShell() {
 
         {/* Quick route chips */}
         <div>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Or jump directly to</p>
-          <div className="grid grid-cols-3 gap-2">
-            {QUICK_ROUTES.map(({ icon: Icon, label, href, hint }) => (
-              <Link key={label} href={href}
-                className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 p-3 text-center transition hover:border-brand/30 hover:bg-elevated">
-                <Icon className="h-6 w-6 text-brand" />
-                <span className="text-xs font-semibold">{label}</span>
-                <span className="text-[10px] text-muted">{hint}</span>
-              </Link>
-            ))}
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Or jump directly to</p>
+            <button type="button" onClick={() => setCustomizing(true)}
+              className="flex items-center gap-1 text-xs font-medium text-muted transition hover:text-brand">
+              <Settings2 className="h-3.5 w-3.5" /> Customize
+            </button>
+          </div>
+          {quickRoutes.length === 0 ? (
+            <button type="button" onClick={() => setCustomizing(true)}
+              className="flex w-full flex-col items-center gap-1.5 rounded-2xl border border-dashed border-border p-5 text-center text-sm text-muted transition hover:border-brand/30 hover:text-brand">
+              <Plus className="h-5 w-5" /> Add quick-jump buttons
+            </button>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {quickRoutes.map(({ key, icon: Icon, label, href, hint }) => (
+                <Link key={key} href={href}
+                  className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 p-3 text-center transition hover:border-brand/30 hover:bg-elevated">
+                  <Icon className="h-6 w-6 text-brand" />
+                  <span className="text-xs font-semibold">{label}</span>
+                  <span className="text-[10px] text-muted">{hint}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {customizing && (
+        <CustomizeRoutes
+          available={available}
+          current={quickRoutes}
+          onSave={(keys) => { saveRoutes(keys); setCustomizing(false); }}
+          onReset={() => { saveRoutes(defaultQuickRouteKeys(planLevel)); setCustomizing(false); }}
+          onClose={() => setCustomizing(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Lets the user pick which quick-jump buttons appear and their order. Only
+// tier-accessible routes are offered (locked features are never listed).
+function CustomizeRoutes({
+  available, current, onSave, onReset, onClose,
+}: {
+  available: QuickRoute[];
+  current: QuickRoute[];
+  onSave: (keys: string[]) => void;
+  onReset: () => void;
+  onClose: () => void;
+}) {
+  // Ordered working list: currently-shown routes first (in their order), then
+  // the remaining available routes. A checkbox toggles whether each is shown.
+  const [order, setOrder] = useState<string[]>(() => {
+    const shown = current.map((r) => r.key);
+    const rest = available.map((r) => r.key).filter((k) => !shown.includes(k));
+    return [...shown, ...rest];
+  });
+  const [shown, setShown] = useState<Set<string>>(() => new Set(current.map((r) => r.key)));
+  const byKey = useMemo(() => new Map(available.map((r) => [r.key, r])), [available]);
+
+  function toggle(key: string) {
+    setShown((s) => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  }
+  function move(key: string, dir: -1 | 1) {
+    setOrder((o) => {
+      const i = o.indexOf(key);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= o.length) return o;
+      const next = [...o];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
+      <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-2xl border border-border bg-bg sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <div>
+            <h3 className="font-bold text-fg">Customize quick buttons</h3>
+            <p className="text-xs text-muted">Choose which buttons show and reorder them.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
+        </div>
+
+        <div className="flex-1 divide-y divide-border overflow-auto">
+          {order.map((key) => {
+            const r = byKey.get(key);
+            if (!r) return null;
+            const on = shown.has(key);
+            const Icon = r.icon;
+            return (
+              <div key={key} className="flex items-center gap-3 px-4 py-2.5">
+                <button type="button" onClick={() => toggle(key)} aria-label={on ? `Hide ${r.label}` : `Show ${r.label}`}
+                  className={cn('grid h-5 w-5 shrink-0 place-items-center rounded border', on ? 'border-brand bg-brand text-white' : 'border-border text-transparent')}>
+                  <Check className="h-3.5 w-3.5" />
+                </button>
+                <Icon className={cn('h-5 w-5 shrink-0', on ? 'text-brand' : 'text-muted')} />
+                <div className="min-w-0 flex-1">
+                  <p className={cn('text-sm font-medium', !on && 'text-muted')}>{r.label}</p>
+                  <p className="text-[11px] text-muted">{r.hint}</p>
+                </div>
+                <div className="flex items-center gap-0.5 text-muted">
+                  <button type="button" onClick={() => move(key, -1)} aria-label={`Move ${r.label} up`} className="rounded p-1 hover:bg-elevated hover:text-fg">▲</button>
+                  <button type="button" onClick={() => move(key, 1)} aria-label={`Move ${r.label} down`} className="rounded p-1 hover:bg-elevated hover:text-fg">▼</button>
+                  <GripVertical className="h-4 w-4 opacity-40" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-between gap-2 border-t border-border p-4">
+          <button type="button" onClick={onReset} className="text-sm font-medium text-muted hover:text-fg">Reset to default</button>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted hover:text-fg">Cancel</button>
+            <button type="button" onClick={() => onSave(order.filter((k) => shown.has(k)))}
+              className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90">Save</button>
           </div>
         </div>
       </div>
