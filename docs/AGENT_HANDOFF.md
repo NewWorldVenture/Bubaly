@@ -48,6 +48,13 @@ Last updated: Dramatic UI upgrade — wallet/money visual allocation + dark-mode
 > - Quick-amount chips now appear consistently across Add Funds (dashboard + child detail),
 >   Send Money, Goal Fund, and Allowance modals.
 >
+> ### Beyond the financial pillars
+> - **Expense splitting** (`components/modules/expenses-module.tsx`) — added a live
+>   Splitwise-style "Splitting $X between N people · ~$Y each" preview in the split form
+>   so parents see the per-person share before saving.
+> - **Dark-mode audit**: swept the *entire* `components/` tree — zero light-only
+>   `bg-{color}-100` classes remain (the financial fixes were the last offenders).
+>
 > ### Accessibility
 > - aria-labels/titles on icon-only buttons across wallet/money: babysitter edit/remove,
 >   card-design modal close, card expand (`aria-expanded`), child "Add funds".
