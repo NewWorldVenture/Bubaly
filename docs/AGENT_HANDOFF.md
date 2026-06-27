@@ -47,6 +47,25 @@ Last updated after the AI-OS UX strategy (audit + roadmap docs). Keep this updat
 > NOTE: vitest is node-only (no jsdom) — component render tests aren't set up; presentational changes
 > are verified via `tsc` + `next build`. Keep pure logic in tested `lib/*` helpers.
 
+> ## ⏰ REMINDERS — iOS-PARITY DETAILS (new, branch `claude/festive-bohr-m4cbeg`)
+> Closed every gap vs the iOS Reminders detail screen: **Lists, URL, Early Reminder, Flag, Subtasks,
+> Image, and Tags-UI** (Priority/Repeat/Date-Time/Notes already existed; "When Messaging" is iOS-only,
+> skipped). tsc/lint clean · build ✓ · **1193 tests** (+7). Reminders use the `family_reminders` table.
+> - **Migration `0100_reminder_details.sql`** ⚠️ NOT APPLIED TO PROD — new `reminder_lists` table
+>   (family-scoped RLS, trigger, realtime) + `family_reminders` ADD COLUMNs: `url`, `flagged`,
+>   `early_reminder_minutes`, `image_url`, `subtasks jsonb`, `list_id`.
+> - **`lib/reminders/details.ts`** (PURE, **7 tests**): `EARLY_REMINDER_OPTIONS`/`earlyReminderLabel`/
+>   `earlyReminderAt`, `parseTags`/`formatTags`, `normalizeSubtasks`/`newSubtask`/`subtaskProgress`, `isValidHttpUrl`.
+> - **`components/modules/reminders-module.tsx`** — `ReminderModal` now has: **List** select (+ inline
+>   "＋ New list…" → inserts `reminder_lists`), **URL**, **Early Reminder** select, **Flag** toggle, **Tags**
+>   chips editor, **Subtasks** editor (add/check/remove, jsonb), **Image** upload (→ `family-media` bucket,
+>   `${familyId}/reminders/…`) with preview. List rows surface list/flag/early/subtasks/url/tags/image.
+> - **Production-safe pre-migration:** the realtime hook degrades the missing `reminder_lists` table to
+>   empty; reads default safely (`?? false`, `normalizeSubtasks`); and **saves retry without the new
+>   columns** on a missing-column error (`stripNewCols` + `isMissingRelationError`), so core reminders keep
+>   saving until 0100 lands. **Next:** wire `early_reminder_minutes` into the notification cron (note: that
+>   cron currently reads the separate `reminders` table, not `family_reminders`).
+>
 > ## 💳 STRIPE SETUP + $0.90 SERVICE FEE (new, branch `claude/festive-bohr-m4cbeg`)
 > The Bubaly Stripe account is now configurable in Super Admin, and a configurable per-transaction service
 > fee (default **$0.90**) is collected to Bubaly. tsc/lint clean · build ✓ · **1186 tests** (+8). No prod break.
