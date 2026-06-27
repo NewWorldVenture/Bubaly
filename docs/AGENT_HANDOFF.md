@@ -52,6 +52,14 @@ Last updated: Programmatic SEO/AEO page generator (2026-06-26q). Keep this updat
 >    Publish immediately (or leave as draft) → Generate. Creates one `seo_pages` row per state.
 > 3. Pages go live at `/{resolved-slug}` (e.g. `/family-organizer/california`) and enter the sitemap.
 >
+> ### SEO/AEO hardening (same session)
+> - **Sibling internal linking**: each generated page lists its sibling published pages from the
+>   same template ("Also available across the U.S.") as links — crawl discovery + link equity.
+> - **BreadcrumbList JSON-LD** added alongside WebPage + FAQPage.
+> - **Editor guardrail**: warns when the slug pattern has no `{variable}` (else all states collide
+>   on one URL) and shows the live resolved slug under the field.
+> - robots.txt already references the sitemap and disallows app surfaces — SEO pages are crawlable.
+>
 > ### Extending beyond states (documented for next agent)
 > The variable system is generic (`seo_pages.variables` jsonb). To add a new dimension (cities,
 > topics, competitors), add a dataset like `states.ts`, a `<thing>Vars()` mapper, and a branch in
