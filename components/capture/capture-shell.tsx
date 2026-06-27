@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Mic, Type, Camera, FileText, Sparkles, X, ArrowRight,
-  Loader2, ChevronDown, Settings2, GripVertical, Plus, Check,
+  Loader2, ChevronDown, Settings2, GripVertical, Plus, Check, Upload, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/toast';
+import { createClient } from '@/lib/supabase/client';
+import { uploadFamilyDocument } from '@/lib/storage/documents';
 import {
   availableQuickRoutes, resolveQuickRoutes, defaultQuickRouteKeys, type QuickRoute,
 } from '@/lib/capture/quick-routes';
@@ -49,7 +51,9 @@ function routeCapture(text: string): { destination: string; url: string } {
   return { destination: 'AI Assistant', url: `/dashboard/assistant?q=${encodeURIComponent(text)}` };
 }
 
-export function CaptureShell({ planLevel = 0, savedRouteKeys = null }: { planLevel?: number; savedRouteKeys?: string[] | null }) {
+export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, userId }: {
+  planLevel?: number; savedRouteKeys?: string[] | null; familyId?: string; userId?: string;
+}) {
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [mode, setMode] = useState<CaptureMode>('type');
@@ -58,6 +62,65 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null }: { planLev
   const [routed, setRouted] = useState<{ destination: string; url: string } | null>(null);
   const [recording, setRecording] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
+
+  // Photo / Scan capture.
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  function pickPhoto() { setMode('photo'); setRouted(null); photoInputRef.current?.click(); }
+  function pickScan() { setMode('document'); setRouted(null); scanInputRef.current?.click(); }
+
+  function onFilePicked(f: File | null) {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    if (!f) { setFile(null); setPreviewUrl(null); return; }
+    setFile(f);
+    setPreviewUrl(f.type.startsWith('image/') ? URL.createObjectURL(f) : null);
+  }
+  function clearFile() { onFilePicked(null); if (photoInputRef.current) photoInputRef.current.value = ''; if (scanInputRef.current) scanInputRef.current.value = ''; }
+
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  async function uploadCapture() {
+    if (!file) return;
+    if (!familyId || !userId) { toastError('Please sign in again to upload.'); return; }
+    setUploading(true);
+    const supabase = createClient();
+    try {
+      if (mode === 'photo') {
+        const ext = file.name.split('.').pop() || 'jpg';
+        const path = `${familyId}/photos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { data: stored, error: upErr } = await supabase.storage
+          .from('family-media').upload(path, file, { upsert: false, cacheControl: '31536000' });
+        if (upErr || !stored) throw new Error(upErr?.message ?? 'Upload failed');
+        const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
+        const { error: insErr } = await supabase.from('family_photos').insert({
+          family_id: familyId, uploaded_by: userId, storage_path: stored.path, url: publicUrl,
+          size_bytes: file.size, media_type: file.type.startsWith('video/') ? 'video' : 'image',
+        });
+        if (insErr) { await supabase.storage.from('family-media').remove([stored.path]); throw new Error(insErr.message); }
+        success('Photo added');
+        router.push('/dashboard/photos');
+      } else {
+        const { path, error: upErr } = await uploadFamilyDocument(supabase, { familyId, folder: 'scans', file });
+        if (upErr || !path) throw new Error(upErr ?? 'Upload failed');
+        const title = file.name.replace(/\.[^.]+$/, '').slice(0, 120) || 'Scan';
+        const { error: insErr } = await supabase.from('documents').insert({
+          family_id: familyId, title, category: 'other', created_by: userId,
+          storage_path: path, size_bytes: file.size, mime_type: file.type || null,
+        });
+        if (insErr) throw new Error(insErr.message);
+        success('Scan saved to Documents');
+        router.push('/dashboard/documents');
+      }
+    } catch (e) {
+      toastError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   // Quick-jump buttons: tier-gated catalog + the user's saved customization.
   // Source of truth is Supabase (synced across devices); localStorage is an
@@ -145,8 +208,8 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null }: { planLev
           {([
             { id: 'type' as const, icon: Type, label: 'Type', action: () => { setMode('type'); textRef.current?.focus(); } },
             { id: 'voice' as const, icon: Mic, label: 'Voice', action: () => { setMode('voice'); startVoice(); } },
-            { id: 'photo' as const, icon: Camera, label: 'Photo', action: () => setMode('photo') },
-            { id: 'document' as const, icon: FileText, label: 'Scan', action: () => setMode('document') },
+            { id: 'photo' as const, icon: Camera, label: 'Photo', action: pickPhoto },
+            { id: 'document' as const, icon: FileText, label: 'Scan', action: pickScan },
           ]).map(({ id, icon: Icon, label, action }) => (
             <button key={id} type="button" onClick={action}
               className={cn(
@@ -159,6 +222,12 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null }: { planLev
           ))}
         </div>
 
+        {/* Hidden capture inputs (camera on mobile) */}
+        <input ref={photoInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+          onChange={(e) => onFilePicked(e.target.files?.[0] ?? null)} />
+        <input ref={scanInputRef} type="file" accept="image/*,application/pdf" className="hidden"
+          onChange={(e) => onFilePicked(e.target.files?.[0] ?? null)} />
+
         {/* Input area */}
         <div className="relative mb-4 overflow-hidden rounded-2xl border border-border bg-surface/40 focus-within:border-brand/50 focus-within:ring-1 focus-within:ring-brand/30">
           {recording ? (
@@ -170,6 +239,28 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null }: { planLev
               <p className="text-sm font-medium text-brand">Listening…</p>
               <button type="button" onClick={() => setRecording(false)} className="text-xs text-muted underline">Cancel</button>
             </div>
+          ) : (mode === 'photo' || mode === 'document') ? (
+            file ? (
+              <div className="flex items-center gap-3 p-4">
+                {previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={previewUrl} alt="Capture preview" className="h-16 w-16 rounded-xl object-cover" />
+                ) : (
+                  <div className="grid h-16 w-16 place-items-center rounded-xl bg-elevated text-muted"><FileText className="h-7 w-7" /></div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{file.name}</p>
+                  <p className="text-xs text-muted">{(file.size / 1024 / 1024).toFixed(1)} MB · {mode === 'photo' ? 'Photo' : 'Scan'}</p>
+                </div>
+                <button type="button" onClick={clearFile} aria-label="Remove file" className="rounded-lg p-2 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+              </div>
+            ) : (
+              <button type="button" onClick={mode === 'photo' ? pickPhoto : pickScan}
+                className="flex min-h-[120px] w-full flex-col items-center justify-center gap-2 p-6 text-muted transition hover:text-brand">
+                {mode === 'photo' ? <Camera className="h-9 w-9" /> : <FileText className="h-9 w-9" />}
+                <span className="text-sm font-medium">{mode === 'photo' ? 'Take or choose a photo' : 'Choose a document or photo to scan'}</span>
+              </button>
+            )
           ) : (
             <textarea
               ref={textRef}
@@ -181,7 +272,7 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null }: { planLev
               onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(); }}
             />
           )}
-          {text && !recording && (
+          {text && !recording && mode !== 'photo' && mode !== 'document' && (
             <div className="flex items-center justify-between border-t border-border/60 px-4 py-2">
               <span className="text-xs text-muted">{text.length} chars</span>
               <button type="button" onClick={() => handleInput('')} className="text-xs text-muted hover:text-fg">Clear</button>
@@ -189,8 +280,14 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null }: { planLev
           )}
         </div>
 
-        {/* AI route result */}
-        {routed ? (
+        {/* Primary action */}
+        {(mode === 'photo' || mode === 'document') ? (
+          <button type="button" disabled={!file || uploading} onClick={uploadCapture}
+            className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-sm font-bold text-white transition hover:bg-brand/90 disabled:opacity-40">
+            {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
+            {uploading ? 'Uploading…' : mode === 'photo' ? 'Save to Photos' : 'Save to Documents'}
+          </button>
+        ) : routed ? (
           <div className="mb-4 overflow-hidden rounded-2xl border border-brand/30 bg-brand/5">
             <div className="flex items-center gap-3 p-4">
               <Sparkles className="h-5 w-5 shrink-0 text-brand" />

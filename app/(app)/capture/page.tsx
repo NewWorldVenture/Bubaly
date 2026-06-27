@@ -25,5 +25,5 @@ export default async function CapturePage() {
     ? (ui.captureQuickRoutes as unknown[]).filter((k): k is string => typeof k === 'string')
     : null;
 
-  return <CaptureShell planLevel={level} savedRouteKeys={saved} />;
+  return <CaptureShell planLevel={level} savedRouteKeys={saved} familyId={ctx.active.familyId} userId={ctx.user.id} />;
 }
