@@ -109,6 +109,24 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result>
   return { ok: true };
 }
 
+/** Updates a member's display name and role. */
+export async function adminUpdateMemberAction(memberId: string, input: { displayName: string; role: MemberRole }): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+
+  const displayName = input.displayName.trim();
+  if (!displayName) return { ok: false, error: 'Name is required' };
+
+  const supabase = createServiceClient();
+  const { data: member, error } = await supabase.from('family_members')
+    .update({ display_name: displayName, role: input.role }).eq('id', memberId).select('family_id').single();
+  if (error) return { ok: false, error: error.message };
+
+  await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role } });
+  revalidatePath('/admin/users');
+  return { ok: true };
+}
+
 /** Re-sends an existing pending invite's email. */
 export async function adminResendInviteAction(inviteId: string): Promise<Result> {
   const guard = await assertSuperAdmin();

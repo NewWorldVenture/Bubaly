@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Settings, Users, Mail, Trash2, Plus, Check } from 'lucide-react';
+import { Settings, Users, Mail, Trash2, Plus, Check, Pencil } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -33,6 +33,7 @@ export function SettingsModule() {
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [editMember, setEditMember] = useState<Tables<'family_members'> | null>(null);
   const [savingFamily, setSavingFamily] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [dashboardView, setDashboardView] = useState<DashboardView>(defaultDashboard);
@@ -237,6 +238,11 @@ export function SettingsModule() {
                 <p className="truncate text-sm font-medium">{m.display_name}</p>
                 <Badge tone="neutral">{ROLE_LABELS[m.role]}</Badge>
               </div>
+              {admin && (
+                <button onClick={() => setEditMember(m)} className="rounded-lg p-2 text-muted hover:text-fg" aria-label="Edit member">
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
               {admin && m.user_id !== userId && (
                 <button onClick={() => removeMember(m.id)} className="rounded-lg p-2 text-muted hover:text-danger" aria-label="Remove member">
                   <Trash2 className="h-4 w-4" />
@@ -261,7 +267,61 @@ export function SettingsModule() {
           onSent={() => { setInviteOpen(false); success('Invite sent!'); }}
         />
       )}
+
+      {editMember && (
+        <EditMemberModal
+          member={editMember}
+          isSelf={editMember.user_id === userId}
+          onClose={() => setEditMember(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function EditMemberModal({ member, isSelf, onClose }: {
+  member: Tables<'family_members'>; isSelf: boolean; onClose: () => void;
+}) {
+  const { success, error: toastError } = useToast();
+  const [saving, setSaving] = useState(false);
+
+  async function save(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const display_name = String(form.get('display_name') ?? '').trim();
+    const role = String(form.get('role') ?? member.role) as MemberRole;
+    if (!display_name) { toastError('Name is required'); return; }
+    setSaving(true);
+    const { error } = await createClient().from('family_members')
+      .update({ display_name, role }).eq('id', member.id);
+    setSaving(false);
+    if (error) return toastError(describeDbError(error));
+    success('Member updated');
+    onClose();
+    window.location.reload();
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Edit family member" description={isSelf ? 'Changing your own role can affect your admin access.' : undefined}>
+      <form onSubmit={save} className="space-y-4">
+        <Field label="Name" required>
+          {(id) => <Input id={id} name="display_name" defaultValue={member.display_name} autoFocus />}
+        </Field>
+        <Field label="Role">
+          {(id) => (
+            <Select id={id} name="role" defaultValue={member.role}>
+              {(Object.keys(ROLE_LABELS) as MemberRole[]).map((r) => (
+                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
