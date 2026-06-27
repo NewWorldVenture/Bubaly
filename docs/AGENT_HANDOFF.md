@@ -1,10 +1,10 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-26 — Session 4: AI Trip Intelligence (destination research + Smart Departure). Branch `claude/connect-8ysp00`. 1136 tests pass · build clean. Keep this updated as you ship.
+Last updated: 2026-06-27 — Session 4: AI Trip Intelligence (destination research + Smart Departure). Branch `claude/connect-8ysp00` → **draft PR #168** (open, Vercel preview deployed green). 1136 tests pass · build clean. Keep this updated as you ship.
 
-> **Session 4 (2026-06-26) — AI TRIP INTELLIGENCE: DESTINATION RESEARCH + SMART DEPARTURE**
-> Branch `claude/connect-8ysp00` · commit `434b586`. tsc clean · 1136 tests pass (30 new) · build exit 0.
+> **Session 4 (2026-06-27) — AI TRIP INTELLIGENCE: DESTINATION RESEARCH + SMART DEPARTURE**
+> Branch `claude/connect-8ysp00` · head commit `7ef5a46` · **draft PR #168** (open). tsc clean · 1136 tests pass (30 new) · build exit 0 · Vercel preview Ready.
 > Route: **/dashboard/trip-intel** (nav: Suggested group "Trip Intelligence", MapPin icon; feature-catalog `trip-intelligence`, basic tier). Page uses `requireUserContext` (not feature-gated, like AI Concierge).
 >
 > ### What it does (the user's ask, fully wired)
