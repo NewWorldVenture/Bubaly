@@ -10,7 +10,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
-import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
@@ -111,7 +111,7 @@ export function MealsModule() {
   const todayStr = new Date().toISOString().slice(0, 10);
   const dateRange = `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   return (
