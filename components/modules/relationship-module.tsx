@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import {
   Heart, Cake, Sparkles, Wine, Star, CalendarDays, Gift, Plus, Pencil, Trash2,
   ExternalLink, DollarSign, Bell, Wand2, Loader2, SlidersHorizontal, MapPin, Check, ShoppingBag,
+  CalendarPlus, CalendarCheck,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -20,6 +21,7 @@ import {
   upcomingDates, formatCountdown, milestoneLabel, type RelDate,
 } from '@/lib/relationship/dates';
 import { suggestGiftsFromWishlist, type WishItemLite, type RelationshipDigest } from '@/lib/relationship/gifts';
+import { buildCalendarEventForDate } from '@/lib/relationship/calendar';
 import type { Tables, RelationshipDateKind, RelationshipDateStatus, RelationshipGiftStatus } from '@/lib/database.types';
 
 type RDate = Tables<'relationship_dates'>;
@@ -143,6 +145,25 @@ export function RelationshipModule() {
     const { error: err } = await createClient().from('relationship_dates').delete().eq('id', d.id);
     if (err) { toastError(describeDbError(err)); return; }
     success('Removed');
+  }
+  async function toggleCalendar(d: RDate) {
+    const sb = createClient();
+    if (d.calendar_event_id) {
+      await sb.from('calendar_events').delete().eq('id', d.calendar_event_id);
+      const { error: err } = await sb.from('relationship_dates').update({ calendar_event_id: null }).eq('id', d.id);
+      if (err) { toastError(describeDbError(err)); return; }
+      success('Removed from calendar');
+      return;
+    }
+    const payload = buildCalendarEventForDate(
+      { kind: d.kind, title: d.title, eventDate: d.event_date, recursAnnually: d.recurs_annually, location: d.location },
+      familyId, userId,
+    );
+    const { data: created, error: err } = await sb.from('calendar_events').insert(payload).select('id').single();
+    if (err || !created) { toastError(describeDbError(err)); return; }
+    const { error: e2 } = await sb.from('relationship_dates').update({ calendar_event_id: created.id }).eq('id', d.id);
+    if (e2) { toastError(describeDbError(e2)); return; }
+    success('Added to your family calendar 📅');
   }
 
   // ── Gifts CRUD ──
@@ -327,6 +348,10 @@ export function RelationshipModule() {
                       <Icon className="h-3 w-3" /> {meta.label}
                     </span>
                     <div className="flex items-center gap-1">
+                      <button onClick={() => toggleCalendar(raw)} aria-label={raw.calendar_event_id ? 'Remove from calendar' : 'Add to calendar'}
+                        className={cn('rounded p-1 hover:bg-elevated', raw.calendar_event_id ? 'text-emerald-300' : 'text-muted hover:text-fg')}>
+                        {raw.calendar_event_id ? <CalendarCheck className="h-3.5 w-3.5" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+                      </button>
                       <button onClick={() => openEditDate(raw)} aria-label="Edit" className="rounded p-1 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                       <button onClick={() => removeDate(raw)} aria-label="Remove" className="rounded p-1 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>

@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS relationship_dates (
   partner_name         TEXT,
   location             TEXT,
   notes                TEXT,
+  calendar_event_id    UUID        REFERENCES calendar_events(id) ON DELETE SET NULL,
   status               TEXT        NOT NULL DEFAULT 'upcoming'
                          CHECK (status IN ('idea','planned','booked','upcoming','completed','cancelled')),
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),

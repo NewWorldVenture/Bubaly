@@ -27,6 +27,11 @@ Last updated after the production bug sweep + frictionless Quick Capture (PR #16
 >   window, linking to `/dashboard/relationship`. Crash-safe pre-migration (`relDateRows ?? []`).
 > - **AI metering** — `/api/ai/relationship` is capped at 20 digests/family/day, counted from `audit_logs`
 >   (action `relationship_ai_digest`); 429 over the limit, best-effort `logAudit` record on success.
+> - **Add to family calendar** — `relationship_dates.calendar_event_id` (added to migration 0098) links a
+>   date to a `calendar_events` row. The card's calendar toggle creates a yearly (recurring dates) or one-off
+>   all-day event via the pure `buildCalendarEventForDate` (`lib/relationship/calendar.ts`, **3 tests**;
+>   birthdays use the `birthday` category) and stores the id; toggling again deletes it. So anniversaries/
+>   date nights show on the calendar everyone already uses.
 > - **Proactive push/email reminders** — `lib/server/notifications.ts` (`generateFamilyNotifications`, the
 >   notifications cron) now emits a `'system'` notification when a relationship date enters its reminder
 >   window, `related_id` keyed by occurrence year (`{id}:{YYYY}`) so it sends once per occurrence and again
