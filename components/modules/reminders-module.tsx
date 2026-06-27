@@ -20,6 +20,7 @@ import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
+import { toLocalDateTimeInput, QUICK_TIME_PRESETS } from '@/lib/utils/quick-dates';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -63,20 +64,6 @@ function isOverdue(r: Reminder) {
   return new Date(r.remind_at) < new Date();
 }
 
-/** Format a Date as the `YYYY-MM-DDTHH:mm` string a datetime-local input expects (local time). */
-function toLocalInput(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/** One-tap relative-time presets for the reminder time field. */
-const QUICK_TIMES: { label: string; compute: () => Date }[] = [
-  { label: 'In 1 hour', compute: () => new Date(Date.now() + 60 * 60 * 1000) },
-  { label: 'Tonight 6pm', compute: () => { const d = new Date(); d.setHours(18, 0, 0, 0); if (d.getTime() < Date.now()) d.setDate(d.getDate() + 1); return d; } },
-  { label: 'Tomorrow 9am', compute: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; } },
-  { label: 'This weekend', compute: () => { const d = new Date(); d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7 || 7)); d.setHours(10, 0, 0, 0); return d; } },
-  { label: 'Next week', compute: () => { const d = new Date(); d.setDate(d.getDate() + ((1 - d.getDay() + 7) % 7 || 7)); d.setHours(9, 0, 0, 0); return d; } },
-];
 
 // ── Quick-add reminder templates (common household reminders) ──
 const AI_SUGGESTIONS = [
@@ -500,8 +487,8 @@ function ReminderModal({ reminder, familyId, userId, members, onClose, onSaved }
                 <Input id={id} name="remind_at" type="datetime-local"
                   value={remindAt} onChange={(e) => setRemindAt(e.target.value)} />
                 <div className="flex flex-wrap gap-1.5">
-                  {QUICK_TIMES.map((q) => (
-                    <button key={q.label} type="button" onClick={() => setRemindAt(toLocalInput(q.compute()))}
+                  {QUICK_TIME_PRESETS.map((q) => (
+                    <button key={q.label} type="button" onClick={() => setRemindAt(toLocalDateTimeInput(q.compute()))}
                       className="rounded-full border border-border px-2.5 py-1 text-xs text-muted transition hover:border-brand/40 hover:text-brand">
                       {q.label}
                     </button>

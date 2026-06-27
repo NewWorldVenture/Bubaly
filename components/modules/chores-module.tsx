@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { toLocalDate, QUICK_DATE_PRESETS } from '@/lib/utils/quick-dates';
 import { formatCents } from '@/lib/wallet/ledger';
 import { payChoreRewardAction } from '@/app/(app)/wallet/actions';
 import type { Tables } from '@/lib/database.types';
@@ -56,19 +57,6 @@ function fmtDue(due: string | null): { label: string; urgent: boolean } {
   return { label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), urgent: false };
 }
 
-/** Format a Date as the `YYYY-MM-DD` string a date input expects (local time). */
-function toLocalDate(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-/** One-tap due-date presets for assigning a chore. */
-const QUICK_DUE: { label: string; compute: () => Date }[] = [
-  { label: 'Today', compute: () => new Date() },
-  { label: 'Tomorrow', compute: () => { const d = new Date(); d.setDate(d.getDate() + 1); return d; } },
-  { label: 'This weekend', compute: () => { const d = new Date(); d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7 || 7)); return d; } },
-  { label: 'Next week', compute: () => { const d = new Date(); d.setDate(d.getDate() + ((1 - d.getDay() + 7) % 7 || 7)); return d; } },
-];
 
 function DonutChart({ segments, total }: { segments: { value: number; color: string }[]; total: number }) {
   const R = 30; const C = 2 * Math.PI * R;
@@ -510,7 +498,7 @@ function NewChoreModal({ familyId, userId, members, onClose, onSaved }: {
           <Field label="Due date">{(id) => <Input id={id} name="due_at" type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />}</Field>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {QUICK_DUE.map((q) => (
+          {QUICK_DATE_PRESETS.map((q) => (
             <button key={q.label} type="button" onClick={() => setDueAt(toLocalDate(q.compute()))}
               className="rounded-full border border-border px-2.5 py-1 text-xs text-muted transition hover:border-brand/40 hover:text-brand">
               {q.label}
