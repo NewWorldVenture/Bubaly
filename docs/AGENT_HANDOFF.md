@@ -1,7 +1,38 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Capture quick-buttons — tier-gated, customizable, Supabase-synced (2026-06-26s). Keep this updated as you ship.
+Last updated: Capture — AI routing, direct-file, photo/scan, tier-gated buttons (2026-06-26s). Keep this updated as you ship.
+
+## ▶ CURRENT STATE (read this first)
+- **Active branch:** `claude/continuation-an1mam` (all work below is committed + pushed here).
+- **Health:** `tsc --noEmit` clean · `npm run build` exit 0 · **full suite 1039/1039 green**.
+  Always run all three before declaring done. `npm run build` catches things `tsc` misses
+  (e.g. "Server Actions must be async" — a `'use server'` file may only export async fns).
+- **Conventions that bite if ignored:**
+  - New DB tables/columns are NOT in generated `database.types.ts`. Either edit the generated
+    type by hand (done for `user_preferences.ui_prefs`) or use a cast helper like
+    `withStripeTables`/`withGuardianTables`/`withSeoTables` (whole new tables).
+  - `gFrom` / cast helpers must be created INSIDE each function (can't close over from outer scope).
+  - Tier gating reads `subscriptions.plan` → `planLevel()` (0 Free / 1 Basic+ / 2 Plus+).
+  - Persisted UI prefs go in `user_preferences.ui_prefs` (jsonb); migration 0093.
+- **⚠️ PENDING EXTERNAL OPS (cannot run in this env — the only things between here and "live"):**
+  1. Apply migrations to prod Supabase, in order: **0088, 0089, 0090, 0091, 0092, 0093**
+     (most aren't applied yet). Then `supabase gen types typescript --linked > lib/database.types.ts`
+     to drop the `as unknown as` casts and table shims (0093's column is already hand-typed).
+  2. Set prod env: `VAPID_*` (+ optional `FCM_SERVER_KEY`) for push; `CRON_SECRET` for all crons;
+     `STRIPE_*`, `TWILIO_*`, `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`, `NEXT_PUBLIC_SITE_URL`/
+     `NEXT_PUBLIC_APP_URL` per the per-pillar checklists below.
+  3. Buy Twilio numbers + register voice/sms/whatsapp webhooks; register Stripe Issuing + main
+     webhooks in the Stripe dashboard.
+  - Everything degrades gracefully until these are done (localStorage fallback for capture prefs,
+    heuristic fallback for AI routing, pledge-mode for gifts, etc.) — the app builds and runs.
+- **Biggest features shipped this run (newest first):** Capture screen (AI routing + direct-file +
+  photo/scan upload + tier-gated customizable quick buttons); Website Template (programmatic
+  SEO/AEO generator — `/admin/marketing/website-template` + public `/[...slug]`); financial-pillar
+  UI polish (allocation bars, skeletons, dark-mode); Bubaly Money / Wallet / AI Call Guardian
+  (built earlier — see entries below).
+
+---
 
 > **Session update (2026-06-26s) — CAPTURE QUICK-JUMP BUTTONS: TIER-GATED + CUSTOMIZABLE + SUPABASE-SYNCED.**
 > Branch `claude/continuation-an1mam`. Verified: tsc clean · build exit 0 · **1029/1029**.
