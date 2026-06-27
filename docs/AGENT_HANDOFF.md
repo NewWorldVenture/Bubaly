@@ -1,7 +1,21 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Programmatic SEO/AEO page generator (2026-06-26q). Keep this updated as you ship.
+Last updated: Website Template (programmatic SEO) — renamed + custom dimension (2026-06-26r). Keep this updated as you ship.
+
+> **Session update (2026-06-26r) — WEBSITE TEMPLATE: LABEL + CUSTOM DIMENSION.**
+> Branch `claude/continuation-an1mam`. Verified: tsc clean · build exit 0 · **1021/1021**.
+> - The programmatic-SEO admin is now surfaced in Marketing as **"Website Template"** at
+>   **`/admin/marketing/website-template`** (route renamed from `seo-pages`; component
+>   `WebsiteTemplateClient`; subnav label "Website Template" in the Content & SEO group).
+>   Public routes, engine, and tables are unchanged.
+> - **Custom second dimension** ("other criteria you decide"): the Generate modal has an
+>   optional "Add custom criteria" section — name a variable (e.g. `city`) + paste values
+>   (comma/newline separated), then generate standalone (one page per value) OR as a
+>   cartesian product with selected states (state × value). Exposes `{city}`/`{city_slug}`
+>   to the template + slug pattern. `generatePagesAction` now takes `custom` +
+>   `combineWithStates`; `buildVarSets()` expands the dimensions; de-dupes within the batch
+>   and against existing slugs. Live page-count estimate in the modal.
 
 > **Session update (2026-06-26q) — PROGRAMMATIC SEO/AEO PAGE GENERATOR (production-ready).**
 > Branch `claude/continuation-an1mam`. Commit `a0d0c93`.
