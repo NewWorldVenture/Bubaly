@@ -27,7 +27,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
-import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
@@ -483,7 +483,7 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
 
 // ── Main Module ─────────────────────────────────────────────────────────────
 
-export function BillingModule() {
+export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: string | null } = {}) {
   const { familyId, userId, role } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
@@ -761,7 +761,7 @@ export function BillingModule() {
   const hasPaidPlan = slugToStripePlan(subscription?.plan) !== null && ['active', 'trialing', 'past_due'].includes(status);
   const subCanceling = Boolean(subscription?.cancel_at_period_end) && hasPaidPlan;
 
-  if (anyLoading) return <LoadingBlock />;
+  if (anyLoading) return <SkeletonList />;
   if (anyError) return <ErrorState message={anyError} onRetry={refreshAll} />;
 
   // ── Render helpers ──────────────────────────────────────────────────────
@@ -1178,7 +1178,7 @@ export function BillingModule() {
             <CreditCard className="h-5 w-5 text-brand" />
             <h2 className="font-semibold">Bubaly Subscription</h2>
           </div>
-          {subLoading ? <LoadingBlock /> : (
+          {subLoading ? <SkeletonList /> : (
             <>
               <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -1214,6 +1214,9 @@ export function BillingModule() {
                   downgrade, or switch billing interval at any time. */}
               {admin && (
                 <PlanManager currentSlug={subscription?.plan ?? null} highlight={needLevel} pending={pending} onChoose={changePlan} />
+              )}
+              {admin && serviceFeeNotice && (
+                <p className="mt-3 text-center text-xs text-muted">{serviceFeeNotice}</p>
               )}
 
               {/* Cancel control for paying families that aren't already canceling. */}

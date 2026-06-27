@@ -11,7 +11,7 @@ import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
-import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
@@ -191,7 +191,7 @@ export function ChoresModule() {
     success('Task deleted'); void refresh();
   }
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList count={6} />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   const TABS: { key: Tab; label: string }[] = [

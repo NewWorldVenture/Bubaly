@@ -446,7 +446,7 @@ export function FamilyAiPanel() {
             Your <GradientText>AI Family</GradientText> Assistant
           </h2>
           <p className="mt-5 text-base leading-7 text-white/72 sm:text-lg sm:leading-8">
-            Your built-in family assistant helps you plan, organize, and stay ahead of what matters most.
+            Your built-in family assistant handles the planning, organizing, and everyday coordination — so you spend less time managing life and more time living it.
           </p>
           <ul className="mt-6 space-y-3 text-sm text-white/86">
             {['Create schedules instantly', 'Plan meals and generate grocery lists', 'Get reminders and helpful suggestions', 'Answers tailored to your family'].map((item) => (

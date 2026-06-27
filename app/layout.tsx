@@ -8,11 +8,11 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Bubaly — Run your family like a calm, connected team',
+    default: 'Bubaly — Less Life Admin. More Living Life.',
     template: '%s · Bubaly',
   },
   description:
-    'Bubaly is an AI chief of staff for your household: calendar, chores, meals, grocery, school, sports, health, home maintenance, documents, and an assistant that takes real action.',
+    'Bubaly is the AI operating system for family life. It quietly handles the logistics—phone calls, emails, scheduling, paperwork, reminders, and everyday coordination—so your family can spend less time managing life and more time living it.',
   applicationName: 'Bubaly',
   keywords: [
     'family organizer', 'shared family calendar', 'chores app', 'meal planning',
@@ -31,11 +31,11 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: 'Bubaly',
-    title: 'Bubaly — Run your family like a calm, connected team',
-    description: 'An AI chief of staff for busy households. One calm place for everything.',
+    title: 'Bubaly — Less Life Admin. More Living Life.',
+    description: 'The AI operating system for family life. Bubaly handles the logistics so your family can spend less time managing life and more time living it.',
     url: SITE_URL,
   },
-  twitter: { card: 'summary_large_image', title: 'Bubaly', description: 'An AI chief of staff for busy households.' },
+  twitter: { card: 'summary_large_image', title: 'Bubaly — Less Life Admin. More Living Life.', description: 'The AI operating system for family life — so you spend less time managing life and more time living it.' },
   robots: { index: true, follow: true },
 };
 

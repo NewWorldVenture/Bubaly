@@ -53,6 +53,10 @@ export type CareLogType = 'check_in' | 'visit' | 'call' | 'meal' | 'medication' 
 export type OpportunityStatus = 'interested' | 'registered' | 'waitlisted' | 'passed' | 'missed';
 export type LocationEventType = 'arrived' | 'left' | 'ping';
 export type WishPriority = 'low' | 'medium' | 'high';
+export type RelationshipDateKind = 'anniversary' | 'birthday' | 'first_date' | 'date_night' | 'milestone' | 'custom';
+export type RelationshipDateStatus = 'idea' | 'planned' | 'booked' | 'upcoming' | 'completed' | 'cancelled';
+export type RelationshipGiftSource = 'manual' | 'ai' | 'wishlist';
+export type RelationshipGiftStatus = 'idea' | 'saved' | 'ordered' | 'purchased' | 'given';
 export type DoseStatus = 'taken' | 'skipped' | 'missed';
 export type WeekPattern = 'all' | 'a' | 'b';
 export type TripStatus = 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
@@ -306,6 +310,26 @@ export interface Database {
         { id: string; family_id: string; member_id: string; title: string; url: string | null; price: number | null; priority: WishPriority; notes: string | null; claimed_by: string | null; claimed_at: string | null; is_purchased: boolean; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; title: string; url?: string | null; price?: number | null; priority?: WishPriority; notes?: string | null; claimed_by?: string | null; claimed_at?: string | null; is_purchased?: boolean; created_by?: string | null },
         Partial<{ member_id: string; title: string; url: string | null; price: number | null; priority: WishPriority; notes: string | null; claimed_by: string | null; claimed_at: string | null; is_purchased: boolean }>
+      >;
+      relationship_profile: T<
+        { id: string; family_id: string; created_by: string | null; partner_name: string | null; partner_member_id: string | null; interests: string[]; love_languages: string[]; gift_budget_cents: number | null; notes: string | null } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; partner_name?: string | null; partner_member_id?: string | null; interests?: string[]; love_languages?: string[]; gift_budget_cents?: number | null; notes?: string | null },
+        Partial<{ partner_name: string | null; partner_member_id: string | null; interests: string[]; love_languages: string[]; gift_budget_cents: number | null; notes: string | null }>
+      >;
+      relationship_dates: T<
+        { id: string; family_id: string; created_by: string | null; kind: RelationshipDateKind; title: string; event_date: string; recurs_annually: boolean; reminder_days_before: number; member_id: string | null; partner_name: string | null; location: string | null; notes: string | null; calendar_event_id: string | null; status: RelationshipDateStatus } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; kind?: RelationshipDateKind; title: string; event_date: string; recurs_annually?: boolean; reminder_days_before?: number; member_id?: string | null; partner_name?: string | null; location?: string | null; notes?: string | null; calendar_event_id?: string | null; status?: RelationshipDateStatus },
+        Partial<{ kind: RelationshipDateKind; title: string; event_date: string; recurs_annually: boolean; reminder_days_before: number; member_id: string | null; partner_name: string | null; location: string | null; notes: string | null; calendar_event_id: string | null; status: RelationshipDateStatus }>
+      >;
+      relationship_gift_ideas: T<
+        { id: string; family_id: string; created_by: string | null; for_member_id: string | null; for_name: string | null; title: string; url: string | null; price_cents: number | null; occasion: string | null; reason: string | null; source: RelationshipGiftSource; wishlist_item_id: string | null; status: RelationshipGiftStatus } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; for_member_id?: string | null; for_name?: string | null; title: string; url?: string | null; price_cents?: number | null; occasion?: string | null; reason?: string | null; source?: RelationshipGiftSource; wishlist_item_id?: string | null; status?: RelationshipGiftStatus },
+        Partial<{ for_member_id: string | null; for_name: string | null; title: string; url: string | null; price_cents: number | null; occasion: string | null; reason: string | null; source: RelationshipGiftSource; wishlist_item_id: string | null; status: RelationshipGiftStatus }>
+      >;
+      stripe_settings: T<
+        { id: string; enabled: boolean; publishable_key: string | null; secret_key: string | null; webhook_secret: string | null; connect_account_id: string | null; service_fee_cents: number; service_fee_price_id: string | null; updated_by: string | null } & Stamps,
+        { id?: string; enabled?: boolean; publishable_key?: string | null; secret_key?: string | null; webhook_secret?: string | null; connect_account_id?: string | null; service_fee_cents?: number; service_fee_price_id?: string | null; updated_by?: string | null },
+        Partial<{ enabled: boolean; publishable_key: string | null; secret_key: string | null; webhook_secret: string | null; connect_account_id: string | null; service_fee_cents: number; service_fee_price_id: string | null; updated_by: string | null }>
       >;
       family_announcements: T<
         { id: string; family_id: string; author_id: string | null; author_member_id: string | null; title: string; body: string | null; is_pinned: boolean } & Stamps,
@@ -934,9 +958,14 @@ export interface Database {
         Partial<{ contact_id: string | null; subject: string | null; body: string | null; summary: string | null; action_items: unknown[]; category: string; status: string; priority: string; received_at: string; updated_at: string }>
       >;
       family_reminders: T<
-        { id: string; family_id: string; created_by: string | null; assigned_to_id: string | null; member_id: string | null; title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; recurrence_time: string | null; recurrence_days: number[] | null; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; ai_suggested: boolean; tags: string[]; created_at: string; updated_at: string },
-        { id?: string; family_id: string; created_by?: string | null; assigned_to_id?: string | null; member_id?: string | null; title: string; notes?: string | null; kind?: string; remind_at?: string | null; location_name?: string | null; recurrence?: string; priority?: string; status?: string; ai_suggested?: boolean },
-        Partial<{ title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; assigned_to_id: string | null; member_id: string | null; updated_at: string }>
+        { id: string; family_id: string; created_by: string | null; assigned_to_id: string | null; member_id: string | null; title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; recurrence_time: string | null; recurrence_days: number[] | null; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; ai_suggested: boolean; tags: string[]; url: string | null; flagged: boolean; early_reminder_minutes: number | null; image_url: string | null; subtasks: Json; list_id: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; created_by?: string | null; assigned_to_id?: string | null; member_id?: string | null; title: string; notes?: string | null; kind?: string; remind_at?: string | null; location_name?: string | null; recurrence?: string; priority?: string; status?: string; ai_suggested?: boolean; tags?: string[]; url?: string | null; flagged?: boolean; early_reminder_minutes?: number | null; image_url?: string | null; subtasks?: Json; list_id?: string | null },
+        Partial<{ title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; assigned_to_id: string | null; member_id: string | null; tags: string[]; url: string | null; flagged: boolean; early_reminder_minutes: number | null; image_url: string | null; subtasks: Json; list_id: string | null; updated_at: string }>
+      >;
+      reminder_lists: T<
+        { id: string; family_id: string; created_by: string | null; name: string; color: string; icon: string; sort_order: number } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; name: string; color?: string; icon?: string; sort_order?: number },
+        Partial<{ name: string; color: string; icon: string; sort_order: number }>
       >;
       family_recipes: T<
         { id: string; family_id: string; name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; is_public: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; ai_generated: boolean; estimated_cost_cents: number | null; source_provider: string | null; source_recipe_id: string | null; attribution: string | null; license_notes: string | null; imported_at: string | null; raw_payload: Json | null; created_by: string | null; created_at: string; updated_at: string },

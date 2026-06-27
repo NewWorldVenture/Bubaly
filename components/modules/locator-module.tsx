@@ -13,7 +13,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { haversineMeters, distanceLabel, timeAgo, isStale } from '@/lib/location/geo';
@@ -145,7 +145,7 @@ export function LocatorModule() {
     };
   }
 
-  if (loading) return <LoadingBlock label="Loading family map…" />;
+  if (loading) return <SkeletonList count={5} />;
 
   return (
     <div>

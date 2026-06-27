@@ -18,7 +18,7 @@ import { RECIPE_AI_ACTIONS } from '@/lib/recipes/ai-actions';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -218,7 +218,7 @@ export function RecipesModule() {
     timesCooked: recipes.reduce((a, r) => a + (r.times_made ?? 0), 0),
   };
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
 
   return (
     <div className="module-page">

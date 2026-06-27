@@ -1,34 +1,178 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-27 — Session 4: AI Trip Intelligence (destination research + Smart Departure). Branch `claude/connect-8ysp00` → **draft PR #168** (open, Vercel preview deployed green). 1136 tests pass · build clean. Keep this updated as you ship.
+Last updated after AI Trip Intelligence (PR #168). Keep this updated as you ship.
 
-> **Session 4 (2026-06-27) — AI TRIP INTELLIGENCE: DESTINATION RESEARCH + SMART DEPARTURE**
-> Branch `claude/connect-8ysp00` · head commit `7ef5a46` · **draft PR #168** (open). tsc clean · 1136 tests pass (30 new) · build exit 0 · Vercel preview Ready.
-> Route: **/dashboard/trip-intel** (nav: Suggested group "Trip Intelligence", MapPin icon; feature-catalog `trip-intelligence`, basic tier). Page uses `requireUserContext` (not feature-gated, like AI Concierge).
->
-> ### What it does (the user's ask, fully wired)
-> Auto-detects upcoming calendar events that have a `location` (next 21 days, excludes our own "🚗 Head out" events) and offers two actions per event:
-> 1. **Research** — geocodes the place + pulls forecast (keyless Open-Meteo), then POSTs `/api/ai/trip` for restaurant/activity/tip recommendations tuned to the family's interests + who's going. Saved to `trip_plans`.
-> 2. **Plan departure** — geocodes home + destination, gets a REAL driving time from **OSRM** (keyless `router.project-osrm.org`), applies a rush-hour traffic multiplier + weather delay, works backward from event time to a single **leave-by**. One tap writes a "🚗 Head out for X" `calendar_events` row. Saved departures show a live countdown/status and a **Refresh** that re-checks traffic+weather and re-syncs the calendar event ("continuously monitor & adjust").
->
-> ### Files
-> - **`lib/trips/departure.ts`** (PURE + 15 tests `tests/trip-departure.test.ts`): `computeDeparture` (backward math: arrive = start−buffer; leave = arrive−park−weather−drive×traffic; ready = leave−prep), `trafficFactorForTime` (weekday AM/PM peaks 1.45/1.5, weekend lighter, overnight 1.0), `weatherDelayMinutes` (WMO code → minutes), `departureStatusCopy`, `leaveByLabel`.
-> - **`lib/trips/routing.ts`** (PURE parsers + 7 tests): `driveEstimate` (OSRM, browser fetch), `parseOsrmDuration/Distance`, `haversineMiles` + `fallbackDriveSeconds` (avg-speed fallback when OSRM down), `metersToMiles`.
-> - **`lib/trips/research.ts`** (PURE + 8 tests): `buildTripResearchPrompt`, `parseTripResearch` (tolerant JSON extract), `fallbackTripResearch` (never-fabricated generic guidance tilted by interests).
-> - **`app/api/ai/trip/route.ts`** — auth-gated; AI when configured else deterministic fallback; returns `{ recommendations, source }`.
-> - **`app/(app)/dashboard/trip-intel/actions.ts`** — `saveTripPlanAction`, `deleteTripPlanAction`, `saveDeparturePlanAction` (+ writes head-out calendar event), `refreshDeparturePlanAction` (recompute + re-sync event), `deleteDeparturePlanAction` (also deletes linked event). NOTE: `calendar_events` UPDATE payload must NOT include `family_id` (Update type forbids it) — see `upsertHeadOutEvent` which splits insert vs update fields.
-> - **`components/modules/trip-intel-module.tsx`** — full client UI (ResearchModal, DepartureModal with prep/park/buffer + live calc, live DepartureCard with per-minute countdown + Refresh). Persists home address + interests to localStorage for frictionless reuse. Geocoding/routing/weather all run in the browser (keyless, network-policy-safe).
-> - **Migration `0098_trip_intelligence.sql`** — `trip_plans` + `departure_plans` (RLS family policies, updated_at triggers, realtime). Types added to `lib/database.types.ts`.
->
-> ### ⚠️ Migration not applied to prod yet
-> `0098_trip_intelligence.sql` — until applied, saving degrades gracefully (page shows a "setup pending" note via `isMissingTableError`; research still works, just can't persist). **Apply it** to enable saving trips/departures.
->
-> ### PR
-> PR #162 was MERGED. These session-4 commits are on `claude/connect-8ysp00` and need a NEW draft PR.
+> ## 🧳 AI TRIP INTELLIGENCE (PR #168) — destination research + Smart Departure
+> Branch `claude/connect-8ysp00`. Turns a located calendar event into AI destination research +
+> a working-backward departure plan that monitors traffic & weather. ⚠️ **Migration
+> `0098_trip_intelligence.sql` NOT APPLIED TO PROD** (`trip_plans` + `departure_plans`).
+> - `lib/trips/{departure,routing,research}.ts` — PURE (30 tests): departure math + traffic/weather
+>   models, OSRM driving time (keyless) + fallback, AI prompt/parse + deterministic fallback.
+> - `app/api/ai/trip/route.ts` + `app/(app)/dashboard/trip-intel/{page,actions}` + module + nav +
+>   feature-catalog. Geocode/route/weather run client-side (keyless, network-policy-safe).
+> - Missing-table aware (degrades pre-migration). Verified post-merge: tsc · vitest · build.
 
-> Living context doc so another agent can continue without re-deriving everything.
-> Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionless Stripe cards, reconciliation, iOS-zoom + missing-table fixes, Wallet promoted in nav. Branch `claude/connect-8ysp00` (PR #162). 1079 tests pass · build clean. Keep this updated as you ship.
+> ## 🧭 AI-OS UX STRATEGY (PR pending) — "Less Managing Life. More Living It."
+> Two living strategy docs now drive the UX direction; read them before large UX work:
+> - **`docs/WORLD_CLASS_UX_AUDIT.md`** — scores every area vs the brand promise, Top-25 friction +
+>   opportunities, the **five-surface IA** (Home · Assistant · Capture · Inbox · Profile), and where
+>   today's ~70 modules map. Per-feature review cards + status.
+> - **`docs/FRICTIONLESS_UX_ROADMAP.md`** — sequenced execution plan: quick wins → Notifications →
+>   Home (Mission Control) → Inbox (decision queue) → Assistant-as-layer → Universal Capture →
+>   plain-language Policy/explainability → "Bubaly handled this for you" recap. Each item names files/tables.
+> - North star: collapse 70+ destinations into 5 surfaces; AI + context bring the right thing at the
+>   right time; every automation Trust-gated + explainable + undoable.
+> - Already shipped toward it: #163 (crash-guard + NL Quick Capture), #165 (skeletons + route loading
+>   + recovery pages). Next safe quick win: adopt `SkeletonList` in the busiest modules.
+
+> ## ✨ UX POLISH PASS (PR pending) — perceived-perf + recovery + skeletons
+> Branch `claude/ux-polish-pass`. Shipped, low-risk, app-wide UX upgrades. No migration.
+> - **Skeleton system** in `components/ui/states.tsx`: `Skeleton`, `SkeletonText`, `SkeletonCard`,
+>   `SkeletonList` (respect `motion-reduce`, `role=status`). Prefer over bare spinners for content.
+> - **`app/(app)/loading.tsx`** — route-level skeleton for the whole authed app → instant feedback on
+>   every navigation, no blank flash, no layout shift. (Additive; Next.js shows it only during loads.)
+> - **Recovery pages (no dead ends):** `not-found.tsx` now offers "Go to dashboard" + "Back to home";
+>   `error.tsx` adds "Go to dashboard" + shows the error `digest` as a support reference.
+> - Verified: tsc clean · eslint clean · build ✓ · suite 1153/1153.
+>
+> ### 🎯 UX BACKLOG for the next agent (prioritized; app is already mature, so these are incremental)
+> The product is broad (~70 modules) and already has shared `EmptyState`/`ErrorState`/`LoadingBlock`,
+> tier gating, dark/light, mobile bottom-sheet modals (safe-area fixed in #163), and world-class wallet
+> screens. Highest-leverage remaining UX work, in order:
+> 1. **Adopt `SkeletonList` in module loading states** — replace `LoadingBlock` in the busiest modules
+>    (chores, meals, calendar, grocery, dashboard widgets) for matched-layout loading. Mechanical, safe.
+> 2. **Per-route `loading.tsx`** for heavy routes (calendar, photos, documents, wallet) with layout-
+>    matched skeletons (subnav + cards), beyond the generic app-level one added here.
+> 3. **Dashboard command-center pass** — confirm every card is clickable + routes correctly; ensure
+>    "needs attention" + quick actions are above the fold on mobile.
+> 4. **Form audit** — input types (`inputMode`, `type=email/tel`), sticky mobile submit, inline
+>    validation + success toasts, autosave where natural. (Quick Capture already NL-parses.)
+> 5. **Upgrade prompts** — make contextual + helpful (show value at the moment of need), never modal-spam.
+> 6. **A11y sweep** — focus traps in modals, visible focus rings (already `focus-ring`), aria-labels on
+>    icon-only buttons, contrast check on muted text in light mode; target WCAG 2.2 AA.
+> 7. **Copy pass** — tighten titles/CTAs/empty states to be short + human; remove any jargon on
+>    consumer pages (Stripe Treasury/Issuing terms are already hidden behind capability detection).
+> 8. **Consistency** — audit one-off card/button styles; consolidate to the shared primitives.
+> NOTE: vitest is node-only (no jsdom) — component render tests aren't set up; presentational changes
+> are verified via `tsc` + `next build`. Keep pure logic in tested `lib/*` helpers.
+
+> ## ⏰ REMINDERS — iOS-PARITY DETAILS (new, branch `claude/festive-bohr-m4cbeg`)
+> Closed every gap vs the iOS Reminders detail screen: **Lists, URL, Early Reminder, Flag, Subtasks,
+> Image, and Tags-UI** (Priority/Repeat/Date-Time/Notes already existed; "When Messaging" is iOS-only,
+> skipped). tsc/lint clean · build ✓ · **1193 tests** (+7). Reminders use the `family_reminders` table.
+> - **Migration `0100_reminder_details.sql`** ⚠️ NOT APPLIED TO PROD — new `reminder_lists` table
+>   (family-scoped RLS, trigger, realtime) + `family_reminders` ADD COLUMNs: `url`, `flagged`,
+>   `early_reminder_minutes`, `image_url`, `subtasks jsonb`, `list_id`.
+> - **`lib/reminders/details.ts`** (PURE, **7 tests**): `EARLY_REMINDER_OPTIONS`/`earlyReminderLabel`/
+>   `earlyReminderAt`, `parseTags`/`formatTags`, `normalizeSubtasks`/`newSubtask`/`subtaskProgress`, `isValidHttpUrl`.
+> - **`components/modules/reminders-module.tsx`** — `ReminderModal` now has: **List** select (+ inline
+>   "＋ New list…" → inserts `reminder_lists`), **URL**, **Early Reminder** select, **Flag** toggle, **Tags**
+>   chips editor, **Subtasks** editor (add/check/remove, jsonb), **Image** upload (→ `family-media` bucket,
+>   `${familyId}/reminders/…`) with preview. List rows surface list/flag/early/subtasks/url/tags/image.
+> - **Production-safe pre-migration:** the realtime hook degrades the missing `reminder_lists` table to
+>   empty; reads default safely (`?? false`, `normalizeSubtasks`); and **saves retry without the new
+>   columns** on a missing-column error (`stripNewCols` + `isMissingRelationError`), so core reminders keep
+>   saving until 0100 lands. **Next:** wire `early_reminder_minutes` into the notification cron (note: that
+>   cron currently reads the separate `reminders` table, not `family_reminders`).
+>
+> ## 💳 STRIPE SETUP + $0.90 SERVICE FEE (new, branch `claude/festive-bohr-m4cbeg`)
+> The Bubaly Stripe account is now configurable in Super Admin, and a configurable per-transaction service
+> fee (default **$0.90**) is collected to Bubaly. tsc/lint clean · build ✓ · **1186 tests** (+8). No prod break.
+> - **Migration `0099_stripe_settings.sql`** ⚠️ NOT APPLIED TO PROD — `stripe_settings` singleton
+>   (`id='singleton'`): enabled, publishable_key, secret_key, webhook_secret, connect_account_id,
+>   **service_fee_cents (default 90)**, service_fee_price_id, updated_by. RLS ON with **no policies** →
+>   service-role only (secrets never reach the browser via PostgREST).
+> - **`lib/stripe/service-fee.ts`** (PURE, **8 tests**): `DEFAULT_SERVICE_FEE_CENTS=90`, `resolveServiceFeeCents`,
+>   `serviceFeeEnabled`, `serviceFeeAddInvoiceItems` (checkout one-time fee), `serviceFeeApplicationAmount`
+>   (Connect `application_fee_amount` for wallet money-movement).
+> - **`lib/stripe/settings.ts`** — `getStripeSettings()` (service-role, env fallback) + `effectiveSecretKey/
+>   WebhookSecret/PublishableKey`. **`lib/stripe.ts` `stripeFromKey()`** builds a client from the configured key.
+> - **Super Admin → Stripe Setup** — `components/admin/stripe-setup-form.tsx` rendered at the top of
+>   `/admin/stripe` (also linked from `/admin/settings`). Editable **service fee ($)** field + fee Price ID +
+>   keys (secrets masked, blank = keep) + connect account + enable toggle. `saveStripeSettingsAction`
+>   (super-admin, audited, no secret leakage).
+> - **Wiring** — `/api/billing/checkout` uses the configured secret key and adds the fee via
+>   `subscription_data.add_invoice_items` (one-time, doesn't touch the recurring item so the webhook's
+>   `items.data[0]` plan mapping stays correct). **`testStripeConnectionAction`** + a "Test connection"
+>   button validate the configured key (`balance.retrieve`, shows live/test mode + settlement currencies).
+>   **Backward-safe:** no settings row → env key + fee off →
+>   identical to today. **Disclosure:** `/dashboard/billing` shows "A one-time $X Bubaly service fee is added
+>   at checkout." (server reads the non-secret fee config; only when enabled) → `BillingModule` prop. **Next:**
+>   wire `serviceFeeApplicationAmount` into wallet/Connect PaymentIntents when
+>   that path goes live; optionally make the fee recurring (needs webhook plan-resolution hardening first).
+>
+> ## 💞 RELATIONSHIP HELPER (new feature, branch `claude/festive-bohr-m4cbeg`)
+> Track anniversaries / birthdays / date nights, store partner preferences, keep a gift-idea list, and get
+> AI nudges + tailored gift ideas grounded in the partner's wishlist. tsc/lint clean · build ✓ · **1172 tests** (+19).
+> - **Migration `0098_relationship_helper.sql`** ⚠️ NOT APPLIED TO PROD — 3 tables: `relationship_profile`
+>   (1/family: partner_name, partner_member_id, interests[], love_languages[], gift_budget_cents, notes),
+>   `relationship_dates` (kind anniversary/birthday/first_date/date_night/milestone/custom; event_date;
+>   recurs_annually; reminder_days_before; status), `relationship_gift_ideas` (source manual/ai/wishlist;
+>   status idea→saved→ordered→purchased→given; optional wishlist_item_id FK). Family-scoped RLS + triggers + realtime.
+> - **`lib/relationship/dates.ts`** (PURE, **12 tests**): `nextOccurrence` (annual roll-forward), `daysUntil`,
+>   `upcomingDates` (sorted, drops past one-offs, computes the ordinal/age), `isReminderDue`, `formatCountdown`,
+>   `milestoneLabel` ("8th anniversary", "turns 36").
+> - **`lib/relationship/gifts.ts`** (PURE, **7 tests**): `suggestGiftsFromWishlist` (drop purchased/claimed,
+>   budget filter, rank by priority then price, → cents), `buildRelationshipDigestPrompt`/`parseRelationshipDigest`.
+> - **`/api/ai/relationship`** — loads profile + upcoming(90d) + partner's ranked wishlist → AI digest
+>   `{headline, prompts[], giftIdeas[]}`. Degrades 503 if tables missing.
+> - **`/dashboard/relationship`** (`components/modules/relationship-module.tsx`, free/level 0; nav under Daily
+>   Life) — realtime client CRUD for dates + gift ideas + partner prefs; AI suggestions panel ("Save" each
+>   idea → gift list); "From wishlist" picker; countdown + reminder badges. Degrades to empty pre-migration
+>   (the hook swallows missing-table).
+> - **Home dashboard nudge** — `ai-home-dashboard.tsx` now loads `relationship_dates` and shows a gentle
+>   rose reminder card (via `upcomingRelationship`, **13th dates test**) when a date is inside its reminder
+>   window, linking to `/dashboard/relationship`. Crash-safe pre-migration (`relDateRows ?? []`).
+> - **AI metering** — `/api/ai/relationship` is capped at 20 digests/family/day, counted from `audit_logs`
+>   (action `relationship_ai_digest`); 429 over the limit, best-effort `logAudit` record on success.
+> - **Gift shopping tracker** — the gift section shows a summary ("N to buy · $X to go · M done") via the
+>   pure `summarizeGifts` (`lib/relationship/gifts.ts`, **+2 tests**) plus tap-to-filter status chips
+>   (All/Idea/Saved/Ordered/Purchased/Given).
+> - **Add to family calendar** — `relationship_dates.calendar_event_id` (added to migration 0098) links a
+>   date to a `calendar_events` row. The card's calendar toggle creates a yearly (recurring dates) or one-off
+>   all-day event via the pure `buildCalendarEventForDate` (`lib/relationship/calendar.ts`, **3 tests**;
+>   birthdays use the `birthday` category) and stores the id; toggling again deletes it. So anniversaries/
+>   date nights show on the calendar everyone already uses.
+> - **Proactive push/email reminders** — `lib/server/notifications.ts` (`generateFamilyNotifications`, the
+>   notifications cron) now emits a `'system'` notification when a relationship date enters its reminder
+>   window, `related_id` keyed by occurrence year (`{id}:{YYYY}`) so it sends once per occurrence and again
+>   next year. Delivered via the existing push + email channels. Reuses `upcomingRelationship` (pure/tested);
+>   missing-table-safe (`relDates ?? []`).
+>
+> ## 🎯 BRAND FOUNDATION — "Less Life Admin. More Living Life." (in progress, branch `claude/festive-bohr-m4cbeg`)
+> New primary tagline + positioning rolled across the marketing site & shared metadata. Hero headline:
+> "The AI Operating System for Family Life." Hero sub: "Bubaly quietly handles the logistics of family
+> life…so your family can spend less time managing life and more time living it." tsc/lint clean · build ✓
+> (167 pages) · 1153 tests.
+> - **Tagline** now in: homepage hero pill + `app/(marketing)/page.tsx`; eyebrows on Features / How-It-Works
+>   (`components/marketing/reference-showcases.tsx`), AI page (`app/(marketing)/ai/page.tsx`), Pricing
+>   (`pricing-content.tsx`); footer (`site-footer.tsx`); default `CTASection` title (`components/marketing/cta.tsx`).
+> - **Positioning** ("AI operating system for family life", "less time managing life, more time living it")
+>   in: root metadata + OG/Twitter (`app/layout.tsx`), PWA `app/manifest.ts`, homepage sub + divider,
+>   `FamilyAiPanel` (`visual-mocks.tsx`).
+> - **Left intentionally:** AI *persona* system prompts still say "chief of staff" (`app/api/ai/**`,
+>   chat/briefing routes) — those shape model behavior, not site copy; and tier taglines in `plans.ts`.
+>   A future pass could align in-app dashboard strings ("Ask your AI Chief of Staff").
+>
+> ## 🛟 PRODUCTION BUG SWEEP + QUICK CAPTURE (PR #163)
+> Branch `claude/festive-bohr-m4cbeg`. Stops live crashes + frictionless Quick Capture. No migration.
+> - `lib/supabase/errors.ts` missing-relation detection + `useRealtimeQuery` swallows it → all ~69
+>   realtime modules degrade to empty state (not a crash) when a feature's migration hasn't reached prod.
+>   (Aligned with main's `isMissingTableError`.) `/api/cron/wallet-allowance` returns 200 pre-0088.
+> - **`lib/capture/parse.ts`** (PURE + 25 tests) — natural-language Quick Capture (events/tasks/shopping).
+> - Modal safe-area padding fix; Family Wallet promoted into Suggested nav.
+>
+> ### Post-merge cleanup (after #163 + #161/#162 cross-merged to main)
+> - **Dedup:** the cross-merge added **two** "Family Wallet" entries to the Suggested nav — removed one.
+>   Now once each in Suggested / Finances / Admin.
+> - **Error helpers consolidated:** `isMissingTableError` (added on main) is now a thin alias of the broader
+>   `isMissingRelationError` — single implementation, both import names preserved.
+> - Also shipped this session on the branch: `/capture` shell creates records via shared `saveCapture`;
+>   grocery quantity parsing; capture→assistant `?q=` auto-send; home "Ask Bubaly anything" bar; global
+>   capture shortcut (press C / ⌘-Enter); shell-preserving `app/(app)/error.tsx`. tsc/lint clean · 1153 tests · build ✓.
+
+Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionless Stripe cards, reconciliation, iOS-zoom + missing-table fixes, Wallet promoted in nav. Branch `claude/connect-8ysp00` (PR #162). 1079 tests pass · build clean. Keep this updated as you ship.
 
 > **Session 3 (2026-06-26) — TREASURY · SEND MONEY · STRIPE CARDS · RECONCILIATION · PROD UX FIXES · NAV**
 > Branch `claude/connect-8ysp00` · PR #162. tsc clean · 1079 tests pass · build exit 0.

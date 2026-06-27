@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CheckCircle2, XCircle, Server, Plug, ShieldCheck, Database, UsersRound, Sparkles } from 'lucide-react';
+import { CheckCircle2, XCircle, Server, Plug, ShieldCheck, Database, UsersRound, Sparkles, CreditCard } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 
@@ -37,6 +37,7 @@ export default async function AdminSettingsPage() {
 
   const links = [
     { href: '/admin/ai', label: 'AI Engine', desc: 'Choose Claude or ChatGPT & set API keys', icon: Sparkles },
+    { href: '/admin/stripe', label: 'Stripe Setup', desc: 'Bubaly Stripe account & service fee', icon: CreditCard },
     { href: '/admin/admins', label: 'Administrators', desc: 'Manage super-admin access', icon: UsersRound },
     { href: '/admin/integrations', label: 'Integrations', desc: 'Connected services & keys', icon: Plug },
     { href: '/admin/security', label: 'Security', desc: 'Access & audit controls', icon: ShieldCheck },

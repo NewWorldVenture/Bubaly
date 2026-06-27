@@ -10,22 +10,14 @@ export type DbErrorLike =
 
 /**
  * True when an error means the table/relation simply isn't provisioned yet —
- * PostgREST `PGRST205` ("Could not find the table ... in the schema cache") or
- * Postgres `42P01` (undefined_table). Used to degrade un-migrated features to a
- * friendly empty state instead of a scary error, so a pending migration never
- * breaks the UI. Forward-compatible: once the migration lands, data appears.
+ * e.g. a migration hasn't been applied to this database. Used to degrade
+ * un-migrated features to a friendly empty state instead of a scary error, so a
+ * pending migration never breaks the UI. Forward-compatible: once the migration
+ * lands, data appears. Alias of `isMissingRelationError` (single source of
+ * truth); kept for call sites that import this name.
  */
 export function isMissingTableError(error: unknown): boolean {
-  if (!error) return false;
-  const obj = (typeof error === 'object' ? error : { message: String(error) }) as DbErrorLike;
-  const code = (obj?.code ?? '').toString();
-  const msg = (obj?.message ?? '').toString().toLowerCase();
-  return (
-    code === 'PGRST205' ||
-    code === '42P01' ||
-    (msg.includes('could not find the table') && msg.includes('schema cache')) ||
-    msg.includes('relation') && msg.includes('does not exist')
-  );
+  return isMissingRelationError(error);
 }
 
 /**
@@ -84,4 +76,28 @@ export function describeDbError(error: unknown, fallback = 'Something went wrong
   }
 
   return raw.trim() || fallback;
+}
+
+/**
+ * True when an error means the table/column/relation isn't present yet — e.g. a
+ * migration hasn't been applied to this database. PostgREST reports these as
+ * "Could not find the table '…' in the schema cache" (PGRST205/PGRST204) or
+ * Postgres 42P01 (undefined_table) / 42703 (undefined_column). Callers can use
+ * this to degrade gracefully (treat as empty) instead of surfacing a crash.
+ */
+export function isMissingRelationError(error: unknown): boolean {
+  if (!error) return false;
+  const obj: DbErrorLike =
+    typeof error === 'object' ? (error as DbErrorLike) : { message: String(error) };
+  const code = (obj?.code ?? '').toString();
+  const msg = (obj?.message ?? '').toString().toLowerCase();
+  return (
+    code === 'PGRST205' ||
+    code === 'PGRST204' ||
+    code === '42P01' ||
+    code === '42703' ||
+    msg.includes('schema cache') ||
+    (msg.includes('could not find') && msg.includes('table')) ||
+    msg.includes('does not exist')
+  );
 }

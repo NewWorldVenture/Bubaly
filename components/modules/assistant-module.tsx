@@ -13,6 +13,7 @@ import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { useVoice } from '@/lib/hooks/use-voice';
 import { VOICE_MODES, cleanTranscript } from '@/lib/ai/voice';
+import { parsePrefillQuery } from '@/lib/ai/prefill';
 
 // Quick-suggestion chips shown above an active conversation.
 const CHIPS = [
@@ -141,6 +142,21 @@ export function AssistantModule() {
   useEffect(() => {
     if (hasConversation) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, hasConversation]);
+
+  // Deep link: arriving with "?q=…" (e.g. routed here from Quick Capture) sends
+  // that question immediately, then strips it from the URL so a refresh/back
+  // doesn't resend. Runs once.
+  const prefillSent = useRef(false);
+  useEffect(() => {
+    if (prefillSent.current || typeof window === 'undefined') return;
+    const q = parsePrefillQuery(window.location.search);
+    if (!q) return;
+    prefillSent.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('q');
+    window.history.replaceState({}, '', url.toString());
+    void send(q);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load the conversation list, and rehydrate the active conversation's messages.
   const loadConversations = useCallback(async () => {

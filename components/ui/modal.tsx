@@ -46,7 +46,10 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          'relative z-10 w-full max-w-lg popover-surface max-h-[85dvh] sm:max-h-[92dvh] overflow-y-auto rounded-b-none rounded-t-3xl p-4 sm:p-6 animate-slide-up sm:animate-fade-in sm:rounded-3xl',
+          // On mobile this is a bottom sheet (items-end): pad the bottom by the
+          // safe-area inset so the action row never hides under the home
+          // indicator / browser chrome. Desktop keeps even padding.
+          'relative z-10 w-full max-w-lg popover-surface max-h-[85dvh] sm:max-h-[92dvh] overflow-y-auto rounded-b-none rounded-t-3xl px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 animate-slide-up sm:animate-fade-in sm:rounded-3xl',
           className,
         )}
       >

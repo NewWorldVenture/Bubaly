@@ -13,7 +13,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import {
   buildTree, treeStats, groupByGeneration, relationshipLabel, lifespan,
@@ -131,7 +131,7 @@ export function FamilyTreeModule() {
     });
   }
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
 
   return (
     <div className="space-y-5">

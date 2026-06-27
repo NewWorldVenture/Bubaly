@@ -45,8 +45,11 @@ export function SiteFooter() {
       <div className="mx-auto grid max-w-[1440px] grid-cols-2 gap-8 px-5 py-10 sm:px-8 md:grid-cols-3 lg:grid-cols-6 lg:px-10">
         <div className="col-span-2 md:col-span-3 lg:col-span-2">
           <Logo />
-          <p className="mt-3 max-w-[220px] text-[11px] leading-5 text-muted">
-            Run your family like a calm, connected team.
+          <p className="mt-3 max-w-[240px] text-[11px] font-semibold leading-5 text-muted">
+            Less Life Admin. More Living Life.
+          </p>
+          <p className="mt-2 max-w-[240px] text-[11px] leading-5 text-muted">
+            The AI operating system for family life.
           </p>
         </div>
         {GROUPS.map((g) => (

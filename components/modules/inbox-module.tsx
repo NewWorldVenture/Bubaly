@@ -16,7 +16,7 @@ import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { PageHeader } from '@/components/app/page-header';
-import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -68,6 +68,8 @@ export function InboxModule() {
       const { data: rows, error } = await supabase
         .from('family_communications').select('*')
         .eq('family_id', familyId).order('received_at', { ascending: false }).limit(200);
+      // useRealtimeQuery degrades missing-relation errors (e.g. the Communications
+      // Hub migration not yet applied) to an empty inbox instead of a crash.
       if (error) return { data: null, error };
       if (!rows?.length) return { data: [], error: null };
       const contactIds = [...new Set(rows.map(r => r.contact_id).filter(Boolean))] as string[];
@@ -132,7 +134,7 @@ export function InboxModule() {
     void markRead(comm);
   }
 
-  if (commsLoading) return <LoadingBlock />;
+  if (commsLoading) return <SkeletonList />;
   if (commsError) return <ErrorState message={commsError} onRetry={refreshComms} />;
 
   const TABS: { key: FilterTab; label: string }[] = [
