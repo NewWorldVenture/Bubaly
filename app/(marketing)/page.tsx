@@ -15,6 +15,7 @@ import {
   GradientText,
   HeroPhoneMockup,
   IconOrb,
+  ManifestoBand,
   PageWrap,
   Pill,
   PlatformBadges,
@@ -88,6 +89,11 @@ export default async function HomePage() {
       {/* ── Testimonials ── */}
       <Container className="max-w-[1440px] px-5 pb-3 pt-4 sm:px-8 lg:px-10">
         <TestimonialBand />
+      </Container>
+
+      {/* ── Brand manifesto ── */}
+      <Container className="max-w-[1440px] px-5 pb-3 pt-10 sm:px-8 sm:pt-12 lg:px-10">
+        <ManifestoBand />
       </Container>
 
       {/* ── Device showcase ── */}
