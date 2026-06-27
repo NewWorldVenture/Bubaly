@@ -6,13 +6,13 @@ import { useState, useRef } from 'react';
 import {
   Mic, Type, Camera, FileText, Sparkles, X, ArrowRight,
   Calendar, CheckSquare, ShoppingCart, Home, HeartPulse, Plane,
-  Loader2, ChevronDown,
+  Loader2, ChevronDown, Undo2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/toast';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
-import { saveCapture, type CaptureSaveResult } from '@/lib/capture/save';
+import { saveCapture, undoCapture, type CaptureSaveResult } from '@/lib/capture/save';
 import type { CaptureKind } from '@/lib/capture/parse';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
@@ -57,15 +57,37 @@ function routeCapture(text: string): { destination: string; url: string } {
 
 export function CaptureShell() {
   const router = useRouter();
-  const { error: toastError } = useToast();
+  const { error: toastError, success } = useToast();
   const { familyId, userId, selfMember } = useApp();
   const [mode, setMode] = useState<CaptureMode>('type');
   const [text, setText] = useState('');
   const [routing, setRouting] = useState(false);
   const [routed, setRouted] = useState<{ destination: string; url: string } | null>(null);
   const [created, setCreated] = useState<(CaptureSaveResult & { destination: string }) | null>(null);
+  const [undoing, setUndoing] = useState(false);
   const [recording, setRecording] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
+
+  // One-tap undo: delete the rows the capture just created and restore the input
+  // so the user can edit and re-file, or walk away. Frictionless safety net for
+  // a mis-routed capture.
+  async function undoCreated() {
+    if (!created) return;
+    setUndoing(true);
+    try {
+      await undoCapture(createClient(), created.undo);
+      const restore = text || created.title;
+      success('Undone');
+      setCreated(null);
+      setText(restore);
+      setMode('type');
+      textRef.current?.focus();
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Could not undo');
+    } finally {
+      setUndoing(false);
+    }
+  }
 
   function handleInput(value: string) {
     setText(value);
@@ -211,6 +233,10 @@ export function CaptureShell() {
                 </p>
                 {created.title && <p className="truncate text-xs text-muted">{created.title}</p>}
               </div>
+              <button type="button" onClick={undoCreated} disabled={undoing}
+                className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted hover:bg-elevated hover:text-fg disabled:opacity-60">
+                {undoing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />} Undo
+              </button>
             </div>
             <div className="flex gap-2 border-t border-emerald-500/20 p-3">
               <button type="button" onClick={goToDestination}

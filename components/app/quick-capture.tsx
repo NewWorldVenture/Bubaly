@@ -10,7 +10,7 @@ import { Input, Textarea, Field } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import { parseEvent, parseDueDate, suggestKind, splitItems } from '@/lib/capture/parse';
-import { saveCapture } from '@/lib/capture/save';
+import { saveCapture, undoCapture } from '@/lib/capture/save';
 import { isOpenCaptureKey, isSaveHotkey, isTypingTarget } from '@/lib/capture/shortcut';
 
 /** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
@@ -66,7 +66,14 @@ export function QuickCapture() {
     const supabase = createClient();
     try {
       const res = await saveCapture(supabase, { kind: type, text: value, familyId, userId, memberId: selfMember?.id ?? null });
-      success(res.count > 1 ? `${res.count} items added` : `${TYPES.find((t) => t.key === type)!.label} saved`);
+      success(
+        res.count > 1 ? `${res.count} items added` : `${TYPES.find((t) => t.key === type)!.label} saved`,
+        { label: 'Undo', onClick: () => {
+          undoCapture(createClient(), res.undo)
+            .then(() => success('Undone'))
+            .catch(() => toastError('Could not undo'));
+        } },
+      );
       reset();
       setOpen(false);
     } catch (err) {
