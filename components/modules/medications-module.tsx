@@ -31,8 +31,22 @@ type Dose = Tables<'medication_doses'>;
 const WHOLE_FAMILY = '__family__';
 const ADHERENCE_WINDOW_DAYS = 30;
 
-const blankMed = { id: '', member_id: '', name: '', dosage: '', instructions: '', is_active: true };
+const blankMed = { id: '', member_id: '', name: '', dosage: '', instructions: '', is_active: true, refill_on: '', refill_reminder_days: 7 };
 const blankSchedule = { time_of_day: '08:00', days_of_week: [0, 1, 2, 3, 4, 5, 6] as number[], starts_on: localDateKey(new Date()), ends_on: '' };
+
+// Refill badge for an active medication. Surfaces what Autopilot already reasons
+// about (refill_on) right in the list, within the member-set reminder window.
+function refillBadge(refillOn: string | null, remindDays: number | null): { label: string; cls: string } | null {
+  if (!refillOn) return null;
+  const exp = new Date(`${refillOn}T00:00:00`).getTime();
+  if (Number.isNaN(exp)) return null;
+  const days = Math.ceil((exp - Date.now()) / 86_400_000);
+  const window = Math.max(0, Math.min(90, remindDays ?? 7));
+  if (days < 0) return { label: 'Refill overdue', cls: 'bg-rose-500/15 text-rose-400' };
+  if (days === 0) return { label: 'Refill today', cls: 'bg-rose-500/15 text-rose-400' };
+  if (days <= window) return { label: `Refill in ${days}d`, cls: 'bg-amber-500/15 text-amber-400' };
+  return null;
+}
 
 function AdherenceRing({ rate, size = 96 }: { rate: number | null; size?: number }) {
   const r = size * 0.4;
@@ -167,7 +181,7 @@ export function MedicationsModule() {
   // ── Medication CRUD ───────────────────────────────────────
   function openNewMed() { setMedForm(blankMed); setMedModalOpen(true); }
   function openEditMed(m: Medication) {
-    setMedForm({ id: m.id, member_id: m.member_id ?? '', name: m.name, dosage: m.dosage ?? '', instructions: m.instructions ?? '', is_active: m.is_active });
+    setMedForm({ id: m.id, member_id: m.member_id ?? '', name: m.name, dosage: m.dosage ?? '', instructions: m.instructions ?? '', is_active: m.is_active, refill_on: m.refill_on ?? '', refill_reminder_days: m.refill_reminder_days ?? 7 });
     setMedModalOpen(true);
   }
 
@@ -182,6 +196,8 @@ export function MedicationsModule() {
       dosage: medForm.dosage.trim() || null,
       instructions: medForm.instructions.trim() || null,
       is_active: medForm.is_active,
+      refill_on: medForm.refill_on || null,
+      refill_reminder_days: Math.max(0, Math.min(90, Number(medForm.refill_reminder_days) || 0)),
     };
     const { error: err } = medForm.id
       ? await sb.from('medications').update(fields).eq('id', medForm.id)
@@ -362,6 +378,10 @@ export function MedicationsModule() {
                       <div className="font-semibold text-fg truncate flex items-center gap-2">
                         {m.name}
                         {!m.is_active && <span className="text-[10px] uppercase tracking-wide text-muted border border-border rounded px-1.5 py-0.5">Inactive</span>}
+                        {m.is_active && (() => {
+                          const rb = refillBadge(m.refill_on, m.refill_reminder_days);
+                          return rb ? <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', rb.cls)}>{rb.label}</span> : null;
+                        })()}
                       </div>
                       {m.dosage && <div className="text-sm text-muted">{m.dosage}</div>}
                       {m.member_id && (
@@ -435,6 +455,14 @@ export function MedicationsModule() {
           <Field label="Instructions">
             {(id) => <Textarea id={id} value={medForm.instructions} onChange={(e) => setMedForm((f) => ({ ...f, instructions: e.target.value }))} placeholder="e.g. Take with food" />}
           </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Refill due" hint="Bubaly reminds you before it runs out.">
+              {(id) => <Input id={id} type="date" value={medForm.refill_on} onChange={(e) => setMedForm((f) => ({ ...f, refill_on: e.target.value }))} />}
+            </Field>
+            <Field label="Remind days ahead">
+              {(id) => <Input id={id} type="number" min={0} max={90} value={medForm.refill_reminder_days} onChange={(e) => setMedForm((f) => ({ ...f, refill_reminder_days: Number(e.target.value) }))} />}
+            </Field>
+          </div>
           <label className="flex items-center gap-2 text-sm text-fg">
             <input type="checkbox" checked={medForm.is_active} onChange={(e) => setMedForm((f) => ({ ...f, is_active: e.target.checked }))} className="h-4 w-4 rounded border-border" />
             Active

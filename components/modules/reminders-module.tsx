@@ -5,7 +5,7 @@ import {
   Bell, Plus, Check, Clock, MapPin, Repeat, Pill, CreditCard,
   GraduationCap, CheckSquare, Trash2, Edit2, Sparkles, X,
   AlertTriangle, Calendar, User, AlarmClock, Loader2,
-  Flag, Link2, Image as ImageIcon, Tag, ListChecks, ListTodo, ChevronDown,
+  Flag, Link2, Image as ImageIcon, Tag, ListChecks, ListTodo, ChevronDown, Search,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -93,6 +93,7 @@ export function RemindersModule() {
 
   const [tab, setTab] = useState<'active' | 'completed' | 'all'>('active');
   const [filterKind, setFilterKind] = useState('all');
+  const [query, setQuery] = useState('');
   const [filterList, setFilterList] = useState('all');
   const [filterFlagged, setFilterFlagged] = useState(false);
   const [filterTag, setFilterTag] = useState<string | null>(null);
@@ -123,8 +124,10 @@ export function RemindersModule() {
     if (filterList !== 'all') rows = rows.filter((r) => filterList === 'none' ? !r.list_id : r.list_id === filterList);
     if (filterFlagged) rows = rows.filter((r) => r.flagged);
     if (filterTag) rows = rows.filter((r) => (r.tags ?? []).includes(filterTag));
+    const q = query.trim().toLowerCase();
+    if (q) rows = rows.filter((r) => `${r.title} ${r.notes ?? ''}`.toLowerCase().includes(q));
     return rows;
-  }, [reminders, tab, filterKind, filterList, filterFlagged, filterTag]);
+  }, [reminders, tab, filterKind, filterList, filterFlagged, filterTag, query]);
 
   // Every tag in use, for the "filter by tag" chips (iOS taps a tag to filter).
   const allTags = useMemo(() => {
@@ -320,6 +323,18 @@ export function RemindersModule() {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Search */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search reminders…"
+              className="w-40 rounded-xl border border-border bg-surface/60 py-2 pl-8 pr-7 text-xs outline-none transition focus:border-brand/50 sm:w-52" />
+            {query && (
+              <button onClick={() => setQuery('')} aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:text-fg">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
           {/* Flagged filter (iOS "Flagged" smart list) */}
           <button onClick={() => setFilterFlagged((f) => !f)} aria-pressed={filterFlagged}
             className={cn('flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs transition',
