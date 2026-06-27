@@ -28,6 +28,14 @@ Last updated: Capture quick-buttons — tier-gated, customizable, Supabase-synce
 >   `user_preferences` (reusable for future UI prefs). **APPLY 0093 TO PROD** for cross-device
 >   sync; until then it degrades to localStorage. `database.types.ts` already updated with the
 >   column, so no regen needed for this one.
+> - **"Capture with AI" is now real AI** (was a `setTimeout` over a client regex):
+>   `app/api/ai/capture/route.ts` asks the configured model (via `resolveProvider`) to pick
+>   the best destination key, **tier-gated server-side** so a note never routes to a locked
+>   feature; falls back to a deterministic tier-aware heuristic when AI is off/errors so it
+>   always resolves. `lib/capture/routing.ts` (pure, 10 tests `tests/capture-routing.test.ts`):
+>   `CAPTURE_DESTINATIONS` (with minLevels), `routeCaptureHeuristic`, `resolveAiKey` (validates
+>   AI output against the tier), `buildCapturePrompt`. `CaptureShell.handleSubmit` calls the
+>   route with the on-device heuristic as instant fallback. **Suite: 1039.**
 > - **Capture Photo & Scan now functional** (were stubs): Photo opens the camera/file picker
 >   (`capture=environment`), previews, uploads to the `family-media` bucket + inserts
 >   `family_photos`, routes to `/dashboard/photos`. Scan picks image/PDF → `uploadFamilyDocument`
