@@ -59,11 +59,14 @@ Last updated: Dramatic UI upgrade — wallet/money visual allocation + dark-mode
 >   list badge now shows "Jan 5" instead of the raw `2026-01-05`.
 > - **School** (`components/modules/school-module.tsx`) — quick presets on the assignment
 >   Date & Time field (left grade-date alone — grades record a past date).
+> - **Health** (`components/modules/health-module.tsx`) — quick presets on appointment
+>   scheduling (left metric/workout/symptom timestamps alone — they record past events).
 > - **Shared helpers**: `lib/utils/quick-dates.ts` houses `toLocalDate`,
 >   `toLocalDateTimeInput`, `QUICK_DATE_PRESETS`, and `QUICK_TIME_PRESETS` — now used by
->   reminders, chores, to-dos, and school. **Reuse these for any future scheduling form**
->   (good candidates not yet done: health appointments, care tasks, celebrations). Covered
->   by `tests/quick-dates.test.ts` (7 tests). **Suite is now 1005 tests.**
+>   **reminders, chores, to-dos, school, and health** appointments. **Reuse these for any
+>   future scheduling form.** Judgment rule applied: only on FUTURE-dated fields (due dates,
+>   appointments), never on fields recording a past/now event (grades, metrics, workouts).
+>   Covered by `tests/quick-dates.test.ts` (7 tests). **Suite is now 1005 tests.**
 > - **Expense splitting** (`components/modules/expenses-module.tsx`) — added a live
 >   Splitwise-style "Splitting $X between N people · ~$Y each" preview in the split form
 >   so parents see the per-person share before saving.
