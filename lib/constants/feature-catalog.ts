@@ -26,6 +26,7 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('calendar', 'Calendar', 'Suggested', 'free', '/dashboard/calendar'),
   F('tasks-chores', 'Tasks & Chores', 'Suggested', 'free', '/dashboard/chores'),
   F('meals', 'Meals', 'Suggested', 'free', '/dashboard/meals'),
+  F('smart-kitchen', 'Smart Kitchen', 'Daily Life', 'basic', '/dashboard/kitchen'),
   F('messages', 'Messages', 'Suggested', 'free', '/dashboard/messages'),
   F('ai-assistant', 'AI Assistant', 'Suggested', 'basic', '/dashboard/assistant'),
   F('ai-concierge', 'AI Concierge', 'Suggested', 'basic', '/dashboard/concierge'),
