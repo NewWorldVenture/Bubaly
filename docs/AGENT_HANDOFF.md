@@ -9,6 +9,11 @@ Last updated: 2026-06-27 — Reminders list-filtering follow-up (after #167/#168
 > a **List filter** dropdown (All / each list / No list) beside the type filter, plus a **delete-list**
 > trash button when a specific list is selected (reminders kept; FK `ON DELETE SET NULL` un-lists them).
 > No new migration (uses 0100's `reminder_lists` + `list_id`). tsc clean.
+> **Also wired notification delivery for family reminders** (they never notified before): `lib/reminders/
+> notify.ts` (PURE, **5 tests**) `dueFamilyReminderNotices` (fires when due-minus-early-lead is within the
+> 24h window) + `reminderFetchHorizonIso`; wired into `lib/server/notifications.ts` `generateFamilyNotifications`
+> (new `family_reminders` block, dedup `fr:${id}`, push+email via the existing pipeline). Pre-0100-safe
+> (`early_reminder_minutes` query degrades to no-op).
 > NOTE: main now has a **0098 collision** — `0098_relationship_helper.sql` AND `0098_trip_intelligence.sql`
 > both exist (parallel merges). Harmless to the app but the next migration author should be aware; apply both.
 >
