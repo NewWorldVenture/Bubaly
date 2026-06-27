@@ -1,7 +1,17 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the AI-OS UX strategy (audit + roadmap docs). Keep this updated as you ship.
+Last updated after AI Trip Intelligence (PR #168). Keep this updated as you ship.
+
+> ## 🧳 AI TRIP INTELLIGENCE (PR #168) — destination research + Smart Departure
+> Branch `claude/connect-8ysp00`. Turns a located calendar event into AI destination research +
+> a working-backward departure plan that monitors traffic & weather. ⚠️ **Migration
+> `0098_trip_intelligence.sql` NOT APPLIED TO PROD** (`trip_plans` + `departure_plans`).
+> - `lib/trips/{departure,routing,research}.ts` — PURE (30 tests): departure math + traffic/weather
+>   models, OSRM driving time (keyless) + fallback, AI prompt/parse + deterministic fallback.
+> - `app/api/ai/trip/route.ts` + `app/(app)/dashboard/trip-intel/{page,actions}` + module + nav +
+>   feature-catalog. Geocode/route/weather run client-side (keyless, network-policy-safe).
+> - Missing-table aware (degrades pre-migration). Verified post-merge: tsc · vitest · build.
 
 > ## 🧭 AI-OS UX STRATEGY (PR pending) — "Less Managing Life. More Living It."
 > Two living strategy docs now drive the UX direction; read them before large UX work:
