@@ -10,8 +10,8 @@ import { fmtDate } from '@/lib/utils/format';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { UsersToolbar } from '@/components/admin/users-toolbar';
 import { InviteRowActions } from '@/components/admin/invite-row-actions';
-import { MemberRowActions } from '@/components/admin/member-row-actions';
 import { FamilyRowActions } from '@/components/admin/family-row-actions';
+import { UsersTable } from '@/components/admin/users-table';
 import { RoleDonut } from '@/components/admin/role-donut';
 import { AlertTriangle } from 'lucide-react';
 import type { Tables } from '@/lib/database.types';
@@ -237,41 +237,11 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                   <EmptyState icon={UsersRound} title="No members match these filters" />
                 )
               ) : (
-                <div className="table-responsive mt-4">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-left text-xs text-muted">
-                        <th className="px-3 py-2 font-medium">User</th>
-                        <th className="px-3 py-2 font-medium">Family</th>
-                        <th className="px-3 py-2 font-medium">Role</th>
-                        <th className="px-3 py-2 font-medium">Plan</th>
-                        <th className="px-3 py-2 font-medium">Status</th>
-                        <th className="px-3 py-2 font-medium">Joined</th>
-                        <th className="px-3 py-2 font-medium" />
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {pageRows.map((u) => (
-                        <tr key={u.member.id}>
-                          <td className="px-3 py-2.5">
-                            <p className="font-medium">{u.name || '—'}</p>
-                            <p className="text-xs text-muted">{u.email ?? <span className="italic">No login account</span>}</p>
-                          </td>
-                          <td className="px-3 py-2.5 text-muted">{u.family ? u.family.name : '—'}</td>
-                          <td className="px-3 py-2.5">{u.role ? <Badge tone="brand">{ROLE_LABELS[u.role]}</Badge> : '—'}</td>
-                          <td className="px-3 py-2.5 text-muted">{u.plan ? PLANS.find((p) => p.id === u.plan)?.name ?? u.plan : '—'}</td>
-                          <td className="px-3 py-2.5">
-                            <Badge tone={u.hasAccount ? 'success' : 'neutral'}>{u.hasAccount ? 'Active' : 'No account'}</Badge>
-                          </td>
-                          <td className="px-3 py-2.5 text-muted">{fmtDate(u.joinedAt, 'MMM d, yyyy')}</td>
-                          <td className="px-3 py-2.5">
-                            <MemberRowActions memberId={u.member.id} name={u.name} role={u.role} familyId={u.family?.id ?? null} plan={u.plan} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <UsersTable rows={pageRows.map((u) => ({
+                  memberId: u.member.id, name: u.name, email: u.email,
+                  familyName: u.family?.name ?? null, familyId: u.family?.id ?? null,
+                  role: u.role, plan: u.plan, hasAccount: u.hasAccount, joinedAt: u.joinedAt,
+                }))} />
               )}
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">

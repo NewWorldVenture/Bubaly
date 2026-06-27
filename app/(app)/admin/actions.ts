@@ -174,6 +174,39 @@ export async function adminUpdateFamilyPlanAction(input: { familyId: string; pla
   return { ok: true };
 }
 
+/** Bulk-set the role on many members (admin). */
+export async function adminBulkUpdateRoleAction(input: { memberIds: string[]; role: MemberRole }): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+  if (!EDITABLE_ROLES.includes(input.role)) return { ok: false, error: 'Invalid role.' };
+  const ids = input.memberIds.filter(Boolean).slice(0, 500);
+  if (ids.length === 0) return { ok: false, error: 'No members selected.' };
+
+  const supabase = createServiceClient();
+  const { error } = await supabase.from('family_members').update({ role: input.role }).in('id', ids);
+  if (error) return { ok: false, error: error.message };
+
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'family_members', metadata: { role: input.role, count: ids.length, bulk: true } });
+  revalidatePath('/admin/users');
+  return { ok: true };
+}
+
+/** Bulk-remove many members from their families (soft delete; admin). */
+export async function adminBulkRemoveAction(input: { memberIds: string[] }): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+  const ids = input.memberIds.filter(Boolean).slice(0, 500);
+  if (ids.length === 0) return { ok: false, error: 'No members selected.' };
+
+  const supabase = createServiceClient();
+  const { error } = await supabase.from('family_members').update({ is_active: false }).in('id', ids);
+  if (error) return { ok: false, error: error.message };
+
+  await adminAuditLog({ familyId: null, action: 'remove', resource: 'family_members', metadata: { count: ids.length, bulk: true } });
+  revalidatePath('/admin/users');
+  return { ok: true };
+}
+
 /** Rename a family (admin). */
 export async function adminRenameFamilyAction(input: { familyId: string; name: string }): Promise<Result> {
   const guard = await assertSuperAdmin();
