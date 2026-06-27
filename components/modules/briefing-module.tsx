@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import {
@@ -618,6 +618,10 @@ export function BriefingModule() {
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<Partial<Record<TabType, string>>>({});
   const [now, setNow] = useState(new Date());
+  const [hydrated, setHydrated] = useState(false);
+  // Tabs we've already attempted to auto-generate, so a failure doesn't loop
+  // and switching back and forth doesn't re-fire the AI call.
+  const autoTried = useRef<Set<TabType>>(new Set());
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000);
@@ -638,6 +642,7 @@ export function BriefingModule() {
         }
       } catch { /* ignore */ }
     });
+    setHydrated(true);
   }, [today]);
 
   const generate = useCallback(async (type: Exclude<TabType, 'kitchen'>) => {
@@ -661,6 +666,18 @@ export function BriefingModule() {
       setLoading(false);
     }
   }, [today]);
+
+  // Frictionless: once the per-day cache has hydrated, auto-generate the active
+  // tab if it has no briefing yet — so opening the briefing just shows it,
+  // instead of asking the user to click "Generate". Guarded so a failure won't
+  // loop and tab-switching won't re-fire. Kitchen mode never auto-generates.
+  useEffect(() => {
+    if (!hydrated || tab === 'kitchen') return;
+    if (briefings[tab] || loading || error) return;
+    if (autoTried.current.has(tab)) return;
+    autoTried.current.add(tab);
+    void generate(tab);
+  }, [hydrated, tab, briefings, loading, error, generate]);
 
   // Live data for kitchen mode
   const { data: rawEvents } = useRealtimeQuery<CalEvent>({
