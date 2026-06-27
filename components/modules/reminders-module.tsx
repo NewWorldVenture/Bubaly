@@ -23,7 +23,7 @@ import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
-  EARLY_REMINDER_OPTIONS, earlyReminderLabel, parseTags, formatTags, normalizeSubtasks, newSubtask, subtaskProgress,
+  EARLY_REMINDER_OPTIONS, earlyReminderLabel, parseTags, formatTags, normalizeSubtasks, newSubtask, subtaskProgress, nextRemindAt,
   type Subtask,
 } from '@/lib/reminders/details';
 import type { Tables } from '@/lib/database.types';
@@ -132,12 +132,34 @@ export function RemindersModule() {
   const overdue = reminders.filter(isOverdue);
   const activeCount = reminders.filter((r) => r.status === 'active').length;
 
-  function complete(id: string) {
-    return run(`complete:${id}`, async () => {
-      const { error } = await createClient().from('family_reminders')
-        .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', id);
+  function complete(reminder: Reminder) {
+    return run(`complete:${reminder.id}`, async () => {
+      const supabase = createClient();
+      const { error } = await supabase.from('family_reminders')
+        .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', reminder.id);
       if (error) throw error;
-      success('Reminder completed ✓');
+
+      // Recurring reminder → spawn the next occurrence so it keeps recurring
+      // (the completed one stays as history, like iOS).
+      let recurred = false;
+      const next = reminder.remind_at && reminder.recurrence !== 'none'
+        ? nextRemindAt(reminder.remind_at, reminder.recurrence) : null;
+      if (next) {
+        const nextRow = {
+          family_id: familyId, created_by: userId, title: reminder.title, notes: reminder.notes,
+          kind: reminder.kind, priority: reminder.priority, recurrence: reminder.recurrence,
+          location_name: reminder.location_name, remind_at: next, member_id: reminder.member_id,
+          assigned_to_id: reminder.assigned_to_id, url: reminder.url, flagged: reminder.flagged,
+          early_reminder_minutes: reminder.early_reminder_minutes, image_url: reminder.image_url,
+          // Fresh occurrence starts with its subtasks unchecked.
+          subtasks: normalizeSubtasks(reminder.subtasks).map((s) => ({ ...s, done: false })) as unknown as Reminder['subtasks'],
+          list_id: reminder.list_id, tags: reminder.tags, status: 'active',
+        };
+        let { error: insErr } = await supabase.from('family_reminders').insert(nextRow);
+        if (insErr && isMissingRelationError(insErr)) ({ error: insErr } = await supabase.from('family_reminders').insert(stripNewCols(nextRow)));
+        recurred = !insErr;
+      }
+      success(recurred ? 'Completed ✓ — next one scheduled' : 'Reminder completed ✓');
       void refresh();
     });
   }
@@ -315,7 +337,7 @@ export function RemindersModule() {
                   snoozed && 'border-warning/30 bg-warning/5',
                 )}>
                 {/* Complete button */}
-                <button onClick={() => !completed && complete(reminder.id)} disabled={completed || isPending(`complete:${reminder.id}`)}
+                <button onClick={() => !completed && complete(reminder)} disabled={completed || isPending(`complete:${reminder.id}`)}
                   aria-label={completed ? 'Completed' : 'Mark complete'}
                   className={cn(
                     'mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 transition',

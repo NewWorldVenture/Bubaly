@@ -78,6 +78,29 @@ export function subtaskProgress(subtasks: Subtask[]): { done: number; total: num
   return { done: subtasks.filter((s) => s.done).length, total: subtasks.length };
 }
 
+/**
+ * The next occurrence of a recurring reminder after `remindAtIso`, or null for a
+ * one-off ('none'). Mirrors the recurrence options: daily, weekdays (next
+ * Mon–Fri), weekly, biweekly, monthly, yearly.
+ */
+export function nextRemindAt(remindAtIso: string, recurrence: string): string | null {
+  const d = new Date(remindAtIso);
+  if (Number.isNaN(d.getTime())) return null;
+  switch (recurrence) {
+    case 'daily': d.setDate(d.getDate() + 1); break;
+    case 'weekdays': {
+      do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
+      break;
+    }
+    case 'weekly': d.setDate(d.getDate() + 7); break;
+    case 'biweekly': d.setDate(d.getDate() + 14); break;
+    case 'monthly': d.setMonth(d.getMonth() + 1); break;
+    case 'yearly': d.setFullYear(d.getFullYear() + 1); break;
+    default: return null; // 'none' or unknown
+  }
+  return d.toISOString();
+}
+
 /** True for a usable http(s) URL. */
 export function isValidHttpUrl(url: string): boolean {
   try {

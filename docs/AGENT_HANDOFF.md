@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-27 — Reminders list-filtering follow-up (after #167/#168 merged). Keep this updated as you ship.
+Last updated: 2026-06-27 — Reminders recurrence advancement + list-filtering + notifications (after #167/#168 merged). Keep this updated as you ship.
 
 > ## ⏰ REMINDERS — LIST FILTERING (follow-up to merged #167, branch `claude/festive-bohr-m4cbeg`)
 > #167 (iOS-parity reminder details: lists/url/early-reminder/flag/subtasks/image/tags via migration 0100)
@@ -14,6 +14,12 @@ Last updated: 2026-06-27 — Reminders list-filtering follow-up (after #167/#168
 > 24h window) + `reminderFetchHorizonIso`; wired into `lib/server/notifications.ts` `generateFamilyNotifications`
 > (new `family_reminders` block, dedup `fr:${id}`, push+email via the existing pipeline). Pre-0100-safe
 > (`early_reminder_minutes` query degrades to no-op).
+> **Also added recurrence advancement** (recurring reminders were inert — recurrence stored but completing
+> never spawned the next one): `nextRemindAt(remindAtIso, recurrence)` in `lib/reminders/details.ts` (PURE,
+> +3 tests → 10 total) does the date math (daily / weekdays-skip-weekend / weekly / biweekly / monthly /
+> yearly; null for `none`/bad input). `complete(reminder)` in `reminders-module.tsx` now marks the current
+> one `completed` (kept as history, iOS-style) and inserts the next occurrence (subtasks reset to unchecked,
+> `status:'active'`); toast says "Completed ✓ — next one scheduled". stripNewCols fallback keeps it pre-0100-safe.
 > NOTE: main now has a **0098 collision** — `0098_relationship_helper.sql` AND `0098_trip_intelligence.sql`
 > both exist (parallel merges). Harmless to the app but the next migration author should be aware; apply both.
 >
