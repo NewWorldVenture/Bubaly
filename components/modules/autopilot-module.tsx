@@ -35,6 +35,11 @@ function iconFor(kind: string) {
   return KIND_ICON[kind] ?? CircleDot;
 }
 
+// Map a suggestion kind → a family_reminders kind (its taxonomy: time/bill/chore/…).
+const REMINDER_KIND: Record<string, string> = {
+  medication: 'medication', finance: 'bill', insurance: 'bill', chore: 'chore',
+};
+
 export function AutopilotModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -87,17 +92,22 @@ export function AutopilotModule() {
 
   async function resolve(s: Suggestion, status: 'approved' | 'executed' | 'dismissed') {
     const supabase = createClient();
-    // Reversible execution for reminders the family approves.
+    // Approving a "create reminder" suggestion writes a real reminder the family
+    // sees on the Reminders page (family_reminders, ai_suggested) and which the
+    // notification cron picks up.
     if ((status === 'approved' || status === 'executed') && s.action_type === 'create_reminder') {
       const payload = (s.payload ?? {}) as { title?: string; at?: string };
-      await supabase.from('reminders').insert({
+      await supabase.from('family_reminders').insert({
         family_id: familyId,
+        created_by: userId,
         title: payload.title ?? s.title,
+        notes: s.detail ?? null,
+        kind: REMINDER_KIND[s.kind] ?? 'time',
+        priority: s.urgency >= 3 ? 'high' : s.urgency === 2 ? 'medium' : 'low',
         remind_at: payload.at ?? new Date().toISOString(),
         member_id: s.member_id,
-        related_type: s.source_kind === 'appointments' ? 'appointment' : 'renewal',
-        related_id: s.source_id,
-        created_by: userId,
+        status: 'active',
+        ai_suggested: true,
       });
       status = 'executed';
     }

@@ -52,6 +52,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     { data: school },
     { data: sports },
     { data: reminders },
+    { data: familyReminders },
     { data: docs },
     { data: renewalsDue },
     { data: signupsDue },
@@ -65,6 +66,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     supabase.from('school_events').select('id, title, starts_at, member_id, event_type').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
     supabase.from('sports_events').select('id, title, starts_at, member_id, sport, location').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
     supabase.from('reminders').select('id, title, remind_at, member_id, is_done').eq('family_id', familyId).eq('is_done', false).gte('remind_at', nowIso).lte('remind_at', in24),
+    // The user-facing Reminders feature (incl. AI-approved reminders from the Front Desk / Autopilot).
+    supabase.from('family_reminders').select('id, title, remind_at, member_id, status').eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).gte('remind_at', nowIso).lte('remind_at', in24),
     supabase.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', nowIso).lte('expires_at', in14d),
     // Renewals within ~90d (per-item reminder window applied in code) and open signups within 7d.
     supabase.from('renewals').select('id, title, expires_at, reminder_days, status').eq('family_id', familyId).eq('status', 'active').gte('expires_at', todayKey).lte('expires_at', renewalMaxKey),
@@ -130,6 +133,15 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null,
       title: `Reminder: ${r.title}`,
       body: `Due ${timeLabel(r.remind_at)}`,
+    });
+  }
+
+  for (const r of familyReminders ?? []) {
+    candidates.push({
+      type: 'system', related_type: 'family_reminders', related_id: r.id,
+      user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null,
+      title: `Reminder: ${r.title}`,
+      body: r.remind_at ? `Due ${timeLabel(r.remind_at)}` : 'Reminder',
     });
   }
 

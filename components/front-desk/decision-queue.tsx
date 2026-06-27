@@ -31,6 +31,11 @@ const KIND_ICON: Record<string, typeof CircleDot> = {
 };
 const iconFor = (kind: string) => KIND_ICON[kind] ?? CircleDot;
 
+// Map a suggestion kind → a family_reminders kind (its taxonomy: time/bill/chore/…).
+const REMINDER_KIND: Record<string, string> = {
+  medication: 'medication', finance: 'bill', insurance: 'bill', chore: 'chore',
+};
+
 function startOfToday(): string {
   const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString();
 }
@@ -99,17 +104,22 @@ export function DecisionQueue() {
 
   // Apply one resolution (no toast/refresh) — shared by single + batch actions.
   async function applyResolve(supabase: ReturnType<typeof createClient>, s: Suggestion, status: 'approved' | 'executed' | 'dismissed') {
-    // Reversible execution for reminders the family approves (mirrors Autopilot).
+    // Approving a "create reminder" suggestion writes a real reminder the family
+    // sees on the Reminders page (family_reminders, ai_suggested) — and which the
+    // notification cron also picks up.
     if ((status === 'approved' || status === 'executed') && s.action_type === 'create_reminder') {
       const payload = (s.payload ?? {}) as { title?: string; at?: string };
-      await supabase.from('reminders').insert({
+      await supabase.from('family_reminders').insert({
         family_id: familyId,
+        created_by: userId,
         title: payload.title ?? s.title,
+        notes: s.detail ?? null,
+        kind: REMINDER_KIND[s.kind] ?? 'time',
+        priority: s.urgency >= 3 ? 'high' : s.urgency === 2 ? 'medium' : 'low',
         remind_at: payload.at ?? new Date().toISOString(),
         member_id: s.member_id,
-        related_type: s.source_kind === 'appointments' ? 'appointment' : 'renewal',
-        related_id: s.source_id,
-        created_by: userId,
+        status: 'active',
+        ai_suggested: true,
       });
       status = 'executed';
     }

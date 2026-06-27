@@ -6,7 +6,21 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 ## ▶ CURRENT STATE (read this first)
 - **Active branch:** `claude/continuation-an1mam` (all work below is committed + pushed here).
 
-> ### ⚠️ KNOWN ISSUE — TWO REMINDER TABLES (split-brain; needs a product decision)
+> ### ✅ RESOLVED (2026-06-27) — Front Desk / Autopilot reminders now hit the Reminders page
+> Per product decision, **AI-approved reminders now write to `family_reminders`** (the user-facing
+> Reminders page), with `ai_suggested: true` (the page already renders an "AI suggested" badge for these)
+> and a kind/priority mapped from the suggestion. Changed: `components/front-desk/decision-queue.tsx`
+> and `components/modules/autopilot-module.tsx` (`applyResolve`/`resolve` insert → `family_reminders`).
+> To avoid losing the reminder ping, **`family_reminders` is now a notification source** in
+> `lib/server/notifications.ts` (new query + `related_type: 'family_reminders'` candidate loop; dedup is
+> generic on `type:related_id:user`, so no collision with `reminders`). Bonus: manually-created
+> Reminders-page entries now notify too. Still-on-`reminders` writers (auto-exec in `lib/autopilot/scan.ts`,
+> AI assistant `lib/ai/actions.ts` + `lib/assistant/tools.ts`) keep notifying via the existing `reminders`
+> source — unchanged; they just don't appear on the Reminders page (acceptable, can migrate later).
+> Residual: the briefing/`display` still read `reminders` only, so AI-approved reminders won't appear in
+> those specific lists (minor; the Front Desk + Reminders page + notifications cover the need).
+
+> ### ⚠️ ORIGINAL ISSUE — TWO REMINDER TABLES (split-brain) — see RESOLVED note above
 > There are two reminder stores and they don't talk to each other:
 > - **`reminders`** — written by Autopilot (`autopilot-module`, `lib/autopilot/scan.ts`), the Front Desk
 >   **decision queue** (`components/front-desk/decision-queue.tsx`), and the AI assistant
