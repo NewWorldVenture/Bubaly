@@ -687,9 +687,9 @@ export interface Database {
         Partial<{ opponent: string; our_score: number; their_score: number; date: string; result: GameResult; notes: string | null }>
       >;
       user_preferences: T<
-        { user_id: string; theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; default_dashboard: DashboardView; notification_prefs: Json } & Stamps,
-        { user_id: string; theme?: ThemePref; push_enabled?: boolean; email_enabled?: boolean; expo_push_token?: string | null; active_family_id?: string | null; default_dashboard?: DashboardView; notification_prefs?: Json },
-        Partial<{ theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; default_dashboard: DashboardView; notification_prefs: Json }>
+        { user_id: string; theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; default_dashboard: DashboardView; notification_prefs: Json; ui_prefs: Json } & Stamps,
+        { user_id: string; theme?: ThemePref; push_enabled?: boolean; email_enabled?: boolean; expo_push_token?: string | null; active_family_id?: string | null; default_dashboard?: DashboardView; notification_prefs?: Json; ui_prefs?: Json },
+        Partial<{ theme: ThemePref; push_enabled: boolean; email_enabled: boolean; expo_push_token: string | null; active_family_id: string | null; default_dashboard: DashboardView; notification_prefs: Json; ui_prefs: Json }>
       >;
       // ── Site-wide super admin allowlist (email-keyed; readable only via is_super_admin()) ──
       super_admins: T<

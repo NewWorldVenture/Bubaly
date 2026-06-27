@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/toast';
 import {
   availableQuickRoutes, resolveQuickRoutes, defaultQuickRouteKeys, type QuickRoute,
 } from '@/lib/capture/quick-routes';
+import { saveCaptureRoutesAction } from '@/app/(app)/capture/actions';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
 
@@ -48,9 +49,9 @@ function routeCapture(text: string): { destination: string; url: string } {
   return { destination: 'AI Assistant', url: `/dashboard/assistant?q=${encodeURIComponent(text)}` };
 }
 
-export function CaptureShell({ planLevel = 0 }: { planLevel?: number }) {
+export function CaptureShell({ planLevel = 0, savedRouteKeys = null }: { planLevel?: number; savedRouteKeys?: string[] | null }) {
   const router = useRouter();
-  const { error: toastError } = useToast();
+  const { success, error: toastError } = useToast();
   const [mode, setMode] = useState<CaptureMode>('type');
   const [text, setText] = useState('');
   const [routing, setRouting] = useState(false);
@@ -59,17 +60,24 @@ export function CaptureShell({ planLevel = 0 }: { planLevel?: number }) {
   const textRef = useRef<HTMLTextAreaElement>(null);
 
   // Quick-jump buttons: tier-gated catalog + the user's saved customization.
+  // Source of truth is Supabase (synced across devices); localStorage is an
+  // offline cache used only when the server has no saved selection yet.
   const available = useMemo(() => availableQuickRoutes(planLevel), [planLevel]);
-  const [savedKeys, setSavedKeys] = useState<string[] | null>(null);
+  const [savedKeys, setSavedKeys] = useState<string[] | null>(savedRouteKeys);
   const [customizing, setCustomizing] = useState(false);
-  useEffect(() => { setSavedKeys(loadSavedKeys()); }, []);
+  useEffect(() => {
+    if (savedRouteKeys == null) setSavedKeys(loadSavedKeys());
+  }, [savedRouteKeys]);
   const quickRoutes = useMemo(() => resolveQuickRoutes(savedKeys, planLevel), [savedKeys, planLevel]);
 
-  function saveRoutes(keys: string[]) {
+  async function saveRoutes(keys: string[]) {
     // An empty selection means "use the tier default" rather than no buttons.
     const next = keys.length > 0 ? keys : defaultQuickRouteKeys(planLevel);
-    setSavedKeys(next);
-    try { window.localStorage.setItem(ROUTES_STORAGE_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+    setSavedKeys(next); // optimistic
+    try { window.localStorage.setItem(ROUTES_STORAGE_KEY, JSON.stringify(next)); } catch { /* cache unavailable */ }
+    const res = await saveCaptureRoutesAction(next);
+    if (res.ok) success('Buttons saved');
+    else toastError('Saved on this device — sync will retry later.');
   }
 
   function handleInput(value: string) {
