@@ -1,7 +1,38 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the production bug sweep + frictionless Quick Capture (PR #163). Keep this updated as you ship.
+Last updated after the UX polish pass (PR pending). Keep this updated as you ship.
+
+> ## ✨ UX POLISH PASS (PR pending) — perceived-perf + recovery + skeletons
+> Branch `claude/ux-polish-pass`. Shipped, low-risk, app-wide UX upgrades. No migration.
+> - **Skeleton system** in `components/ui/states.tsx`: `Skeleton`, `SkeletonText`, `SkeletonCard`,
+>   `SkeletonList` (respect `motion-reduce`, `role=status`). Prefer over bare spinners for content.
+> - **`app/(app)/loading.tsx`** — route-level skeleton for the whole authed app → instant feedback on
+>   every navigation, no blank flash, no layout shift. (Additive; Next.js shows it only during loads.)
+> - **Recovery pages (no dead ends):** `not-found.tsx` now offers "Go to dashboard" + "Back to home";
+>   `error.tsx` adds "Go to dashboard" + shows the error `digest` as a support reference.
+> - Verified: tsc clean · eslint clean · build ✓ · suite 1153/1153.
+>
+> ### 🎯 UX BACKLOG for the next agent (prioritized; app is already mature, so these are incremental)
+> The product is broad (~70 modules) and already has shared `EmptyState`/`ErrorState`/`LoadingBlock`,
+> tier gating, dark/light, mobile bottom-sheet modals (safe-area fixed in #163), and world-class wallet
+> screens. Highest-leverage remaining UX work, in order:
+> 1. **Adopt `SkeletonList` in module loading states** — replace `LoadingBlock` in the busiest modules
+>    (chores, meals, calendar, grocery, dashboard widgets) for matched-layout loading. Mechanical, safe.
+> 2. **Per-route `loading.tsx`** for heavy routes (calendar, photos, documents, wallet) with layout-
+>    matched skeletons (subnav + cards), beyond the generic app-level one added here.
+> 3. **Dashboard command-center pass** — confirm every card is clickable + routes correctly; ensure
+>    "needs attention" + quick actions are above the fold on mobile.
+> 4. **Form audit** — input types (`inputMode`, `type=email/tel`), sticky mobile submit, inline
+>    validation + success toasts, autosave where natural. (Quick Capture already NL-parses.)
+> 5. **Upgrade prompts** — make contextual + helpful (show value at the moment of need), never modal-spam.
+> 6. **A11y sweep** — focus traps in modals, visible focus rings (already `focus-ring`), aria-labels on
+>    icon-only buttons, contrast check on muted text in light mode; target WCAG 2.2 AA.
+> 7. **Copy pass** — tighten titles/CTAs/empty states to be short + human; remove any jargon on
+>    consumer pages (Stripe Treasury/Issuing terms are already hidden behind capability detection).
+> 8. **Consistency** — audit one-off card/button styles; consolidate to the shared primitives.
+> NOTE: vitest is node-only (no jsdom) — component render tests aren't set up; presentational changes
+> are verified via `tsc` + `next build`. Keep pure logic in tested `lib/*` helpers.
 
 > ## 💳 STRIPE SETUP + $0.90 SERVICE FEE (new, branch `claude/festive-bohr-m4cbeg`)
 > The Bubaly Stripe account is now configurable in Super Admin, and a configurable per-transaction service
