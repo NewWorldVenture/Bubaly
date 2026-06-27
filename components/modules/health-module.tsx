@@ -13,6 +13,7 @@ import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
+import { toLocalDateTimeInput, QUICK_TIME_PRESETS } from '@/lib/utils/quick-dates';
 import type { Tables, MetricType } from '@/lib/database.types';
 
 type HealthMetric = Tables<'health_metrics'>;
@@ -807,7 +808,19 @@ export function HealthModule() {
         <div className="space-y-4">
           <Field label="Title">{(id) => <Input id={id} value={apptForm.title} onChange={(e) => setApptForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Annual Physical" />}</Field>
           <Field label="Member">{(id) => <Select id={id} value={apptForm.member_id} onChange={(e) => setApptForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">All</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="Date & Time">{(id) => <Input id={id} type="datetime-local" value={apptForm.starts_at} onChange={(e) => setApptForm((f) => ({ ...f, starts_at: e.target.value }))} />}</Field>
+          <Field label="Date & Time">{(id) => (
+            <div className="space-y-2">
+              <Input id={id} type="datetime-local" value={apptForm.starts_at} onChange={(e) => setApptForm((f) => ({ ...f, starts_at: e.target.value }))} />
+              <div className="flex flex-wrap gap-1.5">
+                {QUICK_TIME_PRESETS.map((q) => (
+                  <button key={q.label} type="button" onClick={() => setApptForm((f) => ({ ...f, starts_at: toLocalDateTimeInput(q.compute()) }))}
+                    className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted transition hover:border-brand/40 hover:text-brand">
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}</Field>
           <Field label="Notes (Provider, Location)">{(id) => <Input id={id} value={apptForm.notes} onChange={(e) => setApptForm((f) => ({ ...f, notes: e.target.value }))} placeholder="e.g. Dr. Martinez · Oak Medical" />}</Field>
           <Button onClick={saveAppointment} disabled={saving || !apptForm.title || !apptForm.starts_at} loading={saving} className="w-full">{saving ? 'Saving...' : 'Add Appointment'}</Button>
         </div>
