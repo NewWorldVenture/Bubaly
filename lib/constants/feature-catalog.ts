@@ -21,6 +21,7 @@ const F = (key: string, label: string, section: FeatureSection, defaultTier: Fea
 
 export const FEATURE_CATALOG: FeatureDef[] = [
   // ── Suggested ──────────────────────────────────────────────
+  F('front-desk', 'Family Front Desk', 'Suggested', 'plus', '/dashboard/front-desk'),
   F('parent-dashboard', 'Parent Dashboard', 'Suggested', 'free', '/dashboard'),
   F('family-dashboard', 'Family Dashboard', 'Suggested', 'free', '/dashboard'),
   F('calendar', 'Calendar', 'Suggested', 'free', '/dashboard/calendar'),

@@ -1,10 +1,31 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Brand realignment — "Less Managing Life. More Living It." (2026-06-27). Keep this updated as you ship.
+Last updated: Family Front Desk — the AI concierge hub (2026-06-27). Keep this updated as you ship.
 
 ## ▶ CURRENT STATE (read this first)
 - **Active branch:** `claude/continuation-an1mam` (all work below is committed + pushed here).
+
+> **Session update (2026-06-27) — FAMILY FRONT DESK (the AI concierge hub).**
+> Packages the scattered concierge capabilities into one branded surface — the "Family AI Front Desk"
+> from the product vision (every call answered / email understood / form processed). The capabilities
+> already existed across ~80 routes; this is the LOBBY that unifies them + puts the only-what-needs-you
+> decision queue front and center. **No migration — 100% wired over existing tables.**
+> - **`app/(app)/dashboard/front-desk/page.tsx`** (server, `requireFeature('/dashboard/front-desk')`,
+>   Family+/plus). Hero (brand voice) → `<DecisionQueue/>` → 8 concierge channel cards. Live counts via
+>   `documents` (head count) + upcoming `calendar_events`; phone/SMS status from `isTwilioConfigured()`.
+> - **`components/front-desk/decision-queue.tsx`** (client) — the "AI Executive Dashboard": reads
+>   `autopilot_suggestions` (status='open') via `useRealtimeQuery`, one-tap approve/dismiss, reuses the
+>   EXACT resolve logic from `autopilot-module.tsx` (incl. reversible `create_reminder` execution) so the
+>   two stay consistent. Shows "N handled today" from suggestions resolved since local midnight.
+> - **Channel → real surface map:** Phone/SMS → `/guardian` (Twilio call-screening), Email → `/dashboard/inbox`
+>   (Magic Import), Document → `/dashboard/documents`, Scheduling → `/dashboard/calendar` (the Find-a-time
+>   work from earlier this session), Automation → `/dashboard/autopilot`, Memory → `/dashboard/family-memory`,
+>   Personal Assistant → `/dashboard/briefing`. All routes pre-existing & verified.
+> - **Registered:** `lib/constants/feature-catalog.ts` (`front-desk`, plus), `lib/constants/plans.ts`
+>   ROUTE_PLAN_LEVEL (`/dashboard/front-desk: 2`), `lib/constants/navigation.ts` (flagship — first item in
+>   the "Family AI OS" group, `Headset` icon, minLevel 2).
+> - Verified: tsc clean · build exit 0 · **1056/1056**. No migration, no new env. Production-ready now.
 
 > **Session update (2026-06-27) — BRAND REALIGNMENT: "Less Managing Life. More Living It."**
 > New positioning **"The AI Operating System for Family Life"** + primary tagline
