@@ -53,6 +53,10 @@ export type CareLogType = 'check_in' | 'visit' | 'call' | 'meal' | 'medication' 
 export type OpportunityStatus = 'interested' | 'registered' | 'waitlisted' | 'passed' | 'missed';
 export type LocationEventType = 'arrived' | 'left' | 'ping';
 export type WishPriority = 'low' | 'medium' | 'high';
+export type RelationshipDateKind = 'anniversary' | 'birthday' | 'first_date' | 'date_night' | 'milestone' | 'custom';
+export type RelationshipDateStatus = 'idea' | 'planned' | 'booked' | 'upcoming' | 'completed' | 'cancelled';
+export type RelationshipGiftSource = 'manual' | 'ai' | 'wishlist';
+export type RelationshipGiftStatus = 'idea' | 'saved' | 'ordered' | 'purchased' | 'given';
 export type DoseStatus = 'taken' | 'skipped' | 'missed';
 export type WeekPattern = 'all' | 'a' | 'b';
 export type TripStatus = 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
@@ -306,6 +310,21 @@ export interface Database {
         { id: string; family_id: string; member_id: string; title: string; url: string | null; price: number | null; priority: WishPriority; notes: string | null; claimed_by: string | null; claimed_at: string | null; is_purchased: boolean; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; title: string; url?: string | null; price?: number | null; priority?: WishPriority; notes?: string | null; claimed_by?: string | null; claimed_at?: string | null; is_purchased?: boolean; created_by?: string | null },
         Partial<{ member_id: string; title: string; url: string | null; price: number | null; priority: WishPriority; notes: string | null; claimed_by: string | null; claimed_at: string | null; is_purchased: boolean }>
+      >;
+      relationship_profile: T<
+        { id: string; family_id: string; created_by: string | null; partner_name: string | null; partner_member_id: string | null; interests: string[]; love_languages: string[]; gift_budget_cents: number | null; notes: string | null } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; partner_name?: string | null; partner_member_id?: string | null; interests?: string[]; love_languages?: string[]; gift_budget_cents?: number | null; notes?: string | null },
+        Partial<{ partner_name: string | null; partner_member_id: string | null; interests: string[]; love_languages: string[]; gift_budget_cents: number | null; notes: string | null }>
+      >;
+      relationship_dates: T<
+        { id: string; family_id: string; created_by: string | null; kind: RelationshipDateKind; title: string; event_date: string; recurs_annually: boolean; reminder_days_before: number; member_id: string | null; partner_name: string | null; location: string | null; notes: string | null; status: RelationshipDateStatus } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; kind?: RelationshipDateKind; title: string; event_date: string; recurs_annually?: boolean; reminder_days_before?: number; member_id?: string | null; partner_name?: string | null; location?: string | null; notes?: string | null; status?: RelationshipDateStatus },
+        Partial<{ kind: RelationshipDateKind; title: string; event_date: string; recurs_annually: boolean; reminder_days_before: number; member_id: string | null; partner_name: string | null; location: string | null; notes: string | null; status: RelationshipDateStatus }>
+      >;
+      relationship_gift_ideas: T<
+        { id: string; family_id: string; created_by: string | null; for_member_id: string | null; for_name: string | null; title: string; url: string | null; price_cents: number | null; occasion: string | null; reason: string | null; source: RelationshipGiftSource; wishlist_item_id: string | null; status: RelationshipGiftStatus } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; for_member_id?: string | null; for_name?: string | null; title: string; url?: string | null; price_cents?: number | null; occasion?: string | null; reason?: string | null; source?: RelationshipGiftSource; wishlist_item_id?: string | null; status?: RelationshipGiftStatus },
+        Partial<{ for_member_id: string | null; for_name: string | null; title: string; url: string | null; price_cents: number | null; occasion: string | null; reason: string | null; source: RelationshipGiftSource; wishlist_item_id: string | null; status: RelationshipGiftStatus }>
       >;
       family_announcements: T<
         { id: string; family_id: string; author_id: string | null; author_member_id: string | null; title: string; body: string | null; is_pinned: boolean } & Stamps,

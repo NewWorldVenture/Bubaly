@@ -69,6 +69,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/announcements', label: 'Announcements', icon: Megaphone, minLevel: 0 },
       { href: '/dashboard/activity', label: 'Activity Feed', icon: Activity, minLevel: 0 },
       { href: '/dashboard/celebrations', label: 'Celebrations', icon: Cake, minLevel: 0 },
+      { href: '/dashboard/relationship', label: 'Relationship Helper', icon: HeartHandshake, minLevel: 0 },
       { href: '/dashboard/readiness', label: 'Readiness', icon: Gauge, minLevel: 0 },
       { href: '/dashboard/memories', label: 'Memories', icon: BookHeart, minLevel: 0 },
       { href: '/dashboard/family-tree', label: 'Family Tree', icon: GitBranch, minLevel: 0 },

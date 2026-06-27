@@ -3,6 +3,27 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the production bug sweep + frictionless Quick Capture (PR #163). Keep this updated as you ship.
 
+> ## 💞 RELATIONSHIP HELPER (new feature, branch `claude/festive-bohr-m4cbeg`)
+> Track anniversaries / birthdays / date nights, store partner preferences, keep a gift-idea list, and get
+> AI nudges + tailored gift ideas grounded in the partner's wishlist. tsc/lint clean · build ✓ · **1172 tests** (+19).
+> - **Migration `0098_relationship_helper.sql`** ⚠️ NOT APPLIED TO PROD — 3 tables: `relationship_profile`
+>   (1/family: partner_name, partner_member_id, interests[], love_languages[], gift_budget_cents, notes),
+>   `relationship_dates` (kind anniversary/birthday/first_date/date_night/milestone/custom; event_date;
+>   recurs_annually; reminder_days_before; status), `relationship_gift_ideas` (source manual/ai/wishlist;
+>   status idea→saved→ordered→purchased→given; optional wishlist_item_id FK). Family-scoped RLS + triggers + realtime.
+> - **`lib/relationship/dates.ts`** (PURE, **12 tests**): `nextOccurrence` (annual roll-forward), `daysUntil`,
+>   `upcomingDates` (sorted, drops past one-offs, computes the ordinal/age), `isReminderDue`, `formatCountdown`,
+>   `milestoneLabel` ("8th anniversary", "turns 36").
+> - **`lib/relationship/gifts.ts`** (PURE, **7 tests**): `suggestGiftsFromWishlist` (drop purchased/claimed,
+>   budget filter, rank by priority then price, → cents), `buildRelationshipDigestPrompt`/`parseRelationshipDigest`.
+> - **`/api/ai/relationship`** — loads profile + upcoming(90d) + partner's ranked wishlist → AI digest
+>   `{headline, prompts[], giftIdeas[]}`. Degrades 503 if tables missing.
+> - **`/dashboard/relationship`** (`components/modules/relationship-module.tsx`, free/level 0; nav under Daily
+>   Life) — realtime client CRUD for dates + gift ideas + partner prefs; AI suggestions panel ("Save" each
+>   idea → gift list); "From wishlist" picker; countdown + reminder badges. Degrades to empty pre-migration
+>   (the hook swallows missing-table). **Next (optional):** surface upcoming dates on the home dashboard;
+>   per-day metering on the AI route.
+>
 > ## 🎯 BRAND FOUNDATION — "Less Life Admin. More Living Life." (in progress, branch `claude/festive-bohr-m4cbeg`)
 > New primary tagline + positioning rolled across the marketing site & shared metadata. Hero headline:
 > "The AI Operating System for Family Life." Hero sub: "Bubaly quietly handles the logistics of family
