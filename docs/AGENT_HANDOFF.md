@@ -95,6 +95,10 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 > (and a real **Notes** field); `apptForm` state, the insert, and the reset all updated. No migration
 > (columns existed). Concierge-digest input seam audited clean: `bills.due_date`, `home_warranties.expires_on`,
 > `pantry_items.expires_at`, `maintenance_tasks.due_at` all already settable. tsc clean · build 0 · **1061/1061**.
+>
+> Follow-up: surfaced the new med refill date in the meds list too (not just Autopilot) — a
+> `refillBadge(refill_on, refill_reminder_days)` helper renders "Refill overdue/today/in Nd" (rose/amber)
+> on active meds within the member-set reminder window, mirroring how pantry/documents show expiry.
 
 > **Session update (2026-06-27) — FAMILY FRONT DESK (the AI concierge hub).**
 > Packages the scattered concierge capabilities into one branded surface — the "Family AI Front Desk"
