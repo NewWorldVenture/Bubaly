@@ -1,9 +1,29 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Social Feed (consumption) — PR pending. Keep this updated as you ship.
+Last updated after Social Feed access + super-admin full-unlock (PR pending). Keep this updated as you ship.
 
-> ## 📰 SOCIAL FEED — "All your social feeds. One place." (PR pending)
+> ## 🔓 SOCIAL FEED ACCESS + SUPER-ADMIN FULL UNLOCK (PR pending, branch `claude/loving-mccarthy-e1ahq8`)
+> Follow-up to the Social Feed ship (#176, MERGED). Fixes the live `/dashboard/social-feed` 404
+> (route was only on the unmerged branch — now on main, deploys via Vercel), surfaces it in Quick
+> Access, and makes super-admins fully unlocked on the Home dashboard.
+> - **Quick Access button**: added `social_feed` to the dashboard feature registry (`lib/dashboard/registry.ts`,
+>   free tier, icon `rss`) AND to all three `DEFAULT_LAYOUT_BY_TIER` defaults (free/basic/plus) so the
+>   **Social Feed** tile shows by default in the Home "Quick Access" grid and is addable/searchable in Customize.
+>   Added `rss` → `Rss` in `components/dashboard/feature-icons.tsx`. (Nav entry + feature-catalog entry already
+>   shipped with #176.)
+> - **Super-admins fully unlocked on Home**: `components/dashboard/ai-home-dashboard.tsx` now forces
+>   `dashTier = 'plus'` when `isSuperAdmin()` — every Quick Access tile available, nothing locked, the
+>   "Unlock more" upgrade block disappears (`lockedFeatures('plus')` is empty). The sidebar/mobile nav
+>   already unlocked super-admins via `featureAccessByTier(..., isSuperAdmin)`; this closes the last gap.
+> - **`Daniel.Hughen@gmail.com` is a super-admin**: already in the built-in allowlist
+>   (`lib/constants/super-admins.ts`, lowercased `daniel.hughen@gmail.com`) — verified, no change needed.
+>   Super-admin status is also additive via `SUPER_ADMIN_EMAILS` env + the `is_super_admin` RPC.
+> - ⚠️ **Migration `0101_social_feed.sql` still NOT applied to prod** — the route renders (empty state)
+>   but `social_reader_*` tables must be created in Supabase prod before sources/items persist.
+> - Verified: tsc clean · eslint clean · suite **1261/1261** · build ✓ (`/dashboard/social-feed` registered).
+
+> ## 📰 SOCIAL FEED — "All your social feeds. One place." (#176 — MERGED)
 > Branch `claude/social-feed`. A calm, ad-free CONSUMPTION feed at **`/dashboard/social-feed`** —
 > DISTINCT from the existing publishing "Social Command" (`/dashboard/social`). Families connect
 > SOURCES (IG/FB/YouTube/TikTok/X/LinkedIn/Reddit/WhatsApp/Pinterest) → posts land as ITEMS to
@@ -3257,6 +3277,34 @@ Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionles
 > - **To gate a NEW feature:** add it to `FEATURE_CATALOG` (with `href`) → it
 >   auto-appears in `/admin/tier-features` + the pricing matrix; gate the page/layout
 >   with `requireFeature('<href>')`.
+
+> **Session update (2026-06-22d, branch `claude/loving-mccarthy-e1ahq8`):**
+> - **Public-site wiring #55 DONE — marketing Forms now render & accept submissions
+>   publicly.** Admin could author `marketing_forms` (fields jsonb) but nothing
+>   served them; built the public renderer + submit endpoint, mirroring the #54
+>   landing-page PR. **NO migration** (tables `marketing_forms` /
+>   `marketing_form_submissions` already exist; service-role writes bypass RLS).
+> - **Public route** `app/(marketing)/f/[id]/page.tsx` (service-role read, only
+>   `status='active'` + non-deleted forms with ≥1 field) renders the form via a
+>   client `form-renderer.tsx`. Optional `metadata.{title,description,submit_label,
+>   success_message}` customise it. Pages are `robots: noindex` (utility pages).
+> - **Submit endpoint** `POST /api/forms/submit { formId, values }` — rate-limited
+>   (10/min/IP), validates server-side, inserts a `marketing_form_submissions` row
+>   (service role), and fires `fireAutomationEvent('form_submitted', …)` deduped by
+>   `eventSubjectKey('form_submitted', [formId, submissionId])` (best-effort).
+> - **Pure helper** `lib/marketing/forms.ts` (`parseFormFields` w/ type inference for
+>   legacy label/key fields, `validateSubmission`, `submissionEmail`/`submissionName`,
+>   `inputType`/`fieldAutoComplete`) + tests `tests/marketing-forms.test.ts` (10).
+>   Added `/f` + `/api/forms` to `middleware.ts` PUBLIC.
+> - **Admin** (`/admin/marketing/forms`): each form card now shows an Active/Archived
+>   pill, a "View public form" link (`/f/<id>`) when active, and an Activate/Archive
+>   toggle (`setFormStatus`). New forms are created `active` (live immediately).
+> - **NEXT: Asset Library (DAM)** — `marketing_assets` (kind image/video/doc/brand,
+>   storage_path, tags[], dimensions, alt, usage refs) + private bucket
+>   `marketing-assets`; picker reused by Email/Social/Content/Landing. (Then Video,
+>   Personalization — see "Remaining pillars to build" below.) This completes the
+>   public-site wiring gap (#54 + #55); future builders must ship their public
+>   surface in the same PR.
 
 > **Session update (2026-06-22c, branch `claude/lp-public-renderer`):**
 > - **Public-site wiring #54 DONE — landing pages now render publicly.** Admin

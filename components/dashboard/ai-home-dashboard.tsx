@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
 import type { UserContext } from '@/lib/supabase/auth';
+import { isSuperAdmin } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
@@ -271,7 +272,11 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const { data: dashSettingsRow } = await supabase
     .from('family_dashboard_settings').select('allow_child_customization, lock_to_family_default').eq('family_id', familyId).maybeSingle();
   const dashSettings = normalizeSettings(dashSettingsRow ? { allowChildCustomization: dashSettingsRow.allow_child_customization, lockToFamilyDefault: dashSettingsRow.lock_to_family_default } : null);
-  const dashTier = tierForPlanLevel(planLevel(walletSub?.plan ?? null));
+  // Super-admins are fully unlocked everywhere — no plan gating on Quick Access
+  // (every tile available, nothing locked, no "Unlock more"), matching the nav
+  // which already treats super-admins as having access to everything.
+  const superAdmin = await isSuperAdmin();
+  const dashTier = superAdmin ? 'plus' : tierForPlanLevel(planLevel(walletSub?.plan ?? null));
   const layouts = (layoutRows ?? []) as { feature_keys: string[]; scope: string; user_id: string | null }[];
   const myLayout = layouts.find((l) => l.scope === 'user' && l.user_id === ctx.user.id);
   const familyLayout = layouts.find((l) => l.scope === 'family');
