@@ -1,7 +1,12 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-27 — Home dashboard reminder-attention card (after #173 MERGED). Keep this updated as you ship.
+Last updated: 2026-06-27 — PR #175: ported standalone data-wiring features + brand manifesto onto main. Keep this updated as you ship.
+
+> **PR #175 (2026-06-27) — STANDALONE FEATURE PORTS onto `main`** (branch `claude/features-onto-main`)
+> Cherry-picked isolated feature commits from the long-diverged `claude/continuation-an1mam` (merging the whole branch conflicts across the reworked money/economy + Stripe domains). Several needed manual re-application because main's modules were reworked by later PRs. tsc clean · build green · 1240 tests pass.
+> Ported: (1) Autopilot→`family_reminders`; (2) Documents expiry settable + expiring surfaced; (3) Members birthday editable in `EditMemberModal` (Settings); (4) Medications refill date settable; (5) Medications refill-due badge; (6) Appointments structured `provider`/`location` fields (briefing renders "…with {provider} @ {location}"); (7) Homepage `ManifestoBand` (reuses `GradientText`); (8) Reminders text search. No migrations.
+> **KNOWN ISSUE (not fixed — product/schema decision):** two reminder stores exist — `reminders` (Autopilot/Front Desk decision queue, AI assistant; read by briefing/notifications/display) and `family_reminders` (Reminders page + Capture). They don't sync. The Autopilot/Front Desk fixes write to `family_reminders` so approvals appear on the page, but a full unification (single table or a sync) is still open.
 
 > ## 🏠 HOME DASHBOARD — REMINDER ATTENTION CARD (new, branch `claude/festive-bohr-m4cbeg`)
 > Now that `family_reminders` is a first-class notifying service (#173, merged), the home dashboard
