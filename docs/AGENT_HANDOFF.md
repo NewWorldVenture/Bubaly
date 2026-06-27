@@ -63,6 +63,16 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 > Command Center + Autopilot already consumed. No migration (column existed). tsc clean · build 0 ·
 > **1061/1061**.
 
+> **Session update (2026-06-27) — MEMBER BIRTHDAY: settable after onboarding.**
+> `family_members.birthday` was only settable during onboarding — the post-onboarding `EditMemberModal`
+> (Settings → Family members) updated name/role/color but NOT birthday, even though Autopilot
+> (`birthdaySuggestions`), celebrations, and `family/members` (which *displays* it) all consume it. So
+> birthdays for members added later, or anyone who skipped it, could never be set/fixed. Fixed in
+> `components/modules/settings-module.tsx`: `EditMemberModal` gains a **Birthday** date field (hint:
+> "Powers birthday reminders, gift ideas, and celebrations"), saved as `birthday: birthday || null`;
+> modal description updated. RLS-scoped browser-client update (same as the other fields). No migration.
+> tsc clean · build 0 · **1061/1061**.
+
 > **Session update (2026-06-27) — FAMILY FRONT DESK (the AI concierge hub).**
 > Packages the scattered concierge capabilities into one branded surface — the "Family AI Front Desk"
 > from the product vision (every call answered / email understood / form processed). The capabilities

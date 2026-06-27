@@ -274,6 +274,7 @@ function EditMemberModal({ member, isSelf, onClose, onSaved }: {
   const [name, setName] = useState(member.display_name);
   const [role, setRole] = useState<MemberRole>(member.role);
   const [color, setColor] = useState<string>(member.color ?? MEMBER_COLORS[0]);
+  const [birthday, setBirthday] = useState<string>(member.birthday ?? '');
   const [saving, setSaving] = useState(false);
 
   async function save(e: React.FormEvent) {
@@ -283,7 +284,7 @@ function EditMemberModal({ member, isSelf, onClose, onSaved }: {
     const supabase = createClient();
     const { error } = await supabase
       .from('family_members')
-      .update({ display_name: name.trim().slice(0, 80), role, color })
+      .update({ display_name: name.trim().slice(0, 80), role, color, birthday: birthday || null })
       .eq('id', member.id);
     setSaving(false);
     if (error) return toastError(describeDbError(error));
@@ -292,7 +293,7 @@ function EditMemberModal({ member, isSelf, onClose, onSaved }: {
   }
 
   return (
-    <Modal open onClose={onClose} title="Edit family member" description="Update their name, role, and color.">
+    <Modal open onClose={onClose} title="Edit family member" description="Update their name, role, birthday, and color.">
       <form onSubmit={save} className="space-y-4">
         <Field label="Name">{(id) => (
           <Input id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoFocus />
@@ -303,6 +304,9 @@ function EditMemberModal({ member, isSelf, onClose, onSaved }: {
           </Select>
         )}</Field>
         {isSelf && <p className="-mt-2 text-xs text-muted">You can&apos;t change your own role.</p>}
+        <Field label="Birthday" hint="Powers birthday reminders, gift ideas, and celebrations.">{(id) => (
+          <Input id={id} type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
+        )}</Field>
         <div>
           <p className="mb-1.5 text-sm font-medium">Color</p>
           <div className="flex flex-wrap gap-2">
