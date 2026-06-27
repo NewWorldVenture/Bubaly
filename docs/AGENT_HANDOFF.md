@@ -53,6 +53,16 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 > title/body/kind/date, member-name, favoritesOnly, list filter+order). Suite **1056 → 1061**. Pure
 > refactor, no behavior change, no migration.
 
+> **Session update (2026-06-27) — DOCUMENTS: expiry was half-wired; now settable + surfaced.**
+> `documents.expires_at` existed and the Command Center already surfaced "expiring documents," but the
+> upload form never let you SET it. Fixed in `components/modules/documents-module.tsx`: upload modal
+> gains an optional **"Expires (optional)"** date field (hint about passports/insurance/registrations),
+> included in the insert as `expires_at: form.expires_at || null`; form reset updated. Added an
+> **Expires column** to the Recent Documents table via a new `expiryStatus()` helper — "Expired" (rose),
+> `<date> · Nd` (amber, within 30 days), plain date otherwise, "—" when unset. Completes a feature the
+> Command Center + Autopilot already consumed. No migration (column existed). tsc clean · build 0 ·
+> **1061/1061**.
+
 > **Session update (2026-06-27) — FAMILY FRONT DESK (the AI concierge hub).**
 > Packages the scattered concierge capabilities into one branded surface — the "Family AI Front Desk"
 > from the product vision (every call answered / email understood / form processed). The capabilities

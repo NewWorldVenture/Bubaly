@@ -46,6 +46,20 @@ function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// Expiry badge state for a document. null → no expiry set. Highlights anything
+// expired or within 30 days so renewals (passports, insurance, registrations)
+// never sneak up on a family.
+function expiryStatus(expiresAt: string | null | undefined): { label: string; cls: string } | null {
+  if (!expiresAt) return null;
+  const exp = new Date(expiresAt).getTime();
+  if (Number.isNaN(exp)) return null;
+  const days = Math.ceil((exp - Date.now()) / 86_400_000);
+  const date = fmtDate(expiresAt);
+  if (days < 0) return { label: 'Expired', cls: 'bg-rose-500/15 text-rose-400' };
+  if (days <= 30) return { label: `${date} · ${days}d`, cls: 'bg-amber-500/15 text-amber-400' };
+  return { label: date, cls: 'bg-surface text-muted' };
+}
+
 function mimeIcon(mime: string | null): string {
   if (!mime) return '📄';
   if (mime.includes('pdf')) return '📕';
@@ -58,7 +72,7 @@ export function DocumentsModule() {
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: '', category: 'other', member_id: '' });
+  const [form, setForm] = useState({ title: '', category: 'other', member_id: '', expires_at: '' });
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -136,6 +150,7 @@ export function DocumentsModule() {
       family_id: familyId, title: form.title, category: form.category,
       member_id: form.member_id || null, created_by: userId,
       storage_path: path, size_bytes: file.size, mime_type: file.type || null,
+      expires_at: form.expires_at || null,
     });
     setSaving(false);
     if (err) {
@@ -144,7 +159,7 @@ export function DocumentsModule() {
       toastError('Failed to save document'); return;
     }
     success('Document uploaded!');
-    setOpen(false); setForm({ title: '', category: 'other', member_id: '' }); setFile(null); refresh();
+    setOpen(false); setForm({ title: '', category: 'other', member_id: '', expires_at: '' }); setFile(null); refresh();
   }
 
   if (loading) return <LoadingBlock />;
@@ -203,6 +218,7 @@ export function DocumentsModule() {
                   <th className="px-4 py-3 text-left font-medium">Category</th>
                   <th className="px-4 py-3 text-left font-medium">Size</th>
                   <th className="px-4 py-3 text-left font-medium">Date Added</th>
+                  <th className="px-4 py-3 text-left font-medium">Expires</th>
                   <th className="w-20 px-4 py-3" />
                 </tr></thead>
                 <tbody className="divide-y divide-border/50">
@@ -223,6 +239,11 @@ export function DocumentsModule() {
                         <td className="px-4 py-3.5"><span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold', cat.bg, cat.color)}>{cat.icon} {cat.label}</span></td>
                         <td className="px-4 py-3.5 text-xs text-muted">{fmtSize(doc.size_bytes)}</td>
                         <td className="px-4 py-3.5 text-xs text-muted">{fmtDate(doc.created_at)}</td>
+                        <td className="px-4 py-3.5 text-xs">{(() => {
+                          const e = expiryStatus(doc.expires_at);
+                          if (!e) return <span className="text-muted/50">—</span>;
+                          return <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold', e.cls)}>{e.label}</span>;
+                        })()}</td>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-1">
                             <button onClick={() => download(doc)} title="Download" className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-surface/40 hover:text-fg"><Download className="h-3.5 w-3.5" /></button>
@@ -342,6 +363,7 @@ export function DocumentsModule() {
           <Field label="Document Name">{(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Passport - Emma" />}</Field>
           <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>{CATEGORIES.map((c) => <option key={c} value={c}>{CAT_META[c]?.label ?? c}</option>)}</Select>}</Field>
           <Field label="Member">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Family (shared)</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label="Expires (optional)" hint="For passports, insurance, registrations — Bubaly reminds you before it lapses.">{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>
           <Button onClick={save} disabled={saving || !form.title || !file} loading={saving} className="w-full">{saving ? 'Uploading…' : 'Upload Document'}</Button>
         </div>
       </Modal>
