@@ -9,6 +9,11 @@ Last updated: Website Template (programmatic SEO) — renamed + custom dimension
 >   **`/admin/marketing/website-template`** (route renamed from `seo-pages`; component
 >   `WebsiteTemplateClient`; subnav label "Website Template" in the Content & SEO group).
 >   Public routes, engine, and tables are unchanged.
+> - **Analytics panel**: the admin now shows a stat row (templates / total pages / published /
+>   total views) + a "Top performing pages" list ranked by the per-page `views` counter (pure
+>   server-side aggregation, no extra query).
+> - **Duplicate template**: `duplicateTemplateAction` + a Copy button on each card clone a
+>   template (content copied, name "(copy)", created inactive, no pages) for fast variations.
 > - **Custom second dimension** ("other criteria you decide"): the Generate modal has an
 >   optional "Add custom criteria" section — name a variable (e.g. `city`) + paste values
 >   (comma/newline separated), then generate standalone (one page per value) OR as a
