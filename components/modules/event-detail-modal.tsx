@@ -8,8 +8,9 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Avatar } from '@/components/ui/avatar';
+import { CONTEXT_LABELS, CONTEXT_META } from '@/lib/calendar/scheduling';
 import { cn } from '@/lib/utils/cn';
-import type { Tables } from '@/lib/database.types';
+import type { Tables, CalendarContext } from '@/lib/database.types';
 
 type Event = Tables<'calendar_events'>;
 type Member = Tables<'family_members'>;
@@ -79,6 +80,15 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
     <Modal open onClose={onClose} title={event.title}>
       <div className="space-y-4">
         <div className="space-y-1.5 text-sm text-muted">
+          {(() => {
+            const fc = (event as { context?: string | null }).context;
+            const ctx: CalendarContext = fc === 'personal' || fc === 'work' ? fc : 'family';
+            return (
+              <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold', CONTEXT_META[ctx].chip)}>
+                <span className={cn('h-1.5 w-1.5 rounded-full', CONTEXT_META[ctx].dot)} /> {CONTEXT_LABELS[ctx]}
+              </span>
+            );
+          })()}
           <p className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />{fmtRange(event)}</p>
           {event.location && <p className="flex items-center gap-2"><MapPin className="h-4 w-4" />{event.location}</p>}
           {event.assignee_id && memberById.get(event.assignee_id) && (

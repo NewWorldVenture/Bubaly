@@ -49,6 +49,16 @@ describe('mapIcsEventToRow', () => {
   it('defaults a missing title', () => {
     expect(mapIcsEventToRow(ev({ title: '' }), 'f', 'd').title).toBe('Untitled');
   });
+  it('defaults context to family with no owner', () => {
+    const row = mapIcsEventToRow(ev({}), 'f', 'd');
+    expect(row.context).toBe('family');
+    expect(row.assignee_id).toBeNull();
+  });
+  it('stamps the feed owner context + member onto every event', () => {
+    const row = mapIcsEventToRow(ev({}), 'f', 'd', { context: 'work', memberId: 'mem-9' });
+    expect(row.context).toBe('work');
+    expect(row.assignee_id).toBe('mem-9');
+  });
 });
 
 describe('buildFeedRows', () => {

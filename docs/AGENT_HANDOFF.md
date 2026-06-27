@@ -1,10 +1,46 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Capture — AI routing, direct-file, photo/scan, tier-gated buttons (2026-06-26s). Keep this updated as you ship.
+Last updated: Calendar — personal/work/family lens + AI "find a time" scheduling (2026-06-27). Keep this updated as you ship.
 
 ## ▶ CURRENT STATE (read this first)
 - **Active branch:** `claude/continuation-an1mam` (all work below is committed + pushed here).
+
+> **Session update (2026-06-27) — CALENDAR: PERSONAL/WORK/FAMILY LENS + AI SCHEDULING.**
+> Deep dive on Calendar Integration. Everyone still sees everything in one place; `context`
+> ('family'|'personal'|'work') is a filterable lens, and the AI can read each person's calendar
+> to find times everyone is free.
+> - **Migration `0094_calendar_context.sql`** (PENDING prod apply): adds `calendar_events.context`
+>   (text, default 'family', check family/personal/work) + indexes on `context` and `assignee_id`;
+>   adds `calendar_feeds.context` + `calendar_feeds.member_id` (FK family_members, on delete set null).
+> - **`lib/database.types.ts`** hand-edited: `CalendarContext` type + `context` on all 3
+>   `calendar_events` positions + `context`/`member_id` on all 3 `calendar_feeds` positions.
+>   (Regenerate types after applying 0094 to confirm.)
+> - **`lib/calendar/scheduling.ts`** (pure, unit-tested) — the engine: `CONTEXTS`, `CONTEXT_LABELS`,
+>   `CONTEXT_META` (dot/chip tailwind: family=brand, personal=emerald, work=amber), `isCalendarContext`,
+>   `busyIntervals` (all-day → whole day; no-end → 30min; context filter), `mergeIntervals`, `freeGaps`,
+>   `findFreeSlots(events, opts)` (combines ALL members' busy time → shared free slots, clips to
+>   working hours, snaps to granularity, soonest-first). `tests/calendar-scheduling.test.ts` (7).
+> - **`app/api/ai/schedule/route.ts`** — POST `{memberIds?, windowStartISO?, windowEndISO?, durationMin?,
+>   contexts?, workingHours?, maxSuggestions?}`. Reads `calendar_events`+`school_events`+`sports_events`
+>   for the family in window (events via `select('*')` for pre-migration resilience, `context ?? 'family'`),
+>   keeps only selected members OR unassigned (whole-family) commitments, returns `{durationMin, slots:
+>   [{startISO,endISO}], busyCount}`. This is the AI's per-person calendar access.
+> - **`components/modules/calendar-module.tsx`** — context "Lens" chip row (Everything/Family/Personal/
+>   Work) beside member pills; colored context dot on every week-grid + mobile event; **"Find a time"**
+>   header button → `FindTimeModal`; `NewEventModal` gained **Lens** + **Who's it for** selects.
+> - **`components/modules/find-time-modal.tsx`** (NEW) — frictionless AI booking: pick who/duration/window/
+>   lens/daytime-only → `/api/ai/schedule` → tap a slot to insert the event instantly.
+> - **`components/modules/event-detail-modal.tsx`** — context badge in the header.
+> - **Feed/Google sync now carry owner+lens:** `lib/calendar/feeds.ts` (`FeedOwner`, `buildFeedRows(...,owner)`
+>   stamps `context`+`assignee_id`), `lib/server/calendar-feeds.ts` (selects+passes feed context/member_id),
+>   `app/(app)/dashboard/sync/feeds/actions.ts` (`addCalendarFeed({...,context,memberId})`),
+>   `components/dashboard/calendar-sync-panel.tsx` (Lens + Belongs-to selects + badges on each feed),
+>   `app/api/google/calendar/sync/route.ts` (tags synced events `assignee_id = signing member`, `context
+>   'personal'`). `lib/validation.ts` `eventSchema` gained `context` + `assignee_id`.
+> - Verified: tsc clean · build exit 0 · **1056/1056** (+9 calendar tests). **Apply 0094 to prod**, then
+>   regen types. Reads degrade gracefully pre-migration; writes that set `context` need 0094 applied first
+>   (deploy migration before code, as usual).
 
 > **Session update (2026-06-26u) — EDITABLE FEATURE FLAGS CONSOLE (Supabase-wired toggles).**
 > Closes the screenshot gap where Stripe/Money admin feature flags were read-only with
@@ -49,7 +85,7 @@ Last updated: Capture — AI routing, direct-file, photo/scan, tier-gated button
 >   `components/admin/family-row-actions.tsx`.
 > - Verified: tsc clean · build exit 0 · **1047/1047**. No migration (uses existing tables/RLS).
 
-- **Health:** `tsc --noEmit` clean · `npm run build` exit 0 · **full suite 1039/1039 green**.
+- **Health:** `tsc --noEmit` clean · `npm run build` exit 0 · **full suite 1056/1056 green**.
   Always run all three before declaring done. `npm run build` catches things `tsc` misses
   (e.g. "Server Actions must be async" — a `'use server'` file may only export async fns).
 - **Conventions that bite if ignored:**
@@ -60,9 +96,9 @@ Last updated: Capture — AI routing, direct-file, photo/scan, tier-gated button
   - Tier gating reads `subscriptions.plan` → `planLevel()` (0 Free / 1 Basic+ / 2 Plus+).
   - Persisted UI prefs go in `user_preferences.ui_prefs` (jsonb); migration 0093.
 - **⚠️ PENDING EXTERNAL OPS (cannot run in this env — the only things between here and "live"):**
-  1. Apply migrations to prod Supabase, in order: **0088, 0089, 0090, 0091, 0092, 0093**
+  1. Apply migrations to prod Supabase, in order: **0088, 0089, 0090, 0091, 0092, 0093, 0094**
      (most aren't applied yet). Then `supabase gen types typescript --linked > lib/database.types.ts`
-     to drop the `as unknown as` casts and table shims (0093's column is already hand-typed).
+     to drop the `as unknown as` casts and table shims (0093's + 0094's columns are already hand-typed).
   2. Set prod env: `VAPID_*` (+ optional `FCM_SERVER_KEY`) for push; `CRON_SECRET` for all crons;
      `STRIPE_*`, `TWILIO_*`, `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`, `NEXT_PUBLIC_SITE_URL`/
      `NEXT_PUBLIC_APP_URL` per the per-pillar checklists below.

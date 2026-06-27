@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Sparkles } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
@@ -16,11 +16,19 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { LoadingBlock, ErrorState } from '@/components/ui/states';
 import { eventSchema, fieldErrors } from '@/lib/validation';
+import { CONTEXTS, CONTEXT_LABELS, CONTEXT_META } from '@/lib/calendar/scheduling';
+import { FindTimeModal } from './find-time-modal';
 import { EventDetailModal } from './event-detail-modal';
 import { cn } from '@/lib/utils/cn';
-import type { Tables } from '@/lib/database.types';
+import type { Tables, CalendarContext } from '@/lib/database.types';
 
 type Event = Tables<'calendar_events'>;
+
+/** Resilient read of an event's context — '' / undefined pre-migration → 'family'. */
+function eventContext(e: Event): CalendarContext {
+  const c = (e as { context?: string | null }).context;
+  return c === 'personal' || c === 'work' ? c : 'family';
+}
 
 const CATEGORY_COLORS: Record<string, string> = {
   general: 'bg-brand/20 border-brand/40 text-brand',
@@ -126,6 +134,8 @@ export function CalendarModule() {
   const [selected, setSelected] = useState<Event | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [filterMember, setFilterMember] = useState<string>('all');
+  const [filterContext, setFilterContext] = useState<'all' | CalendarContext>('all');
+  const [findOpen, setFindOpen] = useState(false);
   const [view, setView] = useState<'week' | 'month' | 'agenda'>('week');
   const [gcalConnected, setGcalConnected] = useState<boolean | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -162,8 +172,10 @@ export function CalendarModule() {
   const memberById = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
 
   const filtered = useMemo(() =>
-    filterMember === 'all' ? data : data.filter(e => e.assignee_id === filterMember),
-    [data, filterMember]);
+    data.filter(e =>
+      (filterMember === 'all' || e.assignee_id === filterMember) &&
+      (filterContext === 'all' || eventContext(e) === filterContext)),
+    [data, filterMember, filterContext]);
 
   const allDay = filtered.filter(e => e.all_day);
   const timed = filtered.filter(e => !e.all_day);
@@ -247,6 +259,9 @@ export function CalendarModule() {
             action={
               <div className="flex items-center gap-2">
                 {gcalConnected === false && (
+                  // OAuth start is a server route that 302-redirects to Google — needs a full
+                  // navigation, not client-side <Link> routing.
+                  // eslint-disable-next-line @next/next/no-html-link-for-pages
                   <a href="/api/google/calendar/auth" className="btn-inline">
                     <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58Z" fill="#EA4335"/></svg>
                     Connect Google
@@ -259,6 +274,9 @@ export function CalendarModule() {
                   </button>
                 )}
                 <AiInsight kind="calendar" />
+                <button onClick={() => setFindOpen(true)} className="btn-inline">
+                  <Sparkles className="h-3.5 w-3.5" /> Find a time
+                </button>
                 <Button size="sm" onClick={() => setOpen(true)}>
                   <Plus className="h-4 w-4" /> Add Event
                 </Button>
@@ -309,6 +327,23 @@ export function CalendarModule() {
               </button>
             ))}
           </div>
+
+          {/* Context lens — separate personal/work/family while seeing it all together */}
+          <div className="mt-2 flex items-center gap-2 overflow-x-auto scrollbar-none">
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted">Lens</span>
+            <button onClick={() => setFilterContext('all')}
+              className={cn('flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition',
+                filterContext === 'all' ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
+              <div className={cn('h-1.5 w-1.5 rounded-full', filterContext === 'all' ? 'bg-brand' : 'bg-muted')} /> Everything
+            </button>
+            {CONTEXTS.map(c => (
+              <button key={c} onClick={() => setFilterContext(c === filterContext ? 'all' : c)}
+                className={cn('flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition',
+                  filterContext === c ? cn('border-transparent', CONTEXT_META[c].chip) : 'border-border bg-surface/40 text-muted hover:text-fg')}>
+                <div className={cn('h-1.5 w-1.5 rounded-full', CONTEXT_META[c].dot)} /> {CONTEXT_LABELS[c]}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ===== MOBILE DAY VIEW (below md) ===== */}
@@ -356,7 +391,8 @@ export function CalendarModule() {
               return (
                 <div key={e.id} onClick={() => setSelected(e)} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold">
+                    <span className="flex items-center gap-1.5 text-xs font-semibold">
+                      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', CONTEXT_META[eventContext(e)].dot)} />
                       {new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                       {e.ends_at && ` – ${new Date(e.ends_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`}
                     </span>
@@ -444,7 +480,10 @@ export function CalendarModule() {
                         className={cn('absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}
                         title={e.title}>
                         <div className="flex items-start justify-between gap-1">
-                          <span className="font-semibold leading-tight truncate">{new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                          <span className="flex items-center gap-1 font-semibold leading-tight truncate">
+                            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', CONTEXT_META[eventContext(e)].dot)} />
+                            {new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                          </span>
                           {height > 30 && member && <Avatar name={member.display_name} color={member.color} size={14} />}
                         </div>
                         {height > 24 && <div className="mt-0.5 truncate font-medium leading-tight">{e.title}</div>}
@@ -513,13 +552,14 @@ export function CalendarModule() {
         </div>
       </div>
 
-      {open && <NewEventModal familyId={familyId} userId={userId} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); void refresh(); }} />}
+      {open && <NewEventModal familyId={familyId} userId={userId} members={members} selfMemberId={selfMember?.id ?? null} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); void refresh(); }} />}
+      {findOpen && <FindTimeModal members={members} selfMemberId={selfMember?.id ?? null} onClose={() => setFindOpen(false)} onScheduled={() => { setFindOpen(false); void refresh(); }} />}
       {selected && <EventDetailModal event={selected} members={members} selfMemberId={selfMember?.id ?? null} familyId={familyId} onClose={() => setSelected(null)} />}
     </div>
   );
 }
 
-function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: string; userId: string; onClose: () => void; onSaved: () => void }) {
+function NewEventModal({ familyId, userId, members, selfMemberId, onClose, onSaved }: { familyId: string; userId: string; members: ReturnType<typeof useApp>['members']; selfMemberId: string | null; onClose: () => void; onSaved: () => void }) {
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -530,6 +570,8 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
     const input = {
       title: String(form.get('title') ?? ''),
       category: String(form.get('category') ?? 'general'),
+      context: String(form.get('context') ?? 'family'),
+      assignee_id: String(form.get('assignee_id') ?? '') || undefined,
       starts_at: String(form.get('starts_at') ?? ''),
       ends_at: String(form.get('ends_at') ?? '') || undefined,
       location: String(form.get('location') ?? '') || undefined,
@@ -563,12 +605,29 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
         <Field label="Title" error={errors.title} required>
           {(id) => <Input id={id} name="title" autoFocus placeholder="Team dinner" />}
         </Field>
-        <Field label="Category">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Category">
+            {(id) => (
+              <Select id={id} name="category">
+                {['general','school','sports','appointment','birthday','holiday','other'].map(c => (
+                  <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <Field label="Lens">
+            {(id) => (
+              <Select id={id} name="context" defaultValue="family">
+                {CONTEXTS.map(c => <option key={c} value={c}>{CONTEXT_LABELS[c]}</option>)}
+              </Select>
+            )}
+          </Field>
+        </div>
+        <Field label="Who's it for">
           {(id) => (
-            <Select id={id} name="category">
-              {['general','school','sports','appointment','birthday','holiday','other'].map(c => (
-                <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
-              ))}
+            <Select id={id} name="assignee_id" defaultValue={selfMemberId ?? ''}>
+              <option value="">Whole family</option>
+              {members.map(m => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </Select>
           )}
         </Field>

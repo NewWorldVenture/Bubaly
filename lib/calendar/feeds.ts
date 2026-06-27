@@ -44,6 +44,8 @@ export function icsRruleToRecurrence(rrule: string | null | undefined): Recurren
   }
 }
 
+export type CalendarContext = 'family' | 'personal' | 'work';
+
 export interface FeedEventRow {
   family_id: string;
   feed_id: string;
@@ -56,14 +58,21 @@ export interface FeedEventRow {
   all_day: boolean;
   recurrence: RecurrenceFreq;
   category: 'general';
+  context: CalendarContext;
+  assignee_id: string | null;
 }
+
+/** Owner tagging applied to every event a feed imports (its person + lens). */
+export type FeedOwner = { context?: CalendarContext | null; memberId?: string | null };
 
 /**
  * Shapes a parsed ICS event into a calendar_events upsert row tied to a feed.
  * The (feed_id, external_uid) pair is the upsert conflict target, so re-syncing
  * a changed public calendar updates rows in place instead of duplicating them.
+ * `owner` stamps the feed's person + context onto every event so a synced "Work"
+ * calendar shows up as that member's work events.
  */
-export function mapIcsEventToRow(ev: IcsEvent, familyId: string, feedId: string): FeedEventRow {
+export function mapIcsEventToRow(ev: IcsEvent, familyId: string, feedId: string, owner: FeedOwner = {}): FeedEventRow {
   return {
     family_id: familyId,
     feed_id: feedId,
@@ -76,15 +85,17 @@ export function mapIcsEventToRow(ev: IcsEvent, familyId: string, feedId: string)
     all_day: ev.allDay ?? false,
     recurrence: icsRruleToRecurrence(ev.recurrenceRule),
     category: 'general',
+    context: owner.context ?? 'family',
+    assignee_id: owner.memberId ?? null,
   };
 }
 
 /** Builds dedup'd upsert rows from parsed ICS events (last write wins per UID). */
-export function buildFeedRows(events: IcsEvent[], familyId: string, feedId: string): FeedEventRow[] {
+export function buildFeedRows(events: IcsEvent[], familyId: string, feedId: string, owner: FeedOwner = {}): FeedEventRow[] {
   const byUid = new Map<string, FeedEventRow>();
   for (const ev of events) {
     if (!ev.uid || !ev.startsAt) continue;
-    byUid.set(ev.uid, mapIcsEventToRow(ev, familyId, feedId));
+    byUid.set(ev.uid, mapIcsEventToRow(ev, familyId, feedId, owner));
   }
   return [...byUid.values()];
 }

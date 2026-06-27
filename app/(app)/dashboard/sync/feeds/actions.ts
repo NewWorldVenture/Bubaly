@@ -9,7 +9,9 @@ import { normalizeFeedUrl, FEED_COLORS, type FeedColor } from '@/lib/calendar/fe
 type ActionResult = { ok: true; imported?: number } | { ok: false; error: string };
 
 /** Adds a calendar subscription, then immediately syncs it once. */
-export async function addCalendarFeed(input: { name: string; url: string; color?: string }): Promise<ActionResult> {
+export async function addCalendarFeed(
+  input: { name: string; url: string; color?: string; context?: string; memberId?: string | null },
+): Promise<ActionResult> {
   const ctx = await requireUserContext();
   const { familyId } = ctx.active;
   const supabase = await createServer();
@@ -18,11 +20,13 @@ export async function addCalendarFeed(input: { name: string; url: string; color?
   if (!url) return { ok: false, error: 'Enter a valid ICS or webcal:// URL' };
   const name = (input.name || '').trim() || 'Calendar feed';
   const color: FeedColor = FEED_COLORS.includes(input.color as FeedColor) ? (input.color as FeedColor) : 'blue';
+  const context = (input.context === 'personal' || input.context === 'work') ? input.context : 'family';
+  const member_id = input.memberId || null;
 
   const { data: feed, error } = await supabase
     .from('calendar_feeds')
-    .insert({ family_id: familyId, name, url, color, created_by: ctx.user.id })
-    .select('id, family_id, url')
+    .insert({ family_id: familyId, name, url, color, created_by: ctx.user.id, context, member_id })
+    .select('id, family_id, url, context, member_id')
     .single();
   if (error || !feed) return { ok: false, error: error?.message ?? 'Could not save the feed' };
 
@@ -40,7 +44,7 @@ export async function syncCalendarFeed(feedId: string): Promise<ActionResult> {
 
   const { data: feed, error } = await supabase
     .from('calendar_feeds')
-    .select('id, family_id, url')
+    .select('id, family_id, url, context, member_id')
     .eq('id', feedId)
     .eq('family_id', ctx.active.familyId)
     .single();

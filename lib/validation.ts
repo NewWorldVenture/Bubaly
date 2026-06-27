@@ -112,6 +112,10 @@ export const eventSchema = z.object({
     'general', 'school', 'sports', 'appointment', 'medication',
     'maintenance', 'birthday', 'holiday', 'other',
   ]).default('general'),
+  // The personal/work/family lens — everyone still sees everything in one place;
+  // this is a filterable separator and the unit AI scheduling reasons about.
+  context: z.enum(['family', 'personal', 'work']).default('family'),
+  assignee_id: z.string().uuid().optional().nullable(),
   location: z.string().max(200).optional().nullable(),
   description: z.string().max(2000).optional().nullable(),
 });

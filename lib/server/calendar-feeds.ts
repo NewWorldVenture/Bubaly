@@ -18,7 +18,7 @@ export type FeedSyncResult = { ok: true; imported: number } | { ok: false; error
  */
 export async function syncFeed(
   supabase: SupabaseClient,
-  feed: { id: string; family_id: string; url: string },
+  feed: { id: string; family_id: string; url: string; context?: string | null; member_id?: string | null },
 ): Promise<FeedSyncResult> {
   const url = normalizeFeedUrl(feed.url);
   if (!url) {
@@ -52,7 +52,8 @@ export async function syncFeed(
 
   let rows;
   try {
-    rows = buildFeedRows(parseICS(icsText), feed.family_id, feed.id);
+    const context = (feed.context === 'personal' || feed.context === 'work') ? feed.context : 'family';
+    rows = buildFeedRows(parseICS(icsText), feed.family_id, feed.id, { context, memberId: feed.member_id ?? null });
   } catch {
     const msg = 'Could not parse the calendar';
     await stampFeed(supabase, feed.id, { last_status: 'error', last_error: msg });
@@ -90,12 +91,12 @@ export async function syncAllFeedsForFamily(
 ): Promise<{ feeds: number; imported: number }> {
   const { data: feeds } = await supabase
     .from('calendar_feeds')
-    .select('id, family_id, url')
+    .select('id, family_id, url, context, member_id')
     .eq('family_id', familyId);
 
   let imported = 0;
   for (const f of feeds ?? []) {
-    const r = await syncFeed(supabase, f as { id: string; family_id: string; url: string });
+    const r = await syncFeed(supabase, f as { id: string; family_id: string; url: string; context?: string | null; member_id?: string | null });
     if (r.ok) imported += r.imported;
   }
   return { feeds: (feeds ?? []).length, imported };

@@ -6,32 +6,39 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
-import { Input, Field } from '@/components/ui/input';
+import { Input, Field, Select } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { addCalendarFeed, syncCalendarFeed, removeCalendarFeed } from '@/app/(app)/dashboard/sync/feeds/actions';
 import { CALENDAR_PROVIDERS, getCalendarProvider, type CalendarProvider } from '@/lib/calendar/providers';
-import type { Tables } from '@/lib/database.types';
+import { CONTEXTS, CONTEXT_LABELS, CONTEXT_META } from '@/lib/calendar/scheduling';
+import type { Tables, CalendarContext } from '@/lib/database.types';
 
 type CalendarFeed = Tables<'calendar_feeds'>;
 
 export function CalendarSyncPanel() {
-  const { familyId } = useApp();
+  const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
   const [providerId, setProviderId] = useState<string | null>(null);
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
+  const [context, setContext] = useState<CalendarContext>('family');
+  const [memberId, setMemberId] = useState('');
   const [adding, setAdding] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
 
+  const memberById = new Map(members.map((m) => [m.id, m]));
   const provider = providerId ? getCalendarProvider(providerId) : null;
 
   function pick(p: CalendarProvider) {
     setProviderId(p.id);
     setName((prev) => prev || (p.id === 'ics' ? '' : p.label));
+    // Sensible default lens from the provider label (e.g. an Outlook work account).
+    if (/work|outlook|office/i.test(p.label)) setContext('work');
   }
-  function closeModal() { setOpen(false); setProviderId(null); setUrl(''); setName(''); }
+  function closeModal() { setOpen(false); setProviderId(null); setUrl(''); setName(''); setContext('family'); setMemberId(''); }
 
   // Feeds now persist in Supabase — they sync across every device and
   // auto-refresh nightly via cron, instead of living in this browser only.
@@ -44,7 +51,7 @@ export function CalendarSyncPanel() {
     e.preventDefault();
     if (!url.trim()) return;
     setAdding(true);
-    const res = await addCalendarFeed({ name, url });
+    const res = await addCalendarFeed({ name, url, context, memberId: memberId || null });
     setAdding(false);
     if (!res.ok) { toastError(res.error); return; }
     success(res.imported != null ? `Added — ${res.imported} events imported` : 'Calendar added');
@@ -96,7 +103,25 @@ export function CalendarSyncPanel() {
               <div key={feed.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-4 py-3">
                 <Link2 className="h-4 w-4 text-muted shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="truncate text-sm font-semibold">{feed.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate text-sm font-semibold">{feed.name}</p>
+                    {(() => {
+                      const fc = (feed as { context?: string | null }).context;
+                      const ctx: CalendarContext = fc === 'personal' || fc === 'work' ? fc : 'family';
+                      const mid = (feed as { member_id?: string | null }).member_id;
+                      const owner = mid ? memberById.get(mid) : null;
+                      return (
+                        <>
+                          <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold', CONTEXT_META[ctx].chip)}>{CONTEXT_LABELS[ctx]}</span>
+                          {owner && (
+                            <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted">
+                              <Avatar name={owner.display_name} color={owner.color} size={12} /> {owner.display_name}
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
                   <p className="truncate text-xs text-muted">{feed.url}</p>
                   {feed.last_status === 'error' && feed.last_error ? (
                     <p className="text-[10px] text-danger mt-0.5"><AlertCircle className="inline h-2.5 w-2.5" /> {feed.last_error}</p>
@@ -159,6 +184,24 @@ export function CalendarSyncPanel() {
               <Field label="Calendar name">
                 {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Work, School, Soccer…" />}
               </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Lens">
+                  {(id) => (
+                    <Select id={id} value={context} onChange={(e) => setContext(e.target.value as CalendarContext)}>
+                      {CONTEXTS.map((c) => <option key={c} value={c}>{CONTEXT_LABELS[c]}</option>)}
+                    </Select>
+                  )}
+                </Field>
+                <Field label="Belongs to">
+                  {(id) => (
+                    <Select id={id} value={memberId} onChange={(e) => setMemberId(e.target.value)}>
+                      <option value="">Whole family</option>
+                      {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+                    </Select>
+                  )}
+                </Field>
+              </div>
+              <p className="-mt-1 text-[11px] text-muted">Tag this calendar so its events show under the right lens and feed AI scheduling for that person.</p>
               <Field label="ICS / webcal URL" required>
                 {(id) => <Input id={id} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={provider.placeholder} autoFocus />}
               </Field>

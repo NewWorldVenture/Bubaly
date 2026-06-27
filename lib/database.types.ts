@@ -12,6 +12,7 @@ export type Priority = 'low' | 'medium' | 'high';
 export type EventCategory =
   | 'general' | 'school' | 'sports' | 'appointment' | 'medication'
   | 'maintenance' | 'birthday' | 'holiday' | 'other';
+export type CalendarContext = 'family' | 'personal' | 'work';
 export type RecurrenceFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 export type PetSpecies = 'dog' | 'cat' | 'bird' | 'fish' | 'reptile' | 'small_mammal' | 'horse' | 'other';
 export type PetCareKind = 'vaccination' | 'vet_visit' | 'medication' | 'grooming' | 'weight' | 'other';
@@ -148,14 +149,14 @@ export interface Database {
         Partial<{ status: InviteStatus; role: MemberRole; accepted_by: string | null }>
       >;
       calendar_events: T<
-        { id: string; family_id: string; title: string; description: string | null; location: string | null; category: EventCategory; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; feed_id: string | null; external_uid: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; title: string; description?: string | null; location?: string | null; category?: EventCategory; starts_at: string; ends_at?: string | null; all_day?: boolean; recurrence?: RecurrenceFreq; recurrence_until?: string | null; assignee_id?: string | null; feed_id?: string | null; external_uid?: string | null; created_by?: string | null },
-        Partial<{ title: string; description: string | null; location: string | null; category: EventCategory; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; feed_id: string | null; external_uid: string | null }>
+        { id: string; family_id: string; title: string; description: string | null; location: string | null; category: EventCategory; context: CalendarContext; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; feed_id: string | null; external_uid: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; description?: string | null; location?: string | null; category?: EventCategory; context?: CalendarContext; starts_at: string; ends_at?: string | null; all_day?: boolean; recurrence?: RecurrenceFreq; recurrence_until?: string | null; assignee_id?: string | null; feed_id?: string | null; external_uid?: string | null; created_by?: string | null },
+        Partial<{ title: string; description: string | null; location: string | null; category: EventCategory; context: CalendarContext; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; feed_id: string | null; external_uid: string | null }>
       >;
       calendar_feeds: T<
-        { id: string; family_id: string; name: string; url: string; color: string; last_status: string; last_error: string | null; last_synced_at: string | null; event_count: number; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; name: string; url: string; color?: string; last_status?: string; last_error?: string | null; last_synced_at?: string | null; event_count?: number; created_by?: string | null },
-        Partial<{ name: string; url: string; color: string; last_status: string; last_error: string | null; last_synced_at: string | null; event_count: number }>
+        { id: string; family_id: string; name: string; url: string; color: string; context: CalendarContext; member_id: string | null; last_status: string; last_error: string | null; last_synced_at: string | null; event_count: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; url: string; color?: string; context?: CalendarContext; member_id?: string | null; last_status?: string; last_error?: string | null; last_synced_at?: string | null; event_count?: number; created_by?: string | null },
+        Partial<{ name: string; url: string; color: string; context: CalendarContext; member_id: string | null; last_status: string; last_error: string | null; last_synced_at: string | null; event_count: number }>
       >;
       school_events: T<
         { id: string; family_id: string; member_id: string | null; school_name: string | null; title: string; event_type: string | null; starts_at: string; ends_at: string | null; notes: string | null; source: string | null; created_by: string | null } & Stamps,

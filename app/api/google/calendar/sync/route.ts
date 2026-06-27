@@ -57,7 +57,10 @@ export async function POST() {
         all_day: !e.start.dateTime,
         recurrence: 'none' as const,
         recurrence_until: null,
-        assignee_id: null,
+        // A connected personal Google account belongs to the signing-in member;
+        // tag it so it shows under their "Personal" lens and feeds AI scheduling.
+        assignee_id: ctx.active.member.id,
+        context: 'personal' as const,
         created_by: ctx.user.id,
       }));
 
