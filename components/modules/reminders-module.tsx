@@ -94,6 +94,8 @@ export function RemindersModule() {
   const [tab, setTab] = useState<'active' | 'completed' | 'all'>('active');
   const [filterKind, setFilterKind] = useState('all');
   const [filterList, setFilterList] = useState('all');
+  const [filterFlagged, setFilterFlagged] = useState(false);
+  const [filterTag, setFilterTag] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Reminder | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -118,8 +120,22 @@ export function RemindersModule() {
     if (tab === 'completed') rows = rows.filter((r) => r.status === 'completed' || r.status === 'dismissed');
     if (filterKind !== 'all') rows = rows.filter((r) => r.kind === filterKind);
     if (filterList !== 'all') rows = rows.filter((r) => filterList === 'none' ? !r.list_id : r.list_id === filterList);
+    if (filterFlagged) rows = rows.filter((r) => r.flagged);
+    if (filterTag) rows = rows.filter((r) => (r.tags ?? []).includes(filterTag));
     return rows;
-  }, [reminders, tab, filterKind, filterList]);
+  }, [reminders, tab, filterKind, filterList, filterFlagged, filterTag]);
+
+  // Every tag in use, for the "filter by tag" chips (iOS taps a tag to filter).
+  const allTags = useMemo(() => {
+    const seen = new Set<string>();
+    for (const r of reminders) for (const t of r.tags ?? []) seen.add(t);
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [reminders]);
+
+  const filtersActive = filterKind !== 'all' || filterList !== 'all' || filterFlagged || filterTag != null;
+  function clearFilters() {
+    setFilterKind('all'); setFilterList('all'); setFilterFlagged(false); setFilterTag(null);
+  }
 
   async function deleteList(id: string) {
     if (!confirm('Delete this list? Reminders in it are kept (just un-listed).')) return;
@@ -280,7 +296,7 @@ export function RemindersModule() {
       )}
 
       {/* Tabs */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="tab-bar">
           {(['active', 'completed', 'all'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
@@ -289,35 +305,68 @@ export function RemindersModule() {
             </button>
           ))}
         </div>
-        {/* Kind filter */}
-        <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)}
-          className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
-          <option value="all">All types</option>
-          {KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
-        </select>
-        {/* List filter */}
-        {(lists ?? []).length > 0 && (
-          <div className="flex items-center gap-1">
-            <select value={filterList} onChange={(e) => setFilterList(e.target.value)}
-              className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
-              <option value="all">All lists</option>
-              {(lists ?? []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              <option value="none">No list</option>
-            </select>
-            {filterList !== 'all' && filterList !== 'none' && (
-              <button onClick={() => deleteList(filterList)} aria-label="Delete list" className="rounded-lg p-1.5 text-muted hover:text-danger">
-                <Trash2 className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Flagged filter (iOS "Flagged" smart list) */}
+          <button onClick={() => setFilterFlagged((f) => !f)} aria-pressed={filterFlagged}
+            className={cn('flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs transition',
+              filterFlagged ? 'border-warning/60 bg-warning/10 text-warning' : 'border-border bg-surface/60 text-muted hover:bg-elevated')}>
+            <Flag className="h-3.5 w-3.5" /> Flagged
+          </button>
+          {/* Kind filter */}
+          <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)}
+            className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
+            <option value="all">All types</option>
+            {KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
+          </select>
+          {/* List filter */}
+          {(lists ?? []).length > 0 && (
+            <div className="flex items-center gap-1">
+              <select value={filterList} onChange={(e) => setFilterList(e.target.value)}
+                className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
+                <option value="all">All lists</option>
+                {(lists ?? []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                <option value="none">No list</option>
+              </select>
+              {filterList !== 'all' && filterList !== 'none' && (
+                <button onClick={() => deleteList(filterList)} aria-label="Delete list" className="rounded-lg p-1.5 text-muted hover:text-danger">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Tag filter chips (iOS taps a tag to filter) */}
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Tag className="h-3.5 w-3.5 text-muted" />
+          {allTags.map((t) => (
+            <button key={t} onClick={() => setFilterTag((cur) => cur === t ? null : t)} aria-pressed={filterTag === t}
+              className={cn('rounded-full border px-2.5 py-0.5 text-[11px] transition',
+                filterTag === t ? 'border-brand/60 bg-brand/10 text-brand' : 'border-border bg-surface/40 text-muted hover:bg-elevated')}>
+              {t}
+            </button>
+          ))}
+          {filterTag && (
+            <button onClick={() => setFilterTag(null)} className="flex items-center gap-0.5 text-[11px] text-muted hover:text-fg">
+              <X className="h-3 w-3" /> Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Reminder list */}
       {filtered.length === 0 ? (
-        <EmptyState icon={Bell} title="No reminders"
-          description="Set time-based, location, medication, or recurring reminders for your family."
-          action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Reminder</Button>} />
+        filtersActive ? (
+          <EmptyState icon={Bell} title="No matching reminders"
+            description="Nothing matches the current filters. Clear them to see everything."
+            action={<Button variant="outline" onClick={clearFilters}><X className="h-4 w-4" /> Clear filters</Button>} />
+        ) : (
+          <EmptyState icon={Bell} title="No reminders"
+            description="Set time-based, location, medication, or recurring reminders for your family."
+            action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Reminder</Button>} />
+        )
       ) : (
         <div className="space-y-2">
           {filtered.map((reminder) => {
@@ -412,7 +461,11 @@ export function RemindersModule() {
                       </a>
                     )}
                     {(reminder.tags ?? []).map((t) => (
-                      <span key={t} className="flex items-center gap-0.5 rounded-full bg-elevated px-1.5 py-0.5 text-[10px]"><Tag className="h-2.5 w-2.5" />{t}</span>
+                      <button key={t} type="button" onClick={() => setFilterTag((cur) => cur === t ? null : t)}
+                        className={cn('flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] transition hover:bg-brand/15',
+                          filterTag === t ? 'bg-brand/15 text-brand' : 'bg-elevated')}>
+                        <Tag className="h-2.5 w-2.5" />{t}
+                      </button>
                     ))}
                   </div>
                   {reminder.image_url && (

@@ -20,6 +20,10 @@ Last updated: 2026-06-27 — Reminders recurrence advancement + list-filtering +
 > yearly; null for `none`/bad input). `complete(reminder)` in `reminders-module.tsx` now marks the current
 > one `completed` (kept as history, iOS-style) and inserts the next occurrence (subtasks reset to unchecked,
 > `status:'active'`); toast says "Completed ✓ — next one scheduled". stripNewCols fallback keeps it pre-0100-safe.
+> **Also added Flagged + Tag filtering** (iOS "Flagged" smart list + tap-a-tag-to-filter): `reminders-module.tsx`
+> gets a **Flagged** toggle in the filter row + a **tag-chip row** (every tag in use; tap to filter, tap again
+> to clear) + clickable per-card tag chips. Empty state is now filter-aware ("No matching reminders" + Clear
+> filters when `filtersActive`). All pure client-side filtering — no migration, no new query.
 > NOTE: main now has a **0098 collision** — `0098_relationship_helper.sql` AND `0098_trip_intelligence.sql`
 > both exist (parallel merges). Harmless to the app but the next migration author should be aware; apply both.
 >
