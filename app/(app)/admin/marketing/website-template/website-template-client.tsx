@@ -4,12 +4,13 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Pencil, Trash2, X, Globe, Eye, Sparkles, ExternalLink,
-  ChevronDown, ChevronRight, Wand2, Check, Copy,
+  ChevronDown, ChevronRight, Wand2, Check, Copy, LayoutTemplate,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { renderPage, type SeoTemplate, type FeatureBlock, type FaqItem } from '@/lib/seo/template';
 import { US_STATES, stateVars } from '@/lib/seo/states';
+import { SEO_PRESETS, type SeoPreset } from '@/lib/seo/presets';
 import {
   upsertTemplateAction, deleteTemplateAction, duplicateTemplateAction, generatePagesAction,
   setPageStatusAction, deletePagesAction, setTemplatePagesStatusAction,
@@ -30,14 +31,16 @@ const area = 'w-full rounded-xl border border-border bg-surface/60 px-3 py-2 tex
 const label = 'mb-1 block text-xs font-medium text-muted';
 
 export function WebsiteTemplateClient({ templates }: { templates: TemplateView[] }) {
-  const [editing, setEditing] = useState<TemplateView | 'new' | null>(null);
+  const [editing, setEditing] = useState<TemplateView | null>(null);
+  const [creating, setCreating] = useState<SeoPreset | 'blank' | null>(null);
+  const [picking, setPicking] = useState(false);
   const [generating, setGenerating] = useState<TemplateView | null>(null);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold">Page templates <span className="text-muted">· {templates.length}</span></h2>
-        <button onClick={() => setEditing('new')} className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90">
+        <button onClick={() => setPicking(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90">
           <Plus className="h-4 w-4" /> New template
         </button>
       </div>
@@ -45,12 +48,12 @@ export function WebsiteTemplateClient({ templates }: { templates: TemplateView[]
       {templates.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-12 text-center">
           <Globe className="mx-auto mb-3 h-8 w-8 text-muted" />
-          <p className="font-semibold text-fg">No SEO page templates yet</p>
+          <p className="font-semibold text-fg">No website templates yet</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted">
-            Create one template — e.g. &ldquo;Family organizer in {'{state}'}&rdquo; — and generate a
-            landing page for all 50 states in a click.
+            Start from a ready-made template — Family Organizer, Chore App, Meal Planner — and
+            generate a landing page for all 50 states in a click.
           </p>
-          <button onClick={() => setEditing('new')} className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90">
+          <button onClick={() => setPicking(true)} className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90">
             <Plus className="h-4 w-4" /> New template
           </button>
         </div>
@@ -62,13 +65,52 @@ export function WebsiteTemplateClient({ templates }: { templates: TemplateView[]
         </div>
       )}
 
-      {editing && (
+      {picking && (
+        <PresetPicker
+          onPick={(p) => { setPicking(false); setCreating(p); }}
+          onClose={() => setPicking(false)}
+        />
+      )}
+      {(editing || creating) && (
         <TemplateEditor
-          template={editing === 'new' ? null : editing}
-          onClose={() => setEditing(null)}
+          template={editing}
+          preset={creating && creating !== 'blank' ? creating : null}
+          onClose={() => { setEditing(null); setCreating(null); }}
         />
       )}
       {generating && <GenerateModal template={generating} onClose={() => setGenerating(null)} />}
+    </div>
+  );
+}
+
+function PresetPicker({ onPick, onClose }: { onPick: (p: SeoPreset | 'blank') => void; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-2xl border border-border bg-bg p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-fg">Start a new website template</h3>
+            <p className="text-xs text-muted">Pick a ready-made starting point or start from scratch.</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {SEO_PRESETS.map((p) => (
+            <button key={p.id} onClick={() => onPick(p)} className="rounded-xl border border-border bg-surface/40 p-4 text-left transition hover:border-brand/40 hover:bg-surface/70">
+              <div className="flex items-center gap-2">
+                <LayoutTemplate className="h-4 w-4 text-brand" />
+                <p className="font-semibold text-fg">{p.label}</p>
+              </div>
+              <p className="mt-1 text-xs text-muted">{p.description}</p>
+              <p className="mt-2 font-mono text-[10px] text-muted">/{p.draft.slugPattern}</p>
+            </button>
+          ))}
+          <button onClick={() => onPick('blank')} className="flex flex-col items-start justify-center rounded-xl border border-dashed border-border p-4 text-left transition hover:border-brand/40">
+            <div className="flex items-center gap-2"><Plus className="h-4 w-4 text-muted" /><p className="font-semibold text-fg">Start from scratch</p></div>
+            <p className="mt-1 text-xs text-muted">A blank template you fill in yourself.</p>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -343,27 +385,23 @@ type Draft = {
   ctaLabel: string; ctaHref: string; staticVars: Array<{ k: string; v: string }>; isActive: boolean;
 };
 
-function toDraft(t: TemplateView | null): Draft {
-  if (!t) return {
-    name: '', topic: '', slugPattern: 'family-organizer/{state_slug}', eyebrow: 'Bubaly · {state}',
-    h1Template: 'The #1 Family Organizer App in {state}',
-    subheadTemplate: 'Join {state} families staying organized with Bubaly — calendars, chores, meals, and more in one app.',
-    metaTitleTemplate: 'Bubaly for {state} Families | Family Organizer App',
-    metaDescriptionTemplate: 'The best family organizer app for {state} households in {year}. Shared calendars, chores, meal planning, and reminders.',
-    introTemplate: 'Families across {state} use Bubaly to keep everyone on the same page.\n\nFrom shared calendars to chores, meal planning, and reminders — Bubaly brings your whole household together in one beautifully simple app.',
-    featureBlocks: [
-      { icon: 'calendar', title: 'Shared family calendar', description: 'Everyone in your {state} household sees the same schedule in real time.' },
-      { icon: 'chores', title: 'Chores & rewards', description: 'Assign chores and motivate kids with points and allowances.' },
-      { icon: 'meals', title: 'Meal planning', description: 'Plan the week and build grocery lists automatically.' },
-    ],
-    faqs: [
-      { q: 'Is Bubaly available in {state}?', a: 'Yes — Bubaly works for every family in {state} and across the U.S.' },
-      { q: 'How much does Bubaly cost?', a: 'Bubaly has a free plan, plus affordable Basic and Plus tiers for families who want more.' },
-    ],
-    ctaLabel: 'Get started free', ctaHref: '/signup',
-    staticVars: [{ k: 'product', v: 'Bubaly' }], isActive: true,
-  };
+const BLANK_DRAFT: Draft = {
+  name: '', topic: '', slugPattern: 'topic/{state_slug}', eyebrow: '{product} · {state}',
+  h1Template: '', subheadTemplate: '', metaTitleTemplate: '', metaDescriptionTemplate: '',
+  introTemplate: '', featureBlocks: [], faqs: [], ctaLabel: 'Get started free', ctaHref: '/signup',
+  staticVars: [{ k: 'product', v: 'Bubaly' }], isActive: true,
+};
+
+function presetToDraft(p: SeoPreset): Draft {
   return {
+    ...p.draft,
+    staticVars: Object.entries(p.draft.staticVars).map(([k, v]) => ({ k, v })),
+    isActive: true,
+  };
+}
+
+function toDraft(t: TemplateView | null, preset: SeoPreset | null): Draft {
+  if (t) return {
     name: t.name, topic: t.topic ?? '', slugPattern: t.slugPattern, eyebrow: t.eyebrow ?? '',
     h1Template: t.h1Template, subheadTemplate: t.subheadTemplate ?? '',
     metaTitleTemplate: t.metaTitleTemplate ?? '', metaDescriptionTemplate: t.metaDescriptionTemplate ?? '',
@@ -371,12 +409,14 @@ function toDraft(t: TemplateView | null): Draft {
     faqs: t.faqs.length ? t.faqs : [], ctaLabel: t.ctaLabel ?? '', ctaHref: t.ctaHref || '/signup',
     staticVars: Object.entries(t.staticVars ?? {}).map(([k, v]) => ({ k, v })), isActive: t.isActive,
   };
+  if (preset) return presetToDraft(preset);
+  return BLANK_DRAFT;
 }
 
-function TemplateEditor({ template, onClose }: { template: TemplateView | null; onClose: () => void }) {
+function TemplateEditor({ template, preset, onClose }: { template: TemplateView | null; preset: SeoPreset | null; onClose: () => void }) {
   const router = useRouter();
   const { success, error: toastError } = useToast();
-  const [d, setD] = useState<Draft>(() => toDraft(template));
+  const [d, setD] = useState<Draft>(() => toDraft(template, preset));
   const [saving, setSaving] = useState(false);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
 
