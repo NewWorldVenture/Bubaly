@@ -5,12 +5,13 @@ import {
   Bell, Plus, Check, Clock, MapPin, Repeat, Pill, CreditCard,
   GraduationCap, CheckSquare, Trash2, Edit2, Sparkles, X,
   AlertTriangle, Calendar, User, AlarmClock, Loader2,
+  Flag, Link2, Image as ImageIcon, Tag, ListChecks, ListTodo,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, isMissingRelationError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -21,6 +22,10 @@ import { Badge } from '@/components/ui/badge';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import {
+  EARLY_REMINDER_OPTIONS, earlyReminderLabel, parseTags, formatTags, normalizeSubtasks, newSubtask, subtaskProgress,
+  type Subtask,
+} from '@/lib/reminders/details';
 import type { Tables } from '@/lib/database.types';
 
 type Reminder = Tables<'family_reminders'>;
@@ -58,6 +63,15 @@ function kindMeta(id: string) {
   return KINDS.find((k) => k.id === id) ?? KINDS[0];
 }
 
+// Columns added by migration 0100. Stripped on a missing-column error so saves
+// keep working before the migration is applied (the fields persist once it is).
+const NEW_REMINDER_COLS = ['url', 'flagged', 'early_reminder_minutes', 'image_url', 'subtasks', 'list_id'] as const;
+function stripNewCols<T extends Record<string, unknown>>(obj: T): T {
+  const copy = { ...obj };
+  for (const k of NEW_REMINDER_COLS) delete (copy as Record<string, unknown>)[k];
+  return copy;
+}
+
 function isOverdue(r: Reminder) {
   if (!r.remind_at || r.status !== 'active') return false;
   return new Date(r.remind_at) < new Date();
@@ -82,6 +96,12 @@ export function RemindersModule() {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Reminder | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const { data: lists } = useRealtimeQuery<Tables<'reminder_lists'>>({
+    table: 'reminder_lists', familyId, deps: [familyId],
+    fetcher: (sb) => sb.from('reminder_lists').select('*').eq('family_id', familyId).order('sort_order'),
+  });
+  const listById = useMemo(() => new Map((lists ?? []).map((l) => [l.id, l])), [lists]);
 
   const { data: reminders, loading, error, refresh } = useRealtimeQuery<Reminder>({
     table: 'family_reminders', familyId, deps: [familyId],
@@ -328,7 +348,29 @@ export function RemindersModule() {
                         {member.display_name}
                       </span>
                     )}
+                    {reminder.list_id && listById.get(reminder.list_id) && (
+                      <span className="flex items-center gap-1"><ListTodo className="h-3.5 w-3.5" />{listById.get(reminder.list_id)!.name}</span>
+                    )}
+                    {reminder.flagged && <span className="flex items-center gap-1 text-warning"><Flag className="h-3.5 w-3.5" />Flagged</span>}
+                    {reminder.early_reminder_minutes != null && (
+                      <span className="flex items-center gap-1"><Bell className="h-3.5 w-3.5" />{earlyReminderLabel(reminder.early_reminder_minutes)}</span>
+                    )}
+                    {(() => { const st = normalizeSubtasks(reminder.subtasks); return st.length > 0 ? (
+                      <span className="flex items-center gap-1"><ListChecks className="h-3.5 w-3.5" />{subtaskProgress(st).done}/{subtaskProgress(st).total}</span>
+                    ) : null; })()}
+                    {reminder.url && (
+                      <a href={reminder.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-brand hover:underline" onClick={(e) => e.stopPropagation()}>
+                        <Link2 className="h-3.5 w-3.5" />Link
+                      </a>
+                    )}
+                    {(reminder.tags ?? []).map((t) => (
+                      <span key={t} className="flex items-center gap-0.5 rounded-full bg-elevated px-1.5 py-0.5 text-[10px]"><Tag className="h-2.5 w-2.5" />{t}</span>
+                    ))}
                   </div>
+                  {reminder.image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={reminder.image_url} alt="" className="mt-2 h-20 w-20 rounded-lg object-cover" />
+                  )}
                 </div>
 
                 {/* Actions */}
@@ -371,6 +413,7 @@ export function RemindersModule() {
           familyId={familyId}
           userId={userId}
           members={members}
+          lists={lists ?? []}
           onClose={() => { setAddOpen(false); setEditing(null); }}
           onSaved={() => { setAddOpen(false); setEditing(null); void refresh(); }}
         />
@@ -379,22 +422,69 @@ export function RemindersModule() {
   );
 }
 
-function ReminderModal({ reminder, familyId, userId, members, onClose, onSaved }: {
+function ReminderModal({ reminder, familyId, userId, members, lists, onClose, onSaved }: {
   reminder: Reminder | null;
   familyId: string; userId: string;
   members: Tables<'family_members'>[];
+  lists: Tables<'reminder_lists'>[];
   onClose: () => void; onSaved: () => void;
 }) {
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [kind, setKind] = useState(reminder?.kind ?? 'time');
   const [recurrence, setRecurrence] = useState(reminder?.recurrence ?? 'none');
+  // iOS-parity detail fields.
+  const [flagged, setFlagged] = useState(reminder?.flagged ?? false);
+  const [listId, setListId] = useState(reminder?.list_id ?? '');
+  const [earlyMinutes, setEarlyMinutes] = useState<string>(reminder?.early_reminder_minutes != null ? String(reminder.early_reminder_minutes) : '');
+  const [tags, setTags] = useState<string[]>(reminder?.tags ?? []);
+  const [tagInput, setTagInput] = useState('');
+  const [subtasks, setSubtasks] = useState<Subtask[]>(normalizeSubtasks(reminder?.subtasks));
+  const [subtaskInput, setSubtaskInput] = useState('');
+  const [imageUrl, setImageUrl] = useState(reminder?.image_url ?? '');
+  const [uploading, setUploading] = useState(false);
+
+  function commitTags() {
+    const merged = parseTags([formatTags(tags), tagInput].filter(Boolean).join(','));
+    setTags(merged); setTagInput('');
+    return merged;
+  }
+  function addSubtask() {
+    const t = subtaskInput.trim();
+    if (!t) return;
+    setSubtasks((s) => [...s, newSubtask(t)]); setSubtaskInput('');
+  }
+  async function uploadImage(file: File) {
+    if (file.size > 25 * 1024 * 1024) { toastError('Image is too large (max 25 MB)'); return; }
+    setUploading(true);
+    try {
+      const supabase = createClient();
+      const ext = file.name.split('.').pop();
+      const path = `${familyId}/reminders/${Date.now()}.${ext}`;
+      const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
+      if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
+      const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
+      setImageUrl(publicUrl);
+    } finally {
+      setUploading(false);
+    }
+  }
+  async function createList(): Promise<string | null> {
+    const name = window.prompt('New list name')?.trim();
+    if (!name) return null;
+    const { data, error } = await createClient().from('reminder_lists')
+      .insert({ family_id: familyId, created_by: userId, name }).select('id').single();
+    if (error || !data) { toastError(describeDbError(error)); return null; }
+    setListId(data.id);
+    return data.id;
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const g = (k: string) => String(form.get(k) ?? '').trim() || null;
     const remindAtRaw = g('remind_at');
+    const finalTags = commitTags();
     const payload = {
       title: g('title') ?? '',
       notes: g('notes'),
@@ -405,6 +495,13 @@ function ReminderModal({ reminder, familyId, userId, members, onClose, onSaved }
       remind_at: remindAtRaw ? new Date(remindAtRaw).toISOString() : null,
       member_id: g('member_id'),
       assigned_to_id: g('assigned_to_id'),
+      url: g('url'),
+      flagged,
+      early_reminder_minutes: earlyMinutes === '' ? null : Number(earlyMinutes),
+      image_url: imageUrl || null,
+      subtasks: subtasks as unknown as Tables<'family_reminders'>['subtasks'],
+      list_id: listId || null,
+      tags: finalTags,
     };
     // ── Validation ──
     if (!payload.title) return toastError('Title is required');
@@ -423,9 +520,19 @@ function ReminderModal({ reminder, familyId, userId, members, onClose, onSaved }
     setLoading(true);
     try {
       const supabase = createClient();
-      const { error } = reminder
-        ? await supabase.from('family_reminders').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', reminder.id)
-        : await supabase.from('family_reminders').insert({ ...payload, family_id: familyId, created_by: userId });
+      const fullUpdate = { ...payload, updated_at: new Date().toISOString() };
+      const fullInsert = { ...payload, family_id: familyId, created_by: userId };
+      const run = (uStrip: typeof fullUpdate, iStrip: typeof fullInsert) => reminder
+        ? supabase.from('family_reminders').update(uStrip).eq('id', reminder.id)
+        : supabase.from('family_reminders').insert(iStrip);
+
+      let { error } = await run(fullUpdate, fullInsert);
+      // Forward-compatible: before migration 0100 the new columns don't exist —
+      // retry with only the legacy fields so the core reminder still saves (the
+      // extra fields light up once 0100 lands).
+      if (error && isMissingRelationError(error)) {
+        ({ error } = await run(stripNewCols(fullUpdate), stripNewCols(fullInsert)));
+      }
       if (error) { toastError(describeDbError(error)); return; }
       success(reminder ? 'Reminder updated' : 'Reminder created');
       onSaved();
@@ -513,6 +620,109 @@ function ReminderModal({ reminder, familyId, userId, members, onClose, onSaved }
 
         <Field label="Notes">
           {(id) => <Textarea id={id} name="notes" defaultValue={reminder?.notes ?? ''} placeholder="Additional context or instructions…" className="min-h-[80px]" />}
+        </Field>
+
+        <Field label="URL">
+          {(id) => <Input id={id} name="url" type="url" defaultValue={reminder?.url ?? ''} placeholder="https://…" />}
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="List">
+            {(id) => (
+              <select id={id} value={listId}
+                onChange={(e) => { if (e.target.value === '__new__') void createList(); else setListId(e.target.value); }}
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
+                <option value="">No list</option>
+                {lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                <option value="__new__">＋ New list…</option>
+              </select>
+            )}
+          </Field>
+          <Field label="Early Reminder">
+            {(id) => (
+              <select id={id} value={earlyMinutes} onChange={(e) => setEarlyMinutes(e.target.value)}
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
+                {EARLY_REMINDER_OPTIONS.map((o) => <option key={String(o.minutes)} value={o.minutes ?? ''}>{o.label}</option>)}
+              </select>
+            )}
+          </Field>
+        </div>
+
+        <button type="button" onClick={() => setFlagged((f) => !f)}
+          className="flex w-full items-center justify-between rounded-xl border border-border bg-surface/40 px-3 py-2.5 text-sm">
+          <span className="flex items-center gap-2"><Flag className={cn('h-4 w-4', flagged ? 'text-warning' : 'text-muted')} /> Flag</span>
+          <span className={cn('relative h-6 w-10 rounded-full transition', flagged ? 'bg-warning' : 'bg-border')}>
+            <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white transition', flagged ? 'left-[18px]' : 'left-0.5')} />
+          </span>
+        </button>
+
+        {/* Tags */}
+        <Field label="Tags">
+          {(id) => (
+            <div>
+              {tags.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {tags.map((t) => (
+                    <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand">
+                      <Tag className="h-3 w-3" />{t}
+                      <button type="button" onClick={() => setTags((cur) => cur.filter((x) => x !== t))} aria-label={`Remove ${t}`}><X className="h-3 w-3" /></button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <Input id={id} value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commitTags(); } }}
+                onBlur={() => commitTags()}
+                placeholder="Add tags, comma-separated" />
+            </div>
+          )}
+        </Field>
+
+        {/* Subtasks */}
+        <Field label={`Subtasks${subtasks.length ? ` · ${subtaskProgress(subtasks).done}/${subtaskProgress(subtasks).total}` : ''}`}>
+          {(id) => (
+            <div className="space-y-1.5">
+              {subtasks.map((s) => (
+                <div key={s.id} className="flex items-center gap-2 rounded-lg border border-border bg-surface/40 px-2.5 py-1.5">
+                  <button type="button" onClick={() => setSubtasks((cur) => cur.map((x) => x.id === s.id ? { ...x, done: !x.done } : x))}
+                    className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-full border', s.done ? 'border-success bg-success text-white' : 'border-border')} aria-label="Toggle subtask">
+                    {s.done && <Check className="h-3 w-3" />}
+                  </button>
+                  <span className={cn('flex-1 text-sm', s.done && 'text-muted line-through')}>{s.title}</span>
+                  <button type="button" onClick={() => setSubtasks((cur) => cur.filter((x) => x.id !== s.id))} aria-label="Remove subtask" className="text-muted hover:text-danger"><X className="h-3.5 w-3.5" /></button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <Input id={id} value={subtaskInput} onChange={(e) => setSubtaskInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSubtask(); } }}
+                  placeholder="Add a subtask" />
+                <Button type="button" variant="outline" onClick={addSubtask}><Plus className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          )}
+        </Field>
+
+        {/* Image */}
+        <Field label="Image">
+          {() => (
+            <div className="flex items-center gap-3">
+              {imageUrl
+                ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <div className="relative"><img src={imageUrl} alt="Reminder" className="h-16 w-16 rounded-lg object-cover" />
+                    <button type="button" onClick={() => setImageUrl('')} aria-label="Remove image" className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white"><X className="h-3 w-3" /></button>
+                  </div>
+                )
+                : <div className="grid h-16 w-16 place-items-center rounded-lg border border-dashed border-border text-muted"><ImageIcon className="h-5 w-5" /></div>}
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm hover:bg-elevated">
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                {uploading ? 'Uploading…' : imageUrl ? 'Replace' : 'Add Image'}
+                <input type="file" accept="image/*" className="hidden" disabled={uploading}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadImage(f); }} />
+              </label>
+            </div>
+          )}
         </Field>
 
         <div className="flex justify-end gap-2 pt-2">
