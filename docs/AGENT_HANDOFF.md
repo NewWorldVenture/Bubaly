@@ -73,6 +73,20 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 > modal description updated. RLS-scoped browser-client update (same as the other fields). No migration.
 > tsc clean · build 0 · **1061/1061**.
 
+> **Session update (2026-06-27) — MEDICATIONS: refill date now settable (refill reminders un-stalled).**
+> The Autopilot scan reads `medications.refill_on` + `refill_reminder_days` to surface refill reminders,
+> but the medication add/edit form set none of it (0 occurrences). Fixed in
+> `components/modules/medications-module.tsx`: added **Refill due** (date) + **Remind days ahead**
+> (number, clamped 0–90, default 7) to `blankMed`, the edit-open mapping, the insert/update `fields`
+> (`refill_on: medForm.refill_on || null`), and the modal form. No migration (columns existed).
+> tsc clean · build 0 · **1061/1061**.
+>
+> **AUDIT NOTE (half-wired hunt):** verified `renewals.expires_at`, `family_insurance_policies.renewal_date`,
+> and `subscriptions_tracked.next_charge` ARE settable in their modules — only medications was missing.
+> Heuristic that keeps paying off: a column read by `lib/autopilot/scan.ts` / Command Center / briefing
+> but absent from the module's create/edit form = a dead AI-reminder path. Three found+fixed this session
+> (documents.expires_at, family_members.birthday, medications.refill_on).
+
 > **Session update (2026-06-27) — FAMILY FRONT DESK (the AI concierge hub).**
 > Packages the scattered concierge capabilities into one branded surface — the "Family AI Front Desk"
 > from the product vision (every call answered / email understood / form processed). The capabilities
