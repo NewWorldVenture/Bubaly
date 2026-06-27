@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Wallet, Users, TrendingUp, Clock, CheckCircle2, AlertCircle, Receipt } from 'lucide-react';
+import { FeatureFlagsPanel, type FlagRow } from '@/components/admin/feature-flags-panel';
 
 export const metadata: Metadata = { title: 'Wallet Admin — Bubaly' };
 
@@ -40,6 +41,9 @@ export default async function AdminWalletPage() {
     supabase.from('wallet_transactions').select('family_id').eq('status', 'completed').limit(5000),
     supabase.from('families').select('id, name').limit(500),
   ]);
+
+  const { data: flagRows } = await supabase.from('feature_flags').select('key, enabled, description').order('key');
+  const featureFlags = (flagRows ?? []) as FlagRow[];
 
   // Tally total volume
   const totalCreditCents = (recentTxns ?? []).filter((t) => t.direction === 'credit').reduce((s, t) => s + t.amount_cents, 0);
@@ -84,6 +88,14 @@ export default async function AdminWalletPage() {
         <StatCard label="Completed transactions" value={txnCount ?? 0} icon={Receipt} />
         <StatCard label="Pending approvals" value={pendingApprovals?.length ?? 0} icon={Clock} sub="Require parent action" />
       </div>
+
+      {/* Feature flags — editable in-app */}
+      {featureFlags.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-base font-semibold text-fg">Feature flags</h2>
+          <FeatureFlagsPanel flags={featureFlags} />
+        </section>
+      )}
 
       {/* Pending approvals */}
       {(pendingApprovals?.length ?? 0) > 0 && (
