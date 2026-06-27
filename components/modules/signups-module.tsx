@@ -8,14 +8,16 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   groupByUrgency, opportunityStats, daysToDeadline, isMissed,
@@ -109,7 +111,7 @@ export function SignupsModule() {
       ? await sb.from('opportunities').update(fields).eq('id', form.id)
       : await sb.from('opportunities').insert({ ...fields, family_id: familyId, created_by: userId });
     setSaving(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(form.id ? 'Signup updated' : 'Signup added');
     setModalOpen(false);
   }
@@ -117,14 +119,14 @@ export function SignupsModule() {
   async function setStatus(o: Opportunity, status: OpportunityStatus) {
     const sb = createClient();
     const { error: err } = await sb.from('opportunities').update({ status }).eq('id', o.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
   async function remove(o: Opportunity) {
     if (!confirm(`Delete "${o.title}"?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('opportunities').delete().eq('id', o.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Signup deleted');
   }
 
@@ -137,7 +139,7 @@ export function SignupsModule() {
     return `in ${d}d`;
   };
 
-  if (loading) return <LoadingBlock label="Loading signups…" />;
+  if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load signups'} />;
 
   const buckets = showDone ? BUCKET_ORDER : BUCKET_ORDER.filter((b) => b !== 'done');
@@ -147,7 +149,12 @@ export function SignupsModule() {
       <PageHeader
         title="Registrations & Signups"
         description="Never miss a camp, school, or activity registration deadline again."
-        action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add signup</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="signups" iconOnly />
+            {canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add signup</Button>}
+          </div>
+        }
       />
 
       {/* Stats */}

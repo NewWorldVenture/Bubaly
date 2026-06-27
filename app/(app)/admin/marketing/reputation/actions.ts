@@ -1,0 +1,85 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { slugify, clampRating } from '@/lib/marketing/reputation';
+
+function s(fd: FormData, k: string): string | null {
+  const v = String(fd.get(k) ?? '').trim();
+  return v === '' ? null : v;
+}
+
+// ── Testimonials ───────────────────────────────────────────────────────────
+export async function saveTestimonialAction(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const id = s(formData, 'id');
+  const author_name = s(formData, 'author_name');
+  const quote = s(formData, 'quote');
+  if (!author_name || !quote) return;
+
+  const row = {
+    author_name,
+    author_role: s(formData, 'author_role'),
+    company: s(formData, 'company'),
+    quote,
+    rating: clampRating(Number(s(formData, 'rating') ?? '')),
+    is_published: formData.get('is_published') === 'on',
+  };
+
+  if (id) {
+    await supabase.from('testimonials').update(row).eq('id', id);
+    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'testimonial', resourceId: id });
+  } else {
+    const { data } = await supabase.from('testimonials').insert({ ...row, created_by: actorId }).select('id').single();
+    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'testimonial', resourceId: data?.id ?? null });
+  }
+  revalidatePath('/admin/marketing/reputation');
+}
+
+export async function togglePublishTestimonialAction(id: string, publish: boolean) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  await supabase.from('testimonials').update({ is_published: publish }).eq('id', id);
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'testimonial', resourceId: id, metadata: { is_published: publish } });
+  revalidatePath('/admin/marketing/reputation');
+}
+
+export async function deleteTestimonialAction(id: string) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  await supabase.from('testimonials').delete().eq('id', id);
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'testimonial', resourceId: id });
+  revalidatePath('/admin/marketing/reputation');
+}
+
+// ── Case studies ───────────────────────────────────────────────────────────
+export async function saveCaseStudyAction(formData: FormData) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  const id = s(formData, 'id');
+  const title = s(formData, 'title');
+  if (!title) return;
+
+  const row = {
+    title,
+    slug: s(formData, 'slug') ? slugify(s(formData, 'slug')!) : slugify(title),
+    industry: s(formData, 'industry'),
+    customer_name: s(formData, 'customer_name'),
+    summary: s(formData, 'summary'),
+    result_metric: s(formData, 'result_metric'),
+    is_published: formData.get('is_published') === 'on',
+  };
+
+  if (id) {
+    await supabase.from('case_studies').update(row).eq('id', id);
+    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'case_study', resourceId: id });
+  } else {
+    const { data } = await supabase.from('case_studies').insert({ ...row, created_by: actorId }).select('id').single();
+    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'case_study', resourceId: data?.id ?? null });
+  }
+  revalidatePath('/admin/marketing/reputation');
+}
+
+export async function deleteCaseStudyAction(id: string) {
+  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+  await supabase.from('case_studies').delete().eq('id', id);
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'case_study', resourceId: id });
+  revalidatePath('/admin/marketing/reputation');
+}

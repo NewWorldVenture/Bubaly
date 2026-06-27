@@ -1,15 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Settings, Users, Mail, Trash2, Plus, Check } from 'lucide-react';
+import { Settings, Users, Mail, Trash2, Plus, Check, Pencil } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
+import { AvatarPicker } from '@/components/ui/avatar-picker';
+import { PhoneInput } from '@/components/ui/phone-input';
+import { guessDialCodeFromPhone, extractLocalNumber, COUNTRY_DIAL_CODES } from '@/lib/utils/phone';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { ROLE_LABELS, INVITABLE_ROLES, isAdmin } from '@/lib/constants/roles';
@@ -28,6 +33,7 @@ export function SettingsModule() {
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [editMember, setEditMember] = useState<Tables<'family_members'> | null>(null);
   const [savingFamily, setSavingFamily] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [dashboardView, setDashboardView] = useState<DashboardView>(defaultDashboard);
@@ -38,20 +44,25 @@ export function SettingsModule() {
   // Account profile (name + phone) live in `profiles`, not in useApp() — load it
   // once so the form prefills the values captured during onboarding.
   const [profileLoaded, setProfileLoaded] = useState(false);
-  const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', phone: '' });
+  const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', phone: '', avatarUrl: '' });
   useEffect(() => {
     let active = true;
     (async () => {
       const supabase = createClient();
-      const { data } = await supabase.from('profiles').select('full_name, phone').eq('id', userId).maybeSingle();
+      const { data } = await supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', userId).maybeSingle();
       if (!active) return;
       const { firstName, lastName } = splitFullName(data?.full_name ?? selfMember?.display_name ?? '');
-      setProfileForm({ firstName, lastName, phone: data?.phone ?? '' });
+      setProfileForm({ firstName, lastName, phone: data?.phone ?? '', avatarUrl: data?.avatar_url ?? '' });
       setProfileLoaded(true);
     })();
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  // Pre-select the country dial code from the stored E.164 number (PhoneInput
+  // falls back to its own locale guess when there's no saved number).
+  const savedDialCode = guessDialCodeFromPhone(profileForm.phone);
+  const savedCountryCode = COUNTRY_DIAL_CODES.find((c) => c.dialCode === savedDialCode)?.code;
 
   async function chooseDashboard(view: DashboardView) {
     if (view === dashboardView || savingDashboard) return;
@@ -85,7 +96,7 @@ export function SettingsModule() {
     const supabase = createClient();
     const { error } = await supabase.from('families').update({ name }).eq('id', family.id);
     setSavingFamily(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Family name updated');
   }
 
@@ -93,7 +104,7 @@ export function SettingsModule() {
     if (!confirm('Remove this member from the family?')) return;
     const supabase = createClient();
     const { error } = await supabase.from('family_members').update({ is_active: false }).eq('id', memberId);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Member removed');
     window.location.reload();
   }
@@ -102,12 +113,19 @@ export function SettingsModule() {
 
   return (
     <div className="module-page">
-      <PageHeader title="Settings" description="Manage your profile, family, and members." />
+      <PageHeader title="Settings" description="Manage your profile, family, and members." action={<AiInsight kind="settings" />} />
 
       {/* Profile */}
       <Card>
         <h2 className="mb-4 text-base font-semibold">Your profile</h2>
         <form onSubmit={saveProfile} className="space-y-4">
+          {profileLoaded && (
+            <AvatarPicker
+              defaultValue={profileForm.avatarUrl}
+              displayName={`${profileForm.firstName} ${profileForm.lastName}`.trim()}
+              onChange={(url) => setProfileForm((f) => ({ ...f, avatarUrl: url }))}
+            />
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="First name" required>
               {(id) => (
@@ -123,11 +141,19 @@ export function SettingsModule() {
                   placeholder="Rivera" disabled={!profileLoaded} />
               )}
             </Field>
-            <Field label="Contact phone" required>
-              {(id) => (
-                <Input id={id} type="tel" inputMode="tel" value={profileForm.phone}
-                  onChange={(e) => setProfileForm((f) => ({ ...f, phone: e.target.value }))}
-                  placeholder="(555) 123-4567" disabled={!profileLoaded} />
+            <Field label="Contact phone" hint="Optional">
+              {() => (
+                profileLoaded ? (
+                  <PhoneInput
+                    defaultDialCode={savedDialCode}
+                    defaultCountryCode={savedCountryCode}
+                    defaultLocalNumber={extractLocalNumber(profileForm.phone, savedDialCode)}
+                    onChange={(e164) => setProfileForm((f) => ({ ...f, phone: e164 }))}
+                  />
+                ) : (
+                  <Input type="tel" inputMode="tel" value={profileForm.phone}
+                    placeholder="(555) 123-4567" disabled />
+                )
               )}
             </Field>
             <Field label="Email" hint="Managed by your sign-in">
@@ -212,6 +238,11 @@ export function SettingsModule() {
                 <p className="truncate text-sm font-medium">{m.display_name}</p>
                 <Badge tone="neutral">{ROLE_LABELS[m.role]}</Badge>
               </div>
+              {admin && (
+                <button onClick={() => setEditMember(m)} className="rounded-lg p-2 text-muted hover:text-fg" aria-label="Edit member">
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
               {admin && m.user_id !== userId && (
                 <button onClick={() => removeMember(m.id)} className="rounded-lg p-2 text-muted hover:text-danger" aria-label="Remove member">
                   <Trash2 className="h-4 w-4" />
@@ -236,7 +267,65 @@ export function SettingsModule() {
           onSent={() => { setInviteOpen(false); success('Invite sent!'); }}
         />
       )}
+
+      {editMember && (
+        <EditMemberModal
+          member={editMember}
+          isSelf={editMember.user_id === userId}
+          onClose={() => setEditMember(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function EditMemberModal({ member, isSelf, onClose }: {
+  member: Tables<'family_members'>; isSelf: boolean; onClose: () => void;
+}) {
+  const { success, error: toastError } = useToast();
+  const [saving, setSaving] = useState(false);
+
+  async function save(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const display_name = String(form.get('display_name') ?? '').trim();
+    const role = String(form.get('role') ?? member.role) as MemberRole;
+    const birthday = String(form.get('birthday') ?? '').trim();
+    if (!display_name) { toastError('Name is required'); return; }
+    setSaving(true);
+    const { error } = await createClient().from('family_members')
+      .update({ display_name, role, birthday: birthday || null }).eq('id', member.id);
+    setSaving(false);
+    if (error) return toastError(describeDbError(error));
+    success('Member updated');
+    onClose();
+    window.location.reload();
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Edit family member" description={isSelf ? 'Changing your own role can affect your admin access.' : undefined}>
+      <form onSubmit={save} className="space-y-4">
+        <Field label="Name" required>
+          {(id) => <Input id={id} name="display_name" defaultValue={member.display_name} autoFocus />}
+        </Field>
+        <Field label="Role">
+          {(id) => (
+            <Select id={id} name="role" defaultValue={member.role}>
+              {(Object.keys(ROLE_LABELS) as MemberRole[]).map((r) => (
+                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label="Birthday" hint="Powers birthday reminders, gift ideas, and celebrations.">
+          {(id) => <Input id={id} name="birthday" type="date" defaultValue={member.birthday ?? ''} />}
+        </Field>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -261,7 +350,7 @@ function InviteModal({ familyId, userId, onClose, onSent }: {
       role,
       invited_by: userId,
     }).select('id').single();
-    if (error || !invite) { setLoading(false); return toastError(error?.message ?? 'Failed'); }
+    if (error || !invite) { setLoading(false); return toastError(describeDbError(error, 'Failed')); }
 
     // Fire invite email (non-blocking — don't fail UI if email fails)
     void fetch('/api/email/invite', {

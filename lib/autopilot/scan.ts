@@ -1,0 +1,207 @@
+// lib/autopilot/scan.ts — the server-side Autopilot pass, shared by the
+// on-demand route (active family) and the cron runner (all families).
+//
+// Reads the family's real rows, builds the normalized snapshot, runs the pure
+// engine, then reconciles `autopilot_suggestions`: respects prior resolutions,
+// clears stale OPEN suggestions whose signal vanished, and auto-executes new
+// high-confidence reminders (reversibly — it inserts a real `reminders` row).
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/database.types';
+import { buildSuggestions, confidenceTier, type FamilySnapshot } from '@/lib/autopilot/engine';
+import { computeMemberTraits, type MemberTraits, type MemberHistory } from '@/lib/autopilot/twin';
+
+type DB = SupabaseClient<Database>;
+
+export type AutopilotScanResult = { scanned: number; autoExecuted: number; cleared: number; notified: number };
+
+const RESOLVED = new Set(['dismissed', 'snoozed', 'executed', 'approved', 'auto_executed']);
+
+export async function runAutopilotScan(supabase: DB, familyId: string, userId: string | null): Promise<AutopilotScanResult> {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const in30 = new Date(now.getTime() + 30 * 86400000).toISOString().slice(0, 10);
+  const in2 = new Date(now.getTime() + 2 * 86400000).toISOString();
+
+  const since60 = new Date(now.getTime() - 8 * 86400000).toISOString().slice(0, 10);
+  const since90 = new Date(now.getTime() - 90 * 86400000).toISOString();
+  const [
+    { data: renewals }, { data: appts }, { data: choreRows },
+    { data: members }, { data: groceries }, { data: apptReminders },
+    { data: events }, { data: subs }, { data: stress }, { data: meds },
+    { data: choreHistory }, { data: twinProfiles }, { data: mealPlans }, { data: insurance }, { data: wishlist }, { data: existing },
+  ] = await Promise.all([
+    supabase.from('renewals').select('id, title, expires_at, status').eq('family_id', familyId).eq('status', 'active').lte('expires_at', in30).limit(100),
+    supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(50),
+    supabase.from('chore_assignments').select('id, due_at, member_id, status, chores(title)').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', `${today}T00:00:00Z`).limit(100),
+    supabase.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null).limit(50),
+    supabase.from('grocery_items').select('id, name, created_at, is_checked').eq('family_id', familyId).eq('is_checked', false).limit(200),
+    supabase.from('reminders').select('related_id').eq('family_id', familyId).eq('related_type', 'appointment').eq('is_done', false).limit(200),
+    supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(100),
+    supabase.from('subscriptions_tracked').select('id, name, cost_cents, cadence, next_charge, last_used, status').eq('family_id', familyId).in('status', ['active', 'trial']).limit(200),
+    supabase.from('family_stress_signals').select('member_id, weight, occurred_on').eq('family_id', familyId).eq('status', 'active').gte('occurred_on', since60).limit(500),
+    supabase.from('medications').select('id, name, member_id, refill_on, refill_reminder_days').eq('family_id', familyId).eq('is_active', true).not('refill_on', 'is', null).limit(200),
+    // Digital Twin learning: 90d of chore outcomes per member.
+    supabase.from('chore_assignments').select('member_id, status').eq('family_id', familyId).gte('created_at', since90).limit(2000),
+    supabase.from('family_digital_twin_profiles').select('id, member_id, metadata').eq('family_id', familyId).limit(50),
+    // Meal Agent / Family Memory: 90d of dinner history + the next few days' plans.
+    supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', since90.slice(0, 10)).limit(500),
+    supabase.from('family_insurance_policies').select('id, policy_type, insurer, renewal_date').eq('family_id', familyId).eq('is_active', true).not('renewal_date', 'is', null).lte('renewal_date', in30).limit(100),
+    // Family Memory: unpurchased wish-list items → gift ideas for upcoming birthdays.
+    supabase.from('wishlist_items').select('member_id, title, priority, is_purchased').eq('family_id', familyId).eq('is_purchased', false).limit(500),
+    supabase.from('autopilot_suggestions').select('id, dedupe_key, status').eq('family_id', familyId).limit(500),
+  ]);
+
+  const remindedAppt = new Set((apptReminders ?? []).map((r) => r.related_id).filter(Boolean) as string[]);
+
+  // Family Memory: top unpurchased wish-list titles per member (high priority first).
+  const prioRank: Record<string, number> = { high: 3, medium: 2, low: 1 };
+  const giftsByMember = new Map<string, string[]>();
+  for (const w of (wishlist ?? []).slice().sort((a, b) => (prioRank[b.priority] ?? 0) - (prioRank[a.priority] ?? 0))) {
+    const arr = giftsByMember.get(w.member_id) ?? [];
+    if (arr.length < 3) { arr.push(w.title); giftsByMember.set(w.member_id, arr); }
+  }
+
+  // Family Memory: rank dinners cooked over the last 90 days, and note which of
+  // the next few days already have a dinner planned.
+  const mealCounts = new Map<string, number>();
+  const plannedDinnerDays: string[] = [];
+  const horizonEnd = new Date(now.getTime() + 4 * 86400000).toISOString().slice(0, 10);
+  for (const mp of mealPlans ?? []) {
+    const name = (mp as unknown as { meals: { name: string } | null }).meals?.name;
+    if (name) mealCounts.set(name, (mealCounts.get(name) ?? 0) + 1);
+    if (mp.plan_date >= today && mp.plan_date <= horizonEnd) plannedDinnerDays.push(mp.plan_date);
+  }
+  const favoriteMeals = Array.from(mealCounts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  const snapshot: FamilySnapshot = {
+    today,
+    renewals: (renewals ?? []).map((r) => ({ id: r.id, label: r.title, expiresOn: r.expires_at })),
+    appointments: (appts ?? []).map((a) => ({ id: a.id, title: a.title, startsAt: a.starts_at, memberId: a.member_id, hasReminder: remindedAppt.has(a.id) })),
+    overdueChores: (choreRows ?? []).map((c) => ({
+      id: c.id,
+      title: (c as unknown as { chores: { title: string } | null }).chores?.title ?? 'Chore',
+      dueAt: c.due_at, memberId: c.member_id,
+    })),
+    birthdays: (members ?? []).map((m) => ({ memberId: m.id, name: m.display_name, birthday: m.birthday as string, giftIdeas: giftsByMember.get(m.id) })),
+    lingeringGroceries: (groceries ?? []).map((g) => ({ id: g.id, name: g.name, addedAt: g.created_at })),
+    events: (events ?? []).map((e) => ({ id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, memberId: e.assignee_id })),
+    subscriptions: (subs ?? []).map((x) => ({ id: x.id, name: x.name, costCents: x.cost_cents, cadence: x.cadence, nextCharge: x.next_charge, lastUsed: x.last_used, status: x.status })),
+    stressSignals: (stress ?? []).map((x) => ({ memberId: x.member_id, weight: Number(x.weight), occurredOn: x.occurred_on })),
+    medications: (meds ?? []).map((x) => ({ id: x.id, name: x.name, memberId: x.member_id, refillOn: x.refill_on as string, reminderDays: x.refill_reminder_days })),
+    favoriteMeals,
+    plannedDinnerDays,
+    insurance: (insurance ?? []).map((p) => ({ id: p.id, label: `${p.policy_type} insurance (${p.insurer})`, renewalOn: p.renewal_date as string })),
+  };
+
+  // Digital Twin: learn per-member reliability from chore history, persist it to
+  // the twin profile, and use it to modulate this scan's confidence/urgency.
+  const histByMember = new Map<string, { completed: number; total: number }>();
+  for (const c of choreHistory ?? []) {
+    if (!c.member_id) continue;
+    const h = histByMember.get(c.member_id) ?? { completed: 0, total: 0 };
+    h.total += 1;
+    if (c.status === 'approved') h.completed += 1;
+    histByMember.set(c.member_id, h);
+  }
+  const history: MemberHistory[] = Array.from(histByMember.entries()).map(([memberId, h]) => ({
+    memberId, choresCompleted: h.completed, choresTotal: h.total,
+  }));
+  const traits = computeMemberTraits(history);
+  const traitsByMember = new Map<string, MemberTraits>(traits.map((t) => [t.memberId, t]));
+
+  // Persist learned traits into the twin (best-effort; merges, never clobbers).
+  const profileByMember = new Map((twinProfiles ?? []).map((p) => [p.member_id, p]));
+  for (const t of traits) {
+    try {
+      const existingProfile = profileByMember.get(t.memberId);
+      if (existingProfile) {
+        const merged = { ...(existingProfile.metadata as Record<string, unknown> ?? {}), autopilot_traits: t };
+        await supabase.from('family_digital_twin_profiles').update({ metadata: merged as never }).eq('id', existingProfile.id);
+      } else {
+        await supabase.from('family_digital_twin_profiles').insert({
+          family_id: familyId, member_id: t.memberId, metadata: { autopilot_traits: t } as never, created_by: userId,
+        });
+      }
+    } catch {
+      // non-fatal: trait persistence is an enhancement, not required for the scan
+    }
+  }
+
+  const drafts = buildSuggestions(snapshot, traitsByMember);
+  const draftKeys = new Set(drafts.map((d) => d.dedupeKey));
+  const existingByKey = new Map((existing ?? []).map((e) => [e.dedupe_key, e]));
+
+  // 1) Clear stale OPEN suggestions whose signal disappeared this scan.
+  const stale = (existing ?? []).filter((e) => e.status === 'open' && !draftKeys.has(e.dedupe_key)).map((e) => e.id);
+  if (stale.length > 0) {
+    await supabase.from('autopilot_suggestions').delete().in('id', stale).eq('family_id', familyId);
+  }
+
+  // 2) Insert genuinely-new drafts; auto-execute the safe high-confidence ones.
+  //    Ambient delivery: high-urgency or auto-handled items also become a
+  //    `notifications` row so the existing push/email cron reaches the family
+  //    without anyone opening the app.
+  let autoExecuted = 0;
+  let notified = 0;
+  for (const d of drafts) {
+    const prior = existingByKey.get(d.dedupeKey);
+    if (prior) continue; // respect prior state (resolved or already-open); avoid churn
+
+    const isAuto = confidenceTier(d.confidence) === 'auto';
+    let status: 'open' | 'auto_executed' = 'open';
+
+    if (isAuto && d.actionType === 'create_reminder') {
+      const at = (d.payload.at as string) ?? `${today}T09:00:00Z`;
+      const { error: remErr } = await supabase.from('reminders').insert({
+        family_id: familyId,
+        title: (d.payload.title as string) ?? d.title,
+        remind_at: at,
+        member_id: d.memberId,
+        related_type: d.sourceKind === 'appointments' ? 'appointment' : 'renewal',
+        related_id: d.sourceId,
+        created_by: userId,
+      });
+      if (!remErr) { status = 'auto_executed'; autoExecuted++; }
+    }
+
+    const { data: inserted } = await supabase.from('autopilot_suggestions').insert({
+      family_id: familyId,
+      member_id: d.memberId,
+      kind: d.kind,
+      title: d.title,
+      detail: d.detail,
+      confidence: d.confidence,
+      urgency: d.urgency,
+      status,
+      action_type: d.actionType,
+      action_label: d.actionLabel,
+      payload: d.payload as never,
+      source_kind: d.sourceKind,
+      source_id: d.sourceId,
+      dedupe_key: d.dedupeKey,
+      expires_at: d.expiresAt,
+      resolved_at: status === 'auto_executed' ? now.toISOString() : null,
+      resolved_by: null,
+      created_by: userId,
+    }).select('id').single();
+
+    // Ambient push/email for the things worth interrupting for.
+    if (inserted && (d.urgency >= 2 || status === 'auto_executed')) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        family_id: familyId,
+        user_id: null, // whole family; managers receive it via the delivery pipeline
+        type: 'system',
+        title: status === 'auto_executed' ? `Autopilot handled: ${d.title}` : d.title,
+        body: d.detail,
+        related_type: 'autopilot_suggestions',
+        related_id: inserted.id,
+      });
+      if (!notifErr) notified++;
+    }
+  }
+
+  return { scanned: drafts.length, autoExecuted, cleared: stale.length, notified };
+}

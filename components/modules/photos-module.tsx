@@ -5,18 +5,20 @@ import {
   Image as ImageIcon, Plus, Upload, X, Star, StarOff, Trash2,
   ChevronLeft, ChevronRight, ZoomIn, Edit2, Grid3X3, List,
   Camera, Heart, Mountain, GraduationCap, Trophy, Calendar,
-  Download, Share2, Search, Tag, MoreHorizontal,
+  Download, Share2, Search, Tag, MoreHorizontal, Film, Play,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -75,9 +77,12 @@ export function PhotosModule() {
     const supabase = createClient();
     let uploaded = 0;
     for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue;
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      if (!isImage && !isVideo) continue;
       const ext = file.name.split('.').pop();
-      const path = `${familyId}/photos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const folder = isVideo ? 'videos' : 'photos';
+      const path = `${familyId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { data: stored, error: upErr } = await supabase.storage
         .from('family-media')
         .upload(path, file, { upsert: false, cacheControl: '31536000' });
@@ -90,11 +95,12 @@ export function PhotosModule() {
         storage_path: stored.path,
         url: publicUrl,
         size_bytes: file.size,
+        media_type: isVideo ? 'video' : 'image',
       });
       uploaded++;
     }
     if (uploaded > 0) {
-      success(`${uploaded} photo${uploaded > 1 ? 's' : ''} uploaded`);
+      success(`${uploaded} file${uploaded > 1 ? 's' : ''} uploaded`);
       void refreshPhotos();
       void refreshAlbums();
     }
@@ -149,16 +155,17 @@ export function PhotosModule() {
     cover: allPhotos.find((p) => p.album_id === a.id)?.url,
   }));
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
 
   return (
     <div ref={dropRef} className="module-page transition-colors border-2 border-transparent rounded-2xl">
       {/* Header */}
       <PageHeader
-        title="Family Photos"
+        title="Family Photos & Videos"
         description="Memories your family will treasure forever."
         action={
           <div className="flex items-center gap-2">
+            <AiInsight kind="photos" iconOnly />
             <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
               <Search className="h-3.5 w-3.5 text-muted" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
@@ -266,13 +273,27 @@ export function PhotosModule() {
           ) : view === 'grid' ? (
             /* Grid */
             <div className="columns-2 gap-3 sm:columns-3 lg:columns-4 xl:columns-5">
-              {photos.map((photo, idx) => (
+              {photos.map((photo, idx) => {
+                const isVideo = photo.media_type === 'video';
+                return (
                 <div key={photo.id} className="group relative mb-3 break-inside-avoid overflow-hidden rounded-xl border border-border/40"
                   onClick={() => setLightboxIdx(idx)}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photo.url ?? ''} alt={photo.caption ?? 'Photo'}
-                    className="w-full cursor-pointer object-cover transition group-hover:scale-105"
-                    loading="lazy" />
+                  {isVideo ? (
+                    <div className="flex aspect-video w-full cursor-pointer items-center justify-center bg-black/80">
+                      <Play className="h-10 w-10 text-white/70" />
+                    </div>
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={photo.url ?? ''} alt={photo.caption ?? 'Photo'}
+                      className="w-full cursor-pointer object-cover transition group-hover:scale-105"
+                      loading="lazy" />
+                  )}
+                  {/* Video badge */}
+                  {isVideo && (
+                    <div className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
+                      <Film className="h-3 w-3" /> Video
+                    </div>
+                  )}
                   {/* Hover overlay */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                     <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
@@ -290,12 +311,13 @@ export function PhotosModule() {
                     </div>
                   </div>
                   {photo.is_favorite && (
-                    <div className="absolute right-2 top-2">
+                    <div className={`absolute ${isVideo ? 'right-2 bottom-2' : 'right-2 top-2'}`}>
                       <Heart className="h-4 w-4 fill-red-400 text-red-400 drop-shadow" />
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             /* List */
@@ -303,10 +325,16 @@ export function PhotosModule() {
               {photos.map((photo, idx) => (
                 <div key={photo.id} onClick={() => setLightboxIdx(idx)}
                   className="group flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 hover:bg-elevated/30 transition last:border-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photo.url ?? ''} alt="" className="h-12 w-12 rounded-xl object-cover" />
+                  {photo.media_type === 'video' ? (
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black/80">
+                      <Play className="h-5 w-5 text-white/70" />
+                    </div>
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={photo.url ?? ''} alt="" className="h-12 w-12 rounded-xl object-cover" />
+                  )}
                   <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium">{photo.caption ?? 'Photo'}</p>
+                    <p className="truncate text-sm font-medium">{photo.caption ?? (photo.media_type === 'video' ? 'Video' : 'Photo')}</p>
                     <p className="text-xs text-muted">{fmtRelative(photo.created_at)}</p>
                   </div>
                   {photo.tags?.map((t) => <Badge key={t} tone="neutral">{t}</Badge>)}
@@ -338,11 +366,20 @@ export function PhotosModule() {
             </button>
           )}
 
-          {/* Image */}
+          {/* Media */}
           <div onClick={(e) => e.stopPropagation()} className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photos[lightboxIdx].url ?? ''} alt={photos[lightboxIdx].caption ?? ''}
-              className="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl" />
+            {photos[lightboxIdx].media_type === 'video' ? (
+              <video
+                src={photos[lightboxIdx].url ?? ''}
+                controls
+                autoPlay
+                className="max-h-[80vh] max-w-full rounded-2xl shadow-2xl"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={photos[lightboxIdx].url ?? ''} alt={photos[lightboxIdx].caption ?? ''}
+                className="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl" />
+            )}
             {/* Controls */}
             <div className="mt-4 flex items-center gap-3 text-white">
               <span className="text-sm text-white/70">{lightboxIdx + 1} / {photos.length}</span>
@@ -415,7 +452,7 @@ function NewAlbumModal({ familyId, userId, onClose, onCreated }: {
       family_id: familyId, name: name.trim(), kind, description: description.trim() || null, created_by: userId,
     });
     setLoading(false);
-    if (error) { toastError(error.message); return; }
+    if (error) { toastError(describeDbError(error)); return; }
     onCreated();
   }
 
@@ -466,7 +503,7 @@ function UploadModal({ onClose, onUpload }: { onClose: () => void; onUpload: (f:
   }
 
   return (
-    <Modal open onClose={onClose} title="Upload Photos">
+    <Modal open onClose={onClose} title="Upload Photos & Videos">
       <div className="space-y-4">
         <div onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
@@ -478,10 +515,10 @@ function UploadModal({ onClose, onUpload }: { onClose: () => void; onUpload: (f:
           )}>
           <Upload className="h-10 w-10 text-muted" />
           <div>
-            <p className="font-semibold">Drop photos here or click to browse</p>
-            <p className="mt-1 text-sm text-muted">Supports JPEG, PNG, HEIC, WebP</p>
+            <p className="font-semibold">Drop photos or videos here or click to browse</p>
+            <p className="mt-1 text-sm text-muted">Supports JPEG, PNG, HEIC, WebP, MP4, MOV, WebM</p>
           </div>
-          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleChange} />
+          <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleChange} />
         </div>
 
         {selected.length > 0 && (

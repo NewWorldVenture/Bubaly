@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
-import { requirePlanLevel } from '@/lib/supabase/auth';
+import { requireFeature } from '@/lib/supabase/auth';
 import { InboxModule } from '@/components/modules/inbox-module';
 
-export const metadata: Metadata = { title: 'Magic Import' };
+export const metadata: Metadata = { title: 'Communications Hub' };
 
 export default async function InboxPage() {
-  await requirePlanLevel(1);
+  await requireFeature('/dashboard/inbox');
   return <InboxModule />;
 }

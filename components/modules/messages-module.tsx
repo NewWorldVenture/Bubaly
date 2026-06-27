@@ -3,16 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   MessageCircle, Plus, Send, Smile, Paperclip, Reply, Pin, Trash2,
-  MoreHorizontal, Check, CheckCheck, ArrowLeft, Users, Search, X, Camera,
+  MoreHorizontal, Check, CheckCheck, ArrowLeft, Users, Search, X, Camera, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { ROLE_LABELS } from '@/lib/constants/roles';
 import { fmtRelative, fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
@@ -202,50 +204,79 @@ export function MessagesModule() {
     e.preventDefault();
     const content = text.trim();
     if (!content || !activeConv || sending) return;
+    if (content.length > 4000) { toastError('Message is too long (max 4000 characters)'); return; }
+    const prevReplyTo = replyTo;
     setSending(true);
     setText('');
     setReplyTo(null);
-    const supabase = createClient();
-    const { error } = await supabase.from('family_messages').insert({
-      conversation_id: activeConv.id,
-      family_id: familyId,
-      sender_id: userId,
-      sender_name: myName,
-      content,
-      kind: 'text',
-      reply_to_id: replyTo?.id ?? null,
-    });
-    setSending(false);
-    if (error) toastError(error.message);
-    else inputRef.current?.focus();
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from('family_messages').insert({
+        conversation_id: activeConv.id,
+        family_id: familyId,
+        sender_id: userId,
+        sender_name: myName,
+        content,
+        kind: 'text',
+        reply_to_id: prevReplyTo?.id ?? null,
+      });
+      if (error) {
+        // Restore the unsent message so the user doesn't lose their text.
+        toastError(describeDbError(error));
+        setText(content);
+        setReplyTo(prevReplyTo);
+      } else {
+        inputRef.current?.focus();
+      }
+    } catch (err) {
+      toastError(describeDbError(err));
+      setText(content);
+      setReplyTo(prevReplyTo);
+    } finally {
+      setSending(false);
+    }
   }
 
   // ── Send image/file ─────────────────────────────────────────
+  const [uploadingFile, setUploadingFile] = useState(false);
   async function sendFile(file: File) {
-    if (!activeConv) return;
-    const supabase = createClient();
-    const ext = file.name.split('.').pop();
-    const path = `${familyId}/messages/${Date.now()}.${ext}`;
-    const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
-    if (upErr) { toastError(upErr.message); return; }
-    const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
-    const isImage = file.type.startsWith('image/');
-    await supabase.from('family_messages').insert({
-      conversation_id: activeConv.id,
-      family_id: familyId,
-      sender_id: userId,
-      sender_name: myName,
-      content: isImage ? null : file.name,
-      kind: isImage ? 'image' : 'file',
-      attachment_url: publicUrl,
-      attachment_name: file.name,
-      attachment_mime: file.type,
-    });
+    if (!activeConv || uploadingFile) return;
+    // 25 MB cap mirrors the storage bucket limit; fail fast with a clear message.
+    if (file.size > 25 * 1024 * 1024) { toastError('File is too large (max 25 MB)'); return; }
+    setUploadingFile(true);
+    try {
+      const supabase = createClient();
+      const ext = file.name.split('.').pop();
+      const path = `${familyId}/messages/${Date.now()}.${ext}`;
+      const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
+      if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
+      const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
+      const isImage = file.type.startsWith('image/');
+      const { error: insErr } = await supabase.from('family_messages').insert({
+        conversation_id: activeConv.id,
+        family_id: familyId,
+        sender_id: userId,
+        sender_name: myName,
+        content: isImage ? null : file.name,
+        kind: isImage ? 'image' : 'file',
+        attachment_url: publicUrl,
+        attachment_name: file.name,
+        attachment_mime: file.type,
+      });
+      if (insErr) {
+        // Roll back the orphaned upload if the message row failed to insert.
+        await supabase.storage.from('family-media').remove([stored.path]);
+        toastError(describeDbError(insErr));
+      }
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setUploadingFile(false);
+    }
   }
 
   // ── React to message ─────────────────────────────────────────
   async function reactTo(msg: Message, emoji: string) {
-    const supabase = createClient();
     const current = (msg.reactions as Record<string, string[]>) ?? {};
     const existing = current[emoji] ?? [];
     const updated = existing.includes(userId)
@@ -253,22 +284,23 @@ export function MessagesModule() {
       : { ...current, [emoji]: [...existing, userId] };
     // remove keys with empty arrays
     for (const k of Object.keys(updated)) { if (!updated[k].length) delete updated[k]; }
-    await supabase.from('family_messages').update({ reactions: updated }).eq('id', msg.id);
     setMsgMenu(null);
+    const { error } = await createClient().from('family_messages').update({ reactions: updated }).eq('id', msg.id);
+    if (error) toastError(describeDbError(error));
   }
 
   // ── Delete message ──────────────────────────────────────────
   async function deleteMessage(id: string) {
-    const supabase = createClient();
-    await supabase.from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId);
     setMsgMenu(null);
+    const { error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId);
+    if (error) toastError(describeDbError(error));
   }
 
   // ── Pin message ─────────────────────────────────────────────
   async function pinMessage(msg: Message) {
-    const supabase = createClient();
-    await supabase.from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id);
     setMsgMenu(null);
+    const { error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id);
+    if (error) toastError(describeDbError(error));
   }
 
   function selectConversation(conv: Conversation) {
@@ -298,7 +330,7 @@ export function MessagesModule() {
         : (activeConv.member_ids ?? []).map((uid) => members.find((m) => m.user_id === uid))
       ).filter(Boolean) as Tables<'family_members'>[];
 
-  if (loadingConvs) return <LoadingBlock />;
+  if (loadingConvs) return <SkeletonList />;
 
   return (
     <div className="flex h-[calc(100vh-var(--topbar-height)-2rem)] overflow-hidden rounded-2xl border border-border bg-surface/30">
@@ -396,6 +428,7 @@ export function MessagesModule() {
                       : `${activeConv.participant_ids?.length || activeConv.member_ids?.length || members.length} members`}
                 </p>
               </div>
+              <AiInsight kind="messages" params={{ conversationId: activeConv.id }} variant="ghost" iconOnly />
               <button className="rounded-lg p-1.5 text-muted hover:text-fg"><Search className="h-4 w-4" /></button>
               <button className="rounded-lg p-1.5 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>
             </div>
@@ -403,7 +436,7 @@ export function MessagesModule() {
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
               {loadingMsgs ? (
-                <LoadingBlock />
+                <SkeletonList />
               ) : messages.length === 0 ? (
                 <EmptyState icon={MessageCircle} title="No messages yet"
                   description="Say hello to your family!" />
@@ -582,10 +615,10 @@ export function MessagesModule() {
               className="flex items-end gap-2 border-t border-border bg-surface/50 px-4 py-3">
               {/* Attachment */}
               <input ref={fileRef} type="file" accept="image/*,application/pdf,.doc,.docx"
-                className="hidden" onChange={(e) => { if (e.target.files?.[0]) sendFile(e.target.files[0]); }} />
-              <button type="button" onClick={() => fileRef.current?.click()}
-                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg transition">
-                <Paperclip className="h-4 w-4" />
+                className="hidden" onChange={(e) => { if (e.target.files?.[0]) sendFile(e.target.files[0]); e.target.value = ''; }} />
+              <button type="button" onClick={() => fileRef.current?.click()} disabled={uploadingFile} aria-label="Attach file"
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50">
+                {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
               </button>
 
               {/* Emoji */}
@@ -760,7 +793,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
     });
 
     setLoading(false);
-    if (error || !data) { toastError(error?.message ?? 'Could not create conversation'); return; }
+    if (error || !data) { toastError(describeDbError(error, 'Could not create conversation')); return; }
     onCreated(data);
   }
 

@@ -13,10 +13,28 @@ export type EventCategory =
   | 'general' | 'school' | 'sports' | 'appointment' | 'medication'
   | 'maintenance' | 'birthday' | 'holiday' | 'other';
 export type RecurrenceFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type PetSpecies = 'dog' | 'cat' | 'bird' | 'fish' | 'reptile' | 'small_mammal' | 'horse' | 'other';
+export type PetCareKind = 'vaccination' | 'vet_visit' | 'medication' | 'grooming' | 'weight' | 'other';
+export type InsurancePolicyType = 'health' | 'dental' | 'vision' | 'auto' | 'home' | 'renters' | 'life' | 'disability' | 'umbrella' | 'pet' | 'travel' | 'other';
+export type PremiumFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type PantryLocation = 'pantry' | 'fridge' | 'freezer' | 'counter' | 'garage' | 'other';
+export type NutritionSubject = 'recipe' | 'meal' | 'week';
 export type NotificationType =
   | 'chore_due' | 'medication_due' | 'calendar_event' | 'school_event' | 'sports_event'
   | 'maintenance_task' | 'grocery_reminder' | 'document_expiry' | 'family_invite' | 'system';
+export type WalletTxnType =
+  | 'gift_received' | 'parent_top_up' | 'allowance' | 'chore_reward' | 'babysitter_payment'
+  | 'card_spend' | 'card_refund' | 'goal_transfer' | 'bucket_transfer' | 'transfer' | 'withdrawal' | 'fee' | 'adjustment' | 'reversal';
+export type WalletTxnStatus =
+  | 'pending' | 'requires_parent_approval' | 'processing' | 'completed' | 'failed' | 'reversed' | 'cancelled';
+export type StripeAccountStatus = 'pending' | 'restricted' | 'enabled' | 'disabled';
+export type InvestOrderSide = 'buy' | 'sell';
+export type InvestOrderStatus = 'pending' | 'filled' | 'rejected' | 'cancelled';
+export type SocialItemKind = 'post' | 'video' | 'photo' | 'link';
+export type SocialCategory = 'family' | 'friends' | 'groups' | 'other';
+export type EconomyDirection = 'credit' | 'debit';
+export type EconomyRedemptionStatus = 'pending' | 'approved' | 'fulfilled' | 'rejected' | 'cancelled';
 export type SubscriptionStatus =
   | 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid';
 export type AccountType = 'checking' | 'savings' | 'credit' | 'investment' | 'retirement';
@@ -37,11 +55,32 @@ export type CareLogType = 'check_in' | 'visit' | 'call' | 'meal' | 'medication' 
 export type OpportunityStatus = 'interested' | 'registered' | 'waitlisted' | 'passed' | 'missed';
 export type LocationEventType = 'arrived' | 'left' | 'ping';
 export type WishPriority = 'low' | 'medium' | 'high';
+export type RelationshipDateKind = 'anniversary' | 'birthday' | 'first_date' | 'date_night' | 'milestone' | 'custom';
+export type RelationshipDateStatus = 'idea' | 'planned' | 'booked' | 'upcoming' | 'completed' | 'cancelled';
+export type RelationshipGiftSource = 'manual' | 'ai' | 'wishlist';
+export type RelationshipGiftStatus = 'idea' | 'saved' | 'ordered' | 'purchased' | 'given';
 export type DoseStatus = 'taken' | 'skipped' | 'missed';
 export type WeekPattern = 'all' | 'a' | 'b';
 export type TripStatus = 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
 export type TripItemKind = 'packing' | 'todo' | 'reservation' | 'document';
 export type RedemptionStatus = 'requested' | 'approved' | 'fulfilled' | 'rejected';
+
+// Vacation Planner enums (migration 0070)
+export type VacationStatus = 'planning' | 'booked' | 'active' | 'completed' | 'cancelled';
+export type VacationKind = 'road_trip' | 'flight' | 'cruise' | 'theme_park' | 'international' | 'domestic' | 'staycation' | 'camping' | 'other';
+export type VacItemKind = 'activity' | 'reservation' | 'meal' | 'travel' | 'reminder' | 'note' | 'free_time';
+export type VacDayPart = 'morning' | 'afternoon' | 'evening' | 'all_day';
+export type VacTransportKind = 'car' | 'train' | 'bus' | 'ferry' | 'rideshare' | 'shuttle' | 'subway' | 'walk' | 'bike' | 'other';
+export type VacLodgingKind = 'hotel' | 'airbnb' | 'resort' | 'cabin' | 'campground' | 'cruise_cabin' | 'hostel' | 'family' | 'rental' | 'other';
+export type VacBudgetCategory = 'flights' | 'lodging' | 'transportation' | 'activities' | 'food' | 'shopping' | 'insurance' | 'fees' | 'misc';
+export type VacPackCategory = 'clothes' | 'toiletries' | 'electronics' | 'medications' | 'documents' | 'sports' | 'beach' | 'ski' | 'camping' | 'baby' | 'snacks' | 'other';
+export type VacDocKind = 'passport' | 'id' | 'visa' | 'ticket' | 'boarding_pass' | 'hotel_confirmation' | 'rental_confirmation' | 'insurance' | 'itinerary' | 'medical' | 'other';
+export type VacRecoKind = 'missing_reservation' | 'packing' | 'budget_warning' | 'weather_warning' | 'travel_conflict' | 'activity_suggestion' | 'restaurant' | 'document_missing' | 'suggestion';
+export type VacRecoStatus = 'open' | 'accepted' | 'dismissed' | 'done';
+
+// Weekend Planner enums (migration 0071, 0072)
+export type WeekendPlanStatus = 'interested' | 'going' | 'maybe' | 'passed';
+export type WeekendFeedKind = 'ics' | 'rss';
 
 // Sync platform enums (migration 0018)
 export type SyncProviderEnum = 'google' | 'microsoft' | 'apple' | 'amazon' | 'internal';
@@ -174,6 +213,21 @@ export interface Database {
         { id?: string; family_id: string; meal_id?: string | null; plan_date: string; meal_type?: MealType; created_by?: string | null },
         Partial<{ meal_id: string | null; plan_date: string; meal_type: MealType }>
       >;
+      meal_votes: T<
+        { id: string; family_id: string; created_by: string | null; title: string; meal_date: string | null; meal_type: string | null; status: string; deadline: string | null; allow_maybe: boolean; winner_option_id: string | null } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; title: string; meal_date?: string | null; meal_type?: string | null; status?: string; deadline?: string | null; allow_maybe?: boolean; winner_option_id?: string | null },
+        Partial<{ title: string; meal_date: string | null; meal_type: string | null; status: string; deadline: string | null; allow_maybe: boolean; winner_option_id: string | null }>
+      >;
+      meal_vote_options: T<
+        { id: string; vote_id: string; family_id: string; recipe_id: string | null; label: string; photo_url: string | null; created_at: string },
+        { id?: string; vote_id: string; family_id: string; recipe_id?: string | null; label: string; photo_url?: string | null },
+        Partial<{ label: string; photo_url: string | null; recipe_id: string | null }>
+      >;
+      meal_vote_ballots: T<
+        { id: string; vote_id: string; option_id: string; family_id: string; member_id: string; choice: string } & Stamps,
+        { id?: string; vote_id: string; option_id: string; family_id: string; member_id: string; choice?: string },
+        Partial<{ choice: string }>
+      >;
       grocery_lists: T<
         { id: string; family_id: string; name: string; is_archived: boolean; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name?: string; is_archived?: boolean; created_by?: string | null },
@@ -184,10 +238,20 @@ export interface Database {
         { id?: string; family_id: string; list_id: string; name: string; quantity?: string | null; category?: string | null; is_checked?: boolean; source_meal_id?: string | null; created_by?: string | null },
         Partial<{ name: string; quantity: string | null; category: string | null; is_checked: boolean }>
       >;
+      pantry_items: T<
+        { id: string; family_id: string; name: string; category: string | null; location: PantryLocation; quantity: number; unit: string | null; low_threshold: number | null; expires_at: string | null; barcode: string | null; is_staple: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; category?: string | null; location?: PantryLocation; quantity?: number; unit?: string | null; low_threshold?: number | null; expires_at?: string | null; barcode?: string | null; is_staple?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; category: string | null; location: PantryLocation; quantity: number; unit: string | null; low_threshold: number | null; expires_at: string | null; barcode: string | null; is_staple: boolean; notes: string | null }>
+      >;
+      meal_nutrition: T<
+        { id: string; family_id: string; subject_type: NutritionSubject; subject_id: string; servings: number | null; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null; sugar_g: number | null; sodium_mg: number | null; summary: string | null; details: Json | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; subject_type: NutritionSubject; subject_id: string; servings?: number | null; calories?: number | null; protein_g?: number | null; carbs_g?: number | null; fat_g?: number | null; fiber_g?: number | null; sugar_g?: number | null; sodium_mg?: number | null; summary?: string | null; details?: Json | null; created_by?: string | null },
+        Partial<{ subject_type: NutritionSubject; subject_id: string; servings: number | null; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null; sugar_g: number | null; sodium_mg: number | null; summary: string | null; details: Json | null }>
+      >;
       medications: T<
-        { id: string; family_id: string; member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; member_id?: string | null; name: string; dosage?: string | null; instructions?: string | null; is_active?: boolean; created_by?: string | null },
-        Partial<{ member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean }>
+        { id: string; family_id: string; member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean; refill_on: string | null; refill_reminder_days: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; name: string; dosage?: string | null; instructions?: string | null; is_active?: boolean; refill_on?: string | null; refill_reminder_days?: number; created_by?: string | null },
+        Partial<{ member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean; refill_on: string | null; refill_reminder_days: number }>
       >;
       medication_schedules: T<
         { id: string; family_id: string; medication_id: string; time_of_day: string; days_of_week: number[]; starts_on: string; ends_on: string | null; last_taken_at: string | null } & Stamps,
@@ -248,6 +312,26 @@ export interface Database {
         { id: string; family_id: string; member_id: string; title: string; url: string | null; price: number | null; priority: WishPriority; notes: string | null; claimed_by: string | null; claimed_at: string | null; is_purchased: boolean; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; title: string; url?: string | null; price?: number | null; priority?: WishPriority; notes?: string | null; claimed_by?: string | null; claimed_at?: string | null; is_purchased?: boolean; created_by?: string | null },
         Partial<{ member_id: string; title: string; url: string | null; price: number | null; priority: WishPriority; notes: string | null; claimed_by: string | null; claimed_at: string | null; is_purchased: boolean }>
+      >;
+      relationship_profile: T<
+        { id: string; family_id: string; created_by: string | null; partner_name: string | null; partner_member_id: string | null; interests: string[]; love_languages: string[]; gift_budget_cents: number | null; notes: string | null } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; partner_name?: string | null; partner_member_id?: string | null; interests?: string[]; love_languages?: string[]; gift_budget_cents?: number | null; notes?: string | null },
+        Partial<{ partner_name: string | null; partner_member_id: string | null; interests: string[]; love_languages: string[]; gift_budget_cents: number | null; notes: string | null }>
+      >;
+      relationship_dates: T<
+        { id: string; family_id: string; created_by: string | null; kind: RelationshipDateKind; title: string; event_date: string; recurs_annually: boolean; reminder_days_before: number; member_id: string | null; partner_name: string | null; location: string | null; notes: string | null; calendar_event_id: string | null; status: RelationshipDateStatus } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; kind?: RelationshipDateKind; title: string; event_date: string; recurs_annually?: boolean; reminder_days_before?: number; member_id?: string | null; partner_name?: string | null; location?: string | null; notes?: string | null; calendar_event_id?: string | null; status?: RelationshipDateStatus },
+        Partial<{ kind: RelationshipDateKind; title: string; event_date: string; recurs_annually: boolean; reminder_days_before: number; member_id: string | null; partner_name: string | null; location: string | null; notes: string | null; calendar_event_id: string | null; status: RelationshipDateStatus }>
+      >;
+      relationship_gift_ideas: T<
+        { id: string; family_id: string; created_by: string | null; for_member_id: string | null; for_name: string | null; title: string; url: string | null; price_cents: number | null; occasion: string | null; reason: string | null; source: RelationshipGiftSource; wishlist_item_id: string | null; status: RelationshipGiftStatus } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; for_member_id?: string | null; for_name?: string | null; title: string; url?: string | null; price_cents?: number | null; occasion?: string | null; reason?: string | null; source?: RelationshipGiftSource; wishlist_item_id?: string | null; status?: RelationshipGiftStatus },
+        Partial<{ for_member_id: string | null; for_name: string | null; title: string; url: string | null; price_cents: number | null; occasion: string | null; reason: string | null; source: RelationshipGiftSource; wishlist_item_id: string | null; status: RelationshipGiftStatus }>
+      >;
+      stripe_settings: T<
+        { id: string; enabled: boolean; publishable_key: string | null; secret_key: string | null; webhook_secret: string | null; connect_account_id: string | null; service_fee_cents: number; service_fee_price_id: string | null; updated_by: string | null } & Stamps,
+        { id?: string; enabled?: boolean; publishable_key?: string | null; secret_key?: string | null; webhook_secret?: string | null; connect_account_id?: string | null; service_fee_cents?: number; service_fee_price_id?: string | null; updated_by?: string | null },
+        Partial<{ enabled: boolean; publishable_key: string | null; secret_key: string | null; webhook_secret: string | null; connect_account_id: string | null; service_fee_cents: number; service_fee_price_id: string | null; updated_by: string | null }>
       >;
       family_announcements: T<
         { id: string; family_id: string; author_id: string | null; author_member_id: string | null; title: string; body: string | null; is_pinned: boolean } & Stamps,
@@ -319,10 +403,300 @@ export interface Database {
         { id?: string; family_id: string; title?: string | null; body?: string; is_pinned?: boolean; checklist?: Json | null; created_by?: string | null },
         Partial<{ title: string | null; body: string; is_pinned: boolean; checklist: Json | null }>
       >;
+      journal_entries: T<
+        { id: string; family_id: string; member_id: string | null; entry_date: string; mood: 'great' | 'good' | 'okay' | 'low' | 'stressed' | null; title: string | null; body: string; prompt: string | null; tags: string[]; is_private: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; entry_date?: string; mood?: 'great' | 'good' | 'okay' | 'low' | 'stressed' | null; title?: string | null; body?: string; prompt?: string | null; tags?: string[]; is_private?: boolean; created_by?: string | null },
+        Partial<{ member_id: string | null; entry_date: string; mood: 'great' | 'good' | 'okay' | 'low' | 'stressed' | null; title: string | null; body: string; prompt: string | null; tags: string[]; is_private: boolean }>
+      >;
+      family_wallets: T<
+        { id: string; family_id: string; currency: string; mode: 'ledger' | 'treasury'; is_active: boolean; disclosures_accepted_at: string | null; disclosures_accepted_by: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; currency?: string; mode?: 'ledger' | 'treasury'; is_active?: boolean; disclosures_accepted_at?: string | null; disclosures_accepted_by?: string | null; created_by?: string | null },
+        Partial<{ currency: string; mode: 'ledger' | 'treasury'; is_active: boolean; disclosures_accepted_at: string | null; disclosures_accepted_by: string | null }>
+      >;
+      child_wallets: T<
+        { id: string; family_id: string; member_id: string; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; is_active?: boolean; created_by?: string | null },
+        Partial<{ is_active: boolean }>
+      >;
+      wallet_buckets: T<
+        { id: string; family_id: string; child_wallet_id: string; kind: 'spend' | 'save' | 'give' | 'invest' | 'goal'; label: string; sort_order: number } & Stamps,
+        { id?: string; family_id: string; child_wallet_id: string; kind: 'spend' | 'save' | 'give' | 'invest' | 'goal'; label: string; sort_order?: number },
+        Partial<{ label: string; sort_order: number }>
+      >;
+      wallet_transactions: T<
+        { id: string; family_id: string; child_wallet_id: string | null; bucket_id: string | null; type: WalletTxnType; status: WalletTxnStatus; direction: 'credit' | 'debit'; amount_cents: number; currency: string; description: string | null; related_type: string | null; related_id: string | null; reverses_id: string | null; stripe_ref: string | null; metadata: Json; created_by: string | null; approved_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id?: string | null; bucket_id?: string | null; type: WalletTxnType; status?: WalletTxnStatus; direction: 'credit' | 'debit'; amount_cents: number; currency?: string; description?: string | null; related_type?: string | null; related_id?: string | null; reverses_id?: string | null; stripe_ref?: string | null; metadata?: Json; created_by?: string | null; approved_by?: string | null },
+        Partial<{ status: WalletTxnStatus; description: string | null; approved_by: string | null; metadata: Json }>
+      >;
+      wallet_rules: T<
+        { id: string; family_id: string; child_wallet_id: string | null; split: Json; auto_accept_gifts: boolean; require_approval_over_cents: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id?: string | null; split?: Json; auto_accept_gifts?: boolean; require_approval_over_cents?: number; created_by?: string | null },
+        Partial<{ split: Json; auto_accept_gifts: boolean; require_approval_over_cents: number }>
+      >;
+      wallet_goals: T<
+        { id: string; family_id: string; child_wallet_id: string | null; title: string; kind: string; target_cents: number; saved_cents: number; target_date: string | null; status: string; image_url: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id?: string | null; title: string; kind?: string; target_cents: number; saved_cents?: number; target_date?: string | null; status?: string; image_url?: string | null; created_by?: string | null },
+        Partial<{ title: string; kind: string; target_cents: number; saved_cents: number; target_date: string | null; status: string; image_url: string | null }>
+      >;
+      pay_handles: T<
+        { id: string; family_id: string; child_wallet_id: string | null; handle: string; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id?: string | null; handle: string; is_active?: boolean; created_by?: string | null },
+        Partial<{ child_wallet_id: string | null; handle: string; is_active: boolean }>
+      >;
+      gift_links: T<
+        { id: string; family_id: string; child_wallet_id: string | null; token: string; occasion: string | null; message: string | null; suggested_cents: number[]; is_active: boolean; expires_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id?: string | null; token: string; occasion?: string | null; message?: string | null; suggested_cents?: number[]; is_active?: boolean; expires_at?: string | null; created_by?: string | null },
+        Partial<{ occasion: string | null; message: string | null; suggested_cents: number[]; is_active: boolean; expires_at: string | null }>
+      >;
+      gift_payments: T<
+        { id: string; family_id: string; gift_link_id: string | null; child_wallet_id: string | null; giver_name: string | null; giver_email: string | null; amount_cents: number; message: string | null; occasion: string | null; status: WalletTxnStatus; stripe_ref: string | null; applied_txn_id: string | null } & Stamps,
+        { id?: string; family_id: string; gift_link_id?: string | null; child_wallet_id?: string | null; giver_name?: string | null; giver_email?: string | null; amount_cents: number; message?: string | null; occasion?: string | null; status?: WalletTxnStatus; stripe_ref?: string | null; applied_txn_id?: string | null },
+        Partial<{ status: WalletTxnStatus; applied_txn_id: string | null; stripe_ref: string | null }>
+      >;
+      allowance_rules: T<
+        { id: string; family_id: string; child_wallet_id: string; amount_cents: number; cadence: 'weekly' | 'biweekly' | 'monthly'; split: Json | null; is_active: boolean; next_run_on: string | null; last_run_on: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id: string; amount_cents: number; cadence?: 'weekly' | 'biweekly' | 'monthly'; split?: Json | null; is_active?: boolean; next_run_on?: string | null; last_run_on?: string | null; created_by?: string | null },
+        Partial<{ amount_cents: number; cadence: 'weekly' | 'biweekly' | 'monthly'; split: Json | null; is_active: boolean; next_run_on: string | null; last_run_on: string | null }>
+      >;
+      babysitter_profiles: T<
+        { id: string; family_id: string; name: string; phone: string | null; email: string | null; rate_cents: number | null; notes: string | null; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; phone?: string | null; email?: string | null; rate_cents?: number | null; notes?: string | null; is_active?: boolean; created_by?: string | null },
+        Partial<{ name: string; phone: string | null; email: string | null; rate_cents: number | null; notes: string | null; is_active: boolean }>
+      >;
+      babysitter_payments: T<
+        { id: string; family_id: string; babysitter_id: string | null; event_id: string | null; hours: number | null; rate_cents: number | null; tip_cents: number; amount_cents: number; status: WalletTxnStatus; stripe_ref: string | null; receipt_url: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; babysitter_id?: string | null; event_id?: string | null; hours?: number | null; rate_cents?: number | null; tip_cents?: number; amount_cents: number; status?: WalletTxnStatus; stripe_ref?: string | null; receipt_url?: string | null; created_by?: string | null },
+        Partial<{ status: WalletTxnStatus; tip_cents: number; receipt_url: string | null }>
+      >;
+      parent_approvals: T<
+        { id: string; family_id: string; kind: string; ref_type: string | null; ref_id: string | null; amount_cents: number | null; status: 'pending' | 'approved' | 'rejected'; requested_by: string | null; decided_by: string | null; decided_at: string | null; note: string | null } & Stamps,
+        { id?: string; family_id: string; kind: string; ref_type?: string | null; ref_id?: string | null; amount_cents?: number | null; status?: 'pending' | 'approved' | 'rejected'; requested_by?: string | null; decided_by?: string | null; decided_at?: string | null; note?: string | null },
+        Partial<{ status: 'pending' | 'approved' | 'rejected'; decided_by: string | null; decided_at: string | null; note: string | null }>
+      >;
+      wallet_audit_logs: T<
+        { id: string; family_id: string; actor_user_id: string | null; action: string; entity_type: string | null; entity_id: string | null; detail: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; actor_user_id?: string | null; action: string; entity_type?: string | null; entity_id?: string | null; detail?: string | null; metadata?: Json },
+        Partial<{ detail: string | null; metadata: Json }>
+      >;
+      compliance_disclosures: T<
+        { id: string; family_id: string; kind: string; version: string; accepted_by: string | null; accepted_at: string; ip_address: string | null } & Stamps,
+        { id?: string; family_id: string; kind: string; version: string; accepted_by?: string | null; accepted_at?: string; ip_address?: string | null },
+        Partial<{ kind: string; version: string }>
+      >;
+      feature_flags: T<
+        { key: string; enabled: boolean; description: string | null; updated_at: string },
+        { key: string; enabled?: boolean; description?: string | null },
+        Partial<{ enabled: boolean; description: string | null }>
+      >;
+      social_reader_sources: T<
+        { id: string; family_id: string; platform: string; display_name: string; handle: string | null; account_count: number; category: SocialCategory; is_active: boolean; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; platform: string; display_name: string; handle?: string | null; account_count?: number; category?: SocialCategory; is_active?: boolean; sort_order?: number; created_by?: string | null },
+        Partial<{ display_name: string; handle: string | null; account_count: number; category: SocialCategory; is_active: boolean; sort_order: number }>
+      >;
+      social_reader_items: T<
+        { id: string; family_id: string; source_id: string | null; platform: string; author_name: string; author_handle: string | null; avatar_url: string | null; content: string | null; media_urls: string[]; thumbnail_url: string | null; permalink: string | null; kind: SocialItemKind; duration_label: string | null; category: SocialCategory; verified: boolean; is_favorite: boolean; is_read: boolean; external_id: string | null; posted_at: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; source_id?: string | null; platform: string; author_name: string; author_handle?: string | null; avatar_url?: string | null; content?: string | null; media_urls?: string[]; thumbnail_url?: string | null; permalink?: string | null; kind?: SocialItemKind; duration_label?: string | null; category?: SocialCategory; verified?: boolean; is_favorite?: boolean; is_read?: boolean; external_id?: string | null; posted_at?: string; created_by?: string | null },
+        Partial<{ content: string | null; media_urls: string[]; thumbnail_url: string | null; permalink: string | null; kind: SocialItemKind; duration_label: string | null; category: SocialCategory; verified: boolean; is_favorite: boolean; is_read: boolean }>
+      >;
+      invest_assets: T<
+        { id: string; symbol: string; name: string; kind: string; emoji: string; description: string | null; price_cents: number; risk_level: string; is_active: boolean; sort_order: number } & Stamps,
+        { id?: string; symbol: string; name: string; kind?: string; emoji?: string; description?: string | null; price_cents: number; risk_level?: string; is_active?: boolean; sort_order?: number },
+        Partial<{ name: string; kind: string; emoji: string; description: string | null; price_cents: number; risk_level: string; is_active: boolean; sort_order: number }>
+      >;
+      invest_holdings: T<
+        { id: string; family_id: string; child_wallet_id: string; asset_id: string; shares: number; avg_cost_cents: number } & Stamps,
+        { id?: string; family_id: string; child_wallet_id: string; asset_id: string; shares?: number; avg_cost_cents?: number },
+        Partial<{ shares: number; avg_cost_cents: number }>
+      >;
+      invest_orders: T<
+        { id: string; family_id: string; child_wallet_id: string; asset_id: string; side: InvestOrderSide; shares: number; price_cents: number; amount_cents: number; status: InvestOrderStatus; txn_id: string | null; requested_by: string | null; decided_by: string | null; decided_at: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id: string; asset_id: string; side: InvestOrderSide; shares: number; price_cents: number; amount_cents: number; status?: InvestOrderStatus; txn_id?: string | null; requested_by?: string | null; decided_by?: string | null; decided_at?: string | null },
+        Partial<{ status: InvestOrderStatus; txn_id: string | null; decided_by: string | null; decided_at: string | null }>
+      >;
+      family_currencies: T<
+        { id: string; family_id: string; name: string; emoji: string; unit_label: string | null; is_active: boolean; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; emoji?: string; unit_label?: string | null; is_active?: boolean; sort_order?: number; created_by?: string | null },
+        Partial<{ name: string; emoji: string; unit_label: string | null; is_active: boolean; sort_order: number }>
+      >;
+      currency_transactions: T<
+        { id: string; family_id: string; currency_id: string; member_id: string; direction: EconomyDirection; amount: number; reason: string | null; related_type: string | null; related_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; currency_id: string; member_id: string; direction: EconomyDirection; amount: number; reason?: string | null; related_type?: string | null; related_id?: string | null; created_by?: string | null },
+        Partial<{ reason: string | null }>
+      >;
+      economy_rewards: T<
+        { id: string; family_id: string; currency_id: string; title: string; emoji: string; cost: number; stock: number | null; is_active: boolean; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; currency_id: string; title: string; emoji?: string; cost: number; stock?: number | null; is_active?: boolean; sort_order?: number; created_by?: string | null },
+        Partial<{ title: string; emoji: string; cost: number; stock: number | null; is_active: boolean; sort_order: number }>
+      >;
+      economy_redemptions: T<
+        { id: string; family_id: string; reward_id: string | null; currency_id: string; member_id: string; title: string; cost: number; status: EconomyRedemptionStatus; txn_id: string | null; requested_by: string | null; decided_by: string | null; decided_at: string | null; note: string | null } & Stamps,
+        { id?: string; family_id: string; reward_id?: string | null; currency_id: string; member_id: string; title: string; cost: number; status?: EconomyRedemptionStatus; txn_id?: string | null; requested_by?: string | null; decided_by?: string | null; decided_at?: string | null; note?: string | null },
+        Partial<{ status: EconomyRedemptionStatus; txn_id: string | null; decided_by: string | null; decided_at: string | null; note: string | null }>
+      >;
+      stripe_connected_accounts: T<
+        { id: string; family_id: string; stripe_account_id: string; status: StripeAccountStatus; charges_enabled: boolean; payouts_enabled: boolean; details_submitted: boolean; treasury_enabled: boolean; card_issuing_enabled: boolean; requirements_due: Json; onboarded_by: string | null } & Stamps,
+        { id?: string; family_id: string; stripe_account_id: string; status?: StripeAccountStatus; charges_enabled?: boolean; payouts_enabled?: boolean; details_submitted?: boolean; treasury_enabled?: boolean; card_issuing_enabled?: boolean; requirements_due?: Json; onboarded_by?: string | null },
+        Partial<{ status: StripeAccountStatus; charges_enabled: boolean; payouts_enabled: boolean; details_submitted: boolean; treasury_enabled: boolean; card_issuing_enabled: boolean; requirements_due: Json }>
+      >;
+      stripe_financial_accounts: T<
+        { id: string; family_id: string; connected_account_id: string; stripe_financial_account_id: string; status: string; cached_balance_cents: number; cached_at: string | null } & Stamps,
+        { id?: string; family_id: string; connected_account_id: string; stripe_financial_account_id: string; status?: string; cached_balance_cents?: number; cached_at?: string | null },
+        Partial<{ status: string; cached_balance_cents: number; cached_at: string | null }>
+      >;
+      stripe_cardholders: T<
+        { id: string; family_id: string; member_id: string; child_wallet_id: string | null; stripe_cardholder_id: string; status: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; child_wallet_id?: string | null; stripe_cardholder_id: string; status?: string; created_by?: string | null },
+        Partial<{ status: string }>
+      >;
+      stripe_issuing_cards: T<
+        { id: string; family_id: string; child_wallet_id: string; cardholder_id: string; stripe_card_id: string; type: 'virtual' | 'physical'; status: 'pending' | 'active' | 'inactive' | 'canceled'; last4: string | null; brand: string | null; exp_month: number | null; exp_year: number | null; design_id: string | null; spend_limit_cents: number | null; spend_window: string; blocked_categories: string[]; is_frozen: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; child_wallet_id: string; cardholder_id: string; stripe_card_id: string; type?: 'virtual' | 'physical'; status?: 'pending' | 'active' | 'inactive' | 'canceled'; last4?: string | null; brand?: string | null; exp_month?: number | null; exp_year?: number | null; design_id?: string | null; spend_limit_cents?: number | null; spend_window?: string; blocked_categories?: string[]; is_frozen?: boolean; created_by?: string | null },
+        Partial<{ status: 'pending' | 'active' | 'inactive' | 'canceled'; last4: string | null; brand: string | null; exp_month: number | null; exp_year: number | null; design_id: string | null; spend_limit_cents: number | null; spend_window: string; blocked_categories: string[]; is_frozen: boolean }>
+      >;
+      stripe_authorizations: T<
+        { id: string; family_id: string; card_id: string | null; child_wallet_id: string | null; stripe_authorization_id: string; amount_cents: number; merchant_name: string | null; merchant_category: string | null; outcome: 'approved' | 'declined'; decline_reason: string | null; txn_id: string | null } & Stamps,
+        { id?: string; family_id: string; card_id?: string | null; child_wallet_id?: string | null; stripe_authorization_id: string; amount_cents?: number; merchant_name?: string | null; merchant_category?: string | null; outcome: 'approved' | 'declined'; decline_reason?: string | null; txn_id?: string | null },
+        Partial<{ outcome: 'approved' | 'declined'; decline_reason: string | null; txn_id: string | null }>
+      >;
+      stripe_card_designs: T<
+        { id: string; name: string; description: string | null; preview_url: string | null; stripe_personalization_design_id: string | null; status: string; is_active: boolean; sort_order: number } & Stamps,
+        { id?: string; name: string; description?: string | null; preview_url?: string | null; stripe_personalization_design_id?: string | null; status?: string; is_active?: boolean; sort_order?: number },
+        Partial<{ name: string; description: string | null; preview_url: string | null; stripe_personalization_design_id: string | null; status: string; is_active: boolean; sort_order: number }>
+      >;
+      stripe_webhook_events: T<
+        { id: string; stripe_event_id: string; type: string; status: string; error: string | null; payload_summary: Json; created_at: string },
+        { id?: string; stripe_event_id: string; type: string; status?: string; error?: string | null; payload_summary?: Json },
+        Partial<{ status: string; error: string | null }>
+      >;
+      dashboard_layouts: T<
+        { id: string; family_id: string; user_id: string | null; scope: 'user' | 'family'; device_context: 'all' | 'mobile' | 'tablet' | 'desktop'; feature_keys: string[]; is_active: boolean; created_by: string | null; updated_by: string | null; metadata: Json; deleted_at: string | null } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; scope?: 'user' | 'family'; device_context?: 'all' | 'mobile' | 'tablet' | 'desktop'; feature_keys?: string[]; is_active?: boolean; created_by?: string | null; updated_by?: string | null; metadata?: Json; deleted_at?: string | null },
+        Partial<{ user_id: string | null; scope: 'user' | 'family'; device_context: 'all' | 'mobile' | 'tablet' | 'desktop'; feature_keys: string[]; is_active: boolean; updated_by: string | null; metadata: Json; deleted_at: string | null }>
+      >;
+      dashboard_layout_events: T<
+        { id: string; family_id: string; user_id: string | null; action: string; feature_key: string | null; metadata: Json; created_at: string },
+        { id?: string; family_id: string; user_id?: string | null; action: string; feature_key?: string | null; metadata?: Json },
+        Partial<{ metadata: Json }>
+      >;
+      family_dashboard_settings: T<
+        { family_id: string; allow_child_customization: boolean; lock_to_family_default: boolean; updated_by: string | null } & Stamps,
+        { family_id: string; allow_child_customization?: boolean; lock_to_family_default?: boolean; updated_by?: string | null },
+        Partial<{ allow_child_customization: boolean; lock_to_family_default: boolean; updated_by: string | null }>
+      >;
+      family_tree_nodes: T<
+        { id: string; family_id: string; parent_node_id: string | null; member_id: string | null; name: string; relationship: string; birth_year: number | null; death_year: number | null; birth_place: string | null; photo_url: string | null; bio: string | null; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; parent_node_id?: string | null; member_id?: string | null; name: string; relationship?: string; birth_year?: number | null; death_year?: number | null; birth_place?: string | null; photo_url?: string | null; bio?: string | null; metadata?: Json; created_by?: string | null },
+        Partial<{ parent_node_id: string | null; member_id: string | null; name: string; relationship: string; birth_year: number | null; death_year: number | null; birth_place: string | null; photo_url: string | null; bio: string | null; metadata: Json }>
+      >;
+      family_insurance_policies: T<
+        { id: string; family_id: string; policy_type: InsurancePolicyType; insurer: string; policy_number: string | null; member_id: string | null; premium_amount: number | null; premium_frequency: PremiumFrequency; coverage_amount: number | null; deductible: number | null; effective_date: string | null; renewal_date: string | null; agent_name: string | null; agent_phone: string | null; claim_phone: string | null; document_path: string | null; notes: string | null; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; policy_type?: InsurancePolicyType; insurer: string; policy_number?: string | null; member_id?: string | null; premium_amount?: number | null; premium_frequency?: PremiumFrequency; coverage_amount?: number | null; deductible?: number | null; effective_date?: string | null; renewal_date?: string | null; agent_name?: string | null; agent_phone?: string | null; claim_phone?: string | null; document_path?: string | null; notes?: string | null; is_active?: boolean; created_by?: string | null },
+        Partial<{ policy_type: InsurancePolicyType; insurer: string; policy_number: string | null; member_id: string | null; premium_amount: number | null; premium_frequency: PremiumFrequency; coverage_amount: number | null; deductible: number | null; effective_date: string | null; renewal_date: string | null; agent_name: string | null; agent_phone: string | null; claim_phone: string | null; document_path: string | null; notes: string | null; is_active: boolean }>
+      >;
+      pets: T<
+        { id: string; family_id: string; name: string; species: PetSpecies; breed: string | null; birthday: string | null; adoption_date: string | null; weight_kg: number | null; color: string | null; microchip_id: string | null; photo_path: string | null; vet_name: string | null; vet_phone: string | null; notes: string | null; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; species?: PetSpecies; breed?: string | null; birthday?: string | null; adoption_date?: string | null; weight_kg?: number | null; color?: string | null; microchip_id?: string | null; photo_path?: string | null; vet_name?: string | null; vet_phone?: string | null; notes?: string | null; is_active?: boolean; created_by?: string | null },
+        Partial<{ name: string; species: PetSpecies; breed: string | null; birthday: string | null; adoption_date: string | null; weight_kg: number | null; color: string | null; microchip_id: string | null; photo_path: string | null; vet_name: string | null; vet_phone: string | null; notes: string | null; is_active: boolean }>
+      >;
+      pet_care_records: T<
+        { id: string; family_id: string; pet_id: string; kind: PetCareKind; title: string; record_date: string; next_due: string | null; dose: string | null; weight_kg: number | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; pet_id: string; kind?: PetCareKind; title: string; record_date?: string; next_due?: string | null; dose?: string | null; weight_kg?: number | null; notes?: string | null; created_by?: string | null },
+        Partial<{ pet_id: string; kind: PetCareKind; title: string; record_date: string; next_due: string | null; dose: string | null; weight_kg: number | null; notes: string | null }>
+      >;
+      family_polls: T<
+        { id: string; family_id: string; vacation_id: string | null; question: string; description: string | null; kind: string; status: string; closes_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; question: string; description?: string | null; kind?: string; status?: string; closes_at?: string | null; created_by?: string | null },
+        Partial<{ vacation_id: string | null; question: string; description: string | null; kind: string; status: string; closes_at: string | null }>
+      >;
+      family_poll_options: T<
+        { id: string; family_id: string; poll_id: string; label: string; sort: number; created_at: string },
+        { id?: string; family_id: string; poll_id: string; label: string; sort?: number },
+        Partial<{ label: string; sort: number }>
+      >;
+      family_poll_votes: T<
+        { id: string; family_id: string; poll_id: string; option_id: string; member_id: string; created_at: string },
+        { id?: string; family_id: string; poll_id: string; option_id: string; member_id: string },
+        Partial<{ option_id: string; member_id: string }>
+      >;
+      trip_memories: T<
+        { id: string; family_id: string; vacation_id: string | null; title: string; memory_date: string; note: string | null; location: string | null; photo_path: string | null; member_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; title: string; memory_date?: string; note?: string | null; location?: string | null; photo_path?: string | null; member_id?: string | null; created_by?: string | null },
+        Partial<{ vacation_id: string | null; title: string; memory_date: string; note: string | null; location: string | null; photo_path: string | null; member_id: string | null }>
+      >;
+      behavior_logs: T<
+        { id: string; family_id: string; member_id: string | null; kind: string; category: string; note: string | null; points: number; occurred_at: string; logged_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; kind?: string; category?: string; note?: string | null; points?: number; occurred_at?: string; logged_by?: string | null },
+        Partial<{ member_id: string | null; kind: string; category: string; note: string | null; points: number; occurred_at: string }>
+      >;
+      screen_time_entries: T<
+        { id: string; family_id: string; member_id: string | null; entry_date: string; minutes: number; category: string; device: string | null; note: string | null; logged_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; entry_date?: string; minutes: number; category?: string; device?: string | null; note?: string | null; logged_by?: string | null },
+        Partial<{ member_id: string | null; entry_date: string; minutes: number; category: string; device: string | null; note: string | null }>
+      >;
+      screen_time_limits: T<
+        { id: string; family_id: string; member_id: string; daily_minutes: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; daily_minutes: number; created_by?: string | null },
+        Partial<{ daily_minutes: number }>
+      >;
+      expense_splits: T<
+        { id: string; family_id: string; description: string; total_cents: number; category: string | null; paid_by: string | null; spent_on: string; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; description: string; total_cents: number; category?: string | null; paid_by?: string | null; spent_on?: string; note?: string | null; created_by?: string | null },
+        Partial<{ description: string; total_cents: number; category: string | null; paid_by: string | null; spent_on: string; note: string | null }>
+      >;
+      expense_split_shares: T<
+        { id: string; family_id: string; split_id: string; member_id: string; share_cents: number; settled: boolean; settled_at: string | null } & Stamps,
+        { id?: string; family_id: string; split_id: string; member_id: string; share_cents: number; settled?: boolean; settled_at?: string | null },
+        Partial<{ share_cents: number; settled: boolean; settled_at: string | null }>
+      >;
+      subscriptions_tracked: T<
+        { id: string; family_id: string; name: string; cost_cents: number; cadence: string; category: string | null; status: string; next_charge: string | null; last_used: string | null; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; cost_cents: number; cadence?: string; category?: string | null; status?: string; next_charge?: string | null; last_used?: string | null; note?: string | null; created_by?: string | null },
+        Partial<{ name: string; cost_cents: number; cadence: string; category: string | null; status: string; next_charge: string | null; last_used: string | null; note: string | null }>
+      >;
+      tax_documents: T<
+        { id: string; family_id: string; tax_year: number; category: string; name: string; storage_path: string | null; amount_cents: number | null; member_id: string | null; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; tax_year: number; category?: string; name: string; storage_path?: string | null; amount_cents?: number | null; member_id?: string | null; note?: string | null; created_by?: string | null },
+        Partial<{ tax_year: number; category: string; name: string; storage_path: string | null; amount_cents: number | null; member_id: string | null; note: string | null }>
+      >;
+      utility_bills: T<
+        { id: string; family_id: string; kind: string; provider: string | null; period_month: string; amount_cents: number; usage: number | null; unit: string | null; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; kind?: string; provider?: string | null; period_month?: string; amount_cents?: number; usage?: number | null; unit?: string | null; note?: string | null; created_by?: string | null },
+        Partial<{ kind: string; provider: string | null; period_month: string; amount_cents: number; usage: number | null; unit: string | null; note: string | null }>
+      >;
+      household_info: T<
+        { id: string; family_id: string; category: string; label: string; value: string | null; note: string | null; is_sensitive: boolean; sort: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; category?: string; label: string; value?: string | null; note?: string | null; is_sensitive?: boolean; sort?: number; created_by?: string | null },
+        Partial<{ category: string; label: string; value: string | null; note: string | null; is_sensitive: boolean; sort: number }>
+      >;
+      home_security_events: T<
+        { id: string; family_id: string; kind: string; severity: string; title: string; detail: string | null; occurred_at: string; resolved: boolean; resolved_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; kind?: string; severity?: string; title: string; detail?: string | null; occurred_at?: string; resolved?: boolean; resolved_at?: string | null; created_by?: string | null },
+        Partial<{ kind: string; severity: string; title: string; detail: string | null; occurred_at: string; resolved: boolean; resolved_at: string | null }>
+      >;
+      smart_devices: T<
+        { id: string; family_id: string; name: string; type: string; room: string | null; brand: string | null; integration: string; status: string; last_state: string | null; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; type?: string; room?: string | null; brand?: string | null; integration?: string; status?: string; last_state?: string | null; note?: string | null; created_by?: string | null },
+        Partial<{ name: string; type: string; room: string | null; brand: string | null; integration: string; status: string; last_state: string | null; note: string | null }>
+      >;
       goals: T<
         { id: string; family_id: string; title: string; description: string | null; target_date: string | null; progress: number; is_complete: boolean; created_by: string | null } & Stamps,
         { id?: string; family_id: string; title: string; description?: string | null; target_date?: string | null; progress?: number; is_complete?: boolean; created_by?: string | null },
         Partial<{ title: string; description: string | null; target_date: string | null; progress: number; is_complete: boolean }>
+      >;
+      habits: T<
+        { id: string; family_id: string; member_id: string | null; title: string; description: string | null; icon: string; color: string; cadence: 'daily' | 'weekly'; target_per_period: number; reminder_time: string | null; weekdays: number[]; is_active: boolean; archived_at: string | null; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; description?: string | null; icon?: string; color?: string; cadence?: 'daily' | 'weekly'; target_per_period?: number; reminder_time?: string | null; weekdays?: number[]; is_active?: boolean; archived_at?: string | null; sort_order?: number; created_by?: string | null },
+        Partial<{ member_id: string | null; title: string; description: string | null; icon: string; color: string; cadence: 'daily' | 'weekly'; target_per_period: number; reminder_time: string | null; weekdays: number[]; is_active: boolean; archived_at: string | null; sort_order: number }>
+      >;
+      habit_logs: T<
+        { id: string; family_id: string; habit_id: string; member_id: string | null; log_date: string; count: number; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; habit_id: string; member_id?: string | null; log_date?: string; count?: number; note?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; log_date: string; count: number; note: string | null }>
+      >;
+      autopilot_suggestions: T<
+        { id: string; family_id: string; member_id: string | null; kind: string; title: string; detail: string | null; confidence: number; urgency: number; status: 'open' | 'approved' | 'executed' | 'auto_executed' | 'dismissed' | 'snoozed'; action_type: string | null; action_label: string | null; payload: Json; source_kind: string | null; source_id: string | null; dedupe_key: string; expires_at: string | null; resolved_at: string | null; resolved_by: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; kind: string; title: string; detail?: string | null; confidence?: number; urgency?: number; status?: 'open' | 'approved' | 'executed' | 'auto_executed' | 'dismissed' | 'snoozed'; action_type?: string | null; action_label?: string | null; payload?: Json; source_kind?: string | null; source_id?: string | null; dedupe_key: string; expires_at?: string | null; resolved_at?: string | null; resolved_by?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; kind: string; title: string; detail: string | null; confidence: number; urgency: number; status: 'open' | 'approved' | 'executed' | 'auto_executed' | 'dismissed' | 'snoozed'; action_type: string | null; action_label: string | null; payload: Json; source_kind: string | null; source_id: string | null; expires_at: string | null; resolved_at: string | null; resolved_by: string | null }>
       >;
       reminders: T<
         { id: string; family_id: string; title: string; notes: string | null; remind_at: string; recurrence: RecurrenceFreq; is_done: boolean; member_id: string | null; related_type: string | null; related_id: string | null; created_by: string | null } & Stamps,
@@ -360,9 +734,9 @@ export interface Database {
         Partial<{ status: string; completed_at: string | null; abandoned_at: string | null }>
       >;
       subscriptions: T<
-        { id: string; family_id: string; billing_customer_id: string | null; plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; seats: number } & Stamps,
-        { id?: string; family_id: string; billing_customer_id?: string | null; plan?: string; status?: SubscriptionStatus; provider_ref?: string | null; current_period_end?: string | null; seats?: number },
-        Partial<{ plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; seats: number }>
+        { id: string; family_id: string; billing_customer_id: string | null; plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; cancel_at_period_end: boolean; seats: number } & Stamps,
+        { id?: string; family_id: string; billing_customer_id?: string | null; plan?: string; status?: SubscriptionStatus; provider_ref?: string | null; current_period_end?: string | null; cancel_at_period_end?: boolean; seats?: number },
+        Partial<{ plan: string; status: SubscriptionStatus; provider_ref: string | null; current_period_end: string | null; cancel_at_period_end: boolean; seats: number }>
       >;
       // ── Financial ──────────────────────────────────────────
       financial_accounts: T<
@@ -396,10 +770,30 @@ export interface Database {
         { id?: string; family_id: string; member_id: string; type: MetricType; value: number; unit?: string | null; recorded_at?: string },
         Partial<{ type: MetricType; value: number; unit: string | null; recorded_at: string }>
       >;
+      health_visits: T<
+        { id: string; family_id: string; member_id: string | null; provider_id: string | null; kind: string; title: string; provider_name: string | null; location: string | null; visit_date: string; reason: string | null; outcome: string | null; follow_up_date: string | null; cost_cents: number | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; provider_id?: string | null; kind?: string; title: string; provider_name?: string | null; location?: string | null; visit_date?: string; reason?: string | null; outcome?: string | null; follow_up_date?: string | null; cost_cents?: number | null; created_by?: string | null },
+        Partial<{ member_id: string | null; provider_id: string | null; kind: string; title: string; provider_name: string | null; location: string | null; visit_date: string; reason: string | null; outcome: string | null; follow_up_date: string | null; cost_cents: number | null }>
+      >;
+      immunizations: T<
+        { id: string; family_id: string; member_id: string | null; vaccine: string; dose_label: string | null; date_given: string | null; next_due_date: string | null; provider_name: string | null; lot_number: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; vaccine: string; dose_label?: string | null; date_given?: string | null; next_due_date?: string | null; provider_name?: string | null; lot_number?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; vaccine: string; dose_label: string | null; date_given: string | null; next_due_date: string | null; provider_name: string | null; lot_number: string | null; notes: string | null }>
+      >;
       workout_logs: T<
         { id: string; family_id: string; member_id: string; activity: string; duration_minutes: number | null; calories: number | null; distance: number | null; notes: string | null; recorded_at: string; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; activity: string; duration_minutes?: number | null; calories?: number | null; distance?: number | null; notes?: string | null; recorded_at?: string; created_by?: string | null },
         Partial<{ activity: string; duration_minutes: number | null; calories: number | null; distance: number | null; notes: string | null; recorded_at: string }>
+      >;
+      symptom_logs: T<
+        { id: string; family_id: string; member_id: string; symptom: string; severity: number; body_area: string | null; started_at: string; ended_at: string | null; status: string; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; symptom: string; severity?: number; body_area?: string | null; started_at?: string; ended_at?: string | null; status?: string; notes?: string | null; created_by?: string | null },
+        Partial<{ symptom: string; severity: number; body_area: string | null; started_at: string; ended_at: string | null; status: string; notes: string | null }>
+      >;
+      health_goals: T<
+        { id: string; family_id: string; member_id: string; metric_type: string; target: number; period: string; label: string | null; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; metric_type: string; target: number; period?: string; label?: string | null; is_active?: boolean; created_by?: string | null },
+        Partial<{ metric_type: string; target: number; period: string; label: string | null; is_active: boolean }>
       >;
       // ── School ──────────────────────────────────────────────
       school_classes: T<
@@ -496,24 +890,99 @@ export interface Database {
         Partial<{ name: string; description: string | null; cover_url: string | null; kind: string; is_shared: boolean; photo_count: number }>
       >;
       family_photos: T<
-        { id: string; family_id: string; album_id: string | null; uploaded_by: string | null; storage_path: string; url: string | null; thumbnail_url: string | null; caption: string | null; taken_at: string | null; width: number | null; height: number | null; size_bytes: number | null; tags: string[]; member_tags: string[]; is_favorite: boolean; metadata: Json; created_at: string },
-        { id?: string; family_id: string; album_id?: string | null; uploaded_by?: string | null; storage_path: string; url?: string | null; thumbnail_url?: string | null; caption?: string | null; taken_at?: string | null; width?: number | null; height?: number | null; size_bytes?: number | null; tags?: string[]; member_tags?: string[] },
-        Partial<{ album_id: string | null; caption: string | null; tags: string[]; member_tags: string[]; is_favorite: boolean; url: string | null }>
+        { id: string; family_id: string; album_id: string | null; uploaded_by: string | null; storage_path: string; url: string | null; thumbnail_url: string | null; caption: string | null; taken_at: string | null; width: number | null; height: number | null; size_bytes: number | null; tags: string[]; member_tags: string[]; is_favorite: boolean; metadata: Json; media_type: string; duration_seconds: number | null; created_at: string },
+        { id?: string; family_id: string; album_id?: string | null; uploaded_by?: string | null; storage_path: string; url?: string | null; thumbnail_url?: string | null; caption?: string | null; taken_at?: string | null; width?: number | null; height?: number | null; size_bytes?: number | null; tags?: string[]; member_tags?: string[]; media_type?: string; duration_seconds?: number | null },
+        Partial<{ album_id: string | null; caption: string | null; tags: string[]; member_tags: string[]; is_favorite: boolean; url: string | null; media_type: string; duration_seconds: number | null }>
       >;
       family_contacts: T<
         { id: string; family_id: string; name: string; relationship: string | null; category: string; phone: string | null; phone_alt: string | null; email: string | null; address: string | null; notes: string | null; photo_url: string | null; is_emergency: boolean; birthday_month: number | null; birthday_day: number | null; tags: string[]; linked_member_id: string | null; specialty: string | null; organization: string | null; created_by: string | null; created_at: string; updated_at: string },
         { id?: string; family_id: string; name: string; relationship?: string | null; category?: string; phone?: string | null; phone_alt?: string | null; email?: string | null; address?: string | null; notes?: string | null; photo_url?: string | null; is_emergency?: boolean; birthday_month?: number | null; birthday_day?: number | null; specialty?: string | null; organization?: string | null; created_by?: string | null },
         Partial<{ name: string; relationship: string | null; category: string; phone: string | null; phone_alt: string | null; email: string | null; address: string | null; notes: string | null; is_emergency: boolean; birthday_month: number | null; birthday_day: number | null; specialty: string | null; organization: string | null; updated_at: string }>
       >;
+      front_desk_settings: T<
+        { family_id: string; enabled: boolean; greeting: string; screening_mode: string; voicemail_enabled: boolean; forward_number: string | null; quiet_hours_start: number | null; quiet_hours_end: number | null; block_spam: boolean; block_unknown: boolean; blocked_numbers: unknown[]; allowed_numbers: unknown[]; created_at: string; updated_at: string },
+        { family_id: string; enabled?: boolean; greeting?: string; screening_mode?: string; voicemail_enabled?: boolean; forward_number?: string | null; quiet_hours_start?: number | null; quiet_hours_end?: number | null; block_spam?: boolean; block_unknown?: boolean; blocked_numbers?: unknown[]; allowed_numbers?: unknown[] },
+        Partial<{ enabled: boolean; greeting: string; screening_mode: string; voicemail_enabled: boolean; forward_number: string | null; quiet_hours_start: number | null; quiet_hours_end: number | null; block_spam: boolean; block_unknown: boolean; blocked_numbers: unknown[]; allowed_numbers: unknown[]; updated_at: string }>
+      >;
+      call_logs: T<
+        { id: string; family_id: string; contact_id: string | null; caller_name: string | null; caller_number: string | null; direction: string; status: string; classification: string; priority: string; transcript: string | null; ai_summary: string | null; action_items: unknown[]; voicemail_url: string | null; duration_secs: number | null; is_read: boolean; received_at: string; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; contact_id?: string | null; caller_name?: string | null; caller_number?: string | null; direction?: string; status?: string; classification?: string; priority?: string; transcript?: string | null; ai_summary?: string | null; action_items?: unknown[]; voicemail_url?: string | null; duration_secs?: number | null; is_read?: boolean; received_at?: string; created_by?: string | null },
+        Partial<{ contact_id: string | null; caller_name: string | null; caller_number: string | null; status: string; classification: string; priority: string; transcript: string | null; ai_summary: string | null; action_items: unknown[]; voicemail_url: string | null; duration_secs: number | null; is_read: boolean; updated_at: string }>
+      >;
+      trust_policies: T<
+        { id: string; family_id: string; name: string; description: string | null; domain: string; capability: string; subject_kind: string; subject_role: string | null; subject_member_id: string | null; effect: string; conditions: Json; approval_model: string; required_approvals: number; priority: number; enabled: boolean; is_system: boolean; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name: string; description?: string | null; domain?: string; capability?: string; subject_kind?: string; subject_role?: string | null; subject_member_id?: string | null; effect?: string; conditions?: Json; approval_model?: string; required_approvals?: number; priority?: number; enabled?: boolean; is_system?: boolean; created_by?: string | null },
+        Partial<{ name: string; description: string | null; domain: string; capability: string; subject_kind: string; subject_role: string | null; subject_member_id: string | null; effect: string; conditions: Json; approval_model: string; required_approvals: number; priority: number; enabled: boolean; updated_at: string }>
+      >;
+      permission_grants: T<
+        { id: string; family_id: string; member_id: string; domain: string; capability: string; effect: string; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; member_id: string; domain: string; capability: string; effect?: string; created_by?: string | null },
+        Partial<{ domain: string; capability: string; effect: string; updated_at: string }>
+      >;
+      trust_delegations: T<
+        { id: string; family_id: string; from_member_id: string; to_member_id: string; domains: string[]; reason: string | null; starts_at: string; expires_at: string; revoked_at: string | null; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; from_member_id: string; to_member_id: string; domains?: string[]; reason?: string | null; starts_at?: string; expires_at: string; revoked_at?: string | null; created_by?: string | null },
+        Partial<{ domains: string[]; reason: string | null; expires_at: string; revoked_at: string | null; updated_at: string }>
+      >;
+      approval_requests: T<
+        { id: string; family_id: string; domain: string; capability: string; requested_by_kind: string; requested_by_member_id: string | null; agent: string | null; title: string; summary: string | null; payload: Json; amount_cents: number | null; confidence: number | null; policy_id: string | null; reasoning: string | null; approval_model: string; required_approvals: number; approvals: Json; status: string; priority: string; decided_by: string | null; decided_at: string | null; expires_at: string | null; executed_at: string | null; execution_result: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; domain: string; capability?: string; requested_by_kind?: string; requested_by_member_id?: string | null; agent?: string | null; title: string; summary?: string | null; payload?: Json; amount_cents?: number | null; confidence?: number | null; policy_id?: string | null; reasoning?: string | null; approval_model?: string; required_approvals?: number; approvals?: Json; status?: string; priority?: string; expires_at?: string | null },
+        Partial<{ status: string; approvals: Json; decided_by: string | null; decided_at: string | null; executed_at: string | null; execution_result: string | null; priority: string; updated_at: string }>
+      >;
+      trust_scores: T<
+        { id: string; family_id: string; actor_kind: string; actor_id: string; score: number; factors: Json; verified: boolean; interactions: number; successes: number; updated_at: string; created_at: string },
+        { id?: string; family_id: string; actor_kind: string; actor_id: string; score?: number; factors?: Json; verified?: boolean; interactions?: number; successes?: number },
+        Partial<{ score: number; factors: Json; verified: boolean; interactions: number; successes: number; updated_at: string }>
+      >;
+      emergency_sessions: T<
+        { id: string; family_id: string; kind: string; reason: string | null; activated_by: string | null; activated_at: string; ended_by: string | null; ended_at: string | null; elevated_domains: string[]; created_at: string; updated_at: string },
+        { id?: string; family_id: string; kind?: string; reason?: string | null; activated_by?: string | null; ended_by?: string | null; ended_at?: string | null; elevated_domains?: string[] },
+        Partial<{ kind: string; reason: string | null; ended_by: string | null; ended_at: string | null; elevated_domains: string[]; updated_at: string }>
+      >;
+      trust_audit_logs: T<
+        { id: string; family_id: string; actor_kind: string; actor_id: string | null; domain: string | null; capability: string | null; decision: string; reason: string | null; policy_id: string | null; confidence: number | null; approval_id: string | null; context: Json; device: string | null; created_at: string },
+        { id?: string; family_id: string; actor_kind?: string; actor_id?: string | null; domain?: string | null; capability?: string | null; decision: string; reason?: string | null; policy_id?: string | null; confidence?: number | null; approval_id?: string | null; context?: Json; device?: string | null },
+        Partial<{ reason: string | null; context: Json }>
+      >;
+      concierge_sessions: T<
+        { id: string; family_id: string; created_by: string | null; title: string; kind: string; status: string; notes: string | null; ai_summary: string | null; messages: unknown[]; created_at: string; updated_at: string },
+        { id?: string; family_id: string; created_by?: string | null; title?: string; kind?: string; status?: string; notes?: string | null; ai_summary?: string | null; messages?: unknown[] },
+        Partial<{ title: string; kind: string; status: string; notes: string | null; ai_summary: string | null; messages: unknown[]; updated_at: string }>
+      >;
+      concierge_plans: T<
+        { id: string; family_id: string; session_id: string | null; created_by: string | null; title: string; kind: string; description: string | null; ai_suggestion: string | null; status: string; planned_for: string | null; budget_cents: number | null; location: string | null; members: unknown[]; links: unknown[]; created_at: string; updated_at: string },
+        { id?: string; family_id: string; session_id?: string | null; created_by?: string | null; title: string; kind?: string; description?: string | null; ai_suggestion?: string | null; status?: string; planned_for?: string | null; budget_cents?: number | null; location?: string | null; members?: unknown[]; links?: unknown[] },
+        Partial<{ title: string; kind: string; description: string | null; ai_suggestion: string | null; status: string; planned_for: string | null; budget_cents: number | null; location: string | null; members: unknown[]; links: unknown[]; updated_at: string }>
+      >;
+      trip_plans: T<
+        { id: string; family_id: string; created_by: string | null; event_id: string | null; title: string; destination: string; dest_lat: number | null; dest_lng: number | null; start_date: string | null; end_date: string | null; members: unknown[]; interests: string | null; recommendations: Json; weather_summary: string | null; status: string; created_at: string; updated_at: string },
+        { id?: string; family_id: string; created_by?: string | null; event_id?: string | null; title: string; destination: string; dest_lat?: number | null; dest_lng?: number | null; start_date?: string | null; end_date?: string | null; members?: unknown[]; interests?: string | null; recommendations?: Json; weather_summary?: string | null; status?: string },
+        Partial<{ title: string; destination: string; dest_lat: number | null; dest_lng: number | null; start_date: string | null; end_date: string | null; members: unknown[]; interests: string | null; recommendations: Json; weather_summary: string | null; status: string; event_id: string | null; updated_at: string }>
+      >;
+      departure_plans: T<
+        { id: string; family_id: string; created_by: string | null; event_id: string | null; reminder_event_id: string | null; title: string; origin: string | null; origin_lat: number | null; origin_lng: number | null; destination: string | null; dest_lat: number | null; dest_lng: number | null; event_start: string; prep_minutes: number; park_minutes: number; buffer_minutes: number; drive_seconds: number; traffic_factor: number; weather_delay_minutes: number; weather_summary: string | null; leave_by: string | null; last_checked_at: string | null; status: string; created_at: string; updated_at: string },
+        { id?: string; family_id: string; created_by?: string | null; event_id?: string | null; reminder_event_id?: string | null; title: string; origin?: string | null; origin_lat?: number | null; origin_lng?: number | null; destination?: string | null; dest_lat?: number | null; dest_lng?: number | null; event_start: string; prep_minutes?: number; park_minutes?: number; buffer_minutes?: number; drive_seconds?: number; traffic_factor?: number; weather_delay_minutes?: number; weather_summary?: string | null; leave_by?: string | null; last_checked_at?: string | null; status?: string },
+        Partial<{ title: string; origin: string | null; origin_lat: number | null; origin_lng: number | null; destination: string | null; dest_lat: number | null; dest_lng: number | null; event_start: string; prep_minutes: number; park_minutes: number; buffer_minutes: number; drive_seconds: number; traffic_factor: number; weather_delay_minutes: number; weather_summary: string | null; leave_by: string | null; last_checked_at: string | null; reminder_event_id: string | null; status: string; updated_at: string }>
+      >;
+      family_communications: T<
+        { id: string; family_id: string; contact_id: string | null; thread_id: string | null; channel: string; direction: string; subject: string | null; body: string | null; summary: string | null; action_items: unknown[]; category: string; status: string; priority: string; received_at: string; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; contact_id?: string | null; thread_id?: string | null; channel?: string; direction?: string; subject?: string | null; body?: string | null; summary?: string | null; action_items?: unknown[]; category?: string; status?: string; priority?: string; received_at?: string; created_by?: string | null },
+        Partial<{ contact_id: string | null; subject: string | null; body: string | null; summary: string | null; action_items: unknown[]; category: string; status: string; priority: string; received_at: string; updated_at: string }>
+      >;
       family_reminders: T<
-        { id: string; family_id: string; created_by: string | null; assigned_to_id: string | null; member_id: string | null; title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; recurrence_time: string | null; recurrence_days: number[] | null; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; ai_suggested: boolean; tags: string[]; created_at: string; updated_at: string },
-        { id?: string; family_id: string; created_by?: string | null; assigned_to_id?: string | null; member_id?: string | null; title: string; notes?: string | null; kind?: string; remind_at?: string | null; location_name?: string | null; recurrence?: string; priority?: string; status?: string; ai_suggested?: boolean },
-        Partial<{ title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; assigned_to_id: string | null; member_id: string | null; updated_at: string }>
+        { id: string; family_id: string; created_by: string | null; assigned_to_id: string | null; member_id: string | null; title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; recurrence_time: string | null; recurrence_days: number[] | null; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; ai_suggested: boolean; tags: string[]; url: string | null; flagged: boolean; early_reminder_minutes: number | null; image_url: string | null; subtasks: Json; list_id: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; created_by?: string | null; assigned_to_id?: string | null; member_id?: string | null; title: string; notes?: string | null; kind?: string; remind_at?: string | null; location_name?: string | null; recurrence?: string; priority?: string; status?: string; ai_suggested?: boolean; tags?: string[]; url?: string | null; flagged?: boolean; early_reminder_minutes?: number | null; image_url?: string | null; subtasks?: Json; list_id?: string | null },
+        Partial<{ title: string; notes: string | null; kind: string; remind_at: string | null; location_name: string | null; recurrence: string; priority: string; status: string; completed_at: string | null; snoozed_until: string | null; assigned_to_id: string | null; member_id: string | null; tags: string[]; url: string | null; flagged: boolean; early_reminder_minutes: number | null; image_url: string | null; subtasks: Json; list_id: string | null; updated_at: string }>
+      >;
+      reminder_lists: T<
+        { id: string; family_id: string; created_by: string | null; name: string; color: string; icon: string; sort_order: number } & Stamps,
+        { id?: string; family_id: string; created_by?: string | null; name: string; color?: string; icon?: string; sort_order?: number },
+        Partial<{ name: string; color: string; icon: string; sort_order: number }>
       >;
       family_recipes: T<
-        { id: string; family_id: string; name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; is_public: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; ai_generated: boolean; estimated_cost_cents: number | null; created_by: string | null; created_at: string; updated_at: string },
-        { id?: string; family_id: string; name: string; description?: string | null; category?: string; cuisine?: string | null; servings?: number; prep_time_mins?: number | null; cook_time_mins?: number | null; difficulty?: string; ingredients?: Json; instructions?: Json; notes?: string | null; photo_url?: string | null; tags?: string[]; allergy_flags?: string[]; source_url?: string | null; created_by?: string | null },
-        Partial<{ name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; updated_at: string }>
+        { id: string; family_id: string; name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; is_public: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; ai_generated: boolean; estimated_cost_cents: number | null; source_provider: string | null; source_recipe_id: string | null; attribution: string | null; license_notes: string | null; imported_at: string | null; raw_payload: Json | null; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name: string; description?: string | null; category?: string; cuisine?: string | null; servings?: number; prep_time_mins?: number | null; cook_time_mins?: number | null; difficulty?: string; ingredients?: Json; instructions?: Json; notes?: string | null; photo_url?: string | null; tags?: string[]; allergy_flags?: string[]; ai_generated?: boolean; source_url?: string | null; source_provider?: string | null; source_recipe_id?: string | null; attribution?: string | null; license_notes?: string | null; imported_at?: string | null; raw_payload?: Json | null; created_by?: string | null },
+        Partial<{ name: string; description: string | null; category: string; cuisine: string | null; servings: number; prep_time_mins: number | null; cook_time_mins: number | null; difficulty: string; ingredients: Json; instructions: Json; notes: string | null; photo_url: string | null; tags: string[]; allergy_flags: string[]; is_favorite: boolean; rating: number | null; times_made: number; last_made_at: string | null; source_url: string | null; source_provider: string | null; source_recipe_id: string | null; attribution: string | null; license_notes: string | null; imported_at: string | null; raw_payload: Json | null; updated_at: string }>
       >;
       todo_lists: T<
         { id: string; family_id: string; created_by: string | null; name: string; color: string; icon: string; is_shared: boolean; sort_order: number; archived_at: string | null; created_at: string; updated_at: string },
@@ -730,6 +1199,96 @@ export interface Database {
         { email: string; reason: string; campaign_id: string | null; created_at: string },
         { email: string; reason?: string; campaign_id?: string | null },
         Partial<{ reason: string; campaign_id: string | null }>
+      >;
+      crm_contacts: T<
+        { id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null; company: string | null; lead_status: string; lifecycle_stage: string; lead_source: string | null; family_id: string | null; owner_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; first_name?: string | null; last_name?: string | null; email?: string | null; phone?: string | null; company?: string | null; lead_status?: string; lifecycle_stage?: string; lead_source?: string | null; family_id?: string | null; owner_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ first_name: string | null; last_name: string | null; email: string | null; phone: string | null; company: string | null; lead_status: string; lifecycle_stage: string; lead_source: string | null; family_id: string | null; owner_id: string | null; notes: string | null }>
+      >;
+      crm_deals: T<
+        { id: string; contact_id: string | null; name: string; amount_cents: number; currency: string; stage: string; close_date: string | null; owner_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; contact_id?: string | null; name: string; amount_cents?: number; currency?: string; stage?: string; close_date?: string | null; owner_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ contact_id: string | null; name: string; amount_cents: number; currency: string; stage: string; close_date: string | null; owner_id: string | null; notes: string | null }>
+      >;
+      crm_quotes: T<
+        { id: string; contact_id: string | null; deal_id: string | null; title: string; status: string; amount_cents: number; currency: string; valid_until: string | null; notes: string | null; sent_at: string | null; responded_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; contact_id?: string | null; deal_id?: string | null; title: string; status?: string; amount_cents?: number; currency?: string; valid_until?: string | null; notes?: string | null; sent_at?: string | null; responded_at?: string | null; created_by?: string | null },
+        Partial<{ contact_id: string | null; deal_id: string | null; title: string; status: string; amount_cents: number; currency: string; valid_until: string | null; notes: string | null; sent_at: string | null; responded_at: string | null }>
+      >;
+      mkt_visitors: T<
+        { id: string; anonymous_id: string; contact_id: string | null; device_type: string | null; country: string | null; first_seen: string; last_seen: string; session_count: number } & Stamps,
+        { id?: string; anonymous_id: string; contact_id?: string | null; device_type?: string | null; country?: string | null; first_seen?: string; last_seen?: string; session_count?: number },
+        Partial<{ contact_id: string | null; device_type: string | null; country: string | null; last_seen: string; session_count: number }>
+      >;
+      mkt_sessions: T<
+        { id: string; visitor_id: string | null; source: string | null; medium: string | null; campaign: string | null; landing_path: string | null; page_views: number; started_at: string },
+        { id?: string; visitor_id?: string | null; source?: string | null; medium?: string | null; campaign?: string | null; landing_path?: string | null; page_views?: number; started_at?: string },
+        Partial<{ source: string | null; medium: string | null; campaign: string | null; landing_path: string | null; page_views: number }>
+      >;
+      mkt_touchpoints: T<
+        { id: string; visitor_id: string | null; source: string | null; medium: string | null; campaign: string | null; kind: string; occurred_at: string },
+        { id?: string; visitor_id?: string | null; source?: string | null; medium?: string | null; campaign?: string | null; kind?: string; occurred_at?: string },
+        Partial<{ source: string | null; medium: string | null; campaign: string | null; kind: string }>
+      >;
+      testimonials: T<
+        { id: string; author_name: string; author_role: string | null; company: string | null; quote: string; rating: number | null; avatar_url: string | null; is_published: boolean; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; author_name: string; author_role?: string | null; company?: string | null; quote: string; rating?: number | null; avatar_url?: string | null; is_published?: boolean; sort_order?: number; created_by?: string | null },
+        Partial<{ author_name: string; author_role: string | null; company: string | null; quote: string; rating: number | null; avatar_url: string | null; is_published: boolean; sort_order: number }>
+      >;
+      case_studies: T<
+        { id: string; title: string; slug: string; industry: string | null; customer_name: string | null; summary: string | null; body: string | null; result_metric: string | null; is_published: boolean; created_by: string | null } & Stamps,
+        { id?: string; title: string; slug: string; industry?: string | null; customer_name?: string | null; summary?: string | null; body?: string | null; result_metric?: string | null; is_published?: boolean; created_by?: string | null },
+        Partial<{ title: string; slug: string; industry: string | null; customer_name: string | null; summary: string | null; body: string | null; result_metric: string | null; is_published: boolean }>
+      >;
+      marketing_assets: T<
+        { id: string; name: string; kind: string; storage_path: string; mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null; alt_text: string | null; tags: string[]; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; name: string; kind?: string; storage_path: string; mime_type?: string | null; size_bytes?: number | null; width?: number | null; height?: number | null; alt_text?: string | null; tags?: string[]; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; kind: string; storage_path: string; mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null; alt_text: string | null; tags: string[]; metadata: Json; deleted_at: string | null }>
+      >;
+      marketing_videos: T<
+        { id: string; title: string; provider: string; video_id: string | null; url: string | null; storage_path: string | null; poster_url: string | null; captions_url: string | null; transcript: string | null; duration_seconds: number | null; status: string; tags: string[]; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; title: string; provider?: string; video_id?: string | null; url?: string | null; storage_path?: string | null; poster_url?: string | null; captions_url?: string | null; transcript?: string | null; duration_seconds?: number | null; status?: string; tags?: string[]; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ title: string; provider: string; video_id: string | null; url: string | null; storage_path: string | null; poster_url: string | null; captions_url: string | null; transcript: string | null; duration_seconds: number | null; status: string; tags: string[]; metadata: Json; deleted_at: string | null }>
+      >;
+      marketing_exit_intent: T<
+        { id: string; name: string; headline: string; body: string | null; cta_label: string | null; cta_href: string | null; match: Json; trigger_config: Json; priority: number; status: string; impressions: number; conversions: number; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; name: string; headline: string; body?: string | null; cta_label?: string | null; cta_href?: string | null; match?: Json; trigger_config?: Json; priority?: number; status?: string; impressions?: number; conversions?: number; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; headline: string; body: string | null; cta_label: string | null; cta_href: string | null; match: Json; trigger_config: Json; priority: number; status: string; impressions: number; conversions: number; metadata: Json; deleted_at: string | null }>
+      >;
+      marketing_push_campaigns: T<
+        { id: string; title: string; body: string | null; url: string | null; segment_id: string | null; audience: string; status: string; recipients: number; sent: number; failed: number; skipped: number; clicked: number; sent_at: string | null; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; title: string; body?: string | null; url?: string | null; segment_id?: string | null; audience?: string; status?: string; recipients?: number; sent?: number; failed?: number; skipped?: number; clicked?: number; sent_at?: string | null; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ title: string; body: string | null; url: string | null; segment_id: string | null; audience: string; status: string; recipients: number; sent: number; failed: number; skipped: number; clicked: number; sent_at: string | null; metadata: Json; deleted_at: string | null }>
+      >;
+      marketing_personalization_rules: T<
+        { id: string; name: string; slot: string; match: Json; variant: Json; priority: number; status: string; metadata: Json; created_by: string | null; deleted_at: string | null } & Stamps,
+        { id?: string; name: string; slot: string; match?: Json; variant?: Json; priority?: number; status?: string; metadata?: Json; created_by?: string | null; deleted_at?: string | null },
+        Partial<{ name: string; slot: string; match: Json; variant: Json; priority: number; status: string; metadata: Json; deleted_at: string | null }>
+      >;
+      affiliates: T<
+        { id: string; name: string; email: string | null; code: string; commission_rate: number; status: string; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; name: string; email?: string | null; code: string; commission_rate?: number; status?: string; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; email: string | null; code: string; commission_rate: number; status: string; notes: string | null }>
+      >;
+      affiliate_referrals: T<
+        { id: string; affiliate_id: string; referred_email: string | null; family_id: string | null; status: string; amount_cents: number; commission_cents: number; converted_at: string | null; paid_at: string | null; created_at: string },
+        { id?: string; affiliate_id: string; referred_email?: string | null; family_id?: string | null; status?: string; amount_cents?: number; commission_cents?: number; converted_at?: string | null; paid_at?: string | null; created_at?: string },
+        Partial<{ referred_email: string | null; family_id: string | null; status: string; amount_cents: number; commission_cents: number; converted_at: string | null; paid_at: string | null }>
+      >;
+      competitors: T<
+        { id: string; name: string; domain: string | null; ranking: number | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; name: string; domain?: string | null; ranking?: number | null; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; domain: string | null; ranking: number | null; notes: string | null }>
+      >;
+      keyword_intel: T<
+        { id: string; keyword: string; search_volume: number; difficulty: number | null; our_rank: number | null; competitor_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; keyword: string; search_volume?: number; difficulty?: number | null; our_rank?: number | null; competitor_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ keyword: string; search_volume: number; difficulty: number | null; our_rank: number | null; competitor_id: string | null; notes: string | null }>
+      >;
+      backlinks: T<
+        { id: string; source_domain: string; target_url: string | null; authority: number | null; status: string; discovered_at: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; source_domain: string; target_url?: string | null; authority?: number | null; status?: string; discovered_at?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ source_domain: string; target_url: string | null; authority: number | null; status: string; discovered_at: string | null; notes: string | null }>
       >;
       weather_locations: T<
         { id: string; family_id: string; name: string; admin1: string | null; country: string | null; latitude: number; longitude: number; is_default: boolean; sort_order: number; created_by: string | null } & Stamps,
@@ -1131,6 +1690,165 @@ export interface Database {
         { id?: string; family_id: string; household_adults?: number; household_children?: number; child_ages?: number[]; region?: string | null; postal_code?: string | null; country?: string | null; goals?: string[]; referral_source?: string | null; referral_detail?: string | null; completed_at?: string | null; metadata?: Json; created_by?: string | null },
         Partial<{ household_adults: number; household_children: number; child_ages: number[]; region: string | null; postal_code: string | null; country: string | null; goals: string[]; referral_source: string | null; referral_detail: string | null; completed_at: string | null; metadata: Json }>
       >;
+
+      // ---- Vacation Planner (migration 0070) ----
+      vacations: T<
+        { id: string; family_id: string; title: string; kind: VacationKind; status: VacationStatus; destination: string | null; start_date: string | null; end_date: string | null; timezone: string | null; cover_image_url: string | null; description: string | null; budget_cents: number | null; currency: string; is_international: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; kind?: VacationKind; status?: VacationStatus; destination?: string | null; start_date?: string | null; end_date?: string | null; timezone?: string | null; cover_image_url?: string | null; description?: string | null; budget_cents?: number | null; currency?: string; is_international?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ title: string; kind: VacationKind; status: VacationStatus; destination: string | null; start_date: string | null; end_date: string | null; timezone: string | null; cover_image_url: string | null; description: string | null; budget_cents: number | null; currency: string; is_international: boolean; notes: string | null }>
+      >;
+      vacation_members: T<
+        { id: string; family_id: string; vacation_id: string; member_id: string | null; role: string | null; guest_name: string | null; dietary_restrictions: string | null; accessibility_needs: string | null; medical_notes: string | null; preferences: string | null; emergency_contact: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; member_id?: string | null; role?: string | null; guest_name?: string | null; dietary_restrictions?: string | null; accessibility_needs?: string | null; medical_notes?: string | null; preferences?: string | null; emergency_contact?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; role: string | null; guest_name: string | null; dietary_restrictions: string | null; accessibility_needs: string | null; medical_notes: string | null; preferences: string | null; emergency_contact: string | null }>
+      >;
+      vacation_destinations: T<
+        { id: string; family_id: string; vacation_id: string; name: string; region: string | null; country: string | null; latitude: number | null; longitude: number | null; arrive_date: string | null; depart_date: string | null; sort_order: number; notes: string | null; map_url: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; name: string; region?: string | null; country?: string | null; latitude?: number | null; longitude?: number | null; arrive_date?: string | null; depart_date?: string | null; sort_order?: number; notes?: string | null; map_url?: string | null; created_by?: string | null },
+        Partial<{ name: string; region: string | null; country: string | null; latitude: number | null; longitude: number | null; arrive_date: string | null; depart_date: string | null; sort_order: number; notes: string | null; map_url: string | null }>
+      >;
+      vacation_itinerary_days: T<
+        { id: string; family_id: string; vacation_id: string; destination_id: string | null; day_date: string; title: string | null; summary: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; destination_id?: string | null; day_date: string; title?: string | null; summary?: string | null; created_by?: string | null },
+        Partial<{ destination_id: string | null; day_date: string; title: string | null; summary: string | null }>
+      >;
+      vacation_itinerary_items: T<
+        { id: string; family_id: string; vacation_id: string; day_id: string | null; kind: VacItemKind; day_part: VacDayPart; title: string; location: string | null; start_time: string | null; end_time: string | null; duration_min: number | null; cost_cents: number | null; booked: boolean; confirmation_code: string | null; notes: string | null; member_ids: string[]; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; day_id?: string | null; kind?: VacItemKind; day_part?: VacDayPart; title: string; location?: string | null; start_time?: string | null; end_time?: string | null; duration_min?: number | null; cost_cents?: number | null; booked?: boolean; confirmation_code?: string | null; notes?: string | null; member_ids?: string[]; sort_order?: number; created_by?: string | null },
+        Partial<{ day_id: string | null; kind: VacItemKind; day_part: VacDayPart; title: string; location: string | null; start_time: string | null; end_time: string | null; duration_min: number | null; cost_cents: number | null; booked: boolean; confirmation_code: string | null; notes: string | null; member_ids: string[]; sort_order: number }>
+      >;
+      vacation_flights: T<
+        { id: string; family_id: string; vacation_id: string; airline: string | null; flight_number: string | null; depart_airport: string | null; arrive_airport: string | null; depart_at: string | null; arrive_at: string | null; terminal: string | null; gate: string | null; seats: string | null; confirmation_code: string | null; booked: boolean; cost_cents: number | null; document_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; airline?: string | null; flight_number?: string | null; depart_airport?: string | null; arrive_airport?: string | null; depart_at?: string | null; arrive_at?: string | null; terminal?: string | null; gate?: string | null; seats?: string | null; confirmation_code?: string | null; booked?: boolean; cost_cents?: number | null; document_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ airline: string | null; flight_number: string | null; depart_airport: string | null; arrive_airport: string | null; depart_at: string | null; arrive_at: string | null; terminal: string | null; gate: string | null; seats: string | null; confirmation_code: string | null; booked: boolean; cost_cents: number | null; document_id: string | null; notes: string | null }>
+      >;
+      vacation_transportation: T<
+        { id: string; family_id: string; vacation_id: string; kind: VacTransportKind; provider: string | null; from_location: string | null; to_location: string | null; depart_at: string | null; arrive_at: string | null; confirmation_code: string | null; distance_miles: number | null; fuel_estimate_cents: number | null; stops: Json; booked: boolean; cost_cents: number | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; kind?: VacTransportKind; provider?: string | null; from_location?: string | null; to_location?: string | null; depart_at?: string | null; arrive_at?: string | null; confirmation_code?: string | null; distance_miles?: number | null; fuel_estimate_cents?: number | null; stops?: Json; booked?: boolean; cost_cents?: number | null; notes?: string | null; created_by?: string | null },
+        Partial<{ kind: VacTransportKind; provider: string | null; from_location: string | null; to_location: string | null; depart_at: string | null; arrive_at: string | null; confirmation_code: string | null; distance_miles: number | null; fuel_estimate_cents: number | null; stops: Json; booked: boolean; cost_cents: number | null; notes: string | null }>
+      >;
+      vacation_lodging: T<
+        { id: string; family_id: string; vacation_id: string; destination_id: string | null; kind: VacLodgingKind; name: string; address: string | null; phone: string | null; check_in: string | null; check_out: string | null; confirmation_code: string | null; nightly_cents: number | null; total_cents: number | null; booked: boolean; url: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; destination_id?: string | null; kind?: VacLodgingKind; name: string; address?: string | null; phone?: string | null; check_in?: string | null; check_out?: string | null; confirmation_code?: string | null; nightly_cents?: number | null; total_cents?: number | null; booked?: boolean; url?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ destination_id: string | null; kind: VacLodgingKind; name: string; address: string | null; phone: string | null; check_in: string | null; check_out: string | null; confirmation_code: string | null; nightly_cents: number | null; total_cents: number | null; booked: boolean; url: string | null; notes: string | null }>
+      >;
+      vacation_activities: T<
+        { id: string; family_id: string; vacation_id: string; destination_id: string | null; name: string; category: string | null; location: string | null; scheduled_at: string | null; duration_min: number | null; cost_cents: number | null; family_friendly: boolean; url: string | null; booked: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; destination_id?: string | null; name: string; category?: string | null; location?: string | null; scheduled_at?: string | null; duration_min?: number | null; cost_cents?: number | null; family_friendly?: boolean; url?: string | null; booked?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ destination_id: string | null; name: string; category: string | null; location: string | null; scheduled_at: string | null; duration_min: number | null; cost_cents: number | null; family_friendly: boolean; url: string | null; booked: boolean; notes: string | null }>
+      >;
+      vacation_activity_tickets: T<
+        { id: string; family_id: string; vacation_id: string; activity_id: string | null; holder_member_id: string | null; holder_name: string | null; ticket_type: string | null; confirmation_code: string | null; price_cents: number | null; document_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; activity_id?: string | null; holder_member_id?: string | null; holder_name?: string | null; ticket_type?: string | null; confirmation_code?: string | null; price_cents?: number | null; document_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ activity_id: string | null; holder_member_id: string | null; holder_name: string | null; ticket_type: string | null; confirmation_code: string | null; price_cents: number | null; document_id: string | null; notes: string | null }>
+      >;
+      vacation_reservations: T<
+        { id: string; family_id: string; vacation_id: string; kind: string | null; name: string; location: string | null; reserved_at: string | null; party_size: number | null; confirmation_code: string | null; cost_cents: number | null; booked: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; kind?: string | null; name: string; location?: string | null; reserved_at?: string | null; party_size?: number | null; confirmation_code?: string | null; cost_cents?: number | null; booked?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ kind: string | null; name: string; location: string | null; reserved_at: string | null; party_size: number | null; confirmation_code: string | null; cost_cents: number | null; booked: boolean; notes: string | null }>
+      >;
+      vacation_budgets: T<
+        { id: string; family_id: string; vacation_id: string; category: VacBudgetCategory; planned_cents: number; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; category: VacBudgetCategory; planned_cents?: number; notes?: string | null; created_by?: string | null },
+        Partial<{ category: VacBudgetCategory; planned_cents: number; notes: string | null }>
+      >;
+      vacation_expenses: T<
+        { id: string; family_id: string; vacation_id: string; category: VacBudgetCategory; description: string; amount_cents: number; spent_on: string; paid_by_member_id: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; category?: VacBudgetCategory; description: string; amount_cents: number; spent_on?: string; paid_by_member_id?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ category: VacBudgetCategory; description: string; amount_cents: number; spent_on: string; paid_by_member_id: string | null; notes: string | null }>
+      >;
+      vacation_packing_lists: T<
+        { id: string; family_id: string; vacation_id: string; name: string; member_id: string | null; is_master: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; name: string; member_id?: string | null; is_master?: boolean; created_by?: string | null },
+        Partial<{ name: string; member_id: string | null; is_master: boolean }>
+      >;
+      vacation_packing_items: T<
+        { id: string; family_id: string; vacation_id: string; list_id: string | null; name: string; category: VacPackCategory; quantity: number; packed: boolean; ai_suggested: boolean; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; list_id?: string | null; name: string; category?: VacPackCategory; quantity?: number; packed?: boolean; ai_suggested?: boolean; notes?: string | null; created_by?: string | null },
+        Partial<{ list_id: string | null; name: string; category: VacPackCategory; quantity: number; packed: boolean; ai_suggested: boolean; notes: string | null }>
+      >;
+      vacation_documents: T<
+        { id: string; family_id: string; vacation_id: string; kind: VacDocKind; title: string; member_id: string | null; document_id: string | null; file_url: string | null; number: string | null; issued_on: string | null; expires_on: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; kind?: VacDocKind; title: string; member_id?: string | null; document_id?: string | null; file_url?: string | null; number?: string | null; issued_on?: string | null; expires_on?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ kind: VacDocKind; title: string; member_id: string | null; document_id: string | null; file_url: string | null; number: string | null; issued_on: string | null; expires_on: string | null; notes: string | null }>
+      >;
+      vacation_emergency_contacts: T<
+        { id: string; family_id: string; vacation_id: string; name: string; relationship: string | null; phone: string | null; email: string | null; category: string | null; address: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; name: string; relationship?: string | null; phone?: string | null; email?: string | null; category?: string | null; address?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; relationship: string | null; phone: string | null; email: string | null; category: string | null; address: string | null; notes: string | null }>
+      >;
+      vacation_medical_information: T<
+        { id: string; family_id: string; vacation_id: string; member_id: string | null; allergies: string | null; conditions: string | null; medications: string | null; blood_type: string | null; insurance_provider: string | null; insurance_number: string | null; physician: string | null; physician_phone: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; member_id?: string | null; allergies?: string | null; conditions?: string | null; medications?: string | null; blood_type?: string | null; insurance_provider?: string | null; insurance_number?: string | null; physician?: string | null; physician_phone?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; allergies: string | null; conditions: string | null; medications: string | null; blood_type: string | null; insurance_provider: string | null; insurance_number: string | null; physician: string | null; physician_phone: string | null; notes: string | null }>
+      >;
+      vacation_checklists: T<
+        { id: string; family_id: string; vacation_id: string; title: string; done: boolean; due_date: string | null; assignee_member_id: string | null; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; title: string; done?: boolean; due_date?: string | null; assignee_member_id?: string | null; sort_order?: number; created_by?: string | null },
+        Partial<{ title: string; done: boolean; due_date: string | null; assignee_member_id: string | null; sort_order: number }>
+      >;
+      vacation_weather_snapshots: T<
+        { id: string; family_id: string; vacation_id: string; destination_id: string | null; location_label: string | null; latitude: number | null; longitude: number | null; forecast_date: string; temp_high_c: number | null; temp_low_c: number | null; precip_prob: number | null; precip_mm: number | null; wind_kph: number | null; weather_code: number | null; summary: string | null; fetched_at: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; destination_id?: string | null; location_label?: string | null; latitude?: number | null; longitude?: number | null; forecast_date: string; temp_high_c?: number | null; temp_low_c?: number | null; precip_prob?: number | null; precip_mm?: number | null; wind_kph?: number | null; weather_code?: number | null; summary?: string | null; fetched_at?: string; created_by?: string | null },
+        Partial<{ destination_id: string | null; location_label: string | null; latitude: number | null; longitude: number | null; forecast_date: string; temp_high_c: number | null; temp_low_c: number | null; precip_prob: number | null; precip_mm: number | null; wind_kph: number | null; weather_code: number | null; summary: string | null; fetched_at: string }>
+      >;
+      vacation_ai_recommendations: T<
+        { id: string; family_id: string; vacation_id: string; kind: VacRecoKind; status: VacRecoStatus; title: string; detail: string | null; severity: number; payload: Json; source: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; kind?: VacRecoKind; status?: VacRecoStatus; title: string; detail?: string | null; severity?: number; payload?: Json; source?: string; created_by?: string | null },
+        Partial<{ kind: VacRecoKind; status: VacRecoStatus; title: string; detail: string | null; severity: number; payload: Json; source: string }>
+      >;
+      vacation_ai_conversations: T<
+        { id: string; family_id: string; vacation_id: string | null; title: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; title?: string | null; created_by?: string | null },
+        Partial<{ vacation_id: string | null; title: string | null }>
+      >;
+      vacation_ai_messages: T<
+        { id: string; family_id: string; conversation_id: string; role: AiRole; content: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; conversation_id: string; role: AiRole; content: string; created_by?: string | null },
+        Partial<{ content: string }>
+      >;
+      vacation_travel_scores: T<
+        { id: string; family_id: string; vacation_id: string; score: number; breakdown: Json; computed_at: string } & Stamps,
+        { id?: string; family_id: string; vacation_id: string; score: number; breakdown?: Json; computed_at?: string },
+        Partial<{ score: number; breakdown: Json; computed_at: string }>
+      >;
+      vacation_activity_logs: T<
+        { id: string; family_id: string; vacation_id: string | null; actor_member_id: string | null; action: string; detail: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; actor_member_id?: string | null; action: string; detail?: string | null; created_by?: string | null },
+        Partial<{ vacation_id: string | null; actor_member_id: string | null; action: string; detail: string | null }>
+      >;
+      vacation_notifications: T<
+        { id: string; family_id: string; vacation_id: string | null; member_id: string | null; title: string; body: string | null; read: boolean; send_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; member_id?: string | null; title: string; body?: string | null; read?: boolean; send_at?: string | null; created_by?: string | null },
+        Partial<{ vacation_id: string | null; member_id: string | null; title: string; body: string | null; read: boolean; send_at: string | null }>
+      >;
+      vacation_audit_logs: T<
+        { id: string; family_id: string; vacation_id: string | null; table_name: string; record_id: string | null; action: string; changes: Json; actor_user_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; table_name: string; record_id?: string | null; action: string; changes?: Json; actor_user_id?: string | null; created_by?: string | null },
+        Partial<{ vacation_id: string | null; table_name: string; record_id: string | null; action: string; changes: Json; actor_user_id: string | null }>
+      >;
+
+      // ---- Weekend Planner (migration 0071) ----
+      weekend_events: T<
+        { id: string; family_id: string; source: string; external_id: string | null; title: string; category: string | null; description: string | null; venue_name: string | null; address: string | null; city: string | null; region: string | null; postal_code: string | null; latitude: number | null; longitude: number | null; starts_at: string | null; ends_at: string | null; url: string | null; image_url: string | null; price_min_cents: number | null; price_max_cents: number | null; currency: string; distance_miles: number | null; is_family_friendly: boolean; search_zip: string | null; search_radius: number | null; raw: Json; discovered_at: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; source?: string; external_id?: string | null; title: string; category?: string | null; description?: string | null; venue_name?: string | null; address?: string | null; city?: string | null; region?: string | null; postal_code?: string | null; latitude?: number | null; longitude?: number | null; starts_at?: string | null; ends_at?: string | null; url?: string | null; image_url?: string | null; price_min_cents?: number | null; price_max_cents?: number | null; currency?: string; distance_miles?: number | null; is_family_friendly?: boolean; search_zip?: string | null; search_radius?: number | null; raw?: Json; discovered_at?: string; created_by?: string | null },
+        Partial<{ title: string; category: string | null; description: string | null; venue_name: string | null; address: string | null; city: string | null; region: string | null; postal_code: string | null; latitude: number | null; longitude: number | null; starts_at: string | null; ends_at: string | null; url: string | null; image_url: string | null; price_min_cents: number | null; price_max_cents: number | null; distance_miles: number | null; is_family_friendly: boolean; raw: Json }>
+      >;
+      weekend_plans: T<
+        { id: string; family_id: string; event_id: string; status: WeekendPlanStatus; member_ids: string[]; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; event_id: string; status?: WeekendPlanStatus; member_ids?: string[]; notes?: string | null; created_by?: string | null },
+        Partial<{ status: WeekendPlanStatus; member_ids: string[]; notes: string | null }>
+      >;
+      weekend_searches: T<
+        { id: string; family_id: string; zip: string; radius_miles: number; days: number; result_count: number; last_run_at: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; zip: string; radius_miles?: number; days?: number; result_count?: number; last_run_at?: string; created_by?: string | null },
+        Partial<{ zip: string; radius_miles: number; days: number; result_count: number; last_run_at: string }>
+      >;
+      weekend_feeds: T<
+        { id: string; family_id: string; label: string; url: string; kind: WeekendFeedKind; is_active: boolean; last_fetched_at: string | null; last_status: string | null; last_count: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; label: string; url: string; kind?: WeekendFeedKind; is_active?: boolean; last_fetched_at?: string | null; last_status?: string | null; last_count?: number; created_by?: string | null },
+        Partial<{ label: string; url: string; kind: WeekendFeedKind; is_active: boolean; last_fetched_at: string | null; last_status: string | null; last_count: number }>
+      >;
     };
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
@@ -1145,6 +1863,7 @@ export interface Database {
       public_stats: { Args: Record<string, never>; Returns: { families: number; members: number; tasks_completed: number }[] };
       social_role_for: { Args: { p_family_id: string }; Returns: SocialRoleEnum };
       social_has_permission: { Args: { p_family_id: string; p_permission: string }; Returns: boolean };
+      bump_exit_intent: { Args: { p_id: string; p_metric: string }; Returns: undefined };
     };
     Enums: {
       member_role: MemberRole;

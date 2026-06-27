@@ -8,14 +8,16 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   groupByDate, driverConflicts, upcomingRides, needsDriverCount, shortTime,
@@ -110,7 +112,7 @@ export function RidesModule() {
       ? await sb.from('rides').update(fields).eq('id', form.id)
       : await sb.from('rides').insert({ ...fields, family_id: familyId, created_by: userId });
     setSaving(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(form.id ? 'Ride updated' : 'Ride added');
     setModalOpen(false);
   }
@@ -119,14 +121,14 @@ export function RidesModule() {
     if (!confirm(`Delete the ride "${r.title}"?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('rides').delete().eq('id', r.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Ride deleted');
   }
 
   async function setStatus(r: Ride, status: RideStatus) {
     const sb = createClient();
     const { error: err } = await sb.from('rides').update({ status }).eq('id', r.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
   function toggleRider(id: string) {
@@ -136,7 +138,7 @@ export function RidesModule() {
   const fmtDay = (key: string) =>
     new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
-  if (loading) return <LoadingBlock label="Loading rides…" />;
+  if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load rides'} />;
 
   return (
@@ -144,7 +146,12 @@ export function RidesModule() {
       <PageHeader
         title="Rides & Carpool"
         description="Coordinate who's driving whom, when, and where — with conflict detection."
-        action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add ride</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="rides" iconOnly />
+            {canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add ride</Button>}
+          </div>
+        }
       />
 
       {/* Alerts */}

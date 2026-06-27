@@ -1,17 +1,16 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowRight, BookOpen, Calendar, Clock, Mail, Search } from 'lucide-react';
-import { getAllPosts, getFeaturedPost, ALL_CATEGORIES, type BlogCategory } from '@/lib/blog/posts';
+import { ArrowRight, BookOpen, Calendar, Clock, Mail, Search, Tag } from 'lucide-react';
+import { getAllPosts, getFeaturedPost, getPostsByCategory, ALL_CATEGORIES, type BlogCategory } from '@/lib/blog/posts';
 import { Container, GradientText, PageWrap } from '@/components/marketing/visual-mocks';
 import { cn } from '@/lib/utils/cn';
+import { BlogSearch } from './blog-search';
 
 export const metadata: Metadata = {
-  title: 'Blog',
-  description: 'Tips, stories & insights for modern families from the Bubaly team.',
+  title: 'Blog — Tips, Stories & Insights for Modern Families',
+  description: 'Practical advice, real stories, and smart tips to help your family stay organized and enjoy more time together.',
 };
 
-// Re-read published posts from Supabase at most hourly so content edits surface
-// without a redeploy.
 export const revalidate = 3600;
 
 const CATEGORY_COLORS: Record<BlogCategory, string> = {
@@ -32,22 +31,42 @@ const ACCENT_BG: Record<BlogCategory, string> = {
   'Family Finances': 'from-rose-600/30 to-rose-900/10',
 };
 
+const CATEGORY_ICON_COLORS: Record<BlogCategory, string> = {
+  'Parenting': 'bg-violet-500/20',
+  'Organization': 'bg-blue-500/20',
+  'School & Activities': 'bg-emerald-500/20',
+  'AI & Technology': 'bg-indigo-500/20',
+  'Wellness': 'bg-amber-500/20',
+  'Family Finances': 'bg-rose-500/20',
+};
+
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-const POPULAR = [
-  '10 Time-Saving Morning Routines for Busy Families',
-  'How to Get Kids Excited About Chores (That Works!)',
-  'The Ultimate Guide to School Year Organization',
-  'Make Meal Planning Easy (and Actually Enjoy It)',
-];
+type Props = { searchParams: Promise<{ category?: string }> };
 
-const POPULAR_DATES = ['May 8, 2024', 'May 6, 2024', 'May 5, 2024', 'May 3, 2024'];
+export default async function BlogPage({ searchParams }: Props) {
+  const params = await searchParams;
+  const activeCategory = ALL_CATEGORIES.find((c) => c === params.category) ?? null;
 
-export default async function BlogPage() {
-  const [allPosts, featured] = await Promise.all([getAllPosts(), getFeaturedPost()]);
-  const latest = allPosts.filter((p) => !p.featured).slice(0, 6);
+  const [allPosts, featured] = await Promise.all([
+    activeCategory ? getPostsByCategory(activeCategory) : getAllPosts(),
+    activeCategory ? Promise.resolve(undefined) : getFeaturedPost(),
+  ]);
+
+  const postsForGrid = activeCategory
+    ? allPosts
+    : allPosts.filter((p) => !p.featured).slice(0, 9);
+
+  const recentPosts = (activeCategory ? allPosts : allPosts).slice(0, 5);
+
+  const categoryCounts = new Map<string, number>();
+  if (!activeCategory) {
+    for (const p of allPosts) {
+      categoryCounts.set(p.category, (categoryCounts.get(p.category) ?? 0) + 1);
+    }
+  }
 
   return (
     <PageWrap>
@@ -55,7 +74,7 @@ export default async function BlogPage() {
       <Container className="pb-0 pt-16 lg:pt-20">
         <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
           <div>
-            <p className="mb-3 text-sm font-semibold text-white/55">The Family Life, Simplified.</p>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-violet-300">The Family Life, Simplified.</p>
             <h1 className="text-5xl font-black leading-[1.06] sm:text-6xl">
               Tips, stories &amp; insights<br />
               <GradientText>for modern families.</GradientText>
@@ -63,12 +82,8 @@ export default async function BlogPage() {
             <p className="mt-5 text-lg leading-8 text-white/60">
               Practical advice, real stories, and smart tips to help you stay organized and enjoy more time together.
             </p>
-            <div className="mt-7 flex h-12 max-w-sm items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4">
-              <Search className="h-4 w-4 shrink-0 text-white/40" />
-              <input className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/40" placeholder="Search articles..." />
-            </div>
+            <BlogSearch posts={allPosts.map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt, category: p.category }))} />
           </div>
-          {/* Illustration */}
           <div className="hidden lg:flex lg:justify-end">
             <div className="relative h-64 w-80">
               <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-violet-600/20 to-blue-900/20" />
@@ -90,26 +105,63 @@ export default async function BlogPage() {
 
         {/* Category tabs */}
         <div className="mt-10 flex flex-wrap gap-2 border-b border-white/8 pb-0">
-          <Link href="/blog" className="rounded-t-xl border border-b-0 border-white/15 bg-white/[0.06] px-4 py-2.5 text-sm font-semibold">
+          <Link
+            href="/blog"
+            className={cn(
+              'rounded-t-xl px-4 py-2.5 text-sm font-medium transition',
+              !activeCategory
+                ? 'border border-b-0 border-white/15 bg-white/[0.06] font-semibold text-white'
+                : 'text-white/55 hover:text-white',
+            )}
+          >
             All Articles
           </Link>
           {ALL_CATEGORIES.map((cat) => (
-            <Link key={cat} href={`/blog?category=${encodeURIComponent(cat)}`}
-              className="rounded-t-xl px-4 py-2.5 text-sm font-medium text-white/55 transition hover:text-white">
+            <Link
+              key={cat}
+              href={`/blog?category=${encodeURIComponent(cat)}`}
+              className={cn(
+                'rounded-t-xl px-4 py-2.5 text-sm font-medium transition',
+                activeCategory === cat
+                  ? 'border border-b-0 border-white/15 bg-white/[0.06] font-semibold text-white'
+                  : 'text-white/55 hover:text-white',
+              )}
+            >
               {cat}
+              {!activeCategory && categoryCounts.has(cat) && (
+                <span className="ml-1.5 text-xs text-white/30">({categoryCounts.get(cat)})</span>
+              )}
             </Link>
           ))}
         </div>
       </Container>
 
       <Container className="py-10">
-        <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
+        <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
           {/* Main content */}
           <div>
+            {/* Active category header */}
+            {activeCategory && (
+              <div className="mb-8 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={cn('grid h-10 w-10 place-items-center rounded-xl', CATEGORY_ICON_COLORS[activeCategory])}>
+                    <Tag className="h-5 w-5 text-white/70" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold">{activeCategory}</h2>
+                    <p className="text-xs text-white/50">{allPosts.length} article{allPosts.length !== 1 ? 's' : ''}</p>
+                  </div>
+                </div>
+                <Link href="/blog" className="text-sm font-semibold text-violet-300 hover:text-violet-200">
+                  View all &rarr;
+                </Link>
+              </div>
+            )}
+
             {/* Featured */}
-            {featured && (
+            {featured && !activeCategory && (
               <div className="mb-10">
-                <h2 className="mb-5 text-lg font-bold">Featured Articles</h2>
+                <h2 className="mb-5 text-lg font-bold">Featured</h2>
                 <Link href={`/blog/${featured.slug}`} className="group block overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] transition hover:border-violet-400/30">
                   <div className={cn('flex h-48 items-end bg-gradient-to-br p-6', ACCENT_BG[featured.category] ?? 'from-violet-600/20 to-blue-900/10')}>
                     <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-violet-800 dark:border-violet-400/30 dark:bg-violet-500/20 dark:text-violet-200">
@@ -134,31 +186,43 @@ export default async function BlogPage() {
               </div>
             )}
 
-            {/* Latest */}
-            <h2 className="mb-5 text-lg font-bold">Latest Articles</h2>
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {latest.map((post) => (
-                <Link key={post.slug} href={`/blog/${post.slug}`}
-                  className="group flex flex-col overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] transition hover:border-violet-400/30 hover:-translate-y-0.5">
-                  <div className={cn('h-32 bg-gradient-to-br', ACCENT_BG[post.category] ?? 'from-white/5 to-white/[0.02]')} />
-                  <div className="flex flex-1 flex-col p-4">
-                    <div className={cn('mb-2 inline-block self-start rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider', CATEGORY_COLORS[post.category])}>
-                      {post.category}
-                    </div>
-                    <h3 className="mt-1 text-sm font-bold leading-snug transition group-hover:text-violet-200">
-                      {post.title}
-                    </h3>
-                    <div className="mt-3 flex items-center gap-2 text-[11px] text-white/40">
-                      <span>{fmtDate(post.date)}</span>
-                      <span>·</span>
-                      <span>{post.readingMinutes} min read</span>
-                    </div>
-                  </div>
+            {/* Grid */}
+            <h2 className="mb-5 text-lg font-bold">
+              {activeCategory ? `${activeCategory} Articles` : 'Latest Articles'}
+            </h2>
+            {postsForGrid.length === 0 ? (
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-10 text-center">
+                <p className="text-white/50">No articles found in this category yet.</p>
+                <Link href="/blog" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-violet-300 hover:text-violet-200">
+                  View all articles <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {postsForGrid.map((post) => (
+                  <Link key={post.slug} href={`/blog/${post.slug}`}
+                    className="group flex flex-col overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] transition hover:border-violet-400/30 hover:-translate-y-0.5">
+                    <div className={cn('h-32 bg-gradient-to-br', ACCENT_BG[post.category] ?? 'from-white/5 to-white/[0.02]')} />
+                    <div className="flex flex-1 flex-col p-4">
+                      <div className={cn('mb-2 inline-block self-start rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider', CATEGORY_COLORS[post.category])}>
+                        {post.category}
+                      </div>
+                      <h3 className="mt-1 text-sm font-bold leading-snug transition group-hover:text-violet-200">
+                        {post.title}
+                      </h3>
+                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/45">{post.excerpt}</p>
+                      <div className="mt-auto pt-3 flex items-center gap-2 text-[11px] text-white/40">
+                        <span>{fmtDate(post.date)}</span>
+                        <span>·</span>
+                        <span>{post.readingMinutes} min read</span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
 
-            {allPosts.length > 7 && (
+            {!activeCategory && allPosts.length > 10 && (
               <div className="mt-8 text-center">
                 <button className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-6 py-3 text-sm font-semibold text-white/70 transition hover:border-violet-400/40 hover:text-white">
                   Load More Articles <ArrowRight className="h-4 w-4" />
@@ -169,23 +233,22 @@ export default async function BlogPage() {
 
           {/* Sidebar */}
           <aside className="space-y-6">
-            {/* Popular this week */}
+            {/* Recent posts (dynamic from DB) */}
             <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-              <h3 className="mb-4 font-bold">Popular This Week</h3>
+              <h3 className="mb-4 font-bold">Recent Posts</h3>
               <ul className="space-y-4">
-                {POPULAR.map((title, i) => (
-                  <li key={title} className="flex gap-3">
-                    <div className="h-12 w-12 shrink-0 rounded-lg bg-gradient-to-br from-violet-600/20 to-blue-900/10" />
-                    <div>
-                      <p className="text-sm font-semibold leading-snug">{title}</p>
-                      <p className="mt-0.5 text-xs text-white/40">{POPULAR_DATES[i]}</p>
-                    </div>
+                {recentPosts.map((post, i) => (
+                  <li key={post.slug}>
+                    <Link href={`/blog/${post.slug}`} className="group flex gap-3">
+                      <div className={cn('h-12 w-12 shrink-0 rounded-lg bg-gradient-to-br', ACCENT_BG[post.category] ?? 'from-violet-600/20 to-blue-900/10')} />
+                      <div className="min-w-0">
+                        <p className="line-clamp-2 text-sm font-semibold leading-snug transition group-hover:text-violet-200">{post.title}</p>
+                        <p className="mt-0.5 text-xs text-white/40">{fmtDate(post.date)}</p>
+                      </div>
+                    </Link>
                   </li>
                 ))}
               </ul>
-              <Link href="#" className="mt-4 flex items-center gap-1 text-xs font-semibold text-violet-300 hover:text-violet-200">
-                View all popular <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
             </div>
 
             {/* Subscribe */}
@@ -196,22 +259,42 @@ export default async function BlogPage() {
               <button className="mt-3 w-full rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 py-2.5 text-sm font-bold shadow-glow">Subscribe</button>
             </div>
 
-            {/* Topics */}
+            {/* Topics with counts */}
             <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-              <h3 className="mb-4 font-bold">Topics We Cover</h3>
+              <h3 className="mb-4 font-bold">Browse Topics</h3>
               <ul className="space-y-2.5">
                 {ALL_CATEGORIES.map((cat) => (
                   <li key={cat}>
-                    <Link href={`/blog?category=${encodeURIComponent(cat)}`} className="flex items-center gap-3 text-sm text-white/60 transition hover:text-white">
-                      <div className={cn('h-2 w-2 rounded-full', CATEGORY_COLORS[cat].split(' ')[0])} />
-                      {cat}
+                    <Link
+                      href={`/blog?category=${encodeURIComponent(cat)}`}
+                      className={cn(
+                        'flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm transition',
+                        activeCategory === cat
+                          ? 'bg-white/[0.06] font-semibold text-white'
+                          : 'text-white/60 hover:bg-white/[0.03] hover:text-white',
+                      )}
+                    >
+                      <div className={cn('h-2 w-2 rounded-full', CATEGORY_ICON_COLORS[cat])} />
+                      <span className="flex-1">{cat}</span>
+                      {categoryCounts.has(cat) && (
+                        <span className="text-xs text-white/30">{categoryCounts.get(cat)}</span>
+                      )}
                     </Link>
                   </li>
                 ))}
               </ul>
-              <Link href="/blog" className="mt-4 flex items-center gap-1 text-xs font-semibold text-violet-300 hover:text-violet-200">
-                View all topics <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
+            </div>
+
+            {/* Tags from all posts */}
+            <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
+              <h3 className="mb-4 font-bold">Popular Tags</h3>
+              <div className="flex flex-wrap gap-2">
+                {Array.from(new Set(allPosts.flatMap((p) => p.tags))).slice(0, 12).map((tag) => (
+                  <span key={tag} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/60">
+                    {tag}
+                  </span>
+                ))}
+              </div>
             </div>
           </aside>
         </div>

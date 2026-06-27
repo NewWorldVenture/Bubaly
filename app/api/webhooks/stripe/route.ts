@@ -41,6 +41,7 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
       status: sub.status as 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid',
       provider_ref: sub.id,
       current_period_end: new Date((sub as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
+      cancel_at_period_end: sub.cancel_at_period_end ?? false,
       seats: 10,
     },
     { onConflict: 'family_id' },

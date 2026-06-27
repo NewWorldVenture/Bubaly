@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { BookOpen, Calendar, ChevronRight, Filter, GraduationCap, MoreHorizontal, Plus, Sparkles } from 'lucide-react';
+import { BookOpen, Calendar, ChevronRight, GraduationCap, MoreHorizontal, Plus, Sparkles } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -9,9 +9,10 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GradeType } from '@/lib/database.types';
 
@@ -19,7 +20,7 @@ type SchoolEvent = Tables<'school_events'>;
 type SchoolClass = Tables<'school_classes'>;
 type Grade = Tables<'grades'>;
 
-const TABS = ['Overview', 'Assignments', 'Classes', 'Grades', 'Resources'] as const;
+const TABS = ['Overview', 'Assignments', 'Classes', 'Grades'] as const;
 type Tab = (typeof TABS)[number];
 
 const EVENT_TYPES = ['general', 'holiday', 'field_trip', 'parent_meeting', 'exam', 'concert', 'sport', 'graduation', 'assignment', 'announcement'];
@@ -267,7 +268,7 @@ export function SchoolModule() {
     refreshGrades();
   }
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} />;
 
   return (
@@ -277,7 +278,9 @@ export function SchoolModule() {
           title="School"
           description="Stay on top of classes, assignments, and school events."
           action={
-            <div className="relative">
+            <div className="flex items-center gap-2">
+              <AiInsight kind="school" iconOnly />
+              <div className="relative">
               <Button onClick={() => setAddMenuOpen((v) => !v)}><Plus className="h-4 w-4" /> Add Item</Button>
               {addMenuOpen && (
                 <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border border-border bg-surface p-1 shadow-lg">
@@ -286,6 +289,7 @@ export function SchoolModule() {
                   <button className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface/60" onClick={() => { setAddMenuOpen(false); setGradeOpen(true); }}>Grade</button>
                 </div>
               )}
+              </div>
             </div>
           }
         />
@@ -293,10 +297,6 @@ export function SchoolModule() {
         {/* Tab bar */}
         <div className="flex items-center justify-between border-b border-border">
           <div className="tab-bar">{TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>)}</div>
-          <div className="flex gap-2 pb-1">
-            <button className="btn-inline"><Filter className="h-3 w-3" /> Filter</button>
-            <button className="btn-inline"><MoreHorizontal className="h-3 w-3" /> More</button>
-          </div>
         </div>
 
         {/* Stats grid */}
@@ -446,13 +446,6 @@ export function SchoolModule() {
                 </table>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Resources tab */}
-        {tab === 'Resources' && (
-          <div className="rounded-2xl border border-border bg-surface/40 p-5">
-            <EmptyState icon={BookOpen} title="Resources coming soon" description="Study materials, links, and helpful resources will appear here." />
           </div>
         )}
 

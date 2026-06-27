@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapPin, Plus, Search, Star, Trash2, LocateFixed, Wind, Droplets, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock } from '@/components/ui/states';
+import { SkeletonList } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import {
   fetchForecast, geocodeCity, reverseGeocode, weatherInfo,
@@ -150,7 +152,7 @@ export function WeatherModule() {
       name: r.name, admin1: r.admin1, country: r.country, latitude: r.latitude, longitude: r.longitude,
       sort_order: saved.length,
     }).select('id').single();
-    if (err || !data) { toastError(err?.message ?? 'Could not add city'); return; }
+    if (err || !data) { toastError(describeDbError(err, 'Could not add city')); return; }
     success(`Added ${r.name}`);
     setAdding(false); setQuery(''); setResults([]);
     await loadSaved();
@@ -160,14 +162,14 @@ export function WeatherModule() {
   async function makeDefault(id: string) {
     await supabase.from('weather_locations').update({ is_default: false }).eq('family_id', familyId);
     const { error: err } = await supabase.from('weather_locations').update({ is_default: true }).eq('id', id);
-    if (err) return toastError(err.message);
+    if (err) return toastError(describeDbError(err));
     success('Default city set');
     await loadSaved();
   }
 
   async function removeCity(id: string) {
     const { error: err } = await supabase.from('weather_locations').delete().eq('id', id);
-    if (err) return toastError(err.message);
+    if (err) return toastError(describeDbError(err));
     if (activeKey === `db:${id}`) setActiveKey(geo ? 'geo' : null);
     await loadSaved();
   }
@@ -177,7 +179,7 @@ export function WeatherModule() {
 
   return (
     <div className="module-page space-y-5">
-      <PageHeader title="Weather" description="Live conditions and forecasts for your locations." />
+      <PageHeader title="Weather" description="Live conditions and forecasts for your locations." action={<AiInsight kind="weather" />} />
 
       {/* Location selector */}
       <div className="flex flex-wrap items-center gap-2">
@@ -243,7 +245,7 @@ export function WeatherModule() {
       </div>
 
       {loading ? (
-        <LoadingBlock />
+        <SkeletonList />
       ) : error ? (
         <div className="rounded-2xl border border-danger/30 bg-danger/10 p-6 text-center text-sm text-danger">{error}</div>
       ) : !active ? (

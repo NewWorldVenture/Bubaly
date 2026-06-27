@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
-import { getStripe, STRIPE_PLANS, type StripePlan } from '@/lib/stripe';
+import { stripeFromKey, STRIPE_PLANS, type StripePlan } from '@/lib/stripe';
+import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
+import { serviceFeeAddInvoiceItems } from '@/lib/stripe/service-fee';
 
 export async function POST(req: NextRequest) {
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
-    const stripe = getStripe();
+    const stripeSettings = await getStripeSettings();
+    const stripe = stripeFromKey(effectiveSecretKey(stripeSettings));
 
     const { plan } = await req.json() as { plan: StripePlan };
     const priceId = STRIPE_PLANS[plan];
@@ -50,6 +53,10 @@ export async function POST(req: NextRequest) {
       metadata: { family_id: familyId },
       subscription_data: {
         metadata: { family_id: familyId },
+        // The Bubaly service fee, added as a one-time charge on the first
+        // invoice (configured in Super Admin → Stripe Setup). Doesn't touch the
+        // recurring plan item, so webhook plan-mapping stays correct.
+        ...(serviceFeeAddInvoiceItems(stripeSettings) ? { add_invoice_items: serviceFeeAddInvoiceItems(stripeSettings) } : {}),
       },
       allow_promotion_codes: true,
     });

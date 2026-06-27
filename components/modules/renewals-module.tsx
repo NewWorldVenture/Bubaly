@@ -8,14 +8,16 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   groupByExpiry, renewalStats, daysToExpiry, isExpired, rollForward,
@@ -99,7 +101,7 @@ export function RenewalsModule() {
       ? await sb.from('renewals').update(fields).eq('id', form.id)
       : await sb.from('renewals').insert({ ...fields, family_id: familyId, created_by: userId });
     setSaving(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(form.id ? 'Renewal updated' : 'Renewal added');
     setModalOpen(false);
   }
@@ -110,7 +112,7 @@ export function RenewalsModule() {
     const { error: err } = await sb.from('renewals').update({
       expires_at: rollForward(r.expires_at, 12), status: 'active',
     }).eq('id', r.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Renewed for another year');
   }
 
@@ -118,7 +120,7 @@ export function RenewalsModule() {
     if (!confirm(`Delete "${r.title}"?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('renewals').delete().eq('id', r.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Renewal deleted');
   }
 
@@ -130,7 +132,7 @@ export function RenewalsModule() {
     return `in ${d}d`;
   };
 
-  if (loading) return <LoadingBlock label="Loading renewals…" />;
+  if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load renewals'} />;
 
   const buckets = showDone ? BUCKET_ORDER : BUCKET_ORDER.filter((b) => b !== 'done');
@@ -140,7 +142,7 @@ export function RenewalsModule() {
       <PageHeader
         title="Renewals & Expirations"
         description="Track IDs, licenses, registrations, warranties, and subscriptions before they lapse."
-        action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add renewal</Button>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="renewals" iconOnly />{canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add renewal</Button>}</div>}
       />
 
       {/* Stats */}

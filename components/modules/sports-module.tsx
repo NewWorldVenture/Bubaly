@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Calendar, ChevronRight, Filter, MoreHorizontal, Plus, Sparkles, Trophy, Users, Zap } from 'lucide-react';
+import { Calendar, ChevronRight, MoreHorizontal, Plus, Sparkles, Trophy, Users, Zap } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -9,9 +9,10 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GameResult } from '@/lib/database.types';
 
@@ -152,7 +153,7 @@ export function SportsModule() {
   // --- Loading / Error ---
   const loading = eventsLoading || teamsLoading || gamesLoading;
   const error = eventsError || teamsError || gamesError;
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} />;
 
   return (
@@ -161,7 +162,7 @@ export function SportsModule() {
         <PageHeader
           title="Sports"
           description="Track games, practices, standings, and team schedules."
-          action={<Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> Add Event</Button>}
+          action={<div className="flex items-center gap-2"><AiInsight kind="sports" iconOnly /><Button onClick={() => setEventOpen(true)}><Plus className="h-4 w-4" /> Add Event</Button></div>}
         />
 
         {/* Tab bar */}
@@ -170,10 +171,6 @@ export function SportsModule() {
             {TABS.map((t) => (
               <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>
             ))}
-          </div>
-          <div className="flex gap-2 pb-1">
-            <button className="btn-inline"><Filter className="h-3 w-3" /> Filter</button>
-            <button className="btn-inline"><MoreHorizontal className="h-3 w-3" /> More</button>
           </div>
         </div>
 

@@ -3,19 +3,22 @@
 import { useMemo, useState } from 'react';
 import {
   ChefHat, Plus, Star, StarOff, Trash2, Edit2, Clock, Users,
-  Search, Filter, Sparkles, ShoppingCart, Heart, ExternalLink,
+  Search, Filter, Sparkles, ShoppingCart, Heart, ExternalLink, Vote,
   BookOpen, Flame, X, Check, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
+import { RECIPE_AI_ACTIONS } from '@/lib/recipes/ai-actions';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -69,6 +72,29 @@ export function RecipesModule() {
   const [viewing, setViewing] = useState<Recipe | null>(null);
   const [editing, setEditing] = useState<Recipe | null>(null);
   const [servingsOverride, setServingsOverride] = useState<number | null>(null);
+  const [aiBusy, setAiBusy] = useState<string | null>(null);
+  const [tonightOpen, setTonightOpen] = useState(false);
+  const [tonightConstraint, setTonightConstraint] = useState('');
+  const [tonightBusy, setTonightBusy] = useState(false);
+  const [tonightPicks, setTonightPicks] = useState<{ id: string; name: string; cuisine: string | null; reason: string }[] | null>(null);
+
+  async function suggestTonight() {
+    setTonightBusy(true);
+    setTonightPicks(null);
+    try {
+      const res = await fetch('/api/recipes/suggest', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ constraint: tonightConstraint }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Could not get suggestions');
+      setTonightPicks(json.picks ?? []);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Could not get suggestions');
+    } finally {
+      setTonightBusy(false);
+    }
+  }
   // When adding a recipe to the grocery list but none exists yet, prompt to
   // create + name one inline rather than failing.
   const [groceryPrompt, setGroceryPrompt] = useState<Recipe | null>(null);
@@ -105,6 +131,24 @@ export function RecipesModule() {
     void refresh();
   }
 
+  async function remix(recipe: Recipe, actionId: string) {
+    setAiBusy(actionId);
+    try {
+      const res = await fetch('/api/recipes/transform', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipeId: recipe.id, actionId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Could not generate variant');
+      success('AI variant saved to your recipes');
+      setViewing(null);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Could not generate variant');
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
   async function markMade(r: Recipe) {
     const supabase = createClient();
     await supabase.from('family_recipes').update({
@@ -138,7 +182,7 @@ export function RecipesModule() {
       };
     });
     const { error } = await supabase.from('grocery_items').insert(items);
-    if (error) { toastError(error.message); return false; }
+    if (error) { toastError(describeDbError(error)); return false; }
     success(`${items.length} ingredients added to your grocery list!`);
     return true;
   }
@@ -162,7 +206,7 @@ export function RecipesModule() {
       .from('grocery_lists')
       .insert({ family_id: familyId, name, created_by: userId })
       .select('id').single();
-    if (error || !created) { setCreatingList(false); toastError(error?.message ?? 'Could not create list'); return; }
+    if (error || !created) { setCreatingList(false); toastError(describeDbError(error, 'Could not create list')); return; }
     const ok = await addItemsToList(groceryPrompt, created.id);
     setCreatingList(false);
     if (ok) setGroceryPrompt(null);
@@ -174,7 +218,7 @@ export function RecipesModule() {
     timesCooked: recipes.reduce((a, r) => a + (r.times_made ?? 0), 0),
   };
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
 
   return (
     <div className="module-page">
@@ -190,6 +234,10 @@ export function RecipesModule() {
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
               {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
+            <button onClick={() => { setTonightOpen(true); setTonightPicks(null); }} className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-semibold text-brand hover:bg-brand/15"><Sparkles className="h-4 w-4" /> Tonight?</button>
+            <a href="/dashboard/recipes/vote" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Vote className="h-4 w-4" /> Vote</a>
+            <a href="/dashboard/recipes/discover" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Search className="h-4 w-4" /> Discover</a>
+            <AiInsight kind="recipes" iconOnly />
             <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add Recipe</Button>
           </div>
         }
@@ -362,6 +410,24 @@ export function RecipesModule() {
               </Button>
             </div>
 
+            {/* AI Remix — saves a transformed variant to your recipes */}
+            <div className="mb-5 rounded-2xl border border-brand/25 bg-brand/5 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand" /> AI Remix</p>
+              <div className="flex flex-wrap gap-2">
+                {RECIPE_AI_ACTIONS.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => remix(viewing, a.id)}
+                    disabled={aiBusy !== null}
+                    className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-medium transition hover:border-brand/50 hover:bg-elevated disabled:opacity-50"
+                  >
+                    {aiBusy === a.id ? 'Working…' : a.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-muted">Creates a new variant in your recipes. AI amounts/nutrition are estimates — not medical advice.</p>
+            </div>
+
             {/* Ingredients */}
             <div className="mb-5">
               <h3 className="mb-3 text-base font-bold">Ingredients</h3>
@@ -444,6 +510,43 @@ export function RecipesModule() {
           </form>
         </Modal>
       )}
+
+      {tonightOpen && (
+        <Modal open onClose={() => setTonightOpen(false)} title="What can we make tonight?">
+          <div className="space-y-4">
+            <p className="text-sm text-muted">We&apos;ll pick from your saved recipes. Optionally tell us what you have or need.</p>
+            <Input value={tonightConstraint} onChange={(e) => setTonightConstraint(e.target.value)}
+              placeholder="e.g. we have chicken & rice · quick · no dairy" />
+            <Button onClick={suggestTonight} loading={tonightBusy} className="w-full">
+              <Sparkles className="h-4 w-4" /> {tonightBusy ? 'Thinking…' : 'Suggest dinner'}
+            </Button>
+
+            {tonightPicks && tonightPicks.length === 0 && (
+              <p className="rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">
+                No matches yet — save a few recipes (try Discover) and ask again.
+              </p>
+            )}
+            {tonightPicks && tonightPicks.length > 0 && (
+              <ul className="space-y-2">
+                {tonightPicks.map((p) => {
+                  const recipe = (recipes ?? []).find((r) => r.id === p.id);
+                  return (
+                    <li key={p.id}>
+                      <button
+                        onClick={() => { if (recipe) { setViewing(recipe); setTonightOpen(false); } }}
+                        className="w-full rounded-xl border border-border bg-surface/40 p-3 text-left transition hover:border-brand/40"
+                      >
+                        <p className="text-sm font-semibold">{p.name}{p.cuisine ? <span className="ml-1 text-xs font-normal text-muted">· {p.cuisine}</span> : null}</p>
+                        <p className="mt-0.5 text-xs text-muted">{p.reason}</p>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -501,7 +604,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
       ? await supabase.from('family_recipes').update(payload as never).eq('id', recipe.id)
       : await supabase.from('family_recipes').insert({ ...payload, family_id: familyId, created_by: userId } as never);
     setLoading(false);
-    if (error) { toastError(error.message); return; }
+    if (error) { toastError(describeDbError(error)); return; }
     success(recipe ? 'Recipe updated' : 'Recipe added');
     onSaved();
   }

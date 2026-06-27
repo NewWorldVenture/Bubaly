@@ -8,14 +8,16 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   computeBalances, canAfford, REDEMPTION_STATUS_LABELS,
@@ -89,7 +91,7 @@ export function RewardsModule() {
       ? await sb.from('rewards').update(fields).eq('id', form.id)
       : await sb.from('rewards').insert({ ...fields, family_id: familyId, created_by: userId });
     setSaving(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(form.id ? 'Reward updated' : 'Reward added');
     setModalOpen(false);
   }
@@ -98,7 +100,7 @@ export function RewardsModule() {
     if (!confirm(`Delete the reward "${r.title}"?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('rewards').delete().eq('id', r.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Reward deleted');
   }
 
@@ -116,7 +118,7 @@ export function RewardsModule() {
       decided_at: canManage && forMemberId === selfMember?.id ? new Date().toISOString() : null,
     });
     setBusy(null);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(canManage && forMemberId === selfMember?.id ? 'Reward redeemed' : 'Redemption requested');
   }
 
@@ -127,11 +129,11 @@ export function RewardsModule() {
       status, decided_by: selfMember?.id ?? null, decided_at: new Date().toISOString(),
     }).eq('id', red.id);
     setBusy(null);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Marked fulfilled');
   }
 
-  if (loading) return <LoadingBlock label="Loading rewards…" />;
+  if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load rewards'} />;
 
   return (
@@ -139,7 +141,12 @@ export function RewardsModule() {
       <PageHeader
         title="Rewards & Allowance"
         description="Turn chore points into rewards. Kids request, parents approve, everyone sees the leaderboard."
-        action={canManage && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add reward</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="rewards" iconOnly />
+            {canManage && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add reward</Button>}
+          </div>
+        }
       />
 
       {/* Balances leaderboard */}

@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { createClient } from '@/lib/supabase/client';
 import type { Tables, DashboardView } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/constants/roles';
+import type { FeatureTier } from '@/lib/constants/feature-catalog';
 
 export type FamilyOption = { familyId: string; name: string };
 
@@ -20,6 +21,8 @@ export type AppContextValue = {
   defaultDashboard: DashboardView;
   /** Active family's subscription level: 0 = Free, 1 = Family Basic, 2 = Family+. */
   planLevel: number;
+  /** Admin Tier & Features, resolved per route href ({ href → tier }); drives nav gating. */
+  featureTiers: Record<string, FeatureTier>;
   members: Tables<'family_members'>[];
   /** The current user's member row in the active family (if they have one). */
   selfMember: Tables<'family_members'> | null;

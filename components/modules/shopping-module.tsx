@@ -4,18 +4,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ShoppingBag, Plus, Trash2, Check, Search, X, ChevronDown, ChevronUp,
-  ShoppingCart, Pencil, Star, Archive, MoreHorizontal, Share2,
+  ShoppingCart, Pencil, Archive, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -38,6 +41,7 @@ const CATEGORIES = ['Produce', 'Dairy & Eggs', 'Meat & Seafood', 'Pantry', 'Beve
 export function ShoppingModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
+  const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
 
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const [newListOpen, setNewListOpen] = useState(false);
@@ -90,46 +94,56 @@ export function ShoppingModule() {
   const checkedCount = items.filter((i) => i.is_checked).length;
   const totalCount = items.length;
 
-  async function addItem(e: React.FormEvent) {
+  function addItem(e: React.FormEvent) {
     e.preventDefault();
     const name = addingText.trim();
     if (!name || !activeListId) return;
-    const supabase = createClient();
-    const { error } = await supabase.from('grocery_items').insert({
-      family_id: familyId, list_id: activeListId, name, category: addingCategory, created_by: userId,
+    if (name.length > 120) { toastError('Item name is too long (max 120 characters)'); return; }
+    return run('add-item', async () => {
+      const { error } = await createClient().from('grocery_items').insert({
+        family_id: familyId, list_id: activeListId, name, category: addingCategory, created_by: userId,
+      });
+      if (error) throw error;
+      setAddingText('');
+      void refreshItems();
     });
-    if (error) { toastError(error.message); return; }
-    setAddingText('');
-    void refreshItems();
   }
 
-  async function toggleItem(item: GroceryItem) {
-    const supabase = createClient();
-    await supabase.from('grocery_items').update({ is_checked: !item.is_checked }).eq('id', item.id);
-    void refreshItems();
+  function toggleItem(item: GroceryItem) {
+    return run(`toggle:${item.id}`, async () => {
+      const { error } = await createClient().from('grocery_items').update({ is_checked: !item.is_checked }).eq('id', item.id);
+      if (error) throw error;
+      void refreshItems();
+    });
   }
 
-  async function deleteItem(id: string) {
-    const supabase = createClient();
-    await supabase.from('grocery_items').delete().eq('id', id);
-    void refreshItems();
+  function deleteItem(id: string) {
+    return run(`delete:${id}`, async () => {
+      const { error } = await createClient().from('grocery_items').delete().eq('id', id);
+      if (error) throw error;
+      void refreshItems();
+    });
   }
 
-  async function clearChecked() {
-    const supabase = createClient();
-    const checkedIds = items.filter((i) => i.is_checked).map((i) => i.id);
-    if (!checkedIds.length) return;
-    await supabase.from('grocery_items').delete().in('id', checkedIds);
-    success(`Cleared ${checkedIds.length} completed items`);
-    void refreshItems();
+  function clearChecked() {
+    return run('clear-checked', async () => {
+      const checkedIds = items.filter((i) => i.is_checked).map((i) => i.id);
+      if (!checkedIds.length) return;
+      const { error } = await createClient().from('grocery_items').delete().in('id', checkedIds);
+      if (error) throw error;
+      success(`Cleared ${checkedIds.length} completed items`);
+      void refreshItems();
+    });
   }
 
-  async function archiveList(id: string) {
-    const supabase = createClient();
-    await supabase.from('grocery_lists').update({ archived_at: new Date().toISOString() } as never).eq('id', id);
-    success('List archived');
-    setActiveListId(lists.find((l) => l.id !== id)?.id ?? null);
-    void refreshLists();
+  function archiveList(id: string) {
+    return run(`archive:${id}`, async () => {
+      const { error } = await createClient().from('grocery_lists').update({ archived_at: new Date().toISOString() } as never).eq('id', id);
+      if (error) throw error;
+      success('List archived');
+      setActiveListId(lists.find((l) => l.id !== id)?.id ?? null);
+      void refreshLists();
+    });
   }
 
   function toggleCollapse(cat: string) {
@@ -140,7 +154,7 @@ export function ShoppingModule() {
     });
   }
 
-  if (listsLoading) return <LoadingBlock />;
+  if (listsLoading) return <SkeletonList />;
 
   return (
     <div className="module-with-sidebar">
@@ -199,8 +213,9 @@ export function ShoppingModule() {
                 <h2 className="text-xl font-bold">{activeList.name}</h2>
               </div>
               <div className="ml-auto flex items-center gap-2">
+                <AiInsight kind="shopping" />
                 {checkedCount > 0 && (
-                  <Button variant="ghost" size="sm" onClick={clearChecked}>
+                  <Button variant="ghost" size="sm" onClick={clearChecked} disabled={isPending('clear-checked')}>
                     <Check className="h-3.5 w-3.5 text-success" /> Clear {checkedCount} done
                   </Button>
                 )}
@@ -225,7 +240,7 @@ export function ShoppingModule() {
             )}
 
             {/* Items by category */}
-            {itemsLoading ? <LoadingBlock /> : byCategory.length === 0 ? (
+            {itemsLoading ? <SkeletonList /> : byCategory.length === 0 ? (
               <EmptyState icon={ShoppingCart} title="List is empty"
                 description="Add items below to get started." />
             ) : (
@@ -250,10 +265,10 @@ export function ShoppingModule() {
                             <div key={item.id}
                               className={cn('group flex items-center gap-3 px-4 py-2.5 hover:bg-elevated/20 transition',
                                 item.is_checked && 'opacity-60')}>
-                              <button onClick={() => toggleItem(item)}
-                                className={cn('flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition',
+                              <button onClick={() => toggleItem(item)} disabled={isPending(`toggle:${item.id}`)} aria-label={item.is_checked ? 'Uncheck item' : 'Check item'}
+                                className={cn('flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition disabled:opacity-60',
                                   item.is_checked ? 'border-success bg-success' : 'border-border hover:border-success/50')}>
-                                {item.is_checked && <Check className="h-3 w-3 text-fg" />}
+                                {isPending(`toggle:${item.id}`) ? <Loader2 className="h-3 w-3 animate-spin text-muted" /> : item.is_checked && <Check className="h-3 w-3 text-fg" />}
                               </button>
                               <span className={cn('flex-1 text-sm', item.is_checked && 'line-through text-muted')}>
                                 {item.name}
@@ -266,9 +281,9 @@ export function ShoppingModule() {
                               {(item as Record<string, unknown>).note ? (
                                 <span className="text-xs text-muted">{String((item as Record<string, unknown>).note)}</span>
                               ) : null}
-                              <button onClick={() => deleteItem(item.id)}
-                                className="rounded p-1 text-muted opacity-0 group-hover:opacity-100 hover:text-danger transition">
-                                <Trash2 className="h-3.5 w-3.5" />
+                              <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label="Delete item"
+                                className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-danger disabled:opacity-50">
+                                {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </button>
                             </div>
                           ))}
@@ -289,7 +304,7 @@ export function ShoppingModule() {
               <input value={addingText} onChange={(e) => setAddingText(e.target.value)}
                 placeholder="+ Add item…"
                 className="flex-1 rounded-xl border border-dashed border-border bg-transparent px-4 py-2 text-sm placeholder:text-muted focus:border-brand/50 focus:outline-none transition" />
-              {addingText && <Button type="submit" size="sm">Add</Button>}
+              {addingText && <Button type="submit" size="sm" disabled={isPending('add-item')}>Add</Button>}
             </form>
           </>
         )}
@@ -331,17 +346,25 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (loading) return;
+    const trimmed = name.trim();
+    if (!trimmed) { toastError('Give your list a name'); return; }
+    if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
     if (!familyId) { toastError('No active family — reload and try again.'); return; }
     setLoading(true);
-    const supabase = createClient();
-    const { data, error } = await supabase.from('grocery_lists').insert({
-      family_id: familyId, name: name.trim(), created_by: userId,
-      list_icon: icon, store: preset.store,
-    } as never).select('id').single();
-    setLoading(false);
-    if (error) { toastError(error.message); return; }
-    onCreated(data.id);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.from('grocery_lists').insert({
+        family_id: familyId, name: trimmed, created_by: userId,
+        list_icon: icon, store: preset.store,
+      } as never).select('id').single();
+      if (error || !data) { toastError(describeDbError(error)); return; }
+      onCreated(data.id);
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -394,12 +417,21 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
+    const trimmed = name.trim();
+    if (!trimmed) { toastError('Give your list a name'); return; }
+    if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
     setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.from('grocery_lists').update({ name, list_icon: icon } as never).eq('id', list.id);
-    setLoading(false);
-    if (error) { toastError(error.message); return; }
-    onSaved();
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from('grocery_lists').update({ name: trimmed, list_icon: icon } as never).eq('id', list.id);
+      if (error) { toastError(describeDbError(error)); return; }
+      onSaved();
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

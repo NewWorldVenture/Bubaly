@@ -1,18 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { Target, Plus, Trash2, CheckCircle2 } from 'lucide-react';
+import { Target, Plus, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
-import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -22,6 +25,7 @@ type Goal = Tables<'goals'>;
 export function GoalsModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
+  const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Goal | null>(null);
 
@@ -34,27 +38,33 @@ export function GoalsModule() {
         .order('is_complete').order('target_date', { ascending: true, nullsFirst: false }),
   });
 
-  async function remove(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from('goals').delete().eq('id', id);
-    if (error) return toastError(error.message);
-    success('Goal removed');
-    void refresh();
+  function remove(id: string) {
+    return run(`delete:${id}`, async () => {
+      const { error } = await createClient().from('goals').delete().eq('id', id);
+      if (error) throw error;
+      success('Goal removed');
+      void refresh();
+    });
   }
 
-  async function updateProgress(goal: Goal, progress: number) {
-    const supabase = createClient();
-    const isComplete = progress >= 100;
-    const { error } = await supabase.from('goals').update({ progress, is_complete: isComplete }).eq('id', goal.id);
-    if (error) return toastError(error.message);
-    if (isComplete) success('Goal completed! 🎉');
-    void refresh();
+  function updateProgress(goal: Goal, progress: number) {
+    // Clamp to a valid 0–100 range before writing.
+    const clamped = Math.max(0, Math.min(100, Math.round(progress)));
+    return run(`progress:${goal.id}`, async () => {
+      const isComplete = clamped >= 100;
+      const { error } = await createClient().from('goals').update({ progress: clamped, is_complete: isComplete }).eq('id', goal.id);
+      if (error) throw error;
+      if (isComplete) success('Goal completed! 🎉');
+      void refresh();
+    });
   }
+
+  const pendingFor = (id: string) => isPending(`delete:${id}`) || isPending(`progress:${id}`);
 
   const active = data.filter((g) => !g.is_complete);
   const completed = data.filter((g) => g.is_complete);
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   return (
@@ -62,7 +72,7 @@ export function GoalsModule() {
       <PageHeader
         title="Family Goals"
         description="Set goals, track progress, and celebrate achievements together."
-        action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New goal</Button>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="goals" iconOnly /><Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New goal</Button></div>}
       />
 
       {data.length === 0 ? (
@@ -73,7 +83,7 @@ export function GoalsModule() {
           {active.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2">
               {active.map((g) => (
-                <GoalCard key={g.id} goal={g} onEdit={() => setEditing(g)} onDelete={remove} onProgress={updateProgress} />
+                <GoalCard key={g.id} goal={g} pending={pendingFor(g.id)} onEdit={() => setEditing(g)} onDelete={remove} onProgress={updateProgress} />
               ))}
             </div>
           )}
@@ -83,7 +93,7 @@ export function GoalsModule() {
               <h2 className="mb-3 text-sm font-semibold text-muted">Completed</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 {completed.map((g) => (
-                  <GoalCard key={g.id} goal={g} onEdit={() => setEditing(g)} onDelete={remove} onProgress={updateProgress} />
+                  <GoalCard key={g.id} goal={g} pending={pendingFor(g.id)} onEdit={() => setEditing(g)} onDelete={remove} onProgress={updateProgress} />
                 ))}
               </div>
             </div>
@@ -104,8 +114,9 @@ export function GoalsModule() {
   );
 }
 
-function GoalCard({ goal, onEdit, onDelete, onProgress }: {
+function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
   goal: Goal;
+  pending: boolean;
   onEdit: () => void;
   onDelete: (id: string) => void;
   onProgress: (g: Goal, progress: number) => void;
@@ -125,8 +136,8 @@ function GoalCard({ goal, onEdit, onDelete, onProgress }: {
             <p className="mt-1 text-xs text-muted">Target: {fmtDate(goal.target_date)}</p>
           )}
         </div>
-        <button onClick={() => onDelete(goal.id)} className="rounded-lg p-1.5 text-muted hover:text-danger" aria-label="Delete">
-          <Trash2 className="h-4 w-4" />
+        <button onClick={() => onDelete(goal.id)} disabled={pending} className="rounded-lg p-1.5 text-muted transition hover:text-danger disabled:opacity-50" aria-label="Delete">
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
         </button>
       </div>
 
@@ -148,8 +159,9 @@ function GoalCard({ goal, onEdit, onDelete, onProgress }: {
               <button
                 key={v}
                 onClick={() => onProgress(goal, v)}
+                disabled={pending}
                 className={cn(
-                  'flex-1 rounded-lg border px-2 py-1 text-xs font-medium transition hover:bg-elevated',
+                  'flex-1 rounded-lg border px-2 py-1 text-xs font-medium transition hover:bg-elevated disabled:opacity-50',
                   goal.progress >= v ? 'border-brand text-brand' : 'border-border text-muted',
                 )}
               >
@@ -172,23 +184,34 @@ function GoalModal({ goal, familyId, userId, onClose, onSaved }: {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (loading) return;
     const form = new FormData(e.currentTarget);
     const title = String(form.get('title') ?? '').trim();
     if (!title) return toastError('Title is required');
+    if (title.length > 120) return toastError('Title is too long (max 120 characters)');
+    const targetDate = String(form.get('target_date') ?? '') || null;
+    if (!goal && targetDate && new Date(targetDate) < new Date(new Date().toDateString())) {
+      return toastError('Pick a target date in the future.');
+    }
     setLoading(true);
-    const supabase = createClient();
-    const payload = {
-      title,
-      description: String(form.get('description') ?? '').trim() || null,
-      target_date: String(form.get('target_date') ?? '') || null,
-    };
-    const { error } = goal
-      ? await supabase.from('goals').update(payload).eq('id', goal.id)
-      : await supabase.from('goals').insert({ family_id: familyId, created_by: userId, ...payload, progress: 0, is_complete: false });
-    setLoading(false);
-    if (error) return toastError(error.message);
-    success(goal ? 'Goal updated' : 'Goal created');
-    onSaved();
+    try {
+      const supabase = createClient();
+      const payload = {
+        title,
+        description: String(form.get('description') ?? '').trim() || null,
+        target_date: targetDate,
+      };
+      const { error } = goal
+        ? await supabase.from('goals').update(payload).eq('id', goal.id)
+        : await supabase.from('goals').insert({ family_id: familyId, created_by: userId, ...payload, progress: 0, is_complete: false });
+      if (error) { toastError(describeDbError(error)); return; }
+      success(goal ? 'Goal updated' : 'Goal created');
+      onSaved();
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

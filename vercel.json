@@ -23,6 +23,14 @@
     {
       "path": "/api/cron/checkout-abandoned",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/autopilot-scan",
+      "schedule": "30 6,18 * * *"
+    },
+    {
+      "path": "/api/cron/wallet-allowance",
+      "schedule": "0 7 * * *"
     }
   ]
 }

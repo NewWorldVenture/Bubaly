@@ -8,13 +8,15 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   sortByRecent, hoursSinceLastContact, isContactOverdue, averageWellbeing,
@@ -105,7 +107,7 @@ export function CareModule() {
       ? await sb.from('care_log').update(fields).eq('id', form.id)
       : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId });
     setSaving(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(form.id ? 'Entry updated' : 'Care logged');
     setModalOpen(false);
   }
@@ -117,7 +119,7 @@ export function CareModule() {
       family_id: familyId, member_id: recipientId, log_type: type,
       occurred_at: new Date().toISOString(), logged_by: selfMember?.id ?? null, created_by: userId,
     });
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(`${CARE_LOG_TYPE_LABELS[type]} logged`);
   }
 
@@ -125,7 +127,7 @@ export function CareModule() {
     if (!confirm('Delete this care entry?')) return;
     const sb = createClient();
     const { error: err } = await sb.from('care_log').delete().eq('id', e.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Entry deleted');
   }
 
@@ -133,7 +135,7 @@ export function CareModule() {
   const fmtDay = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   const sinceLabel = hrsSince == null ? 'No contact logged' : hrsSince < 1 ? 'Just now' : hrsSince < 24 ? `${hrsSince}h ago` : `${Math.floor(hrsSince / 24)}d ago`;
 
-  if (loading) return <LoadingBlock label="Loading care log…" />;
+  if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load care log'} />;
 
   return (
@@ -141,7 +143,7 @@ export function CareModule() {
       <PageHeader
         title="Care Log"
         description="Coordinate care for a loved one — log check-ins, track well-being, and see who's been in touch."
-        action={<Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> Log care</Button>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="care" iconOnly /><Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> Log care</Button></div>}
       />
 
       {/* Recipient selector */}

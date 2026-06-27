@@ -8,13 +8,15 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   groupByDue, homeworkStats, isOverdue, HOMEWORK_STATUS_LABELS, DUE_BUCKET_LABELS,
@@ -97,7 +99,7 @@ export function HomeworkModule() {
       ? await sb.from('homework_assignments').update(fields).eq('id', form.id)
       : await sb.from('homework_assignments').insert({ ...fields, family_id: familyId, created_by: userId });
     setSaving(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(form.id ? 'Homework updated' : 'Homework added');
     setModalOpen(false);
   }
@@ -109,14 +111,14 @@ export function HomeworkModule() {
     const { error: err } = await sb.from('homework_assignments').update({
       status: next, completed_at: isDone ? new Date().toISOString() : null,
     }).eq('id', h.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
   async function remove(h: Homework) {
     if (!confirm(`Delete "${h.title}"?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('homework_assignments').delete().eq('id', h.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Homework deleted');
   }
 
@@ -125,7 +127,7 @@ export function HomeworkModule() {
     return new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
 
-  if (loading) return <LoadingBlock label="Loading homework…" />;
+  if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load homework'} />;
 
   const buckets = showDone ? BUCKET_ORDER : BUCKET_ORDER.filter((b) => b !== 'done');
@@ -135,7 +137,7 @@ export function HomeworkModule() {
       <PageHeader
         title="Homework"
         description="Keep every assignment on track — by student, by due date, with overdue alerts."
-        action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add homework</Button>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="homework" /><Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add homework</Button></div>}
       />
 
       {/* Stats */}

@@ -5,8 +5,8 @@ import {
   FolderKanban, Plug, BarChart3, Sun, CalendarDays, Stethoscope, Smile, TicketCheck,
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
-  DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, type LucideIcon,
+  DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -41,14 +41,24 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     title: 'Suggested',
     layout: 'list',
     items: [
+      { href: '/dashboard/autopilot', label: 'Family Autopilot', icon: Rocket, minLevel: 2 },
       { href: '/dashboard/briefing', label: 'Daily Briefing', icon: Sun, minLevel: 1 },
       { href: '/dashboard/weekly-briefing', label: 'Weekly Briefing', icon: CalendarDays, minLevel: 2 },
       { href: '/dashboard/command-center', label: 'Command Center', icon: Gauge, minLevel: 2 },
       { href: '/dashboard/assistant', label: 'AI Assistant', icon: Sparkles, minLevel: 0 },
+      { href: '/dashboard/trust', label: 'Trust & Permissions', icon: ShieldCheck, minLevel: 0 },
+      { href: '/dashboard/concierge', label: 'AI Concierge', icon: Plane, minLevel: 1 },
+      { href: '/dashboard/trip-intel', label: 'Trip Intelligence', icon: MapPin, minLevel: 1 },
+      { href: '/dashboard/front-desk', label: 'AI Front Desk', icon: PhoneCall, minLevel: 1 },
+      { href: '/dashboard/inbox', label: 'Communications Hub', icon: Inbox, minLevel: 1 },
       { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, minLevel: 0 },
+      { href: '/wallet', label: 'Family Wallet', icon: Wallet, minLevel: 0 },
       { href: '/dashboard/chores', label: 'Tasks & Chores', icon: CheckSquare, minLevel: 1 },
       { href: '/missions', label: 'Family Missions', icon: Trophy, minLevel: 1 },
       { href: '/dashboard/rewards', label: 'Rewards', icon: Gift, minLevel: 1 },
+      { href: '/wallet', label: 'Family Wallet', icon: Wallet, minLevel: 0 },
+      { href: '/dashboard/behavior', label: 'Behavior', icon: Smile, minLevel: 1 },
+      { href: '/dashboard/screen-time', label: 'Screen Time', icon: Monitor, minLevel: 1 },
     ],
   },
   {
@@ -56,14 +66,20 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     layout: 'grid',
     items: [
       { href: '/dashboard/meals', label: 'Meals', icon: UtensilsCrossed, minLevel: 1 },
+      { href: '/dashboard/pantry', label: 'Pantry', icon: Boxes, minLevel: 1 },
       { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle, minLevel: 0 },
       { href: '/dashboard/announcements', label: 'Announcements', icon: Megaphone, minLevel: 0 },
       { href: '/dashboard/activity', label: 'Activity Feed', icon: Activity, minLevel: 0 },
       { href: '/dashboard/celebrations', label: 'Celebrations', icon: Cake, minLevel: 0 },
+      { href: '/dashboard/relationship', label: 'Relationship Helper', icon: HeartHandshake, minLevel: 0 },
       { href: '/dashboard/readiness', label: 'Readiness', icon: Gauge, minLevel: 0 },
       { href: '/dashboard/memories', label: 'Memories', icon: BookHeart, minLevel: 0 },
+      { href: '/dashboard/family-tree', label: 'Family Tree', icon: GitBranch, minLevel: 0 },
+      { href: '/dashboard/grandparent-portal', label: 'Grandparent Portal', icon: Heart, minLevel: 0 },
+      { href: '/dashboard/pets', label: 'Pets', icon: PawPrint, minLevel: 0 },
       { href: '/dashboard/locator', label: 'Family Map', icon: MapPin, minLevel: 1 },
-      { href: '/dashboard/social', label: 'Social Command', icon: Share2, minLevel: 0 },
+      { href: '/dashboard/social', label: 'Social Command', icon: Share2, minLevel: 1 },
+      { href: '/dashboard/social-feed', label: 'Social Feed', icon: Rss, minLevel: 0 },
       { href: '/dashboard/grocery', label: 'Groceries', icon: ShoppingCart, minLevel: 0 },
       { href: '/dashboard/reminders', label: 'Reminders', icon: Bell, minLevel: 0 },
       { href: '/dashboard/weather', label: 'Weather', icon: CloudSun, minLevel: 0 },
@@ -73,6 +89,9 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/wishlists', label: 'Wish Lists', icon: Gift, minLevel: 0 },
       { href: '/dashboard/documents', label: 'Documents', icon: FolderLock, minLevel: 0 },
       { href: '/dashboard/notes', label: 'Notes', icon: StickyNote, minLevel: 0 },
+      { href: '/dashboard/habits', label: 'Habits', icon: Repeat, minLevel: 0 },
+      { href: '/dashboard/journal', label: 'Journal', icon: NotebookPen, minLevel: 0 },
+      { href: '/dashboard/focus', label: 'Focus Mode', icon: Focus, minLevel: 0 },
       { href: '/dashboard/contacts', label: 'Contacts', icon: Users, minLevel: 0 },
     ],
   },
@@ -85,9 +104,17 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/homework', label: 'Homework', icon: BookOpen, minLevel: 1 },
       { href: '/dashboard/signups', label: 'Signups', icon: CalendarClock, minLevel: 1 },
       { href: '/dashboard/home', label: 'Home & Maintenance', icon: Home, minLevel: 1 },
+      { href: '/dashboard/utilities', label: 'Utilities', icon: Gauge, minLevel: 1 },
+      { href: '/dashboard/binder', label: 'Household Binder', icon: FolderLock, minLevel: 1 },
+      { href: '/dashboard/security', label: 'Security Alerts', icon: ShieldAlert, minLevel: 1 },
+      { href: '/dashboard/devices', label: 'Smart Home', icon: Plug, minLevel: 1 },
       { href: '/dashboard/auto', label: 'Auto & Vehicles', icon: Car, minLevel: 1 },
       { href: '/dashboard/renewals', label: 'Renewals', icon: ShieldCheck, minLevel: 1 },
       { href: '/dashboard/trips', label: 'Trip Planner', icon: Plane, minLevel: 1 },
+      { href: '/dashboard/vacations', label: 'Vacation Planner', icon: Sun, minLevel: 1 },
+      { href: '/dashboard/weekend', label: 'Weekend Planner', icon: CalendarRange, minLevel: 1 },
+      { href: '/dashboard/voting', label: 'Group Voting', icon: ListChecks, minLevel: 1 },
+      { href: '/dashboard/trip-memories', label: 'Trip Memories', icon: BookHeart, minLevel: 1 },
       { href: '/dashboard/sports', label: 'Sports', icon: Trophy, minLevel: 1 },
       { href: '/dashboard/rides', label: 'Rides & Carpool', icon: Car, minLevel: 1 },
       { href: '/display', label: 'Kitchen Display', icon: Monitor, minLevel: 1 },
@@ -96,7 +123,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/medical', label: 'Medical', icon: Stethoscope, minLevel: 1 },
       { href: '/dashboard/medications', label: 'Medications', icon: Pill, minLevel: 1 },
       { href: '/dashboard/care', label: 'Care Log', icon: HeartHandshake, minLevel: 1 },
-      { href: '/dashboard/inbox', label: 'Magic Import', icon: Inbox, minLevel: 1 },
+      { href: '/dashboard/inbox', label: 'Communications Hub', icon: Inbox, minLevel: 1 },
       { href: '/dashboard/dental', label: 'Dental', icon: Smile, minLevel: 1 },
       { href: '/dashboard/settings', label: 'Settings', icon: Settings, minLevel: 0 },
     ],
@@ -106,6 +133,12 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     layout: 'grid',
     items: [
       { href: '/dashboard/billing', label: 'Finances', icon: CreditCard, minLevel: 0 },
+      { href: '/wallet', label: 'Family Wallet', icon: Wallet, minLevel: 0 },
+      { href: '/economy', label: 'Family Economy', icon: Coins, minLevel: 0 },
+      { href: '/dashboard/expenses', label: 'Expense Splitting', icon: DollarSign, minLevel: 1 },
+      { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: RefreshCw, minLevel: 1 },
+      { href: '/dashboard/insurance', label: 'Insurance Hub', icon: ShieldAlert, minLevel: 1 },
+      { href: '/dashboard/tax-vault', label: 'Tax Vault', icon: FolderLock, minLevel: 1 },
       { href: '/dashboard/sync', label: 'Calendar Sync', icon: RefreshCw, minLevel: 0 },
       { href: '/dashboard/settings#members', label: 'Family Members', icon: UsersRound, minLevel: 0 },
       { href: '/dashboard/migrate', label: 'Switch to Bubaly', icon: Import, minLevel: 0 },
@@ -145,11 +178,14 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/users', label: 'Users & Families', icon: UsersRound },
   { href: '/admin/marketing', label: 'Marketing', icon: Megaphone },
   { href: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
+  { href: '/admin/tier-features', label: 'Tier & Features', icon: SlidersHorizontal },
   { href: '/admin/system', label: 'System Overview', icon: Activity },
   { href: '/admin/content', label: 'Content Management', icon: FolderKanban },
   { href: '/admin/security', label: 'Security', icon: ShieldCheck },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
   { href: '/admin/billing', label: 'Billing & Payments', icon: DollarSign },
+  { href: '/admin/wallet', label: 'Family Wallet', icon: Wallet },
+  { href: '/admin/stripe', label: 'Money (Stripe)', icon: CreditCard },
   { href: '/admin/integrations', label: 'Integrations', icon: Plug },
   { href: '/admin/sync', label: 'Sync Platform', icon: RefreshCw },
   { href: '/admin/social', label: 'Social Platform', icon: Share2 },
@@ -160,11 +196,18 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/admins', label: 'Admin', icon: UserCog },
 ];
 
-/** Bottom tab bar on mobile web — the 5 highest-frequency destinations. */
+/**
+ * Bottom tab bar on mobile web — 5 tabs: Home | Assistant | Capture | Inbox | Profile.
+ * The Capture tab (index 2) is rendered as a raised FAB by the AppShell.
+ * CAPTURE_TAB_INDEX marks which tab gets the special treatment.
+ */
 export const MOBILE_TABS: NavItem[] = [
   { href: '/dashboard', label: 'Home', icon: LayoutDashboard, minLevel: 0 },
-  { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, minLevel: 0 },
-  { href: '/dashboard/chores', label: 'Chores', icon: CheckSquare, minLevel: 1 },
-  { href: '/dashboard/grocery', label: 'Grocery', icon: ShoppingCart, minLevel: 0 },
   { href: '/dashboard/assistant', label: 'Assistant', icon: Sparkles, minLevel: 0 },
+  { href: '/capture', label: 'Capture', icon: Plus, minLevel: 0 },
+  { href: '/dashboard/inbox', label: 'Inbox', icon: Inbox, minLevel: 0 },
+  { href: '/dashboard/profile', label: 'Profile', icon: UserCog, minLevel: 0 },
 ];
+
+/** Index of the special Capture tab in MOBILE_TABS (rendered as a raised FAB). */
+export const CAPTURE_TAB_INDEX = 2;

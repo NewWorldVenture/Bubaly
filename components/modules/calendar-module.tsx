@@ -1,19 +1,23 @@
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
-import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { AiInsight } from '@/components/ai/ai-insight';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { eventSchema, fieldErrors } from '@/lib/validation';
 import { EventDetailModal } from './event-detail-modal';
+import { FindTimeModal } from './find-time-modal';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -120,9 +124,12 @@ function MiniCalendar({ current, onSelect }: { current: Date; onSelect: (d: Date
 export function CalendarModule() {
   const { familyId, userId, members, selfMember } = useApp();
   const [open, setOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
   const [selected, setSelected] = useState<Event | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [filterMember, setFilterMember] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [catMenu, setCatMenu] = useState(false);
   const [view, setView] = useState<'week' | 'month' | 'agenda'>('week');
   const [gcalConnected, setGcalConnected] = useState<boolean | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -158,9 +165,11 @@ export function CalendarModule() {
 
   const memberById = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
 
-  const filtered = useMemo(() =>
-    filterMember === 'all' ? data : data.filter(e => e.assignee_id === filterMember),
-    [data, filterMember]);
+  const filtered = useMemo(() => {
+    let list = filterMember === 'all' ? data : data.filter(e => e.assignee_id === filterMember);
+    if (filterCategory !== 'all') list = list.filter(e => e.category === filterCategory);
+    return list;
+  }, [data, filterMember, filterCategory]);
 
   const allDay = filtered.filter(e => e.all_day);
   const timed = filtered.filter(e => !e.all_day);
@@ -207,13 +216,6 @@ export function CalendarModule() {
     return [...map.entries()];
   }, [upcoming]);
 
-  async function remove(id: string) {
-    const supabase = createClient();
-    const { error } = await supabase.from('calendar_events').delete().eq('id', id);
-    if (error) return toastError(error.message);
-    success('Event removed'); void refresh();
-  }
-
   async function syncGoogle() {
     setSyncing(true);
     try {
@@ -235,7 +237,7 @@ export function CalendarModule() {
   const mobileDayTimed = timedByDay.get(mobileDayStr) ?? [];
   const mobileDayAllDay = allDayByDay.get(mobileDayStr) ?? [];
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   const dateLabel = `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
@@ -262,6 +264,10 @@ export function CalendarModule() {
                     {syncing ? 'Syncing...' : 'Sync'}
                   </button>
                 )}
+                <AiInsight kind="calendar" />
+                <button onClick={() => setFindOpen(true)} className="btn-inline">
+                  <Sparkles className="h-3.5 w-3.5" /> Find a time
+                </button>
                 <Button size="sm" onClick={() => setOpen(true)}>
                   <Plus className="h-4 w-4" /> Add Event
                 </Button>
@@ -290,9 +296,27 @@ export function CalendarModule() {
                 ))}
               </div>
 
-              <button className="btn-inline">
-                <Filter className="h-3.5 w-3.5" /> Filters
-              </button>
+              <div className="relative">
+                <button onClick={() => setCatMenu(v => !v)}
+                  className={cn('btn-inline', filterCategory !== 'all' && 'text-brand')}>
+                  <Filter className="h-3.5 w-3.5" /> {filterCategory === 'all' ? 'Filters' : filterCategory[0].toUpperCase() + filterCategory.slice(1)}
+                </button>
+                {catMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setCatMenu(false)} />
+                    <div className="absolute right-0 z-20 mt-1 max-h-64 w-44 overflow-y-auto rounded-xl border border-border bg-elevated shadow-lg">
+                      {(['all', 'general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'] as const).map(c => (
+                        <button key={c} onClick={() => { setFilterCategory(c); setCatMenu(false); }}
+                          className={cn('flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-surface transition capitalize',
+                            filterCategory === c && 'text-brand font-semibold')}>
+                          {c === 'all' ? 'All categories' : c}
+                          {filterCategory === c && <Check className="h-3.5 w-3.5" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -511,12 +535,13 @@ export function CalendarModule() {
             );
           })}
           {upcoming.length > 0 && (
-            <button className="mt-1 text-xs text-brand hover:underline">View full agenda →</button>
+            <button onClick={() => setView('agenda')} className="mt-1 text-xs text-brand hover:underline">View full agenda →</button>
           )}
         </div>
       </div>
 
       {open && <NewEventModal familyId={familyId} userId={userId} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); void refresh(); }} />}
+      {findOpen && <FindTimeModal members={members} selfMemberId={selfMember?.id ?? null} onClose={() => setFindOpen(false)} onScheduled={() => { setFindOpen(false); void refresh(); }} />}
       {selected && <EventDetailModal event={selected} members={members} selfMemberId={selfMember?.id ?? null} familyId={familyId} onClose={() => setSelected(null)} />}
     </div>
   );
@@ -540,12 +565,24 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
     };
     const parsed = eventSchema.safeParse(input);
     if (!parsed.success) { setErrors(fieldErrors(parsed.error)); return; }
+    // End must be after start when both are provided.
+    if (parsed.data.ends_at && new Date(parsed.data.ends_at) <= new Date(parsed.data.starts_at)) {
+      setErrors({ ends_at: 'End time must be after the start time.' });
+      return;
+    }
+    setErrors({});
     setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.from('calendar_events').insert({ ...parsed.data, family_id: familyId, created_by: userId, all_day: false, recurrence: 'none' });
-    setLoading(false);
-    if (error) return toastError(error.message);
-    onSaved();
+    try {
+      const supabase = createClient();
+      const recurrence = String(form.get('recurrence') ?? 'none') as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+      const { error } = await supabase.from('calendar_events').insert({ ...parsed.data, family_id: familyId, created_by: userId, all_day: false, recurrence });
+      if (error) { toastError(describeDbError(error)); return; }
+      onSaved();
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -567,12 +604,23 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
           <Field label="Starts" error={errors.starts_at} required>
             {(id) => <Input id={id} name="starts_at" type="datetime-local" />}
           </Field>
-          <Field label="Ends">
+          <Field label="Ends" error={errors.ends_at}>
             {(id) => <Input id={id} name="ends_at" type="datetime-local" />}
           </Field>
         </div>
         <Field label="Location">
           {(id) => <Input id={id} name="location" placeholder="Home, School..." />}
+        </Field>
+        <Field label="Repeat">
+          {(id) => (
+            <Select id={id} name="recurrence">
+              <option value="none">No repeat</option>
+              <option value="daily">Every day</option>
+              <option value="weekly">Every week</option>
+              <option value="monthly">Every month</option>
+              <option value="yearly">Every year</option>
+            </Select>
+          )}
         </Field>
         <Field label="Notes">
           {(id) => <Textarea id={id} name="description" placeholder="Optional details..." />}

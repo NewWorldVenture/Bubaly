@@ -8,6 +8,8 @@ import { logAudit } from '@/lib/server/audit';
 import { sendReactEmail, APP_URL } from '@/lib/email';
 import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
+import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
+import { stripeFromKey } from '@/lib/stripe';
 import type { MemberRole } from '@/lib/constants/roles';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
@@ -107,6 +109,82 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result>
   await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name } });
   revalidatePath('/admin/users');
   return { ok: true };
+}
+
+/** Updates a member's display name and role. */
+export async function adminUpdateMemberAction(memberId: string, input: { displayName: string; role: MemberRole }): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+
+  const displayName = input.displayName.trim();
+  if (!displayName) return { ok: false, error: 'Name is required' };
+
+  const supabase = createServiceClient();
+  const { data: member, error } = await supabase.from('family_members')
+    .update({ display_name: displayName, role: input.role }).eq('id', memberId).select('family_id').single();
+  if (error) return { ok: false, error: error.message };
+
+  await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role } });
+  revalidatePath('/admin/users');
+  return { ok: true };
+}
+
+/** Saves the Bubaly Stripe configuration (Super Admin → Stripe Setup). */
+export async function saveStripeSettingsAction(input: {
+  enabled: boolean;
+  publishableKey: string | null;
+  secretKey: string | null;
+  webhookSecret: string | null;
+  connectAccountId: string | null;
+  serviceFeeCents: number;
+  serviceFeePriceId: string | null;
+}): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+
+  const feeCents = Number.isFinite(input.serviceFeeCents) && input.serviceFeeCents >= 0 ? Math.trunc(input.serviceFeeCents) : 90;
+  const user = await getUser();
+  const supabase = createServiceClient();
+  const clean = (v: string | null) => (v && v.trim() ? v.trim() : null);
+
+  // Secrets: a blank field means "keep the existing value" so the admin can
+  // tweak the fee without re-pasting keys.
+  const { data: current } = await supabase.from('stripe_settings').select('secret_key, webhook_secret').eq('id', 'singleton').maybeSingle();
+  const keepOr = (next: string | null, prev: string | null | undefined) => clean(next) ?? prev ?? null;
+
+  const { error } = await supabase.from('stripe_settings').upsert({
+    id: 'singleton',
+    enabled: input.enabled,
+    publishable_key: clean(input.publishableKey),
+    secret_key: keepOr(input.secretKey, current?.secret_key),
+    webhook_secret: keepOr(input.webhookSecret, current?.webhook_secret),
+    connect_account_id: clean(input.connectAccountId),
+    service_fee_cents: feeCents,
+    service_fee_price_id: clean(input.serviceFeePriceId),
+    updated_by: user?.id ?? null,
+  }, { onConflict: 'id' });
+  if (error) return { ok: false, error: error.message };
+
+  // Audit without leaking secret values.
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'stripe_settings', resourceId: 'singleton', metadata: { enabled: input.enabled, service_fee_cents: feeCents, has_secret: Boolean(clean(input.secretKey)) } });
+  revalidatePath('/admin/stripe');
+  return { ok: true };
+}
+
+/** Verifies the configured Stripe secret key by retrieving the account. */
+export async function testStripeConnectionAction(): Promise<Result<{ livemode: boolean; currencies: number }>> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+  try {
+    const settings = await getStripeSettings();
+    const key = effectiveSecretKey(settings);
+    if (!key) return { ok: false, error: 'No Stripe secret key configured.' };
+    // balance.retrieve needs no id and fails fast on a bad/expired key.
+    const balance = await stripeFromKey(key).balance.retrieve();
+    return { ok: true, data: { livemode: balance.livemode, currencies: balance.available.length } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not connect to Stripe.' };
+  }
 }
 
 /** Re-sends an existing pending invite's email. */
@@ -237,5 +315,21 @@ export async function adminUpdateTicketStatusAction(ticketId: string, status: Ti
 
   await adminAuditLog({ familyId: null, action: 'update', resource: 'support_tickets', resourceId: ticketId, metadata: { status } });
   revalidatePath('/admin/support');
+  return { ok: true };
+}
+
+/** Toggle a global feature flag (e.g. wallet_virtual_ledger_enabled, stripe_*).
+ *  Super-admin only; the single source of truth for what the wallet exposes. */
+export async function adminToggleFeatureFlagAction(key: string, enabled: boolean): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+  if (!key || key.length > 100) return { ok: false, error: 'Invalid flag key' };
+
+  const supabase = createServiceClient();
+  const { error } = await supabase.from('feature_flags').update({ enabled }).eq('key', key);
+  if (error) return { ok: false, error: error.message };
+
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'feature_flags', resourceId: key, metadata: { enabled } });
+  revalidatePath('/admin/wallet');
   return { ok: true };
 }

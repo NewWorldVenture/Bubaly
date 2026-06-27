@@ -37,6 +37,11 @@ export function planLevel(plan: string | null | undefined): number {
   }
 }
 
+// Short tier labels by plan level (0/1/2) — used in the account widget etc.
+export const TIER_LABEL_BY_LEVEL = ['Free Tier', 'Basic Tier', 'Plus Tier'] as const;
+export const tierLabelForLevel = (level: number): string =>
+  TIER_LABEL_BY_LEVEL[level] ?? 'Free Tier';
+
 export const PLAN_NAMES: Record<string, string> = {
   free: 'Bubaly Free',
   basic: 'Family Basic',
@@ -65,18 +70,21 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/settings': 0,
   '/dashboard/billing':  0,
   '/dashboard/assistant':0,  // metered AI (10 requests/mo on Free)
+  '/dashboard/trust':    0,  // Trust & Permissions is foundational safety — free for all
   '/dashboard/wishlists': 0,
   '/dashboard/announcements': 0,
   '/dashboard/activity': 0,
   '/dashboard/celebrations': 0,
   '/dashboard/readiness': 0,
   '/dashboard/memories': 0,
+  '/dashboard/relationship': 0,  // Relationship Helper (dates, gift ideas, AI nudges)
   '/dashboard/social':   0,  // Social Command (page enforces requireUserContext)
   // Basic routes
   '/dashboard/chores':        1,
   '/dashboard/rewards':       1,
   '/dashboard/locator':       1,
   '/dashboard/meals':         1,
+  '/dashboard/pantry':        1,
   '/dashboard/school':        1,
   '/dashboard/timetable':     1,
   '/dashboard/homework':      1,
@@ -90,15 +98,21 @@ export const ROUTE_PLAN_LEVEL: Record<string, number> = {
   '/dashboard/care':          1,
   '/dashboard/dental':        1,
   '/dashboard/goals':         1,
+  '/dashboard/habits':        0,
+  '/dashboard/journal':       0,
+  '/dashboard/focus':         0,
   '/dashboard/notifications': 1,
   '/dashboard/briefing':      1,
   '/dashboard/medications':   1,
   '/dashboard/inbox':         1,
+  '/dashboard/concierge':     1,
+  '/dashboard/front-desk':    1,
   '/dashboard/scan':          1,
   '/dashboard/trips':         1,
   '/dashboard/rides':         1,
   '/display':                 1,  // Kitchen Display Mode
   // Plus routes
+  '/dashboard/autopilot':       2, // Family Autopilot (Mission Control)
   '/dashboard/command-center':  2, // AI Family Command Center
   '/dashboard/weekly-briefing': 2, // Weekly AI Briefing
   '/dashboard/conflicts':       2, // AI Conflict Resolution

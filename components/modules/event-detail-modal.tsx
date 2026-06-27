@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, X, HelpCircle, MapPin, Clock, CalendarDays } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -53,19 +55,24 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
   }, [rsvps]);
 
   async function respond(status: 'accepted' | 'declined' | 'maybe') {
-    if (!selfMemberId) return;
+    if (!selfMemberId || saving) return;
     setSaving(true);
-    const supabase = createClient();
-    const { data, error } = await supabase.from('event_rsvps')
-      .upsert({ event_id: event.id, family_id: familyId, member_id: selfMemberId, status }, { onConflict: 'event_id,member_id' })
-      .select('*');
-    setSaving(false);
-    if (error) { toastError(error.message); return; }
-    // Merge the saved row back into local state.
-    setRsvps((prev) => {
-      const others = prev.filter((r) => r.member_id !== selfMemberId);
-      return data && data[0] ? [...others, data[0]] : others;
-    });
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.from('event_rsvps')
+        .upsert({ event_id: event.id, family_id: familyId, member_id: selfMemberId, status }, { onConflict: 'event_id,member_id' })
+        .select('*');
+      if (error) { toastError(describeDbError(error)); return; }
+      // Merge the saved row back into local state.
+      setRsvps((prev) => {
+        const others = prev.filter((r) => r.member_id !== selfMemberId);
+        return data && data[0] ? [...others, data[0]] : others;
+      });
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -79,6 +86,8 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
           )}
         </div>
         {event.description && <p className="whitespace-pre-wrap text-sm text-fg/90">{event.description}</p>}
+
+        <AiInsight kind="event" params={{ eventId: event.id }} variant="outline" className="w-full" label="AI prep checklist" />
 
         {selfMemberId && (
           <div>

@@ -5,14 +5,16 @@ import { Home, Plus, Trash2, Wrench, Package, Check, Shield, FileText, Upload, E
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
-import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { isManager } from '@/lib/constants/roles';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
@@ -116,7 +118,7 @@ export function HomeModule() {
     const { error } = await supabase.from('maintenance_tasks').update({
       status: 'done', completed_at: new Date().toISOString(),
     }).eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Task completed');
     void refreshTasks();
   }
@@ -124,7 +126,7 @@ export function HomeModule() {
   async function removeAsset(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('home_assets').delete().eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Asset removed');
     void refreshAssets();
   }
@@ -136,7 +138,7 @@ export function HomeModule() {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
-  if (assetsLoading || tasksLoading || docsLoading) return <LoadingBlock />;
+  if (assetsLoading || tasksLoading || docsLoading) return <SkeletonList />;
   if (assetsError) return <ErrorState message={assetsError} onRetry={refreshAssets} />;
   if (tasksError) return <ErrorState message={tasksError} onRetry={refreshTasks} />;
   if (docsError) return <ErrorState message={docsError} onRetry={refreshDocs} />;
@@ -146,12 +148,17 @@ export function HomeModule() {
       <PageHeader
         title="Home & Maintenance"
         description="Track appliances, assets, warranties, and maintenance tasks."
-        action={manager && (
+        action={
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => setOpenAsset(true)}><Package className="h-4 w-4" /> Add asset</Button>
-            <Button onClick={() => setOpenTask(true)}><Plus className="h-4 w-4" /> Add task</Button>
+            <AiInsight kind="home" />
+            {manager && (
+              <>
+                <Button variant="ghost" onClick={() => setOpenAsset(true)}><Package className="h-4 w-4" /> Add asset</Button>
+                <Button onClick={() => setOpenTask(true)}><Plus className="h-4 w-4" /> Add task</Button>
+              </>
+            )}
           </div>
-        )}
+        }
       />
 
       {/* All Warranties */}
@@ -322,7 +329,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     const { error } = await supabase.from('home_assets')
       .update({ warranty_until: warrantyUntil || null }).eq('id', asset.id);
     setSavingDate(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Warranty date saved');
     onChanged();
   }
@@ -348,7 +355,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     setUploading(false);
     if (insertError) {
       await removeFamilyDocument(supabase, path);
-      return toastError(insertError.message);
+      return toastError(describeDbError(insertError));
     }
     success('Warranty document saved');
     onChanged();
@@ -367,7 +374,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     await removeFamilyDocument(supabase, doc.storage_path);
     const { error } = await supabase.from('documents').delete().eq('id', doc.id);
     setRemovingId(null);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('File removed');
     onChanged();
   }
@@ -450,7 +457,7 @@ function NewAssetModal({ familyId, userId, onClose, onCreated }: {
       warranty_until: String(form.get('warranty_until') ?? '') || null,
     });
     setLoading(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Asset added');
     onCreated();
   }
@@ -505,7 +512,7 @@ function NewTaskModal({ familyId, userId, assets, onClose, onCreated }: {
       due_at: form.get('due_at') ? new Date(String(form.get('due_at'))).toISOString() : null,
     });
     setLoading(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Task created');
     onCreated();
   }

@@ -5,10 +5,16 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/ai', '/mobile', '/faq', '/blog', '/contact', '/login', '/signup', '/auth',
   '/join', '/offline',
+  // Legal pages — public for everyone, including signed-out visitors.
+  '/terms', '/privacy', '/cookies', '/acceptable-use',
   // Public survey response pages (NPS/CSAT/CES) — respondents may be anonymous.
   '/s',
   // Public reviews wall + submission page — no login required.
   '/reviews',
+  // Public Family Wallet gift pages — relatives gift via an unguessable token.
+  '/gift',
+  // Public exit-intent offer resolve + metric beacon (anonymous visitors).
+  '/api/exit-intent',
   // Public marketing landing pages + their metric beacon.
   '/lp',
   '/api/lp/track',

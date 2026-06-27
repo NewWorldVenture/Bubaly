@@ -1,19 +1,23 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Plus, CheckCircle2, Circle, MoreHorizontal, Filter, SlidersHorizontal } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Trash2, Filter, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
-import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { payChoreRewardAction } from '@/app/(app)/wallet/actions';
+import { formatCents } from '@/lib/wallet/ledger';
 import type { Tables } from '@/lib/database.types';
 
 type Chore = Tables<'chores'>;
@@ -80,7 +84,11 @@ export function ChoresModule() {
   const manager = isManager(role);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [paying, setPaying] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('all');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | 'low' | 'medium' | 'high'>('all');
+  const [sortBy, setSortBy] = useState<'due' | 'priority' | 'title'>('due');
+  const [menu, setMenu] = useState<'filter' | 'sort' | null>(null);
 
   const { data, loading, error, refresh } = useRealtimeQuery<Assignment>({
     table: 'chore_assignments', familyId, deps: [familyId],
@@ -100,14 +108,26 @@ export function ChoresModule() {
   const completed = data.filter(a => ['approved', 'done'].includes(a.status));
 
   const filtered = useMemo(() => {
+    let list: Assignment[];
     switch (tab) {
-      case 'mine': return data.filter(a => a.member_id === selfMemberId && !['approved', 'done'].includes(a.status));
-      case 'assigned': return data.filter(a => a.member_id !== selfMemberId && !['approved', 'done'].includes(a.status));
-      case 'chores': return data.filter(a => !['approved', 'done'].includes(a.status));
-      case 'completed': return completed;
-      default: return data.filter(a => !['approved', 'done'].includes(a.status));
+      case 'mine': list = data.filter(a => a.member_id === selfMemberId && !['approved', 'done'].includes(a.status)); break;
+      case 'assigned': list = data.filter(a => a.member_id !== selfMemberId && !['approved', 'done'].includes(a.status)); break;
+      case 'chores': list = data.filter(a => !['approved', 'done'].includes(a.status)); break;
+      case 'completed': list = completed; break;
+      default: list = data.filter(a => !['approved', 'done'].includes(a.status));
     }
-  }, [data, tab, selfMemberId, completed]);
+    if (priorityFilter !== 'all') list = list.filter(a => (a.chore?.priority ?? 'medium') === priorityFilter);
+    const prioRank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    list = [...list].sort((a, b) => {
+      if (sortBy === 'title') return (a.chore?.title ?? '').localeCompare(b.chore?.title ?? '');
+      if (sortBy === 'priority') return (prioRank[a.chore?.priority ?? 'medium'] ?? 1) - (prioRank[b.chore?.priority ?? 'medium'] ?? 1);
+      // 'due' — soonest first, undated last
+      const da = a.due_at ? new Date(a.due_at).getTime() : Infinity;
+      const db = b.due_at ? new Date(b.due_at).getTime() : Infinity;
+      return da - db;
+    });
+    return list;
+  }, [data, tab, selfMemberId, completed, priorityFilter, sortBy]);
 
   const dueToday = data.filter(a => {
     if (!a.due_at || ['approved', 'done'].includes(a.status)) return false;
@@ -137,20 +157,41 @@ export function ChoresModule() {
     const next = ['todo', 'in_progress', 'rejected'].includes(a.status) ? 'submitted' : 'todo';
     const { error } = await supabase.from('chore_assignments').update({ status: next, submitted_at: next === 'submitted' ? new Date().toISOString() : null }).eq('id', a.id);
     setBusy(null);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(next === 'submitted' ? 'Submitted for approval!' : 'Marked open'); void refresh();
   }
 
+  async function payChore(a: Assignment) {
+    if (paying) return;
+    setPaying(a.id);
+    const res = await payChoreRewardAction({ choreAssignmentId: a.id });
+    setPaying(null);
+    if (!res.ok) return toastError(res.error ?? 'Payment failed');
+    success('Paid to wallet!'); void refresh();
+  }
+
   async function approve(a: Assignment) {
+    if (busy) return;
     setBusy(a.id);
     const supabase = createClient();
     const { error } = await supabase.from('chore_assignments').update({ status: 'approved', approved_at: new Date().toISOString(), approved_by: userId, points_awarded: a.chore?.points ?? 0 }).eq('id', a.id);
     setBusy(null);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Approved!'); void refresh();
   }
 
-  if (loading) return <LoadingBlock />;
+  async function removeChore(a: Assignment) {
+    if (busy) return;
+    if (typeof window !== 'undefined' && !window.confirm(`Delete "${a.chore?.title ?? 'this task'}"?`)) return;
+    setBusy(a.id);
+    const supabase = createClient();
+    const { error } = await supabase.from('chore_assignments').delete().eq('id', a.id);
+    setBusy(null);
+    if (error) return toastError(describeDbError(error));
+    success('Task deleted'); void refresh();
+  }
+
+  if (loading) return <SkeletonList count={6} />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   const TABS: { key: Tab; label: string }[] = [
@@ -166,11 +207,16 @@ export function ChoresModule() {
           <PageHeader
             title="Tasks & Chores"
             description="Stay on top of what needs to get done."
-            action={manager ? (
-              <Button onClick={() => setOpen(true)}>
-                <Plus className="h-4 w-4" /> Add Task
-              </Button>
-            ) : undefined}
+            action={
+              <div className="flex items-center gap-2">
+                <AiInsight kind="chores" />
+                {manager && (
+                  <Button onClick={() => setOpen(true)}>
+                    <Plus className="h-4 w-4" /> Add Task
+                  </Button>
+                )}
+              </div>
+            }
           />
 
           <div className="grid-stats">
@@ -200,12 +246,47 @@ export function ChoresModule() {
               ))}
             </div>
             <div className="ml-auto flex items-center gap-2">
-              <button className="btn-inline">
-                <Filter className="h-3 w-3" /> Filter
-              </button>
-              <button className="btn-inline">
-                <SlidersHorizontal className="h-3 w-3" /> Sort
-              </button>
+              <div className="relative">
+                <button onClick={() => setMenu(m => m === 'filter' ? null : 'filter')}
+                  className={cn('btn-inline', priorityFilter !== 'all' && 'text-brand')}>
+                  <Filter className="h-3 w-3" /> {priorityFilter === 'all' ? 'Filter' : `${priorityFilter[0].toUpperCase()}${priorityFilter.slice(1)}`}
+                </button>
+                {menu === 'filter' && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setMenu(null)} />
+                    <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg">
+                      {(['all', 'high', 'medium', 'low'] as const).map(p => (
+                        <button key={p} onClick={() => { setPriorityFilter(p); setMenu(null); }}
+                          className={cn('flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-surface transition',
+                            priorityFilter === p && 'text-brand font-semibold')}>
+                          <span className="capitalize">{p === 'all' ? 'All priorities' : p}</span>
+                          {priorityFilter === p && <CheckCircle2 className="h-3.5 w-3.5" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="relative">
+                <button onClick={() => setMenu(m => m === 'sort' ? null : 'sort')} className="btn-inline">
+                  <SlidersHorizontal className="h-3 w-3" /> Sort
+                </button>
+                {menu === 'sort' && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setMenu(null)} />
+                    <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg">
+                      {([['due', 'Due date'], ['priority', 'Priority'], ['title', 'Name (A–Z)']] as const).map(([key, label]) => (
+                        <button key={key} onClick={() => { setSortBy(key); setMenu(null); }}
+                          className={cn('flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-surface transition',
+                            sortBy === key && 'text-brand font-semibold')}>
+                          <span>{label}</span>
+                          {sortBy === key && <CheckCircle2 className="h-3.5 w-3.5" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -252,7 +333,13 @@ export function ChoresModule() {
                         <div className="flex justify-end">
                           {submitted && manager
                             ? <button onClick={() => approve(a)} disabled={!!busy} className="rounded-md bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400 hover:bg-green-500/30 transition">Approve</button>
-                            : <button className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>}
+                            : done && manager && (a.chore?.cash_cents ?? 0) > 0 && !a.cash_awarded_cents
+                            ? <button onClick={() => payChore(a)} disabled={!!paying} className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold transition', paying === a.id ? 'bg-amber-500/20 text-amber-400 animate-pulse' : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30')}>Pay {formatCents(a.chore!.cash_cents!)}</button>
+                            : done && (a.chore?.cash_cents ?? 0) > 0 && !!a.cash_awarded_cents
+                            ? <span className="text-[10px] font-semibold text-green-400">Paid ✓</span>
+                            : manager
+                            ? <button onClick={() => removeChore(a)} disabled={!!busy} className="rounded p-1 text-muted hover:text-red-400 transition" title="Delete task"><Trash2 className="h-4 w-4" /></button>
+                            : null}
                         </div>
                       </div>
                     );
@@ -292,7 +379,13 @@ export function ChoresModule() {
                         <div className="flex-shrink-0">
                           {submitted && manager
                             ? <button onClick={() => approve(a)} disabled={!!busy} className="rounded-md bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400 hover:bg-green-500/30 transition">Approve</button>
-                            : <button className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>}
+                            : done && manager && (a.chore?.cash_cents ?? 0) > 0 && !a.cash_awarded_cents
+                            ? <button onClick={() => payChore(a)} disabled={!!paying} className={cn('rounded-md px-2 py-0.5 text-[10px] font-semibold transition', paying === a.id ? 'bg-amber-500/20 text-amber-400 animate-pulse' : 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30')}>Pay {formatCents(a.chore!.cash_cents!)}</button>
+                            : done && (a.chore?.cash_cents ?? 0) > 0 && !!a.cash_awarded_cents
+                            ? <span className="text-[10px] font-semibold text-green-400">Paid ✓</span>
+                            : manager
+                            ? <button onClick={() => removeChore(a)} disabled={!!busy} className="rounded p-1 text-muted hover:text-red-400 transition" title="Delete task"><Trash2 className="h-4 w-4" /></button>
+                            : null}
                         </div>
                       </div>
                     );
@@ -332,7 +425,7 @@ export function ChoresModule() {
           <div className="sidebar-card">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-sm font-semibold">My Chores</p>
-              <button className="text-xs text-brand hover:underline">View all</button>
+              <button onClick={() => setTab('mine')} className="text-xs text-brand hover:underline">View all</button>
             </div>
             <div className="space-y-2">
               {data.filter(a => a.member_id === selfMember.id && !['approved', 'done'].includes(a.status)).slice(0, 4).map(a => {
@@ -378,7 +471,7 @@ export function ChoresModule() {
               </div>
             ))}
           </div>
-          <button className="mt-3 text-xs text-brand hover:underline">View full report →</button>
+          <button onClick={() => setTab('completed')} className="mt-3 text-xs text-brand hover:underline">View full report →</button>
         </div>
       </div>
 
@@ -399,21 +492,38 @@ function NewChoreModal({ familyId, userId, members, onClose, onSaved }: {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (loading) return;
     const form = new FormData(e.currentTarget);
     const title = String(form.get('title') ?? '').trim();
     const memberId = String(form.get('member_id') ?? '');
     const points = Number(form.get('points') ?? 10);
     const priority = String(form.get('priority') ?? 'medium') as 'low' | 'medium' | 'high';
+    const recurrence = String(form.get('recurrence') ?? 'none') as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
     const due_at = String(form.get('due_at') ?? '') || null;
-    if (!title || !memberId) return toastError('Title and assignee required');
+    // ── Validation ──
+    if (!title) return toastError('Add a task title');
+    if (title.length > 160) return toastError('Title is too long (max 160 characters)');
+    if (!memberId) return toastError('Pick who this task is for');
+    if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError('Points must be a number between 0 and 1000');
+
     setLoading(true);
     const supabase = createClient();
-    const { data: chore, error: ce } = await supabase.from('chores').insert({ family_id: familyId, title, points, priority, recurrence: 'none', created_by: userId }).select('id').single();
-    if (ce || !chore) { setLoading(false); return toastError(ce?.message ?? 'Failed'); }
-    const { error: ae } = await supabase.from('chore_assignments').insert({ family_id: familyId, chore_id: chore.id, member_id: memberId, status: 'todo', due_at });
-    setLoading(false);
-    if (ae) return toastError(ae.message);
-    onSaved();
+    try {
+      const { data: chore, error: ce } = await supabase.from('chores').insert({ family_id: familyId, title, points, priority, recurrence, created_by: userId }).select('id').single();
+      if (ce || !chore) { toastError(describeDbError(ce)); return; }
+      const { error: ae } = await supabase.from('chore_assignments').insert({ family_id: familyId, chore_id: chore.id, member_id: memberId, status: 'todo', due_at });
+      if (ae) {
+        // Roll back the orphaned chore if the assignment failed.
+        await supabase.from('chores').delete().eq('id', chore.id);
+        toastError(describeDbError(ae));
+        return;
+      }
+      onSaved();
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -434,6 +544,17 @@ function NewChoreModal({ familyId, userId, members, onClose, onSaved }: {
           <Field label="Points">{(id) => <Input id={id} name="points" type="number" defaultValue="10" min="0" max="100" />}</Field>
           <Field label="Due date">{(id) => <Input id={id} name="due_at" type="date" />}</Field>
         </div>
+        <Field label="Repeat">
+          {(id) => (
+            <Select id={id} name="recurrence">
+              <option value="none">No repeat</option>
+              <option value="daily">Every day</option>
+              <option value="weekly">Every week</option>
+              <option value="monthly">Every month</option>
+              <option value="yearly">Every year</option>
+            </Select>
+          )}
+        </Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={loading}>

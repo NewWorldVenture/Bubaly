@@ -1,25 +1,45 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Home, UserPlus, Mail, Check, ArrowRight, Baby, User, Users } from 'lucide-react';
+import {
+  Home, UserPlus, Mail, Check, ArrowRight, ArrowLeft,
+  User, Users, Trash2, Plus,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { PhoneInput } from '@/components/ui/phone-input';
+import { AvatarPicker } from '@/components/ui/avatar-picker';
 import { useToast } from '@/components/ui/toast';
-import { ROLE_LABELS } from '@/lib/constants/roles';
+import { ROLE_LABELS, ROLE_DESCRIPTIONS } from '@/lib/constants/roles';
+import type { MemberRole } from '@/lib/constants/roles';
 import { FAMILY_GOALS, REFERRAL_SOURCES, parseChildAges } from '@/lib/onboarding/family';
 import {
-  saveOnboardingProfileAction, createFamilyAction, saveFamilyDetailsAction,
-  addLocalMemberAction, inviteMemberAction,
-} from '@/app/onboarding/actions';
+  MEMBER_COLORS, LOCAL_MEMBER_ROLES, INVITE_ROLES,
+  nextMemberColor, makeLocalMember, makeInviteMember,
+  addMember, removeMember, draftMemberLabel,
+  type DraftMember,
+} from '@/lib/onboarding/draft';
+import { finalizeOnboardingAction } from '@/app/onboarding/actions';
+import {
+  COUNTRY_DIAL_CODES,
+  guessCountryDialCode,
+  guessDialCodeFromPhone,
+  extractLocalNumber,
+} from '@/lib/utils/phone';
 
-const COLORS = ['#7c6dff', '#f4996e', '#4ac99b', '#f0bf5f', '#f57171', '#6aa9ff'];
+const TOTAL_STEPS = 5;
+const STORAGE_KEY = 'onboarding-draft';
 
-const TOTAL_STEPS = 4;
-
-export type InitialProfile = { firstName: string; lastName: string; phone: string; email: string };
+export type InitialProfile = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  avatarUrl?: string;
+};
 
 function timezones(): string[] {
   try {
@@ -30,115 +50,265 @@ function timezones(): string[] {
   return ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu', 'UTC', 'Europe/London'];
 }
 
-type Added = { kind: 'local' | 'invite'; label: string; sub: string; color?: string };
+interface DraftState {
+  profile: {
+    firstName: string;
+    lastName: string;
+    phone: string;       // E.164 combined value
+    dialCode: string;    // stored for back-navigation re-population
+    countryCode: string; // ISO alpha-2, stored for back-navigation
+    email: string;
+    avatarUrl: string;
+  };
+  family: { name: string; timezone: string };
+  details: {
+    householdAdults: number; householdChildren: number; childAges: string;
+    region: string; postalCode: string; goals: string[];
+    referralSource: string; referralDetail: string;
+  };
+  members: DraftMember[];
+  step: number;
+}
+
+function defaultDraft(initial?: InitialProfile): DraftState {
+  const guessTz = (() => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'America/New_York'; }
+  })();
+  const storedDialCode = guessDialCodeFromPhone(initial?.phone);
+  const dialCode = storedDialCode || guessCountryDialCode();
+  const countryCode = (() => {
+    if (storedDialCode) {
+      return COUNTRY_DIAL_CODES.find((c) => c.dialCode === dialCode)?.code ?? 'US';
+    }
+    try {
+      const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+      const region = locale.includes('-') ? locale.split('-').pop()?.toUpperCase() : undefined;
+      if (region) {
+        const m = COUNTRY_DIAL_CODES.find((c) => c.code === region);
+        if (m) return m.code;
+      }
+    } catch { /* ignore */ }
+    return 'US';
+  })();
+  return {
+    profile: {
+      firstName: initial?.firstName ?? '',
+      lastName: initial?.lastName ?? '',
+      phone: initial?.phone ?? '',
+      dialCode,
+      countryCode,
+      email: initial?.email ?? '',
+      avatarUrl: initial?.avatarUrl ?? '',
+    },
+    family: { name: '', timezone: guessTz },
+    details: {
+      householdAdults: 2, householdChildren: 0, childAges: '',
+      region: '', postalCode: '', goals: [],
+      referralSource: '', referralDetail: '',
+    },
+    members: [],
+    step: 1,
+  };
+}
+
+function loadDraft(initial?: InitialProfile): DraftState {
+  const defaults = defaultDraft(initial);
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw) as DraftState;
+      if (saved.step >= 1 && saved.step <= TOTAL_STEPS) {
+        // Deep merge: carry new fields (dialCode, countryCode, avatarUrl) from defaults
+        // when an older draft doesn't have them yet.
+        return {
+          ...defaults,
+          ...saved,
+          profile: { ...defaults.profile, ...saved.profile },
+        };
+      }
+    }
+  } catch { /* ignore corrupt data */ }
+  return defaults;
+}
+
+function saveDraft(draft: DraftState) {
+  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draft)); } catch { /* quota */ }
+}
+
+function clearDraft() {
+  try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* noop */ }
+}
 
 export function OnboardingWizard(
   { initialProfile, emailLocked = false }: { initialProfile?: InitialProfile; emailLocked?: boolean },
 ) {
   const router = useRouter();
-  const { success, error } = useToast();
+  const { success, error: showError } = useToast();
   const tz = useMemo(timezones, []);
-  const guessTz = useMemo(() => {
-    try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'America/New_York'; }
+
+  const [draft, setDraft] = useState<DraftState>(() => loadDraft(initialProfile));
+  const [loading, setLoading] = useState(false);
+
+  const step = draft.step;
+
+  const updateDraft = useCallback((updater: (prev: DraftState) => DraftState) => {
+    setDraft((prev) => {
+      const next = updater(prev);
+      saveDraft(next);
+      return next;
+    });
   }, []);
 
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [familyId, setFamilyId] = useState<string | null>(null);
-  const [members, setMembers] = useState<Added[]>([]);
-  const [goals, setGoals] = useState<string[]>([]);
+  const goTo = useCallback((s: number) => {
+    updateDraft((d) => ({ ...d, step: s }));
+  }, [updateDraft]);
 
-  function toggleGoal(value: string) {
-    setGoals((g) => (g.includes(value) ? g.filter((x) => x !== value) : [...g, value]));
-  }
-
-  async function onSaveProfile(e: React.FormEvent<HTMLFormElement>) {
+  // Step 1 — Profile
+  function captureProfile(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    setLoading(true);
-    const res = await saveOnboardingProfileAction({
-      firstName: String(form.get('firstName') ?? ''),
-      lastName: String(form.get('lastName') ?? ''),
-      phone: String(form.get('phone') ?? ''),
-      email: String(form.get('email') ?? ''),
-    });
-    setLoading(false);
-    if (!res.ok) return error(res.error);
-    setStep(2);
+    updateDraft((d) => ({
+      ...d,
+      profile: {
+        firstName: String(form.get('firstName') ?? '').trim(),
+        lastName: String(form.get('lastName') ?? '').trim(),
+        phone: String(form.get('phone') ?? '').trim(),        // E.164 from PhoneInput hidden input
+        dialCode: String(form.get('dialCode') ?? d.profile.dialCode),
+        countryCode: String(form.get('countryCode') ?? d.profile.countryCode),
+        email: String(form.get('email') ?? '').trim(),
+        avatarUrl: String(form.get('avatarUrl') ?? d.profile.avatarUrl),
+      },
+      step: 2,
+    }));
   }
 
-  async function onCreateFamily(e: React.FormEvent<HTMLFormElement>) {
+  // Step 2 — Family name
+  function captureFamily(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    setLoading(true);
-    const res = await createFamilyAction({
-      name: String(form.get('name') ?? ''),
-      timezone: String(form.get('timezone') ?? 'America/New_York'),
-    });
-    setLoading(false);
-    if (!res.ok) return error(res.error);
-    setFamilyId(res.data!.familyId);
-    setStep(3);
+    updateDraft((d) => ({
+      ...d,
+      family: {
+        name: String(form.get('name') ?? '').trim(),
+        timezone: String(form.get('timezone') ?? 'America/New_York'),
+      },
+      step: 3,
+    }));
   }
 
-  async function onSaveFamilyDetails(e: React.FormEvent<HTMLFormElement>) {
+  // Step 3 — Family details
+  const toggleGoal = useCallback((value: string) => {
+    updateDraft((d) => {
+      const goals = d.details.goals.includes(value)
+        ? d.details.goals.filter((x) => x !== value)
+        : [...d.details.goals, value];
+      return { ...d, details: { ...d.details, goals } };
+    });
+  }, [updateDraft]);
+
+  function captureDetails(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!familyId) return;
     const form = new FormData(e.currentTarget);
-    setLoading(true);
-    const res = await saveFamilyDetailsAction({
-      familyId,
-      householdAdults: Number(form.get('householdAdults') ?? 1),
-      householdChildren: Number(form.get('householdChildren') ?? 0),
-      childAges: parseChildAges(String(form.get('childAges') ?? '')),
-      region: String(form.get('region') ?? ''),
-      postalCode: String(form.get('postalCode') ?? ''),
-      goals,
-      referralSource: String(form.get('referralSource') ?? ''),
-      referralDetail: String(form.get('referralDetail') ?? ''),
-    });
-    setLoading(false);
-    if (!res.ok) return error(res.error);
-    setStep(4);
+    updateDraft((d) => ({
+      ...d,
+      details: {
+        ...d.details,
+        householdAdults: Number(form.get('householdAdults') ?? 2),
+        householdChildren: Number(form.get('householdChildren') ?? 0),
+        childAges: String(form.get('childAges') ?? ''),
+        region: String(form.get('region') ?? ''),
+        postalCode: String(form.get('postalCode') ?? ''),
+        referralSource: String(form.get('referralSource') ?? ''),
+        referralDetail: String(form.get('referralDetail') ?? ''),
+      },
+      step: 4,
+    }));
   }
 
-  async function onAddChild(e: React.FormEvent<HTMLFormElement>) {
+  // Step 4 — Members
+  const localFormRef = useRef<HTMLFormElement>(null);
+  const inviteFormRef = useRef<HTMLFormElement>(null);
+
+  function onAddLocal(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!familyId) return;
-    const form = e.currentTarget;
-    const data = new FormData(form);
-    const name = String(data.get('childName') ?? '');
-    const role = String(data.get('childRole') ?? 'child') as 'child' | 'teen';
-    const color = COLORS[members.length % COLORS.length];
-    setLoading(true);
-    const res = await addLocalMemberAction({ familyId, displayName: name, role, color });
-    setLoading(false);
-    if (!res.ok) return error(res.error);
-    setMembers((m) => [...m, { kind: 'local', label: name, sub: ROLE_LABELS[role], color }]);
+    const form = new FormData(e.currentTarget);
+    const name = String(form.get('memberName') ?? '').trim();
+    const role = String(form.get('memberRole') ?? 'child') as MemberRole;
+    const birthday = String(form.get('memberBirthday') ?? '').trim();
+    if (!name) return;
+    const member = makeLocalMember({ name, role, birthday: birthday || undefined }, draft.members);
+    updateDraft((d) => ({ ...d, members: addMember(d.members, member) }));
     success(`${name} added`);
-    form.reset();
+    e.currentTarget.reset();
   }
 
-  async function onInvite(e: React.FormEvent<HTMLFormElement>) {
+  function onAddInvite(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!familyId) return;
-    const form = e.currentTarget;
-    const data = new FormData(form);
-    const email = String(data.get('inviteEmail') ?? '');
-    const role = String(data.get('inviteRole') ?? 'adult') as 'adult' | 'teen' | 'caregiver' | 'guest';
-    setLoading(true);
-    const res = await inviteMemberAction({ familyId, email, role });
-    setLoading(false);
-    if (!res.ok) return error(res.error);
-    setMembers((m) => [...m, { kind: 'invite', label: email, sub: `Invited · ${ROLE_LABELS[role]}` }]);
-    success(`Invite sent to ${email}`);
-    form.reset();
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get('inviteEmail') ?? '').trim();
+    const role = String(form.get('inviteRole') ?? 'adult') as MemberRole;
+    if (!email) return;
+    const member = makeInviteMember({ email, role });
+    updateDraft((d) => ({ ...d, members: addMember(d.members, member) }));
+    success(`${email} added`);
+    e.currentTarget.reset();
   }
 
-  function finish() {
+  function onRemoveMember(id: string) {
+    updateDraft((d) => ({ ...d, members: removeMember(d.members, id) }));
+  }
+
+  // Step 5 — Review & finalize
+  async function onFinalize() {
+    setLoading(true);
+    const res = await finalizeOnboardingAction({
+      profile: {
+        firstName: draft.profile.firstName,
+        lastName: draft.profile.lastName,
+        phone: draft.profile.phone,
+        email: draft.profile.email,
+        avatarUrl: draft.profile.avatarUrl || undefined,
+      },
+      family: draft.family,
+      details: {
+        householdAdults: draft.details.householdAdults,
+        householdChildren: draft.details.householdChildren,
+        childAges: parseChildAges(draft.details.childAges),
+        region: draft.details.region,
+        postalCode: draft.details.postalCode,
+        goals: draft.details.goals,
+        referralSource: draft.details.referralSource,
+        referralDetail: draft.details.referralDetail,
+      },
+      members: draft.members.map((m) =>
+        m.kind === 'invite'
+          ? { kind: 'invite' as const, email: m.email, role: m.role }
+          : { kind: 'local' as const, name: m.name, role: m.role, birthday: m.birthday, color: m.color },
+      ),
+    });
+    setLoading(false);
+    if (!res.ok) return showError(res.error);
+    clearDraft();
+    success('Welcome to Bubaly!');
     router.push('/dashboard');
     router.refresh();
   }
+
+  // Back button helper
+  function BackButton({ to }: { to: number }) {
+    return (
+      <button
+        type="button"
+        onClick={() => goTo(to)}
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg transition"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back
+      </button>
+    );
+  }
+
+  // Derive the local number (without dial code) for PhoneInput re-population on back navigation
+  const storedLocalNumber = extractLocalNumber(draft.profile.phone, draft.profile.dialCode);
 
   return (
     <div className="animate-fade-in">
@@ -158,25 +328,61 @@ export function OnboardingWizard(
         ))}
       </div>
 
+      {/* Step 1: Profile */}
       {step === 1 && (
         <div className="glass-card p-7">
           <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
             <User className="h-6 w-6" />
           </div>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight">Tell us about you</h1>
-          <p className="mt-1 text-sm text-muted">This is your account profile — your family will see your name.</p>
-          <form onSubmit={onSaveProfile} className="mt-6 space-y-4">
+          <p className="mt-1 text-sm text-muted">This is your account profile — your family will see your name and photo.</p>
+
+          <form onSubmit={captureProfile} className="mt-6 space-y-5">
+            {/* Avatar picker */}
+            <AvatarPicker
+              defaultValue={draft.profile.avatarUrl}
+              displayName={`${draft.profile.firstName} ${draft.profile.lastName}`.trim() || 'You'}
+            />
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="First name" required>
-                {(id) => <Input id={id} name="firstName" defaultValue={initialProfile?.firstName} placeholder="Jordan" autoFocus required />}
+                {(id) => (
+                  <Input
+                    id={id}
+                    name="firstName"
+                    defaultValue={draft.profile.firstName}
+                    placeholder="Jordan"
+                    autoFocus
+                    required
+                  />
+                )}
               </Field>
               <Field label="Last name" required>
-                {(id) => <Input id={id} name="lastName" defaultValue={initialProfile?.lastName} placeholder="Rivera" required />}
+                {(id) => (
+                  <Input
+                    id={id}
+                    name="lastName"
+                    defaultValue={draft.profile.lastName}
+                    placeholder="Rivera"
+                    required
+                  />
+                )}
               </Field>
             </div>
-            <Field label="Contact phone" hint="For account security and important family alerts" required>
-              {(id) => <Input id={id} name="phone" type="tel" inputMode="tel" defaultValue={initialProfile?.phone} placeholder="(555) 123-4567" required />}
+
+            <Field
+              label="Contact phone"
+              hint="Optional — used for account security and important family alerts"
+            >
+              {() => (
+                <PhoneInput
+                  defaultDialCode={draft.profile.dialCode}
+                  defaultCountryCode={draft.profile.countryCode}
+                  defaultLocalNumber={storedLocalNumber}
+                />
+              )}
             </Field>
+
             <Field
               label="Email"
               hint={emailLocked ? 'Managed by your Google sign-in' : 'Where we send invites and notifications'}
@@ -187,7 +393,7 @@ export function OnboardingWizard(
                   id={id}
                   name="email"
                   type="email"
-                  defaultValue={initialProfile?.email}
+                  defaultValue={draft.profile.email}
                   placeholder="you@example.com"
                   required
                   readOnly={emailLocked}
@@ -197,63 +403,68 @@ export function OnboardingWizard(
                 />
               )}
             </Field>
-            <Button type="submit" loading={loading} className="w-full">
+
+            <Button type="submit" className="w-full">
               Continue <ArrowRight className="h-4 w-4" />
             </Button>
           </form>
         </div>
       )}
 
+      {/* Step 2: Family name */}
       {step === 2 && (
         <div className="glass-card p-7">
+          <BackButton to={1} />
           <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
             <Home className="h-6 w-6" />
           </div>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight">Name your family</h1>
           <p className="mt-1 text-sm text-muted">You can change this anytime in settings.</p>
-          <form onSubmit={onCreateFamily} className="mt-6 space-y-4">
+          <form onSubmit={captureFamily} className="mt-6 space-y-4">
             <Field label="Family name" required>
-              {(id) => <Input id={id} name="name" placeholder="The Rivera Family" autoFocus required />}
+              {(id) => <Input id={id} name="name" defaultValue={draft.family.name} placeholder="The Rivera Family" autoFocus required />}
             </Field>
             <Field label="Time zone" hint="Used for reminders and your calendar">
               {(id) => (
-                <Select id={id} name="timezone" defaultValue={guessTz}>
+                <Select id={id} name="timezone" defaultValue={draft.family.timezone}>
                   {tz.map((z) => <option key={z} value={z}>{z}</option>)}
                 </Select>
               )}
             </Field>
-            <Button type="submit" loading={loading} className="w-full">
+            <Button type="submit" className="w-full">
               Continue <ArrowRight className="h-4 w-4" />
             </Button>
           </form>
         </div>
       )}
 
+      {/* Step 3: Family details */}
       {step === 3 && (
         <div className="glass-card p-7">
+          <BackButton to={2} />
           <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
             <Users className="h-6 w-6" />
           </div>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight">About your family</h1>
           <p className="mt-1 text-sm text-muted">This helps us tailor Bubaly to you. You can skip anything.</p>
-          <form onSubmit={onSaveFamilyDetails} className="mt-6 space-y-4">
+          <form onSubmit={captureDetails} className="mt-6 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <Field label="Adults">
-                {(id) => <Input id={id} name="householdAdults" type="number" inputMode="numeric" min={0} max={20} defaultValue={2} />}
+                {(id) => <Input id={id} name="householdAdults" type="number" inputMode="numeric" min={0} max={20} defaultValue={draft.details.householdAdults} />}
               </Field>
               <Field label="Children">
-                {(id) => <Input id={id} name="householdChildren" type="number" inputMode="numeric" min={0} max={20} defaultValue={0} />}
+                {(id) => <Input id={id} name="householdChildren" type="number" inputMode="numeric" min={0} max={20} defaultValue={draft.details.householdChildren} />}
               </Field>
             </div>
             <Field label="Kids' ages" hint="Optional — e.g. 8, 11, 14. Helps age-appropriate chores.">
-              {(id) => <Input id={id} name="childAges" placeholder="8, 11, 14" />}
+              {(id) => <Input id={id} name="childAges" defaultValue={draft.details.childAges} placeholder="8, 11, 14" />}
             </Field>
 
             <div>
               <p className="mb-2 text-sm font-medium">What do you want to use Bubaly for?</p>
               <div className="flex flex-wrap gap-2">
                 {FAMILY_GOALS.map((g) => {
-                  const on = goals.includes(g.value);
+                  const on = draft.details.goals.includes(g.value);
                   return (
                     <button
                       key={g.value}
@@ -273,96 +484,221 @@ export function OnboardingWizard(
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="State / region" hint="Optional">
-                {(id) => <Input id={id} name="region" placeholder="California" />}
+                {(id) => <Input id={id} name="region" defaultValue={draft.details.region} placeholder="California" />}
               </Field>
               <Field label="ZIP / postal code" hint="Optional">
-                {(id) => <Input id={id} name="postalCode" placeholder="94016" />}
+                {(id) => <Input id={id} name="postalCode" defaultValue={draft.details.postalCode} placeholder="94016" />}
               </Field>
             </div>
 
             <Field label="How did you hear about us?">
               {(id) => (
-                <Select id={id} name="referralSource" defaultValue="">
+                <Select id={id} name="referralSource" defaultValue={draft.details.referralSource}>
                   <option value="">Select one…</option>
                   {REFERRAL_SOURCES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </Select>
               )}
             </Field>
             <Field label="Anything else?" hint="Optional">
-              {(id) => <Input id={id} name="referralDetail" placeholder="A friend's name, the podcast, etc." />}
+              {(id) => <Input id={id} name="referralDetail" defaultValue={draft.details.referralDetail} placeholder="A friend's name, the podcast, etc." />}
             </Field>
 
-            <Button type="submit" loading={loading} className="w-full">
+            <Button type="submit" className="w-full">
               Continue <ArrowRight className="h-4 w-4" />
             </Button>
           </form>
         </div>
       )}
 
+      {/* Step 4: Add family members */}
       {step === 4 && (
         <div className="space-y-5">
           <div className="glass-card p-7">
+            <BackButton to={3} />
             <h1 className="text-2xl font-semibold tracking-tight">Add your family</h1>
             <p className="mt-1 text-sm text-muted">
-              Invite people who’ll log in, and add young kids as managed profiles. You can do this later too.
+              Add people who live with you — they don&apos;t need an email. Or invite someone by email. You can do this later too.
             </p>
 
-            {members.length > 0 && (
+            {draft.members.length > 0 && (
               <ul className="mt-5 space-y-2">
-                {members.map((m, i) => (
-                  <li key={i} className="flex items-center gap-3 rounded-xl border border-border bg-surface/50 px-3 py-2">
+                {draft.members.map((m) => (
+                  <li key={m.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/50 px-3 py-2">
                     {m.kind === 'local' ? (
-                      <Avatar name={m.label} color={m.color} size={32} />
+                      <Avatar name={m.name} color={m.color} size={32} />
                     ) : (
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/10 text-brand">
                         <Mail className="h-4 w-4" />
                       </div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{m.label}</p>
-                      <p className="text-xs text-muted">{m.sub}</p>
+                      <p className="truncate text-sm font-medium">{draftMemberLabel(m)}</p>
+                      <p className="text-xs text-muted">
+                        {m.kind === 'invite' ? `Invite · ${ROLE_LABELS[m.role]}` : ROLE_LABELS[m.role]}
+                      </p>
                     </div>
                     {m.kind === 'invite' && <Badge tone="brand">Pending</Badge>}
+                    <button
+                      type="button"
+                      onClick={() => onRemoveMember(m.id)}
+                      className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg transition"
+                      aria-label={`Remove ${draftMemberLabel(m)}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </li>
                 ))}
               </ul>
             )}
           </div>
 
-          {/* Invite adults/teens/caregivers */}
-          <form onSubmit={onInvite} className="glass-card space-y-3 p-6">
+          {/* Add managed member (no login) */}
+          <form ref={localFormRef} onSubmit={onAddLocal} className="glass-card space-y-3 p-6">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Plus className="h-4 w-4 text-brand" /> Add a family member (no login needed)
+            </div>
+            <p className="text-xs text-muted">
+              For anyone who won&apos;t sign in — kids, grandparents, caregivers, etc.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Input name="memberName" placeholder="Name" className="flex-1" required />
+              <Select name="memberRole" defaultValue="child" className="sm:w-44">
+                {LOCAL_MEMBER_ROLES.map((r) => (
+                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                ))}
+              </Select>
+            </div>
+            <Field label="Birthday" hint="Optional — helps with age-appropriate features">
+              {(id) => <Input id={id} name="memberBirthday" type="date" />}
+            </Field>
+            <Button type="submit" variant="secondary">
+              <Plus className="h-4 w-4" /> Add member
+            </Button>
+          </form>
+
+          {/* Invite by email */}
+          <form ref={inviteFormRef} onSubmit={onAddInvite} className="glass-card space-y-3 p-6">
             <div className="flex items-center gap-2 text-sm font-medium">
               <UserPlus className="h-4 w-4 text-brand" /> Invite by email
             </div>
+            <p className="text-xs text-muted">
+              They&apos;ll get an email to create their own account and join your family.
+            </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Input name="inviteEmail" type="email" placeholder="spouse@example.com" className="flex-1" required />
               <Select name="inviteRole" defaultValue="adult" className="sm:w-44">
-                <option value="adult">Adult</option>
-                <option value="teen">Teen</option>
-                <option value="caregiver">Caregiver</option>
-                <option value="guest">Guest</option>
+                {INVITE_ROLES.map((r) => (
+                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                ))}
               </Select>
-              <Button type="submit" variant="secondary" loading={loading}>Send</Button>
             </div>
+            <Button type="submit" variant="secondary">
+              <UserPlus className="h-4 w-4" /> Add invite
+            </Button>
           </form>
 
-          {/* Add young child */}
-          <form onSubmit={onAddChild} className="glass-card space-y-3 p-6">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Baby className="h-4 w-4 text-brand" /> Add a child (no login)
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Input name="childName" placeholder="Ava" className="flex-1" required />
-              <Select name="childRole" defaultValue="child" className="sm:w-44">
-                <option value="child">Child</option>
-                <option value="teen">Teen</option>
-              </Select>
-              <Button type="submit" variant="secondary" loading={loading}>Add</Button>
-            </div>
-          </form>
+          <Button onClick={() => goTo(5)} className="w-full" size="lg">
+            Review &amp; finish <ArrowRight className="h-5 w-5" />
+          </Button>
+        </div>
+      )}
 
-          <Button onClick={finish} className="w-full" size="lg">
-            Go to dashboard <ArrowRight className="h-5 w-5" />
+      {/* Step 5: Review & finalize */}
+      {step === 5 && (
+        <div className="glass-card p-7">
+          <BackButton to={4} />
+          <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
+            <Check className="h-6 w-6" />
+          </div>
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight">Everything look good?</h1>
+          <p className="mt-1 text-sm text-muted">Review your info, then we&apos;ll set up your family.</p>
+
+          <div className="mt-6 space-y-4">
+            {/* Profile summary */}
+            <div className="rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Your profile</h3>
+                <button type="button" onClick={() => goTo(1)} className="text-xs text-brand hover:underline">Edit</button>
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                {draft.profile.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={draft.profile.avatarUrl}
+                    alt="Your avatar"
+                    className="h-10 w-10 rounded-full object-cover"
+                  />
+                ) : (
+                  <Avatar
+                    name={`${draft.profile.firstName} ${draft.profile.lastName}`.trim() || 'You'}
+                    size={40}
+                  />
+                )}
+                <div>
+                  <p className="text-sm font-medium">
+                    {draft.profile.firstName} {draft.profile.lastName}
+                  </p>
+                  <p className="text-xs text-muted">{draft.profile.email}</p>
+                  {draft.profile.phone && (
+                    <p className="text-xs text-muted">{draft.profile.phone}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Family summary */}
+            <div className="rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Family</h3>
+                <button type="button" onClick={() => goTo(2)} className="text-xs text-brand hover:underline">Edit</button>
+              </div>
+              <p className="mt-1 text-sm text-muted">{draft.family.name}</p>
+              <p className="text-xs text-muted">{draft.family.timezone}</p>
+            </div>
+
+            {/* Details summary */}
+            <div className="rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Household</h3>
+                <button type="button" onClick={() => goTo(3)} className="text-xs text-brand hover:underline">Edit</button>
+              </div>
+              <p className="mt-1 text-sm text-muted">
+                {draft.details.householdAdults} adult{draft.details.householdAdults !== 1 ? 's' : ''},
+                {' '}{draft.details.householdChildren} child{draft.details.householdChildren !== 1 ? 'ren' : ''}
+              </p>
+              {draft.details.goals.length > 0 && (
+                <p className="text-xs text-muted">Goals: {draft.details.goals.join(', ')}</p>
+              )}
+            </div>
+
+            {/* Members summary */}
+            <div className="rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Members</h3>
+                <button type="button" onClick={() => goTo(4)} className="text-xs text-brand hover:underline">Edit</button>
+              </div>
+              {draft.members.length === 0 ? (
+                <p className="mt-1 text-sm text-muted">No members added — you can add them later from settings.</p>
+              ) : (
+                <ul className="mt-2 space-y-1">
+                  {draft.members.map((m) => (
+                    <li key={m.id} className="flex items-center gap-2 text-sm">
+                      {m.kind === 'local' ? (
+                        <Avatar name={m.name} color={m.color} size={20} />
+                      ) : (
+                        <Mail className="h-4 w-4 text-muted" />
+                      )}
+                      <span>{draftMemberLabel(m)}</span>
+                      <span className="text-xs text-muted">({ROLE_LABELS[m.role]})</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          <Button onClick={onFinalize} loading={loading} className="mt-6 w-full" size="lg">
+            Create my family <ArrowRight className="h-5 w-5" />
           </Button>
         </div>
       )}

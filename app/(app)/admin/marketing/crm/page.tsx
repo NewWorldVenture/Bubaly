@@ -1,0 +1,119 @@
+import type { Metadata } from 'next';
+import { Users, UserPlus, Building2, Star } from 'lucide-react';
+import { createServiceClient } from '@/lib/supabase/server';
+import { Card } from '@/components/ui/card';
+import { fmtDate } from '@/lib/utils/format';
+import {
+  contactDisplayName, LEAD_STATUSES, LIFECYCLE_STAGES, LIFECYCLE_LABELS,
+} from '@/lib/marketing/crm';
+import type { Tables } from '@/lib/database.types';
+import { saveContactAction, deleteContactAction } from './actions';
+
+export const metadata: Metadata = { title: 'CRM · Contacts', robots: { index: false } };
+export const dynamic = 'force-dynamic';
+
+type Contact = Tables<'crm_contacts'>;
+
+const inputCls = 'h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm';
+const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90';
+
+export default async function CrmPage() {
+  const supabase = createServiceClient();
+  const { data: contacts } = await supabase
+    .from('crm_contacts')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  const list = (contacts ?? []) as Contact[];
+  const customers = list.filter((c) => c.lifecycle_stage === 'customer').length;
+  const companies = new Set(list.map((c) => c.company).filter(Boolean)).size;
+  const mqls = list.filter((c) => c.lifecycle_stage === 'mql' || c.lifecycle_stage === 'sql').length;
+
+  const stats = [
+    { label: 'Contacts', value: list.length, icon: Users, tint: 'text-violet-400 bg-violet-500/15' },
+    { label: 'Customers', value: customers, icon: Star, tint: 'text-emerald-400 bg-emerald-500/15' },
+    { label: 'Qualified (M/SQL)', value: mqls, icon: UserPlus, tint: 'text-amber-400 bg-amber-500/15' },
+    { label: 'Companies', value: companies, icon: Building2, tint: 'text-blue-400 bg-blue-500/15' },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <p className="text-sm text-muted">
+        Your single source of truth for people — leads, prospects, and customers. The CRM cornerstone of the marketing platform.
+      </p>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {stats.map((s) => (
+          <Card key={s.label} className="flex flex-col gap-3">
+            <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${s.tint}`}><s.icon className="h-5 w-5" /></div>
+            <div><p className="text-xl font-bold leading-none">{s.value}</p><p className="mt-1 text-xs text-muted">{s.label}</p></div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Add contact */}
+      <Card>
+        <h2 className="mb-3 text-base font-semibold">Add a contact</h2>
+        <form action={saveContactAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <input name="first_name" placeholder="First name" className={inputCls} />
+          <input name="last_name" placeholder="Last name" className={inputCls} />
+          <input name="email" type="email" placeholder="Email" className={inputCls} />
+          <input name="phone" type="tel" placeholder="Phone" className={inputCls} />
+          <input name="company" placeholder="Company" className={inputCls} />
+          <input name="lead_source" placeholder="Lead source (e.g. Google)" className={inputCls} />
+          <select name="lead_status" defaultValue="new" className={inputCls}>
+            {LEAD_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select name="lifecycle_stage" defaultValue="lead" className={inputCls}>
+            {LIFECYCLE_STAGES.map((s) => <option key={s} value={s}>{LIFECYCLE_LABELS[s]}</option>)}
+          </select>
+          <button type="submit" className={btnCls}>Add contact</button>
+        </form>
+      </Card>
+
+      <Card>
+        <h2 className="mb-4 text-base font-semibold">Contacts</h2>
+        {list.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted">No contacts yet. Add one above, or they’ll flow in from forms and signups.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted">
+                <tr>
+                  <th className="pb-2">Name</th><th className="pb-2">Company</th>
+                  <th className="pb-2">Lifecycle</th><th className="pb-2">Status</th>
+                  <th className="pb-2">Source</th><th className="pb-2">Added</th><th className="pb-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((c) => (
+                  <tr key={c.id} className="border-t border-border align-top">
+                    <td className="py-2">
+                      <p className="font-medium">{contactDisplayName(c)}</p>
+                      {c.email && <p className="text-xs text-muted">{c.email}</p>}
+                    </td>
+                    <td className="py-2">{c.company ?? '—'}</td>
+                    <td className="py-2">
+                      <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[11px] text-violet-300">
+                        {LIFECYCLE_LABELS[c.lifecycle_stage as keyof typeof LIFECYCLE_LABELS] ?? c.lifecycle_stage}
+                      </span>
+                    </td>
+                    <td className="py-2 capitalize">{c.lead_status}</td>
+                    <td className="py-2 text-xs text-muted">{c.lead_source ?? '—'}</td>
+                    <td className="py-2 text-xs text-muted">{fmtDate(c.created_at)}</td>
+                    <td className="py-2 text-right">
+                      <form action={deleteContactAction.bind(null, c.id)}>
+                        <button type="submit" className="text-xs text-muted hover:text-rose-400">Delete</button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}

@@ -9,9 +9,10 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   buildWeekGrid, weekParity, WEEKDAYS, WEEKDAY_LABELS,
@@ -114,7 +115,7 @@ export function TimetableModule() {
     refresh();
   }
 
-  if (loading) return <LoadingBlock label="Loading timetable…" />;
+  if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={error} />;
 
   const totalShown = WEEKDAYS.reduce((n, d) => n + grid[d].length, 0);
@@ -124,7 +125,7 @@ export function TimetableModule() {
       <PageHeader
         title="Timetable"
         description="A visual Mon–Fri class schedule for every student — with alternating A/B week support for rotating timetables."
-        action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add class</Button>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="timetable" iconOnly /><Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add class</Button></div>}
       />
 
       {/* Controls */}

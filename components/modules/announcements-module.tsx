@@ -5,13 +5,15 @@ import { Megaphone, Plus, Pin, PinOff, Trash2, Check, Users } from 'lucide-react
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { isAdmin } from '@/lib/constants/roles';
 import { fmtDateTime } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
@@ -74,7 +76,7 @@ export function AnnouncementsModule() {
       title: title.trim(), body: body.trim() || null, is_pinned: pinned,
     });
     setSaving(false);
-    if (err) return toastError(err.message);
+    if (err) return toastError(describeDbError(err));
     success('Announcement posted');
     setTitle(''); setBody(''); setPinned(false); setShowCompose(false);
   }
@@ -82,13 +84,13 @@ export function AnnouncementsModule() {
   async function togglePin(a: Announcement) {
     const supabase = createClient();
     const { error: err } = await supabase.from('family_announcements').update({ is_pinned: !a.is_pinned }).eq('id', a.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
   async function remove(id: string) {
     const supabase = createClient();
     const { error: err } = await supabase.from('family_announcements').delete().eq('id', id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
     else success('Announcement removed');
   }
 
@@ -97,11 +99,16 @@ export function AnnouncementsModule() {
       <PageHeader
         title="Announcements"
         description="Broadcast updates to the whole family."
-        action={admin ? <Button onClick={() => setShowCompose(true)}><Plus className="h-4 w-4" /> New</Button> : undefined}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="announcements" iconOnly />
+            {admin && <Button onClick={() => setShowCompose(true)}><Plus className="h-4 w-4" /> New</Button>}
+          </div>
+        }
       />
 
       {loading ? (
-        <LoadingBlock />
+        <SkeletonList />
       ) : error ? (
         <ErrorState message="Could not load announcements." />
       ) : (announcements ?? []).length === 0 ? (

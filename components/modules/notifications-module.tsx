@@ -5,12 +5,14 @@ import { Bell, CheckCheck, Trash2, Radar } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -69,13 +71,13 @@ export function NotificationsModule() {
   async function remove(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('notifications').delete().eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     void refresh();
   }
 
   const unread = data.filter((n) => !n.is_read);
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   return (
@@ -85,6 +87,7 @@ export function NotificationsModule() {
         description="Who needs to know what — surfaced from your family's upcoming schedule, chores, and reminders."
         action={(
           <div className="flex items-center gap-2">
+            <AiInsight kind="notifications" />
             <Button variant="ghost" loading={scanning} onClick={scan}>
               <Radar className="h-4 w-4" /> Scan for updates
             </Button>

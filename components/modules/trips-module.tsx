@@ -8,14 +8,16 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   tripDurationDays, daysUntil, isUpcoming, checklistProgress, progressByKind,
@@ -114,7 +116,7 @@ export function TripsModule() {
       ? await sb.from('trips').update(fields).eq('id', tripForm.id)
       : await sb.from('trips').insert({ ...fields, family_id: familyId, created_by: userId });
     setSavingTrip(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(tripForm.id ? 'Trip updated' : 'Trip created');
     setTripModal(false);
   }
@@ -122,7 +124,7 @@ export function TripsModule() {
     if (!confirm(`Delete "${t.name}" and its checklist?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('trips').delete().eq('id', t.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Trip deleted');
     if (selectedId === t.id) setSelectedId(null);
   }
@@ -144,19 +146,19 @@ export function TripsModule() {
       sort_order: selectedItems.length, created_by: userId,
     });
     setSavingItem(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Item added');
     setItemModal(false);
   }
   async function toggleItem(it: TripItem) {
     const sb = createClient();
     const { error: err } = await sb.from('trip_items').update({ is_done: !it.is_done }).eq('id', it.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
   async function removeItem(it: TripItem) {
     const sb = createClient();
     const { error: err } = await sb.from('trip_items').delete().eq('id', it.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
   const fmtRange = (t: Trip) => {
@@ -168,7 +170,7 @@ export function TripsModule() {
     return `${s} – ${e}`;
   };
 
-  if (loading) return <LoadingBlock label="Loading trips…" />;
+  if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load trips'} />;
 
   // ── Trip detail view ──────────────────────────────────────
@@ -310,7 +312,12 @@ export function TripsModule() {
       <PageHeader
         title="Trip Planner"
         description="Plan family travel end to end — itinerary, packing lists, reservations, and documents."
-        action={canEdit && <Button onClick={openNewTrip} className="gap-1.5"><Plus className="h-4 w-4" /> New trip</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="trips" />
+            {canEdit && <Button onClick={openNewTrip} className="gap-1.5"><Plus className="h-4 w-4" /> New trip</Button>}
+          </div>
+        }
       />
 
       <div className="flex items-center gap-1.5 mb-4">

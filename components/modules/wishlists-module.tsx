@@ -8,13 +8,15 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   claimState, canToggleClaim, sortWishes, WISH_PRIORITY_LABELS,
@@ -86,7 +88,7 @@ export function WishlistsModule() {
       ? await sb.from('wishlist_items').update(fields).eq('id', form.id)
       : await sb.from('wishlist_items').insert({ ...fields, family_id: familyId, member_id: selfId!, created_by: userId });
     setSaving(false);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(form.id ? 'Wish updated' : 'Added to your wish list');
     setModalOpen(false);
   }
@@ -95,7 +97,7 @@ export function WishlistsModule() {
     if (!confirm(`Remove "${w.title}"?`)) return;
     const sb = createClient();
     const { error: err } = await sb.from('wishlist_items').delete().eq('id', w.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success('Removed');
   }
 
@@ -106,17 +108,17 @@ export function WishlistsModule() {
     const { error: err } = await sb.from('wishlist_items').update(
       mine ? { claimed_by: null, claimed_at: null, is_purchased: false } : { claimed_by: selfId, claimed_at: new Date().toISOString() },
     ).eq('id', w.id);
-    if (err) { toastError(err.message); return; }
+    if (err) { toastError(describeDbError(err)); return; }
     success(mine ? 'Released' : 'You claimed this gift 🎁');
   }
 
   async function togglePurchased(w: Wish) {
     const sb = createClient();
     const { error: err } = await sb.from('wishlist_items').update({ is_purchased: !w.is_purchased }).eq('id', w.id);
-    if (err) toastError(err.message);
+    if (err) toastError(describeDbError(err));
   }
 
-  if (loading) return <LoadingBlock label="Loading wish lists…" />;
+  if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load wish lists'} />;
 
   return (
@@ -124,7 +126,12 @@ export function WishlistsModule() {
       <PageHeader
         title="Wish Lists"
         description="Everyone's wishes in one place — claim gifts privately so surprises stay surprises."
-        action={isOwnList && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add a wish</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="wishlists" />
+            {isOwnList && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add a wish</Button>}
+          </div>
+        }
       />
 
       {/* Member tabs */}

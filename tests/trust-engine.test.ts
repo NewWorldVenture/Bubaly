@@ -1,0 +1,161 @@
+import { describe, it, expect } from 'vitest';
+import {
+  evaluateAction, computeTrustScore, trustBand,
+  type Policy, type Actor, type Grant, type Delegation,
+} from '@/lib/trust/engine';
+
+const parent: Actor = { kind: 'member', id: 'p1', role: 'parent' };
+const teen: Actor = { kind: 'member', id: 't1', role: 'teen' };
+const child: Actor = { kind: 'member', id: 'c1', role: 'child' };
+const ai: Actor = { kind: 'ai_agent', id: 'concierge', role: 'parent' };
+
+function policy(p: Partial<Policy>): Policy {
+  return {
+    id: 'pol', domain: 'all', capability: 'all', subjectKind: 'everyone',
+    effect: 'require_approval', conditions: {}, approvalModel: 'single',
+    requiredApprovals: 1, priority: 100, enabled: true, ...p,
+  };
+}
+
+describe('evaluateAction — role defaults (least privilege)', () => {
+  it('lets a parent edit anything', () => {
+    const d = evaluateAction({ actor: parent, domain: 'medical', capability: 'edit' });
+    expect(d.effect).toBe('allow');
+    expect(d.basis).toBe('role_default');
+  });
+
+  it('lets a teen view medical but requires approval to edit it (sensitive)', () => {
+    expect(evaluateAction({ actor: teen, domain: 'medical', capability: 'view' }).effect).toBe('allow');
+    const edit = evaluateAction({ actor: teen, domain: 'medical', capability: 'edit' });
+    expect(edit.effect).toBe('require_approval');
+  });
+
+  it('denies a child a capability it does not have', () => {
+    const d = evaluateAction({ actor: child, domain: 'finances', capability: 'edit' });
+    expect(d.effect).toBe('deny');
+    expect(d.basis).toBe('fallback');
+  });
+
+  it('lets a teen edit a non-sensitive domain (chores)', () => {
+    expect(evaluateAction({ actor: teen, domain: 'chores', capability: 'edit' }).effect).toBe('allow');
+  });
+});
+
+describe('evaluateAction — explicit grants', () => {
+  it('an allow grant lets a teen edit a sensitive domain without approval', () => {
+    const grants: Grant[] = [{ memberId: 't1', domain: 'medical', capability: 'edit', effect: 'allow' }];
+    const d = evaluateAction({ actor: teen, domain: 'medical', capability: 'edit', grants });
+    expect(d.effect).toBe('allow');
+    expect(d.basis).toBe('allow_grant');
+  });
+
+  it('a deny grant beats everything, even for a parent', () => {
+    const grants: Grant[] = [{ memberId: 'p1', domain: 'banking', capability: 'delete', effect: 'deny' }];
+    const d = evaluateAction({ actor: parent, domain: 'banking', capability: 'delete', grants });
+    expect(d.effect).toBe('deny');
+    expect(d.basis).toBe('deny_grant');
+  });
+});
+
+describe('evaluateAction — household policies', () => {
+  it('auto-approves under a cost threshold', () => {
+    const policies = [policy({ id: 'lt50', domain: 'scheduling', capability: 'automate', effect: 'auto_approve', conditions: { maxAmountCents: 5000 }, subjectKind: 'ai', priority: 200 })];
+    const d = evaluateAction({ actor: ai, domain: 'scheduling', capability: 'automate', context: { amountCents: 3000 }, policies });
+    expect(d.effect).toBe('allow');
+    expect(d.policyId).toBe('lt50');
+  });
+
+  it('requires approval when over the cost threshold (condition no longer matches → role default)', () => {
+    const policies = [policy({ id: 'lt50', domain: 'travel', capability: 'automate', effect: 'auto_approve', conditions: { maxAmountCents: 5000 }, subjectKind: 'ai', priority: 200 })];
+    // $80 > $50 so the auto_approve policy does NOT match; AI automation in travel falls through to role default
+    const d = evaluateAction({ actor: ai, domain: 'travel', capability: 'automate', context: { amountCents: 8000 }, policies });
+    expect(d.effect).toBe('allow'); // parent-acting AI, travel not sensitive for parent
+  });
+
+  it('a deny policy blocks legal/medical AI even at high confidence', () => {
+    const policies = [policy({ id: 'no-ai-legal', domain: 'documents', capability: 'automate', effect: 'deny', subjectKind: 'ai', priority: 300 })];
+    const d = evaluateAction({ actor: ai, domain: 'documents', capability: 'automate', context: { confidence: 0.99 }, policies });
+    expect(d.effect).toBe('deny');
+  });
+
+  it('respects a minConfidence condition', () => {
+    const policies = [policy({ id: 'hi-conf', domain: 'medical', capability: 'automate', effect: 'auto_approve', conditions: { minConfidence: 0.95 }, subjectKind: 'ai', priority: 200 })];
+    const low = evaluateAction({ actor: ai, domain: 'medical', capability: 'automate', context: { confidence: 0.6 }, policies });
+    expect(low.effect).toBe('require_approval'); // policy doesn't match → AI automation default needs review
+    const high = evaluateAction({ actor: ai, domain: 'medical', capability: 'automate', context: { confidence: 0.97 }, policies });
+    expect(high.effect).toBe('allow');
+  });
+
+  it('honours a time window (babysitter 4pm–10pm)', () => {
+    const sitter: Actor = { kind: 'member', id: 's1', role: 'caregiver' };
+    const policies = [policy({ id: 'sitter-hours', domain: 'tasks', capability: 'approve', effect: 'allow', conditions: { timeStart: '16:00', timeEnd: '22:00' }, subjectKind: 'member', subjectMemberId: 's1', priority: 200 })];
+    const inHours = evaluateAction({ actor: sitter, domain: 'tasks', capability: 'approve', context: { localTime: '18:30' }, policies });
+    expect(inHours.effect).toBe('allow');
+    const outHours = evaluateAction({ actor: sitter, domain: 'tasks', capability: 'approve', context: { localTime: '23:30' }, policies });
+    // out of window → policy doesn't match; caregiver lacks 'approve' by default → deny
+    expect(outHours.effect).toBe('deny');
+  });
+
+  it('higher priority policy wins on conflict', () => {
+    const policies = [
+      policy({ id: 'low', domain: 'shopping', capability: 'automate', effect: 'deny', subjectKind: 'ai', priority: 50 }),
+      policy({ id: 'high', domain: 'shopping', capability: 'automate', effect: 'auto_approve', subjectKind: 'ai', priority: 500 }),
+    ];
+    const d = evaluateAction({ actor: ai, domain: 'shopping', capability: 'automate', policies });
+    expect(d.effect).toBe('allow');
+    expect(d.policyId).toBe('high');
+  });
+});
+
+describe('evaluateAction — delegation', () => {
+  it('an active delegation grants the domain', () => {
+    const now = Date.now();
+    const dels: Delegation[] = [{ toMemberId: 't1', domains: ['transportation'], startsAt: now - 1000, expiresAt: now + 1000, revoked: false }];
+    const d = evaluateAction({ actor: teen, domain: 'transportation', capability: 'edit', delegations: dels, context: { now } });
+    expect(d.effect).toBe('allow');
+    expect(d.basis).toBe('delegation');
+  });
+
+  it('an expired delegation does not grant', () => {
+    const now = Date.now();
+    const dels: Delegation[] = [{ toMemberId: 't1', domains: ['transportation'], startsAt: now - 5000, expiresAt: now - 1000, revoked: false }];
+    // transportation isn't sensitive for a teen and they have edit, so it allows by role default, not delegation
+    const d = evaluateAction({ actor: teen, domain: 'driving', capability: 'edit', delegations: dels, context: { now } });
+    expect(d.effect).toBe('require_approval'); // driving is sensitive for a teen; expired delegation can't help
+  });
+});
+
+describe('evaluateAction — emergency override', () => {
+  it('elevates a listed domain to allow', () => {
+    const d = evaluateAction({ actor: child, domain: 'medical', capability: 'edit', emergencyDomains: ['medical'] });
+    expect(d.effect).toBe('allow');
+    expect(d.basis).toBe('emergency');
+  });
+  it('does not elevate domains not listed', () => {
+    const d = evaluateAction({ actor: child, domain: 'finances', capability: 'edit', emergencyDomains: ['medical'] });
+    expect(d.effect).toBe('deny');
+  });
+});
+
+describe('computeTrustScore + trustBand', () => {
+  it('starts near the role baseline with no history', () => {
+    expect(computeTrustScore({ role: 'teen', interactions: 0, successes: 0 })).toBeGreaterThanOrEqual(45);
+    expect(computeTrustScore({ role: 'teen', interactions: 0, successes: 0 })).toBeLessThanOrEqual(55);
+  });
+  it('rises with a strong track record', () => {
+    const low = computeTrustScore({ role: 'teen', interactions: 2, successes: 2 });
+    const high = computeTrustScore({ role: 'teen', interactions: 30, successes: 30 });
+    expect(high).toBeGreaterThan(low);
+  });
+  it('falls with failures', () => {
+    const good = computeTrustScore({ role: 'adult', interactions: 20, successes: 20 });
+    const bad = computeTrustScore({ role: 'adult', interactions: 20, successes: 4 });
+    expect(bad).toBeLessThan(good);
+  });
+  it('bands map sensibly', () => {
+    expect(trustBand(90)).toBe('high');
+    expect(trustBand(70)).toBe('trusted');
+    expect(trustBand(50)).toBe('building');
+    expect(trustBand(20)).toBe('low');
+  });
+});

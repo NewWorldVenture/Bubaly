@@ -5,13 +5,15 @@ import { Cake, Heart, PartyPopper, CalendarHeart, Plus, Trash2, Gift } from 'luc
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { isAdmin } from '@/lib/constants/roles';
 import {
   upcomingCelebrations, countdownLabel, type CelebrationInput, type CelebrationKind,
@@ -69,7 +71,7 @@ export function CelebrationsModule() {
       family_id: familyId, title: title.trim(), kind, event_date: date, created_by: userId,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Celebration added');
     setTitle(''); setDate(''); setKind('birthday'); setShowAdd(false);
   }
@@ -77,7 +79,7 @@ export function CelebrationsModule() {
   async function remove(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('family_dates').delete().eq('id', id.replace(/^d-/, ''));
-    if (error) toastError(error.message); else success('Removed');
+    if (error) toastError(describeDbError(error)); else success('Removed');
   }
 
   return (
@@ -85,11 +87,16 @@ export function CelebrationsModule() {
       <PageHeader
         title="Celebrations"
         description="Never miss a birthday or anniversary."
-        action={admin ? <Button onClick={() => setShowAdd(true)}><Plus className="h-4 w-4" /> Add</Button> : undefined}
+        action={
+          <div className="flex items-center gap-2">
+            <AiInsight kind="celebrations" iconOnly />
+            {admin && <Button onClick={() => setShowAdd(true)}><Plus className="h-4 w-4" /> Add</Button>}
+          </div>
+        }
       />
 
       {loading ? (
-        <LoadingBlock />
+        <SkeletonList />
       ) : upcoming.length === 0 ? (
         <EmptyState icon={Gift} title="No upcoming celebrations" description="Add birthdays in family member profiles, or add a custom date here." />
       ) : (

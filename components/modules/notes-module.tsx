@@ -9,14 +9,17 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
+import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
-import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { formatInsightsForNote, type NotesInsights } from '@/lib/notes/ai';
 import type { Tables } from '@/lib/database.types';
 
 type Note = Tables<'notes'>;
@@ -113,7 +116,7 @@ export function NotesModule() {
   async function remove(id: string) {
     const supabase = createClient();
     const { error } = await supabase.from('notes').delete().eq('id', id);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success('Note deleted');
     void refresh();
     if (viewing?.id === id) setViewing(null);
@@ -137,7 +140,7 @@ export function NotesModule() {
     void refresh();
   }
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   return (
@@ -158,6 +161,7 @@ export function NotesModule() {
               className="rounded-xl border border-border p-2 text-muted hover:bg-elevated hover:text-fg transition">
               {view === 'grid' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
             </button>
+            <AiInsight kind="notes" iconOnly />
             <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> New Note</Button>
           </div>
         }
@@ -354,9 +358,39 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
   const [selectedColor, setSelectedColor] = useState((note as Record<string, unknown> | null)?.color as string ?? 'default');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [bodyValue, setBodyValue] = useState(note?.body ?? '');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [insights, setInsights] = useState<NotesInsights | null>(null);
 
   function insertChecklistItem() {
     setBodyValue((v) => v + (v && !v.endsWith('\n') ? '\n' : '') + '[ ] ');
+  }
+
+  async function runAiAssist() {
+    const content = bodyValue.trim();
+    if (!content) return toastError('Write something first, then let AI help.');
+    setAiLoading(true);
+    setInsights(null);
+    try {
+      const res = await fetch('/api/ai/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      });
+      const json = (await res.json()) as { insights?: NotesInsights; error?: string };
+      if (!res.ok || !json.insights) throw new Error(json.error || 'Could not analyze note');
+      setInsights(json.insights);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'AI assist failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  function applyInsights() {
+    if (!insights) return;
+    setBodyValue((v) => (v.trimEnd() + formatInsightsForNote(insights)).trimStart());
+    setInsights(null);
+    success('AI summary added to note');
   }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -371,7 +405,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
       ? await supabase.from('notes').update({ title, body: body ?? '' }).eq('id', note.id)
       : await supabase.from('notes').insert({ family_id: familyId, created_by: userId, title, body: body ?? '' });
     setLoading(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(note ? 'Note saved' : 'Note created');
     onSaved();
   }
@@ -405,10 +439,17 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <label className="text-sm font-medium">Content</label>
-            <button type="button" onClick={insertChecklistItem}
-              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition">
-              <CheckSquare className="h-3 w-3" /> Add checklist item
-            </button>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={insertChecklistItem}
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition">
+                <CheckSquare className="h-3 w-3" /> Add checklist item
+              </button>
+              <button type="button" onClick={runAiAssist} disabled={aiLoading}
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10 transition disabled:opacity-50">
+                <Sparkles className={cn('h-3 w-3', aiLoading && 'animate-pulse')} />
+                {aiLoading ? 'Thinking…' : 'AI Assist'}
+              </button>
+            </div>
           </div>
           <Textarea
             value={bodyValue}
@@ -416,6 +457,42 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
             placeholder={`Write anything…\n\nTip: [ ] unchecked item\n     [x] checked item`}
             className="min-h-[200px] font-mono text-sm"
             autoFocus={!!note} />
+
+          {insights && (
+            <div className="mt-3 rounded-xl border border-brand/30 bg-brand/5 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand">
+                  <Sparkles className="h-3.5 w-3.5" /> AI summary
+                </span>
+                <button type="button" onClick={() => setInsights(null)} className="text-muted hover:text-fg">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {insights.summary && <p className="text-sm leading-relaxed">{insights.summary}</p>}
+              {insights.actionItems.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {insights.actionItems.map((item, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-muted">
+                      <Square className="mt-0.5 h-3 w-3 flex-shrink-0" /> {item}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {insights.tags.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {insights.tags.map((tag) => (
+                    <span key={tag} className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-medium text-brand">#{tag}</span>
+                  ))}
+                </div>
+              )}
+              <div className="mt-3 flex justify-end">
+                <button type="button" onClick={applyInsights}
+                  className="rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white hover:bg-brand/90 transition">
+                  Add to note
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
