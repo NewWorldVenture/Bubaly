@@ -28,6 +28,13 @@ Last updated: Capture quick-buttons — tier-gated, customizable, Supabase-synce
 >   `user_preferences` (reusable for future UI prefs). **APPLY 0093 TO PROD** for cross-device
 >   sync; until then it degrades to localStorage. `database.types.ts` already updated with the
 >   column, so no regen needed for this one.
+> - **Capture files items directly** (`fileCaptureAction` in `app/(app)/capture/actions.ts`):
+>   for the text→row destinations (Grocery / To-Dos / Notes), the routed result shows
+>   "Add to {dest}" which creates the record itself (find-or-creates the default grocery/todo
+>   list; notes direct) and lands the user on the page with it already there. Non-fileable
+>   destinations keep "Go to {dest}". `isFileableDestination`/`FILEABLE_KEYS` live in
+>   `lib/capture/routing.ts` (a `'use server'` file can't export sync fns). To add more
+>   fileable destinations: add the key to `FILEABLE_KEYS` + a branch in `fileCaptureAction`.
 > - **"Capture with AI" is now real AI** (was a `setTimeout` over a client regex):
 >   `app/api/ai/capture/route.ts` asks the configured model (via `resolveProvider`) to pick
 >   the best destination key, **tier-gated server-side** so a note never routes to a locked
