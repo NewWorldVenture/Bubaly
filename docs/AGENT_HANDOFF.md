@@ -1,9 +1,20 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-27 — Reminders recurrence advancement + list-filtering + notifications (after #167/#168 merged). Keep this updated as you ship.
+Last updated: 2026-06-27 — Home dashboard reminder-attention card (after #173 MERGED). Keep this updated as you ship.
 
-> ## ⏰ REMINDERS — LIST FILTERING (follow-up to merged #167, branch `claude/festive-bohr-m4cbeg`)
+> ## 🏠 HOME DASHBOARD — REMINDER ATTENTION CARD (new, branch `claude/festive-bohr-m4cbeg`)
+> Now that `family_reminders` is a first-class notifying service (#173, merged), the home dashboard
+> ("Needs Your Attention") surfaces it: a **high-priority "N reminders overdue"** card or, if none overdue,
+> a **medium "N reminders due today"** card linking to `/dashboard/reminders`.
+> - **`lib/dashboard/reminder-attention.ts`** (PURE, **3 tests**): `reminderAttention(rows, now)` →
+>   `{ overdue, dueToday }` (active + timed only; due-today bounded by end of local day; bad timestamps skipped).
+> - **`components/dashboard/ai-home-dashboard.tsx`** — extra `family_reminders` fetch (core cols `status`/
+>   `remind_at` only → **migration-independent**; scoped to `member_id = me OR null`, i.e. mine or whole-family),
+>   counts fed into `buildActionCards`. No migration. tsc/lint clean.
+>
+> ## ⏰ REMINDERS — recurrence + filtering + notifications (#173, MERGED → main `327ee14`)
+> #167 (iOS-parity reminder details: lists/url/early-reminder/flag/subtasks/image/tags via migration 0100)
 > #167 (iOS-parity reminder details: lists/url/early-reminder/flag/subtasks/image/tags via migration 0100)
 > is MERGED. This follow-up adds the "organize by list" view to `components/modules/reminders-module.tsx`:
 > a **List filter** dropdown (All / each list / No list) beside the type filter, plus a **delete-list**
