@@ -8,15 +8,15 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Bubaly — Run your family like a calm, connected team',
+    default: 'Bubaly — The AI Operating System for Family Life',
     template: '%s · Bubaly',
   },
   description:
-    'Bubaly is an AI chief of staff for your household: calendar, chores, meals, grocery, school, sports, health, home maintenance, documents, and an assistant that takes real action.',
+    'Less managing life, more living it. Bubaly is the AI Operating System for family life — quietly coordinating calls, emails, forms, scheduling, reminders, and the invisible work of running a household so your family can focus on what matters most.',
   applicationName: 'Bubaly',
   keywords: [
-    'family organizer', 'shared family calendar', 'chores app', 'meal planning',
-    'family AI assistant', 'household management', 'family operating system',
+    'family operating system', 'AI family assistant', 'shared family calendar',
+    'household management', 'family front desk', 'AI scheduling', 'reduce mental load',
   ],
   authors: [{ name: 'Bubaly' }],
   manifest: '/manifest.webmanifest',
@@ -31,11 +31,11 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: 'Bubaly',
-    title: 'Bubaly — Run your family like a calm, connected team',
-    description: 'An AI chief of staff for busy households. One calm place for everything.',
+    title: 'Bubaly — The AI Operating System for Family Life',
+    description: 'Less Managing Life. More Living It. The AI Operating System that handles the invisible work of running a household.',
     url: SITE_URL,
   },
-  twitter: { card: 'summary_large_image', title: 'Bubaly', description: 'An AI chief of staff for busy households.' },
+  twitter: { card: 'summary_large_image', title: 'Bubaly — The AI Operating System for Family Life', description: 'Less Managing Life. More Living It.' },
   robots: { index: true, follow: true },
 };
 

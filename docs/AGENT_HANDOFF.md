@@ -1,10 +1,34 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Calendar — personal/work/family lens + AI "find a time" scheduling (2026-06-27). Keep this updated as you ship.
+Last updated: Brand realignment — "Less Managing Life. More Living It." (2026-06-27). Keep this updated as you ship.
 
 ## ▶ CURRENT STATE (read this first)
 - **Active branch:** `claude/continuation-an1mam` (all work below is committed + pushed here).
+
+> **Session update (2026-06-27) — BRAND REALIGNMENT: "Less Managing Life. More Living It."**
+> New positioning **"The AI Operating System for Family Life"** + primary tagline
+> **"Less Managing Life. More Living It."** rolled across the marketing surface + metadata.
+> - **`app/layout.tsx`** (global SEO): title default + description + OG + Twitter all retitled to the
+>   new positioning/tagline. **`app/manifest.ts`**: PWA name + description.
+> - **`app/(marketing)/page.tsx`** (homepage hero): Pill → "The AI Operating System for Family Life";
+>   H1 → "Less Managing / Life. / More Living It." (gradient on the last line); subhead rewritten to the
+>   brand-promise voice; tagline divider → "The invisible work of family life, quietly handled"; sr-only
+>   SEO block rewritten to the brand promise. Added **`<LessMoreBand/>`** between the feature rail and AI
+>   panel — a two-column "Less Managing Life" (rose minus list) vs "More Living It" (emerald plus list)
+>   contrast, the brand's defining section.
+> - **`components/marketing/visual-mocks.tsx`**: new exported `LessMoreBand` (+ `Minus`/`Plus` icons,
+>   `LESS_ITEMS`/`MORE_ITEMS`). **`site-footer.tsx`**: tagline. **`reference-showcases.tsx`**: Features +
+>   How-It-Works eyebrows/heroes/subheads. **ai/features/how-it-works/pricing** page metadata + pricing
+>   hero subline. **ai/page.tsx** hero → "Your family's AI Front Desk & Chief of Staff".
+> - LEFT INTENTIONALLY: in-app **"Command Center"** (real Family+ product surface, on-brand with the
+>   "Chief of Staff / Operations Platform" positioning); SEO `lib/seo/presets.ts` templates (keyword-
+>   targeted programmatic SEO, e.g. "#1 Family Organizer App in {state}"); AI chat system prompt
+>   ("proactive chief of staff" — on brand). Copy is static (no Supabase wiring needed).
+> - Canonical brand strings to reuse: positioning **"The AI Operating System for Family Life"**, tagline
+>   **"Less Managing Life. More Living It."**, promise verbs **less managing life / more living it**.
+> - Verified: tsc clean · build exit 0 · **1056/1056**. (Also fixed 2 pre-existing `<a>`→`<Link>` lint
+>   violations in `pricing-content.tsx` surfaced by the re-lint.)
 
 > **Session update (2026-06-27) — CALENDAR: PERSONAL/WORK/FAMILY LENS + AI SCHEDULING.**
 > Deep dive on Calendar Integration. Everyone still sees everything in one place; `context`

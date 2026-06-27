@@ -8,7 +8,7 @@ import type { FeatureTier } from '@/lib/constants/feature-catalog';
 
 export const metadata: Metadata = {
   title: 'Pricing',
-  description: 'Simple pricing for happier families.',
+  description: 'Simple pricing to spend less time managing life and more time living it.',
 };
 
 export const dynamic = 'force-dynamic';

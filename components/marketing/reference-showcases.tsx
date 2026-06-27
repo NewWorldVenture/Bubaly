@@ -164,15 +164,15 @@ export function FeaturesReferencePage() {
     <ReferencePage>
       <div className="mx-auto w-full max-w-[1024px] px-5 pb-2 pt-[26px] sm:px-7">
         <section className="text-center">
-          <Eyebrow>All-in-one family operating system</Eyebrow>
+          <Eyebrow>The AI Operating System for Family Life</Eyebrow>
           <h1 className="mt-3 text-[38px] font-extrabold leading-[1.06] tracking-[-0.035em] sm:text-[48px]">
             Everything your family needs,
             <br />
-            <GradientText>all in one intelligent place.</GradientText>
+            <GradientText>so you can get back to living.</GradientText>
           </h1>
           <p className="mx-auto mt-3.5 max-w-[590px] text-[15px] leading-6 text-white/72">
-            Bubaly combines powerful tools with AI intelligence to help your family
-            <br className="hidden sm:block" /> stay organized, connected, and ahead of what matters most.
+            Bubaly combines powerful tools with AI to handle the busywork of running a household—
+            <br className="hidden sm:block" /> so your family spends less time managing life and more time living it.
           </p>
         </section>
 
@@ -411,7 +411,7 @@ export function HowItWorksReferencePage() {
               <br />
               <GradientText>Works</GradientText>
             </h1>
-            <p className="mt-[16px] max-w-[390px] text-[16px] leading-[26px] text-white/78">Bubaly is your family&apos;s AI-powered operating<br className="hidden sm:block" /> system. It brings everything together—and helps<br className="hidden sm:block" /> you stay ahead of what matters most.</p>
+            <p className="mt-[16px] max-w-[390px] text-[16px] leading-[26px] text-white/78">Bubaly is the AI Operating System for family<br className="hidden sm:block" /> life. It quietly handles the invisible work—so you<br className="hidden sm:block" /> spend less time managing life and more time living it.</p>
             <div className="mt-[20px] flex flex-wrap gap-[15px]">
               <PrimaryButton>Get Started Free <ArrowRight className="h-4 w-4" /></PrimaryButton>
               <OutlineButton href="#steps">See It in Action</OutlineButton>

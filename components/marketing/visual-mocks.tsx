@@ -14,8 +14,10 @@ import {
   Heart,
   Home,
   Mail,
+  Minus,
   Monitor,
   PlayCircle,
+  Plus,
   Shield,
   Sparkles,
   Star,
@@ -876,6 +878,68 @@ export function SmallCtaBand() {
       </div>
       <PrimaryLink href="/signup">Get Started Free</PrimaryLink>
       <OutlineLink href="/how-it-works">See How It Works</OutlineLink>
+    </section>
+  );
+}
+
+const LESS_ITEMS = [
+  'Less scheduling and rescheduling',
+  'Less paperwork and forms',
+  'Less phone tag and email overload',
+  'Less remembering every detail',
+  'Less mental load and stress',
+];
+const MORE_ITEMS = [
+  'More family dinners and traditions',
+  'More adventures and celebrations',
+  'More spontaneous moments',
+  'More peace of mind',
+  'More time together',
+];
+
+/** The brand-defining contrast: the burden you lose vs. the life you gain back. */
+export function LessMoreBand() {
+  return (
+    <section className="showcase-panel p-6 sm:p-9 lg:p-10">
+      <div className="mx-auto max-w-2xl text-center">
+        <h2 className="text-3xl font-bold leading-tight sm:text-[2.4rem]">
+          Less Managing Life. <GradientText>More Living It.</GradientText>
+        </h2>
+        <p className="mx-auto mt-4 max-w-xl text-[15px] leading-7 text-white/70 sm:text-base">
+          Every minute spent managing life is a minute not spent living it. Bubaly hands the busywork
+          to AI so your family gets that time back.
+        </p>
+      </div>
+
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 sm:gap-5">
+        <div className="rounded-2xl border border-rose-500/15 bg-rose-500/[0.04] p-6 sm:p-7">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-rose-300/90">Less Managing Life</h3>
+          <ul className="mt-4 space-y-3">
+            {LESS_ITEMS.map((item) => (
+              <li key={item} className="flex items-center gap-3 text-sm text-white/80">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rose-500/15 text-rose-300">
+                  <Minus className="h-3.5 w-3.5" />
+                </span>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.05] p-6 sm:p-7">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-emerald-300/90">More Living It</h3>
+          <ul className="mt-4 space-y-3">
+            {MORE_ITEMS.map((item) => (
+              <li key={item} className="flex items-center gap-3 text-sm text-white/85">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300">
+                  <Plus className="h-3.5 w-3.5" />
+                </span>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </section>
   );
 }

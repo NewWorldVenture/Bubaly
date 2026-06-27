@@ -3,7 +3,7 @@ import { FeaturesReferencePage } from '@/components/marketing/reference-showcase
 
 export const metadata: Metadata = {
   title: 'Features',
-  description: 'Everything your family needs in one intelligent place.',
+  description: 'Everything your family needs to spend less time managing life and more time living it — calendar, tasks, meals, school, health, documents, and an AI assistant that takes real action.',
 };
 
 export default function FeaturesPage() {

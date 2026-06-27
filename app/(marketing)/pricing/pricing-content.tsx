@@ -220,7 +220,7 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
             Bubaly Pricing
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-white/65">
-            Start free. Upgrade when your family is ready.
+            Start free. Upgrade when your family is ready. Less managing life, more living it.
           </p>
 
           {/* Billing toggle */}
@@ -304,9 +304,9 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
 
         <p className="border-t border-white/8 pt-7 text-center text-sm text-white/55">
           Questions? Visit our{' '}
-          <a className="text-violet-300 hover:underline" href="/faq">Help Center</a>
+          <Link className="text-violet-300 hover:underline" href="/faq">Help Center</Link>
           {' '}or{' '}
-          <a className="text-violet-300 hover:underline" href="/contact">Contact Support</a>
+          <Link className="text-violet-300 hover:underline" href="/contact">Contact Support</Link>
         </p>
       </Container>
     </PageWrap>

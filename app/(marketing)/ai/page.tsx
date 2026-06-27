@@ -5,7 +5,7 @@ import { CTASection } from '@/components/marketing/cta';
 
 export const metadata: Metadata = {
   title: 'Family AI Assistant',
-  description: 'Meet your household’s AI chief of staff. It doesn’t just answer — it creates events, chores, reminders, meal plans, and grocery lists for you.',
+  description: 'Meet your household’s AI chief of staff. It doesn’t just answer — it creates events, chores, reminders, meal plans, and grocery lists for you, so you spend less time managing life and more time living it.',
 };
 
 const PROMPTS = [
@@ -23,8 +23,8 @@ export default function AIPage() {
       <Section className="pt-20 text-center">
         <SectionHeading
           eyebrow="AI assistant"
-          title="An AI chief of staff for your household"
-          description="Ask in plain language. Bubaly takes real action in your family’s data — securely, within your family only."
+          title="Your family’s AI Front Desk & Chief of Staff"
+          description="Ask in plain language. Bubaly takes real action in your family’s data — securely, within your family only — so you spend less time managing life and more time living it."
         />
       </Section>
       <Section className="pt-0">

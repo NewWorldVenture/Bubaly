@@ -46,7 +46,7 @@ export function SiteFooter() {
         <div className="col-span-2 md:col-span-3 lg:col-span-2">
           <Logo />
           <p className="mt-3 max-w-[220px] text-[11px] leading-5 text-muted">
-            Run your family like a calm, connected team.
+            The AI Operating System for family life. Less Managing Life. More Living It.
           </p>
         </div>
         {GROUPS.map((g) => (

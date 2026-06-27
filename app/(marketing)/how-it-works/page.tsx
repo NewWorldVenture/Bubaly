@@ -3,7 +3,7 @@ import { HowItWorksReferencePage } from '@/components/marketing/reference-showca
 
 export const metadata: Metadata = {
   title: 'How It Works',
-  description: 'How Bubaly turns scattered family information into organized action.',
+  description: 'How Bubaly quietly handles the invisible work of family life — so you spend less time managing life and more time living it.',
 };
 
 export default function HowItWorksPage() {
