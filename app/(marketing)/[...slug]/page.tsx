@@ -31,9 +31,25 @@ async function loadPage(slug: string) {
     .eq('id', (page as { template_id: string }).template_id)
     .maybeSingle();
   if (!template || !(template as { is_active: boolean }).is_active) return null;
+  const typedPage = page as { id: string; slug: string; variables: Record<string, string>; template_id: string };
+
+  // Sibling published pages from the same template — internal links for crawl
+  // discovery + link equity (e.g. "also available in other states").
+  const { data: siblingRows } = await supabase
+    .from('seo_pages')
+    .select('slug, variables')
+    .eq('template_id', typedPage.template_id)
+    .eq('status', 'published')
+    .neq('id', typedPage.id)
+    .limit(60);
+  const siblings = ((siblingRows ?? []) as { slug: string; variables: Record<string, string> }[])
+    .map((s) => ({ slug: s.slug, label: s.variables.state || s.variables.city || s.slug }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
   return {
-    page: page as { id: string; slug: string; variables: Record<string, string> },
-    rendered: renderPage(template as unknown as SeoTemplate, (page as { variables: Record<string, string> }).variables),
+    page: typedPage,
+    rendered: renderPage(template as unknown as SeoTemplate, typedPage.variables),
+    siblings,
   };
 }
 
@@ -58,7 +74,7 @@ export default async function ProgrammaticSeoPage({ params }: { params: Promise<
   const joined = (slug ?? []).join('/');
   const data = await loadPage(joined);
   if (!data) notFound();
-  const { page, rendered } = data;
+  const { page, rendered, siblings } = data;
 
   // Best-effort view counter (non-blocking, never fails the render).
   void incrementViews(page.id);
@@ -74,6 +90,14 @@ export default async function ProgrammaticSeoPage({ params }: { params: Promise<
       description: rendered.metaDescription,
       url,
       isPartOf: { '@type': 'WebSite', name: 'Bubaly', url: SITE_URL },
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: SITE_URL },
+        { '@type': 'ListItem', position: 2, name: rendered.h1, item: url },
+      ],
     },
   ];
   if (rendered.faqs.length > 0) {
@@ -155,6 +179,28 @@ export default async function ProgrammaticSeoPage({ params }: { params: Promise<
           <SectionHeading eyebrow="FAQ" title="Frequently asked questions" />
           <div className="mt-12">
             <FAQAccordion items={rendered.faqs.map((f) => ({ q: f.q, a: f.a }))} />
+          </div>
+        </Section>
+      )}
+
+      {/* Related locations — internal links for crawl discovery + link equity */}
+      {siblings.length > 0 && (
+        <Section className="py-0">
+          <div className="mx-auto max-w-4xl">
+            <h2 className="text-center text-sm font-bold uppercase tracking-widest text-muted">
+              Also available across the U.S.
+            </h2>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              {siblings.map((s) => (
+                <Link
+                  key={s.slug}
+                  href={`/${s.slug}`}
+                  className="rounded-full border border-border px-3 py-1.5 text-sm text-muted transition hover:border-brand/40 hover:text-brand"
+                >
+                  {s.label}
+                </Link>
+              ))}
+            </div>
           </div>
         </Section>
       )}
