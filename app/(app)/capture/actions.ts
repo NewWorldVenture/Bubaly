@@ -14,15 +14,33 @@ export type FileResult =
  * grocery items, to-dos, and notes (find-or-create the default list where
  * needed). RLS scopes every write to the caller's family.
  */
-export async function fileCaptureAction(input: { text: string; key: string }): Promise<FileResult> {
+export async function fileCaptureAction(input: { text: string; key: string; title?: string | null; whenISO?: string | null }): Promise<FileResult> {
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const userId = ctx.user.id;
   const supabase = await createServer();
   const text = input.text.trim().slice(0, 500);
   if (!text) return { ok: false, error: 'Nothing to file' };
+  const title = (input.title?.trim() || text).slice(0, 200);
+  const whenISO = input.whenISO && !Number.isNaN(new Date(input.whenISO).getTime())
+    ? new Date(input.whenISO).toISOString() : null;
 
   try {
+    if (input.key === 'calendar') {
+      if (!whenISO) return { ok: true, filed: false, label: 'Calendar', url: '/dashboard/calendar' };
+      const { error } = await supabase
+        .from('calendar_events').insert({ family_id: familyId, title, starts_at: whenISO, all_day: false, created_by: userId });
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, filed: true, label: 'Calendar', url: '/dashboard/calendar' };
+    }
+
+    if (input.key === 'reminders') {
+      const { error } = await supabase
+        .from('family_reminders').insert({ family_id: familyId, created_by: userId, title, kind: 'time', remind_at: whenISO });
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, filed: true, label: 'Reminders', url: '/dashboard/reminders' };
+    }
+
     if (input.key === 'grocery') {
       const { data: existing } = await supabase
         .from('grocery_lists').select('id')

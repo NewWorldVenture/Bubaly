@@ -40,7 +40,7 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
   const [mode, setMode] = useState<CaptureMode>('type');
   const [text, setText] = useState('');
   const [routing, setRouting] = useState(false);
-  const [routed, setRouted] = useState<{ destination: string; url: string; key: string } | null>(null);
+  const [routed, setRouted] = useState<{ destination: string; url: string; key: string; canFile: boolean; title?: string | null; whenISO?: string | null } | null>(null);
   const [filing, setFiling] = useState(false);
   const [recording, setRecording] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -141,13 +141,18 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
         body: JSON.stringify({ text: note }),
       });
       if (res.ok) {
-        const data = (await res.json()) as RoutedDestination & { error?: string };
-        if (data && data.url) { setRouted({ destination: data.destination, url: data.url, key: data.key }); return; }
+        const data = (await res.json()) as RoutedDestination & { canFile?: boolean; title?: string | null; whenISO?: string | null; error?: string };
+        if (data && data.url) {
+          setRouted({ destination: data.destination, url: data.url, key: data.key, canFile: data.canFile ?? isFileableDestination(data.key), title: data.title, whenISO: data.whenISO });
+          return;
+        }
       }
       // Fall back to the instant on-device heuristic.
-      setRouted(routeCaptureHeuristic(note, planLevel));
+      const h = routeCaptureHeuristic(note, planLevel);
+      setRouted({ ...h, canFile: isFileableDestination(h.key) });
     } catch {
-      setRouted(routeCaptureHeuristic(note, planLevel));
+      const h = routeCaptureHeuristic(note, planLevel);
+      setRouted({ ...h, canFile: isFileableDestination(h.key) });
     } finally {
       setRouting(false);
     }
@@ -160,7 +165,7 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
   async function fileIt() {
     if (!routed) return;
     setFiling(true);
-    const res = await fileCaptureAction({ text: text.trim(), key: routed.key });
+    const res = await fileCaptureAction({ text: text.trim(), key: routed.key, title: routed.title, whenISO: routed.whenISO });
     setFiling(false);
     if (res.ok && res.filed) {
       success(`Added to ${res.label}`);
@@ -305,15 +310,17 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
               <Sparkles className="h-5 w-5 shrink-0 text-brand" />
               <div className="flex-1">
                 <p className="text-sm font-semibold">
-                  {isFileableDestination(routed.key) ? <>Add to <span className="text-brand">{routed.destination}</span></> : <>Sending to <span className="text-brand">{routed.destination}</span></>}
+                  {routed.canFile ? <>Add to <span className="text-brand">{routed.destination}</span></> : <>Sending to <span className="text-brand">{routed.destination}</span></>}
                 </p>
                 <p className="text-xs text-muted">
-                  {isFileableDestination(routed.key) ? 'AI can file this for you in one tap.' : 'AI matched your input to the best destination.'}
+                  {routed.whenISO
+                    ? `${routed.title ?? 'Item'} · ${new Date(routed.whenISO).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+                    : routed.canFile ? 'AI can file this for you in one tap.' : 'AI matched your input to the best destination.'}
                 </p>
               </div>
             </div>
             <div className="flex gap-2 border-t border-brand/20 p-3">
-              {isFileableDestination(routed.key) ? (
+              {routed.canFile ? (
                 <button type="button" onClick={fileIt} disabled={filing}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60">
                   {filing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}

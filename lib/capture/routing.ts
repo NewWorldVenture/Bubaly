@@ -23,12 +23,60 @@ export const CAPTURE_DESTINATIONS: CaptureDestination[] = [
 
 export type RoutedDestination = { key: string; destination: string; url: string };
 
-// Destinations Capture can create a record for directly (text → row). Others
-// just route to their page.
+// Destinations Capture can create a record for directly from raw text (text → row).
 export const FILEABLE_KEYS = new Set(['grocery', 'todos', 'notes']);
+// Time-based destinations that can be filed only when a datetime was extracted.
+export const TIME_FILEABLE_KEYS = new Set(['calendar', 'reminders']);
 
 export function isFileableDestination(key: string): boolean {
   return FILEABLE_KEYS.has(key);
+}
+
+/** Whether a routed note can be filed directly given the extracted datetime. */
+export function canFile(key: string, whenISO: string | null | undefined): boolean {
+  if (FILEABLE_KEYS.has(key)) return true;
+  if (TIME_FILEABLE_KEYS.has(key)) return Boolean(whenISO);
+  return false;
+}
+
+export type CaptureExtraction = { key: string; title: string | null; whenISO: string | null };
+
+function validIso(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** Prompt asking the model to route AND extract a title + datetime as JSON. */
+export function buildCaptureExtractionPrompt(text: string, planLevel: number, nowISO: string): { system: string; user: string } {
+  const list = availableDestinations(planLevel).map((d) => `${d.key}: ${d.label}`).join('\n');
+  const system =
+    'You route a family-app quick note and extract details. Reply with ONLY a JSON object ' +
+    '(no prose, no code fence): {"key": <one destination key from the list>, "title": <a short ' +
+    'title for the item, or null>, "when": <ISO-8601 datetime if the note implies a specific date ' +
+    'or time, resolved against the current time; otherwise null>}. ' +
+    "If nothing fits, use key 'assistant'.";
+  const user = `Current time: ${nowISO}\nDestinations:\n${list}\n\nNote: "${text}"`;
+  return { system, user };
+}
+
+/** Parse the model's JSON, validating the key against the tier and the datetime. */
+export function parseCaptureExtraction(raw: string, planLevel: number): CaptureExtraction | null {
+  try {
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const obj = JSON.parse(m[0]) as { key?: unknown; title?: unknown; when?: unknown };
+    const keyNorm = typeof obj.key === 'string' ? obj.key.trim().toLowerCase().replace(/[^a-z]/g, '') : '';
+    const dest = availableDestinations(planLevel).find((d) => d.key === keyNorm);
+    if (!dest) return null;
+    return {
+      key: dest.key,
+      title: typeof obj.title === 'string' && obj.title.trim() ? obj.title.trim().slice(0, 200) : null,
+      whenISO: validIso(obj.when),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Destinations the plan can use. */
