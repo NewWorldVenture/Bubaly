@@ -5,9 +5,13 @@ import { createServer } from '@/lib/supabase/server';
 
 type Result = { ok: true } | { ok: false; error: string };
 
+export type UndoRef = { table: string; id: string };
 export type FileResult =
-  | { ok: true; filed: boolean; label: string; url: string }
+  | { ok: true; filed: boolean; label: string; url: string; undo?: UndoRef }
   | { ok: false; error: string };
+
+// Tables a freshly-filed capture can be undone from (delete-by-id, RLS-scoped).
+const UNDOABLE_TABLES = new Set(['grocery_items', 'todo_items', 'notes', 'calendar_events', 'family_reminders']);
 
 /**
  * File a captured note straight into the right place — no extra taps. Supports
@@ -28,17 +32,17 @@ export async function fileCaptureAction(input: { text: string; key: string; titl
   try {
     if (input.key === 'calendar') {
       if (!whenISO) return { ok: true, filed: false, label: 'Calendar', url: '/dashboard/calendar' };
-      const { error } = await supabase
-        .from('calendar_events').insert({ family_id: familyId, title, starts_at: whenISO, all_day: false, created_by: userId });
-      if (error) return { ok: false, error: error.message };
-      return { ok: true, filed: true, label: 'Calendar', url: '/dashboard/calendar' };
+      const { data, error } = await supabase
+        .from('calendar_events').insert({ family_id: familyId, title, starts_at: whenISO, all_day: false, created_by: userId }).select('id').single();
+      if (error || !data) return { ok: false, error: error?.message ?? 'Could not add' };
+      return { ok: true, filed: true, label: 'Calendar', url: '/dashboard/calendar', undo: { table: 'calendar_events', id: data.id } };
     }
 
     if (input.key === 'reminders') {
-      const { error } = await supabase
-        .from('family_reminders').insert({ family_id: familyId, created_by: userId, title, kind: 'time', remind_at: whenISO });
-      if (error) return { ok: false, error: error.message };
-      return { ok: true, filed: true, label: 'Reminders', url: '/dashboard/reminders' };
+      const { data, error } = await supabase
+        .from('family_reminders').insert({ family_id: familyId, created_by: userId, title, kind: 'time', remind_at: whenISO }).select('id').single();
+      if (error || !data) return { ok: false, error: error?.message ?? 'Could not add' };
+      return { ok: true, filed: true, label: 'Reminders', url: '/dashboard/reminders', undo: { table: 'family_reminders', id: data.id } };
     }
 
     if (input.key === 'grocery') {
@@ -53,10 +57,10 @@ export async function fileCaptureAction(input: { text: string; key: string; titl
         if (error || !created) return { ok: false, error: error?.message ?? 'Could not create list' };
         listId = created.id;
       }
-      const { error } = await supabase
-        .from('grocery_items').insert({ family_id: familyId, list_id: listId, name: text, created_by: userId });
-      if (error) return { ok: false, error: error.message };
-      return { ok: true, filed: true, label: 'Grocery List', url: '/dashboard/grocery' };
+      const { data, error } = await supabase
+        .from('grocery_items').insert({ family_id: familyId, list_id: listId, name: text, created_by: userId }).select('id').single();
+      if (error || !data) return { ok: false, error: error?.message ?? 'Could not add' };
+      return { ok: true, filed: true, label: 'Grocery List', url: '/dashboard/grocery', undo: { table: 'grocery_items', id: data.id } };
     }
 
     if (input.key === 'todos') {
@@ -71,25 +75,35 @@ export async function fileCaptureAction(input: { text: string; key: string; titl
         if (error || !created) return { ok: false, error: error?.message ?? 'Could not create list' };
         listId = created.id;
       }
-      const { error } = await supabase
-        .from('todo_items').insert({ family_id: familyId, list_id: listId, title: text.slice(0, 200), priority: 'medium' });
-      if (error) return { ok: false, error: error.message };
-      return { ok: true, filed: true, label: 'To-Do List', url: '/dashboard/todos' };
+      const { data, error } = await supabase
+        .from('todo_items').insert({ family_id: familyId, list_id: listId, title: text.slice(0, 200), priority: 'medium' }).select('id').single();
+      if (error || !data) return { ok: false, error: error?.message ?? 'Could not add' };
+      return { ok: true, filed: true, label: 'To-Do List', url: '/dashboard/todos', undo: { table: 'todo_items', id: data.id } };
     }
 
     if (input.key === 'notes') {
-      const title = text.split('\n')[0].slice(0, 120);
-      const body = text.length > title.length ? text : '';
-      const { error } = await supabase
-        .from('notes').insert({ family_id: familyId, created_by: userId, title, body });
-      if (error) return { ok: false, error: error.message };
-      return { ok: true, filed: true, label: 'Notes', url: '/dashboard/notes' };
+      const noteTitle = text.split('\n')[0].slice(0, 120);
+      const body = text.length > noteTitle.length ? text : '';
+      const { data, error } = await supabase
+        .from('notes').insert({ family_id: familyId, created_by: userId, title: noteTitle, body }).select('id').single();
+      if (error || !data) return { ok: false, error: error?.message ?? 'Could not add' };
+      return { ok: true, filed: true, label: 'Notes', url: '/dashboard/notes', undo: { table: 'notes', id: data.id } };
     }
 
     return { ok: true, filed: false, label: '', url: '' };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not file' };
   }
+}
+
+/** Reverse a just-filed capture by deleting the created row (RLS-scoped, allowlisted). */
+export async function undoCaptureAction(input: UndoRef): Promise<Result> {
+  await requireUserContext();
+  if (!UNDOABLE_TABLES.has(input.table)) return { ok: false, error: 'Cannot undo this item.' };
+  const supabase = await createServer();
+  const { error } = await (supabase.from(input.table as 'notes')).delete().eq('id', input.id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 /**

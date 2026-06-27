@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Mic, Type, Camera, FileText, Sparkles, X, ArrowRight,
-  Loader2, ChevronDown, Settings2, GripVertical, Plus, Check, Upload, Trash2,
+  Loader2, ChevronDown, Settings2, GripVertical, Plus, Check, Upload, Trash2, CheckCircle2, RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/toast';
@@ -15,7 +15,7 @@ import {
   availableQuickRoutes, resolveQuickRoutes, defaultQuickRouteKeys, type QuickRoute,
 } from '@/lib/capture/quick-routes';
 import { routeCaptureHeuristic, isFileableDestination, type RoutedDestination } from '@/lib/capture/routing';
-import { saveCaptureRoutesAction, fileCaptureAction } from '@/app/(app)/capture/actions';
+import { saveCaptureRoutesAction, fileCaptureAction, undoCaptureAction } from '@/app/(app)/capture/actions';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
 
@@ -42,6 +42,7 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
   const [routing, setRouting] = useState(false);
   const [routed, setRouted] = useState<{ destination: string; url: string; key: string; canFile: boolean; title?: string | null; whenISO?: string | null } | null>(null);
   const [filing, setFiling] = useState(false);
+  const [filed, setFiled] = useState<{ label: string; url: string; undo?: { table: string; id: string } } | null>(null);
   const [recording, setRecording] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
@@ -128,6 +129,7 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
   function handleInput(value: string) {
     setText(value);
     setRouted(null);
+    setFiled(null);
   }
 
   async function handleSubmit() {
@@ -168,14 +170,23 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
     const res = await fileCaptureAction({ text: text.trim(), key: routed.key, title: routed.title, whenISO: routed.whenISO });
     setFiling(false);
     if (res.ok && res.filed) {
-      success(`Added to ${res.label}`);
-      router.push(res.url);
+      setFiled({ label: res.label, url: res.url, undo: res.undo });
+      setRouted(null);
+      setText('');
     } else if (res.ok) {
       router.push(routed.url); // not directly fileable — just open
     } else {
       toastError(res.error ?? 'Could not add — opening instead');
       router.push(routed.url);
     }
+  }
+
+  async function undoFiled() {
+    if (!filed?.undo) { setFiled(null); return; }
+    const res = await undoCaptureAction(filed.undo);
+    if (res.ok) success('Removed');
+    else toastError(res.error ?? 'Could not undo');
+    setFiled(null);
   }
 
   function startVoice() {
@@ -298,7 +309,33 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
         </div>
 
         {/* Primary action */}
-        {(mode === 'photo' || mode === 'document') ? (
+        {filed ? (
+          <div className="mb-4 overflow-hidden rounded-2xl border border-emerald-500/30 bg-emerald-500/5">
+            <div className="flex items-center gap-3 p-4">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold">Added to <span className="text-emerald-500">{filed.label}</span></p>
+                <p className="text-xs text-muted">Saved — undo it or open to see it.</p>
+              </div>
+            </div>
+            <div className="flex gap-2 border-t border-emerald-500/20 p-3">
+              <button type="button" onClick={() => router.push(filed.url)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand/90">
+                Open {filed.label} <ArrowRight className="h-4 w-4" />
+              </button>
+              {filed.undo && (
+                <button type="button" onClick={undoFiled}
+                  className="flex items-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-elevated">
+                  <RotateCcw className="h-4 w-4" /> Undo
+                </button>
+              )}
+              <button type="button" onClick={() => setFiled(null)}
+                className="flex items-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-muted hover:bg-elevated hover:text-fg">
+                New
+              </button>
+            </div>
+          </div>
+        ) : (mode === 'photo' || mode === 'document') ? (
           <button type="button" disabled={!file || uploading} onClick={uploadCapture}
             className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-sm font-bold text-white transition hover:bg-brand/90 disabled:opacity-40">
             {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
