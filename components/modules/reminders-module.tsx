@@ -93,6 +93,7 @@ export function RemindersModule() {
 
   const [tab, setTab] = useState<'active' | 'completed' | 'all'>('active');
   const [filterKind, setFilterKind] = useState('all');
+  const [filterList, setFilterList] = useState('all');
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Reminder | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -116,8 +117,17 @@ export function RemindersModule() {
     if (tab === 'active') rows = rows.filter((r) => r.status === 'active' || r.status === 'snoozed');
     if (tab === 'completed') rows = rows.filter((r) => r.status === 'completed' || r.status === 'dismissed');
     if (filterKind !== 'all') rows = rows.filter((r) => r.kind === filterKind);
+    if (filterList !== 'all') rows = rows.filter((r) => filterList === 'none' ? !r.list_id : r.list_id === filterList);
     return rows;
-  }, [reminders, tab, filterKind]);
+  }, [reminders, tab, filterKind, filterList]);
+
+  async function deleteList(id: string) {
+    if (!confirm('Delete this list? Reminders in it are kept (just un-listed).')) return;
+    const { error: err } = await createClient().from('reminder_lists').delete().eq('id', id);
+    if (err) { toastError(describeDbError(err)); return; }
+    setFilterList('all');
+    success('List deleted');
+  }
 
   const overdue = reminders.filter(isOverdue);
   const activeCount = reminders.filter((r) => r.status === 'active').length;
@@ -263,6 +273,22 @@ export function RemindersModule() {
           <option value="all">All types</option>
           {KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
         </select>
+        {/* List filter */}
+        {(lists ?? []).length > 0 && (
+          <div className="flex items-center gap-1">
+            <select value={filterList} onChange={(e) => setFilterList(e.target.value)}
+              className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
+              <option value="all">All lists</option>
+              {(lists ?? []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              <option value="none">No list</option>
+            </select>
+            {filterList !== 'all' && filterList !== 'none' && (
+              <button onClick={() => deleteList(filterList)} aria-label="Delete list" className="rounded-lg p-1.5 text-muted hover:text-danger">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Reminder list */}

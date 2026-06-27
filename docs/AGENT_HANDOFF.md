@@ -1,8 +1,17 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after AI Trip Intelligence (PR #168). Keep this updated as you ship.
+Last updated: 2026-06-27 — Reminders list-filtering follow-up (after #167/#168 merged). Keep this updated as you ship.
 
+> ## ⏰ REMINDERS — LIST FILTERING (follow-up to merged #167, branch `claude/festive-bohr-m4cbeg`)
+> #167 (iOS-parity reminder details: lists/url/early-reminder/flag/subtasks/image/tags via migration 0100)
+> is MERGED. This follow-up adds the "organize by list" view to `components/modules/reminders-module.tsx`:
+> a **List filter** dropdown (All / each list / No list) beside the type filter, plus a **delete-list**
+> trash button when a specific list is selected (reminders kept; FK `ON DELETE SET NULL` un-lists them).
+> No new migration (uses 0100's `reminder_lists` + `list_id`). tsc clean.
+> NOTE: main now has a **0098 collision** — `0098_relationship_helper.sql` AND `0098_trip_intelligence.sql`
+> both exist (parallel merges). Harmless to the app but the next migration author should be aware; apply both.
+>
 > ## 🧳 AI TRIP INTELLIGENCE (PR #168) — destination research + Smart Departure
 > Branch `claude/connect-8ysp00`. Turns a located calendar event into AI destination research +
 > a working-backward departure plan that monitors traffic & weather. ⚠️ **Migration
