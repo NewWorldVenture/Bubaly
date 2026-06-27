@@ -60,12 +60,16 @@ Last updated: Capture — AI routing, direct-file, photo/scan, tier-gated button
 >   sync; until then it degrades to localStorage. `database.types.ts` already updated with the
 >   column, so no regen needed for this one.
 > - **Capture files items directly** (`fileCaptureAction` in `app/(app)/capture/actions.ts`):
->   for the text→row destinations (Grocery / To-Dos / Notes), the routed result shows
->   "Add to {dest}" which creates the record itself (find-or-creates the default grocery/todo
->   list; notes direct) and lands the user on the page with it already there. Non-fileable
->   destinations keep "Go to {dest}". `isFileableDestination`/`FILEABLE_KEYS` live in
->   `lib/capture/routing.ts` (a `'use server'` file can't export sync fns). To add more
->   fileable destinations: add the key to `FILEABLE_KEYS` + a branch in `fileCaptureAction`.
+>   Grocery / To-Dos / Notes (text→row; find-or-creates the default grocery/todo list) AND
+>   **Calendar / Reminders** (time-based). For time-based, `/api/ai/capture` returns a structured
+>   `{key, title, when}` extraction (model resolves relative dates vs the current time);
+>   `canFile()` is true for text destinations always and for calendar/reminders only when a
+>   datetime was extracted. The routed card shows the parsed title + formatted time and an
+>   "Add to {dest}" one-tap; calendar inserts `calendar_events` (extracted `starts_at`),
+>   reminders inserts `family_reminders` (`remind_at`). Heuristic fallback stays text-only.
+>   `FILEABLE_KEYS` / `TIME_FILEABLE_KEYS` / `canFile` / `parseCaptureExtraction` /
+>   `buildCaptureExtractionPrompt` live in `lib/capture/routing.ts` (a `'use server'` file can't
+>   export sync fns). To add more: extend those sets + add a branch in `fileCaptureAction`.
 > - **"Capture with AI" is now real AI** (was a `setTimeout` over a client regex):
 >   `app/api/ai/capture/route.ts` asks the configured model (via `resolveProvider`) to pick
 >   the best destination key, **tier-gated server-side** so a note never routes to a locked
