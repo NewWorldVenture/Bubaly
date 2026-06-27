@@ -35,6 +35,16 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 > existing `?gcal=` handling). One tap from the concierge card straight into the AI scheduler built
 > earlier this session. tsc clean · build 0 · **1056/1056**. No migration.
 
+> **Session update (2026-06-27) — DECISION QUEUE: "Approve all routine" batch action.**
+> The vision's "one-tap approval for routine actions" — `decision-queue.tsx` now shows an **Approve all
+> routine (N)** button (when >1 routine item) that approves every non-`ask`-tier suggestion at once.
+> Refactored single-item logic into `applyResolve(supabase, s, status)` (no toast/refresh) shared by the
+> single `resolve` and the new `approveAllRoutine` loop (one toast + one refresh at the end). A
+> `processing` flag disables all buttons during the batch. Safe by construction: `applyResolve` only
+> inserts a reversible reminder for `create_reminder` types and otherwise just marks status — no
+> side-effecting execution. 'ask'-tier (uncertain/urgent) items are excluded, so they still need an
+> individual decision. tsc clean · build 0 · **1056/1056**. No migration.
+
 > **Session update (2026-06-27) — FAMILY FRONT DESK (the AI concierge hub).**
 > Packages the scattered concierge capabilities into one branded surface — the "Family AI Front Desk"
 > from the product vision (every call answered / email understood / form processed). The capabilities

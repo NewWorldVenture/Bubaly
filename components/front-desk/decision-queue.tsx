@@ -40,6 +40,7 @@ export function DecisionQueue() {
   const { success, error: toastError } = useToast();
   const [scanning, setScanning] = useState(false);
   const [scannedOnce, setScannedOnce] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
   const { data, loading, error, refresh } = useRealtimeQuery<Suggestion>({
     table: 'autopilot_suggestions',
@@ -82,6 +83,12 @@ export function DecisionQueue() {
     () => open.filter((s) => ['auto', 'approve', 'ask'].includes(confidenceTier(s.confidence))),
     [open],
   );
+  // "Routine" = the high-confidence items (not the uncertain 'ask' tier). These
+  // are what the vision means by "one-tap approval for routine actions".
+  const routineItems = useMemo(
+    () => open.filter((s) => confidenceTier(s.confidence) !== 'ask'),
+    [open],
+  );
   const todayStart = startOfToday();
   const handledToday = useMemo(
     () => data.filter((s) =>
@@ -90,8 +97,8 @@ export function DecisionQueue() {
     [data, todayStart],
   );
 
-  async function resolve(s: Suggestion, status: 'approved' | 'executed' | 'dismissed') {
-    const supabase = createClient();
+  // Apply one resolution (no toast/refresh) — shared by single + batch actions.
+  async function applyResolve(supabase: ReturnType<typeof createClient>, s: Suggestion, status: 'approved' | 'executed' | 'dismissed') {
     // Reversible execution for reminders the family approves (mirrors Autopilot).
     if ((status === 'approved' || status === 'executed') && s.action_type === 'create_reminder') {
       const payload = (s.payload ?? {}) as { title?: string; at?: string };
@@ -106,12 +113,34 @@ export function DecisionQueue() {
       });
       status = 'executed';
     }
-    const { error: upErr } = await supabase.from('autopilot_suggestions')
+    return supabase.from('autopilot_suggestions')
       .update({ status, resolved_at: new Date().toISOString(), resolved_by: userId })
       .eq('id', s.id);
+  }
+
+  async function resolve(s: Suggestion, status: 'approved' | 'executed' | 'dismissed') {
+    const { error: upErr } = await applyResolve(createClient(), s, status);
     if (upErr) return toastError(describeDbError(upErr));
     success(status === 'dismissed' ? 'Dismissed' : 'Done — Bubaly handled it');
     void refresh();
+  }
+
+  async function approveAllRoutine() {
+    if (routineItems.length === 0 || processing) return;
+    setProcessing(true);
+    const supabase = createClient();
+    let done = 0;
+    try {
+      for (const s of routineItems) {
+        const { error: upErr } = await applyResolve(supabase, s, 'approved');
+        if (!upErr) done += 1;
+      }
+      if (done > 0) success(`Approved ${done} routine ${done === 1 ? 'item' : 'items'}`);
+      else toastError('Could not approve those items');
+      void refresh();
+    } finally {
+      setProcessing(false);
+    }
   }
 
   if (loading) return <LoadingBlock />;
@@ -137,6 +166,12 @@ export function DecisionQueue() {
             <span className="hidden items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 sm:flex">
               <Sparkles className="h-3.5 w-3.5" /> {handledToday.length} handled today
             </span>
+          )}
+          {routineItems.length > 1 && (
+            <button onClick={approveAllRoutine} disabled={processing}
+              className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand/90 disabled:opacity-60">
+              <Check className="h-3.5 w-3.5" /> {processing ? 'Approving…' : `Approve all routine (${routineItems.length})`}
+            </button>
           )}
           <button onClick={runScan} disabled={scanning} aria-label="Re-scan"
             className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-60">
@@ -191,12 +226,12 @@ export function DecisionQueue() {
                   {s.detail && <p className="truncate text-xs text-muted">{s.detail}</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <button onClick={() => resolve(s, 'approved')}
-                    className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand/90">
+                  <button onClick={() => resolve(s, 'approved')} disabled={processing}
+                    className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand/90 disabled:opacity-60">
                     <Check className="h-3.5 w-3.5" /> {s.action_label ?? 'Do it'}
                   </button>
-                  <button onClick={() => resolve(s, 'dismissed')} aria-label="Dismiss"
-                    className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-rose-400">
+                  <button onClick={() => resolve(s, 'dismissed')} disabled={processing} aria-label="Dismiss"
+                    className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-rose-400 disabled:opacity-60">
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
