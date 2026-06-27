@@ -53,6 +53,33 @@ export function suggestGiftsFromWishlist(
   return candidates.slice(0, limit);
 }
 
+// ── Gift list summary (a lightweight shopping tracker) ───────────────────────
+
+export type GiftLike = { status: string; price_cents: number | null };
+export type GiftSummary = {
+  total: number;
+  /** Not yet bought: idea / saved / ordered. */
+  open: number;
+  /** Done: purchased / given. */
+  done: number;
+  /** Sum of priced open items. */
+  openCents: number;
+  /** Sum of priced done items. */
+  spentCents: number;
+};
+
+const DONE_STATUSES = new Set(['purchased', 'given']);
+
+export function summarizeGifts(gifts: GiftLike[]): GiftSummary {
+  const s: GiftSummary = { total: gifts.length, open: 0, done: 0, openCents: 0, spentCents: 0 };
+  for (const g of gifts) {
+    const done = DONE_STATUSES.has(g.status);
+    if (done) { s.done += 1; s.spentCents += g.price_cents ?? 0; }
+    else { s.open += 1; s.openCents += g.price_cents ?? 0; }
+  }
+  return s;
+}
+
 // ── AI digest ────────────────────────────────────────────────────────────────
 
 export type DigestUpcoming = {

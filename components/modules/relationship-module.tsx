@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils/cn';
 import {
   upcomingDates, formatCountdown, milestoneLabel, type RelDate,
 } from '@/lib/relationship/dates';
-import { suggestGiftsFromWishlist, type WishItemLite, type RelationshipDigest } from '@/lib/relationship/gifts';
+import { suggestGiftsFromWishlist, summarizeGifts, type WishItemLite, type RelationshipDigest } from '@/lib/relationship/gifts';
 import { buildCalendarEventForDate } from '@/lib/relationship/calendar';
 import type { Tables, RelationshipDateKind, RelationshipDateStatus, RelationshipGiftStatus } from '@/lib/database.types';
 
@@ -86,6 +86,10 @@ export function RelationshipModule() {
   const [saving, setSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [digest, setDigest] = useState<RelationshipDigest | null>(null);
+  const [giftFilter, setGiftFilter] = useState<'all' | RelationshipGiftStatus>('all');
+
+  const giftSummary = useMemo(() => summarizeGifts((gifts ?? []).map((g) => ({ status: g.status, price_cents: g.price_cents }))), [gifts]);
+  const visibleGifts = useMemo(() => (gifts ?? []).filter((g) => giftFilter === 'all' || g.status === giftFilter), [gifts, giftFilter]);
 
   const upcoming = useMemo(() => upcomingDates(
     (dates ?? []).map((d): RelDate => ({
@@ -387,8 +391,29 @@ export function RelationshipModule() {
             description={`Jot down ideas as you spot them${profile?.partner_member_id ? `, pull from ${partnerName}’s wishlist,` : ''} or let AI suggest a few.`}
             action={<Button onClick={openNewGift} className="gap-1.5"><Plus className="h-4 w-4" /> Add a gift idea</Button>} />
         ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {(gifts ?? []).map((g) => (
+          <>
+            {/* Shopping summary + status filter */}
+            <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <p className="text-sm text-muted">
+                <span className="font-semibold text-fg">{giftSummary.open}</span> to buy
+                {giftSummary.openCents > 0 && <> · <span className="font-semibold text-fg">{dollars(giftSummary.openCents)}</span> to go</>}
+                {giftSummary.done > 0 && <> · {giftSummary.done} done</>}
+              </p>
+              <div className="flex flex-wrap gap-1 sm:ml-auto">
+                {(['all', ...GIFT_STATUS.map((s) => s.value)] as const).map((f) => (
+                  <button key={f} onClick={() => setGiftFilter(f)}
+                    className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
+                      giftFilter === f ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:text-fg')}>
+                    {f === 'all' ? 'All' : GIFT_STATUS.find((s) => s.value === f)?.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {visibleGifts.length === 0 ? (
+              <p className="rounded-xl border border-border bg-surface/30 px-4 py-6 text-center text-sm text-muted">No gifts in this status.</p>
+            ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {visibleGifts.map((g) => (
               <div key={g.id} className="flex flex-col rounded-2xl border border-border bg-surface/50 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand"><Gift className="h-5 w-5" /></div>
@@ -416,7 +441,9 @@ export function RelationshipModule() {
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+            )}
+          </>
         )}
       </section>
 

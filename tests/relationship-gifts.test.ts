@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  suggestGiftsFromWishlist, buildRelationshipDigestPrompt, parseRelationshipDigest,
+  suggestGiftsFromWishlist, buildRelationshipDigestPrompt, parseRelationshipDigest, summarizeGifts,
   type WishItemLite,
 } from '@/lib/relationship/gifts';
 
@@ -33,6 +33,21 @@ describe('suggestGiftsFromWishlist', () => {
     const out = suggestGiftsFromWishlist([item({ id: 'a', price: null })], { maxBudgetCents: 1000 });
     expect(out).toHaveLength(1);
     expect(out[0].priceCents).toBeNull();
+  });
+});
+
+describe('summarizeGifts', () => {
+  it('splits open vs done and sums priced items', () => {
+    expect(summarizeGifts([
+      { status: 'idea', price_cents: 2500 },
+      { status: 'ordered', price_cents: 1000 },
+      { status: 'purchased', price_cents: 5000 },
+      { status: 'given', price_cents: null },
+      { status: 'saved', price_cents: null },
+    ])).toEqual({ total: 5, open: 3, done: 2, openCents: 3500, spentCents: 5000 });
+  });
+  it('handles an empty list', () => {
+    expect(summarizeGifts([])).toEqual({ total: 0, open: 0, done: 0, openCents: 0, spentCents: 0 });
   });
 });
 

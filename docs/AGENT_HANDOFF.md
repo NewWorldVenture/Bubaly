@@ -27,6 +27,9 @@ Last updated after the production bug sweep + frictionless Quick Capture (PR #16
 >   window, linking to `/dashboard/relationship`. Crash-safe pre-migration (`relDateRows ?? []`).
 > - **AI metering** — `/api/ai/relationship` is capped at 20 digests/family/day, counted from `audit_logs`
 >   (action `relationship_ai_digest`); 429 over the limit, best-effort `logAudit` record on success.
+> - **Gift shopping tracker** — the gift section shows a summary ("N to buy · $X to go · M done") via the
+>   pure `summarizeGifts` (`lib/relationship/gifts.ts`, **+2 tests**) plus tap-to-filter status chips
+>   (All/Idea/Saved/Ordered/Purchased/Given).
 > - **Add to family calendar** — `relationship_dates.calendar_event_id` (added to migration 0098) links a
 >   date to a `calendar_events` row. The card's calendar toggle creates a yearly (recurring dates) or one-off
 >   all-day event via the pure `buildCalendarEventForDate` (`lib/relationship/calendar.ts`, **3 tests**;
