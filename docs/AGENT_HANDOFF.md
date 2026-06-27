@@ -27,6 +27,11 @@ Last updated after the production bug sweep + frictionless Quick Capture (PR #16
 >   window, linking to `/dashboard/relationship`. Crash-safe pre-migration (`relDateRows ?? []`).
 > - **AI metering** — `/api/ai/relationship` is capped at 20 digests/family/day, counted from `audit_logs`
 >   (action `relationship_ai_digest`); 429 over the limit, best-effort `logAudit` record on success.
+> - **Proactive push/email reminders** — `lib/server/notifications.ts` (`generateFamilyNotifications`, the
+>   notifications cron) now emits a `'system'` notification when a relationship date enters its reminder
+>   window, `related_id` keyed by occurrence year (`{id}:{YYYY}`) so it sends once per occurrence and again
+>   next year. Delivered via the existing push + email channels. Reuses `upcomingRelationship` (pure/tested);
+>   missing-table-safe (`relDates ?? []`).
 >
 > ## 🎯 BRAND FOUNDATION — "Less Life Admin. More Living Life." (in progress, branch `claude/festive-bohr-m4cbeg`)
 > New primary tagline + positioning rolled across the marketing site & shared metadata. Hero headline:
