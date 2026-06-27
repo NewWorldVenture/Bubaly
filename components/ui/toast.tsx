@@ -5,12 +5,14 @@ import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 type ToastTone = 'success' | 'error' | 'info';
-type Toast = { id: number; tone: ToastTone; message: string };
+/** Optional one-tap action shown in the toast, e.g. "Undo". */
+export type ToastAction = { label: string; onClick: () => void };
+type Toast = { id: number; tone: ToastTone; message: string; action?: ToastAction };
 
 type ToastApi = {
-  toast: (message: string, tone?: ToastTone) => void;
-  success: (message: string) => void;
-  error: (message: string) => void;
+  toast: (message: string, tone?: ToastTone, action?: ToastAction) => void;
+  success: (message: string, action?: ToastAction) => void;
+  error: (message: string, action?: ToastAction) => void;
 };
 
 const ToastContext = createContext<ToastApi | null>(null);
@@ -31,16 +33,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counter = useRef(0);
 
-  const push = useCallback((message: string, tone: ToastTone = 'info') => {
+  const push = useCallback((message: string, tone: ToastTone = 'info', action?: ToastAction) => {
     const id = ++counter.current;
-    setToasts((t) => [...t, { id, tone, message }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200);
+    setToasts((t) => [...t, { id, tone, message, action }]);
+    // Actionable toasts linger a little longer so there's time to tap them.
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), action ? 7000 : 4200);
   }, []);
 
   const api: ToastApi = {
     toast: push,
-    success: (m) => push(m, 'success'),
-    error: (m) => push(m, 'error'),
+    success: (m, action) => push(m, 'success', action),
+    error: (m, action) => push(m, 'error', action),
   };
 
   return (
@@ -68,6 +71,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 )}
               />
               <span className="flex-1">{t.message}</span>
+              {t.action && (
+                <button
+                  onClick={() => { t.action!.onClick(); setToasts((arr) => arr.filter((x) => x.id !== t.id)); }}
+                  className="shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold text-brand hover:bg-brand/10"
+                >
+                  {t.action.label}
+                </button>
+              )}
               <button
                 onClick={() => setToasts((arr) => arr.filter((x) => x.id !== t.id))}
                 className="text-muted hover:text-fg"
