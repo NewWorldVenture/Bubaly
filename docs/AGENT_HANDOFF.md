@@ -17,6 +17,11 @@ Last updated: Capture — AI routing, direct-file, photo/scan, tier-gated button
 >   displayName?, role?})` in `app/(app)/admin/actions.ts` (super-admin guarded, service client,
 >   validates role against `EDITABLE_ROLES`, audit-logs `update`, revalidates). The page passes
 >   `name`/`role` into `<MemberRowActions>`.
+> - **Admin Plan column editable**: the same row `…` menu gains "Change plan" →
+>   `PlanModal` (Free/Basic/Plus) → `adminUpdateFamilyPlanAction({familyId, plan})` (super-admin
+>   guarded, validates `PlanId`, updates-or-creates the family's `subscriptions` row at status
+>   `active`, audit-logs, revalidates `/admin/users` + `/admin/subscriptions`). Admin comp/override
+>   (no charge), whole-family scope; only shown when the user has a family.
 > - Verified: tsc clean · build exit 0 · **1047/1047**. No migration (uses existing tables/RLS).
 
 - **Health:** `tsc --noEmit` clean · `npm run build` exit 0 · **full suite 1039/1039 green**.
