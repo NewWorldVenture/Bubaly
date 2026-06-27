@@ -73,6 +73,16 @@ Last updated: Dramatic UI upgrade — wallet/money visual allocation + dark-mode
 > - **Dark-mode audit**: swept the *entire* `components/` tree — zero light-only
 >   `bg-{color}-100` classes remain (the financial fixes were the last offenders).
 >
+> ### Perceived performance — route-level skeletons
+> The app had **zero `loading.tsx` files** — navigating to a server-rendered route showed a
+> frozen UI until the server responded. Added a reusable `Skeleton` primitive
+> (`components/ui/states.tsx`) and route-level `loading.tsx` for **/wallet, /money, /guardian**
+> that mirror each page's real layout (stat rows, balance/allocation cards, child cards,
+> activity/comms feeds). Next.js renders these instantly via Suspense.
+> **To extend**: drop a `loading.tsx` next to any heavy `page.tsx` and compose `<Skeleton>`
+> blocks to match its shape. Good next candidates: `/dashboard`, `/wallet/activity`,
+> `/wallet/children/[childId]`, the guardian sub-pages.
+>
 > ### Accessibility
 > - aria-labels/titles on icon-only buttons across wallet/money: babysitter edit/remove,
 >   card-design modal close, card expand (`aria-expanded`), child "Add funds".
