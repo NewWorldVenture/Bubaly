@@ -69,7 +69,7 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
       ['/admin/marketing/video', 'Video'],
       ['/admin/marketing/seo', 'SEO'],
       ['/admin/marketing/aeo', 'AEO'],
-      ['/admin/marketing/seo-pages', 'SEO Pages'],
+      ['/admin/marketing/website-template', 'Website Template'],
     ],
   },
   {

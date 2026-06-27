@@ -29,7 +29,7 @@ const input = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 te
 const area = 'w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus:border-brand/50 focus:outline-none';
 const label = 'mb-1 block text-xs font-medium text-muted';
 
-export function SeoPagesClient({ templates }: { templates: TemplateView[] }) {
+export function WebsiteTemplateClient({ templates }: { templates: TemplateView[] }) {
   const [editing, setEditing] = useState<TemplateView | 'new' | null>(null);
   const [generating, setGenerating] = useState<TemplateView | null>(null);
 

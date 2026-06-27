@@ -16,7 +16,7 @@ async function guard() {
 }
 
 function revalidate() {
-  revalidatePath('/admin/marketing/seo-pages');
+  revalidatePath('/admin/marketing/website-template');
 }
 
 export type TemplateInput = {

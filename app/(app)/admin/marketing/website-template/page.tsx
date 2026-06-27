@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
 import { withSeoTables, type SeoPageTemplateRow, type SeoPageRow } from '@/lib/supabase/seo-tables';
-import { SeoPagesClient, type TemplateView, type PageView } from './seo-pages-client';
+import { WebsiteTemplateClient, type TemplateView, type PageView } from './website-template-client';
 
-export const metadata: Metadata = { title: 'Marketing · SEO Pages', robots: { index: false } };
+export const metadata: Metadata = { title: 'Marketing · Website Template', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
-export default async function SeoPagesAdmin() {
+export default async function WebsiteTemplateAdmin() {
   const supabase = withSeoTables(createServiceClient());
 
   const [{ data: templates }, { data: pages }] = await Promise.all([
@@ -46,13 +46,17 @@ export default async function SeoPagesAdmin() {
 
   return (
     <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-bold text-fg">Website Template</h1>
+        <p className="text-sm text-muted">Programmatic SEO &amp; AEO landing pages, generated from one template.</p>
+      </div>
       <div className="rounded-2xl border border-border bg-surface/30 p-4 text-sm text-muted">
         Build a single page <strong className="text-fg">template</strong> for a topic, then generate
         SEO + AEO landing pages across every U.S. state in one click. Pages share the exact Bubaly
         look &amp; feel, include FAQ structured data for answer engines, and are managed centrally —
         editing the template instantly updates every page it produced.
       </div>
-      <SeoPagesClient templates={templateViews} />
+      <WebsiteTemplateClient templates={templateViews} />
     </div>
   );
 }
