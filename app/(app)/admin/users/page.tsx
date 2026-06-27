@@ -11,6 +11,7 @@ import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/
 import { UsersToolbar } from '@/components/admin/users-toolbar';
 import { InviteRowActions } from '@/components/admin/invite-row-actions';
 import { MemberRowActions } from '@/components/admin/member-row-actions';
+import { FamilyRowActions } from '@/components/admin/family-row-actions';
 import { RoleDonut } from '@/components/admin/role-donut';
 import { AlertTriangle } from 'lucide-react';
 import type { Tables } from '@/lib/database.types';
@@ -329,6 +330,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                     <th className="px-3 py-2 font-medium">Plan</th>
                     <th className="px-3 py-2 font-medium">Status</th>
                     <th className="px-3 py-2 font-medium">Created</th>
+                    <th className="px-3 py-2 font-medium" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -341,6 +343,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                         <td className="px-3 py-2.5 text-muted">{sub ? PLANS.find((p) => p.id === sub.plan)?.name ?? sub.plan : '—'}</td>
                         <td className="px-3 py-2.5">{sub ? <Badge tone={sub.status === 'active' ? 'success' : 'neutral'}>{sub.status}</Badge> : '—'}</td>
                         <td className="px-3 py-2.5 text-muted">{fmtDate(f.created_at, 'MMM d, yyyy')}</td>
+                        <td className="px-3 py-2.5"><FamilyRowActions familyId={f.id} name={f.name} plan={sub?.plan ?? null} /></td>
                       </tr>
                     );
                   })}

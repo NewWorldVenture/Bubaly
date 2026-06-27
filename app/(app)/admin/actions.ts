@@ -174,6 +174,23 @@ export async function adminUpdateFamilyPlanAction(input: { familyId: string; pla
   return { ok: true };
 }
 
+/** Rename a family (admin). */
+export async function adminRenameFamilyAction(input: { familyId: string; name: string }): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+  const name = input.name.trim();
+  if (!name) return { ok: false, error: 'Family name cannot be empty.' };
+  if (name.length > 80) return { ok: false, error: 'Name is too long (max 80).' };
+
+  const supabase = createServiceClient();
+  const { error } = await supabase.from('families').update({ name }).eq('id', input.familyId);
+  if (error) return { ok: false, error: error.message };
+
+  await adminAuditLog({ familyId: input.familyId, action: 'update', resource: 'families', resourceId: input.familyId, metadata: { name } });
+  revalidatePath('/admin/users');
+  return { ok: true };
+}
+
 export async function adminResendInviteAction(inviteId: string): Promise<Result> {
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
