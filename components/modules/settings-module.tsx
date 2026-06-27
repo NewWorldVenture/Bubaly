@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Settings, Users, Mail, Trash2, Plus, Check } from 'lucide-react';
+import { Settings, Users, Mail, Trash2, Plus, Check, Pencil } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -15,7 +15,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { AvatarPicker } from '@/components/ui/avatar-picker';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
-import { ROLE_LABELS, INVITABLE_ROLES, isAdmin } from '@/lib/constants/roles';
+import { ROLE_LABELS, ROLE_ORDER, INVITABLE_ROLES, isAdmin } from '@/lib/constants/roles';
 import {
   DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, DASHBOARD_DESCRIPTIONS, type DashboardView,
 } from '@/lib/constants/dashboards';
@@ -31,6 +31,7 @@ export function SettingsModule() {
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [editMember, setEditMember] = useState<Tables<'family_members'> | null>(null);
   const [savingFamily, setSavingFamily] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [dashboardView, setDashboardView] = useState<DashboardView>(defaultDashboard);
@@ -222,12 +223,17 @@ export function SettingsModule() {
                 <p className="truncate text-sm font-medium">{m.display_name}</p>
                 <Badge tone="neutral">{ROLE_LABELS[m.role]}</Badge>
               </div>
+              {m.user_id === userId && <Badge tone="brand">You</Badge>}
+              {admin && (
+                <button onClick={() => setEditMember(m)} className="rounded-lg p-2 text-muted hover:text-brand" aria-label={`Edit ${m.display_name}`}>
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
               {admin && m.user_id !== userId && (
                 <button onClick={() => removeMember(m.id)} className="rounded-lg p-2 text-muted hover:text-danger" aria-label="Remove member">
                   <Trash2 className="h-4 w-4" />
                 </button>
               )}
-              {m.user_id === userId && <Badge tone="brand">You</Badge>}
             </li>
           ))}
         </ul>
@@ -246,7 +252,75 @@ export function SettingsModule() {
           onSent={() => { setInviteOpen(false); success('Invite sent!'); }}
         />
       )}
+
+      {editMember && (
+        <EditMemberModal
+          member={editMember}
+          isSelf={editMember.user_id === userId}
+          onClose={() => setEditMember(null)}
+          onSaved={() => { setEditMember(null); success('Member updated'); }}
+        />
+      )}
     </div>
+  );
+}
+
+const MEMBER_COLORS = ['#6366f1', '#ec4899', '#a855f7', '#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#14b8a6'];
+
+function EditMemberModal({ member, isSelf, onClose, onSaved }: {
+  member: Tables<'family_members'>; isSelf: boolean; onClose: () => void; onSaved: () => void;
+}) {
+  const { error: toastError } = useToast();
+  const [name, setName] = useState(member.display_name);
+  const [role, setRole] = useState<MemberRole>(member.role);
+  const [color, setColor] = useState<string>(member.color ?? MEMBER_COLORS[0]);
+  const [saving, setSaving] = useState(false);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return toastError('Name is required.');
+    setSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('family_members')
+      .update({ display_name: name.trim().slice(0, 80), role, color })
+      .eq('id', member.id);
+    setSaving(false);
+    if (error) return toastError(describeDbError(error));
+    onSaved();
+    window.location.reload();
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Edit family member" description="Update their name, role, and color.">
+      <form onSubmit={save} className="space-y-4">
+        <Field label="Name">{(id) => (
+          <Input id={id} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoFocus />
+        )}</Field>
+        <Field label="Role">{(id) => (
+          <Select id={id} value={role} onChange={(e) => setRole(e.target.value as MemberRole)} disabled={isSelf}>
+            {ROLE_ORDER.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+          </Select>
+        )}</Field>
+        {isSelf && <p className="-mt-2 text-xs text-muted">You can&apos;t change your own role.</p>}
+        <div>
+          <p className="mb-1.5 text-sm font-medium">Color</p>
+          <div className="flex flex-wrap gap-2">
+            {MEMBER_COLORS.map((c) => (
+              <button key={c} type="button" onClick={() => setColor(c)} aria-label={`Use color ${c}`}
+                className={cn('h-8 w-8 rounded-full border-2 transition', color === c ? 'border-fg scale-110' : 'border-transparent')}
+                style={{ backgroundColor: c }}>
+                {color === c && <Check className="mx-auto h-4 w-4 text-white" />}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" loading={saving} disabled={!name.trim()}>Save</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

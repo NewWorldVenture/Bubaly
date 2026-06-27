@@ -110,6 +110,40 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result>
 }
 
 /** Re-sends an existing pending invite's email. */
+const EDITABLE_ROLES: MemberRole[] = ['parent', 'adult', 'teen', 'child', 'caregiver', 'guest'];
+
+/** Edit a family member's display name and/or role (site-admin only). */
+export async function adminUpdateMemberAction(input: {
+  memberId: string;
+  displayName?: string;
+  role?: MemberRole;
+}): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+
+  const patch: { display_name?: string; role?: MemberRole } = {};
+  if (typeof input.displayName === 'string') {
+    const name = input.displayName.trim();
+    if (!name) return { ok: false, error: 'Name cannot be empty.' };
+    if (name.length > 80) return { ok: false, error: 'Name is too long (max 80).' };
+    patch.display_name = name;
+  }
+  if (input.role !== undefined) {
+    if (!EDITABLE_ROLES.includes(input.role)) return { ok: false, error: 'Invalid role.' };
+    patch.role = input.role;
+  }
+  if (Object.keys(patch).length === 0) return { ok: false, error: 'Nothing to update.' };
+
+  const supabase = createServiceClient();
+  const { data: member, error } = await supabase.from('family_members')
+    .update(patch).eq('id', input.memberId).select('family_id, display_name, role').single();
+  if (error) return { ok: false, error: error.message };
+
+  await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: input.memberId, metadata: patch });
+  revalidatePath('/admin/users');
+  return { ok: true };
+}
+
 export async function adminResendInviteAction(inviteId: string): Promise<Result> {
   const guard = await assertSuperAdmin();
   if (!guard.ok) return guard;
