@@ -18,6 +18,8 @@ import { resolvePrimary, availableFeatures, lockedFeatures } from '@/lib/dashboa
 import { normalizeSettings, canCustomizeDashboard, effectiveSavedKeys } from '@/lib/dashboard/permissions';
 import { DashboardQuickActions } from '@/components/dashboard/quick-actions';
 import { HomeAskBar } from '@/components/dashboard/home-ask-bar';
+import { Heart } from 'lucide-react';
+import { upcomingRelationship, formatCountdown, milestoneLabel, type RelKind } from '@/lib/relationship/dates';
 
 function greeting() {
   const h = new Date().getHours();
@@ -161,6 +163,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { count: unreadCallsCount },
     { data: layoutRows },
     { data: walletSub },
+    { data: relDateRows },
   ] = await Promise.all([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
@@ -207,7 +210,15 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('dashboard_layouts').select('feature_keys, scope, user_id')
       .eq('family_id', familyId).is('deleted_at', null).in('scope', ['user', 'family']),
     supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']).maybeSingle(),
+    supabase.from('relationship_dates').select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
+      .eq('family_id', familyId).neq('status', 'cancelled').limit(100),
   ]);
+
+  // Soonest relationship date inside its reminder window (gentle proactive nudge).
+  const relReminder = upcomingRelationship(
+    ((relDateRows ?? []) as { id: string; kind: RelKind; title: string; event_date: string; recurs_annually: boolean; reminder_days_before: number; status: string }[])
+      .map((d) => ({ id: d.id, kind: d.kind, title: d.title, eventDate: d.event_date, recursAnnually: d.recurs_annually, reminderDaysBefore: d.reminder_days_before, status: d.status })),
+  )[0];
 
   const openSuggestions = (autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number }[];
   const concierge = (activeConcierge ?? []) as { id: string; title: string; kind: string; status: string }[];
@@ -259,6 +270,19 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
 
       {/* Ask-anything bar → deep-links to the assistant (auto-sends) */}
       <HomeAskBar />
+
+      {/* Relationship reminder — gentle proactive nudge for an upcoming date */}
+      {relReminder && (
+        <Link href="/dashboard/relationship"
+          className="flex items-center gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/5 px-4 py-3 transition hover:bg-rose-500/10">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-500/15 text-rose-300"><Heart className="h-5 w-5" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{relReminder.title} {formatCountdown(relReminder.days).toLowerCase()}</p>
+            <p className="truncate text-xs text-muted">{milestoneLabel(relReminder) ?? 'Plan something special'} · tap for gift ideas</p>
+          </div>
+          <Sparkles className="h-4 w-4 shrink-0 text-rose-300" />
+        </Link>
+      )}
 
       {/* Family members strip */}
       {(members ?? []).length > 1 && (

@@ -121,6 +121,15 @@ export function isReminderDue(d: RelDate, from: Date = new Date()): boolean {
   return days >= 0 && days <= Math.max(0, d.reminderDaysBefore);
 }
 
+/**
+ * Dates that are currently inside their reminder window (e.g. a 14-day reminder
+ * fires when the date is ≤14 days out), soonest first. Used for proactive nudges
+ * like the home-dashboard reminder.
+ */
+export function upcomingRelationship(dates: RelDate[], from: Date = new Date()): UpcomingDate[] {
+  return upcomingDates(dates, { from, withinDays: 60 }).filter((d) => d.days <= d.reminderDaysBefore);
+}
+
 /** A short label for a recurring milestone, e.g. "5th anniversary", "turns 34". */
 export function milestoneLabel(d: UpcomingDate): string | null {
   if (d.years == null || d.years <= 0) return null;

@@ -21,8 +21,11 @@ Last updated after the production bug sweep + frictionless Quick Capture (PR #16
 > - **`/dashboard/relationship`** (`components/modules/relationship-module.tsx`, free/level 0; nav under Daily
 >   Life) — realtime client CRUD for dates + gift ideas + partner prefs; AI suggestions panel ("Save" each
 >   idea → gift list); "From wishlist" picker; countdown + reminder badges. Degrades to empty pre-migration
->   (the hook swallows missing-table). **Next (optional):** surface upcoming dates on the home dashboard;
->   per-day metering on the AI route.
+>   (the hook swallows missing-table).
+> - **Home dashboard nudge** — `ai-home-dashboard.tsx` now loads `relationship_dates` and shows a gentle
+>   rose reminder card (via `upcomingRelationship`, **13th dates test**) when a date is inside its reminder
+>   window, linking to `/dashboard/relationship`. Crash-safe pre-migration (`relDateRows ?? []`).
+>   **Next (optional):** per-day metering on the AI route.
 >
 > ## 🎯 BRAND FOUNDATION — "Less Life Admin. More Living Life." (in progress, branch `claude/festive-bohr-m4cbeg`)
 > New primary tagline + positioning rolled across the marketing site & shared metadata. Hero headline:

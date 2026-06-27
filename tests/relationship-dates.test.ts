@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   nextOccurrence, daysUntil, ordinal, formatCountdown, upcomingDates, isReminderDue, milestoneLabel,
-  type RelDate,
+  upcomingRelationship, type RelDate,
 } from '@/lib/relationship/dates';
 
 // Reference "today": Friday 2026-06-26 (local).
@@ -81,6 +81,17 @@ describe('isReminderDue', () => {
   it('is true inside the reminder window only', () => {
     expect(isReminderDue(D({ eventDate: '2026-06-29', reminderDaysBefore: 14 }), NOW)).toBe(true);
     expect(isReminderDue(D({ eventDate: '2026-12-30', reminderDaysBefore: 14 }), NOW)).toBe(false);
+  });
+});
+
+describe('upcomingRelationship', () => {
+  it('returns only dates inside their reminder window, soonest first', () => {
+    const list = upcomingRelationship([
+      D({ id: 'soon', eventDate: '2026-07-02', reminderDaysBefore: 14 }),   // 6 days out → in window
+      D({ id: 'far', eventDate: '2026-07-20', reminderDaysBefore: 7 }),     // 24 days out → not yet
+      D({ id: 'today', eventDate: '2026-06-26', reminderDaysBefore: 3 }),   // today → in window
+    ], NOW);
+    expect(list.map((d) => d.id)).toEqual(['today', 'soon']);
   });
 });
 
