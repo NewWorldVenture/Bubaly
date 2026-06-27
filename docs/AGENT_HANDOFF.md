@@ -49,6 +49,10 @@ Last updated: Dramatic UI upgrade — wallet/money visual allocation + dark-mode
 >   Send Money, Goal Fund, and Allowance modals.
 >
 > ### Beyond the financial pillars
+> - **Reminders** (`components/modules/reminders-module.tsx`) — the Date & Time field gained
+>   one-tap relative presets (In 1 hour / Tonight 6pm / Tomorrow 9am / This weekend / Next
+>   week). Input is now controlled (`remindAt` state) so presets + manual edits stay in sync;
+>   `toLocalInput()` formats a Date to the local `datetime-local` string.
 > - **Expense splitting** (`components/modules/expenses-module.tsx`) — added a live
 >   Splitwise-style "Splitting $X between N people · ~$Y each" preview in the split form
 >   so parents see the per-person share before saving.
