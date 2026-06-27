@@ -56,6 +56,20 @@ function fmtDue(due: string | null): { label: string; urgent: boolean } {
   return { label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), urgent: false };
 }
 
+/** Format a Date as the `YYYY-MM-DD` string a date input expects (local time). */
+function toLocalDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** One-tap due-date presets for assigning a chore. */
+const QUICK_DUE: { label: string; compute: () => Date }[] = [
+  { label: 'Today', compute: () => new Date() },
+  { label: 'Tomorrow', compute: () => { const d = new Date(); d.setDate(d.getDate() + 1); return d; } },
+  { label: 'This weekend', compute: () => { const d = new Date(); d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7 || 7)); return d; } },
+  { label: 'Next week', compute: () => { const d = new Date(); d.setDate(d.getDate() + ((1 - d.getDay() + 7) % 7 || 7)); return d; } },
+];
+
 function DonutChart({ segments, total }: { segments: { value: number; color: string }[]; total: number }) {
   const R = 30; const C = 2 * Math.PI * R;
   let cumulative = 0;
@@ -439,6 +453,7 @@ function NewChoreModal({ familyId, userId, members, onClose, onSaved }: {
 }) {
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  const [dueAt, setDueAt] = useState('');
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -492,7 +507,15 @@ function NewChoreModal({ familyId, userId, members, onClose, onSaved }: {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Points">{(id) => <Input id={id} name="points" type="number" defaultValue="10" min="0" max="100" />}</Field>
-          <Field label="Due date">{(id) => <Input id={id} name="due_at" type="date" />}</Field>
+          <Field label="Due date">{(id) => <Input id={id} name="due_at" type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />}</Field>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {QUICK_DUE.map((q) => (
+            <button key={q.label} type="button" onClick={() => setDueAt(toLocalDate(q.compute()))}
+              className="rounded-full border border-border px-2.5 py-1 text-xs text-muted transition hover:border-brand/40 hover:text-brand">
+              {q.label}
+            </button>
+          ))}
         </div>
         <Field label="Repeat">
           {(id) => (
