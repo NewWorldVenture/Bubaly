@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Bubaly — Family Operating System',
     short_name: 'Bubaly',
-    description: 'An AI chief of staff for busy households.',
+    description: 'The AI operating system for family life — less life admin, more living life.',
     start_url: '/dashboard',
     scope: '/',
     display: 'standalone',

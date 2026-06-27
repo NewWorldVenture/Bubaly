@@ -3,6 +3,21 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated after the production bug sweep + frictionless Quick Capture (PR #163). Keep this updated as you ship.
 
+> ## 🎯 BRAND FOUNDATION — "Less Life Admin. More Living Life." (in progress, branch `claude/festive-bohr-m4cbeg`)
+> New primary tagline + positioning rolled across the marketing site & shared metadata. Hero headline:
+> "The AI Operating System for Family Life." Hero sub: "Bubaly quietly handles the logistics of family
+> life…so your family can spend less time managing life and more time living it." tsc/lint clean · build ✓
+> (167 pages) · 1153 tests.
+> - **Tagline** now in: homepage hero pill + `app/(marketing)/page.tsx`; eyebrows on Features / How-It-Works
+>   (`components/marketing/reference-showcases.tsx`), AI page (`app/(marketing)/ai/page.tsx`), Pricing
+>   (`pricing-content.tsx`); footer (`site-footer.tsx`); default `CTASection` title (`components/marketing/cta.tsx`).
+> - **Positioning** ("AI operating system for family life", "less time managing life, more time living it")
+>   in: root metadata + OG/Twitter (`app/layout.tsx`), PWA `app/manifest.ts`, homepage sub + divider,
+>   `FamilyAiPanel` (`visual-mocks.tsx`).
+> - **Left intentionally:** AI *persona* system prompts still say "chief of staff" (`app/api/ai/**`,
+>   chat/briefing routes) — those shape model behavior, not site copy; and tier taglines in `plans.ts`.
+>   A future pass could align in-app dashboard strings ("Ask your AI Chief of Staff").
+>
 > ## 🛟 PRODUCTION BUG SWEEP + QUICK CAPTURE (PR #163)
 > Branch `claude/festive-bohr-m4cbeg`. Stops live crashes + frictionless Quick Capture. No migration.
 > - `lib/supabase/errors.ts` missing-relation detection + `useRealtimeQuery` swallows it → all ~69
@@ -10,6 +25,15 @@ Last updated after the production bug sweep + frictionless Quick Capture (PR #16
 >   (Aligned with main's `isMissingTableError`.) `/api/cron/wallet-allowance` returns 200 pre-0088.
 > - **`lib/capture/parse.ts`** (PURE + 25 tests) — natural-language Quick Capture (events/tasks/shopping).
 > - Modal safe-area padding fix; Family Wallet promoted into Suggested nav.
+>
+> ### Post-merge cleanup (after #163 + #161/#162 cross-merged to main)
+> - **Dedup:** the cross-merge added **two** "Family Wallet" entries to the Suggested nav — removed one.
+>   Now once each in Suggested / Finances / Admin.
+> - **Error helpers consolidated:** `isMissingTableError` (added on main) is now a thin alias of the broader
+>   `isMissingRelationError` — single implementation, both import names preserved.
+> - Also shipped this session on the branch: `/capture` shell creates records via shared `saveCapture`;
+>   grocery quantity parsing; capture→assistant `?q=` auto-send; home "Ask Bubaly anything" bar; global
+>   capture shortcut (press C / ⌘-Enter); shell-preserving `app/(app)/error.tsx`. tsc/lint clean · 1153 tests · build ✓.
 
 Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionless Stripe cards, reconciliation, iOS-zoom + missing-table fixes, Wallet promoted in nav. Branch `claude/connect-8ysp00` (PR #162). 1079 tests pass · build clean. Keep this updated as you ship.
 

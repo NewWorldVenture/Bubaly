@@ -51,7 +51,6 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/front-desk', label: 'AI Front Desk', icon: PhoneCall, minLevel: 1 },
       { href: '/dashboard/inbox', label: 'Communications Hub', icon: Inbox, minLevel: 1 },
       { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, minLevel: 0 },
-      { href: '/wallet', label: 'Family Wallet', icon: Wallet, minLevel: 0 },
       { href: '/dashboard/chores', label: 'Tasks & Chores', icon: CheckSquare, minLevel: 1 },
       { href: '/missions', label: 'Family Missions', icon: Trophy, minLevel: 1 },
       { href: '/dashboard/rewards', label: 'Rewards', icon: Gift, minLevel: 1 },

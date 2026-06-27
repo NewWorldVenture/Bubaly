@@ -32,16 +32,16 @@ export default async function HomePage() {
 
           {/* Left */}
           <div className="order-1 text-center lg:text-left">
-            <Pill icon={Sparkles}>AI-Powered Family Command Center!!</Pill>
+            <Pill icon={Sparkles}>Less Life Admin. More Living Life.</Pill>
 
             <h1 className="mt-6 text-[clamp(3rem,11vw,4.1rem)] font-extrabold leading-[1.03] tracking-[-0.038em] lg:text-[4.25rem]">
-              Everything your<br />
-              family needs.<br />
-              <GradientText>In one place.</GradientText>
+              The AI Operating<br />
+              System for<br />
+              <GradientText>Family Life.</GradientText>
             </h1>
 
-            <p className="mx-auto mt-5 max-w-[520px] text-[15px] leading-6 text-white/70 sm:text-base sm:leading-7 lg:mx-0">
-              Bubaly is your AI-powered Operating System for family life. Stay organized, connected, and ahead of what matters most.
+            <p className="mx-auto mt-5 max-w-[540px] text-[15px] leading-6 text-white/70 sm:text-base sm:leading-7 lg:mx-0">
+              Bubaly quietly handles the logistics of family life—phone calls, emails, scheduling, paperwork, reminders, and everyday coordination—so your family can spend less time managing life and more time living it.
             </p>
 
             <div className="mt-7 flex flex-col items-stretch gap-3 xs:flex-row xs:items-center xs:justify-center lg:justify-start">
@@ -63,7 +63,7 @@ export default async function HomePage() {
       {/* ── Tagline divider ── */}
       <div className="mt-12 border-y border-white/[0.06] bg-white/[0.012] py-5 text-center lg:mt-2">
         <p className="text-lg font-semibold text-white/80 sm:text-xl">
-          Your entire family, perfectly organized
+          Less stress. Less mental load. More time together.
         </p>
       </div>
 

@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Section } from './sections';
 
 export function CTASection({
-  title = 'Bring the calm home',
-  subtitle = 'Set up your family in minutes. Invite everyone. Let the AI handle the rest.',
+  title = 'Less Life Admin. More Living Life.',
+  subtitle = 'Set up your family in minutes, invite everyone, and let Bubaly handle the logistics — so you get your time, attention, and peace of mind back.',
 }: {
   title?: string;
   subtitle?: string;

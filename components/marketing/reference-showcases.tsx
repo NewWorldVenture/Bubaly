@@ -164,15 +164,15 @@ export function FeaturesReferencePage() {
     <ReferencePage>
       <div className="mx-auto w-full max-w-[1024px] px-5 pb-2 pt-[26px] sm:px-7">
         <section className="text-center">
-          <Eyebrow>All-in-one family operating system</Eyebrow>
+          <Eyebrow>Less Life Admin. More Living Life.</Eyebrow>
           <h1 className="mt-3 text-[38px] font-extrabold leading-[1.06] tracking-[-0.035em] sm:text-[48px]">
             Everything your family needs,
             <br />
             <GradientText>all in one intelligent place.</GradientText>
           </h1>
           <p className="mx-auto mt-3.5 max-w-[590px] text-[15px] leading-6 text-white/72">
-            Bubaly combines powerful tools with AI intelligence to help your family
-            <br className="hidden sm:block" /> stay organized, connected, and ahead of what matters most.
+            Bubaly combines powerful tools with AI intelligence to handle the invisible work of family life
+            <br className="hidden sm:block" /> — so you spend less time managing life and more time living it.
           </p>
         </section>
 
@@ -405,13 +405,13 @@ export function HowItWorksReferencePage() {
       <div className="mx-auto w-full max-w-[1024px] px-5 pb-3 pt-8 sm:px-[31px]">
         <section className="relative min-h-[463px] lg:h-[463px]">
           <div className="max-w-[414px] pt-[26px] lg:pl-[14px]">
-            <Eyebrow>Simple. Smart. Life-changing.</Eyebrow>
+            <Eyebrow>Less Life Admin. More Living Life.</Eyebrow>
             <h1 className="mt-3 text-[50px] font-extrabold leading-[1.05] tracking-[-0.04em] sm:text-[58px]">
               How Bubaly
               <br />
               <GradientText>Works</GradientText>
             </h1>
-            <p className="mt-[16px] max-w-[390px] text-[16px] leading-[26px] text-white/78">Bubaly is your family&apos;s AI-powered operating<br className="hidden sm:block" /> system. It brings everything together—and helps<br className="hidden sm:block" /> you stay ahead of what matters most.</p>
+            <p className="mt-[16px] max-w-[390px] text-[16px] leading-[26px] text-white/78">Bubaly is the AI operating system for family<br className="hidden sm:block" /> life. It quietly handles the logistics behind the<br className="hidden sm:block" /> scenes—so you get your time back to live it.</p>
             <div className="mt-[20px] flex flex-wrap gap-[15px]">
               <PrimaryButton>Get Started Free <ArrowRight className="h-4 w-4" /></PrimaryButton>
               <OutlineButton href="#steps">See It in Action</OutlineButton>
