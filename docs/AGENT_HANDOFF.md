@@ -70,6 +70,10 @@ Last updated: Capture — AI routing, direct-file, photo/scan, tier-gated button
 >   `FILEABLE_KEYS` / `TIME_FILEABLE_KEYS` / `canFile` / `parseCaptureExtraction` /
 >   `buildCaptureExtractionPrompt` live in `lib/capture/routing.ts` (a `'use server'` file can't
 >   export sync fns). To add more: extend those sets + add a branch in `fileCaptureAction`.
+> - **One-tap Undo after filing**: `fileCaptureAction` returns the created row's `{table, id}`
+>   (`UndoRef`); `undoCaptureAction` deletes it (RLS-scoped, `UNDOABLE_TABLES` allowlist). After
+>   filing, Capture shows an inline success card (Open / Undo / New) instead of navigating away;
+>   editing the note clears it.
 > - **"Capture with AI" is now real AI** (was a `setTimeout` over a client regex):
 >   `app/api/ai/capture/route.ts` asks the configured model (via `resolveProvider`) to pick
 >   the best destination key, **tier-gated server-side** so a note never routes to a locked
