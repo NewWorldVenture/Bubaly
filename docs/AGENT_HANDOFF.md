@@ -19,6 +19,15 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 > - The Front Desk's "Recently handled" → "Full timeline" link lands here, so the concierge proof now
 >   leads to a genuinely searchable memory. No migration, no external deps.
 
+> **Session update (2026-06-27) — DAILY BRIEFING: auto-generates on open (frictionless).**
+> The briefing forced a manual "Generate" click every visit. It already caches per-day in
+> `sessionStorage`, so now `briefing-module.tsx` **auto-generates the active tab once** when there's no
+> cached briefing — opening the page just shows the briefing (the GenerateCTA renders its loading state
+> meanwhile). Guarded by a `hydrated` flag (set at the end of the cache-load effect) so it never wastes
+> an AI call when a cache exists, and an `autoTried` ref so failures don't loop and tab-switching doesn't
+> re-fire. Kitchen mode never auto-generates; manual Refresh/Generate still work. tsc clean · build 0 ·
+> **1056/1056**. No migration.
+
 > **Session update (2026-06-27) — FAMILY FRONT DESK (the AI concierge hub).**
 > Packages the scattered concierge capabilities into one branded surface — the "Family AI Front Desk"
 > from the product vision (every call answered / email understood / form processed). The capabilities
