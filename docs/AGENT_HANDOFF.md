@@ -38,6 +38,13 @@ Last updated: Calendar — personal/work/family lens + AI "find a time" scheduli
 >   `components/dashboard/calendar-sync-panel.tsx` (Lens + Belongs-to selects + badges on each feed),
 >   `app/api/google/calendar/sync/route.ts` (tags synced events `assignee_id = signing member`, `context
 >   'personal'`). `lib/validation.ts` `eventSchema` gained `context` + `assignee_id`.
+> - **Real Month + Agenda views** (the tabs were previously dead — `view` was tracked but never
+>   switched rendering): `calendar-module.tsx` now fetches a view-aware range (week / 6-week month
+>   grid / next-45-days agenda), nav buttons step by week or month, `Today` resets both. `MonthView`
+>   = traditional 6-week grid with ≤3 event chips/day + overflow count + hover "+" to add on that
+>   day (prefills the new-event start at 9am via `defaultDate`). `AgendaView` = chronological list
+>   grouped by day (Today/Tomorrow/weekday). Both respect the member + lens filters and show context
+>   dots. Helpers `byDay` / `monthGridDays` / `localKey` (local-date keys, not UTC).
 > - Verified: tsc clean · build exit 0 · **1056/1056** (+9 calendar tests). **Apply 0094 to prod**, then
 >   regen types. Reads degrade gracefully pre-migration; writes that set `context` need 0094 applied first
 >   (deploy migration before code, as usual).

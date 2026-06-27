@@ -70,6 +70,32 @@ function fmtHour(h: number) {
   return h === 12 ? '12 PM' : h < 12 ? `${h} AM` : `${h - 12} PM`;
 }
 
+// Group events by local ISO date (YYYY-MM-DD).
+function byDay(events: Event[]): Map<string, Event[]> {
+  const map = new Map<string, Event[]>();
+  for (const e of events) {
+    const d = new Date(e.starts_at);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(e);
+  }
+  return map;
+}
+
+// 42 days (6 weeks) covering the month that `anchor` falls in, Monday-first.
+function monthGridDays(anchor: Date): Date[] {
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const startOffset = (first.getDay() + 6) % 7;
+  const gridStart = new Date(first);
+  gridStart.setDate(1 - startOffset);
+  gridStart.setHours(0, 0, 0, 0);
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    return d;
+  });
+}
+
 function eventTop(e: Event): number {
   const d = new Date(e.starts_at);
   return ((d.getHours() - 6) * 60 + d.getMinutes()) * (HOUR_HEIGHT / 60);
@@ -136,7 +162,9 @@ export function CalendarModule() {
   const [filterMember, setFilterMember] = useState<string>('all');
   const [filterContext, setFilterContext] = useState<'all' | CalendarContext>('all');
   const [findOpen, setFindOpen] = useState(false);
+  const [prefillDate, setPrefillDate] = useState<Date | null>(null);
   const [view, setView] = useState<'week' | 'month' | 'agenda'>('week');
+  const [monthAnchor, setMonthAnchor] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [gcalConnected, setGcalConnected] = useState<boolean | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [mobileDayIndex, setMobileDayIndex] = useState(() => {
@@ -148,6 +176,16 @@ export function CalendarModule() {
 
   const monday = useMemo(() => weekStart(weekOffset), [weekOffset]);
   const days = useMemo(() => daysOfWeek(monday), [monday]);
+
+  // The 6-week (42-cell) grid covering the anchored month, Monday-first.
+  const monthGrid = useMemo(() => monthGridDays(monthAnchor), [monthAnchor]);
+
+  // Fetch bounds widen with the view so month/agenda see beyond the current week.
+  const range = useMemo(() => {
+    if (view === 'month') return { start: monthGrid[0], end: new Date(monthGrid[41].getTime() + 86400000) };
+    if (view === 'agenda') { const s = new Date(); s.setHours(0, 0, 0, 0); return { start: s, end: new Date(s.getTime() + 45 * 86400000) }; }
+    return { start: days[0], end: new Date(days[6].getTime() + 86400000) };
+  }, [view, days, monthGrid]);
 
   useEffect(() => {
     fetch('/api/google/calendar/sync').then(r => r.json()).then((d: { connected: boolean }) => setGcalConnected(d.connected)).catch(() => setGcalConnected(false));
@@ -162,10 +200,10 @@ export function CalendarModule() {
   }, []);
 
   const { data, loading, error, refresh } = useRealtimeQuery<Event>({
-    table: 'calendar_events', familyId, deps: [familyId, monday.toISOString()],
+    table: 'calendar_events', familyId, deps: [familyId, view, range.start.toISOString(), range.end.toISOString()],
     fetcher: (supabase) =>
       supabase.from('calendar_events').select('*').eq('family_id', familyId)
-        .gte('starts_at', days[0].toISOString()).lte('starts_at', new Date(days[6].getTime() + 86400000).toISOString())
+        .gte('starts_at', range.start.toISOString()).lte('starts_at', range.end.toISOString())
         .order('starts_at'),
   });
 
@@ -246,7 +284,15 @@ export function CalendarModule() {
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
-  const dateLabel = `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  const dateLabel = view === 'month'
+    ? monthAnchor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : view === 'agenda'
+      ? 'Next 45 days'
+      : `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+  const goToday = () => { setWeekOffset(0); setMonthAnchor(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); }); };
+  const goPrev = () => view === 'month' ? setMonthAnchor(m => new Date(m.getFullYear(), m.getMonth() - 1, 1)) : setWeekOffset(w => w - 1);
+  const goNext = () => view === 'month' ? setMonthAnchor(m => new Date(m.getFullYear(), m.getMonth() + 1, 1)) : setWeekOffset(w => w + 1);
 
   return (
     <div className="module-with-sidebar">
@@ -287,11 +333,13 @@ export function CalendarModule() {
           {/* Nav + view switcher row */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
-              <button onClick={() => { setWeekOffset(0); }} className="btn-inline">Today</button>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setWeekOffset(w => w - 1)} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronLeft className="h-4 w-4" /></button>
-                <button onClick={() => setWeekOffset(w => w + 1)} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronRight className="h-4 w-4" /></button>
-              </div>
+              <button onClick={goToday} className="btn-inline">Today</button>
+              {view !== 'agenda' && (
+                <div className="flex items-center gap-1">
+                  <button onClick={goPrev} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronLeft className="h-4 w-4" /></button>
+                  <button onClick={goNext} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronRight className="h-4 w-4" /></button>
+                </div>
+              )}
               <span className="text-sm font-semibold">{dateLabel}</span>
             </div>
 
@@ -346,6 +394,7 @@ export function CalendarModule() {
           </div>
         </div>
 
+        {view === 'week' && (<>
         {/* ===== MOBILE DAY VIEW (below md) ===== */}
         <div className="flex flex-1 flex-col overflow-y-auto md:hidden">
           {/* Mobile day selector */}
@@ -499,6 +548,17 @@ export function CalendarModule() {
             })}
           </div>
         </div>
+        </>)}
+
+        {view === 'month' && (
+          <MonthView grid={monthGrid} anchorMonth={monthAnchor.getMonth()}
+            eventsByDay={byDay(filtered)} memberById={memberById} onSelect={setSelected}
+            onDayAdd={(d) => { setPrefillDate(d); setOpen(true); }} />
+        )}
+
+        {view === 'agenda' && (
+          <AgendaView events={filtered} memberById={memberById} onSelect={setSelected} />
+        )}
       </div>
 
       {/* Right sidebar */}
@@ -552,17 +612,25 @@ export function CalendarModule() {
         </div>
       </div>
 
-      {open && <NewEventModal familyId={familyId} userId={userId} members={members} selfMemberId={selfMember?.id ?? null} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); void refresh(); }} />}
+      {open && <NewEventModal familyId={familyId} userId={userId} members={members} selfMemberId={selfMember?.id ?? null} defaultDate={prefillDate} onClose={() => { setOpen(false); setPrefillDate(null); }} onSaved={() => { setOpen(false); setPrefillDate(null); void refresh(); }} />}
       {findOpen && <FindTimeModal members={members} selfMemberId={selfMember?.id ?? null} onClose={() => setFindOpen(false)} onScheduled={() => { setFindOpen(false); void refresh(); }} />}
       {selected && <EventDetailModal event={selected} members={members} selfMemberId={selfMember?.id ?? null} familyId={familyId} onClose={() => setSelected(null)} />}
     </div>
   );
 }
 
-function NewEventModal({ familyId, userId, members, selfMemberId, onClose, onSaved }: { familyId: string; userId: string; members: ReturnType<typeof useApp>['members']; selfMemberId: string | null; onClose: () => void; onSaved: () => void }) {
+function NewEventModal({ familyId, userId, members, selfMemberId, defaultDate, onClose, onSaved }: { familyId: string; userId: string; members: ReturnType<typeof useApp>['members']; selfMemberId: string | null; defaultDate?: Date | null; onClose: () => void; onSaved: () => void }) {
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Prefill the start field with the tapped day at 9am (local), formatted for datetime-local.
+  const defaultStart = useMemo(() => {
+    if (!defaultDate) return '';
+    const d = new Date(defaultDate); d.setHours(9, 0, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }, [defaultDate]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -633,7 +701,7 @@ function NewEventModal({ familyId, userId, members, selfMemberId, onClose, onSav
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Starts" error={errors.starts_at} required>
-            {(id) => <Input id={id} name="starts_at" type="datetime-local" />}
+            {(id) => <Input id={id} name="starts_at" type="datetime-local" defaultValue={defaultStart} />}
           </Field>
           <Field label="Ends" error={errors.ends_at}>
             {(id) => <Input id={id} name="ends_at" type="datetime-local" />}
@@ -664,5 +732,133 @@ function NewEventModal({ familyId, userId, members, selfMemberId, onClose, onSav
         </div>
       </form>
     </Modal>
+  );
+}
+
+const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function localKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Traditional month grid (6 weeks) with up to 3 event chips per day + an overflow
+// count. Hovering a day reveals a quick "+" to add an event on that date.
+function MonthView({ grid, anchorMonth, eventsByDay, memberById, onSelect, onDayAdd }: {
+  grid: Date[];
+  anchorMonth: number;
+  eventsByDay: Map<string, Event[]>;
+  memberById: Map<string, ReturnType<typeof useApp>['members'][number]>;
+  onSelect: (e: Event) => void;
+  onDayAdd: (d: Date) => void;
+}) {
+  const todayKey = localKey(new Date());
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="grid grid-cols-7 border-b border-border">
+        {WEEKDAY_LABELS.map((d) => (
+          <div key={d} className="py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-muted">{d}</div>
+        ))}
+      </div>
+      <div className="grid flex-1 grid-cols-7 grid-rows-6 overflow-y-auto">
+        {grid.map((d, i) => {
+          const key = localKey(d);
+          const dayEvents = (eventsByDay.get(key) ?? []).slice().sort((a, b) => +new Date(a.starts_at) - +new Date(b.starts_at));
+          const inMonth = d.getMonth() === anchorMonth;
+          const isToday = key === todayKey;
+          return (
+            <div key={i} className={cn('group relative min-h-[84px] border-b border-l border-border p-1', !inMonth && 'bg-surface/30')}>
+              <div className="mb-1 flex items-center justify-between">
+                <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold',
+                  isToday ? 'bg-brand text-white' : inMonth ? 'text-fg' : 'text-muted')}>
+                  {d.getDate()}
+                </span>
+                <button onClick={() => onDayAdd(d)} aria-label="Add event"
+                  className="opacity-0 transition group-hover:opacity-100 rounded p-0.5 text-muted hover:bg-elevated hover:text-brand">
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="space-y-0.5">
+                {dayEvents.slice(0, 3).map((e) => {
+                  const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
+                  return (
+                    <button key={e.id} onClick={() => onSelect(e)}
+                      className={cn('flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[10px] font-medium transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', CONTEXT_META[eventContext(e)].dot)} />
+                      {!e.all_day && <span className="shrink-0 opacity-70">{new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', hour12: true })}</span>}
+                      <span className="truncate">{e.title}</span>
+                      {member && <span className="ml-auto shrink-0"><Avatar name={member.display_name} color={member.color} size={12} /></span>}
+                    </button>
+                  );
+                })}
+                {dayEvents.length > 3 && (
+                  <div className="px-1 text-[10px] font-medium text-muted">+{dayEvents.length - 3} more</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// A clean chronological list grouped by day — the fastest way to scan what's next.
+function AgendaView({ events, memberById, onSelect }: {
+  events: Event[];
+  memberById: Map<string, ReturnType<typeof useApp>['members'][number]>;
+  onSelect: (e: Event) => void;
+}) {
+  const todayKey = localKey(new Date());
+  const tomorrowKey = localKey(new Date(Date.now() + 86400000));
+  const groups = useMemo(() => {
+    const map = byDay(events);
+    return [...map.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, evs]) => [key, evs.slice().sort((a, b) => +new Date(a.starts_at) - +new Date(b.starts_at))] as const);
+  }, [events]);
+
+  if (groups.length === 0) {
+    return <div className="flex flex-1 items-center justify-center p-10"><p className="text-sm text-muted">Nothing scheduled in this window.</p></div>;
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+      <div className="mx-auto max-w-2xl space-y-5">
+        {groups.map(([key, evs]) => {
+          const d = new Date(key + 'T00:00:00');
+          const label = key === todayKey ? 'Today' : key === tomorrowKey ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'long' });
+          return (
+            <div key={key}>
+              <div className="mb-2 flex items-baseline gap-2">
+                <span className={cn('text-sm font-bold', key === todayKey ? 'text-brand' : 'text-fg')}>{label}</span>
+                <span className="text-xs text-muted">{d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</span>
+              </div>
+              <div className="space-y-1.5">
+                {evs.map((e) => {
+                  const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
+                  return (
+                    <button key={e.id} onClick={() => onSelect(e)}
+                      className="flex w-full items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5 text-left transition hover:border-brand/40 hover:bg-elevated">
+                      <div className="w-16 shrink-0 text-xs font-semibold text-muted">
+                        {e.all_day ? 'All day' : new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                      </div>
+                      <span className={cn('h-8 w-1 shrink-0 rounded-full', CONTEXT_META[eventContext(e)].dot)} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold">{e.title}</div>
+                        <div className="flex items-center gap-2 text-xs text-muted">
+                          <span className={cn('rounded px-1 py-0.5 text-[10px] font-medium', CONTEXT_META[eventContext(e)].chip)}>{CONTEXT_LABELS[eventContext(e)]}</span>
+                          {e.location && <span className="flex items-center gap-0.5 truncate"><MapPin className="h-3 w-3" />{e.location}</span>}
+                        </div>
+                      </div>
+                      {member && <Avatar name={member.display_name} color={member.color} size={22} />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
