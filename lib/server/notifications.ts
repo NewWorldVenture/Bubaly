@@ -8,6 +8,7 @@ import type { Database, NotificationType } from '@/lib/database.types';
 import { renewalReminders, opportunityReminders } from '@/lib/notifications/deadline-reminders';
 import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
+import { dueFamilyReminderNotices, reminderFetchHorizonIso, type FamilyReminderRow } from '@/lib/reminders/notify';
 
 type DB = SupabaseClient<Database>;
 
@@ -170,6 +171,23 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       type: 'system', related_type: 'relationship_dates', related_id: `${d.id}:${d.next.getFullYear()}`, user_id: null,
       title: `💞 ${d.title} ${formatCountdown(d.days).toLowerCase()}`,
       body: ms ? `${ms} · plan something special` : 'Open the Relationship Helper for gift ideas',
+    });
+  }
+
+  // Rich family reminders (the /dashboard/reminders service) — these never
+  // notified before. Fire when the effective time (due minus the early-reminder
+  // lead) is within the window; dedup permanently per reminder.
+  const { data: famReminders } = await supabase.from('family_reminders')
+    .select('id, title, remind_at, status, early_reminder_minutes, member_id')
+    .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
+    .gte('remind_at', nowIso).lte('remind_at', reminderFetchHorizonIso(now));
+  for (const n of dueFamilyReminderNotices((famReminders ?? []) as FamilyReminderRow[], now)) {
+    const r = (famReminders ?? []).find((x) => x.id === n.id)!;
+    candidates.push({
+      type: 'system', related_type: 'family_reminders', related_id: `fr:${n.id}`,
+      user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null,
+      title: `Reminder: ${n.title}`,
+      body: `Due ${timeLabel(n.remindAtIso)}`,
     });
   }
 

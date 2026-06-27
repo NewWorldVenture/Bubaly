@@ -1,8 +1,36 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after AI Trip Intelligence (PR #168). Keep this updated as you ship.
+Last updated: 2026-06-27 — Reminders recurrence advancement + list-filtering + notifications (after #167/#168 merged). Keep this updated as you ship.
 
+> ## ⏰ REMINDERS — LIST FILTERING (follow-up to merged #167, branch `claude/festive-bohr-m4cbeg`)
+> #167 (iOS-parity reminder details: lists/url/early-reminder/flag/subtasks/image/tags via migration 0100)
+> is MERGED. This follow-up adds the "organize by list" view to `components/modules/reminders-module.tsx`:
+> a **List filter** dropdown (All / each list / No list) beside the type filter, plus a **delete-list**
+> trash button when a specific list is selected (reminders kept; FK `ON DELETE SET NULL` un-lists them).
+> No new migration (uses 0100's `reminder_lists` + `list_id`). tsc clean.
+> **Also wired notification delivery for family reminders** (they never notified before): `lib/reminders/
+> notify.ts` (PURE, **5 tests**) `dueFamilyReminderNotices` (fires when due-minus-early-lead is within the
+> 24h window) + `reminderFetchHorizonIso`; wired into `lib/server/notifications.ts` `generateFamilyNotifications`
+> (new `family_reminders` block, dedup `fr:${id}`, push+email via the existing pipeline). Pre-0100-safe
+> (`early_reminder_minutes` query degrades to no-op).
+> **Also added recurrence advancement** (recurring reminders were inert — recurrence stored but completing
+> never spawned the next one): `nextRemindAt(remindAtIso, recurrence)` in `lib/reminders/details.ts` (PURE,
+> +3 tests → 10 total) does the date math (daily / weekdays-skip-weekend / weekly / biweekly / monthly /
+> yearly; null for `none`/bad input). `complete(reminder)` in `reminders-module.tsx` now marks the current
+> one `completed` (kept as history, iOS-style) and inserts the next occurrence (subtasks reset to unchecked,
+> `status:'active'`); toast says "Completed ✓ — next one scheduled". stripNewCols fallback keeps it pre-0100-safe.
+> **Also added Flagged + Tag filtering** (iOS "Flagged" smart list + tap-a-tag-to-filter): `reminders-module.tsx`
+> gets a **Flagged** toggle in the filter row + a **tag-chip row** (every tag in use; tap to filter, tap again
+> to clear) + clickable per-card tag chips. Empty state is now filter-aware ("No matching reminders" + Clear
+> filters when `filtersActive`). All pure client-side filtering — no migration, no new query.
+> **Also added inline subtask check-off**: the subtask count badge on each card is now an expand toggle
+> (`expanded` Set state + ChevronDown); expanding reveals the subtasks with checkboxes that persist via
+> `toggleSubtask(reminder, subtaskId)` (updates the `subtasks` jsonb; degrades silently pre-0100). No more
+> opening the editor just to tick one off.
+> NOTE: main now has a **0098 collision** — `0098_relationship_helper.sql` AND `0098_trip_intelligence.sql`
+> both exist (parallel merges). Harmless to the app but the next migration author should be aware; apply both.
+>
 > ## 🧳 AI TRIP INTELLIGENCE (PR #168) — destination research + Smart Departure
 > Branch `claude/connect-8ysp00`. Turns a located calendar event into AI destination research +
 > a working-backward departure plan that monitors traffic & weather. ⚠️ **Migration

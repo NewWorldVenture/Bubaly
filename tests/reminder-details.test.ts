@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   earlyReminderLabel, earlyReminderAt, parseTags, formatTags,
-  normalizeSubtasks, newSubtask, subtaskProgress, isValidHttpUrl,
+  normalizeSubtasks, newSubtask, subtaskProgress, isValidHttpUrl, nextRemindAt,
 } from '@/lib/reminders/details';
 
 describe('earlyReminderLabel', () => {
@@ -55,6 +55,24 @@ describe('subtaskProgress', () => {
   it('counts done vs total', () => {
     expect(subtaskProgress([newSubtask('a'), { ...newSubtask('b'), done: true }])).toEqual({ done: 1, total: 2 });
     expect(subtaskProgress([])).toEqual({ done: 0, total: 0 });
+  });
+});
+
+describe('nextRemindAt', () => {
+  it('advances by the recurrence interval', () => {
+    expect(nextRemindAt('2026-07-01T09:00:00.000Z', 'daily')).toBe('2026-07-02T09:00:00.000Z');
+    expect(nextRemindAt('2026-07-01T09:00:00.000Z', 'weekly')).toBe('2026-07-08T09:00:00.000Z');
+    expect(nextRemindAt('2026-07-01T09:00:00.000Z', 'biweekly')).toBe('2026-07-15T09:00:00.000Z');
+    expect(nextRemindAt('2026-07-01T09:00:00.000Z', 'monthly')).toBe('2026-08-01T09:00:00.000Z');
+    expect(nextRemindAt('2026-07-01T09:00:00.000Z', 'yearly')).toBe('2027-07-01T09:00:00.000Z');
+  });
+  it('weekdays skips the weekend (Fri → Mon)', () => {
+    // 2026-07-03 is a Friday → next weekday is Monday 2026-07-06.
+    expect(nextRemindAt('2026-07-03T09:00:00.000Z', 'weekdays')).toBe('2026-07-06T09:00:00.000Z');
+  });
+  it('returns null for none/unknown/bad input', () => {
+    expect(nextRemindAt('2026-07-01T09:00:00.000Z', 'none')).toBeNull();
+    expect(nextRemindAt('not-a-date', 'daily')).toBeNull();
   });
 });
 
