@@ -17,6 +17,15 @@ export default async function WebsiteTemplateAdmin() {
   const tplRows = (templates ?? []) as SeoPageTemplateRow[];
   const pageRows = (pages ?? []) as SeoPageRow[];
 
+  // ── Analytics ──
+  const publishedCount = pageRows.filter((p) => p.status === 'published').length;
+  const totalViews = pageRows.reduce((s, p) => s + (p.views ?? 0), 0);
+  const topPages = [...pageRows]
+    .filter((p) => (p.views ?? 0) > 0)
+    .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))
+    .slice(0, 8)
+    .map((p) => ({ slug: p.slug, views: p.views ?? 0, status: p.status, label: p.variables.state || p.variables.city || p.slug }));
+
   const pagesByTemplate = new Map<string, PageView[]>();
   for (const p of pageRows) {
     const arr = pagesByTemplate.get(p.template_id) ?? [];
@@ -56,6 +65,42 @@ export default async function WebsiteTemplateAdmin() {
         look &amp; feel, include FAQ structured data for answer engines, and are managed centrally —
         editing the template instantly updates every page it produced.
       </div>
+
+      {/* Analytics summary */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          { label: 'Templates', value: tplRows.length },
+          { label: 'Total pages', value: pageRows.length },
+          { label: 'Published', value: publishedCount },
+          { label: 'Total views', value: totalViews.toLocaleString() },
+        ].map((s) => (
+          <div key={s.label} className="rounded-2xl border border-border bg-surface/40 p-4">
+            <p className="text-xs text-muted">{s.label}</p>
+            <p className="mt-1 text-2xl font-bold text-fg">{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {topPages.length > 0 && (
+        <div className="rounded-2xl border border-border bg-surface/40 overflow-hidden">
+          <div className="border-b border-border px-4 py-3">
+            <h2 className="text-sm font-semibold text-fg">Top performing pages</h2>
+          </div>
+          <div className="divide-y divide-border">
+            {topPages.map((p) => (
+              <div key={p.slug} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-medium">{p.label}</span>
+                  <a href={`/${p.slug}`} target="_blank" rel="noreferrer" className="ml-2 font-mono text-xs text-muted hover:text-brand">/{p.slug}</a>
+                </span>
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${p.status === 'published' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-surface text-muted'}`}>{p.status}</span>
+                <span className="w-16 text-right font-semibold tabular-nums">{p.views.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <WebsiteTemplateClient templates={templateViews} />
     </div>
   );
