@@ -369,7 +369,16 @@ function TemplateEditor({ template, onClose }: { template: TemplateView | null; 
               <div><label className={label}>Template name</label><input className={input} value={d.name} onChange={(e) => set('name', e.target.value)} placeholder="Family Organizer by State" /></div>
               <div><label className={label}>Topic (optional)</label><input className={input} value={d.topic} onChange={(e) => set('topic', e.target.value)} placeholder="family-organizer" /></div>
             </div>
-            <div><label className={label}>Slug pattern</label><input className={cn(input, 'font-mono')} value={d.slugPattern} onChange={(e) => set('slugPattern', e.target.value)} placeholder="family-organizer/{state_slug}" /></div>
+            <div>
+              <label className={label}>Slug pattern</label>
+              <input className={cn(input, 'font-mono')} value={d.slugPattern} onChange={(e) => set('slugPattern', e.target.value)} placeholder="family-organizer/{state_slug}" />
+              {d.slugPattern && !d.slugPattern.includes('{') && (
+                <p className="mt-1 text-xs text-amber-500">
+                  No variable in the slug — every state resolves to the same URL, so only one page can be generated. Add e.g. <code className="text-brand">{'{state_slug}'}</code>.
+                </p>
+              )}
+              <p className="mt-1 text-[11px] text-muted">Resolves to <span className="font-mono text-fg">/{preview.slug || '…'}</span></p>
+            </div>
             <div><label className={label}>Eyebrow</label><input className={input} value={d.eyebrow} onChange={(e) => set('eyebrow', e.target.value)} /></div>
             <div><label className={label}>Headline (H1)</label><input className={input} value={d.h1Template} onChange={(e) => set('h1Template', e.target.value)} /></div>
             <div><label className={label}>Subhead</label><textarea className={area} rows={2} value={d.subheadTemplate} onChange={(e) => set('subheadTemplate', e.target.value)} /></div>
