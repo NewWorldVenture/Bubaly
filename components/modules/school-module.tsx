@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
+import { toLocalDateTimeInput, QUICK_TIME_PRESETS } from '@/lib/utils/quick-dates';
 import type { Tables, GradeType } from '@/lib/database.types';
 
 type SchoolEvent = Tables<'school_events'>;
@@ -607,7 +608,19 @@ export function SchoolModule() {
           <Field label="Title">{(id) => <Input id={id} value={eventForm.title} onChange={(e) => setEventForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Math Worksheet" />}</Field>
           <Field label="Type">{(id) => <Select id={id} value={eventForm.event_type} onChange={(e) => setEventForm((f) => ({ ...f, event_type: e.target.value }))}>{EVENT_TYPES.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}</Select>}</Field>
           <Field label="Student">{(id) => <Select id={id} value={eventForm.member_id} onChange={(e) => setEventForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">All</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
-          <Field label="Date & Time">{(id) => <Input id={id} type="datetime-local" value={eventForm.starts_at} onChange={(e) => setEventForm((f) => ({ ...f, starts_at: e.target.value }))} />}</Field>
+          <Field label="Date & Time">{(id) => (
+            <div className="space-y-2">
+              <Input id={id} type="datetime-local" value={eventForm.starts_at} onChange={(e) => setEventForm((f) => ({ ...f, starts_at: e.target.value }))} />
+              <div className="flex flex-wrap gap-1.5">
+                {QUICK_TIME_PRESETS.map((q) => (
+                  <button key={q.label} type="button" onClick={() => setEventForm((f) => ({ ...f, starts_at: toLocalDateTimeInput(q.compute()) }))}
+                    className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted transition hover:border-brand/40 hover:text-brand">
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}</Field>
           <Field label="School">{(id) => <Input id={id} value={eventForm.school_name} onChange={(e) => setEventForm((f) => ({ ...f, school_name: e.target.value }))} placeholder="Optional" />}</Field>
           <Field label="Notes">{(id) => <Input id={id} value={eventForm.notes} onChange={(e) => setEventForm((f) => ({ ...f, notes: e.target.value }))} />}</Field>
           <Button className="w-full" onClick={saveEvent} disabled={saving || !eventForm.title || !eventForm.starts_at}>{saving ? 'Saving...' : 'Add Event'}</Button>
