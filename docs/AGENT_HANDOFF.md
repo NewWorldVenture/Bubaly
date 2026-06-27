@@ -28,6 +28,13 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 > re-fire. Kitchen mode never auto-generates; manual Refresh/Generate still work. tsc clean · build 0 ·
 > **1056/1056**. No migration.
 
+> **Session update (2026-06-27) — FRONT DESK <-> SCHEDULER deep link.**
+> The Front Desk "AI Scheduling Agent" card landed on `/dashboard/calendar` but didn't launch the
+> scheduler. Now the card links to `/dashboard/calendar?find=1`, and `calendar-module.tsx`'s mount
+> effect reads `?find=1` -> opens the **Find a time** modal and cleans the URL (same pattern as the
+> existing `?gcal=` handling). One tap from the concierge card straight into the AI scheduler built
+> earlier this session. tsc clean · build 0 · **1056/1056**. No migration.
+
 > **Session update (2026-06-27) — FAMILY FRONT DESK (the AI concierge hub).**
 > Packages the scattered concierge capabilities into one branded surface — the "Family AI Front Desk"
 > from the product vision (every call answered / email understood / form processed). The capabilities

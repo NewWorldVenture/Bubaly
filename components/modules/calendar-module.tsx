@@ -192,6 +192,8 @@ export function CalendarModule() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('gcal') === 'connected') { success('Google Calendar connected!'); window.history.replaceState({}, '', window.location.pathname); }
     else if (params.get('gcal') === 'error') { toastError('Google Calendar connection failed.'); window.history.replaceState({}, '', window.location.pathname); }
+    // Deep-link from the Front Desk "AI Scheduling Agent" card → open Find a time.
+    if (params.get('find') === '1') { setFindOpen(true); window.history.replaceState({}, '', window.location.pathname); }
   }, [success, toastError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll to 7am on mount

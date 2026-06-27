@@ -87,7 +87,7 @@ export default async function FrontDeskPage() {
     {
       icon: CalendarClock, title: 'AI Scheduling Agent', tone: 'text-sky-400',
       desc: 'Finds a time everyone is free and books it — across each person’s calendar in one tap.',
-      href: '/dashboard/calendar', status: 'active',
+      href: '/dashboard/calendar?find=1', status: 'active',
       meta: eventCount && eventCount > 0 ? `${eventCount} events this week` : 'Find a time',
     },
     {
