@@ -60,6 +60,15 @@ Last updated: Programmatic SEO/AEO page generator (2026-06-26q). Keep this updat
 >   on one URL) and shows the live resolved slug under the field.
 > - robots.txt already references the sitemap and disallows app surfaces — SEO pages are crawlable.
 >
+> ### Hub / index pages (auto-derived, zero config)
+> Each template automatically gets a **hub page** at its slug pattern's static prefix
+> (`family-organizer/{state_slug}` → `/family-organizer`), via `hubSlug()` in
+> `lib/seo/template.ts`. The catch-all route falls back to `loadHub()` when no exact page
+> matches: it renders a **directory grid of every published location** + generic hero copy
+> (HUB_VARS: state = "the United States") + `CollectionPage` & `ItemList` JSON-LD. Individual
+> pages link up to the hub ("Browse all locations"); hub URLs are in the sitemap. The route is
+> refactored into shared `Hero`/`IntroAndFeatures`/`ClosingCTA` blocks used by both views.
+>
 > ### Extending beyond states (documented for next agent)
 > The variable system is generic (`seo_pages.variables` jsonb). To add a new dimension (cities,
 > topics, competitors), add a dataset like `states.ts`, a `<thing>Vars()` mapper, and a branch in
