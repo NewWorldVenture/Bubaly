@@ -1,9 +1,29 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the Social Feed (consumption) — PR pending. Keep this updated as you ship.
+Last updated after Social Feed access + super-admin full-unlock (PR pending). Keep this updated as you ship.
 
-> ## 📰 SOCIAL FEED — "All your social feeds. One place." (PR pending)
+> ## 🔓 SOCIAL FEED ACCESS + SUPER-ADMIN FULL UNLOCK (PR pending, branch `claude/loving-mccarthy-e1ahq8`)
+> Follow-up to the Social Feed ship (#176, MERGED). Fixes the live `/dashboard/social-feed` 404
+> (route was only on the unmerged branch — now on main, deploys via Vercel), surfaces it in Quick
+> Access, and makes super-admins fully unlocked on the Home dashboard.
+> - **Quick Access button**: added `social_feed` to the dashboard feature registry (`lib/dashboard/registry.ts`,
+>   free tier, icon `rss`) AND to all three `DEFAULT_LAYOUT_BY_TIER` defaults (free/basic/plus) so the
+>   **Social Feed** tile shows by default in the Home "Quick Access" grid and is addable/searchable in Customize.
+>   Added `rss` → `Rss` in `components/dashboard/feature-icons.tsx`. (Nav entry + feature-catalog entry already
+>   shipped with #176.)
+> - **Super-admins fully unlocked on Home**: `components/dashboard/ai-home-dashboard.tsx` now forces
+>   `dashTier = 'plus'` when `isSuperAdmin()` — every Quick Access tile available, nothing locked, the
+>   "Unlock more" upgrade block disappears (`lockedFeatures('plus')` is empty). The sidebar/mobile nav
+>   already unlocked super-admins via `featureAccessByTier(..., isSuperAdmin)`; this closes the last gap.
+> - **`Daniel.Hughen@gmail.com` is a super-admin**: already in the built-in allowlist
+>   (`lib/constants/super-admins.ts`, lowercased `daniel.hughen@gmail.com`) — verified, no change needed.
+>   Super-admin status is also additive via `SUPER_ADMIN_EMAILS` env + the `is_super_admin` RPC.
+> - ⚠️ **Migration `0101_social_feed.sql` still NOT applied to prod** — the route renders (empty state)
+>   but `social_reader_*` tables must be created in Supabase prod before sources/items persist.
+> - Verified: tsc clean · eslint clean · suite **1261/1261** · build ✓ (`/dashboard/social-feed` registered).
+
+> ## 📰 SOCIAL FEED — "All your social feeds. One place." (#176 — MERGED)
 > Branch `claude/social-feed`. A calm, ad-free CONSUMPTION feed at **`/dashboard/social-feed`** —
 > DISTINCT from the existing publishing "Social Command" (`/dashboard/social`). Families connect
 > SOURCES (IG/FB/YouTube/TikTok/X/LinkedIn/Reddit/WhatsApp/Pinterest) → posts land as ITEMS to
