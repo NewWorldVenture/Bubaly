@@ -22,6 +22,11 @@ Last updated: Capture — AI routing, direct-file, photo/scan, tier-gated button
 >   guarded, validates `PlanId`, updates-or-creates the family's `subscriptions` row at status
 >   `active`, audit-logs, revalidates `/admin/users` + `/admin/subscriptions`). Admin comp/override
 >   (no charge), whole-family scope; only shown when the user has a family.
+> - **Admin users bulk actions**: the All Users table is now a client `UsersTable`
+>   (`components/admin/users-table.tsx`) with row checkboxes + select-all and a bulk bar
+>   (Change role / Remove) shown when rows are selected. `adminBulkUpdateRoleAction` /
+>   `adminBulkRemoveAction` (super-admin guarded, `.in('id', ids)`, capped 500, audit-logged).
+>   Per-row edit/plan/remove unchanged inside it.
 > - **Admin Families tab editable**: actions column with a `…` menu → "Rename family"
 >   (`adminRenameFamilyAction`) + "Change plan" (reuses `adminUpdateFamilyPlanAction`). New
 >   `components/admin/family-row-actions.tsx`.
