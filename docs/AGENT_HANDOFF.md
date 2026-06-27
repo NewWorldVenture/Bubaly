@@ -1,7 +1,34 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionless Stripe cards, reconciliation, iOS-zoom + missing-table fixes, Wallet promoted in nav. Branch `claude/connect-8ysp00` (PR #162). 1079 tests pass · build clean. Keep this updated as you ship.
+Last updated: 2026-06-26 — Session 4: AI Trip Intelligence (destination research + Smart Departure). Branch `claude/connect-8ysp00`. 1136 tests pass · build clean. Keep this updated as you ship.
+
+> **Session 4 (2026-06-26) — AI TRIP INTELLIGENCE: DESTINATION RESEARCH + SMART DEPARTURE**
+> Branch `claude/connect-8ysp00` · commit `434b586`. tsc clean · 1136 tests pass (30 new) · build exit 0.
+> Route: **/dashboard/trip-intel** (nav: Suggested group "Trip Intelligence", MapPin icon; feature-catalog `trip-intelligence`, basic tier). Page uses `requireUserContext` (not feature-gated, like AI Concierge).
+>
+> ### What it does (the user's ask, fully wired)
+> Auto-detects upcoming calendar events that have a `location` (next 21 days, excludes our own "🚗 Head out" events) and offers two actions per event:
+> 1. **Research** — geocodes the place + pulls forecast (keyless Open-Meteo), then POSTs `/api/ai/trip` for restaurant/activity/tip recommendations tuned to the family's interests + who's going. Saved to `trip_plans`.
+> 2. **Plan departure** — geocodes home + destination, gets a REAL driving time from **OSRM** (keyless `router.project-osrm.org`), applies a rush-hour traffic multiplier + weather delay, works backward from event time to a single **leave-by**. One tap writes a "🚗 Head out for X" `calendar_events` row. Saved departures show a live countdown/status and a **Refresh** that re-checks traffic+weather and re-syncs the calendar event ("continuously monitor & adjust").
+>
+> ### Files
+> - **`lib/trips/departure.ts`** (PURE + 15 tests `tests/trip-departure.test.ts`): `computeDeparture` (backward math: arrive = start−buffer; leave = arrive−park−weather−drive×traffic; ready = leave−prep), `trafficFactorForTime` (weekday AM/PM peaks 1.45/1.5, weekend lighter, overnight 1.0), `weatherDelayMinutes` (WMO code → minutes), `departureStatusCopy`, `leaveByLabel`.
+> - **`lib/trips/routing.ts`** (PURE parsers + 7 tests): `driveEstimate` (OSRM, browser fetch), `parseOsrmDuration/Distance`, `haversineMiles` + `fallbackDriveSeconds` (avg-speed fallback when OSRM down), `metersToMiles`.
+> - **`lib/trips/research.ts`** (PURE + 8 tests): `buildTripResearchPrompt`, `parseTripResearch` (tolerant JSON extract), `fallbackTripResearch` (never-fabricated generic guidance tilted by interests).
+> - **`app/api/ai/trip/route.ts`** — auth-gated; AI when configured else deterministic fallback; returns `{ recommendations, source }`.
+> - **`app/(app)/dashboard/trip-intel/actions.ts`** — `saveTripPlanAction`, `deleteTripPlanAction`, `saveDeparturePlanAction` (+ writes head-out calendar event), `refreshDeparturePlanAction` (recompute + re-sync event), `deleteDeparturePlanAction` (also deletes linked event). NOTE: `calendar_events` UPDATE payload must NOT include `family_id` (Update type forbids it) — see `upsertHeadOutEvent` which splits insert vs update fields.
+> - **`components/modules/trip-intel-module.tsx`** — full client UI (ResearchModal, DepartureModal with prep/park/buffer + live calc, live DepartureCard with per-minute countdown + Refresh). Persists home address + interests to localStorage for frictionless reuse. Geocoding/routing/weather all run in the browser (keyless, network-policy-safe).
+> - **Migration `0098_trip_intelligence.sql`** — `trip_plans` + `departure_plans` (RLS family policies, updated_at triggers, realtime). Types added to `lib/database.types.ts`.
+>
+> ### ⚠️ Migration not applied to prod yet
+> `0098_trip_intelligence.sql` — until applied, saving degrades gracefully (page shows a "setup pending" note via `isMissingTableError`; research still works, just can't persist). **Apply it** to enable saving trips/departures.
+>
+> ### PR
+> PR #162 was MERGED. These session-4 commits are on `claude/connect-8ysp00` and need a NEW draft PR.
+
+> Living context doc so another agent can continue without re-deriving everything.
+> Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionless Stripe cards, reconciliation, iOS-zoom + missing-table fixes, Wallet promoted in nav. Branch `claude/connect-8ysp00` (PR #162). 1079 tests pass · build clean. Keep this updated as you ship.
 
 > **Session 3 (2026-06-26) — TREASURY · SEND MONEY · STRIPE CARDS · RECONCILIATION · PROD UX FIXES · NAV**
 > Branch `claude/connect-8ysp00` · PR #162. tsc clean · 1079 tests pass · build exit 0.
