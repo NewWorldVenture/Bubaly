@@ -25,7 +25,8 @@ Last updated after the production bug sweep + frictionless Quick Capture (PR #16
 > - **Home dashboard nudge** — `ai-home-dashboard.tsx` now loads `relationship_dates` and shows a gentle
 >   rose reminder card (via `upcomingRelationship`, **13th dates test**) when a date is inside its reminder
 >   window, linking to `/dashboard/relationship`. Crash-safe pre-migration (`relDateRows ?? []`).
->   **Next (optional):** per-day metering on the AI route.
+> - **AI metering** — `/api/ai/relationship` is capped at 20 digests/family/day, counted from `audit_logs`
+>   (action `relationship_ai_digest`); 429 over the limit, best-effort `logAudit` record on success.
 >
 > ## 🎯 BRAND FOUNDATION — "Less Life Admin. More Living Life." (in progress, branch `claude/festive-bohr-m4cbeg`)
 > New primary tagline + positioning rolled across the marketing site & shared metadata. Hero headline:
