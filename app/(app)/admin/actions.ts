@@ -191,6 +191,36 @@ export async function adminBulkUpdateRoleAction(input: { memberIds: string[]; ro
   return { ok: true };
 }
 
+/** Bulk-set the plan on many families (admin comp/override; no charge). */
+export async function adminBulkUpdatePlanAction(input: { familyIds: string[]; plan: PlanId }): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+  if (!ALLOWED_PLANS.includes(input.plan)) return { ok: false, error: 'Invalid plan.' };
+  const ids = [...new Set(input.familyIds.filter(Boolean))].slice(0, 200);
+  if (ids.length === 0) return { ok: false, error: 'No families selected.' };
+
+  const supabase = createServiceClient();
+  const { data: existing } = await supabase.from('subscriptions').select('family_id').in('family_id', ids);
+  const haveSub = new Set((existing ?? []).map((r) => r.family_id));
+
+  const toUpdate = ids.filter((id) => haveSub.has(id));
+  const toInsert = ids.filter((id) => !haveSub.has(id));
+
+  if (toUpdate.length > 0) {
+    const { error } = await supabase.from('subscriptions').update({ plan: input.plan, status: 'active' }).in('family_id', toUpdate);
+    if (error) return { ok: false, error: error.message };
+  }
+  if (toInsert.length > 0) {
+    const { error } = await supabase.from('subscriptions').insert(toInsert.map((family_id) => ({ family_id, plan: input.plan, status: 'active' as const })));
+    if (error) return { ok: false, error: error.message };
+  }
+
+  await adminAuditLog({ familyId: null, action: 'update', resource: 'subscriptions', metadata: { plan: input.plan, count: ids.length, bulk: true } });
+  revalidatePath('/admin/users');
+  revalidatePath('/admin/subscriptions');
+  return { ok: true };
+}
+
 /** Bulk-remove many members from their families (soft delete; admin). */
 export async function adminBulkRemoveAction(input: { memberIds: string[] }): Promise<Result> {
   const guard = await assertSuperAdmin();

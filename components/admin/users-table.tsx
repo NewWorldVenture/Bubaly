@@ -2,14 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, Check, UserMinus, Tag } from 'lucide-react';
+import { X, Check, UserMinus, Tag, CreditCard } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { fmtDate } from '@/lib/utils/format';
 import { ROLE_LABELS, ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
-import { PLANS } from '@/lib/constants/plans';
+import { PLANS, type PlanId } from '@/lib/constants/plans';
 import { useToast } from '@/components/ui/toast';
 import { MemberRowActions } from './member-row-actions';
-import { adminBulkUpdateRoleAction, adminBulkRemoveAction } from '@/app/(app)/admin/actions';
+import { adminBulkUpdateRoleAction, adminBulkRemoveAction, adminBulkUpdatePlanAction } from '@/app/(app)/admin/actions';
 
 export type UserRow = {
   memberId: string;
@@ -29,8 +29,12 @@ export function UsersTable({ rows }: { rows: UserRow[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [roleModal, setRoleModal] = useState(false);
+  const [planModal, setPlanModal] = useState(false);
+  const [plan, setPlan] = useState<PlanId>('basic');
 
   const allSelected = rows.length > 0 && selected.size === rows.length;
+  // Families represented by the current selection (deduped) — bulk plan targets these.
+  const selectedFamilyIds = [...new Set(rows.filter((r) => selected.has(r.memberId) && r.familyId).map((r) => r.familyId as string))];
 
   function toggle(id: string) {
     setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -63,6 +67,17 @@ export function UsersTable({ rows }: { rows: UserRow[] }) {
     router.refresh();
   }
 
+  async function applyPlan() {
+    setBusy(true);
+    const res = await adminBulkUpdatePlanAction({ familyIds: selectedFamilyIds, plan });
+    setBusy(false);
+    setPlanModal(false);
+    if (!res.ok) return toastError(res.error);
+    success(`Plan set for ${selectedFamilyIds.length} famil${selectedFamilyIds.length === 1 ? 'y' : 'ies'}`);
+    setSelected(new Set());
+    router.refresh();
+  }
+
   return (
     <div className="mt-4">
       {/* Bulk action bar */}
@@ -73,6 +88,12 @@ export function UsersTable({ rows }: { rows: UserRow[] }) {
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium hover:bg-elevated disabled:opacity-50">
             <Tag className="h-3.5 w-3.5" /> Change role
           </button>
+          {selectedFamilyIds.length > 0 && (
+            <button onClick={() => setPlanModal(true)} disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium hover:bg-elevated disabled:opacity-50">
+              <CreditCard className="h-3.5 w-3.5" /> Change plan
+            </button>
+          )}
           <button onClick={bulkRemove} disabled={busy}
             className="inline-flex items-center gap-1.5 rounded-lg border border-danger/30 px-2.5 py-1 text-xs font-medium text-danger hover:bg-danger/10 disabled:opacity-50">
             <UserMinus className="h-3.5 w-3.5" /> Remove
@@ -120,6 +141,33 @@ export function UsersTable({ rows }: { rows: UserRow[] }) {
           </tbody>
         </table>
       </div>
+
+      {planModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPlanModal(false)}>
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-bg p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-1 flex items-center justify-between">
+              <h3 className="font-bold text-fg">Change plan</h3>
+              <button onClick={() => setPlanModal(false)} aria-label="Close" className="rounded-lg p-1.5 text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
+            </div>
+            <p className="mb-4 text-xs text-muted">Admin override (no charge) for {selectedFamilyIds.length} famil{selectedFamilyIds.length === 1 ? 'y' : 'ies'} in the selection.</p>
+            <div className="space-y-2">
+              {PLANS.map((p) => (
+                <button key={p.id} type="button" onClick={() => setPlan(p.id)}
+                  className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition ${plan === p.id ? 'border-brand bg-brand/10' : 'border-border hover:bg-elevated'}`}>
+                  <span className="font-medium">{p.name}</span>
+                  {plan === p.id && <span className="text-xs font-semibold text-brand">Selected</span>}
+                </button>
+              ))}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setPlanModal(false)} className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted hover:text-fg">Cancel</button>
+              <button onClick={applyPlan} disabled={busy} className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60">
+                {busy ? 'Saving…' : 'Save plan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {roleModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setRoleModal(false)}>
