@@ -32,6 +32,10 @@ Last updated: Family Front Desk — the AI concierge hub (2026-06-27). Keep this
 >   when there are open/handled suggestions) now reads **"Family Front Desk"** (Headset icon) and links to
 >   `/dashboard/front-desk` instead of `/dashboard/autopilot` — the Front Desk is the superset and keeps
 >   Autopilot one tap away as a channel. Same tier behavior (both level 2), so no gating regression.
+> - **"Recently handled for you" timeline** on the Front Desk page (server-side): last 6 handled
+>   `autopilot_suggestions` (status auto_executed/executed/approved, by resolved_at desc) with kind icon,
+>   relative time, and an "Auto" badge for auto-executed items — proof the concierge is working (the AI
+>   Family Memory teaser, links to `/dashboard/family-memory`). Only renders when there's history.
 > - Verified: tsc clean · build exit 0 · **1056/1056**. No migration, no new env. Production-ready now.
 
 > **Session update (2026-06-27) — BRAND REALIGNMENT: "Less Managing Life. More Living It."**

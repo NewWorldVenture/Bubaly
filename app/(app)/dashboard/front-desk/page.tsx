@@ -2,13 +2,22 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
   Phone, Mail, MessageSquare, FileText, CalendarClock, Zap, BookHeart, Sun,
-  ArrowRight, Sparkles,
+  ArrowRight, Sparkles, Check, CircleDot, ShoppingCart, ListChecks, Cake,
+  CalendarX, Wallet, HeartPulse, Pill, UtensilsCrossed, FileClock, ShieldCheck,
 } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import { DecisionQueue } from '@/components/front-desk/decision-queue';
+import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+
+const HANDLED_ICON: Record<string, typeof CircleDot> = {
+  document: FileClock, appointment: CalendarClock, chore: ListChecks,
+  birthday: Cake, groceries: ShoppingCart, conflict: CalendarX,
+  finance: Wallet, wellbeing: HeartPulse, medication: Pill, meal: UtensilsCrossed,
+  insurance: ShieldCheck,
+};
 
 export const metadata: Metadata = { title: 'Family Front Desk' };
 export const dynamic = 'force-dynamic';
@@ -37,11 +46,17 @@ export default async function FrontDeskPage() {
   const now = new Date();
   const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7);
 
-  const [{ count: docCount }, { count: eventCount }] = await Promise.all([
+  const [{ count: docCount }, { count: eventCount }, { data: handled }] = await Promise.all([
     supabase.from('documents').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
     supabase.from('calendar_events').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).gte('starts_at', now.toISOString()).lte('starts_at', weekEnd.toISOString()),
+    supabase.from('autopilot_suggestions')
+      .select('id, title, detail, kind, status, resolved_at')
+      .eq('family_id', familyId).in('status', ['auto_executed', 'executed', 'approved'])
+      .order('resolved_at', { ascending: false, nullsFirst: false }).limit(6),
   ]);
+
+  const handledItems = (handled ?? []) as { id: string; title: string; detail: string | null; kind: string; status: string; resolved_at: string | null }[];
 
   const phoneReady: ChannelStatus = isTwilioConfigured() ? 'active' : 'setup';
 
@@ -109,6 +124,44 @@ export default async function FrontDeskPage() {
 
       {/* Executive Dashboard — only what needs a decision */}
       <DecisionQueue />
+
+      {/* Recently handled — proof the concierge is working (AI Family Memory) */}
+      {handledItems.length > 0 && (
+        <div className="rounded-2xl border border-border bg-surface/40 p-5 sm:p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <Sparkles className="h-5 w-5 text-emerald-400" /> Recently handled for you
+            </h2>
+            <Link href="/dashboard/family-memory" className="text-xs font-semibold text-brand hover:underline">
+              Full timeline
+            </Link>
+          </div>
+          <ul className="space-y-2">
+            {handledItems.map((h) => {
+              const Icon = HANDLED_ICON[h.kind] ?? CircleDot;
+              const auto = h.status === 'auto_executed';
+              return (
+                <li key={h.id} className="flex items-center gap-3 rounded-xl border border-emerald-500/15 bg-emerald-500/[0.04] px-4 py-2.5">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500/15 text-emerald-400">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{h.title}</p>
+                    {h.detail && <p className="truncate text-xs text-muted">{h.detail}</p>}
+                  </div>
+                  {auto && (
+                    <span className="hidden shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400 sm:inline">
+                      Auto
+                    </span>
+                  )}
+                  {h.resolved_at && <span className="shrink-0 text-[11px] text-muted">{fmtRelative(h.resolved_at)}</span>}
+                  <Check className="h-4 w-4 shrink-0 text-emerald-400" />
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* Concierge channels */}
       <div>
