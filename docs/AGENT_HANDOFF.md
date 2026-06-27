@@ -24,6 +24,10 @@ Last updated: 2026-06-27 — Reminders recurrence advancement + list-filtering +
 > gets a **Flagged** toggle in the filter row + a **tag-chip row** (every tag in use; tap to filter, tap again
 > to clear) + clickable per-card tag chips. Empty state is now filter-aware ("No matching reminders" + Clear
 > filters when `filtersActive`). All pure client-side filtering — no migration, no new query.
+> **Also added inline subtask check-off**: the subtask count badge on each card is now an expand toggle
+> (`expanded` Set state + ChevronDown); expanding reveals the subtasks with checkboxes that persist via
+> `toggleSubtask(reminder, subtaskId)` (updates the `subtasks` jsonb; degrades silently pre-0100). No more
+> opening the editor just to tick one off.
 > NOTE: main now has a **0098 collision** — `0098_relationship_helper.sql` AND `0098_trip_intelligence.sql`
 > both exist (parallel merges). Harmless to the app but the next migration author should be aware; apply both.
 >

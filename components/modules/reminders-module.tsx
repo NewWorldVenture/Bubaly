@@ -5,7 +5,7 @@ import {
   Bell, Plus, Check, Clock, MapPin, Repeat, Pill, CreditCard,
   GraduationCap, CheckSquare, Trash2, Edit2, Sparkles, X,
   AlertTriangle, Calendar, User, AlarmClock, Loader2,
-  Flag, Link2, Image as ImageIcon, Tag, ListChecks, ListTodo,
+  Flag, Link2, Image as ImageIcon, Tag, ListChecks, ListTodo, ChevronDown,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -96,6 +96,7 @@ export function RemindersModule() {
   const [filterList, setFilterList] = useState('all');
   const [filterFlagged, setFilterFlagged] = useState(false);
   const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Reminder | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -176,6 +177,19 @@ export function RemindersModule() {
         recurred = !insErr;
       }
       success(recurred ? 'Completed ✓ — next one scheduled' : 'Reminder completed ✓');
+      void refresh();
+    });
+  }
+
+  // Check a subtask off without opening the editor (iOS-style inline).
+  function toggleSubtask(reminder: Reminder, subtaskId: string) {
+    return run(`subtask:${reminder.id}:${subtaskId}`, async () => {
+      const next = normalizeSubtasks(reminder.subtasks).map((s) => s.id === subtaskId ? { ...s, done: !s.done } : s);
+      const supabase = createClient();
+      const { error } = await supabase.from('family_reminders')
+        .update({ subtasks: next as unknown as Reminder['subtasks'] }).eq('id', reminder.id);
+      // Pre-0100 the subtasks column may not exist yet — degrade silently.
+      if (error && !isMissingRelationError(error)) throw error;
       void refresh();
     });
   }
@@ -453,7 +467,12 @@ export function RemindersModule() {
                       <span className="flex items-center gap-1"><Bell className="h-3.5 w-3.5" />{earlyReminderLabel(reminder.early_reminder_minutes)}</span>
                     )}
                     {(() => { const st = normalizeSubtasks(reminder.subtasks); return st.length > 0 ? (
-                      <span className="flex items-center gap-1"><ListChecks className="h-3.5 w-3.5" />{subtaskProgress(st).done}/{subtaskProgress(st).total}</span>
+                      <button type="button" onClick={() => setExpanded((cur) => { const n = new Set(cur); n.has(reminder.id) ? n.delete(reminder.id) : n.add(reminder.id); return n; })}
+                        aria-expanded={expanded.has(reminder.id)}
+                        className="flex items-center gap-1 transition hover:text-fg">
+                        <ListChecks className="h-3.5 w-3.5" />{subtaskProgress(st).done}/{subtaskProgress(st).total}
+                        <ChevronDown className={cn('h-3 w-3 transition-transform', expanded.has(reminder.id) && 'rotate-180')} />
+                      </button>
                     ) : null; })()}
                     {reminder.url && (
                       <a href={reminder.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-brand hover:underline" onClick={(e) => e.stopPropagation()}>
@@ -468,6 +487,25 @@ export function RemindersModule() {
                       </button>
                     ))}
                   </div>
+
+                  {/* Inline subtasks — check off without opening the editor */}
+                  {expanded.has(reminder.id) && (
+                    <div className="mt-2 space-y-1 border-l-2 border-border/60 pl-3">
+                      {normalizeSubtasks(reminder.subtasks).map((s) => {
+                        const busy = isPending(`subtask:${reminder.id}:${s.id}`);
+                        return (
+                          <button key={s.id} type="button" onClick={() => toggleSubtask(reminder, s.id)} disabled={busy}
+                            className="flex w-full items-center gap-2 text-left text-xs disabled:opacity-50">
+                            <span className={cn('grid h-4 w-4 shrink-0 place-items-center rounded-full border', s.done ? 'border-success bg-success text-white' : 'border-border')}>
+                              {busy ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : s.done && <Check className="h-2.5 w-2.5" />}
+                            </span>
+                            <span className={cn(s.done && 'text-muted line-through')}>{s.title}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {reminder.image_url && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={reminder.image_url} alt="" className="mt-2 h-20 w-20 rounded-lg object-cover" />
