@@ -14,6 +14,7 @@ import { uploadFamilyDocument } from '@/lib/storage/documents';
 import {
   availableQuickRoutes, resolveQuickRoutes, defaultQuickRouteKeys, type QuickRoute,
 } from '@/lib/capture/quick-routes';
+import { routeCaptureHeuristic, type RoutedDestination } from '@/lib/capture/routing';
 import { saveCaptureRoutesAction } from '@/app/(app)/capture/actions';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
@@ -30,26 +31,6 @@ function loadSavedKeys(): string[] | null {
   } catch { return null; }
 }
 
-function routeCapture(text: string): { destination: string; url: string } {
-  const lower = text.toLowerCase();
-  if (/buy|shop|grocery|groceries|store|milk|eggs|bread|chicken|produce/.test(lower))
-    return { destination: 'Grocery List', url: '/dashboard/grocery' };
-  if (/event|party|birthday|meeting|appointment|schedule|doctor|dentist|school/.test(lower))
-    return { destination: 'Calendar', url: '/dashboard/calendar' };
-  if (/meal|recipe|dinner|lunch|breakfast|cook|food/.test(lower))
-    return { destination: 'Meals', url: '/dashboard/meals' };
-  if (/trip|vacation|travel|flight|hotel|pack/.test(lower))
-    return { destination: 'Trip Planner', url: '/dashboard/trips' };
-  if (/health|symptom|medicine|medication|sick|pain|fever/.test(lower))
-    return { destination: 'Health', url: '/dashboard/health' };
-  if (/document|scan|file|pdf|receipt|invoice/.test(lower))
-    return { destination: 'Documents', url: '/dashboard/documents' };
-  if (/note|remember|idea|thought/.test(lower))
-    return { destination: 'Notes', url: '/dashboard/notes' };
-  if (/task|todo|remind|chore|clean|fix|repair|do|finish/.test(lower))
-    return { destination: 'Tasks & Chores', url: '/dashboard/chores' };
-  return { destination: 'AI Assistant', url: `/dashboard/assistant?q=${encodeURIComponent(text)}` };
-}
 
 export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, userId }: {
   planLevel?: number; savedRouteKeys?: string[] | null; familyId?: string; userId?: string;
@@ -148,13 +129,27 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
     setRouted(null);
   }
 
-  function handleSubmit() {
-    if (!text.trim()) return;
+  async function handleSubmit() {
+    const note = text.trim();
+    if (!note) return;
     setRouting(true);
-    setTimeout(() => {
-      setRouted(routeCapture(text));
+    try {
+      const res = await fetch('/api/ai/capture', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: note }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as RoutedDestination & { error?: string };
+        if (data && data.url) { setRouted({ destination: data.destination, url: data.url }); return; }
+      }
+      // Fall back to the instant on-device heuristic.
+      setRouted(routeCaptureHeuristic(note, planLevel));
+    } catch {
+      setRouted(routeCaptureHeuristic(note, planLevel));
+    } finally {
       setRouting(false);
-    }, 500);
+    }
   }
 
   function goToDestination() {
