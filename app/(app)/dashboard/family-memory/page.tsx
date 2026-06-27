@@ -1,19 +1,15 @@
 import type { Metadata } from 'next';
-import { Camera, Quote, Plane, Award, BookHeart, Star, Sparkles } from 'lucide-react';
+import { Award, BookHeart, Star, Sparkles } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
-import { SectionCard, MiniEmpty, StatTile } from '@/components/family/shell';
+import { SectionCard, StatTile } from '@/components/family/shell';
 import { QuickAdd } from '@/components/family/quick-add';
-import { DeleteButton } from '@/components/family/record-actions';
+import { MemoryTimeline } from '@/components/family/memory-timeline';
 import { fmtDate } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'Family Memory' };
 export const dynamic = 'force-dynamic';
-
-const KIND_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
-  photo: Camera, quote: Quote, trip: Plane, achievement: Award, journal: BookHeart, milestone: Star,
-};
 
 export default async function FamilyMemoryPage() {
   const ctx = await requireUserContext();
@@ -26,7 +22,6 @@ export default async function FamilyMemoryPage() {
     supabase.from('family_milestones').select('*').eq('family_id', familyId).order('milestone_date', { ascending: false }).limit(12),
   ]);
 
-  const nameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
   const thisYear = new Date().getFullYear();
   const yearCount = (memories ?? []).filter((m) => m.memory_date.startsWith(`${thisYear}`)).length;
   const favorites = (memories ?? []).filter((m) => m.is_favorite).length;
@@ -63,27 +58,8 @@ export default async function FamilyMemoryPage() {
         <StatTile label="Milestones" value={milestones?.length ?? 0} icon={Award} accent="bg-emerald-600" />
       </div>
 
-      <SectionCard title="Timeline" description="Most recent first">
-        {memories && memories.length > 0 ? (
-          <ul className="space-y-3">
-            {memories.map((m) => {
-              const Icon = KIND_ICON[m.kind] ?? BookHeart;
-              return (
-                <li key={m.id} className="flex items-start gap-3 rounded-xl bg-surface/40 p-3">
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-500/15">
-                    <Icon className="h-4 w-4 text-brand" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-2 text-sm font-medium">{m.title}{m.is_favorite && <Star className="h-3.5 w-3.5 text-amber-400" />}</p>
-                    {m.body && <p className="mt-0.5 line-clamp-2 text-xs text-muted">{m.body}</p>}
-                    <p className="mt-1 text-xs text-muted">{[fmtDate(m.memory_date), m.member_id ? nameById.get(m.member_id) : null].filter(Boolean).join(' · ')}</p>
-                  </div>
-                  <DeleteButton table="family_memories" id={m.id} />
-                </li>
-              );
-            })}
-          </ul>
-        ) : <MiniEmpty icon={Camera} text="No memories yet — capture your first above." />}
+      <SectionCard title="Timeline" description="Search and revisit every memory">
+        <MemoryTimeline memories={memories ?? []} members={members ?? []} />
       </SectionCard>
 
       {milestones && milestones.length > 0 && (

@@ -1,10 +1,23 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: Family Front Desk — the AI concierge hub (2026-06-27). Keep this updated as you ship.
+Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27). Keep this updated as you ship.
 
 ## ▶ CURRENT STATE (read this first)
 - **Active branch:** `claude/continuation-an1mam` (all work below is committed + pushed here).
+
+> **Session update (2026-06-27) — FAMILY MEMORY: actually searchable.**
+> The Family Memory page header had long promised "a searchable timeline" but had NO search box —
+> it just rendered a list. Now it's real (the AI Family Memory capability from the vision).
+> - **`components/family/memory-timeline.tsx`** (NEW, client) — `MemoryTimeline({memories, members})`:
+>   instant client-side filter over the already-loaded rows across title / details / type / who /
+>   date, plus a **Favorites** toggle, a live result count, and a no-results state. Reuses `DeleteButton`.
+> - **`app/(app)/dashboard/family-memory/page.tsx`** — replaced the static `<ul>` with `<MemoryTimeline>`;
+>   removed now-unused `KIND_ICON`/`nameById`/icon imports. Server still loads memories (≤40) + milestones
+>   (≤12); filtering is client-side so it's frictionless. `Tables<'family_memories'>` is structurally
+>   assignable to the component's `MemoryRow` (no cast needed).
+> - The Front Desk's "Recently handled" → "Full timeline" link lands here, so the concierge proof now
+>   leads to a genuinely searchable memory. No migration, no external deps.
 
 > **Session update (2026-06-27) — FAMILY FRONT DESK (the AI concierge hub).**
 > Packages the scattered concierge capabilities into one branded surface — the "Family AI Front Desk"
