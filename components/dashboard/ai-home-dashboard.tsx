@@ -10,7 +10,7 @@ import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
-import { Rocket, Gauge, ShieldCheck } from 'lucide-react';
+import { Headset, Gauge, ShieldCheck } from 'lucide-react';
 import { successProbability } from '@/lib/autopilot/engine';
 
 function greeting() {
@@ -243,18 +243,18 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         </div>
       )}
 
-      {/* Family Autopilot — Control Tower summary */}
+      {/* Family Front Desk — the AI concierge front door + decision summary */}
       {showAutopilot && (
-        <Link href="/dashboard/autopilot"
+        <Link href="/dashboard/front-desk"
           className="block rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-5 transition hover:border-brand/40">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15">
-                <Rocket className="h-5 w-5 text-brand" />
+                <Headset className="h-5 w-5 text-brand" />
               </div>
               <div>
-                <p className="text-sm font-bold">Family Autopilot</p>
-                <p className="text-xs text-muted">Bubaly is watching over today</p>
+                <p className="text-sm font-bold">Family Front Desk</p>
+                <p className="text-xs text-muted">Your concierge is watching over today</p>
               </div>
             </div>
             <ArrowRight className="h-4 w-4 text-brand" />

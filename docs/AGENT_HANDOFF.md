@@ -28,6 +28,10 @@ Last updated: Family Front Desk — the AI concierge hub (2026-06-27). Keep this
 > - **Self-populating:** `DecisionQueue` POSTs `/api/autopilot/scan` once on mount (mirrors the Autopilot
 >   module) so the desk is never hollow on first open; shows a "Checking your family…" state during the
 >   first scan and a manual **Re-scan** button in the header. Scan is idempotent (dedupe_key).
+> - **Discoverability:** the home dashboard's prominent AI summary card (`ai-home-dashboard.tsx`, shown
+>   when there are open/handled suggestions) now reads **"Family Front Desk"** (Headset icon) and links to
+>   `/dashboard/front-desk` instead of `/dashboard/autopilot` — the Front Desk is the superset and keeps
+>   Autopilot one tap away as a channel. Same tier behavior (both level 2), so no gating regression.
 > - Verified: tsc clean · build exit 0 · **1056/1056**. No migration, no new env. Production-ready now.
 
 > **Session update (2026-06-27) — BRAND REALIGNMENT: "Less Managing Life. More Living It."**
