@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
@@ -17,6 +17,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { eventSchema, fieldErrors } from '@/lib/validation';
 import { EventDetailModal } from './event-detail-modal';
+import { FindTimeModal } from './find-time-modal';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -123,6 +124,7 @@ function MiniCalendar({ current, onSelect }: { current: Date; onSelect: (d: Date
 export function CalendarModule() {
   const { familyId, userId, members, selfMember } = useApp();
   const [open, setOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
   const [selected, setSelected] = useState<Event | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [filterMember, setFilterMember] = useState<string>('all');
@@ -263,6 +265,9 @@ export function CalendarModule() {
                   </button>
                 )}
                 <AiInsight kind="calendar" />
+                <button onClick={() => setFindOpen(true)} className="btn-inline">
+                  <Sparkles className="h-3.5 w-3.5" /> Find a time
+                </button>
                 <Button size="sm" onClick={() => setOpen(true)}>
                   <Plus className="h-4 w-4" /> Add Event
                 </Button>
@@ -536,6 +541,7 @@ export function CalendarModule() {
       </div>
 
       {open && <NewEventModal familyId={familyId} userId={userId} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); void refresh(); }} />}
+      {findOpen && <FindTimeModal members={members} selfMemberId={selfMember?.id ?? null} onClose={() => setFindOpen(false)} onScheduled={() => { setFindOpen(false); void refresh(); }} />}
       {selected && <EventDetailModal event={selected} members={members} selfMemberId={selfMember?.id ?? null} familyId={familyId} onClose={() => setSelected(null)} />}
     </div>
   );
