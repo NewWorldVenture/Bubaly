@@ -55,10 +55,15 @@ Last updated: Dramatic UI upgrade — wallet/money visual allocation + dark-mode
 >   `toLocalInput()` formats a Date to the local `datetime-local` string.
 > - **Chores** (`components/modules/chores-module.tsx`) — same one-tap due-date presets
 >   (Today / Tomorrow / This weekend / Next week) under the assignment due-date field.
-> - **Shared helpers**: `lib/utils/quick-dates.ts` now houses `toLocalDate`,
->   `toLocalDateTimeInput`, `QUICK_DATE_PRESETS`, and `QUICK_TIME_PRESETS` (used by both
->   reminders + chores; reuse these for any future scheduling form). Covered by
->   `tests/quick-dates.test.ts` (7 tests). **Suite is now 1005 tests.**
+> - **To-do lists** (`components/modules/todos-module.tsx`) — quick due-date presets + the
+>   list badge now shows "Jan 5" instead of the raw `2026-01-05`.
+> - **School** (`components/modules/school-module.tsx`) — quick presets on the assignment
+>   Date & Time field (left grade-date alone — grades record a past date).
+> - **Shared helpers**: `lib/utils/quick-dates.ts` houses `toLocalDate`,
+>   `toLocalDateTimeInput`, `QUICK_DATE_PRESETS`, and `QUICK_TIME_PRESETS` — now used by
+>   reminders, chores, to-dos, and school. **Reuse these for any future scheduling form**
+>   (good candidates not yet done: health appointments, care tasks, celebrations). Covered
+>   by `tests/quick-dates.test.ts` (7 tests). **Suite is now 1005 tests.**
 > - **Expense splitting** (`components/modules/expenses-module.tsx`) — added a live
 >   Splitwise-style "Splitting $X between N people · ~$Y each" preview in the split form
 >   so parents see the per-person share before saving.
