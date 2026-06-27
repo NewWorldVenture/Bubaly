@@ -26,7 +26,10 @@ Last updated: Capture — AI routing, direct-file, photo/scan, tier-gated button
 >   (`components/admin/users-table.tsx`) with row checkboxes + select-all and a bulk bar
 >   (Change role / Remove) shown when rows are selected. `adminBulkUpdateRoleAction` /
 >   `adminBulkRemoveAction` (super-admin guarded, `.in('id', ids)`, capped 500, audit-logged).
->   Per-row edit/plan/remove unchanged inside it.
+>   Per-row edit/plan/remove unchanged inside it. Also **bulk Change plan**
+>   (`adminBulkUpdatePlanAction`) — applies to the deduped families in the selection (batched
+>   update + insert for families without a sub, capped 200). Permission matrix (Roles &
+>   Permissions tab) is intentionally READ-ONLY — it reflects the RLS policies, not a config.
 > - **Admin Families tab editable**: actions column with a `…` menu → "Rename family"
 >   (`adminRenameFamilyAction`) + "Change plan" (reuses `adminUpdateFamilyPlanAction`). New
 >   `components/admin/family-row-actions.tsx`.
