@@ -248,6 +248,16 @@ export interface Database {
         { id?: string; family_id: string; subject_type: NutritionSubject; subject_id: string; servings?: number | null; calories?: number | null; protein_g?: number | null; carbs_g?: number | null; fat_g?: number | null; fiber_g?: number | null; sugar_g?: number | null; sodium_mg?: number | null; summary?: string | null; details?: Json | null; created_by?: string | null },
         Partial<{ subject_type: NutritionSubject; subject_id: string; servings: number | null; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null; sugar_g: number | null; sodium_mg: number | null; summary: string | null; details: Json | null }>
       >;
+      leftover_inventory: T<
+        { id: string; family_id: string; name: string; source_meal: string | null; quantity: string | null; stored_on: string; use_by: string | null; location: string; status: string; notes: string | null; metadata: Json; created_by: string | null; updated_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; source_meal?: string | null; quantity?: string | null; stored_on?: string; use_by?: string | null; location?: string; status?: string; notes?: string | null; metadata?: Json; created_by?: string | null; updated_by?: string | null },
+        Partial<{ name: string; source_meal: string | null; quantity: string | null; stored_on: string; use_by: string | null; location: string; status: string; notes: string | null; metadata: Json; updated_by: string | null }>
+      >;
+      family_food_scores: T<
+        { id: string; family_id: string; snapshot_date: string; overall: number; grade: string; sub_scores: Json; coaching: Json; metadata: Json; created_by: string | null; updated_by: string | null } & Stamps,
+        { id?: string; family_id: string; snapshot_date?: string; overall: number; grade: string; sub_scores?: Json; coaching?: Json; metadata?: Json; created_by?: string | null; updated_by?: string | null },
+        Partial<{ snapshot_date: string; overall: number; grade: string; sub_scores: Json; coaching: Json; metadata: Json; updated_by: string | null }>
+      >;
       medications: T<
         { id: string; family_id: string; member_id: string | null; name: string; dosage: string | null; instructions: string | null; is_active: boolean; refill_on: string | null; refill_reminder_days: number; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id?: string | null; name: string; dosage?: string | null; instructions?: string | null; is_active?: boolean; refill_on?: string | null; refill_reminder_days?: number; created_by?: string | null },
