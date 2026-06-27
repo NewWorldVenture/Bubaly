@@ -201,6 +201,19 @@ function GenerateModal({ template, onClose }: { template: TemplateView; onClose:
   const [selected, setSelected] = useState<Set<string>>(() => new Set(US_STATES.map((s) => s.abbr).filter((a) => !existing.has(a))));
   const [publish, setPublish] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customKey, setCustomKey] = useState('');
+  const [customValuesText, setCustomValuesText] = useState('');
+  const [combine, setCombine] = useState(true);
+
+  const customValues = useMemo(
+    () => [...new Set(customValuesText.split(/[\n,]/).map((v) => v.trim()).filter(Boolean))],
+    [customValuesText],
+  );
+  const customActive = customOpen && customKey.trim().length > 0 && customValues.length > 0;
+  const estimate = customActive
+    ? (combine && selected.size > 0 ? selected.size * customValues.length : customValues.length)
+    : selected.size;
 
   function toggle(abbr: string) {
     setSelected((s) => { const n = new Set(s); n.has(abbr) ? n.delete(abbr) : n.add(abbr); return n; });
@@ -210,12 +223,18 @@ function GenerateModal({ template, onClose }: { template: TemplateView; onClose:
   function selectRegion(abbrs: string[]) { setSelected((s) => new Set([...s, ...abbrs])); }
 
   async function generate() {
-    if (selected.size === 0) return toastError('Pick at least one state.');
+    if (estimate === 0) return toastError('Pick states or add custom criteria values.');
     setBusy(true);
-    const res = await generatePagesAction({ templateId: template.id, stateAbbrs: [...selected], publish });
+    const res = await generatePagesAction({
+      templateId: template.id,
+      stateAbbrs: [...selected],
+      custom: customActive ? { key: customKey.trim(), values: customValues } : null,
+      combineWithStates: combine,
+      publish,
+    });
     setBusy(false);
     if (!res.ok) return toastError(res.error ?? 'Failed');
-    success(`Generated ${res.created ?? 0} page${res.created === 1 ? '' : 's'}${res.skipped ? ` · ${res.skipped} already existed` : ''}`);
+    success(`Generated ${res.created ?? 0} page${res.created === 1 ? '' : 's'}${res.skipped ? ` · ${res.skipped} skipped` : ''}`);
     onClose();
     router.refresh();
   }
@@ -258,13 +277,47 @@ function GenerateModal({ template, onClose }: { template: TemplateView; onClose:
           })}
         </div>
 
+        {/* Optional second dimension — "other criteria you decide" */}
+        <div className="border-t border-border px-4 py-3">
+          <button onClick={() => setCustomOpen((v) => !v)} className="flex w-full items-center justify-between text-xs font-medium text-muted hover:text-fg">
+            <span className="flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Add custom criteria (cities, audiences, use-cases…)</span>
+            {customOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </button>
+          {customOpen && (
+            <div className="mt-3 space-y-2">
+              <div className="flex gap-2">
+                <div className="w-32">
+                  <input className={cn(input, 'h-9 font-mono')} value={customKey} onChange={(e) => setCustomKey(e.target.value)} placeholder="city" />
+                  <p className="mt-1 text-[10px] text-muted">variable name</p>
+                </div>
+                <div className="flex-1">
+                  <textarea className={cn(area, 'min-h-0')} rows={3} value={customValuesText} onChange={(e) => setCustomValuesText(e.target.value)} placeholder="Los Angeles, San Francisco, San Diego…" />
+                  <p className="mt-1 text-[10px] text-muted">{customValues.length} value{customValues.length === 1 ? '' : 's'} · comma or newline separated</p>
+                </div>
+              </div>
+              {customKey.trim() && (
+                <p className="text-[11px] text-muted">
+                  Use <code className="text-brand">{`{${customKey.trim().toLowerCase()}}`}</code> and{' '}
+                  <code className="text-brand">{`{${customKey.trim().toLowerCase()}_slug}`}</code> in your template &amp; slug pattern.
+                </p>
+              )}
+              {selected.size > 0 && customValues.length > 0 && (
+                <label className="flex cursor-pointer items-center gap-2 text-xs">
+                  <input type="checkbox" checked={combine} onChange={(e) => setCombine(e.target.checked)} className="accent-brand" />
+                  Combine with selected states (every state × every value)
+                </label>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center justify-between gap-3 border-t border-border p-4">
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input type="checkbox" checked={publish} onChange={(e) => setPublish(e.target.checked)} className="accent-brand" />
             Publish immediately
           </label>
-          <button onClick={generate} disabled={busy} className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60">
-            <Wand2 className="h-4 w-4" /> {busy ? 'Generating…' : `Generate ${selected.size}`}
+          <button onClick={generate} disabled={busy || estimate === 0} className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60">
+            <Wand2 className="h-4 w-4" /> {busy ? 'Generating…' : `Generate ${estimate}`}
           </button>
         </div>
       </div>

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { withSeoTables, type SeoPageTemplateRow } from '@/lib/supabase/seo-tables';
-import { resolveSlug, mergeVars, type SeoTemplate, type FeatureBlock, type FaqItem } from '@/lib/seo/template';
+import { resolveSlug, slugify, mergeVars, type SeoTemplate, type FeatureBlock, type FaqItem } from '@/lib/seo/template';
 import { US_STATES, stateVars } from '@/lib/seo/states';
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -92,6 +92,10 @@ export async function deleteTemplateAction(input: { id: string }): Promise<Resul
 export async function generatePagesAction(input: {
   templateId: string;
   stateAbbrs: string[];
+  // Optional second dimension ("other criteria") — a custom variable + values.
+  custom?: { key: string; values: string[] } | null;
+  // When a custom dimension is set: cartesian with states, else custom-only.
+  combineWithStates?: boolean;
   publish: boolean;
 }): Promise<Result & { created?: number; skipped?: number }> {
   const { supabase } = await guard();
@@ -106,7 +110,13 @@ export async function generatePagesAction(input: {
   const template = tplRow as unknown as SeoTemplate & SeoPageTemplateRow;
 
   const states = US_STATES.filter((s) => input.stateAbbrs.includes(s.abbr));
-  if (states.length === 0) return { ok: false, error: 'Pick at least one state.' };
+  const custom = input.custom && input.custom.key.trim() && input.custom.values.length
+    ? { key: input.custom.key.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_'), values: input.custom.values }
+    : null;
+
+  // Build the list of variable sets to generate from the chosen dimensions.
+  const varSets = buildVarSets(states, custom, input.combineWithStates ?? false);
+  if (varSets.length === 0) return { ok: false, error: 'Pick at least one state or add custom criteria values.' };
 
   // Existing slugs for this template, to skip duplicates.
   const { data: existing } = await supabase
@@ -116,25 +126,43 @@ export async function generatePagesAction(input: {
   const existingSlugs = new Set((existing ?? []).map((r: { slug: string }) => r.slug));
 
   const rows: Record<string, unknown>[] = [];
-  for (const s of states) {
-    const vars = mergeVars(template, stateVars(s));
-    const slug = resolveSlug(template.slug_pattern, vars);
-    if (!slug || existingSlugs.has(slug)) continue;
+  const seen = new Set<string>();
+  for (const pageVars of varSets) {
+    const slug = resolveSlug(template.slug_pattern, mergeVars(template, pageVars));
+    if (!slug || existingSlugs.has(slug) || seen.has(slug)) continue;
+    seen.add(slug);
     rows.push({
       template_id: input.templateId,
       slug,
-      variables: stateVars(s),
+      variables: pageVars,
       status: input.publish ? 'published' : 'draft',
       published_at: input.publish ? new Date().toISOString() : null,
     });
   }
 
-  if (rows.length === 0) return { ok: true, created: 0, skipped: states.length };
+  if (rows.length === 0) return { ok: true, created: 0, skipped: varSets.length };
 
   const { error } = await (supabase.from('seo_pages') as ReturnType<typeof supabase.from>).insert(rows);
   if (error) return { ok: false, error: error.message };
   revalidate();
-  return { ok: true, created: rows.length, skipped: states.length - rows.length };
+  return { ok: true, created: rows.length, skipped: varSets.length - rows.length };
+}
+
+/** Expand the selected dimensions into one variable set per page. */
+function buildVarSets(
+  states: typeof US_STATES,
+  custom: { key: string; values: string[] } | null,
+  combine: boolean,
+): Record<string, string>[] {
+  const customVars = (v: string): Record<string, string> => ({ [custom!.key]: v, [`${custom!.key}_slug`]: slugify(v) });
+
+  if (custom && combine && states.length > 0) {
+    const out: Record<string, string>[] = [];
+    for (const s of states) for (const v of custom.values) out.push({ ...stateVars(s), ...customVars(v) });
+    return out;
+  }
+  if (custom) return custom.values.map(customVars);
+  return states.map((s) => stateVars(s));
 }
 
 export async function setPageStatusAction(input: { ids: string[]; status: 'draft' | 'published' }): Promise<Result> {
