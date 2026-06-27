@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isPlatform, platformLabel, type Platform } from '@/lib/social/feed';
+import { buildItemFromHtml, isSafePublicUrl } from '@/lib/social/unfurl';
 
 type Result = { ok: boolean; error?: string };
 type Category = 'family' | 'friends' | 'groups' | 'other';
@@ -77,6 +78,71 @@ export async function markAllReadAction(): Promise<Result> {
   const supabase = await createServer();
   const { error } = await supabase.from('social_reader_items')
     .update({ is_read: true }).eq('family_id', ctx.active.familyId).eq('is_read', false);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(PATH);
+  return { ok: true };
+}
+
+/**
+ * Add to the feed by pasting a URL. Fetches the link server-side, reads its
+ * OpenGraph/Twitter-card metadata, and stores a real feed item — the ungated
+ * ingestion path that works today (no per-platform OAuth needed). Idempotent:
+ * the canonical URL is the `external_id`, so re-adding the same link is a no-op.
+ */
+export async function addByUrlAction(input: { url: string; category?: string; sourceId?: string | null }): Promise<Result> {
+  const ctx = await requireUserContext();
+  const raw = (input.url ?? '').trim();
+  if (!raw) return { ok: false, error: 'Paste a link to add.' };
+  const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  if (!isSafePublicUrl(url)) return { ok: false, error: 'Enter a valid public web link.' };
+
+  let html: string;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        // A real UA + HTML Accept so sites return their OpenGraph <head>.
+        'User-Agent': 'Mozilla/5.0 (compatible; Bubaly-SocialFeed/1.0; +https://www.bubaly.com)',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) return { ok: false, error: `Couldn’t fetch that link (HTTP ${res.status}).` };
+    const type = res.headers.get('content-type') ?? '';
+    if (type && !/text\/html|application\/xhtml|text\/xml|application\/xml/i.test(type)) {
+      return { ok: false, error: 'That link isn’t a web page we can preview.' };
+    }
+    // Cap the body we parse — the <head> is all we need.
+    html = (await res.text()).slice(0, 600_000);
+  } catch {
+    return { ok: false, error: 'Couldn’t reach that link. Check it and try again.' };
+  }
+
+  const draft = buildItemFromHtml(url, html);
+  const supabase = await createServer();
+
+  // Idempotent: skip if this canonical link is already in the family's feed.
+  const { data: existing } = await supabase.from('social_reader_items')
+    .select('id').eq('family_id', ctx.active.familyId).eq('platform', draft.platform)
+    .eq('external_id', draft.externalId).limit(1).maybeSingle();
+  if (existing) { revalidatePath(PATH); return { ok: true }; }
+
+  const { error } = await supabase.from('social_reader_items').insert({
+    family_id: ctx.active.familyId,
+    source_id: input.sourceId ?? null,
+    platform: draft.platform,
+    author_name: draft.authorName,
+    author_handle: draft.authorHandle,
+    content: draft.content,
+    media_urls: draft.mediaUrls,
+    thumbnail_url: draft.thumbnailUrl,
+    permalink: draft.permalink,
+    kind: draft.kind,
+    duration_label: draft.durationLabel,
+    category: asCategory(input.category),
+    external_id: draft.externalId,
+    created_by: ctx.user.id,
+  });
   if (error) return { ok: false, error: error.message };
   revalidatePath(PATH);
   return { ok: true };
