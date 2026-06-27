@@ -6,6 +6,20 @@ Last updated: Capture — AI routing, direct-file, photo/scan, tier-gated button
 ## ▶ CURRENT STATE (read this first)
 - **Active branch:** `claude/continuation-an1mam` (all work below is committed + pushed here).
 
+> **Session update (2026-06-26u) — EDITABLE FEATURE FLAGS CONSOLE (Supabase-wired toggles).**
+> Closes the screenshot gap where Stripe/Money admin feature flags were read-only with
+> "toggle these in the database (service role)". Now they toggle in-app.
+> - **`lib/wallet/feature-flags.ts`** — metadata (label/group/needsApproval) for the 10 seeded
+>   flags (groups: Core / Family Wallet / Stripe-needs-approval). `flagLabel/flagGroup/flagNeedsApproval`.
+> - **`components/admin/feature-flags-panel.tsx`** — reusable client toggle list (real switch UI,
+>   grouped, "Stripe approval" badges, optimistic + revert). `FeatureFlagsPanel({flags})`.
+> - **`app/(app)/admin/feature-flags/`** — dedicated console `page.tsx` (service-client reads
+>   `feature_flags`) + `actions.ts` `setFeatureFlagAction({key, enabled})` (super-admin guarded,
+>   service-role upsert — the table has authenticated SELECT but NO write policy, so writes must
+>   be service-role). The SAME panel is embedded in `/admin/stripe` and `/admin/wallet`.
+> - Added "Feature Flags" to `ADMIN_NAV`. Verified: tsc clean · build exit 0 · **1047/1047**.
+>   No migration (the `feature_flags` table + seed are in migration 0088 — apply 0088 to prod).
+
 > **Session update (2026-06-26t) — EDITABLE FAMILY MEMBERS (Settings + Admin), Supabase-wired.**
 > Both member screens are now editable (name / role / color).
 > - **Settings → Family members** (`components/modules/settings-module.tsx`): admins get a
