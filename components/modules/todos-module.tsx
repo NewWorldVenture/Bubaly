@@ -20,6 +20,8 @@ import { Badge } from '@/components/ui/badge';
 import { LoadingBlock, EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
+import { toLocalDate, QUICK_DATE_PRESETS } from '@/lib/utils/quick-dates';
+import { fmtDate } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
 
 type TodoList = Tables<'todo_lists'>;
@@ -270,7 +272,7 @@ export function TodosModule() {
                           {item.due_date && (
                             <span className={cn('flex items-center gap-1 text-[10px]', isOverdue ? 'text-danger font-semibold' : 'text-muted')}>
                               <Calendar className="h-2.5 w-2.5" />
-                              {isOverdue ? 'Overdue · ' : ''}{item.due_date}
+                              {isOverdue ? 'Overdue · ' : ''}{fmtDate(item.due_date + 'T00:00:00', 'MMM d')}
                             </span>
                           )}
                           {item.tags.map((tag) => (
@@ -457,7 +459,19 @@ function ItemModal({ familyId, userId, listId, members, item, onClose, onSaved }
             )}
           </Field>
           <Field label="Due date">
-            {(id) => <Input id={id} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />}
+            {(id) => (
+              <div className="space-y-2">
+                <Input id={id} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                <div className="flex flex-wrap gap-1.5">
+                  {QUICK_DATE_PRESETS.map((q) => (
+                    <button key={q.label} type="button" onClick={() => setDueDate(toLocalDate(q.compute()))}
+                      className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted transition hover:border-brand/40 hover:text-brand">
+                      {q.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </Field>
         </div>
         <Field label="Assign to">
