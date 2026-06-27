@@ -1,7 +1,20 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after the UX polish pass (PR pending). Keep this updated as you ship.
+Last updated after the AI-OS UX strategy (audit + roadmap docs). Keep this updated as you ship.
+
+> ## 🧭 AI-OS UX STRATEGY (PR pending) — "Less Managing Life. More Living It."
+> Two living strategy docs now drive the UX direction; read them before large UX work:
+> - **`docs/WORLD_CLASS_UX_AUDIT.md`** — scores every area vs the brand promise, Top-25 friction +
+>   opportunities, the **five-surface IA** (Home · Assistant · Capture · Inbox · Profile), and where
+>   today's ~70 modules map. Per-feature review cards + status.
+> - **`docs/FRICTIONLESS_UX_ROADMAP.md`** — sequenced execution plan: quick wins → Notifications →
+>   Home (Mission Control) → Inbox (decision queue) → Assistant-as-layer → Universal Capture →
+>   plain-language Policy/explainability → "Bubaly handled this for you" recap. Each item names files/tables.
+> - North star: collapse 70+ destinations into 5 surfaces; AI + context bring the right thing at the
+>   right time; every automation Trust-gated + explainable + undoable.
+> - Already shipped toward it: #163 (crash-guard + NL Quick Capture), #165 (skeletons + route loading
+>   + recovery pages). Next safe quick win: adopt `SkeletonList` in the busiest modules.
 
 > ## ✨ UX POLISH PASS (PR pending) — perceived-perf + recovery + skeletons
 > Branch `claude/ux-polish-pass`. Shipped, low-risk, app-wide UX upgrades. No migration.
