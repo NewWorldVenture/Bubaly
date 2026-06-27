@@ -12,6 +12,11 @@ Last updated: 2026-06-27 — Home dashboard reminder-attention card (after #173 
 > - **`components/dashboard/ai-home-dashboard.tsx`** — extra `family_reminders` fetch (core cols `status`/
 >   `remind_at` only → **migration-independent**; scoped to `member_id = me OR null`, i.e. mine or whole-family),
 >   counts fed into `buildActionCards`. No migration. tsc/lint clean.
+> - **"Coming Up" now merges events + reminders**: `lib/dashboard/upcoming.ts` (PURE, **3 tests**)
+>   `mergeUpcoming(events, reminders, limit)` → one chronological list (`kind: 'event' | 'reminder'`, keys
+>   namespaced so they never collide). The dashboard fetches the week's upcoming reminders (future, ≤7d,
+>   mine-or-family) and renders the merged feed — reminders get a sky Bell + time, events a muted Calendar;
+>   each row links to its module. (PR #174.)
 >
 > ## ⏰ REMINDERS — recurrence + filtering + notifications (#173, MERGED → main `327ee14`)
 > #167 (iOS-parity reminder details: lists/url/early-reminder/flag/subtasks/image/tags via migration 0100)
