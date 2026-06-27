@@ -40,6 +40,12 @@ Start top-left, move right; do high-effort behind flags.
 - Success: notifications/user/day down; approval-response time down.
 
 ### Phase B — Home = Family Mission Control (high impact)
+- **✅ Ranking core shipped:** `lib/home/needs-attention.ts` (PURE + 11 tests) — `NeedItem`,
+  `rankNeedsAttention` (urgency→recency, deterministic), `summarizeNeeds`, `needsHeadline`, `topNeeds`.
+  **To wire:** add a server reader mapping each domain's pending rows → `NeedItem[]` (wrap each query
+  with `isMissingRelationError` so un-migrated tables degrade to empty), then render a "Needs you"
+  section in `AiHomeDashboard` via `topNeeds` + `needsHeadline`. Read-only links first; add inline
+  Approve/Snooze/Delegate after.
 - New `components/home/mission-control.tsx` rendered by `/dashboard`. Ranked cards from a single
   server aggregator that unions cross-domain "needs me" items (wallet approvals, trust approvals,
   chore sign-offs, renewals due, calendar conflicts, concierge outcomes).
