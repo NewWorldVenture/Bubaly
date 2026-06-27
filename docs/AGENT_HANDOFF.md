@@ -120,6 +120,16 @@ Last updated: Family Memory — real search; Front Desk hub complete (2026-06-27
 > `refillBadge(refill_on, refill_reminder_days)` helper renders "Refill overdue/today/in Nd" (rose/amber)
 > on active meds within the member-set reminder window, mirroring how pantry/documents show expiry.
 
+> **Session update (2026-06-27) — HOMEPAGE: Brand Manifesto section.**
+> Added `ManifestoBand` to `components/marketing/visual-mocks.tsx` and placed it on the homepage
+> (`app/(marketing)/page.tsx`, after Testimonials, before the Device showcase). Editorial centered
+> copy: "Life isn't meant to be spent coordinating… / Life is meant to be **lived**. / Bubaly exists to
+> quietly handle the work behind everyday family life… / Because every minute spent managing life is a
+> minute not spent living it. / Our mission is simple: **Less Managing Life. More Living It.**" Static,
+> on-brand, reuses `GradientText`. Note: my branch's hero is "Less Managing Life. More Living It." +
+> "The AI Operating System for Family Life" pill; prod/main shows a parallel variant ("LESS LIFE ADMIN…"
+> pill) — divergence is expected, this work is on the branch. tsc clean · build 0 · **1061/1061**.
+
 > **Session update (2026-06-27) — FAMILY FRONT DESK (the AI concierge hub).**
 > Packages the scattered concierge capabilities into one branded surface — the "Family AI Front Desk"
 > from the product vision (every call answered / email understood / form processed). The capabilities
