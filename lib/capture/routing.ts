@@ -23,6 +23,14 @@ export const CAPTURE_DESTINATIONS: CaptureDestination[] = [
 
 export type RoutedDestination = { key: string; destination: string; url: string };
 
+// Destinations Capture can create a record for directly (text → row). Others
+// just route to their page.
+export const FILEABLE_KEYS = new Set(['grocery', 'todos', 'notes']);
+
+export function isFileableDestination(key: string): boolean {
+  return FILEABLE_KEYS.has(key);
+}
+
 /** Destinations the plan can use. */
 export function availableDestinations(planLevel: number): CaptureDestination[] {
   return CAPTURE_DESTINATIONS.filter((d) => d.minLevel <= planLevel);

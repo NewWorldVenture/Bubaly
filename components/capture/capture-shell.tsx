@@ -14,8 +14,8 @@ import { uploadFamilyDocument } from '@/lib/storage/documents';
 import {
   availableQuickRoutes, resolveQuickRoutes, defaultQuickRouteKeys, type QuickRoute,
 } from '@/lib/capture/quick-routes';
-import { routeCaptureHeuristic, type RoutedDestination } from '@/lib/capture/routing';
-import { saveCaptureRoutesAction } from '@/app/(app)/capture/actions';
+import { routeCaptureHeuristic, isFileableDestination, type RoutedDestination } from '@/lib/capture/routing';
+import { saveCaptureRoutesAction, fileCaptureAction } from '@/app/(app)/capture/actions';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
 
@@ -40,7 +40,8 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
   const [mode, setMode] = useState<CaptureMode>('type');
   const [text, setText] = useState('');
   const [routing, setRouting] = useState(false);
-  const [routed, setRouted] = useState<{ destination: string; url: string } | null>(null);
+  const [routed, setRouted] = useState<{ destination: string; url: string; key: string } | null>(null);
+  const [filing, setFiling] = useState(false);
   const [recording, setRecording] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
@@ -141,7 +142,7 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
       });
       if (res.ok) {
         const data = (await res.json()) as RoutedDestination & { error?: string };
-        if (data && data.url) { setRouted({ destination: data.destination, url: data.url }); return; }
+        if (data && data.url) { setRouted({ destination: data.destination, url: data.url, key: data.key }); return; }
       }
       // Fall back to the instant on-device heuristic.
       setRouted(routeCaptureHeuristic(note, planLevel));
@@ -154,6 +155,22 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
 
   function goToDestination() {
     if (routed) router.push(routed.url);
+  }
+
+  async function fileIt() {
+    if (!routed) return;
+    setFiling(true);
+    const res = await fileCaptureAction({ text: text.trim(), key: routed.key });
+    setFiling(false);
+    if (res.ok && res.filed) {
+      success(`Added to ${res.label}`);
+      router.push(res.url);
+    } else if (res.ok) {
+      router.push(routed.url); // not directly fileable — just open
+    } else {
+      toastError(res.error ?? 'Could not add — opening instead');
+      router.push(routed.url);
+    }
   }
 
   function startVoice() {
@@ -287,15 +304,27 @@ export function CaptureShell({ planLevel = 0, savedRouteKeys = null, familyId, u
             <div className="flex items-center gap-3 p-4">
               <Sparkles className="h-5 w-5 shrink-0 text-brand" />
               <div className="flex-1">
-                <p className="text-sm font-semibold">Sending to <span className="text-brand">{routed.destination}</span></p>
-                <p className="text-xs text-muted">AI matched your input to the best destination.</p>
+                <p className="text-sm font-semibold">
+                  {isFileableDestination(routed.key) ? <>Add to <span className="text-brand">{routed.destination}</span></> : <>Sending to <span className="text-brand">{routed.destination}</span></>}
+                </p>
+                <p className="text-xs text-muted">
+                  {isFileableDestination(routed.key) ? 'AI can file this for you in one tap.' : 'AI matched your input to the best destination.'}
+                </p>
               </div>
             </div>
             <div className="flex gap-2 border-t border-brand/20 p-3">
-              <button type="button" onClick={goToDestination}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand/90">
-                Go to {routed.destination} <ArrowRight className="h-4 w-4" />
-              </button>
+              {isFileableDestination(routed.key) ? (
+                <button type="button" onClick={fileIt} disabled={filing}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60">
+                  {filing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  {filing ? 'Adding…' : `Add to ${routed.destination}`}
+                </button>
+              ) : (
+                <button type="button" onClick={goToDestination}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand/90">
+                  Go to {routed.destination} <ArrowRight className="h-4 w-4" />
+                </button>
+              )}
               <button type="button" onClick={() => setRouted(null)}
                 className="flex items-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-elevated">
                 <ChevronDown className="h-4 w-4" /> Change
