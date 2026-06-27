@@ -54,10 +54,11 @@ Last updated: Dramatic UI upgrade — wallet/money visual allocation + dark-mode
 >   week). Input is now controlled (`remindAt` state) so presets + manual edits stay in sync;
 >   `toLocalInput()` formats a Date to the local `datetime-local` string.
 > - **Chores** (`components/modules/chores-module.tsx`) — same one-tap due-date presets
->   (Today / Tomorrow / This weekend / Next week) under the assignment due-date field;
->   `toLocalDate()` helper. (NOTE: `toLocalInput`/`toLocalDate` + the QUICK_* preset arrays
->   are now duplicated in reminders + chores — a future cleanup could extract them to a
->   shared `lib/utils/dates.ts`.)
+>   (Today / Tomorrow / This weekend / Next week) under the assignment due-date field.
+> - **Shared helpers**: `lib/utils/quick-dates.ts` now houses `toLocalDate`,
+>   `toLocalDateTimeInput`, `QUICK_DATE_PRESETS`, and `QUICK_TIME_PRESETS` (used by both
+>   reminders + chores; reuse these for any future scheduling form). Covered by
+>   `tests/quick-dates.test.ts` (7 tests). **Suite is now 1005 tests.**
 > - **Expense splitting** (`components/modules/expenses-module.tsx`) — added a live
 >   Splitwise-style "Splitting $X between N people · ~$Y each" preview in the split form
 >   so parents see the per-person share before saving.
