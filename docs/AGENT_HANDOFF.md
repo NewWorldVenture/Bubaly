@@ -1,7 +1,35 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after AI Trip Intelligence (PR #168). Keep this updated as you ship.
+Last updated: 2026-06-27 — Session 5: Family Food Operating System (AI Chef, Food Score, Smart Kitchen, Leftover Intelligence). Branch `claude/connect-8ysp00`. 1162 tests pass · build clean. Keep this updated as you ship.
+
+> **Session 5 (2026-06-27) — FAMILY FOOD OPERATING SYSTEM (phase 1)**
+> Branch `claude/connect-8ysp00` · tsc clean · 1162 tests pass (26 new) · build exit 0.
+> Built the unifying "operating system" layer ON TOP of the existing food stack (do NOT duplicate: `meals`, `meal_plans`, `family_recipes`, `meal_votes`, `pantry_items`, `meal_nutrition`, `grocery_lists/items` + AI routes `/api/ai/meals/plan|nutrition`, `/api/ai/recipes/*`; pure libs `lib/meals/planner.ts`, `lib/meals/nutrition.ts`, `lib/pantry/logic.ts`, `lib/recipes/*`, `lib/grocery/retailers.ts`).
+>
+> ### Shipped (production-ready, the differentiating glue)
+> - **AI Family Chef** `app/api/ai/chef/route.ts` + `lib/food/chef.ts` (PURE + 7 tests): conversational chef grounded in REAL context — calendar busy-nights (evening events next 7d), pantry + expiring items, logged leftovers, dietary rules, budget, family recipes. Returns typed `{ message, meals[], groceryAdds[], tips[] }`. Deterministic `fallbackChefReply` when AI off. `parseChefReply` reuses `parseModelJSON`.
+> - **Family Food Health Score** `lib/food/score.ts` (PURE + 11 tests): 7 weighted sub-scores (planning, variety, nutrition, waste, pantry, budget, satisfaction) → overall + letter grade + coaching. `nutritionBalanceScore` uses `DAILY_VALUES`. Only includes sub-scores it has data for. Snapshotted to `family_food_scores`.
+> - **Leftover Intelligence** `lib/food/leftovers.ts` (PURE + 8 tests): `leftoverUrgency` (eat_now/eat_soon/freeze/expired), `activeLeftovers`, `leftoverNudge`, `urgentLeftoverCount`. The AI Chef reuses leftovers first.
+> - **Smart Kitchen Dashboard** `/dashboard/kitchen` (`page.tsx` computes everything from existing tables; `components/modules/kitchen-dashboard.tsx`): tablet-first hero — tonight's dinner, Food Score ring + coaching + "save snapshot", expiring food, leftover cards (log / mark eaten / freeze / remove), grocery snapshot, this-week meals, AI Chef chat modal with quick-prompts.
+> - **Server actions** `app/(app)/dashboard/kitchen/actions.ts`: `addLeftoverAction`, `updateLeftoverStatusAction`, `deleteLeftoverAction`, `snapshotFoodScoreAction` (upsert per family/day).
+> - **Migration `0099_food_os.sql`**: `leftover_inventory` + `family_food_scores` (is_family_member RLS, set_updated_at triggers) + types in `lib/database.types.ts`. Mirrors 0080 style.
+> - Nav (Daily Life → "Smart Kitchen", ChefHat) + feature-catalog `smart-kitchen` (basic). Page uses `requireUserContext`. Also removed a duplicate Family Wallet nav entry left by a prior merge.
+> - **Migration-aware**: `leftover_inventory` reads use `isMissingTableError` → leftovers degrade to a "turns on once migration applied" note; everything else works.
+>
+> ### ⚠️ Migration not applied to prod yet
+> `0099_food_os.sql` — until applied, leftover logging + score snapshots can't persist (the dashboard, score, and AI Chef all still work read-only). **Apply it** to enable.
+>
+> ### Roadmap — remaining Food OS vision (next agents, build on the above)
+> The user's full spec lists 15 modules + 35 tables. Phase 1 (above) delivers the highest-leverage differentiators. Still to build, in rough priority:
+> 1. **Receipt → Pantry** (OCR a grocery receipt → auto-add pantry_items) and **Photo → Pantry** (vision estimate of fridge/pantry → confirm). Use the existing AI provider's vision path.
+> 2. **Family Mood Meals** (comfort/celebration/healthy-reset/budget/quick) — a one-tap chip that pre-fills the AI Chef request, then writes to meal_plans via the existing `/api/ai/meals/plan` write path.
+> 3. **Grocery Intelligence**: pantry-aware list generation (auto-remove owned, auto-add low-stock via `lowStockItems`), `grocery_price_history` + multi-store optimization strategies, family voting on items.
+> 4. **Household food budget**: a `meal_budget_snapshots`/budget setting so the Food Score `budget` sub-score + AI Chef get a real number (currently null → budget sub-score skipped). Wire `weeklyBudgetCents` into the kitchen page + chef route.
+> 5. **Cooking Mode** (distraction-free step-by-step with timers + voice) on recipe detail; **Batch/Meal-Prep planners**; **Holiday/Event planners** (guests, dishes, schedule).
+> 6. **meal_history** table (log what was actually cooked) to power Variety/Satisfaction scores precisely and an AI recommendation loop (currently variety uses planned distinct dishes; satisfaction uses avg recipe rating as a proxy).
+> 7. Per-member **dietary_preferences/allergies** tables to feed `dietary` into the Chef automatically (currently passed from the request only).
+> NOTE: when adding meal_plans↔meals joins, the typed client doesn't model the FK — cast `as unknown as <Row>[]` (see kitchen/page.tsx).
 
 > ## 🧳 AI TRIP INTELLIGENCE (PR #168) — destination research + Smart Departure
 > Branch `claude/connect-8ysp00`. Turns a located calendar event into AI destination research +
