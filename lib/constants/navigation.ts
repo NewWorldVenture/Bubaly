@@ -48,6 +48,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/assistant', label: 'AI Assistant', icon: Sparkles, minLevel: 0 },
       { href: '/dashboard/trust', label: 'Trust & Permissions', icon: ShieldCheck, minLevel: 0 },
       { href: '/dashboard/concierge', label: 'AI Concierge', icon: Plane, minLevel: 1 },
+      { href: '/dashboard/trip-intel', label: 'Trip Intelligence', icon: MapPin, minLevel: 1 },
       { href: '/dashboard/front-desk', label: 'AI Front Desk', icon: PhoneCall, minLevel: 1 },
       { href: '/dashboard/inbox', label: 'Communications Hub', icon: Inbox, minLevel: 1 },
       { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, minLevel: 0 },
