@@ -1,9 +1,30 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-27 — Reminders recurrence advancement + list-filtering + notifications (after #167/#168 merged). Keep this updated as you ship.
+Last updated: 2026-06-27 — Home dashboard reminder-attention card (after #173 MERGED). Keep this updated as you ship.
 
-> ## ⏰ REMINDERS — LIST FILTERING (follow-up to merged #167, branch `claude/festive-bohr-m4cbeg`)
+> ## 🏠 HOME DASHBOARD — REMINDER ATTENTION CARD (new, branch `claude/festive-bohr-m4cbeg`)
+> Now that `family_reminders` is a first-class notifying service (#173, merged), the home dashboard
+> ("Needs Your Attention") surfaces it: a **high-priority "N reminders overdue"** card or, if none overdue,
+> a **medium "N reminders due today"** card linking to `/dashboard/reminders`.
+> - **`lib/dashboard/reminder-attention.ts`** (PURE, **3 tests**): `reminderAttention(rows, now)` →
+>   `{ overdue, dueToday }` (active + timed only; due-today bounded by end of local day; bad timestamps skipped).
+> - **`components/dashboard/ai-home-dashboard.tsx`** — extra `family_reminders` fetch (core cols `status`/
+>   `remind_at` only → **migration-independent**; scoped to `member_id = me OR null`, i.e. mine or whole-family),
+>   counts fed into `buildActionCards`. No migration. tsc/lint clean.
+> - **"Coming Up" now merges events + reminders**: `lib/dashboard/upcoming.ts` (PURE, **3 tests**)
+>   `mergeUpcoming(events, reminders, limit)` → one chronological list (`kind: 'event' | 'reminder'`, keys
+>   namespaced so they never collide). The dashboard fetches the week's upcoming reminders (future, ≤7d,
+>   mine-or-family) and renders the merged feed — reminders get a sky Bell + time, events a muted Calendar;
+>   each row links to its module. (PR #174.)
+> - **AI assistant now creates real reminders**: the `add_reminder` tool in `lib/assistant/tools.ts` was
+>   writing to the **legacy `reminders` table** (invisible in the app). Repointed it at **`family_reminders`**
+>   (core table 0014 — no migration), enriched with optional `priority` / `recurrence` / `assignee`, marked
+>   `ai_suggested`. AI-made reminders now appear in the module, notifications, the dashboard attention card,
+>   and Coming Up — closing the loop. **3 tests** (`tests/assistant-add-reminder.test.ts`). (PR #174.)
+>
+> ## ⏰ REMINDERS — recurrence + filtering + notifications (#173, MERGED → main `327ee14`)
+> #167 (iOS-parity reminder details: lists/url/early-reminder/flag/subtasks/image/tags via migration 0100)
 > #167 (iOS-parity reminder details: lists/url/early-reminder/flag/subtasks/image/tags via migration 0100)
 > is MERGED. This follow-up adds the "organize by list" view to `components/modules/reminders-module.tsx`:
 > a **List filter** dropdown (All / each list / No list) beside the type filter, plus a **delete-list**

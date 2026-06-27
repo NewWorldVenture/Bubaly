@@ -2,7 +2,7 @@ import Link from 'next/link';
 import {
   Sparkles, Calendar, CheckSquare, ShoppingCart, HeartPulse,
   ArrowRight, Bell, ChevronRight, Home, Pill, GraduationCap,
-  Trophy, Sun, Clock, Users, MessageSquare, Plane, PhoneCall,
+  Trophy, Sun, Clock, Users, MessageSquare, Plane, PhoneCall, AlarmClock,
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
 import type { UserContext } from '@/lib/supabase/auth';
@@ -20,6 +20,8 @@ import { DashboardQuickActions } from '@/components/dashboard/quick-actions';
 import { HomeAskBar } from '@/components/dashboard/home-ask-bar';
 import { Heart } from 'lucide-react';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelKind } from '@/lib/relationship/dates';
+import { reminderAttention } from '@/lib/dashboard/reminder-attention';
+import { mergeUpcoming } from '@/lib/dashboard/upcoming';
 
 function greeting() {
   const h = new Date().getHours();
@@ -50,6 +52,8 @@ function buildActionCards(data: {
   overdueMeds: boolean;
   pendingApprovals: number;
   openTodos: number;
+  overdueReminders: number;
+  dueTodayReminders: number;
 }): ActionCard[] {
   const cards: ActionCard[] = [];
 
@@ -90,6 +94,30 @@ function buildActionCards(data: {
       subtitle: 'Check the medication schedule.',
       href: '/dashboard/medications',
       cta: 'View medications',
+    });
+  }
+
+  if (data.overdueReminders > 0) {
+    cards.push({
+      id: 'reminders-overdue',
+      priority: 'high',
+      icon: AlarmClock,
+      iconBg: 'bg-rose-500/15 text-rose-400',
+      title: `${data.overdueReminders} reminder${data.overdueReminders > 1 ? 's' : ''} overdue`,
+      subtitle: 'These were due earlier — tap to catch up.',
+      href: '/dashboard/reminders',
+      cta: 'View reminders',
+    });
+  } else if (data.dueTodayReminders > 0) {
+    cards.push({
+      id: 'reminders-today',
+      priority: 'medium',
+      icon: Bell,
+      iconBg: 'bg-sky-500/15 text-sky-400',
+      title: `${data.dueTodayReminders} reminder${data.dueTodayReminders > 1 ? 's' : ''} due today`,
+      subtitle: 'Stay ahead of what’s coming up.',
+      href: '/dashboard/reminders',
+      cta: 'View reminders',
     });
   }
 
@@ -164,6 +192,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { data: layoutRows },
     { data: walletSub },
     { data: relDateRows },
+    { data: dueReminderRows },
+    { data: weekReminderRows },
   ] = await Promise.all([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
@@ -212,6 +242,16 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']).maybeSingle(),
     supabase.from('relationship_dates').select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
       .eq('family_id', familyId).neq('status', 'cancelled').limit(100),
+    supabase.from('family_reminders').select('id, remind_at, status')
+      .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
+      .or(`member_id.eq.${myMemberId},member_id.is.null`)
+      .lte('remind_at', todayEnd.toISOString()).limit(100),
+    supabase.from('family_reminders').select('id, title, remind_at')
+      .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
+      .or(`member_id.eq.${myMemberId},member_id.is.null`)
+      .gt('remind_at', todayEnd.toISOString())
+      .lte('remind_at', new Date(Date.now() + 7 * 86400000).toISOString())
+      .order('remind_at').limit(10),
   ]);
 
   // Soonest relationship date inside its reminder window (gentle proactive nudge).
@@ -242,6 +282,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const lockedButtons = lockedFeatures(dashTier);
   const canCustomize = canCustomizeDashboard(manager, dashSettings);
 
+  const { overdue: overdueReminders, dueToday: dueTodayReminders } = reminderAttention(
+    (dueReminderRows ?? []) as { remind_at: string | null; status: string }[], now,
+  );
+
   const actionCards = buildActionCards({
     pendingChores: pendingChores ?? 0,
     todayEvents: todayEvents ?? [],
@@ -249,11 +293,20 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     overdueMeds: (overdueMedsCount ?? 0) > 0,
     pendingApprovals: pendingApprovals ?? 0,
     openTodos: openTodos ?? 0,
+    overdueReminders,
+    dueTodayReminders,
   });
 
   const name = me.display_name ?? ctx.user.email?.split('@')[0] ?? 'there';
   const hasEvents = (todayEvents ?? []).length > 0;
-  const hasUpcoming = (upcomingEvents ?? []).length > 0;
+
+  // "Coming Up" merges this week's calendar events and timed reminders.
+  const upcomingItems = mergeUpcoming(
+    (upcomingEvents ?? []) as { id: string; title: string; starts_at: string; all_day: boolean }[],
+    (weekReminderRows ?? []) as { id: string; title: string; remind_at: string | null }[],
+    5,
+  );
+  const hasUpcoming = upcomingItems.length > 0;
 
   return (
     <div className="space-y-6 pb-32">
@@ -468,14 +521,19 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
             <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand hover:underline">Calendar</Link>
           </div>
           <div className="space-y-1.5">
-            {(upcomingEvents ?? []).map((ev) => (
-              <div key={ev.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface/20 px-4 py-2.5">
-                <Calendar className="h-4 w-4 shrink-0 text-muted" />
-                <span className="flex-1 truncate text-sm">{ev.title}</span>
+            {upcomingItems.map((item) => (
+              <Link key={item.key} href={item.kind === 'reminder' ? '/dashboard/reminders' : '/dashboard/calendar'}
+                className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface/20 px-4 py-2.5 transition hover:bg-elevated">
+                {item.kind === 'reminder'
+                  ? <Bell className="h-4 w-4 shrink-0 text-sky-400" />
+                  : <Calendar className="h-4 w-4 shrink-0 text-muted" />}
+                <span className="flex-1 truncate text-sm">{item.title}</span>
                 <span className="text-xs text-muted">
-                  {new Date(ev.starts_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {item.allDay
+                    ? new Date(item.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                    : new Date(item.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                 </span>
-              </div>
+              </Link>
             ))}
           </div>
         </div>

@@ -160,24 +160,36 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
     },
     {
       name: 'add_reminder',
-      description: 'Create a reminder that alerts the family at a specific time.',
+      description: 'Create a reminder that alerts the family at a specific time. Use for "remind me/us to…" requests. Supports priority, an optional assignee, and repeating reminders.',
       input_schema: {
         type: 'object',
         properties: {
           title: { type: 'string' },
           remind_at: { type: 'string', description: 'ISO 8601 datetime to remind at' },
           notes: { type: 'string' },
+          priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], description: 'Defaults to medium' },
+          recurrence: { type: 'string', enum: ['none', 'daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'yearly'], description: 'Repeat cadence; defaults to none' },
+          assignee: { type: 'string', description: `Optional family member this reminder is for (one of: ${memberNames})` },
         },
         required: ['title', 'remind_at'],
       },
       execute: async (a) => {
         const title = str(a.title); const remind_at = str(a.remind_at);
         if (!title || !remind_at) return { ok: false, error: 'title and remind_at are required' };
-        const { error } = await supabase.from('reminders').insert({
-          family_id: ctx.familyId, title, remind_at, notes: optStr(a.notes), created_by: ctx.userId,
+        const priority = (['low', 'medium', 'high', 'urgent'].includes(str(a.priority)) ? str(a.priority) : 'medium') as Database['public']['Tables']['family_reminders']['Insert']['priority'];
+        const recurrence = (['none', 'daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'yearly'].includes(str(a.recurrence)) ? str(a.recurrence) : 'none') as Database['public']['Tables']['family_reminders']['Insert']['recurrence'];
+        const memberId = resolveMember(ctx, a.assignee);
+        // Writes to family_reminders — the same service shown at /dashboard/reminders,
+        // so AI-created reminders appear in the module, notifications, and home dashboard.
+        const { error } = await supabase.from('family_reminders').insert({
+          family_id: ctx.familyId, created_by: ctx.userId, title, remind_at, notes: optStr(a.notes),
+          kind: recurrence === 'none' ? 'time' : 'recurring', priority, recurrence,
+          member_id: memberId, ai_suggested: true,
         });
         if (error) return { ok: false, error: error.message };
-        return { ok: true, summary: `Reminder set: “${title}”.` };
+        const forWhom = memberId ? ` for ${str(a.assignee)}` : '';
+        const repeats = recurrence !== 'none' ? ` (repeats ${recurrence})` : '';
+        return { ok: true, summary: `Reminder set${forWhom}: “${title}”${repeats}.` };
       },
     },
     {
