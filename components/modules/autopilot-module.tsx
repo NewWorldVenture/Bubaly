@@ -87,17 +87,22 @@ export function AutopilotModule() {
 
   async function resolve(s: Suggestion, status: 'approved' | 'executed' | 'dismissed') {
     const supabase = createClient();
-    // Reversible execution for reminders the family approves.
+    // Approving a "create reminder" writes a real reminder the family sees on the
+    // Reminders page (family_reminders, ai_suggested) — the notification cron picks
+    // it up via dueFamilyReminderNotices, same as the Front Desk's call reminders.
     if ((status === 'approved' || status === 'executed') && s.action_type === 'create_reminder') {
       const payload = (s.payload ?? {}) as { title?: string; at?: string };
-      await supabase.from('reminders').insert({
+      await supabase.from('family_reminders').insert({
         family_id: familyId,
+        created_by: userId,
         title: payload.title ?? s.title,
+        notes: s.detail ?? null,
+        kind: 'task',
+        priority: s.urgency >= 3 ? 'high' : 'normal',
         remind_at: payload.at ?? new Date().toISOString(),
         member_id: s.member_id,
-        related_type: s.source_kind === 'appointments' ? 'appointment' : 'renewal',
-        related_id: s.source_id,
-        created_by: userId,
+        status: 'pending',
+        ai_suggested: true,
       });
       status = 'executed';
     }
