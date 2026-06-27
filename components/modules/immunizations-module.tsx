@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { COMMON_VACCINES, sortByDateGiven, dueImmunizations, dueStatus, daysUntilDue } from '@/lib/health/immunizations';
 import type { Tables } from '@/lib/database.types';
@@ -110,7 +110,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
       )}
 
       {loading ? (
-        <LoadingBlock />
+        <SkeletonList />
       ) : scoped.length === 0 ? (
         <EmptyState icon={Syringe} title="No immunizations recorded" description="Track vaccines and next-due dates — handy for school, camp, and travel forms." />
       ) : (

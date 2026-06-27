@@ -12,7 +12,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
-import { LoadingBlock } from '@/components/ui/states';
+import { SkeletonList } from '@/components/ui/states';
 import { fmtTime } from '@/lib/utils/format';
 
 type FocusItem = {
@@ -77,7 +77,7 @@ export function FocusModule() {
 
   useEffect(() => { void load(); }, [load]);
 
-  if (items === null) return <LoadingBlock />;
+  if (items === null) return <SkeletonList />;
 
   const total = items.length;
   const current = items[index];

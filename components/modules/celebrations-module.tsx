@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { isAdmin } from '@/lib/constants/roles';
@@ -96,7 +96,7 @@ export function CelebrationsModule() {
       />
 
       {loading ? (
-        <LoadingBlock />
+        <SkeletonList />
       ) : upcoming.length === 0 ? (
         <EmptyState icon={Gift} title="No upcoming celebrations" description="Add birthdays in family member profiles, or add a custom date here." />
       ) : (

@@ -14,7 +14,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, ErrorState, EmptyState } from '@/components/ui/states';
+import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
@@ -250,7 +250,7 @@ export function MedicationsModule() {
     return map;
   }, [schedules]);
 
-  if (medsLoading) return <LoadingBlock label="Loading medications…" />;
+  if (medsLoading) return <SkeletonList count={5} />;
   if (medsError) return <ErrorState message={typeof medsError === 'string' ? medsError : 'Failed to load medications'} />;
 
   return (

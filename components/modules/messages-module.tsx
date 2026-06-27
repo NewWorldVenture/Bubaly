@@ -14,7 +14,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { ROLE_LABELS } from '@/lib/constants/roles';
 import { fmtRelative, fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
@@ -330,7 +330,7 @@ export function MessagesModule() {
         : (activeConv.member_ids ?? []).map((uid) => members.find((m) => m.user_id === uid))
       ).filter(Boolean) as Tables<'family_members'>[];
 
-  if (loadingConvs) return <LoadingBlock />;
+  if (loadingConvs) return <SkeletonList />;
 
   return (
     <div className="flex h-[calc(100vh-var(--topbar-height)-2rem)] overflow-hidden rounded-2xl border border-border bg-surface/30">
@@ -436,7 +436,7 @@ export function MessagesModule() {
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
               {loadingMsgs ? (
-                <LoadingBlock />
+                <SkeletonList />
               ) : messages.length === 0 ? (
                 <EmptyState icon={MessageCircle} title="No messages yet"
                   description="Say hello to your family!" />

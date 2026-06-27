@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { LoadingBlock, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { tallyPoll, voterCount, memberSelections, isPollClosed, type VoteLike, type OptionLike } from '@/lib/voting/polls';
@@ -108,7 +108,7 @@ export function VotingModule() {
     if (error) toastError(describeDbError(error)); else success('Deleted');
   }
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <SkeletonList />;
   const all = polls ?? [];
 
   return (

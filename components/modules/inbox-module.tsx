@@ -16,7 +16,7 @@ import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { PageHeader } from '@/components/app/page-header';
-import { LoadingBlock, ErrorState } from '@/components/ui/states';
+import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -134,7 +134,7 @@ export function InboxModule() {
     void markRead(comm);
   }
 
-  if (commsLoading) return <LoadingBlock />;
+  if (commsLoading) return <SkeletonList />;
   if (commsError) return <ErrorState message={commsError} onRetry={refreshComms} />;
 
   const TABS: { key: FilterTab; label: string }[] = [
