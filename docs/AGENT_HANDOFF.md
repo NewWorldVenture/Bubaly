@@ -9,6 +9,11 @@ Last updated: Website Template (programmatic SEO) — renamed + custom dimension
 >   **`/admin/marketing/website-template`** (route renamed from `seo-pages`; component
 >   `WebsiteTemplateClient`; subnav label "Website Template" in the Content & SEO group).
 >   Public routes, engine, and tables are unchanged.
+> - **Template library** (`lib/seo/presets.ts`): "New template" opens a preset picker —
+>   Family Organizer, Chore & Allowance App, Meal Planner & Groceries, Shared Family Calendar
+>   (each with full SEO copy/features/FAQs/slug) or "Start from scratch". Picking one opens the
+>   editor pre-filled. `toDraft(template, preset)`; `BLANK_DRAFT` is the scratch baseline. Add a
+>   new preset by appending to `SEO_PRESETS`.
 > - **Programmatic OG images**: `app/(marketing)/[...slug]/opengraph-image.tsx` renders a branded
 >   1200×630 social card per page/hub via `next/og` ImageResponse (Bubaly wordmark + eyebrow + H1
 >   on a brand gradient). `nodejs` runtime; reads the page/template via the service client +
