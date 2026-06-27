@@ -22,6 +22,9 @@ Last updated: Capture — AI routing, direct-file, photo/scan, tier-gated button
 >   guarded, validates `PlanId`, updates-or-creates the family's `subscriptions` row at status
 >   `active`, audit-logs, revalidates `/admin/users` + `/admin/subscriptions`). Admin comp/override
 >   (no charge), whole-family scope; only shown when the user has a family.
+> - **Admin Families tab editable**: actions column with a `…` menu → "Rename family"
+>   (`adminRenameFamilyAction`) + "Change plan" (reuses `adminUpdateFamilyPlanAction`). New
+>   `components/admin/family-row-actions.tsx`.
 > - Verified: tsc clean · build exit 0 · **1047/1047**. No migration (uses existing tables/RLS).
 
 - **Health:** `tsc --noEmit` clean · `npm run build` exit 0 · **full suite 1039/1039 green**.
