@@ -1,7 +1,31 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-28 — Onboarding loop fix: auto-provision family so signups can't get trapped. Keep this updated as you ship.
+Last updated: 2026-06-28 — Onboarding journey rebuilt to match the mockups (profile → PIN → done). Keep this updated as you ship.
+
+> ## 🎬 ONBOARDING JOURNEY — REBUILT TO MATCH THE MOCKUPS (on branch `claude/onboarding-journey`)
+> Replaced the heavy multi-step FAMILY-setup wizard with the lightweight post-sign-in journey from the
+> product mockups: **Create your profile (avatar, name, age, color) → Create a 4-digit PIN → "You're all
+> set!" → dashboard.** Builds on the #186 loop fix; still loop-proof.
+> - **`components/onboarding/onboarding-wizard.tsx`** — fully rewritten (3 steps + progress dots, mobile-first,
+>   matches the screens). Reuses `AvatarPicker` (controlled via `onChange`) + `MEMBER_COLORS`. PIN step has
+>   create+confirm, show/hide, weak-PIN hint, and PIN tips. Done step shows the avatar, "You're all set,
+>   {name}!", the 3 benefit cards, and "Start exploring" → `/dashboard`.
+> - **`lib/onboarding/pin.ts`** (PURE, **8 tests**) — `normalizePin`, `isValidPin`, `isWeakPin`, `normalizeAge`.
+> - **`app/onboarding/actions.ts` `completeProfileOnboardingAction`** — ONE atomic write: `saveUserProfile`
+>   (name+avatar → profiles, syncs member display_name) → `ensureActiveFamily` (provisions the family/parent
+>   member/trial sub) → set member `color` → persist `age` + scrypt-hashed `pinHash` + `onboardingComplete`
+>   in `user_preferences.notification_prefs` (core jsonb, **NO migration**). PIN hashed with node `scrypt`
+>   (salt:hash); never logged. Old actions (finalize/createFamily/details/invite) kept for the manual/invite paths.
+> - **`app/auth/callback/route.ts`** — brand-new accounts (no active `family_members` row) are routed to
+>   `/onboarding` after sign-in; returning users / deep links / super-admins go straight in. No hard gate on
+>   protected pages, so it CANNOT loop (requireUserContext still auto-provisions as the safety net).
+> - **`app/onboarding/page.tsx`** — prefills the name from profile/`user_metadata`; passes `initialName`.
+> - Verified: tsc · eslint · build ✓ (`/onboarding` 7.44 kB) · suite **1364/1364** (8 new). No migration.
+> **Out of scope (provider-gated, human-owned — flagged, NOT built):** the auth-METHOD screens before the
+> profile step (phone OTP, email link, **Sign in with Apple**) need Supabase auth-provider config +
+> credentials (Twilio SMS, Apple OAuth) — dashboard/env, not code. And PIN-based SIGN-IN (mockup screen 14)
+> needs a device-remembered-profile design; the PIN is captured/hashed now, ready for that follow-up.
 
 > ## 🔁 ONBOARDING LOOP — FIXED (on branch `claude/onboarding-loop-fix`)
 > **Symptom:** users reported onboarding "going in a loop" — never reaching the app.

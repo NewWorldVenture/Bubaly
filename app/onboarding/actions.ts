@@ -6,6 +6,9 @@ import { sendEmail } from '@/lib/server/email';
 import { APP_URL } from '@/lib/email';
 import { createFamilySchema, familyDetailsSchema, finalizeOnboardingSchema, inviteSchema, onboardingProfileSchema } from '@/lib/validation';
 import { saveUserProfile } from '@/lib/server/profiles';
+import { ensureActiveFamily } from '@/lib/server/ensure-family';
+import { isValidPin, normalizeAge } from '@/lib/onboarding/pin';
+import { scryptSync, randomBytes } from 'crypto';
 import { cleanGoals, cleanReferralSource } from '@/lib/onboarding/family';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
@@ -151,6 +154,79 @@ export async function saveFamilyDetailsAction(input: {
   }
 
   return { ok: true };
+}
+
+/** Hash a PIN (scrypt, random salt) → "salt:hash" hex. Stored, never logged. */
+function hashPin(pin: string): string {
+  const salt = randomBytes(16);
+  const hash = scryptSync(pin, salt, 32);
+  return `${salt.toString('hex')}:${hash.toString('hex')}`;
+}
+
+/**
+ * The lightweight onboarding journey from the product mockups (post sign-in):
+ * "Create your profile" (avatar, name, age, color) → "Create a PIN" → done.
+ * One atomic write: saves the profile, auto-provisions the family space (so the
+ * user lands straight on the dashboard — no separate setup wizard, no loop),
+ * stores the member's color, and persists age + a hashed PIN + an
+ * `onboardingComplete` flag in the core `user_preferences.notification_prefs`
+ * jsonb (no migration). Idempotent.
+ */
+export async function completeProfileOnboardingAction(input: {
+  firstName: string; age?: number | string | null; avatarUrl?: string; color?: string; pin?: string;
+}): Promise<Result<{ familyId: string }>> {
+  const firstName = (input.firstName ?? '').trim();
+  if (firstName.length < 1) return { ok: false, error: 'Please add your name.' };
+  if (input.pin && !isValidPin(input.pin)) return { ok: false, error: 'Your PIN must be 4 digits.' };
+
+  const supabase = await createServer();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { ok: false, error: 'Not signed in' };
+
+  // 1. Save the profile (name + optional avatar). Sets profiles.full_name so the
+  //    family trigger names the parent member correctly when we provision next.
+  const profileRes = await saveUserProfile(auth.user.id, {
+    firstName, lastName: '', phone: '', avatarUrl: input.avatarUrl || null,
+  });
+  if (!profileRes.ok) return profileRes;
+
+  // 2. Ensure the family space exists (creates parent member + trial sub).
+  const ok = await ensureActiveFamily(supabase, auth.user);
+  if (!ok) return { ok: false, error: 'Could not finish setting up your space. Please try again.' };
+
+  // 3. Resolve the active family + apply the chosen colour to this member.
+  const { data: membership } = await supabase
+    .from('family_members')
+    .select('family_id')
+    .eq('user_id', auth.user.id)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle();
+  const familyId = membership?.family_id ?? '';
+  if (input.color) {
+    await supabase.from('family_members').update({ color: input.color }).eq('user_id', auth.user.id);
+  }
+
+  // 4. Persist age + hashed PIN + completion flag (merge — never clobber prefs).
+  const { data: prefRow } = await supabase
+    .from('user_preferences').select('notification_prefs').eq('user_id', auth.user.id).maybeSingle();
+  const prefs = (prefRow?.notification_prefs as Record<string, unknown> | null) ?? {};
+  const merged: Record<string, unknown> = { ...prefs, onboardingComplete: true };
+  const age = normalizeAge(input.age);
+  if (age !== null) merged.age = age;
+  if (input.pin && isValidPin(input.pin)) merged.pinHash = hashPin(input.pin);
+  await supabase.from('user_preferences').upsert(
+    { user_id: auth.user.id, notification_prefs: merged as never },
+    { onConflict: 'user_id' },
+  );
+
+  await logAudit(supabase, {
+    familyId: familyId || null, actorId: auth.user.id,
+    action: 'update', resource: 'profiles', resourceId: auth.user.id,
+    metadata: { onboarding: 'profile_complete' },
+  });
+
+  return { ok: true, data: { familyId } };
 }
 
 /** Adds a managed member with no login (e.g. a young child). */
