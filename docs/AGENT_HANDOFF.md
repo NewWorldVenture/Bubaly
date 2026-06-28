@@ -1,7 +1,26 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-28 — Production sync: merged #183/#171/#172 + #181 (safe part) to main. Keep this updated as you ship.
+Last updated: 2026-06-28 — Home "Needs you" unified decision queue (wired #171's ranking brain) + /economy /referrals shell. Keep this updated as you ship.
+
+> ## 🎯 HOME "NEEDS YOU" — UNIFIED DECISION QUEUE (new, on `main`)
+> Doctrine: *challenge every assumption; consolidate scattered decisions; no feature is complete until it
+> measurably reduces decisions/searching/manual work* ("Less Managing Life. More Living It.").
+> Home's old `buildActionCards` was an ad-hoc list that only knew about chores/grocery/todos/reminders and
+> **missed money + renewal decisions entirely** — the family had to dig into Wallet and Renewals to find them.
+> Replaced it with ONE ranked, calm "Needs you" surface driven by #171's pure ranking brain:
+> - **`lib/home/needs-attention.ts`** (already merged via #171) — `rankNeedsAttention` / `summarizeNeeds` /
+>   `needsHeadline` / `topNeeds`. Now actually used.
+> - **`lib/home/needs-sources.ts`** (NEW, PURE, **6 tests**) — `parentApprovalToNeed` (pending money approvals →
+>   urgent cards, kind→label/href), `renewalToNeed(row, now)` (renewals inside their reminder window/expired →
+>   urgent ≤3d else normal; null otherwise), `usdFromCents`.
+> - **`components/dashboard/ai-home-dashboard.tsx`** — `buildHomeNeeds` unions approvals (`parent_approvals`,
+>   managers only) + renewals (`renewals`) + chore sign-offs + overdue/today reminders + meds + chores + grocery
+>   + todos into `NeedItem[]`, ranked by urgency then recency; renders a headline ("N things need you") + top-5
+>   cards + "+N more". Both new fetches are missing-table-safe (`?? []`). No migration.
+> - Today's events stay in their own "Today" section (not a decision). Verified: tsc · lint · build · full suite.
+> - **Next per the doctrine:** keep auditing surfaces for friction — fold trust/concierge/calendar-conflict
+>   sources into `buildHomeNeeds` as those domains expose pending rows; consider an Inbox/Assistant merge.
 
 > ## 🚀 PRODUCTION SYNC (2026-06-28) — pulled 4 stale/open PRs onto `main`
 > Swept the last 48h of PRs; everything merged is on `main`. Then brought the open ones in:
