@@ -1,12 +1,15 @@
 'use client';
 
 // The curated Free-tier desktop sidebar: a calm primary list, the user's pinned
-// shortcuts, an "All Services" launcher to the full catalog, and a Settings /
-// Help footer. The full ~70-module catalog lives behind All Services (plan-gated
-// with upgrade prompts) so nothing is lost — it's just no longer overwhelming.
+// shortcuts, an "All Services" launcher to the full catalog (where any service
+// can be ⭐-pinned to the sidebar), and a Settings / Help footer. The full
+// ~70-module catalog lives behind All Services (plan-gated with upgrade prompts)
+// so nothing is lost — it's just no longer overwhelming.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Star } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
   PRIMARY_NAV, SIDEBAR_FOOTER_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS, type NavItem,
@@ -14,33 +17,19 @@ import {
 import { FEATURE_BY_KEY } from '@/lib/dashboard/registry';
 import { FeatureIcon } from '@/components/dashboard/feature-icons';
 import { Modal } from '@/components/ui/modal';
+import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { saveDashboardLayoutAction } from '@/app/(app)/dashboard/customize-actions';
 import { useApp } from './app-context';
 import { resolveItems, NavEntry, isActive } from './nav-shared';
-import { usePathname } from 'next/navigation';
 
-/** The user's pinned Quick-Access shortcuts (from their saved dashboard layout). */
-function SidebarShortcuts() {
-  const { familyId, userId } = useApp();
+// Reverse map: nav route → registry feature key (only routes that ARE a
+// registry feature can be pinned, since pins persist as dashboard feature_keys).
+const KEY_BY_ROUTE = new Map(Object.values(FEATURE_BY_KEY).map((f) => [f.route, f.key]));
+
+/** The user's pinned Quick-Access shortcuts, resolved to links. */
+function SidebarShortcuts({ keys }: { keys: string[] }) {
   const pathname = usePathname();
-  const [keys, setKeys] = useState<string[] | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    createClient()
-      .from('dashboard_layouts')
-      .select('feature_keys, scope, user_id')
-      .eq('family_id', familyId).is('deleted_at', null).in('scope', ['user', 'family'])
-      .then(({ data }) => {
-        if (!active) return;
-        const mine = data?.find((l) => l.scope === 'user' && l.user_id === userId);
-        const fam = data?.find((l) => l.scope === 'family');
-        setKeys(((mine?.feature_keys ?? fam?.feature_keys ?? []) as string[]).slice(0, 6));
-      });
-    return () => { active = false; };
-  }, [familyId, userId]);
-
-  if (keys === null) return null; // loading — render nothing to avoid layout flash
   if (keys.length === 0) {
     return <p className="px-2 py-1 text-xs leading-5 text-muted/60">Pin favorites from All Services.</p>;
   }
@@ -65,9 +54,10 @@ function SidebarShortcuts() {
   );
 }
 
-/** Full catalog of every module, grouped + plan-gated, shown in a modal. */
-function AllServicesModal({ open, onClose, onLocked }: {
+/** Full catalog of every module, grouped + plan-gated, with ⭐ pin toggles. */
+function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin }: {
   open: boolean; onClose: () => void; onLocked: (item: NavItem) => void;
+  pinned: Set<string>; onTogglePin: (key: string) => void;
 }) {
   const { planLevel, isSuperAdmin, featureTiers } = useApp();
   if (!open) return null;
@@ -81,11 +71,28 @@ function AllServicesModal({ open, onClose, onLocked }: {
             <div key={group.title} className="space-y-1">
               <p className="px-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted/70">{group.title}</p>
               <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-                {resolved.map(({ item, locked }) => (
-                  <div key={item.href} onClick={() => { if (!locked) onClose(); }}>
-                    <NavEntry item={item} variant="grid" locked={locked} onLocked={onLocked} />
-                  </div>
-                ))}
+                {resolved.map(({ item, locked }) => {
+                  const key = !locked ? KEY_BY_ROUTE.get(item.href) : undefined;
+                  const isPinned = key ? pinned.has(key) : false;
+                  return (
+                    <div key={item.href} className="relative">
+                      <div onClick={() => { if (!locked) onClose(); }}>
+                        <NavEntry item={item} variant="grid" locked={locked} onLocked={onLocked} />
+                      </div>
+                      {key && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); onTogglePin(key); }}
+                          aria-label={isPinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
+                          title={isPinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
+                          className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-md text-muted/60 transition hover:bg-elevated hover:text-brand"
+                        >
+                          <Star className={cn('h-3.5 w-3.5', isPinned && 'fill-brand text-brand')} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
@@ -96,8 +103,41 @@ function AllServicesModal({ open, onClose, onLocked }: {
 }
 
 export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => void }) {
-  const { unreadMessages } = useApp();
+  const { familyId, userId, unreadMessages } = useApp();
+  const { error: toastError } = useToast();
   const [allOpen, setAllOpen] = useState(false);
+  const [keys, setKeys] = useState<string[] | null>(null);
+
+  // Initial pinned set: the user's saved layout, else the family default.
+  useEffect(() => {
+    let active = true;
+    createClient()
+      .from('dashboard_layouts')
+      .select('feature_keys, scope, user_id')
+      .eq('family_id', familyId).is('deleted_at', null).in('scope', ['user', 'family'])
+      .then(({ data }) => {
+        if (!active) return;
+        const mine = data?.find((l) => l.scope === 'user' && l.user_id === userId);
+        const fam = data?.find((l) => l.scope === 'family');
+        setKeys(((mine?.feature_keys ?? fam?.feature_keys ?? []) as string[]));
+      });
+    return () => { active = false; };
+  }, [familyId, userId]);
+
+  const pinnedSet = useMemo(() => new Set(keys ?? []), [keys]);
+
+  async function togglePin(key: string) {
+    const current = keys ?? [];
+    const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+    setKeys(next); // optimistic
+    // No deviceContext → device 'all', the same row the Home Quick Access uses,
+    // so pinned favorites stay in sync across the sidebar and the dashboard.
+    const res = await saveDashboardLayoutAction({ featureKeys: next });
+    if (!res.ok) {
+      setKeys(current); // revert
+      toastError(res.error ?? 'Could not update your shortcuts.');
+    }
+  }
 
   return (
     <>
@@ -119,7 +159,7 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
         {/* Shortcuts */}
         <div className="mt-5 space-y-0.5">
           <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted/70">Shortcuts</p>
-          <SidebarShortcuts />
+          {keys !== null && <SidebarShortcuts keys={keys} />}
         </div>
 
         {/* All Services launcher */}
@@ -142,7 +182,13 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
         </div>
       </nav>
 
-      <AllServicesModal open={allOpen} onClose={() => setAllOpen(false)} onLocked={(i) => { setAllOpen(false); onLocked(i); }} />
+      <AllServicesModal
+        open={allOpen}
+        onClose={() => setAllOpen(false)}
+        onLocked={(i) => { setAllOpen(false); onLocked(i); }}
+        pinned={pinnedSet}
+        onTogglePin={togglePin}
+      />
     </>
   );
 }

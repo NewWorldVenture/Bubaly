@@ -20,9 +20,13 @@ Last updated: 2026-06-28 — Phone OTP sign-in/up wired (method chooser now phon
 >   `read_by` ∌ me and `sender_id ≠ me`; passed via **`unreadMessages`** on app-context (optional, defaults 0).
 > - No migration. tsc · lint · build green · suite 1381.
 > - **Family switching now lives in the top-bar UserMenu** (shown when `families.length > 1`) — closes the
->   gap from dropping the sidebar switcher for Free tier; available on every tier. **Remaining follow-ups:**
->   SHORTCUTS could become drag-to-pin (⭐ from All Services → `dashboard_layouts`); Messages badge is a
->   load-time snapshot (could subscribe to `family_messages` realtime).
+>   gap from dropping the sidebar switcher for Free tier; available on every tier.
+> - **SHORTCUTS are now ⭐-pinnable from All Services**: each catalog item shows a star toggle (only for
+>   non-locked services that map to a registry feature key via `KEY_BY_ROUTE`). `FreeTierSidebar` holds the
+>   pinned keys in state (so the modal + the shortcuts list stay in sync), persists via the existing
+>   `saveDashboardLayoutAction({ featureKeys })` (device 'all' → the SAME row as the Home Quick Access, so
+>   favorites are unified across sidebar + dashboard), optimistic with revert-on-error. **Remaining follow-up:**
+>   Messages badge is a load-time snapshot (could subscribe to `family_messages` realtime).
 >
 > ## 📱 PHONE OTP AUTH + METHOD CHOOSER (on branch `claude/phone-otp-auth`)
 > Completes the mockups' multi-method sign-up: the chooser now offers **phone · email · Google · Apple**.
