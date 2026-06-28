@@ -5,6 +5,7 @@ import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { planLevel } from '@/lib/constants/plans';
 import { tierToLevel } from '@/lib/features/tiers';
 import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
+import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 
@@ -42,6 +43,17 @@ export async function isSuperAdmin(): Promise<boolean> {
   if (isSuperAdminEmail(auth.user.email)) return true;
   const { data } = await supabase.rpc('is_super_admin');
   return data === true;
+}
+
+/**
+ * The plan level to gate FEATURE CONTENT by, with super-admins bumped to the max
+ * (2 = Family+). Use this anywhere a page/route/action would otherwise gate on the
+ * raw `planLevel(subscription)` so site super-admins get everything 100% unlocked
+ * — mirroring `requireFeature` / `requirePlanLevel`, which already bypass for them.
+ * Do NOT use in system/cron contexts that process families by their real plan.
+ */
+export async function effectivePlanLevel(rawLevel: number): Promise<number> {
+  return (await isSuperAdmin()) ? 2 : rawLevel;
 }
 
 /**
@@ -97,7 +109,23 @@ export async function getUserContext(): Promise<UserContext | { needsFamily: tru
 export async function requireUserContext(): Promise<UserContext> {
   const ctx = await getUserContext();
   if (!ctx) redirect('/login');
-  if ('needsFamily' in ctx) redirect('/onboarding');
+  if ('needsFamily' in ctx) {
+    // Never trap a signed-in user in an onboarding loop. Auto-provision their
+    // family space, then re-resolve — so signing up lands you straight on the
+    // dashboard (with an "Invite your family" card), not a mandatory wizard.
+    const supabase = await createServer();
+    const { data: auth } = await supabase.auth.getUser();
+    if (auth.user) {
+      const ok = await ensureActiveFamily(supabase, auth.user);
+      if (ok) {
+        const next = await getUserContext();
+        if (next && !('needsFamily' in next)) return next;
+      }
+    }
+    // Fallback only if provisioning genuinely failed (e.g. DB unreachable):
+    // the manual wizard. requireUserContext is NOT called there, so no loop.
+    redirect('/onboarding');
+  }
   return ctx;
 }
 

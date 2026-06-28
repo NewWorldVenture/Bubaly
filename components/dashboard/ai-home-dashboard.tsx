@@ -2,7 +2,7 @@ import Link from 'next/link';
 import {
   Sparkles, Calendar, CheckSquare, ShoppingCart, HeartPulse,
   ArrowRight, Bell, ChevronRight, Home, Pill, GraduationCap,
-  Trophy, Sun, Clock, Users, MessageSquare, Plane, PhoneCall, AlarmClock,
+  Trophy, Sun, Clock, Users, MessageSquare, Plane, PhoneCall, AlarmClock, RefreshCw, CalendarClock, FileClock,
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
 import type { UserContext } from '@/lib/supabase/auth';
@@ -23,6 +23,11 @@ import { Heart } from 'lucide-react';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelKind } from '@/lib/relationship/dates';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
 import { mergeUpcoming } from '@/lib/dashboard/upcoming';
+import { topNeeds, summarizeNeeds, needsHeadline, type NeedItem } from '@/lib/home/needs-attention';
+import { type ParentApprovalRow, type RenewalRow, type DocumentRow } from '@/lib/home/needs-sources';
+import { buildHomeNeeds } from '@/lib/home/needs-build';
+import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
+import { HomeApprovalActions } from '@/components/dashboard/home-approval-actions';
 
 function greeting() {
   const h = new Date().getHours();
@@ -35,134 +40,22 @@ function todayLabel() {
   return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-type ActionCard = {
-  id: string;
-  priority: 'high' | 'medium' | 'low';
-  icon: React.ComponentType<{ className?: string }>;
-  iconBg: string;
-  title: string;
-  subtitle: string;
-  href: string;
-  cta: string;
+// Render metadata (icon + accent + CTA + fallback subtitle) per NeedItem.kind.
+type NeedRenderMeta = { icon: React.ComponentType<{ className?: string }>; iconBg: string; cta: string; subtitle: string };
+const NEED_META: Record<string, NeedRenderMeta> = {
+  approval: { icon: ShieldCheck, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', subtitle: 'A family member is waiting on your approval.' },
+  calendar_conflict: { icon: CalendarClock, iconBg: 'bg-rose-500/15 text-rose-400', cta: 'Resolve', subtitle: 'Two events are double-booked.' },
+  renewal: { icon: RefreshCw, iconBg: 'bg-orange-500/15 text-orange-400', cta: 'Renew', subtitle: 'Renew it before it lapses.' },
+  document: { icon: FileClock, iconBg: 'bg-orange-500/15 text-orange-400', cta: 'View', subtitle: 'A document is expiring soon.' },
+  chore_signoff: { icon: CheckSquare, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', subtitle: 'Chores are waiting for your sign-off.' },
+  reminder_overdue: { icon: AlarmClock, iconBg: 'bg-rose-500/15 text-rose-400', cta: 'Catch up', subtitle: 'These were due earlier.' },
+  meds: { icon: Pill, iconBg: 'bg-rose-500/15 text-rose-400', cta: 'View', subtitle: 'Check the medication schedule.' },
+  reminder_today: { icon: Bell, iconBg: 'bg-sky-500/15 text-sky-400', cta: 'View', subtitle: 'Coming up today.' },
+  chores_todo: { icon: CheckSquare, iconBg: 'bg-violet-500/15 text-violet-400', cta: 'View', subtitle: 'Keep the momentum going.' },
+  grocery: { icon: ShoppingCart, iconBg: 'bg-emerald-500/15 text-emerald-400', cta: 'Update', subtitle: 'Items may be running low.' },
+  todos: { icon: CheckSquare, iconBg: 'bg-teal-500/15 text-teal-400', cta: 'View', subtitle: 'Personal items waiting for you.' },
 };
-
-function buildActionCards(data: {
-  pendingChores: number;
-  todayEvents: { id: string; title: string; starts_at: string; all_day: boolean; location: string | null }[];
-  lowGrocery: boolean;
-  overdueMeds: boolean;
-  pendingApprovals: number;
-  openTodos: number;
-  overdueReminders: number;
-  dueTodayReminders: number;
-}): ActionCard[] {
-  const cards: ActionCard[] = [];
-
-  if (data.todayEvents.length > 0) {
-    const next = data.todayEvents[0];
-    cards.push({
-      id: 'today-event',
-      priority: 'high',
-      icon: Calendar,
-      iconBg: 'bg-blue-500/15 text-blue-400',
-      title: next.title,
-      subtitle: next.all_day ? 'All day' : `Today at ${fmtTime(next.starts_at)}${next.location ? ` · ${next.location}` : ''}`,
-      href: '/dashboard/calendar',
-      cta: 'See calendar',
-    });
-  }
-
-  if (data.pendingApprovals > 0) {
-    cards.push({
-      id: 'approvals',
-      priority: 'high',
-      icon: CheckSquare,
-      iconBg: 'bg-amber-500/15 text-amber-400',
-      title: `${data.pendingApprovals} chore${data.pendingApprovals > 1 ? 's' : ''} awaiting approval`,
-      subtitle: 'Family members are waiting on you.',
-      href: '/dashboard/chores',
-      cta: 'Review now',
-    });
-  }
-
-  if (data.overdueMeds) {
-    cards.push({
-      id: 'meds',
-      priority: 'high',
-      icon: Pill,
-      iconBg: 'bg-rose-500/15 text-rose-400',
-      title: 'Medication due today',
-      subtitle: 'Check the medication schedule.',
-      href: '/dashboard/medications',
-      cta: 'View medications',
-    });
-  }
-
-  if (data.overdueReminders > 0) {
-    cards.push({
-      id: 'reminders-overdue',
-      priority: 'high',
-      icon: AlarmClock,
-      iconBg: 'bg-rose-500/15 text-rose-400',
-      title: `${data.overdueReminders} reminder${data.overdueReminders > 1 ? 's' : ''} overdue`,
-      subtitle: 'These were due earlier — tap to catch up.',
-      href: '/dashboard/reminders',
-      cta: 'View reminders',
-    });
-  } else if (data.dueTodayReminders > 0) {
-    cards.push({
-      id: 'reminders-today',
-      priority: 'medium',
-      icon: Bell,
-      iconBg: 'bg-sky-500/15 text-sky-400',
-      title: `${data.dueTodayReminders} reminder${data.dueTodayReminders > 1 ? 's' : ''} due today`,
-      subtitle: 'Stay ahead of what’s coming up.',
-      href: '/dashboard/reminders',
-      cta: 'View reminders',
-    });
-  }
-
-  if (data.pendingChores > 0) {
-    cards.push({
-      id: 'chores',
-      priority: 'medium',
-      icon: CheckSquare,
-      iconBg: 'bg-violet-500/15 text-violet-400',
-      title: `${data.pendingChores} task${data.pendingChores > 1 ? 's' : ''} to do today`,
-      subtitle: 'Keep the momentum going.',
-      href: '/dashboard/chores',
-      cta: 'View tasks',
-    });
-  }
-
-  if (data.lowGrocery) {
-    cards.push({
-      id: 'grocery',
-      priority: 'medium',
-      icon: ShoppingCart,
-      iconBg: 'bg-emerald-500/15 text-emerald-400',
-      title: 'Grocery list needs updating',
-      subtitle: 'Items may be running low.',
-      href: '/dashboard/grocery',
-      cta: 'Update list',
-    });
-  }
-
-  if (data.openTodos > 0) {
-    cards.push({
-      id: 'todos',
-      priority: 'low',
-      icon: CheckSquare,
-      iconBg: 'bg-teal-500/15 text-teal-400',
-      title: `${data.openTodos} to-do item${data.openTodos > 1 ? 's' : ''} open`,
-      subtitle: 'Personal items waiting for you.',
-      href: '/dashboard/todos',
-      cta: 'View to-dos',
-    });
-  }
-
-  return cards.slice(0, 5);
-}
+const DEFAULT_NEED_META: NeedRenderMeta = { icon: Bell, iconBg: 'bg-brand/15 text-brand', cta: 'View', subtitle: '' };
 
 export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const familyId = ctx.active.familyId;
@@ -195,6 +88,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { data: relDateRows },
     { data: dueReminderRows },
     { data: weekReminderRows },
+    { data: approvalRows },
+    { data: renewalRows },
+    { data: conflictEventRows },
+    { data: documentRows },
   ] = await Promise.all([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
@@ -253,6 +150,25 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .gt('remind_at', todayEnd.toISOString())
       .lte('remind_at', new Date(Date.now() + 7 * 86400000).toISOString())
       .order('remind_at').limit(10),
+    // Money decisions waiting on a parent (wallet/cards/allowance) — managers only.
+    manager
+      ? supabase.from('parent_approvals').select('id, kind, amount_cents, created_at')
+          .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(20)
+      : Promise.resolve({ data: [] }),
+    // Renewals approaching/expired so they surface on Home, not just in their module.
+    supabase.from('renewals').select('id, title, expires_at, reminder_days, status, created_at')
+      .eq('family_id', familyId).in('status', ['active', 'expired'])
+      .lte('expires_at', new Date(Date.now() + 45 * 86400000).toISOString()).limit(50),
+    // Upcoming assigned events (next 14d) → detect personal double-bookings.
+    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id')
+      .eq('family_id', familyId).not('assignee_id', 'is', null)
+      .gte('starts_at', todayStart.toISOString())
+      .lte('starts_at', new Date(Date.now() + 14 * 86400000).toISOString())
+      .order('starts_at').limit(200),
+    // Stored documents expiring within ~30 days (passports, licenses, insurance…).
+    supabase.from('documents').select('id, title, expires_at')
+      .eq('family_id', familyId).not('expires_at', 'is', null)
+      .lte('expires_at', new Date(Date.now() + 30 * 86400000).toISOString()).limit(50),
   ]);
 
   // Soonest relationship date inside its reminder window (gentle proactive nudge).
@@ -291,16 +207,33 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     (dueReminderRows ?? []) as { remind_at: string | null; status: string }[], now,
   );
 
-  const actionCards = buildActionCards({
-    pendingChores: pendingChores ?? 0,
-    todayEvents: todayEvents ?? [],
-    lowGrocery: (groceryCount ?? 0) > 0,
-    overdueMeds: (overdueMedsCount ?? 0) > 0,
+  // Personal double-bookings: detect per-assignee overlaps; a manager sees the
+  // whole family's, everyone else just their own.
+  const memberNameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
+  const homeConflicts = detectConflicts((conflictEventRows ?? []) as ConflictEvent[])
+    .filter((c) => manager || c.assigneeId === myMemberId)
+    .map((c) => ({ id: c.eventIds[0], assigneeName: memberNameById.get(c.assigneeId) ?? null, count: c.eventIds.length, startsAt: c.startsAt }));
+
+  const homeNeeds = buildHomeNeeds({
+    approvals: (approvalRows ?? []) as ParentApprovalRow[],
+    renewals: (renewalRows ?? []) as RenewalRow[],
+    documents: (documentRows ?? []) as DocumentRow[],
+    conflicts: homeConflicts,
     pendingApprovals: pendingApprovals ?? 0,
-    openTodos: openTodos ?? 0,
+    overdueMeds: (overdueMedsCount ?? 0) > 0,
     overdueReminders,
     dueTodayReminders,
+    pendingChores: pendingChores ?? 0,
+    lowGrocery: (groceryCount ?? 0) > 0,
+    openTodos: openTodos ?? 0,
+    now,
   });
+  const needs = topNeeds(homeNeeds, 5);
+  const needsHeader = needsHeadline(summarizeNeeds(homeNeeds));
+  // Map each approval need back to its row so the card can offer one-tap approve.
+  const approvalKindByNeedId = new Map<string, string>(
+    ((approvalRows ?? []) as ParentApprovalRow[]).map((a) => [`approval:${a.id}`, a.kind]),
+  );
 
   const name = me.display_name ?? ctx.user.email?.split('@')[0] ?? 'there';
   const hasEvents = (todayEvents ?? []).length > 0;
@@ -454,38 +387,58 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         </Link>
       </div>
 
-      {/* AI Action Cards */}
-      {actionCards.length > 0 && (
+      {/* Needs you — the single, ranked cross-domain decision queue */}
+      {needs.shown.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-brand" />
-            <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">Needs Your Attention</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Needs you</h2>
           </div>
+          <p className="-mt-1 text-sm text-fg/80">{needsHeader}</p>
           <div className="space-y-2.5">
-            {actionCards.map((card) => (
-              <Link
-                key={card.id}
-                href={card.href}
-                className={cn(
-                  'flex items-center gap-4 rounded-2xl border p-4 transition hover:bg-elevated',
-                  card.priority === 'high'
-                    ? 'border-amber-500/20 bg-amber-500/5'
-                    : 'border-border bg-surface/40',
-                )}
-              >
-                <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', card.iconBg)}>
-                  <card.icon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">{card.title}</p>
-                  <p className="mt-0.5 truncate text-xs text-muted">{card.subtitle}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-brand">
-                  {card.cta} <ChevronRight className="h-3.5 w-3.5" />
-                </div>
-              </Link>
-            ))}
+            {needs.shown.map((item) => {
+              const meta = NEED_META[item.kind] ?? DEFAULT_NEED_META;
+              const Icon = meta.icon;
+              const urgent = item.urgency === 'urgent' || item.urgency === 'emergency';
+              const approvalKind = item.kind === 'approval' ? approvalKindByNeedId.get(item.id) : undefined;
+              const cardClass = cn(
+                'flex items-center gap-4 rounded-2xl border p-4 transition',
+                urgent ? 'border-amber-500/20 bg-amber-500/5' : 'border-border bg-surface/40',
+              );
+              const body = (
+                <>
+                  <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', meta.iconBg)}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{item.title}</p>
+                    {meta.subtitle && <p className="mt-0.5 truncate text-xs text-muted">{meta.subtitle}</p>}
+                  </div>
+                </>
+              );
+              // Approvals get one-tap Approve/Decline inline (buttons can't nest in
+              // an <a>, so the card is a div with the title linking out).
+              if (approvalKind !== undefined) {
+                return (
+                  <div key={item.id} className={cardClass}>
+                    <Link href={item.href} className="flex min-w-0 flex-1 items-center gap-4 hover:opacity-90">{body}</Link>
+                    <HomeApprovalActions approvalId={item.id.slice('approval:'.length)} kind={approvalKind} />
+                  </div>
+                );
+              }
+              return (
+                <Link key={item.id} href={item.href} className={cn(cardClass, 'hover:bg-elevated')}>
+                  {body}
+                  <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-brand">
+                    {meta.cta} <ChevronRight className="h-3.5 w-3.5" />
+                  </div>
+                </Link>
+              );
+            })}
           </div>
+          {needs.more > 0 && (
+            <p className="text-xs text-muted">+{needs.more} more {needs.more === 1 ? 'item' : 'items'} need you.</p>
+          )}
         </div>
       )}
 
@@ -556,7 +509,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       />
 
       {/* Empty state when no cards */}
-      {actionCards.length === 0 && !hasEvents && (
+      {homeNeeds.length === 0 && !hasEvents && (
         <div className="flex flex-col items-center gap-4 rounded-2xl border border-border bg-surface/40 py-12 text-center">
           <div className="grid h-16 w-16 place-items-center rounded-full bg-brand/10">
             <Sparkles className="h-8 w-8 text-brand" />

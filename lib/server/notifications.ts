@@ -6,6 +6,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, NotificationType } from '@/lib/database.types';
 import { renewalReminders, opportunityReminders } from '@/lib/notifications/deadline-reminders';
+import { approvalReminders, type ApprovalInput } from '@/lib/notifications/approval-reminders';
+import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
 import { dueFamilyReminderNotices, reminderFetchHorizonIso, type FamilyReminderRow } from '@/lib/reminders/notify';
@@ -60,6 +62,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     { data: meds },
     { data: medSchedules },
     { data: medDoses },
+    { data: approvalsPending },
   ] = await Promise.all([
     supabase.from('family_members').select('id, user_id, display_name, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
@@ -75,6 +78,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     supabase.from('medications').select('id, name, dosage, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
     supabase.from('medication_schedules').select('id, medication_id, time_of_day, days_of_week, starts_on, ends_on').eq('family_id', familyId),
     supabase.from('medication_doses').select('schedule_id, scheduled_for, status').eq('family_id', familyId).gte('scheduled_for', todayStartIso),
+    // Pending money approvals → a "decision is waiting on you" ping for parents.
+    supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', familyId).eq('status', 'pending').limit(50),
   ]);
 
   const userByMember = new Map((members ?? []).map((m) => [m.id, m.user_id]));
@@ -156,6 +161,11 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     candidates.push(row);
   }
 
+  // Pending money approvals → notify the parents who can act on them.
+  for (const row of approvalReminders((approvalsPending ?? []) as ApprovalInput[], managerLites)) {
+    candidates.push(row);
+  }
+
   // Relationship dates entering their reminder window (anniversaries, birthdays,
   // date nights). The related_id is keyed by occurrence year so the permanent
   // dedup sends one advance reminder per occurrence, then again next year.
@@ -189,6 +199,28 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       title: `Reminder: ${n.title}`,
       body: `Due ${timeLabel(n.remindAtIso)}`,
     });
+  }
+
+  // Calendar double-bookings → proactively flag whoever is double-booked (or the
+  // managers, for a child with no account). Reuses the pure conflict detector.
+  const { data: conflictEvents } = await supabase.from('calendar_events')
+    .select('id, title, starts_at, ends_at, all_day, assignee_id')
+    .eq('family_id', familyId).not('assignee_id', 'is', null)
+    .gte('starts_at', nowIso).lte('starts_at', in14d)
+    .order('starts_at').limit(200);
+  const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));
+  for (const c of detectConflicts((conflictEvents ?? []) as ConflictEvent[])) {
+    const key = `conflict:${[...c.eventIds].sort().join('-')}`;
+    const who = nameByMember.get(c.assigneeId);
+    const body = `${who ? `${who}: ` : ''}${c.eventIds.length} events overlap ${timeLabel(c.startsAt)}`;
+    const target = userByMember.get(c.assigneeId) ?? null;
+    if (target) {
+      candidates.push({ type: 'system', related_type: 'calendar_events', related_id: key, user_id: target, title: 'Schedule conflict', body });
+    } else if (managers.length > 0) {
+      for (const m of managers) candidates.push({ type: 'system', related_type: 'calendar_events', related_id: `${key}:${m.id}`, user_id: m.user_id, title: 'Schedule conflict', body });
+    } else {
+      candidates.push({ type: 'system', related_type: 'calendar_events', related_id: key, user_id: null, title: 'Schedule conflict', body });
+    }
   }
 
   // ── Generic items: dedup permanently against notifications for the same item.

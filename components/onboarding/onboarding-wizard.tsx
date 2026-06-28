@@ -1,704 +1,203 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// Onboarding journey — mirrors the product mockups (post sign-in):
+//   1) Create your profile  — avatar, name, age, colour
+//   2) Create a PIN         — 4-digit, confirm, tips
+//   3) You're all set       — summary → straight to the dashboard
+// One atomic write at the end (completeProfileOnboardingAction) provisions the
+// family space too, so there is no separate setup wizard and no redirect loop.
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Home, UserPlus, Mail, Check, ArrowRight, ArrowLeft,
-  User, Users, Trash2, Plus,
+  ShieldCheck, Users, Sparkles, ArrowRight, Eye, EyeOff, Check, Loader2, Lock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input, Field, Select } from '@/components/ui/input';
-import { Avatar } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { PhoneInput } from '@/components/ui/phone-input';
 import { AvatarPicker } from '@/components/ui/avatar-picker';
 import { useToast } from '@/components/ui/toast';
-import { ROLE_LABELS, ROLE_DESCRIPTIONS } from '@/lib/constants/roles';
-import type { MemberRole } from '@/lib/constants/roles';
-import { FAMILY_GOALS, REFERRAL_SOURCES, parseChildAges } from '@/lib/onboarding/family';
-import {
-  MEMBER_COLORS, LOCAL_MEMBER_ROLES, INVITE_ROLES,
-  nextMemberColor, makeLocalMember, makeInviteMember,
-  addMember, removeMember, draftMemberLabel,
-  type DraftMember,
-} from '@/lib/onboarding/draft';
-import { finalizeOnboardingAction } from '@/app/onboarding/actions';
-import {
-  COUNTRY_DIAL_CODES,
-  guessCountryDialCode,
-  guessDialCodeFromPhone,
-  extractLocalNumber,
-} from '@/lib/utils/phone';
+import { cn } from '@/lib/utils/cn';
+import { MEMBER_COLORS } from '@/lib/onboarding/draft';
+import { normalizePin, isValidPin, isWeakPin } from '@/lib/onboarding/pin';
+import { completeProfileOnboardingAction } from '@/app/onboarding/actions';
 
-const TOTAL_STEPS = 5;
-const STORAGE_KEY = 'onboarding-draft';
+type Step = 'profile' | 'pin' | 'done';
+const STEPS: Step[] = ['profile', 'pin', 'done'];
 
-export type InitialProfile = {
-  firstName: string;
-  lastName: string;
-  phone: string;
-  email: string;
-  avatarUrl?: string;
-};
-
-function timezones(): string[] {
-  try {
-    const intl = Intl as typeof Intl & { supportedValuesOf?: (k: string) => string[] };
-    const all = intl.supportedValuesOf?.('timeZone');
-    if (all?.length) return all;
-  } catch { /* fall through */ }
-  return ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu', 'UTC', 'Europe/London'];
-}
-
-interface DraftState {
-  profile: {
-    firstName: string;
-    lastName: string;
-    phone: string;       // E.164 combined value
-    dialCode: string;    // stored for back-navigation re-population
-    countryCode: string; // ISO alpha-2, stored for back-navigation
-    email: string;
-    avatarUrl: string;
-  };
-  family: { name: string; timezone: string };
-  details: {
-    householdAdults: number; householdChildren: number; childAges: string;
-    region: string; postalCode: string; goals: string[];
-    referralSource: string; referralDetail: string;
-  };
-  members: DraftMember[];
-  step: number;
-}
-
-function defaultDraft(initial?: InitialProfile): DraftState {
-  const guessTz = (() => {
-    try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'America/New_York'; }
-  })();
-  const storedDialCode = guessDialCodeFromPhone(initial?.phone);
-  const dialCode = storedDialCode || guessCountryDialCode();
-  const countryCode = (() => {
-    if (storedDialCode) {
-      return COUNTRY_DIAL_CODES.find((c) => c.dialCode === dialCode)?.code ?? 'US';
-    }
-    try {
-      const locale = Intl.DateTimeFormat().resolvedOptions().locale;
-      const region = locale.includes('-') ? locale.split('-').pop()?.toUpperCase() : undefined;
-      if (region) {
-        const m = COUNTRY_DIAL_CODES.find((c) => c.code === region);
-        if (m) return m.code;
-      }
-    } catch { /* ignore */ }
-    return 'US';
-  })();
-  return {
-    profile: {
-      firstName: initial?.firstName ?? '',
-      lastName: initial?.lastName ?? '',
-      phone: initial?.phone ?? '',
-      dialCode,
-      countryCode,
-      email: initial?.email ?? '',
-      avatarUrl: initial?.avatarUrl ?? '',
-    },
-    family: { name: '', timezone: guessTz },
-    details: {
-      householdAdults: 2, householdChildren: 0, childAges: '',
-      region: '', postalCode: '', goals: [],
-      referralSource: '', referralDetail: '',
-    },
-    members: [],
-    step: 1,
-  };
-}
-
-function loadDraft(initial?: InitialProfile): DraftState {
-  const defaults = defaultDraft(initial);
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const saved = JSON.parse(raw) as DraftState;
-      if (saved.step >= 1 && saved.step <= TOTAL_STEPS) {
-        // Deep merge: carry new fields (dialCode, countryCode, avatarUrl) from defaults
-        // when an older draft doesn't have them yet.
-        return {
-          ...defaults,
-          ...saved,
-          profile: { ...defaults.profile, ...saved.profile },
-        };
-      }
-    }
-  } catch { /* ignore corrupt data */ }
-  return defaults;
-}
-
-function saveDraft(draft: DraftState) {
-  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draft)); } catch { /* quota */ }
-}
-
-function clearDraft() {
-  try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* noop */ }
-}
-
-export function OnboardingWizard(
-  { initialProfile, emailLocked = false }: { initialProfile?: InitialProfile; emailLocked?: boolean },
-) {
+export function OnboardingWizard({ initialName = '' }: { initialName?: string }) {
   const router = useRouter();
-  const { success, error: showError } = useToast();
-  const tz = useMemo(timezones, []);
+  const { error: toastError } = useToast();
 
-  const [draft, setDraft] = useState<DraftState>(() => loadDraft(initialProfile));
-  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<Step>('profile');
+  const [name, setName] = useState(initialName);
+  const [age, setAge] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [color, setColor] = useState(MEMBER_COLORS[0]);
 
-  const step = draft.step;
+  const [pin, setPin] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [showPin, setShowPin] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const updateDraft = useCallback((updater: (prev: DraftState) => DraftState) => {
-    setDraft((prev) => {
-      const next = updater(prev);
-      saveDraft(next);
-      return next;
+  const firstName = name.trim().split(' ')[0] || 'there';
+  const pinMatches = isValidPin(pin) && pin === confirm;
+
+  async function finish() {
+    setSaving(true);
+    const res = await completeProfileOnboardingAction({
+      firstName: name.trim(),
+      age: age || null,
+      avatarUrl: avatarUrl || undefined,
+      color,
+      pin: isValidPin(pin) ? pin : undefined,
     });
-  }, []);
-
-  const goTo = useCallback((s: number) => {
-    updateDraft((d) => ({ ...d, step: s }));
-  }, [updateDraft]);
-
-  // Step 1 — Profile
-  function captureProfile(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    updateDraft((d) => ({
-      ...d,
-      profile: {
-        firstName: String(form.get('firstName') ?? '').trim(),
-        lastName: String(form.get('lastName') ?? '').trim(),
-        phone: String(form.get('phone') ?? '').trim(),        // E.164 from PhoneInput hidden input
-        dialCode: String(form.get('dialCode') ?? d.profile.dialCode),
-        countryCode: String(form.get('countryCode') ?? d.profile.countryCode),
-        email: String(form.get('email') ?? '').trim(),
-        avatarUrl: String(form.get('avatarUrl') ?? d.profile.avatarUrl),
-      },
-      step: 2,
-    }));
+    setSaving(false);
+    if (!res.ok) return toastError(res.error ?? 'Something went wrong');
+    setStep('done');
   }
-
-  // Step 2 — Family name
-  function captureFamily(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    updateDraft((d) => ({
-      ...d,
-      family: {
-        name: String(form.get('name') ?? '').trim(),
-        timezone: String(form.get('timezone') ?? 'America/New_York'),
-      },
-      step: 3,
-    }));
-  }
-
-  // Step 3 — Family details
-  const toggleGoal = useCallback((value: string) => {
-    updateDraft((d) => {
-      const goals = d.details.goals.includes(value)
-        ? d.details.goals.filter((x) => x !== value)
-        : [...d.details.goals, value];
-      return { ...d, details: { ...d.details, goals } };
-    });
-  }, [updateDraft]);
-
-  function captureDetails(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    updateDraft((d) => ({
-      ...d,
-      details: {
-        ...d.details,
-        householdAdults: Number(form.get('householdAdults') ?? 2),
-        householdChildren: Number(form.get('householdChildren') ?? 0),
-        childAges: String(form.get('childAges') ?? ''),
-        region: String(form.get('region') ?? ''),
-        postalCode: String(form.get('postalCode') ?? ''),
-        referralSource: String(form.get('referralSource') ?? ''),
-        referralDetail: String(form.get('referralDetail') ?? ''),
-      },
-      step: 4,
-    }));
-  }
-
-  // Step 4 — Members
-  const localFormRef = useRef<HTMLFormElement>(null);
-  const inviteFormRef = useRef<HTMLFormElement>(null);
-
-  function onAddLocal(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const name = String(form.get('memberName') ?? '').trim();
-    const role = String(form.get('memberRole') ?? 'child') as MemberRole;
-    const birthday = String(form.get('memberBirthday') ?? '').trim();
-    if (!name) return;
-    const member = makeLocalMember({ name, role, birthday: birthday || undefined }, draft.members);
-    updateDraft((d) => ({ ...d, members: addMember(d.members, member) }));
-    success(`${name} added`);
-    e.currentTarget.reset();
-  }
-
-  function onAddInvite(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const email = String(form.get('inviteEmail') ?? '').trim();
-    const role = String(form.get('inviteRole') ?? 'adult') as MemberRole;
-    if (!email) return;
-    const member = makeInviteMember({ email, role });
-    updateDraft((d) => ({ ...d, members: addMember(d.members, member) }));
-    success(`${email} added`);
-    e.currentTarget.reset();
-  }
-
-  function onRemoveMember(id: string) {
-    updateDraft((d) => ({ ...d, members: removeMember(d.members, id) }));
-  }
-
-  // Step 5 — Review & finalize
-  async function onFinalize() {
-    setLoading(true);
-    const res = await finalizeOnboardingAction({
-      profile: {
-        firstName: draft.profile.firstName,
-        lastName: draft.profile.lastName,
-        phone: draft.profile.phone,
-        email: draft.profile.email,
-        avatarUrl: draft.profile.avatarUrl || undefined,
-      },
-      family: draft.family,
-      details: {
-        householdAdults: draft.details.householdAdults,
-        householdChildren: draft.details.householdChildren,
-        childAges: parseChildAges(draft.details.childAges),
-        region: draft.details.region,
-        postalCode: draft.details.postalCode,
-        goals: draft.details.goals,
-        referralSource: draft.details.referralSource,
-        referralDetail: draft.details.referralDetail,
-      },
-      members: draft.members.map((m) =>
-        m.kind === 'invite'
-          ? { kind: 'invite' as const, email: m.email, role: m.role }
-          : { kind: 'local' as const, name: m.name, role: m.role, birthday: m.birthday, color: m.color },
-      ),
-    });
-    setLoading(false);
-    if (!res.ok) return showError(res.error);
-    clearDraft();
-    success('Welcome to Bubaly!');
-    router.push('/dashboard');
-    router.refresh();
-  }
-
-  // Back button helper
-  function BackButton({ to }: { to: number }) {
-    return (
-      <button
-        type="button"
-        onClick={() => goTo(to)}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg transition"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
-    );
-  }
-
-  // Derive the local number (without dial code) for PhoneInput re-population on back navigation
-  const storedLocalNumber = extractLocalNumber(draft.profile.phone, draft.profile.dialCode);
 
   return (
-    <div className="animate-fade-in">
-      {/* Progress */}
-      <div className="mb-6 flex items-center gap-3">
-        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((n) => (
-          <div key={n} className="flex flex-1 items-center gap-3">
-            <div
-              className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
-                step >= n ? 'bg-brand text-brand-fg' : 'bg-elevated text-muted'
-              }`}
-            >
-              {step > n ? <Check className="h-4 w-4" /> : n}
-            </div>
-            {n < TOTAL_STEPS && <div className={`h-px flex-1 ${step > n ? 'bg-brand' : 'bg-border'}`} />}
-          </div>
+    <div className="rounded-3xl border border-border bg-surface/40 p-6 sm:p-8">
+      {/* progress dots */}
+      <div className="mb-6 flex items-center justify-center gap-2">
+        {STEPS.map((s, i) => (
+          <span key={s}
+            className={cn('h-1.5 rounded-full transition-all',
+              step === s ? 'w-8 bg-brand' : i < STEPS.indexOf(step) ? 'w-4 bg-brand/50' : 'w-4 bg-border')} />
         ))}
       </div>
 
-      {/* Step 1: Profile */}
-      {step === 1 && (
-        <div className="glass-card p-7">
-          <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
-            <User className="h-6 w-6" />
+      {step === 'profile' && (
+        <div>
+          <h1 className="text-center text-2xl font-bold">Create your profile</h1>
+          <p className="mx-auto mt-1 max-w-sm text-center text-sm text-muted">
+            Tell us a little about yourself so we can personalize your experience.
+          </p>
+
+          <div className="mt-6 flex justify-center">
+            <AvatarPicker displayName={name || 'You'} defaultValue={avatarUrl} onChange={setAvatarUrl} />
           </div>
-          <h1 className="mt-3 text-2xl font-semibold tracking-tight">Tell us about you</h1>
-          <p className="mt-1 text-sm text-muted">This is your account profile — your family will see your name and photo.</p>
 
-          <form onSubmit={captureProfile} className="mt-6 space-y-5">
-            {/* Avatar picker */}
-            <AvatarPicker
-              defaultValue={draft.profile.avatarUrl}
-              displayName={`${draft.profile.firstName} ${draft.profile.lastName}`.trim() || 'You'}
-            />
+          <div className="mt-6 space-y-4">
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium">Your name <span className="text-brand">*</span></span>
+              <input value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="Jordan"
+                className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring" />
+            </label>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="First name" required>
-                {(id) => (
-                  <Input
-                    id={id}
-                    name="firstName"
-                    defaultValue={draft.profile.firstName}
-                    placeholder="Jordan"
-                    autoFocus
-                    required
-                  />
-                )}
-              </Field>
-              <Field label="Last name" required>
-                {(id) => (
-                  <Input
-                    id={id}
-                    name="lastName"
-                    defaultValue={draft.profile.lastName}
-                    placeholder="Rivera"
-                    required
-                  />
-                )}
-              </Field>
-            </div>
-
-            <Field
-              label="Contact phone"
-              hint="Optional — used for account security and important family alerts"
-            >
-              {() => (
-                <PhoneInput
-                  defaultDialCode={draft.profile.dialCode}
-                  defaultCountryCode={draft.profile.countryCode}
-                  defaultLocalNumber={storedLocalNumber}
-                />
-              )}
-            </Field>
-
-            <Field
-              label="Email"
-              hint={emailLocked ? 'Managed by your Google sign-in' : 'Where we send invites and notifications'}
-              required
-            >
-              {(id) => (
-                <Input
-                  id={id}
-                  name="email"
-                  type="email"
-                  defaultValue={draft.profile.email}
-                  placeholder="you@example.com"
-                  required
-                  readOnly={emailLocked}
-                  aria-disabled={emailLocked || undefined}
-                  tabIndex={emailLocked ? -1 : undefined}
-                  className={emailLocked ? 'cursor-not-allowed opacity-60' : undefined}
-                />
-              )}
-            </Field>
-
-            <Button type="submit" className="w-full">
-              Continue <ArrowRight className="h-4 w-4" />
-            </Button>
-          </form>
-        </div>
-      )}
-
-      {/* Step 2: Family name */}
-      {step === 2 && (
-        <div className="glass-card p-7">
-          <BackButton to={1} />
-          <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
-            <Home className="h-6 w-6" />
-          </div>
-          <h1 className="mt-3 text-2xl font-semibold tracking-tight">Name your family</h1>
-          <p className="mt-1 text-sm text-muted">You can change this anytime in settings.</p>
-          <form onSubmit={captureFamily} className="mt-6 space-y-4">
-            <Field label="Family name" required>
-              {(id) => <Input id={id} name="name" defaultValue={draft.family.name} placeholder="The Rivera Family" autoFocus required />}
-            </Field>
-            <Field label="Time zone" hint="Used for reminders and your calendar">
-              {(id) => (
-                <Select id={id} name="timezone" defaultValue={draft.family.timezone}>
-                  {tz.map((z) => <option key={z} value={z}>{z}</option>)}
-                </Select>
-              )}
-            </Field>
-            <Button type="submit" className="w-full">
-              Continue <ArrowRight className="h-4 w-4" />
-            </Button>
-          </form>
-        </div>
-      )}
-
-      {/* Step 3: Family details */}
-      {step === 3 && (
-        <div className="glass-card p-7">
-          <BackButton to={2} />
-          <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
-            <Users className="h-6 w-6" />
-          </div>
-          <h1 className="mt-3 text-2xl font-semibold tracking-tight">About your family</h1>
-          <p className="mt-1 text-sm text-muted">This helps us tailor Bubaly to you. You can skip anything.</p>
-          <form onSubmit={captureDetails} className="mt-6 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Adults">
-                {(id) => <Input id={id} name="householdAdults" type="number" inputMode="numeric" min={0} max={20} defaultValue={draft.details.householdAdults} />}
-              </Field>
-              <Field label="Children">
-                {(id) => <Input id={id} name="householdChildren" type="number" inputMode="numeric" min={0} max={20} defaultValue={draft.details.householdChildren} />}
-              </Field>
-            </div>
-            <Field label="Kids' ages" hint="Optional — e.g. 8, 11, 14. Helps age-appropriate chores.">
-              {(id) => <Input id={id} name="childAges" defaultValue={draft.details.childAges} placeholder="8, 11, 14" />}
-            </Field>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium">How old are you?</span>
+              <select value={age} onChange={(e) => setAge(e.target.value)}
+                className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring">
+                <option value="">Prefer not to say</option>
+                {Array.from({ length: 99 }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </label>
 
             <div>
-              <p className="mb-2 text-sm font-medium">What do you want to use Bubaly for?</p>
-              <div className="flex flex-wrap gap-2">
-                {FAMILY_GOALS.map((g) => {
-                  const on = draft.details.goals.includes(g.value);
-                  return (
-                    <button
-                      key={g.value}
-                      type="button"
-                      onClick={() => toggleGoal(g.value)}
-                      aria-pressed={on}
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition ${
-                        on ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:text-fg'
-                      }`}
-                    >
-                      <span aria-hidden>{g.icon}</span> {g.label}
-                    </button>
-                  );
-                })}
+              <span className="mb-2 block text-sm font-medium">Choose a color</span>
+              <div className="flex flex-wrap gap-2.5">
+                {MEMBER_COLORS.map((c) => (
+                  <button key={c} type="button" aria-label={`Color ${c}`} onClick={() => setColor(c)}
+                    className={cn('grid h-9 w-9 place-items-center rounded-full transition', color === c && 'ring-2 ring-white/70')}
+                    style={{ backgroundColor: c }}>
+                    {color === c && <Check className="h-4 w-4 text-white" />}
+                  </button>
+                ))}
               </div>
             </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="State / region" hint="Optional">
-                {(id) => <Input id={id} name="region" defaultValue={draft.details.region} placeholder="California" />}
-              </Field>
-              <Field label="ZIP / postal code" hint="Optional">
-                {(id) => <Input id={id} name="postalCode" defaultValue={draft.details.postalCode} placeholder="94016" />}
-              </Field>
-            </div>
-
-            <Field label="How did you hear about us?">
-              {(id) => (
-                <Select id={id} name="referralSource" defaultValue={draft.details.referralSource}>
-                  <option value="">Select one…</option>
-                  {REFERRAL_SOURCES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </Select>
-              )}
-            </Field>
-            <Field label="Anything else?" hint="Optional">
-              {(id) => <Input id={id} name="referralDetail" defaultValue={draft.details.referralDetail} placeholder="A friend's name, the podcast, etc." />}
-            </Field>
-
-            <Button type="submit" className="w-full">
-              Continue <ArrowRight className="h-4 w-4" />
-            </Button>
-          </form>
-        </div>
-      )}
-
-      {/* Step 4: Add family members */}
-      {step === 4 && (
-        <div className="space-y-5">
-          <div className="glass-card p-7">
-            <BackButton to={3} />
-            <h1 className="text-2xl font-semibold tracking-tight">Add your family</h1>
-            <p className="mt-1 text-sm text-muted">
-              Add people who live with you — they don&apos;t need an email. Or invite someone by email. You can do this later too.
-            </p>
-
-            {draft.members.length > 0 && (
-              <ul className="mt-5 space-y-2">
-                {draft.members.map((m) => (
-                  <li key={m.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/50 px-3 py-2">
-                    {m.kind === 'local' ? (
-                      <Avatar name={m.name} color={m.color} size={32} />
-                    ) : (
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/10 text-brand">
-                        <Mail className="h-4 w-4" />
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{draftMemberLabel(m)}</p>
-                      <p className="text-xs text-muted">
-                        {m.kind === 'invite' ? `Invite · ${ROLE_LABELS[m.role]}` : ROLE_LABELS[m.role]}
-                      </p>
-                    </div>
-                    {m.kind === 'invite' && <Badge tone="brand">Pending</Badge>}
-                    <button
-                      type="button"
-                      onClick={() => onRemoveMember(m.id)}
-                      className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg transition"
-                      aria-label={`Remove ${draftMemberLabel(m)}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
-          {/* Add managed member (no login) */}
-          <form ref={localFormRef} onSubmit={onAddLocal} className="glass-card space-y-3 p-6">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Plus className="h-4 w-4 text-brand" /> Add a family member (no login needed)
-            </div>
-            <p className="text-xs text-muted">
-              For anyone who won&apos;t sign in — kids, grandparents, caregivers, etc.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Input name="memberName" placeholder="Name" className="flex-1" required />
-              <Select name="memberRole" defaultValue="child" className="sm:w-44">
-                {LOCAL_MEMBER_ROLES.map((r) => (
-                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                ))}
-              </Select>
-            </div>
-            <Field label="Birthday" hint="Optional — helps with age-appropriate features">
-              {(id) => <Input id={id} name="memberBirthday" type="date" />}
-            </Field>
-            <Button type="submit" variant="secondary">
-              <Plus className="h-4 w-4" /> Add member
-            </Button>
-          </form>
-
-          {/* Invite by email */}
-          <form ref={inviteFormRef} onSubmit={onAddInvite} className="glass-card space-y-3 p-6">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <UserPlus className="h-4 w-4 text-brand" /> Invite by email
-            </div>
-            <p className="text-xs text-muted">
-              They&apos;ll get an email to create their own account and join your family.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Input name="inviteEmail" type="email" placeholder="spouse@example.com" className="flex-1" required />
-              <Select name="inviteRole" defaultValue="adult" className="sm:w-44">
-                {INVITE_ROLES.map((r) => (
-                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                ))}
-              </Select>
-            </div>
-            <Button type="submit" variant="secondary">
-              <UserPlus className="h-4 w-4" /> Add invite
-            </Button>
-          </form>
-
-          <Button onClick={() => goTo(5)} className="w-full" size="lg">
-            Review &amp; finish <ArrowRight className="h-5 w-5" />
+          <Button className="mt-7 w-full" disabled={!name.trim()} onClick={() => setStep('pin')}>
+            Continue
           </Button>
         </div>
       )}
 
-      {/* Step 5: Review & finalize */}
-      {step === 5 && (
-        <div className="glass-card p-7">
-          <BackButton to={4} />
-          <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand">
-            <Check className="h-6 w-6" />
-          </div>
-          <h1 className="mt-3 text-2xl font-semibold tracking-tight">Everything look good?</h1>
-          <p className="mt-1 text-sm text-muted">Review your info, then we&apos;ll set up your family.</p>
+      {step === 'pin' && (
+        <div>
+          <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand"><Lock className="h-7 w-7" /></div>
+          <h1 className="text-center text-2xl font-bold">Create a PIN for {firstName}</h1>
+          <p className="mx-auto mt-1 max-w-sm text-center text-sm text-muted">
+            This PIN helps keep {firstName}&rsquo;s profile safe and private.
+          </p>
 
           <div className="mt-6 space-y-4">
-            {/* Profile summary */}
-            <div className="rounded-xl border border-border p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Your profile</h3>
-                <button type="button" onClick={() => goTo(1)} className="text-xs text-brand hover:underline">Edit</button>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium">Create 4-digit PIN <span className="text-brand">*</span></span>
+              <div className="relative">
+                <input value={pin} onChange={(e) => setPin(normalizePin(e.target.value))} inputMode="numeric"
+                  type={showPin ? 'text' : 'password'} placeholder="••••"
+                  className="h-12 w-full rounded-xl border border-border bg-bg px-3 text-center text-lg tracking-[0.5em] focus-ring" />
+                <button type="button" onClick={() => setShowPin((v) => !v)} aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
+                  {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
-              <div className="mt-2 flex items-center gap-3">
-                {draft.profile.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={draft.profile.avatarUrl}
-                    alt="Your avatar"
-                    className="h-10 w-10 rounded-full object-cover"
-                  />
-                ) : (
-                  <Avatar
-                    name={`${draft.profile.firstName} ${draft.profile.lastName}`.trim() || 'You'}
-                    size={40}
-                  />
-                )}
-                <div>
-                  <p className="text-sm font-medium">
-                    {draft.profile.firstName} {draft.profile.lastName}
-                  </p>
-                  <p className="text-xs text-muted">{draft.profile.email}</p>
-                  {draft.profile.phone && (
-                    <p className="text-xs text-muted">{draft.profile.phone}</p>
-                  )}
-                </div>
-              </div>
-            </div>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium">Confirm PIN <span className="text-brand">*</span></span>
+              <input value={confirm} onChange={(e) => setConfirm(normalizePin(e.target.value))} inputMode="numeric"
+                type={showPin ? 'text' : 'password'} placeholder="••••"
+                className="h-12 w-full rounded-xl border border-border bg-bg px-3 text-center text-lg tracking-[0.5em] focus-ring" />
+            </label>
 
-            {/* Family summary */}
-            <div className="rounded-xl border border-border p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Family</h3>
-                <button type="button" onClick={() => goTo(2)} className="text-xs text-brand hover:underline">Edit</button>
-              </div>
-              <p className="mt-1 text-sm text-muted">{draft.family.name}</p>
-              <p className="text-xs text-muted">{draft.family.timezone}</p>
-            </div>
+            {confirm.length === 4 && pin !== confirm && (
+              <p className="text-xs text-danger">PINs don&rsquo;t match.</p>
+            )}
+            {isValidPin(pin) && isWeakPin(pin) && (
+              <p className="text-xs text-amber-500">That PIN is easy to guess — consider a less obvious one.</p>
+            )}
 
-            {/* Details summary */}
-            <div className="rounded-xl border border-border p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Household</h3>
-                <button type="button" onClick={() => goTo(3)} className="text-xs text-brand hover:underline">Edit</button>
-              </div>
-              <p className="mt-1 text-sm text-muted">
-                {draft.details.householdAdults} adult{draft.details.householdAdults !== 1 ? 's' : ''},
-                {' '}{draft.details.householdChildren} child{draft.details.householdChildren !== 1 ? 'ren' : ''}
-              </p>
-              {draft.details.goals.length > 0 && (
-                <p className="text-xs text-muted">Goals: {draft.details.goals.join(', ')}</p>
-              )}
-            </div>
-
-            {/* Members summary */}
-            <div className="rounded-xl border border-border p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Members</h3>
-                <button type="button" onClick={() => goTo(4)} className="text-xs text-brand hover:underline">Edit</button>
-              </div>
-              {draft.members.length === 0 ? (
-                <p className="mt-1 text-sm text-muted">No members added — you can add them later from settings.</p>
-              ) : (
-                <ul className="mt-2 space-y-1">
-                  {draft.members.map((m) => (
-                    <li key={m.id} className="flex items-center gap-2 text-sm">
-                      {m.kind === 'local' ? (
-                        <Avatar name={m.name} color={m.color} size={20} />
-                      ) : (
-                        <Mail className="h-4 w-4 text-muted" />
-                      )}
-                      <span>{draftMemberLabel(m)}</span>
-                      <span className="text-xs text-muted">({ROLE_LABELS[m.role]})</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <div className="rounded-xl border border-border bg-bg/50 p-3">
+              <p className="mb-1.5 text-xs font-semibold text-muted">PIN tips</p>
+              <ul className="space-y-1 text-xs text-muted">
+                <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand" /> Use 4 different numbers</li>
+                <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand" /> Avoid birthdays or repeating numbers</li>
+                <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand" /> Easy for you, hard for others to guess</li>
+              </ul>
             </div>
           </div>
 
-          <Button onClick={onFinalize} loading={loading} className="mt-6 w-full" size="lg">
-            Create my family <ArrowRight className="h-5 w-5" />
+          <div className="mt-6 flex gap-2">
+            <Button variant="secondary" onClick={() => setStep('profile')}>Back</Button>
+            <Button className="flex-1" disabled={!pinMatches || saving} onClick={finish}>
+              {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null} Continue
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {step === 'done' && (
+        <div className="text-center">
+          <div className="relative mx-auto h-24 w-24">
+            <span className="grid h-24 w-24 place-items-center rounded-full text-3xl font-bold text-white" style={{ backgroundColor: color }}>
+              {firstName.slice(0, 1).toUpperCase()}
+            </span>
+            <span className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full bg-emerald-500 text-white ring-4 ring-surface">
+              <Check className="h-4 w-4" />
+            </span>
+          </div>
+          <h1 className="mt-4 text-2xl font-bold">You&rsquo;re all set, {firstName}!</h1>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+            Your profile has been created successfully. Welcome to the Bubaly family!
+          </p>
+
+          <div className="mt-6 space-y-3 text-left">
+            {[
+              { icon: ShieldCheck, title: 'Safe & secure', body: 'Your information is protected with top-level security.' },
+              { icon: Users, title: 'Family connected', body: 'You can now connect, share and explore together.' },
+              { icon: Sparkles, title: 'Let the fun begin!', body: 'Explore Bubaly and create amazing memories.' },
+            ].map(({ icon: Icon, title, body }) => (
+              <div key={title} className="flex items-start gap-3 rounded-xl border border-border bg-bg/40 p-3">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand"><Icon className="h-4 w-4" /></div>
+                <div><p className="text-sm font-semibold">{title}</p><p className="text-xs text-muted">{body}</p></div>
+              </div>
+            ))}
+          </div>
+
+          <Button className="mt-7 w-full" onClick={() => { router.push('/dashboard'); router.refresh(); }}>
+            Start exploring <ArrowRight className="ml-1 h-4 w-4" />
           </Button>
         </div>
       )}

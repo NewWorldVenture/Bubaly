@@ -1,7 +1,218 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after Social Feed URL-unfurl ingestion (PR pending). Keep this updated as you ship.
+Last updated: 2026-06-28 — Phone OTP sign-in/up wired (method chooser now phone · email · Google · Apple). Keep this updated as you ship.
+
+> ## 📱 PHONE OTP AUTH + METHOD CHOOSER (on branch `claude/phone-otp-auth`)
+> Completes the mockups' multi-method sign-up: the chooser now offers **phone · email · Google · Apple**.
+> - **`lib/auth/otp.ts`** (PURE, **6 tests**) — `normalizeOtp`, `isValidOtp` (6 digits), `isLikelyE164`,
+>   `formatCountdown` (mm:ss resend timer), `providerHint` (friendly message when a provider isn't enabled).
+> - **`components/auth/phone-auth.tsx`** — two-phase SMS flow matching the mock: enter number (`PhoneInput`,
+>   E.164) → "Enter the code we sent you" (6-digit, 30s resend countdown, change number). Wired to Supabase
+>   `auth.signInWithOtp({ phone })` → `auth.verifyOtp({ phone, token, type:'sms' })`; new accounts → `/onboarding`
+>   (the profile→PIN→done flow), returning users get routed on by the onboarding layout. Shows a friendly hint
+>   until the SMS provider is enabled.
+> - Wired into **`components/auth/signup-form.tsx`** ("Continue with phone" + "Continue with email" + OAuth →
+>   `/onboarding`) and **`components/auth/login-form.tsx`** ("Continue with phone" → `/dashboard`).
+> - **Apple/Google** were already wired (`components/auth/oauth-buttons.tsx`, `signInWithOAuth`, graceful
+>   "isn't enabled yet" toast) → no change needed; they light up when the provider is configured.
+> - Verified: tsc · eslint · build ✓ (`/login`, `/signup`) · suite **1370/1370** (6 new). No migration.
+> **⚠️ REQUIRES PROVIDER CONFIG to go live (human-owned, in Supabase dashboard):** enable **Phone auth +
+>   an SMS provider (Twilio)** for phone OTP, and the **Apple** OAuth provider + keys for Sign in with Apple.
+>   The UI + Supabase calls are complete and correct; they error with a friendly hint until those are set.
+> **Still open:** PIN-based SIGN-IN (mockup screen 14) — the PIN is captured + scrypt-hashed at onboarding;
+>   turning it into a login factor needs a device-remembered-profile design (separate follow-up).
+
+> ## 🎬 ONBOARDING JOURNEY — REBUILT TO MATCH THE MOCKUPS (on branch `claude/onboarding-journey`)
+> Replaced the heavy multi-step FAMILY-setup wizard with the lightweight post-sign-in journey from the
+> product mockups: **Create your profile (avatar, name, age, color) → Create a 4-digit PIN → "You're all
+> set!" → dashboard.** Builds on the #186 loop fix; still loop-proof.
+> - **`components/onboarding/onboarding-wizard.tsx`** — fully rewritten (3 steps + progress dots, mobile-first,
+>   matches the screens). Reuses `AvatarPicker` (controlled via `onChange`) + `MEMBER_COLORS`. PIN step has
+>   create+confirm, show/hide, weak-PIN hint, and PIN tips. Done step shows the avatar, "You're all set,
+>   {name}!", the 3 benefit cards, and "Start exploring" → `/dashboard`.
+> - **`lib/onboarding/pin.ts`** (PURE, **8 tests**) — `normalizePin`, `isValidPin`, `isWeakPin`, `normalizeAge`.
+> - **`app/onboarding/actions.ts` `completeProfileOnboardingAction`** — ONE atomic write: `saveUserProfile`
+>   (name+avatar → profiles, syncs member display_name) → `ensureActiveFamily` (provisions the family/parent
+>   member/trial sub) → set member `color` → persist `age` + scrypt-hashed `pinHash` + `onboardingComplete`
+>   in `user_preferences.notification_prefs` (core jsonb, **NO migration**). PIN hashed with node `scrypt`
+>   (salt:hash); never logged. Old actions (finalize/createFamily/details/invite) kept for the manual/invite paths.
+> - **`app/auth/callback/route.ts`** — brand-new accounts (no active `family_members` row) are routed to
+>   `/onboarding` after sign-in; returning users / deep links / super-admins go straight in. No hard gate on
+>   protected pages, so it CANNOT loop (requireUserContext still auto-provisions as the safety net).
+> - **`app/onboarding/page.tsx`** — prefills the name from profile/`user_metadata`; passes `initialName`.
+> - Verified: tsc · eslint · build ✓ (`/onboarding` 7.44 kB) · suite **1364/1364** (8 new). No migration.
+> **Out of scope (provider-gated, human-owned — flagged, NOT built):** the auth-METHOD screens before the
+> profile step (phone OTP, email link, **Sign in with Apple**) need Supabase auth-provider config +
+> credentials (Twilio SMS, Apple OAuth) — dashboard/env, not code. And PIN-based SIGN-IN (mockup screen 14)
+> needs a device-remembered-profile design; the PIN is captured/hashed now, ready for that follow-up.
+
+> ## 🔁 ONBOARDING LOOP — FIXED (on branch `claude/onboarding-loop-fix`)
+> **Symptom:** users reported onboarding "going in a loop" — never reaching the app.
+> **Root cause:** onboarding was a MANDATORY family-creation wizard gate. `requireUserContext()` returns
+> `needsFamily` for any signed-in user without a `family_members` row and redirected to `/onboarding`; a user
+> who signed up but didn't finish the heavy wizard got bounced back to onboarding on every protected page.
+> **Fix (prod-safe, no migration — uses only core tables 0002–0003 that ARE in prod):**
+> - **`lib/server/ensure-family.ts`** `ensureActiveFamily(supabase, user)` — if the user has no active
+>   membership, inserts a `families` row (the `handle_new_family` trigger then creates their active `parent`
+>   member + trial subscription), sets `user_preferences.active_family_id`, and names the member from
+>   profile/`user_metadata.full_name`/email. Idempotent; returns false only on genuine failure.
+> - **`lib/supabase/auth.ts` `requireUserContext`** — on `needsFamily`, calls `ensureActiveFamily` then
+>   re-resolves and returns the real context. Falls back to `/onboarding` ONLY if provisioning truly failed
+>   (and that route doesn't call `requireUserContext`, so it can't loop). Net effect = the lightweight journey
+>   in the mockups: **sign up → straight to the dashboard** with the "Invite your family" card. The manual
+>   wizard at `/onboarding` still works for direct visitors and can't create a duplicate family (its layout
+>   redirects to `/dashboard` once a family exists).
+> - Verified: tsc · eslint · build ✓ · suite **1356/1356**.
+> **STILL NEEDED for the full mockup journey (NOT in this fix — flagged, partly human-owned):** the visual
+> multi-method auth screens (phone OTP, email link, **Sign in with Apple**) require Supabase auth-provider
+> configuration + credentials (Twilio SMS, Apple OAuth) that are dashboard/env settings, not code; and the
+> **4-digit PIN** sign-in needs a stored PIN (could reuse `user_preferences.notification_prefs` to stay
+> migration-free, but PIN-first sign-in implies a device-remembered profile — design needed). Recommend
+> building those as a follow-up once providers are enabled; the loop fix makes the app usable NOW regardless.
+
+> ## 🔓 SUPER-ADMINS = 100% UNLOCKED (#185 — MERGED)
+> Per the user: a super-admin (e.g. `Daniel.Hughen@gmail.com`) has NOTHING locked — no paywall tiles,
+> no Plus gates, no "Unlock more". Added **`effectivePlanLevel(rawLevel)`** to `lib/supabase/auth.ts`
+> (returns `2` for super-admins, else the raw level) and wrapped every remaining content gate that read raw
+> `planLevel(subscription)`: `wallet/page.tsx`, `wallet/allowance/page.tsx`, `wallet/actions.ts`
+> (`familyWalletTier`), `dashboard/readiness/page.tsx`, `dashboard/customize-actions.ts` (`userTier` — so
+> saving a Quick Access layout with any tile is allowed), and the AI routes `api/ai/wallet`,
+> `api/ai/wallet/child/[childId]`, `api/ai/invest`, `api/ai/weekly-briefing`. **NOT** applied to
+> `api/cron/wallet-allowance` (system context — bills each family by its real plan). Page/nav/Home gates
+> already bypassed for super-admins; this closes the in-content gaps. Verified: tsc · eslint · build ✓ ·
+> suite **1356/1356**. No migration.
+
+> ## 🧷 CAPTURE SHORTCUTS → SUPABASE (cross-device, on branch `claude/capture-shortcuts-supabase`)
+> The Capture "Or jump directly to" grid was already customizable, but its layout only lived in
+> **localStorage** (per-device, lost on a new device/browser). Now it **persists to Supabase** so a member's
+> shortcuts follow them everywhere — and it's **prod-safe with NO migration** (reuses the core
+> `user_preferences.notification_prefs` jsonb via the same read-merge-write pattern the Google Calendar
+> integration already uses; own-row RLS).
+> - **`lib/capture/shortcuts.ts`** (PURE, **9 tests** in `tests/capture-shortcuts.test.ts`):
+>   `sanitizeShortcutKeys(input, validKeys?, max)` (strings-only, dedupe, optional allow-set, cap),
+>   `resolveShortcutKeys` (sanitize → fallback to defaults so the grid is never blank),
+>   `DEFAULT_CAPTURE_SHORTCUTS`, `MAX_CAPTURE_SHORTCUTS`, `CAPTURE_SHORTCUTS_PREF_KEY`.
+> - **`app/(app)/capture/shortcuts-actions.ts`**: `loadCaptureShortcuts()` (server reader) +
+>   `saveCaptureShortcutsAction({keys})` (read-merge-write into `notification_prefs.captureShortcuts`).
+> - **`app/(app)/capture/page.tsx`** server-loads the layout → passes `initialShortcuts` to `CaptureShell`
+>   (`force-dynamic`); **`capture-shell.tsx`** uses the server value on first paint (authoritative), keeps
+>   localStorage as an offline cache, and on every change writes BOTH the cache and Supabase.
+> - Verified: tsc · eslint · build ✓ (`/capture` 7.2 kB) · full suite **1356/1356** (9 new). No migration.
+
+> ## 🗺️ ROADMAP / GAP NOTES (2026-06-28, for the next agent)
+> Context: the "Build the world's best Family OS" master prompt references a **Cozi presentation that is NOT
+> in the repo** — no agent can "study" it; don't fabricate that analysis. Many master-prompt headline items
+> are ALREADY shipped on `main` by the parallel swarm — **don't duplicate**: AI Command Center = the Home
+> "Needs you" decision queue (+ notifications + one-tap approve + Assistant `list_pending_decisions`); Social
+> Feed (consume + paste-link unfurl ingestion); pinned Social Feed Quick Access tile; customizable Capture
+> shortcuts; Food OS; Wallet/economy. Before building, `git log origin/main` to see what just landed.
+> - **Hard blockers (human-owned, gate "production ready"):** prod migrations `0098*`–`0102` (+ any `0085–0097`)
+>   are NOT applied, and push/email/Stripe/`CRON_SECRET` envs are NOT set. So any feature needing a NEW table
+>   or those envs is *built* but not *live*. **Prefer changes that reuse already-deployed tables** (e.g. this
+>   Capture change reused `user_preferences`) so they work in prod today.
+> - **DECIDED (2026-06-28): super-admins get EVERYTHING 100% unlocked, everywhere — no locks, no paywalls.**
+>   Page access (`requireFeature`/`requirePlanLevel`), nav (`featureAccessByTier`), and Home Quick Access
+>   (`dashTier='plus'`) already bypassed for super-admins. NEW: `effectivePlanLevel(rawLevel)` in
+>   `lib/supabase/auth.ts` returns 2 (Family+) for super-admins; applied to every remaining CONTENT gate that
+>   read raw `planLevel(subscription)` — wallet tier (`wallet/page`, `wallet/allowance/page`, `wallet/actions`
+>   `familyWalletTier`, `api/ai/wallet`, `api/ai/wallet/child`, `api/ai/invest`), readiness Plus gate,
+>   weekly-briefing Plus gate, and the Quick Access SAVE validation (`customize-actions` `userTier`) so a
+>   super-admin can save any layout. **Excluded the system cron** (`api/cron/wallet-allowance`) — it must
+>   process each family by its REAL plan, not the super-admin's. (Reverses the earlier "keep green box locked
+>   → /pricing for super-admins" idea, which the user overrode: full unlock wins.)
+> - **High-leverage, prod-safe next candidates (reuse existing tables / pure libs):** (a) Global AI search
+>   over existing tables; (b) one-tap on more Home "Needs you" kinds (complete an overdue reminder, RSVP);
+>   (c) AI yearly/era recap from existing photos/events; (d) richer Social Feed (realtime via `useRealtimeQuery`,
+>   AI auto-categorize added links into family/friends/groups). Each: pure logic in tested `lib/*`, wire to
+>   Supabase, ship, update THIS doc.
+
+> ## ▶️ START HERE (current state — read this first)
+> - **`main` is the source of truth** and deploys to prod (Vercel → www.bubaly.com). As of this update its tip
+>   is the "one-tap Approve/Decline on Home" commit (`8153a52`). Everything below is already ON `main`.
+> - **Designated working branch:** `claude/festive-bohr-m4cbeg`. Recent increments were merged by
+>   rebase→**fast-forward push to `main`** (the GitHub merge API was intermittently rate-limited; FF push gives
+>   the same result and auto-closes the PR as merged). After each merge, reset the branch to `origin/main`.
+> - **Ship discipline (every increment):** keep pure logic in tested `lib/*` (vitest is node-only, no jsdom —
+>   no component render tests; presentational changes are verified via `tsc` + `next build`). Gate every merge on
+>   **`tsc --noEmit` clean · eslint clean · full `vitest` green · `npm run build` exit 0**. Builds take >2min —
+>   run them backgrounded and watch for `BUILD_EXIT=0`. Suite is ~**1342 tests**.
+> - **No new migrations were needed** for any recent work (all reads are missing-table-safe via `?? []`).
+> - **Commits show as "Unverified" on GitHub** — SSH signing isn't functional in this env and the committer
+>   email is already correct (`noreply@anthropic.com`). Cosmetic; do not rewrite shared `main` history over it.
+> - **⚠️ Ops still owned by a human (out of agent reach):** apply pending prod migrations
+>   **`0098`* (relationship + trip — apply both), `0099_stripe_settings`, `0100_reminder_details`,
+>   `0101_social_feed`, `0102_food_os`** (+ any `0085–0097` not yet applied), and set the
+>   `CRON_SECRET` / push / email / Stripe envs + Stripe Setup $0.90 Price ID. Until envs are set, the smart
+>   notifications (incl. the new approval pings) are generated but not delivered.
+> - **Active doctrine (the user's standing mandate):** *challenge every assumption; eliminate friction;
+>   no feature is complete until it measurably reduces time/decisions/stress/manual work* → "Less Managing
+>   Life. More Living It." Pick the highest-leverage assumption each turn, implement it production-ready
+>   (100% Supabase-wired), ship it, update THIS doc. Next candidates are in the Home "Needs you" entry below.
+
+> ## 🎯 HOME "NEEDS YOU" — UNIFIED DECISION QUEUE (new, on `main`)
+> Doctrine: *challenge every assumption; consolidate scattered decisions; no feature is complete until it
+> measurably reduces decisions/searching/manual work* ("Less Managing Life. More Living It.").
+> Home's old `buildActionCards` was an ad-hoc list that only knew about chores/grocery/todos/reminders and
+> **missed money + renewal decisions entirely** — the family had to dig into Wallet and Renewals to find them.
+> Replaced it with ONE ranked, calm "Needs you" surface driven by #171's pure ranking brain:
+> - **`lib/home/needs-attention.ts`** (already merged via #171) — `rankNeedsAttention` / `summarizeNeeds` /
+>   `needsHeadline` / `topNeeds`. Now actually used.
+> - **`lib/home/needs-sources.ts`** (NEW, PURE, **8 tests**) — `parentApprovalToNeed` (pending money approvals →
+>   urgent cards, kind→label/href), `renewalToNeed(row, now)` (renewals inside their reminder window/expired →
+>   urgent ≤3d else normal; null otherwise), `documentExpiryToNeed(row, now)` (stored docs — passport/license/
+>   insurance — expiring ≤30d/expired → urgent ≤3d else normal), `usdFromCents`.
+> - **`components/dashboard/ai-home-dashboard.tsx`** — `buildHomeNeeds` unions approvals (`parent_approvals`,
+>   managers only) + renewals (`renewals`) + document expiry (`documents`) + calendar conflicts + chore sign-offs
+>   + overdue/today reminders + meds + chores + grocery + todos into `NeedItem[]`, ranked by urgency then recency;
+>   renders a headline ("N things need you") + top-5 cards + "+N more". All new fetches missing-table-safe
+>   (`?? []`). No migration.
+> - Today's events stay in their own "Today" section (not a decision). Verified: tsc · lint · build · full suite.
+> - **Calendar conflicts now wired in too** — `lib/home/conflicts.ts` (PURE, **5 tests**) `detectConflicts`
+>   finds per-assignee overlapping timed events (half-open intervals; all-day/unassigned ignored; default
+>   duration when no `ends_at`). Home fetches the next 14d of assigned events and surfaces double-bookings as
+>   urgent `calendar_conflict` needs (a manager sees the whole family's; everyone else only their own).
+> - **Approvals are now proactively notified too** (so Bubaly tells the parent instead of waiting to be
+>   opened): `lib/notifications/approval-reminders.ts` (PURE, **4 tests**) `approvalReminders(approvals,
+>   managers)` → one 'system' notification per manager per pending `parent_approvals` row (per-manager
+>   `related_id` keeps the dedup unique). Wired into `lib/server/notifications.ts` `generateFamilyNotifications`
+>   (new `parent_approvals` fetch + push), delivered through the existing push+email pipeline. (Pre-existing
+>   pipeline already covered renewals/meds/reminders/relationship/docs; approvals were the gap.)
+> - **One-tap approve/decline on Home** (multi-screen → one tap): money-approval cards in "Needs you" now
+>   render inline **Approve / Decline** buttons (`components/dashboard/home-approval-actions.tsx`, client) that
+>   reuse the SAME authorized wallet server actions the Wallet screen uses — `decideAllowanceRequestAction`
+>   for `allowance_request`, else `decideSpendRequestAction` — then `router.refresh()`. Buttons can't nest in
+>   an `<a>`, so approval cards render as a div with the title linking out + the action island beside it.
+>   `approvalKindByNeedId` maps each `approval:${id}` need back to its kind so the right action is called.
+> - **Calendar conflicts are proactively notified too** — `generateFamilyNotifications` reuses the pure
+>   `detectConflicts` over the next 14d of assigned events and emits a "Schedule conflict" notification to the
+>   double-booked person (or the managers, for a child with no account). Dedup key
+>   `conflict:${sortedEventIds}` so a new alert fires only when the overlapping set changes. Inline (like the
+>   reminder/relationship blocks), no new pure logic.
+> - **The builder is now shared, and the AI assistant can answer "what needs me?"** — extracted
+>   `buildHomeNeeds` (the pure union) into **`lib/home/needs-build.ts`** (**3 tests**); the dashboard imports it
+>   instead of defining it. Added a **`list_pending_decisions`** read tool to `lib/assistant/tools.ts` that
+>   fetches the same sources, runs `detectConflicts`, calls `buildHomeNeeds` + `rankNeedsAttention`, and returns
+>   the ranked items — so "what's on my plate / anything I'm missing" is answered from the SAME logic as Home.
+> - **Next per the doctrine:** trust has no clean pending table (trust_policies/delegations/scores only), and
+>   concierge status is free-text with no "awaiting decision" state — both skipped; consider an Inbox/Assistant
+>   consolidation, or extend one-tap to other safe decisions (e.g. complete a single overdue reminder).
+
+> ## 🚀 PRODUCTION SYNC (2026-06-28) — pulled 4 stale/open PRs onto `main`
+> Swept the last 48h of PRs; everything merged is on `main`. Then brought the open ones in:
+> - **#183** (nav dedup + app shell for `/wallet` & `/missions`) — rebased + merged.
+> - **#171** (Mission Control "Needs you" ranking core — `lib/home/needs-attention.ts`, PURE, 11 tests) —
+>   clean additive foundation, rebased + merged.
+> - **#172** (Family Food OS — AI Chef, Food Score, Smart Kitchen) — cherry-picked the self-contained
+>   Food OS commit (the branch's Trip Intelligence was already in main via #168; its nav-dedup redundant
+>   with #183). **Migration renumbered `0099_food_os.sql` → `0102_food_os.sql`** (0099 = stripe_settings).
+>   ⚠️ **Apply `0102_food_os.sql` to prod** (`leftover_inventory` + `family_food_scores`); `/dashboard/kitchen`
+>   degrades gracefully until then.
+> - **#181** — applied ONLY the safe part (per user): **Social Feed pinned as an always-present Quick Access
+>   tile** (`quick-actions.tsx` + reverted #179's `social_feed` registry/default entries to avoid double-render).
+>   Deliberately SKIPPED its other two parts: the Capture `?customize=1` flow (overlaps shipped #182) and the
+>   "restore super-admin upsell" (would reverse shipped #179's full-unlock). #181 closed as superseded otherwise.
+> - All merged via rebase→fast-forward; tsc/lint/build green + full suite at each step. No new migrations except 0102.
 
 > ## 🔗 SOCIAL FEED — URL-UNFURL INGESTION (PR pending, branch `claude/loving-mccarthy-e1ahq8`)
 > Closes the biggest open gap: the feed had no UN-gated way to get content in (live per-platform
@@ -80,7 +291,16 @@ Last updated: 2026-06-27 — PR #175: ported standalone data-wiring features + b
 > **(9) Calendar AI "Find a time" — SAFE SLICE of `5490301`** (added 2026-06-27): ported the self-contained scheduling feature WITHOUT the personal/work/family lens DB column (so no migration, no sync-domain edits). `lib/calendar/scheduling.ts` (PURE, 7 tests — busy-interval/free-gap/free-slot engine; `CalendarContext` defined locally, in-memory only), `/api/ai/schedule` (per-member events+school+sports → shared free slots; resilient to no `context` column), `find-time-modal.tsx` (pick people/duration/window/daytime → scan → one-tap book), and a "Find a time" button in `calendar-module`. 1247 tests pass.
 > **DEFERRED (user chose the safe slice):** the calendar **context lens** (personal/work/family) from `5490301` is NOT ported — it needs migration `0094_calendar_context.sql` (RENUMBER to `0100+`; `0094` is taken by `family_dashboard_settings`), a `calendar_events.context` + `calendar_feeds.context`/`member_id` column, `database.types` `CalendarContext`, and edits across the reworked Google-calendar/sync/feeds domain (`sync/feeds/actions.ts`, `api/google/calendar/sync`, `calendar-sync-panel`, `lib/calendar/feeds.ts`, `lib/server/calendar-feeds.ts`, `lib/validation.ts`, event-detail badge, NewEventModal context field). Also already-on-main: `08d0ce9` Month/Agenda views. `claude/continuation-an1mam` has ~114 commits total — many are isolated, portable features still on the table (Front Desk hub, decision-queue batch actions, memory search, admin consoles, Capture direct-file/undo, etc.); port the same way (cherry-pick isolated commits, drop handoff churn, manual re-apply where main diverged).
 
-> ## 🏠 HOME DASHBOARD — REMINDER ATTENTION CARD (new, branch `claude/festive-bohr-m4cbeg`)
+> ## 🧱 APP SHELL FOR /wallet & /missions (new, branch `claude/festive-bohr-m4cbeg`, PR #183)
+> `/wallet` and `/missions` rendered **bare** (no sidebar/top bar) because the app chrome lived only in
+> `app/(app)/dashboard/layout.tsx`, and those routes are **siblings of** `/dashboard`, not children. Fix:
+> extracted the generic shell into **`components/app/app-frame.tsx`** (`AppFrame` — loads family ctx, wraps
+> children in `AppProvider` + `AppShell` + PWA/native bootstrap) and gave each route its own one-line layout
+> reusing it: `dashboard/layout.tsx` (refactored), **new** `wallet/layout.tsx`, **new** `missions/layout.tsx`.
+> Now they match `/dashboard/inbox` exactly. Neither page used `useApp` before, so no behavior change beyond
+> gaining the chrome. No migration. Also includes the **nav dedup** (one Family Wallet in Suggested) + guard test.
+>
+> ## 🏠 HOME DASHBOARD — REMINDER ATTENTION CARD (MERGED in #174 → main 6966f6b)
 > Now that `family_reminders` is a first-class notifying service (#173, merged), the home dashboard
 > ("Needs Your Attention") surfaces it: a **high-priority "N reminders overdue"** card or, if none overdue,
 > a **medium "N reminders due today"** card linking to `/dashboard/reminders`.

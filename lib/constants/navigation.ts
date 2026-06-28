@@ -56,7 +56,6 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/chores', label: 'Tasks & Chores', icon: CheckSquare, minLevel: 1 },
       { href: '/missions', label: 'Family Missions', icon: Trophy, minLevel: 1 },
       { href: '/dashboard/rewards', label: 'Rewards', icon: Gift, minLevel: 1 },
-      { href: '/wallet', label: 'Family Wallet', icon: Wallet, minLevel: 0 },
       { href: '/dashboard/behavior', label: 'Behavior', icon: Smile, minLevel: 1 },
       { href: '/dashboard/screen-time', label: 'Screen Time', icon: Monitor, minLevel: 1 },
     ],
@@ -65,6 +64,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     title: 'Daily Life',
     layout: 'grid',
     items: [
+      { href: '/dashboard/kitchen', label: 'Smart Kitchen', icon: ChefHat, minLevel: 1 },
       { href: '/dashboard/meals', label: 'Meals', icon: UtensilsCrossed, minLevel: 1 },
       { href: '/dashboard/pantry', label: 'Pantry', icon: Boxes, minLevel: 1 },
       { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle, minLevel: 0 },

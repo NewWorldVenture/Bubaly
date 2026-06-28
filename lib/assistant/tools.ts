@@ -5,6 +5,11 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { ToolSpec } from '@/lib/ai/provider';
+import { buildHomeNeeds } from '@/lib/home/needs-build';
+import { rankNeedsAttention } from '@/lib/home/needs-attention';
+import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
+import type { ParentApprovalRow, RenewalRow, DocumentRow } from '@/lib/home/needs-sources';
+import { reminderAttention } from '@/lib/dashboard/reminder-attention';
 
 type DB = SupabaseClient<Database>;
 
@@ -288,6 +293,47 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           .select('name, quantity').eq('list_id', listId).eq('is_checked', false).order('created_at').limit(100);
         if (error) return { ok: false, error: error.message };
         return { ok: true, items: (data ?? []).map((i) => ({ name: i.name, quantity: i.quantity })) };
+      },
+    },
+    {
+      name: 'list_pending_decisions',
+      description: "List everything currently needing the family's attention or a decision — pending money approvals, renewals & documents about to expire, schedule conflicts (double-bookings), reminders due, and chores awaiting sign-off. Use for \"what needs me\", \"what's on my plate\", \"anything I'm missing\", \"what should I deal with today\" questions.",
+      input_schema: { type: 'object', properties: {} },
+      execute: async () => {
+        const now = new Date();
+        const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
+        const in14 = new Date(now.getTime() + 14 * 86400000).toISOString();
+        const in30 = new Date(now.getTime() + 30 * 86400000).toISOString();
+        const in45 = new Date(now.getTime() + 45 * 86400000).toISOString();
+        const [appr, ren, docs, dueRem, convEvents, signoff, grocery, todos] = await Promise.all([
+          supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', ctx.familyId).eq('status', 'pending').limit(50),
+          supabase.from('renewals').select('id, title, expires_at, reminder_days, status, created_at').eq('family_id', ctx.familyId).in('status', ['active', 'expired']).lte('expires_at', in45).limit(50),
+          supabase.from('documents').select('id, title, expires_at').eq('family_id', ctx.familyId).not('expires_at', 'is', null).lte('expires_at', in30).limit(50),
+          supabase.from('family_reminders').select('id, remind_at, status').eq('family_id', ctx.familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', todayEnd.toISOString()).limit(100),
+          supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id').eq('family_id', ctx.familyId).not('assignee_id', 'is', null).gte('starts_at', now.toISOString()).lte('starts_at', in14).order('starts_at').limit(200),
+          supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('status', 'submitted'),
+          supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_checked', false),
+          supabase.from('todo_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_done', false),
+        ]);
+        const { overdue, dueToday } = reminderAttention((dueRem.data ?? []) as { remind_at: string | null; status: string }[], now);
+        const nameByMember = new Map(ctx.members.map((m) => [m.id, m.display_name]));
+        const conflicts = detectConflicts((convEvents.data ?? []) as ConflictEvent[])
+          .map((c) => ({ id: c.eventIds[0], assigneeName: nameByMember.get(c.assigneeId) ?? null, count: c.eventIds.length, startsAt: c.startsAt }));
+        const needs = rankNeedsAttention(buildHomeNeeds({
+          approvals: (appr.data ?? []) as ParentApprovalRow[],
+          renewals: (ren.data ?? []) as RenewalRow[],
+          documents: (docs.data ?? []) as DocumentRow[],
+          conflicts,
+          pendingApprovals: signoff.count ?? 0,
+          overdueMeds: false,
+          overdueReminders: overdue,
+          dueTodayReminders: dueToday,
+          pendingChores: 0,
+          lowGrocery: (grocery.count ?? 0) > 0,
+          openTodos: todos.count ?? 0,
+          now,
+        }));
+        return { ok: true, count: needs.length, items: needs.map((n) => ({ title: n.title, urgency: n.urgency })) };
       },
     },
     {
