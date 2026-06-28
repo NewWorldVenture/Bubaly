@@ -329,8 +329,14 @@ export async function finalizeOnboardingAction(input: {
   });
   if (!profileRes.ok) return profileRes;
 
-  // 2. Create the family — DB trigger creates parent member + trial subscription
-  const { data: familyRow, error: famErr } = await supabase
+  // 2. Create the family — DB trigger creates parent member + trial subscription.
+  //    Use the service-role client for the insert: the families_select RLS policy
+  //    (is_family_member, STABLE) would otherwise filter the RETURNING row before
+  //    the trigger's membership is visible to the statement snapshot, so the
+  //    insert would come back empty. See lib/server/ensure-family.ts for the full
+  //    explanation of this trigger + RLS + RETURNING race.
+  const admin = createServiceClient();
+  const { data: familyRow, error: famErr } = await admin
     .from('families')
     .insert({ name: family.name, timezone: family.timezone, created_by: auth.user.id })
     .select()

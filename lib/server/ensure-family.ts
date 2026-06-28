@@ -1,5 +1,6 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 // Guarantees an authenticated user always has a family space, so onboarding can
 // never trap them in a redirect loop (sign up → land on the dashboard with an
@@ -7,6 +8,17 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 // (families/family_members/user_preferences from migrations 0002–0003, in prod):
 // inserting a `families` row fires the `handle_new_family` trigger, which creates
 // the owner's active `parent` member + a trial subscription. Idempotent.
+//
+// IMPORTANT: provisioning runs through the SERVICE-ROLE client, not the caller's
+// RLS-scoped client. The family-scoped RLS helper `is_family_member()` is STABLE,
+// so it reads the statement's start-of-statement snapshot. When the user client
+// does `insert(families).select()`, the RETURNING row is filtered by the
+// `families_select` policy (`is_family_member(id)`) — but the membership the
+// AFTER-INSERT trigger just created isn't visible to that STABLE snapshot yet, so
+// RETURNING comes back empty and the insert "fails" with no row. Provisioning is a
+// trusted server operation for an already-authenticated user, so we bypass RLS to
+// sidestep that read-back race entirely. Identity is verified by the caller (the
+// user.id is taken from a validated `auth.getUser()`).
 
 type AuthUser = {
   id: string;
@@ -22,22 +34,33 @@ function deriveName(user: AuthUser, profileName?: string | null): string {
 /**
  * Ensure the user has an active family membership. Returns true when one exists
  * (already, or freshly provisioned), false only if provisioning genuinely failed
- * (caller can then fall back to the manual onboarding wizard).
+ * (caller can then fall back to the manual onboarding wizard). The real cause of
+ * any failure is logged server-side under the `[ensure-family]` tag.
+ *
+ * The `supabase` argument is accepted for API symmetry with the call sites (and
+ * so the "already a member?" check can run as the user) but all writes use the
+ * service-role client — see the note above.
  */
 export async function ensureActiveFamily(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   user: AuthUser,
 ): Promise<boolean> {
-  // Already in a family? Nothing to do.
-  const { data: existing } = await supabase
+  const admin = createServiceClient();
+
+  // Already in a family? Nothing to do. (Service client → never hidden by RLS.)
+  const { data: existing, error: existErr } = await admin
     .from('family_members')
     .select('family_id')
     .eq('user_id', user.id)
     .eq('is_active', true)
     .limit(1);
+  if (existErr) {
+    console.error('[ensure-family] membership lookup failed', existErr);
+    return false;
+  }
   if (existing && existing.length > 0) return true;
 
-  const { data: profile } = await supabase
+  const { data: profile } = await admin
     .from('profiles')
     .select('display_name, full_name')
     .eq('id', user.id)
@@ -46,24 +69,29 @@ export async function ensureActiveFamily(
   const familyName = ownerName.endsWith('s') ? `${ownerName}' Family` : `${ownerName}'s Family`;
 
   // Insert the family — the handle_new_family trigger creates the active parent
-  // member + trial subscription (SECURITY DEFINER, so RLS doesn't block it).
-  const { data: family, error } = await supabase
+  // member + trial subscription. Bypassing RLS means the RETURNING row isn't
+  // filtered, so we reliably get the new family id back.
+  const { data: family, error } = await admin
     .from('families')
     .insert({ name: familyName, timezone: 'UTC', created_by: user.id })
     .select('id')
     .single();
-  if (error || !family) return false;
+  if (error || !family) {
+    console.error('[ensure-family] family insert failed', error);
+    return false;
+  }
 
   // Make it the active family.
-  await supabase.from('user_preferences').upsert(
+  const { error: prefErr } = await admin.from('user_preferences').upsert(
     { user_id: user.id, active_family_id: family.id },
     { onConflict: 'user_id' },
   );
+  if (prefErr) console.error('[ensure-family] active family upsert failed', prefErr);
 
   // The trigger names the member from profiles.full_name (or 'Parent'); make sure
   // it shows the user's real name even when the profile row isn't populated yet.
   try {
-    await supabase
+    await admin
       .from('family_members')
       .update({ display_name: ownerName })
       .eq('family_id', family.id)
@@ -71,12 +99,21 @@ export async function ensureActiveFamily(
       .or('display_name.is.null,display_name.eq.Parent');
   } catch { /* best-effort cosmetic */ }
 
-  // Confirm membership is now visible (the trigger ran in the same transaction).
-  const { data: confirm } = await supabase
+  // Confirm the trigger created the membership (it runs in the same transaction
+  // as the insert, so this should always succeed here).
+  const { data: confirm, error: confirmErr } = await admin
     .from('family_members')
     .select('family_id')
     .eq('user_id', user.id)
     .eq('is_active', true)
     .limit(1);
-  return Boolean(confirm && confirm.length > 0);
+  if (confirmErr) {
+    console.error('[ensure-family] membership confirm failed', confirmErr);
+    return false;
+  }
+  if (!confirm || confirm.length === 0) {
+    console.error('[ensure-family] trigger did not create membership for family', family.id);
+    return false;
+  }
+  return true;
 }
