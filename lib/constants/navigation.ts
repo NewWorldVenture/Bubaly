@@ -221,7 +221,7 @@ export const CAPTURE_TAB_INDEX = 2;
  */
 export const PRIMARY_NAV: NavItem[] = [
   { href: '/dashboard', label: 'Home', icon: Home },
-  { href: '/dashboard/family-operations', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard?view=family', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
   { href: '/dashboard/todos', label: 'Tasks', icon: ListChecks },
   { href: '/dashboard/meals', label: 'Meals', icon: UtensilsCrossed },
