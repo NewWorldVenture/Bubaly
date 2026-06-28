@@ -5,6 +5,7 @@ import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { planLevel } from '@/lib/constants/plans';
 import { tierToLevel } from '@/lib/features/tiers';
 import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
+import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 
@@ -108,7 +109,23 @@ export async function getUserContext(): Promise<UserContext | { needsFamily: tru
 export async function requireUserContext(): Promise<UserContext> {
   const ctx = await getUserContext();
   if (!ctx) redirect('/login');
-  if ('needsFamily' in ctx) redirect('/onboarding');
+  if ('needsFamily' in ctx) {
+    // Never trap a signed-in user in an onboarding loop. Auto-provision their
+    // family space, then re-resolve — so signing up lands you straight on the
+    // dashboard (with an "Invite your family" card), not a mandatory wizard.
+    const supabase = await createServer();
+    const { data: auth } = await supabase.auth.getUser();
+    if (auth.user) {
+      const ok = await ensureActiveFamily(supabase, auth.user);
+      if (ok) {
+        const next = await getUserContext();
+        if (next && !('needsFamily' in next)) return next;
+      }
+    }
+    // Fallback only if provisioning genuinely failed (e.g. DB unreachable):
+    // the manual wizard. requireUserContext is NOT called there, so no loop.
+    redirect('/onboarding');
+  }
   return ctx;
 }
 
