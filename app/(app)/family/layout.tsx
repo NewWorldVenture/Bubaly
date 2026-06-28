@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from 'next/cache';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isDashboardView } from '@/lib/constants/dashboards';
@@ -10,6 +11,7 @@ import { RegisterSW } from '@/components/pwa/register-sw';
 // Family administration routes share the same authenticated shell as the
 // dashboard so navigation, family switching and the notification bell all work.
 export default async function FamilyLayout({ children }: { children: React.ReactNode }) {
+  noStore();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 

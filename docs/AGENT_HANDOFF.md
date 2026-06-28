@@ -1,7 +1,30 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-28 — Services hub (mobile Services tab → categorized All Services, tier-gated); mobile-first nav drawer + super-admin excluded from curated sidebar; onboarding "couldn't finish setting up your space" fixed; App Lock hardened + seeded from onboarding PIN; Create Memory + Welcome/More/logout-confirm screens shipped. Keep this updated as you ship.
+Last updated: 2026-06-28 — Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
+
+> ## 💳 PLAN / TIER RESOLUTION — single source of truth (on `main`)
+> Symptom: the bottom-left account widget (and nav gating) showed **Free Tier for every account** even when the
+> Supabase `subscriptions.plan` was correct (basic/plus). Two root causes, both fixed:
+> 1. The plan was read with `.in('status',['active','trialing']).maybeSingle()` in ~14 places. `.maybeSingle()`
+>    **throws on >1 matching row** (the `handle_new_family` trigger seeds a free `trialing` row; admin "Set Plan" /
+>    Stripe add more) → `data` null → `planLevel(null)` = 0 = Free.
+> 2. Possible stale Data Cache / RLS-empty reads of the user-scoped subscription query.
+> **Fix:** **`lib/server/plan.ts` → `resolveFamilyPlanLevel(_supabase, familyId)`** — reads ALL active/trialing
+> rows via the **service-role client** (bypasses RLS) and returns the **highest** plan level. It is now the ONLY
+> way the app resolves a family's plan. Wired into: `app-frame.tsx` (sidebar tier + nav gating), `requirePlanLevel`
+> + `requireFeature` guards (`lib/supabase/auth.ts`), `ai-home-dashboard.tsx`, capture/family layouts, dashboard
+> `customize-actions`, wallet tier (`wallet/actions.ts` + wallet/allowance pages), readiness page, and the AI
+> wallet/invest/weekly-briefing routes. **Never resolve a plan with `.maybeSingle()` again — call
+> `resolveFamilyPlanLevel`.** `AppFrame` + capture/family layouts also call `unstable_noStore()` so the shell
+> always renders the live tier (no cached "Free").
+> - **Free-tier core nav is now genuinely free**: `feature-catalog.ts` set `documents` (Files), `family-map`
+>   (Location), `family-tree` (Family), `family-accounts` (Family Members) → `defaultTier: 'free'`; and
+>   `PRIMARY_NAV` "Dashboard" now points to `/dashboard?view=family` (was a Plus page `/dashboard/family-operations`).
+>   NOTE: catalog tiers are DEFAULTS — an admin override in Tier & Features (DB) wins, so check there if something
+>   still shows locked.
+> - One-off account tiers were set via `scripts/set-account-tiers.sql` (Supabase SQL editor; no DB creds in the
+>   sandbox). Super admin allowlist (`lib/constants/super-admins.ts`) is ONLY `daniel.hughen@gmail.com`.
 
 > ## 🧭 FREE-TIER CURATED DESKTOP SIDEBAR (on `main`)
 > Per the mockup, the **Free tier** (planLevel 0) desktop sidebar is now a calm, curated nav instead of the

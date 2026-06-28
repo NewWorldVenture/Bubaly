@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from 'next/cache';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isDashboardView } from '@/lib/constants/dashboards';
@@ -8,6 +9,7 @@ import { AppShell } from '@/components/app/app-shell';
 import { RegisterSW } from '@/components/pwa/register-sw';
 
 export default async function CaptureLayout({ children }: { children: React.ReactNode }) {
+  noStore();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 

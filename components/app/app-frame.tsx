@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from 'next/cache';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isDashboardView } from '@/lib/constants/dashboards';
@@ -17,6 +18,10 @@ import { PushRegistrar } from '@/components/native/push-registrar';
  * identical everywhere instead of only under /dashboard.
  */
 export async function AppFrame({ children }: { children: React.ReactNode }) {
+  // Always render the shell fresh — the account tier / nav gating must reflect the
+  // live subscription, never a cached Data Cache result (which surfaced as a stale
+  // "Free Tier" after an upgrade).
+  noStore();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
