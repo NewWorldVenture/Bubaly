@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { BookHeart, Award, Plane, Image as ImageIcon } from 'lucide-react';
+import Link from 'next/link';
+import { BookHeart, Award, Plane, Image as ImageIcon, Plus } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { groupByMonth, countMemories, type MemoryItem, type MemoryKind } from '@/lib/memories/timeline';
@@ -47,12 +48,24 @@ export default async function MemoriesPage() {
       <div className="flex items-center gap-2">
         <BookHeart className="h-5 w-5 text-brand" />
         <h1 className="text-lg font-bold">Memories</h1>
+        <Link
+          href="/dashboard/memories/create"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-2 text-sm font-semibold text-brand-fg transition hover:brightness-110"
+        >
+          <Plus className="h-4 w-4" /> Create memory
+        </Link>
       </div>
 
       {total === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-surface/40 py-16 text-center">
           <BookHeart className="h-10 w-10 text-muted/40" />
           <p className="mt-3 text-muted">Your family memory lane is empty — add a favorite photo, log a trip, or record a milestone.</p>
+          <Link
+            href="/dashboard/memories/create"
+            className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-fg transition hover:brightness-110"
+          >
+            <Plus className="h-4 w-4" /> Create your first memory
+          </Link>
         </div>
       ) : (
         <div className="space-y-8">
