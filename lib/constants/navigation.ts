@@ -206,7 +206,9 @@ export const MOBILE_TABS: NavItem[] = [
   { href: '/dashboard/assistant', label: 'Assistant', icon: Sparkles, minLevel: 0 },
   { href: '/capture', label: 'Capture', icon: Plus, minLevel: 0 },
   { href: '/dashboard/inbox', label: 'Inbox', icon: Inbox, minLevel: 0 },
-  { href: '/dashboard/profile', label: 'Profile', icon: UserCog, minLevel: 0 },
+  // Profile moved to the top-bar avatar menu; the 5th tab is now the Services
+  // hub (the full categorized catalog). See app/(app)/services.
+  { href: '/services', label: 'Services', icon: LayoutGrid, minLevel: 0 },
 ];
 
 /** Index of the special Capture tab in MOBILE_TABS (rendered as a raised FAB). */
