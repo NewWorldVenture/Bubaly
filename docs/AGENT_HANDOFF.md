@@ -1,7 +1,27 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-28 — Onboarding journey rebuilt to match the mockups (profile → PIN → done). Keep this updated as you ship.
+Last updated: 2026-06-28 — Phone OTP sign-in/up wired (method chooser now phone · email · Google · Apple). Keep this updated as you ship.
+
+> ## 📱 PHONE OTP AUTH + METHOD CHOOSER (on branch `claude/phone-otp-auth`)
+> Completes the mockups' multi-method sign-up: the chooser now offers **phone · email · Google · Apple**.
+> - **`lib/auth/otp.ts`** (PURE, **6 tests**) — `normalizeOtp`, `isValidOtp` (6 digits), `isLikelyE164`,
+>   `formatCountdown` (mm:ss resend timer), `providerHint` (friendly message when a provider isn't enabled).
+> - **`components/auth/phone-auth.tsx`** — two-phase SMS flow matching the mock: enter number (`PhoneInput`,
+>   E.164) → "Enter the code we sent you" (6-digit, 30s resend countdown, change number). Wired to Supabase
+>   `auth.signInWithOtp({ phone })` → `auth.verifyOtp({ phone, token, type:'sms' })`; new accounts → `/onboarding`
+>   (the profile→PIN→done flow), returning users get routed on by the onboarding layout. Shows a friendly hint
+>   until the SMS provider is enabled.
+> - Wired into **`components/auth/signup-form.tsx`** ("Continue with phone" + "Continue with email" + OAuth →
+>   `/onboarding`) and **`components/auth/login-form.tsx`** ("Continue with phone" → `/dashboard`).
+> - **Apple/Google** were already wired (`components/auth/oauth-buttons.tsx`, `signInWithOAuth`, graceful
+>   "isn't enabled yet" toast) → no change needed; they light up when the provider is configured.
+> - Verified: tsc · eslint · build ✓ (`/login`, `/signup`) · suite **1370/1370** (6 new). No migration.
+> **⚠️ REQUIRES PROVIDER CONFIG to go live (human-owned, in Supabase dashboard):** enable **Phone auth +
+>   an SMS provider (Twilio)** for phone OTP, and the **Apple** OAuth provider + keys for Sign in with Apple.
+>   The UI + Supabase calls are complete and correct; they error with a friendly hint until those are set.
+> **Still open:** PIN-based SIGN-IN (mockup screen 14) — the PIN is captured + scrypt-hashed at onboarding;
+>   turning it into a login factor needs a device-remembered-profile design (separate follow-up).
 
 > ## 🎬 ONBOARDING JOURNEY — REBUILT TO MATCH THE MOCKUPS (on branch `claude/onboarding-journey`)
 > Replaced the heavy multi-step FAMILY-setup wizard with the lightweight post-sign-in journey from the
