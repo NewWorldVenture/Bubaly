@@ -1,7 +1,23 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-28 — App shell for /wallet & /missions + nav dedup (#183); prior: Social Feed URL-unfurl ingestion. Keep this updated as you ship.
+Last updated: 2026-06-28 — Production sync: merged #183/#171/#172 + #181 (safe part) to main. Keep this updated as you ship.
+
+> ## 🚀 PRODUCTION SYNC (2026-06-28) — pulled 4 stale/open PRs onto `main`
+> Swept the last 48h of PRs; everything merged is on `main`. Then brought the open ones in:
+> - **#183** (nav dedup + app shell for `/wallet` & `/missions`) — rebased + merged.
+> - **#171** (Mission Control "Needs you" ranking core — `lib/home/needs-attention.ts`, PURE, 11 tests) —
+>   clean additive foundation, rebased + merged.
+> - **#172** (Family Food OS — AI Chef, Food Score, Smart Kitchen) — cherry-picked the self-contained
+>   Food OS commit (the branch's Trip Intelligence was already in main via #168; its nav-dedup redundant
+>   with #183). **Migration renumbered `0099_food_os.sql` → `0102_food_os.sql`** (0099 = stripe_settings).
+>   ⚠️ **Apply `0102_food_os.sql` to prod** (`leftover_inventory` + `family_food_scores`); `/dashboard/kitchen`
+>   degrades gracefully until then.
+> - **#181** — applied ONLY the safe part (per user): **Social Feed pinned as an always-present Quick Access
+>   tile** (`quick-actions.tsx` + reverted #179's `social_feed` registry/default entries to avoid double-render).
+>   Deliberately SKIPPED its other two parts: the Capture `?customize=1` flow (overlaps shipped #182) and the
+>   "restore super-admin upsell" (would reverse shipped #179's full-unlock). #181 closed as superseded otherwise.
+> - All merged via rebase→fast-forward; tsc/lint/build green + full suite at each step. No new migrations except 0102.
 
 > ## 🔗 SOCIAL FEED — URL-UNFURL INGESTION (PR pending, branch `claude/loving-mccarthy-e1ahq8`)
 > Closes the biggest open gap: the feed had no UN-gated way to get content in (live per-platform

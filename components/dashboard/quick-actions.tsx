@@ -8,7 +8,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Settings2, X, ChevronUp, ChevronDown, Plus, Check, RotateCcw, Search, Lock, Sparkles, Users } from 'lucide-react';
+import { Settings2, X, ChevronUp, ChevronDown, Plus, Check, RotateCcw, Search, Lock, Sparkles, Users, Rss } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
@@ -143,6 +143,15 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
             <span className="text-[11px] font-semibold">{f.label}</span>
           </Link>
         ))}
+
+        {/* Pinned Social Feed — always present by default (flagship shortcut),
+            shown right after the customizable tiles. Not removable/reorderable. */}
+        <Link href="/dashboard/social-feed"
+          className="relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 py-4 text-center transition hover:border-brand/20 hover:bg-elevated">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-elevated text-brand"><Rss className="h-4 w-4" /></div>
+          <span className="text-[11px] font-semibold">Social Feed</span>
+          {editing && <span className="absolute right-1 top-1 rounded bg-brand/15 px-1 text-[8px] font-bold uppercase text-brand">Pinned</span>}
+        </Link>
 
         {/* Add tile */}
         {editing && keys.length < MAX_DASH_BUTTONS && addable.length > 0 && (
