@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PhoneInput } from '@/components/ui/phone-input';
+import { OtpInput } from '@/components/ui/otp-input';
 import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { normalizeOtp, isValidOtp, isLikelyE164, formatCountdown, providerHint } from '@/lib/auth/otp';
@@ -86,11 +87,11 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
         <h2 className="text-lg font-semibold">Enter the code we sent you</h2>
         <p className="mt-0.5 text-sm text-muted">We sent a 6-digit code to {phone}.</p>
       </div>
-      <input
-        value={code} onChange={(e) => setCode(normalizeOtp(e.target.value))} inputMode="numeric" autoFocus
-        placeholder="••••••" aria-label="Verification code"
-        className="h-14 w-full rounded-xl border border-border bg-bg text-center text-2xl tracking-[0.4em] focus-ring"
-        onKeyDown={(e) => { if (e.key === 'Enter') void verify(); }}
+      <OtpInput
+        value={code}
+        onChange={(next) => setCode(normalizeOtp(next))}
+        autoFocus
+        onComplete={() => void verify()}
       />
       <Button className="w-full" loading={verifying} disabled={!isValidOtp(code)} onClick={verify}>
         Verify &amp; continue

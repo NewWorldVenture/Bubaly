@@ -61,21 +61,22 @@ export function LoginForm() {
         </div>
       ) : (
       <>
-      <div className="mt-6">
-        <OAuthButtons />
-      </div>
-
+      {/* Phone-first: the number is the primary way in, then Google/Apple. */}
       <button
         type="button"
         onClick={() => setShowPhone(true)}
-        className={`mt-3 ${authButtonClass}`}
+        className={`mt-6 ${authButtonClass}`}
       >
         <Smartphone className="h-[18px] w-[18px]" /> Continue with phone
       </button>
 
+      <div className="mt-3">
+        <OAuthButtons />
+      </div>
+
       <div className="relative my-5 flex items-center gap-3">
         <div className="flex-1 border-t border-border" />
-        <span className="text-xs text-muted">or</span>
+        <span className="text-xs text-muted">or use email</span>
         <div className="flex-1 border-t border-border" />
       </div>
 

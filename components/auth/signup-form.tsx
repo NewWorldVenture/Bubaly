@@ -127,6 +127,13 @@ export function SignupForm() {
           >
             <Mail className="h-[18px] w-[18px]" /> Continue with email
           </button>
+          <button
+            type="button"
+            onClick={() => setShowPhone(true)}
+            className="mx-auto block pt-1 text-center text-sm font-medium text-muted underline-offset-4 hover:text-fg hover:underline"
+          >
+            Continue without email
+          </button>
         </div>
       ) : (
         <form onSubmit={onSubmit} className="space-y-4 animate-fade-in" noValidate>
