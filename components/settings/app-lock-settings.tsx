@@ -10,18 +10,24 @@ import { useApp } from '@/components/app/app-context';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
-import { buildAppLockConfig, isValidPin, isAppLockConfig, unlockKey } from '@/lib/security/app-lock';
+import { buildAppLockConfig, isValidPin, isAppLockConfig, unlockKey, type AppLockConfig } from '@/lib/security/app-lock';
 import { saveAppLockConfig } from '@/app/(app)/settings/app-lock-actions';
 import { cn } from '@/lib/utils/cn';
 
 export function AppLockSettings() {
   const { userId } = useApp();
   const { success, error: toastError } = useToast();
-  const [enabled, setEnabled] = useState<boolean | null>(null); // null = loading
+  // undefined = loading, null = no PIN ever set, otherwise the stored config.
+  const [config, setConfig] = useState<AppLockConfig | null | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Load current state directly from the user's own preferences.
+  const hasPin = !!config;            // a PIN exists (may be on or off)
+  const enabled = config?.enabled ?? false;
+
+  // Load current config directly from the user's own preferences. The PIN may have
+  // been seeded (disabled) during onboarding, so we keep the full config — flipping
+  // it on later must not require re-entering the PIN.
   useEffect(() => {
     let active = true;
     void createClient()
@@ -29,19 +35,27 @@ export function AppLockSettings() {
       .then(({ data }) => {
         if (!active) return;
         const cfg = (data?.notification_prefs as Record<string, unknown> | null)?.appLock;
-        setEnabled(isAppLockConfig(cfg) ? cfg.enabled : false);
+        setConfig(isAppLockConfig(cfg) ? cfg : null);
       });
     return () => { active = false; };
   }, [userId]);
 
-  async function disable() {
+  // Flip an EXISTING config on/off without re-hashing. Turning off keeps the salt +
+  // hash so the user can turn it back on with one tap (the seed-and-opt-in model).
+  async function setEnabled(value: boolean) {
+    if (!config) return;
+    const next = { ...config, enabled: value };
     setSaving(true);
-    const res = await saveAppLockConfig(null);
+    const res = await saveAppLockConfig(next);
     setSaving(false);
     if (!res.ok) { toastError(res.error); return; }
-    try { sessionStorage.removeItem(unlockKey(userId)); } catch { /* ignore */ }
-    setEnabled(false);
-    success('App Lock turned off');
+    try {
+      // This device is already authenticated — never lock yourself out on toggle.
+      if (value) sessionStorage.setItem(unlockKey(userId), '1');
+      else sessionStorage.removeItem(unlockKey(userId));
+    } catch { /* ignore */ }
+    setConfig(next);
+    success(value ? 'App Lock is on' : 'App Lock turned off');
   }
 
   // Re-lock immediately on this device: drop the session unlock flag and reload so
@@ -53,13 +67,13 @@ export function AppLockSettings() {
 
   async function onSet(pin: string) {
     setSaving(true);
-    const cfg = await buildAppLockConfig(pin);
+    const cfg = await buildAppLockConfig(pin); // enabled: true
     const res = await saveAppLockConfig(cfg);
     setSaving(false);
     if (!res.ok) { toastError(res.error); return; }
     // This device is already authenticated — count it as unlocked for this session.
     try { sessionStorage.setItem(unlockKey(userId), '1'); } catch { /* ignore */ }
-    setEnabled(true);
+    setConfig(cfg);
     setModalOpen(false);
     success('App Lock is on');
   }
@@ -77,21 +91,30 @@ export function AppLockSettings() {
               Require a 4-digit PIN to open Bubaly on this browser. Handy when you share a device.
               You can always sign out from the lock screen if you forget it.
             </p>
-            {enabled && (
+            {enabled ? (
               <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
                 <ShieldCheck className="h-3.5 w-3.5" /> On
               </p>
-            )}
+            ) : hasPin ? (
+              <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-muted">
+                <ShieldCheck className="h-3.5 w-3.5" /> PIN ready — App Lock is off
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          {enabled === null ? (
+          {config === undefined ? (
             <span className="text-xs text-muted">…</span>
           ) : enabled ? (
             <>
               <Button size="sm" variant="outline" onClick={lockNow} disabled={saving}>Lock now</Button>
               <Button size="sm" variant="outline" onClick={() => setModalOpen(true)} disabled={saving}>Change PIN</Button>
-              <button onClick={disable} disabled={saving} className="text-xs font-medium text-muted hover:text-rose-400 disabled:opacity-50">Turn off</button>
+              <button onClick={() => setEnabled(false)} disabled={saving} className="text-xs font-medium text-muted hover:text-rose-400 disabled:opacity-50">Turn off</button>
+            </>
+          ) : hasPin ? (
+            <>
+              <Button size="sm" onClick={() => setEnabled(true)} disabled={saving}>Turn on</Button>
+              <button onClick={() => setModalOpen(true)} disabled={saving} className="text-xs font-medium text-muted hover:text-fg disabled:opacity-50">Change PIN</button>
             </>
           ) : (
             <Button size="sm" onClick={() => setModalOpen(true)} disabled={saving}>Set up PIN</Button>
