@@ -18,6 +18,19 @@ export async function GET(request: Request) {
       // before migration 0008 is applied.
       const { data: { user } } = await supabase.auth.getUser();
       const isAdmin = isSuperAdminEmail(user?.email) || (await supabase.rpc('is_super_admin')).data === true;
+
+      // Brand-new accounts (no family yet) go through the lightweight profile +
+      // PIN onboarding journey first; returning users go straight in. Only when
+      // the caller didn't request a specific deep link (next === '/dashboard').
+      if (next === '/dashboard' && user && !isAdmin) {
+        const { data: membership } = await supabase
+          .from('family_members').select('family_id')
+          .eq('user_id', user.id).eq('is_active', true).limit(1);
+        if (!membership || membership.length === 0) {
+          return NextResponse.redirect(new URL('/onboarding', url.origin));
+        }
+      }
+
       const destination = isAdmin && next === '/dashboard' ? '/admin' : next;
       return NextResponse.redirect(new URL(destination, url.origin));
     }
