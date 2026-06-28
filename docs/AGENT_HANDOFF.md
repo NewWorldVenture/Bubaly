@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated after Social Feed URL-unfurl ingestion (PR pending). Keep this updated as you ship.
+Last updated: 2026-06-28 — App shell for /wallet & /missions + nav dedup (#183); prior: Social Feed URL-unfurl ingestion. Keep this updated as you ship.
 
 > ## 🔗 SOCIAL FEED — URL-UNFURL INGESTION (PR pending, branch `claude/loving-mccarthy-e1ahq8`)
 > Closes the biggest open gap: the feed had no UN-gated way to get content in (live per-platform
@@ -80,7 +80,16 @@ Last updated: 2026-06-27 — PR #175: ported standalone data-wiring features + b
 > **(9) Calendar AI "Find a time" — SAFE SLICE of `5490301`** (added 2026-06-27): ported the self-contained scheduling feature WITHOUT the personal/work/family lens DB column (so no migration, no sync-domain edits). `lib/calendar/scheduling.ts` (PURE, 7 tests — busy-interval/free-gap/free-slot engine; `CalendarContext` defined locally, in-memory only), `/api/ai/schedule` (per-member events+school+sports → shared free slots; resilient to no `context` column), `find-time-modal.tsx` (pick people/duration/window/daytime → scan → one-tap book), and a "Find a time" button in `calendar-module`. 1247 tests pass.
 > **DEFERRED (user chose the safe slice):** the calendar **context lens** (personal/work/family) from `5490301` is NOT ported — it needs migration `0094_calendar_context.sql` (RENUMBER to `0100+`; `0094` is taken by `family_dashboard_settings`), a `calendar_events.context` + `calendar_feeds.context`/`member_id` column, `database.types` `CalendarContext`, and edits across the reworked Google-calendar/sync/feeds domain (`sync/feeds/actions.ts`, `api/google/calendar/sync`, `calendar-sync-panel`, `lib/calendar/feeds.ts`, `lib/server/calendar-feeds.ts`, `lib/validation.ts`, event-detail badge, NewEventModal context field). Also already-on-main: `08d0ce9` Month/Agenda views. `claude/continuation-an1mam` has ~114 commits total — many are isolated, portable features still on the table (Front Desk hub, decision-queue batch actions, memory search, admin consoles, Capture direct-file/undo, etc.); port the same way (cherry-pick isolated commits, drop handoff churn, manual re-apply where main diverged).
 
-> ## 🏠 HOME DASHBOARD — REMINDER ATTENTION CARD (new, branch `claude/festive-bohr-m4cbeg`)
+> ## 🧱 APP SHELL FOR /wallet & /missions (new, branch `claude/festive-bohr-m4cbeg`, PR #183)
+> `/wallet` and `/missions` rendered **bare** (no sidebar/top bar) because the app chrome lived only in
+> `app/(app)/dashboard/layout.tsx`, and those routes are **siblings of** `/dashboard`, not children. Fix:
+> extracted the generic shell into **`components/app/app-frame.tsx`** (`AppFrame` — loads family ctx, wraps
+> children in `AppProvider` + `AppShell` + PWA/native bootstrap) and gave each route its own one-line layout
+> reusing it: `dashboard/layout.tsx` (refactored), **new** `wallet/layout.tsx`, **new** `missions/layout.tsx`.
+> Now they match `/dashboard/inbox` exactly. Neither page used `useApp` before, so no behavior change beyond
+> gaining the chrome. No migration. Also includes the **nav dedup** (one Family Wallet in Suggested) + guard test.
+>
+> ## 🏠 HOME DASHBOARD — REMINDER ATTENTION CARD (MERGED in #174 → main 6966f6b)
 > Now that `family_reminders` is a first-class notifying service (#173, merged), the home dashboard
 > ("Needs Your Attention") surfaces it: a **high-priority "N reminders overdue"** card or, if none overdue,
 > a **medium "N reminders due today"** card linking to `/dashboard/reminders`.
