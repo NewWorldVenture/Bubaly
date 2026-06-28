@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
-import { ChevronDown, Check, Gift, Lock, LogOut, Menu, Mic, Moon, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, Sparkles, SunMedium, X } from 'lucide-react';
+import { ChevronDown, Check, Gift, Lock, LogOut, Menu, Mic, Moon, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, Sparkles, SunMedium, UserCog, X } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { APP_NAV_GROUPS, MOBILE_TABS, CAPTURE_TAB_INDEX, type NavItem } from '@/lib/constants/navigation';
@@ -166,6 +166,9 @@ function UserMenu() {
                 <ShieldCheck className="h-4 w-4" /> Site Admin
               </Link>
             )}
+            <Link href="/dashboard/profile" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
+              <UserCog className="h-4 w-4" /> Profile
+            </Link>
             <Link href="/dashboard/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
               <SettingsIcon className="h-4 w-4" /> Settings
             </Link>

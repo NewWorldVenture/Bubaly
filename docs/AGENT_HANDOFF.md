@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-28 — Mobile-first nav drawer + super-admin excluded from curated sidebar; onboarding "couldn't finish setting up your space" fixed; App Lock hardened + seeded from onboarding PIN; Create Memory + Welcome/More/logout-confirm screens shipped. Keep this updated as you ship.
+Last updated: 2026-06-28 — Services hub (mobile Services tab → categorized All Services, tier-gated); mobile-first nav drawer + super-admin excluded from curated sidebar; onboarding "couldn't finish setting up your space" fixed; App Lock hardened + seeded from onboarding PIN; Create Memory + Welcome/More/logout-confirm screens shipped. Keep this updated as you ship.
 
 > ## 🧭 FREE-TIER CURATED DESKTOP SIDEBAR (on `main`)
 > Per the mockup, the **Free tier** (planLevel 0) desktop sidebar is now a calm, curated nav instead of the
@@ -39,6 +39,23 @@ Last updated: 2026-06-28 — Mobile-first nav drawer + super-admin excluded from
 >   Tailwind animation. Mobile family switching stays in the top-bar `UserMenu`. **Super admins are excluded**
 >   from the curated nav — gate is `planLevel === 0 && !isSuperAdmin`, so a Free-plan super admin keeps the full
 >   catalog. tsc · lint · build green.
+>
+> ## 🧩 SERVICES HUB — mobile tab swap + categorized All Services (on `main`)
+> Per the mockup, the **5th mobile bottom tab is now "Services"** (was Profile) — `MOBILE_TABS` in
+> `lib/constants/navigation.ts` (icon `LayoutGrid`, href `/services`). **Profile** moved to the top-bar avatar
+> `UserMenu` (new "Profile" link → `/dashboard/profile`, above Settings) so nothing is lost on mobile.
+> - **`/services`** (`app/(app)/services/page.tsx` → `components/services/services-hub.tsx`): the **All Services**
+>   hub — 8 category cards with **live, tier-aware tool counts**, an **Upgrade-to-Plus** banner (hidden when
+>   `planLevel === 2` or super admin), and **Quick Actions** (Add Event/Task/Expense · Send Message).
+> - **`/services/[category]`** (`components/services/service-category.tsx`): the category's features, plan-gated
+>   via the shared `resolveItems`/`NavEntry` (`components/app/nav-shared.tsx`) — Off features hidden, above-plan
+>   features render locked and open the `UpgradeModal` (never a dead end).
+> - **`lib/constants/service-categories.ts`** — `SERVICE_CATEGORIES` maps EVERY `APP_NAV_GROUPS` route into
+>   exactly one of the 8 categories (Family Life · Finances · Kids & Education · Health & Wellness ·
+>   Communications · Home Management · Home Safety · All Integrations). No migration; counts + gates read the
+>   live subscription via `useApp().featureTiers` + `planLevel`. **When you add a new feature route, also add it
+>   to the right category's `hrefs` here**, or it won't appear in the Services hub.
+> - `app/(app)/services/layout.tsx` uses the shared `AppFrame` (same chrome/context as `/dashboard`). tsc·lint·build green.
 >
 > ## 🔐 ONBOARDING + APP LOCK + MEMORY/AUTH SCREENS (all on `main`)
 > Shipped this session — all tsc/lint/build green, no migrations (jsonb merge-writes only):
