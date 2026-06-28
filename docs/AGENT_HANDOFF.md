@@ -155,6 +155,16 @@ Last updated: 2026-06-28 — Phone OTP sign-in/up wired (method chooser now phon
 >   AI auto-categorize added links into family/friends/groups). Each: pure logic in tested `lib/*`, wire to
 >   Supabase, ship, update THIS doc.
 
+> ## 🛠️ ADMIN — SET FAMILY PLAN / DOWNGRADE TO FREE (new, on `main`)
+> Super-admins can now change any family's tier without SQL. `adminSetFamilyPlanAction({ familyId, plan })`
+> in `app/(app)/admin/actions.ts` (super-admin guarded via `assertSuperAdmin`, service-role client, written to
+> `audit_logs` via `adminAuditLog`) updates the family's active/trialing `subscriptions` row (or inserts one)
+> to `free | basic | basic_annual | plus | plus_annual`; `free` → planLevel 0. UI: **`components/admin/
+> set-plan-control.tsx`** (a confirm-gated `<select>`) is wired into the **Admin → Users → Families** table
+> Plan column (covers every family incl. currently-free). No migration. NOTE: a family's plan is only half the
+> story — a **super-admin override** (`super_admins` table / `SUPER_ADMIN_EMAILS` env) force-unlocks to Plus
+> regardless; clear both to make an account truly Free.
+>
 > ## ▶️ START HERE (current state — read this first)
 > - **`main` is the source of truth** and deploys to prod (Vercel → www.bubaly.com). As of this update its tip
 >   is the "one-tap Approve/Decline on Home" commit (`8153a52`). Everything below is already ON `main`.

@@ -11,6 +11,7 @@ import { emailSchema } from '@/lib/validation';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { stripeFromKey } from '@/lib/stripe';
 import type { MemberRole } from '@/lib/constants/roles';
+import type { PlanId } from '@/lib/constants/plans';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -125,6 +126,49 @@ export async function adminUpdateMemberAction(memberId: string, input: { display
   if (error) return { ok: false, error: error.message };
 
   await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role } });
+  revalidatePath('/admin/users');
+  return { ok: true };
+}
+
+/** Plans a super-admin can assign from the console (free + the paid tiers). */
+const ASSIGNABLE_PLANS = new Set<PlanId>(['free', 'basic', 'basic_annual', 'plus', 'plus_annual']);
+
+/**
+ * Set a family's subscription plan directly (e.g. comp a family, or downgrade to
+ * Free). Updates the family's active/trialing subscription, or creates one if
+ * none exists. 'free' yields planLevel 0. Super-admin only, audited.
+ */
+export async function adminSetFamilyPlanAction(input: { familyId: string; plan: string }): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+
+  const plan = input.plan as PlanId;
+  if (!ASSIGNABLE_PLANS.has(plan)) return { ok: false, error: 'Unknown plan' };
+  if (!input.familyId) return { ok: false, error: 'A family is required' };
+
+  const supabase = createServiceClient();
+  // Update the family's current active/trialing subscription if it has one;
+  // otherwise create one. Keeps a single source of truth for the plan.
+  const { data: existing } = await supabase.from('subscriptions')
+    .select('id, plan').eq('family_id', input.familyId)
+    .in('status', ['active', 'trialing']).order('created_at', { ascending: false }).limit(1).maybeSingle();
+
+  const previousPlan = existing?.plan ?? null;
+  if (existing) {
+    const { error } = await supabase.from('subscriptions')
+      .update({ plan, status: 'active' }).eq('id', existing.id);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase.from('subscriptions')
+      .insert({ family_id: input.familyId, plan, status: 'active', seats: 1 });
+    if (error) return { ok: false, error: error.message };
+  }
+
+  await adminAuditLog({
+    familyId: input.familyId, action: 'update', resource: 'subscriptions',
+    resourceId: input.familyId, metadata: { plan, previous_plan: previousPlan },
+  });
+  revalidatePath('/admin/subscriptions');
   revalidatePath('/admin/users');
   return { ok: true };
 }
