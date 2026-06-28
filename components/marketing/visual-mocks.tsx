@@ -477,41 +477,6 @@ export function FamilyAiPanel() {
   );
 }
 
-/**
- * The Bubaly brand manifesto — an editorial, emotional closing statement. Centered
- * long-form copy with the key beats emphasized and the tagline as the payoff.
- */
-export function ManifestoBand() {
-  return (
-    <section className="relative overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-violet-500/[0.06] via-transparent to-blue-500/[0.05] px-6 py-14 sm:px-10 sm:py-20">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-      <div className="mx-auto max-w-3xl text-center">
-        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Our Manifesto</span>
-        <p className="mx-auto mt-6 max-w-2xl text-balance text-xl font-medium leading-snug text-white/75 sm:text-2xl sm:leading-snug">
-          Life isn&apos;t meant to be spent coordinating schedules, answering emails, filling out forms,
-          returning phone calls, or remembering every detail.
-        </p>
-        <p className="mt-7 text-3xl font-extrabold tracking-tight sm:text-5xl">
-          Life is meant to be <GradientText>lived</GradientText>.
-        </p>
-        <p className="mx-auto mt-8 max-w-2xl text-base leading-7 text-white/65 sm:text-lg sm:leading-8">
-          Bubaly exists to quietly handle the work behind everyday family life—anticipating needs,
-          coordinating responsibilities, and reducing the invisible workload that steals time and attention.
-        </p>
-        <p className="mx-auto mt-6 max-w-xl text-base font-semibold leading-7 text-white/80 sm:text-lg">
-          Because every minute spent managing life is a minute not spent living it.
-        </p>
-        <div className="mt-10">
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-white/45">Our mission is simple</p>
-          <p className="mt-3 text-2xl font-extrabold tracking-tight sm:text-3xl">
-            Less Managing Life. <GradientText>More Living It.</GradientText>
-          </p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export function TestimonialBand({ compact = false }: { compact?: boolean }) {
   const testimonials = [
     ['Jessica M.', 'Mom of 3', 'Bubaly has simplified our chaos. We are more organized and actually enjoy family time again!'],
