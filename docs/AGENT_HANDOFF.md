@@ -1,7 +1,30 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-28 — Home "Needs you" unified decision queue (wired #171's ranking brain) + /economy /referrals shell. Keep this updated as you ship.
+Last updated: 2026-06-28 — Home "Needs you" decision queue (sources + ranking + notifications + one-tap approve) + /economy /referrals shell. Keep this updated as you ship.
+
+> ## ▶️ START HERE (current state — read this first)
+> - **`main` is the source of truth** and deploys to prod (Vercel → www.bubaly.com). As of this update its tip
+>   is the "one-tap Approve/Decline on Home" commit (`8153a52`). Everything below is already ON `main`.
+> - **Designated working branch:** `claude/festive-bohr-m4cbeg`. Recent increments were merged by
+>   rebase→**fast-forward push to `main`** (the GitHub merge API was intermittently rate-limited; FF push gives
+>   the same result and auto-closes the PR as merged). After each merge, reset the branch to `origin/main`.
+> - **Ship discipline (every increment):** keep pure logic in tested `lib/*` (vitest is node-only, no jsdom —
+>   no component render tests; presentational changes are verified via `tsc` + `next build`). Gate every merge on
+>   **`tsc --noEmit` clean · eslint clean · full `vitest` green · `npm run build` exit 0**. Builds take >2min —
+>   run them backgrounded and watch for `BUILD_EXIT=0`. Suite is ~**1342 tests**.
+> - **No new migrations were needed** for any recent work (all reads are missing-table-safe via `?? []`).
+> - **Commits show as "Unverified" on GitHub** — SSH signing isn't functional in this env and the committer
+>   email is already correct (`noreply@anthropic.com`). Cosmetic; do not rewrite shared `main` history over it.
+> - **⚠️ Ops still owned by a human (out of agent reach):** apply pending prod migrations
+>   **`0098`* (relationship + trip — apply both), `0099_stripe_settings`, `0100_reminder_details`,
+>   `0101_social_feed`, `0102_food_os`** (+ any `0085–0097` not yet applied), and set the
+>   `CRON_SECRET` / push / email / Stripe envs + Stripe Setup $0.90 Price ID. Until envs are set, the smart
+>   notifications (incl. the new approval pings) are generated but not delivered.
+> - **Active doctrine (the user's standing mandate):** *challenge every assumption; eliminate friction;
+>   no feature is complete until it measurably reduces time/decisions/stress/manual work* → "Less Managing
+>   Life. More Living It." Pick the highest-leverage assumption each turn, implement it production-ready
+>   (100% Supabase-wired), ship it, update THIS doc. Next candidates are in the Home "Needs you" entry below.
 
 > ## 🎯 HOME "NEEDS YOU" — UNIFIED DECISION QUEUE (new, on `main`)
 > Doctrine: *challenge every assumption; consolidate scattered decisions; no feature is complete until it
