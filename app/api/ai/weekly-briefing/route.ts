@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { planLevel } from '@/lib/constants/plans';
 import { weekWindow, weekRangeLabel, choreCompletionRate, bucketByDay, dayLoad } from '@/lib/ai/weekly';
 import { resolveProvider } from '@/lib/ai/provider';
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       .eq('family_id', familyId)
       .in('status', ['active', 'trialing'])
       .maybeSingle();
-    if (planLevel(sub?.plan ?? null) < 2) {
+    if ((await effectivePlanLevel(planLevel(sub?.plan ?? null))) < 2) {
       return NextResponse.json({ error: 'Weekly AI Briefing is a Family+ feature.' }, { status: 402 });
     }
 

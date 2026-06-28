@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
@@ -147,7 +147,7 @@ async function familyWalletTier(supabase: Awaited<ReturnType<typeof createServer
   const { data: sub } = await supabase
     .from('subscriptions').select('plan, status').eq('family_id', familyId)
     .in('status', ['active', 'trialing']).maybeSingle();
-  return walletTierForPlanLevel(planLevel(sub?.plan ?? null));
+  return walletTierForPlanLevel(await effectivePlanLevel(planLevel(sub?.plan ?? null)));
 }
 
 /**
