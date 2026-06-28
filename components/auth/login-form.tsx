@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { signInSchema, fieldErrors } from '@/lib/validation';
 import { Smartphone } from 'lucide-react';
-import { OAuthButtons } from '@/components/auth/oauth-buttons';
+import { OAuthButtons, authButtonClass } from '@/components/auth/oauth-buttons';
 import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
 import { resolveLandingPathAction } from '@/app/(auth)/actions';
@@ -68,7 +68,7 @@ export function LoginForm() {
       <button
         type="button"
         onClick={() => setShowPhone(true)}
-        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface/60 px-4 py-3 text-sm font-semibold transition hover:bg-elevated"
+        className={`mt-3 ${authButtonClass}`}
       >
         <Smartphone className="h-[18px] w-[18px]" /> Continue with phone
       </button>

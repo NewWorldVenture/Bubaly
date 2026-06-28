@@ -9,6 +9,12 @@ import { AppleIcon } from '@/components/auth/apple-icon';
 
 type Provider = 'google' | 'apple';
 
+// Shared style for every auth provider button (Google · Apple · phone · email)
+// so the sign-in / sign-up screens are visually unified — a solid black pill with
+// a white label. This is also Apple's standard "Continue with Apple" treatment.
+export const authButtonClass =
+  'flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-black px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-zinc-900 disabled:opacity-60';
+
 /**
  * Google + Apple sign-in buttons, shared by the login and signup screens.
  * `next` is where the OAuth callback should send the user after auth
@@ -52,7 +58,7 @@ export function OAuthButtons({ next }: { next?: string }) {
         type="button"
         onClick={() => signInWith('google')}
         disabled={pending !== null}
-        className="flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-surface/60 px-4 py-3 text-sm font-semibold transition hover:bg-elevated disabled:opacity-60"
+        className={authButtonClass}
       >
         {pending === 'google' ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <GoogleIcon />}
         Continue with Google
@@ -61,9 +67,9 @@ export function OAuthButtons({ next }: { next?: string }) {
         type="button"
         onClick={() => signInWith('apple')}
         disabled={pending !== null}
-        className="flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-fg px-4 py-3 text-sm font-semibold text-bg transition hover:opacity-90 disabled:opacity-60"
+        className={authButtonClass}
       >
-        {pending === 'apple' ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <AppleIcon className="h-[18px] w-[18px]" />}
+        {pending === 'apple' ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <AppleIcon className="h-5 w-5" />}
         Continue with Apple
       </button>
     </div>
