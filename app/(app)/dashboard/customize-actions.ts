@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { planLevel } from '@/lib/constants/plans';
@@ -26,7 +26,7 @@ async function userTier(supabase: Awaited<ReturnType<typeof createServer>>, fami
   const { data: sub } = await supabase
     .from('subscriptions').select('plan, status').eq('family_id', familyId)
     .in('status', ['active', 'trialing']).maybeSingle();
-  return tierForPlanLevel(planLevel(sub?.plan ?? null));
+  return tierForPlanLevel(await effectivePlanLevel(planLevel(sub?.plan ?? null)));
 }
 
 async function logEvent(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string, userId: string, action: string, featureKey?: string | null, metadata: Record<string, unknown> = {}) {

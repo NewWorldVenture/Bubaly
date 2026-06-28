@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Gauge, TrendingUp, TrendingDown, Sparkles, ArrowRight } from 'lucide-react';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { computeReadiness, BAND_LABEL, type ReadinessInput } from '@/lib/readiness/score';
 import { planLevel } from '@/lib/constants/plans';
@@ -50,7 +50,7 @@ export default async function ReadinessPage() {
     activeMembers: activeMembers ?? 0,
   };
   const { score, band, factors } = computeReadiness(input);
-  const isPlus = planLevel(sub?.plan ?? null) >= 2;
+  const isPlus = (await effectivePlanLevel(planLevel(sub?.plan ?? null))) >= 2;
 
   // SVG ring math.
   const r = 54, c = 2 * Math.PI * r, dash = (score / 100) * c;

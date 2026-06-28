@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { planLevel } from '@/lib/constants/plans';
@@ -34,7 +34,7 @@ export default async function WalletPage() {
     supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']).maybeSingle(),
     supabase.from('parent_approvals').select('id, kind, ref_id, amount_cents, note, requested_by, created_at').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(50),
   ]);
-  const tier = walletTierForPlanLevel(planLevel(sub?.plan ?? null));
+  const tier = walletTierForPlanLevel(await effectivePlanLevel(planLevel(sub?.plan ?? null)));
 
   const bucketKindById = new Map((buckets ?? []).map((b) => [b.id, b.kind as BucketKind]));
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));

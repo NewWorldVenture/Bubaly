@@ -46,6 +46,17 @@ export async function isSuperAdmin(): Promise<boolean> {
 }
 
 /**
+ * The plan level to gate FEATURE CONTENT by, with super-admins bumped to the max
+ * (2 = Family+). Use this anywhere a page/route/action would otherwise gate on the
+ * raw `planLevel(subscription)` so site super-admins get everything 100% unlocked
+ * — mirroring `requireFeature` / `requirePlanLevel`, which already bypass for them.
+ * Do NOT use in system/cron contexts that process families by their real plan.
+ */
+export async function effectivePlanLevel(rawLevel: number): Promise<number> {
+  return (await isSuperAdmin()) ? 2 : rawLevel;
+}
+
+/**
  * Resolves the full user + active-family context. Returns null when not signed in,
  * or { needsFamily: true } when signed in but not yet in any family.
  */
