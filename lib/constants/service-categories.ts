@@ -101,9 +101,9 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     tint: 'bg-cyan-500/15 text-cyan-300',
     countLabel: 'tools',
     hrefs: [
-      '/dashboard/messages', '/dashboard/announcements', '/dashboard/inbox',
-      '/dashboard/front-desk', '/dashboard/social', '/dashboard/social-feed',
-      '/dashboard/contacts', '/dashboard/notes',
+      '/dashboard/assistant', '/dashboard/messages', '/dashboard/announcements',
+      '/dashboard/inbox', '/dashboard/front-desk', '/dashboard/social',
+      '/dashboard/social-feed', '/dashboard/contacts', '/dashboard/notes',
     ],
   },
   {
