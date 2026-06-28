@@ -6,8 +6,9 @@ import { createServiceClient } from '@/lib/supabase/server';
 // never trap them in a redirect loop (sign up → land on the dashboard with an
 // "Invite your family" card — the lightweight journey). Uses only core tables
 // (families/family_members/user_preferences from migrations 0002–0003, in prod):
-// inserting a `families` row fires the `handle_new_family` trigger, which creates
-// the owner's active `parent` member + a trial subscription. Idempotent.
+// inserts the `families` row, then EXPLICITLY creates the owner's active `parent`
+// member + a trial subscription (not relying on the `handle_new_family` trigger,
+// which isn't guaranteed active in every environment). Idempotent.
 //
 // IMPORTANT: provisioning runs through the SERVICE-ROLE client, not the caller's
 // RLS-scoped client. The family-scoped RLS helper `is_family_member()` is STABLE,
@@ -68,9 +69,8 @@ export async function ensureActiveFamily(
   const ownerName = deriveName(user, profile?.display_name ?? profile?.full_name ?? null);
   const familyName = ownerName.endsWith('s') ? `${ownerName}' Family` : `${ownerName}'s Family`;
 
-  // Insert the family — the handle_new_family trigger creates the active parent
-  // member + trial subscription. Bypassing RLS means the RETURNING row isn't
-  // filtered, so we reliably get the new family id back.
+  // Insert the family. Bypassing RLS means the RETURNING row isn't filtered, so
+  // we reliably get the new family id back.
   const { data: family, error } = await admin
     .from('families')
     .insert({ name: familyName, timezone: 'UTC', created_by: user.id })
@@ -81,6 +81,34 @@ export async function ensureActiveFamily(
     return false;
   }
 
+  // Explicitly create the owner's parent membership — do NOT rely on the
+  // `handle_new_family` trigger, which isn't guaranteed to be installed/active in
+  // every environment. (Both the original onboarding loop and the "couldn't
+  // finish setting up your space" error came from trusting that trigger; the
+  // working createFamily path always inserted the member itself.) Upsert is
+  // idempotent, so if the trigger DID fire we just reconcile name/role instead
+  // of duplicating.
+  const { error: memberErr } = await admin.from('family_members').upsert(
+    { family_id: family.id, user_id: user.id, role: 'parent', display_name: ownerName, is_active: true },
+    { onConflict: 'family_id,user_id' },
+  );
+  if (memberErr) {
+    console.error('[ensure-family] parent member upsert failed', memberErr);
+    return false;
+  }
+
+  // Ensure a trial subscription exists (the trigger may have created one; only
+  // insert when missing so we never duplicate). Non-fatal.
+  const { data: existingSub } = await admin
+    .from('subscriptions').select('id').eq('family_id', family.id).limit(1);
+  if (!existingSub || existingSub.length === 0) {
+    const { error: subErr } = await admin.from('subscriptions').insert({
+      family_id: family.id, plan: 'free', status: 'trialing',
+      current_period_end: new Date(Date.now() + 14 * 86400000).toISOString(),
+    });
+    if (subErr) console.error('[ensure-family] trial subscription insert failed', subErr);
+  }
+
   // Make it the active family.
   const { error: prefErr } = await admin.from('user_preferences').upsert(
     { user_id: user.id, active_family_id: family.id },
@@ -88,19 +116,7 @@ export async function ensureActiveFamily(
   );
   if (prefErr) console.error('[ensure-family] active family upsert failed', prefErr);
 
-  // The trigger names the member from profiles.full_name (or 'Parent'); make sure
-  // it shows the user's real name even when the profile row isn't populated yet.
-  try {
-    await admin
-      .from('family_members')
-      .update({ display_name: ownerName })
-      .eq('family_id', family.id)
-      .eq('user_id', user.id)
-      .or('display_name.is.null,display_name.eq.Parent');
-  } catch { /* best-effort cosmetic */ }
-
-  // Confirm the trigger created the membership (it runs in the same transaction
-  // as the insert, so this should always succeed here).
+  // Confirm the membership is in place before we report success.
   const { data: confirm, error: confirmErr } = await admin
     .from('family_members')
     .select('family_id')
@@ -112,7 +128,7 @@ export async function ensureActiveFamily(
     return false;
   }
   if (!confirm || confirm.length === 0) {
-    console.error('[ensure-family] trigger did not create membership for family', family.id);
+    console.error('[ensure-family] membership missing after provisioning family', family.id);
     return false;
   }
   return true;
