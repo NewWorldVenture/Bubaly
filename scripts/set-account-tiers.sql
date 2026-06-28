@@ -6,11 +6,9 @@
 -- Idempotent: safe to re-run. Skips (with a NOTICE) any email that
 -- has no auth user / no family yet.
 --
---   Newworldventurellc@gmail.com -> Parent · Free  (plan 'free')
---   Blackstoneagency@gmail.com   -> Parent · Basic (plan 'basic')
---   SurgeServiceslllc@gmail.com  -> Parent · Plus  (plan 'plus')
---     ^ NOTE the spelling has THREE l's as provided ("lllc"); fix the
---       VALUES row below if the real address is "...servicesllc@gmail.com".
+--   Newworldventurellc@gmail.com  -> Parent · Free  (plan 'free')
+--   Blackstoneagencyllc@gmail.com -> Parent · Basic (plan 'basic')
+--   SurgeServicesllc@gmail.com    -> Parent · Plus  (plan 'plus')
 -- ============================================================
 
 -- 1) Tiers + ensure they are an active parent of their family ----------------
@@ -24,8 +22,8 @@ BEGIN
   FOR rec IN
     SELECT * FROM (VALUES
       ('newworldventurellc@gmail.com', 'free'),
-      ('blackstoneagency@gmail.com',  'basic'),
-      ('surgeserviceslllc@gmail.com', 'plus')
+      ('blackstoneagencyllc@gmail.com',  'basic'),
+      ('surgeservicesllc@gmail.com', 'plus')
     ) AS t(email, plan)
   LOOP
     SELECT id INTO v_uid FROM auth.users WHERE lower(email) = lower(rec.email) LIMIT 1;
@@ -89,7 +87,7 @@ FROM auth.users u
 JOIN public.user_preferences up ON up.user_id = u.id
 LEFT JOIN public.subscriptions s ON s.family_id = up.active_family_id
 WHERE lower(u.email) IN (
-  'newworldventurellc@gmail.com','blackstoneagency@gmail.com','surgeserviceslllc@gmail.com'
+  'newworldventurellc@gmail.com','blackstoneagencyllc@gmail.com','surgeservicesllc@gmail.com'
 )
 ORDER BY u.email;
 
