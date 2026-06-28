@@ -25,6 +25,7 @@ import { setDefaultDashboardAction, updateMyProfileAction } from '@/app/(app)/ac
 import { splitFullName } from '@/lib/onboarding/profile';
 import { cn } from '@/lib/utils/cn';
 import { CalendarSyncPanel } from '@/components/dashboard/calendar-sync-panel';
+import { AppLockSettings } from '@/components/settings/app-lock-settings';
 import type { Tables } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/database.types';
 
@@ -258,6 +259,9 @@ export function SettingsModule() {
       <Card>
         <CalendarSyncPanel />
       </Card>
+
+      {/* Security — opt-in App Lock */}
+      <AppLockSettings />
 
       {inviteOpen && (
         <InviteModal
