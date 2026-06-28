@@ -188,6 +188,13 @@ Last updated: 2026-06-28 — Mobile-first nav drawer + super-admin excluded from
 >   AI auto-categorize added links into family/friends/groups). Each: pure logic in tested `lib/*`, wire to
 >   Supabase, ship, update THIS doc.
 
+> ## 📱 MOBILE — ALL SERVICES CATALOG (new, on `main`)
+> Mobile parity for the desktop "All Services" launcher: phones only have the 5-tab bottom nav, so the full
+> ~70-module catalog wasn't browsable. **`components/app/mobile-services-catalog.tsx`** (client) renders the
+> grouped, **searchable**, plan-gated catalog (reuses `resolveItems`/`NavEntry` from `nav-shared`; locked
+> services → `/pricing`), added to the top of the **`/dashboard/more`** hub (reachable via Profile tab → More).
+> No migration.
+>
 > ## 🛠️ ADMIN — SET FAMILY PLAN / DOWNGRADE TO FREE (new, on `main`)
 > Super-admins can now change any family's tier without SQL. `adminSetFamilyPlanAction({ familyId, plan })`
 > in `app/(app)/admin/actions.ts` (super-admin guarded via `assertSuperAdmin`, service-role client, written to
