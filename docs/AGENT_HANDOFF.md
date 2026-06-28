@@ -1,7 +1,31 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-28 — Capture shortcuts now persist to Supabase (cross-device) + roadmap refresh. Keep this updated as you ship.
+Last updated: 2026-06-28 — Onboarding loop fix: auto-provision family so signups can't get trapped. Keep this updated as you ship.
+
+> ## 🔁 ONBOARDING LOOP — FIXED (on branch `claude/onboarding-loop-fix`)
+> **Symptom:** users reported onboarding "going in a loop" — never reaching the app.
+> **Root cause:** onboarding was a MANDATORY family-creation wizard gate. `requireUserContext()` returns
+> `needsFamily` for any signed-in user without a `family_members` row and redirected to `/onboarding`; a user
+> who signed up but didn't finish the heavy wizard got bounced back to onboarding on every protected page.
+> **Fix (prod-safe, no migration — uses only core tables 0002–0003 that ARE in prod):**
+> - **`lib/server/ensure-family.ts`** `ensureActiveFamily(supabase, user)` — if the user has no active
+>   membership, inserts a `families` row (the `handle_new_family` trigger then creates their active `parent`
+>   member + trial subscription), sets `user_preferences.active_family_id`, and names the member from
+>   profile/`user_metadata.full_name`/email. Idempotent; returns false only on genuine failure.
+> - **`lib/supabase/auth.ts` `requireUserContext`** — on `needsFamily`, calls `ensureActiveFamily` then
+>   re-resolves and returns the real context. Falls back to `/onboarding` ONLY if provisioning truly failed
+>   (and that route doesn't call `requireUserContext`, so it can't loop). Net effect = the lightweight journey
+>   in the mockups: **sign up → straight to the dashboard** with the "Invite your family" card. The manual
+>   wizard at `/onboarding` still works for direct visitors and can't create a duplicate family (its layout
+>   redirects to `/dashboard` once a family exists).
+> - Verified: tsc · eslint · build ✓ · suite **1356/1356**.
+> **STILL NEEDED for the full mockup journey (NOT in this fix — flagged, partly human-owned):** the visual
+> multi-method auth screens (phone OTP, email link, **Sign in with Apple**) require Supabase auth-provider
+> configuration + credentials (Twilio SMS, Apple OAuth) that are dashboard/env settings, not code; and the
+> **4-digit PIN** sign-in needs a stored PIN (could reuse `user_preferences.notification_prefs` to stay
+> migration-free, but PIN-first sign-in implies a device-remembered profile — design needed). Recommend
+> building those as a follow-up once providers are enabled; the loop fix makes the app usable NOW regardless.
 
 > ## 🧷 CAPTURE SHORTCUTS → SUPABASE (cross-device, on branch `claude/capture-shortcuts-supabase`)
 > The Capture "Or jump directly to" grid was already customizable, but its layout only lived in
