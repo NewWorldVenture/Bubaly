@@ -19,8 +19,12 @@ Last updated: 2026-06-28 — Home "Needs you" unified decision queue (wired #171
 >   + todos into `NeedItem[]`, ranked by urgency then recency; renders a headline ("N things need you") + top-5
 >   cards + "+N more". Both new fetches are missing-table-safe (`?? []`). No migration.
 > - Today's events stay in their own "Today" section (not a decision). Verified: tsc · lint · build · full suite.
-> - **Next per the doctrine:** keep auditing surfaces for friction — fold trust/concierge/calendar-conflict
->   sources into `buildHomeNeeds` as those domains expose pending rows; consider an Inbox/Assistant merge.
+> - **Calendar conflicts now wired in too** — `lib/home/conflicts.ts` (PURE, **5 tests**) `detectConflicts`
+>   finds per-assignee overlapping timed events (half-open intervals; all-day/unassigned ignored; default
+>   duration when no `ends_at`). Home fetches the next 14d of assigned events and surfaces double-bookings as
+>   urgent `calendar_conflict` needs (a manager sees the whole family's; everyone else only their own).
+> - **Next per the doctrine:** trust has no clean pending table (trust_policies/delegations/scores only), so
+>   skip it for now; consider concierge outcomes, then an Inbox/Assistant consolidation.
 
 > ## 🚀 PRODUCTION SYNC (2026-06-28) — pulled 4 stale/open PRs onto `main`
 > Swept the last 48h of PRs; everything merged is on `main`. Then brought the open ones in:

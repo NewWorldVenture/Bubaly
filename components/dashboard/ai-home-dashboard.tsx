@@ -2,7 +2,7 @@ import Link from 'next/link';
 import {
   Sparkles, Calendar, CheckSquare, ShoppingCart, HeartPulse,
   ArrowRight, Bell, ChevronRight, Home, Pill, GraduationCap,
-  Trophy, Sun, Clock, Users, MessageSquare, Plane, PhoneCall, AlarmClock, RefreshCw,
+  Trophy, Sun, Clock, Users, MessageSquare, Plane, PhoneCall, AlarmClock, RefreshCw, CalendarClock,
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
 import type { UserContext } from '@/lib/supabase/auth';
@@ -25,6 +25,7 @@ import { reminderAttention } from '@/lib/dashboard/reminder-attention';
 import { mergeUpcoming } from '@/lib/dashboard/upcoming';
 import { topNeeds, summarizeNeeds, needsHeadline, type NeedItem } from '@/lib/home/needs-attention';
 import { parentApprovalToNeed, renewalToNeed, type ParentApprovalRow, type RenewalRow } from '@/lib/home/needs-sources';
+import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 
 function greeting() {
   const h = new Date().getHours();
@@ -41,6 +42,7 @@ function todayLabel() {
 type NeedRenderMeta = { icon: React.ComponentType<{ className?: string }>; iconBg: string; cta: string; subtitle: string };
 const NEED_META: Record<string, NeedRenderMeta> = {
   approval: { icon: ShieldCheck, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', subtitle: 'A family member is waiting on your approval.' },
+  calendar_conflict: { icon: CalendarClock, iconBg: 'bg-rose-500/15 text-rose-400', cta: 'Resolve', subtitle: 'Two events are double-booked.' },
   renewal: { icon: RefreshCw, iconBg: 'bg-orange-500/15 text-orange-400', cta: 'Renew', subtitle: 'Renew it before it lapses.' },
   chore_signoff: { icon: CheckSquare, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', subtitle: 'Chores are waiting for your sign-off.' },
   reminder_overdue: { icon: AlarmClock, iconBg: 'bg-rose-500/15 text-rose-400', cta: 'Catch up', subtitle: 'These were due earlier.' },
@@ -62,6 +64,7 @@ const DEFAULT_NEED_META: NeedRenderMeta = { icon: Bell, iconBg: 'bg-brand/15 tex
 function buildHomeNeeds(data: {
   approvals: ParentApprovalRow[];
   renewals: RenewalRow[];
+  conflicts: { id: string; assigneeName: string | null; count: number; startsAt: string }[];
   pendingApprovals: number;
   overdueMeds: boolean;
   overdueReminders: number;
@@ -77,6 +80,12 @@ function buildHomeNeeds(data: {
 
   for (const a of data.approvals) items.push(parentApprovalToNeed(a));
   for (const r of data.renewals) { const n = renewalToNeed(r, data.now); if (n) items.push(n); }
+  for (const c of data.conflicts)
+    items.push({
+      id: `conflict:${c.id}`, kind: 'calendar_conflict',
+      title: c.assigneeName ? `${c.assigneeName}: ${c.count} events overlap` : `${c.count} events overlap`,
+      href: '/dashboard/calendar', urgency: 'urgent', createdAt: c.startsAt,
+    });
 
   if (data.pendingApprovals > 0)
     items.push({ id: 'chore-signoff', kind: 'chore_signoff', title: `${data.pendingApprovals} chore${plural(data.pendingApprovals)} awaiting approval`, href: '/dashboard/chores', urgency: 'urgent', createdAt: nowIso });
@@ -129,6 +138,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { data: weekReminderRows },
     { data: approvalRows },
     { data: renewalRows },
+    { data: conflictEventRows },
   ] = await Promise.all([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
@@ -196,6 +206,12 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('renewals').select('id, title, expires_at, reminder_days, status, created_at')
       .eq('family_id', familyId).in('status', ['active', 'expired'])
       .lte('expires_at', new Date(Date.now() + 45 * 86400000).toISOString()).limit(50),
+    // Upcoming assigned events (next 14d) → detect personal double-bookings.
+    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id')
+      .eq('family_id', familyId).not('assignee_id', 'is', null)
+      .gte('starts_at', todayStart.toISOString())
+      .lte('starts_at', new Date(Date.now() + 14 * 86400000).toISOString())
+      .order('starts_at').limit(200),
   ]);
 
   // Soonest relationship date inside its reminder window (gentle proactive nudge).
@@ -234,9 +250,17 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     (dueReminderRows ?? []) as { remind_at: string | null; status: string }[], now,
   );
 
+  // Personal double-bookings: detect per-assignee overlaps; a manager sees the
+  // whole family's, everyone else just their own.
+  const memberNameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
+  const homeConflicts = detectConflicts((conflictEventRows ?? []) as ConflictEvent[])
+    .filter((c) => manager || c.assigneeId === myMemberId)
+    .map((c) => ({ id: c.eventIds[0], assigneeName: memberNameById.get(c.assigneeId) ?? null, count: c.eventIds.length, startsAt: c.startsAt }));
+
   const homeNeeds = buildHomeNeeds({
     approvals: (approvalRows ?? []) as ParentApprovalRow[],
     renewals: (renewalRows ?? []) as RenewalRow[],
+    conflicts: homeConflicts,
     pendingApprovals: pendingApprovals ?? 0,
     overdueMeds: (overdueMedsCount ?? 0) > 0,
     overdueReminders,
