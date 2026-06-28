@@ -20,7 +20,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const [{ data: members }, { data: prefs }, { data: sub }, superAdmin] = await Promise.all([
+  const [{ data: members }, { data: prefs }, { data: sub }, superAdmin, { count: unreadMessages }] = await Promise.all([
     supabase
       .from('family_members')
       .select('*')
@@ -39,6 +39,15 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
       .in('status', ['active', 'trialing'])
       .maybeSingle(),
     isSuperAdmin(),
+    // Unread family messages for this user → sidebar Messages badge. Excludes my
+    // own messages; `read_by` (user ids) not containing me = unread.
+    supabase
+      .from('family_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('family_id', ctx.active.familyId)
+      .is('deleted_at', null)
+      .neq('sender_id', ctx.user.id)
+      .not('read_by', 'cs', `{${ctx.user.id}}`),
   ]);
 
   const defaultDashboard = isDashboardView(prefs?.default_dashboard)
@@ -60,6 +69,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
         defaultDashboard,
         planLevel,
         featureTiers,
+        unreadMessages: unreadMessages ?? 0,
       }}
       initialMembers={members ?? []}
     >

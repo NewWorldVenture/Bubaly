@@ -3,6 +3,25 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-06-28 — Phone OTP sign-in/up wired (method chooser now phone · email · Google · Apple). Keep this updated as you ship.
 
+> ## 🧭 FREE-TIER CURATED DESKTOP SIDEBAR (on `main`)
+> Per the mockup, the **Free tier** (planLevel 0) desktop sidebar is now a calm, curated nav instead of the
+> full ~70-module grouped list: **PRIMARY_NAV** (Home · Dashboard · Calendar · Tasks · Meals · Chores ·
+> Finances · Messages[badge] · Files · Location · Family) → **SHORTCUTS** (the user's pinned Quick-Access
+> from `dashboard_layouts`, else a hint) → **All Services** launcher (opens a modal with the FULL grouped
+> catalog, plan-gated with locks + upgrade prompts — nothing is lost) → **Settings · Help & Support** footer.
+> Paid tiers (planLevel ≥ 1) keep the existing full `SidebarNav` + AI-coach footer (gated in `AppShell`).
+> - **`lib/constants/navigation.ts`** — `PRIMARY_NAV`, `SIDEBAR_FOOTER_NAV` (Settings, Help→`/dashboard/more`),
+>   `ALL_SERVICES_ICON`.
+> - **`components/app/nav-shared.tsx`** (NEW) — extracted `isActive` / `resolveItems` / `NavEntry` (now with an
+>   optional unread `badge`) so the full + curated sidebars share them with no circular import.
+> - **`components/app/free-tier-sidebar.tsx`** (NEW) — `FreeTierSidebar` + `SidebarShortcuts` (client-reads the
+>   user's saved layout) + `AllServicesModal`.
+> - **Messages unread badge is 100% wired**: `app-frame.tsx` counts `family_messages` where
+>   `read_by` ∌ me and `sender_id ≠ me`; passed via **`unreadMessages`** on app-context (optional, defaults 0).
+> - No migration. tsc · lint · build green · suite 1381. **Follow-ups:** family-switcher is omitted from the
+>   Free sidebar (rare on free; switch via Settings → Families) — consider moving it into the top-bar UserMenu;
+>   SHORTCUTS could become drag-to-pin; badge is a load-time snapshot (could subscribe to realtime).
+>
 > ## 📱 PHONE OTP AUTH + METHOD CHOOSER (on branch `claude/phone-otp-auth`)
 > Completes the mockups' multi-method sign-up: the chooser now offers **phone · email · Google · Apple**.
 > - **`lib/auth/otp.ts`** (PURE, **6 tests**) — `normalizeOtp`, `isValidOtp` (6 digits), `isLikelyE164`,

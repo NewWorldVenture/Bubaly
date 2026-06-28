@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -211,3 +211,31 @@ export const MOBILE_TABS: NavItem[] = [
 
 /** Index of the special Capture tab in MOBILE_TABS (rendered as a raised FAB). */
 export const CAPTURE_TAB_INDEX = 2;
+
+/**
+ * Curated PRIMARY desktop sidebar for the **Free tier** — a calm, focused set of
+ * everyday destinations (the full ~70-module catalog lives behind "All Services").
+ * All free (minLevel 0). The Messages entry shows a live unread badge.
+ */
+export const PRIMARY_NAV: NavItem[] = [
+  { href: '/dashboard', label: 'Home', icon: Home },
+  { href: '/dashboard/family-operations', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
+  { href: '/dashboard/todos', label: 'Tasks', icon: ListChecks },
+  { href: '/dashboard/meals', label: 'Meals', icon: UtensilsCrossed },
+  { href: '/dashboard/chores', label: 'Chores', icon: CheckSquare },
+  { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
+  { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle },
+  { href: '/dashboard/documents', label: 'Files', icon: FolderLock },
+  { href: '/dashboard/locator', label: 'Location', icon: MapPin },
+  { href: '/dashboard/family-tree', label: 'Family', icon: Users },
+];
+
+/** Pinned footer of the Free-tier sidebar — always reachable, below All Services. */
+export const SIDEBAR_FOOTER_NAV: NavItem[] = [
+  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
+  { href: '/dashboard/more', label: 'Help & Support', icon: HelpCircle },
+];
+
+/** Icon for the "All Services" launcher that opens the full catalog. */
+export const ALL_SERVICES_ICON = LayoutGrid;

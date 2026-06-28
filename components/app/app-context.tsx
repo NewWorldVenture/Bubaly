@@ -23,6 +23,8 @@ export type AppContextValue = {
   planLevel: number;
   /** Admin Tier & Features, resolved per route href ({ href → tier }); drives nav gating. */
   featureTiers: Record<string, FeatureTier>;
+  /** Unread family messages for this user (drives the sidebar Messages badge). */
+  unreadMessages: number;
   members: Tables<'family_members'>[];
   /** The current user's member row in the active family (if they have one). */
   selfMember: Tables<'family_members'> | null;
@@ -42,7 +44,7 @@ export function AppProvider({
   initialMembers,
   children,
 }: {
-  value: Omit<AppContextValue, 'members' | 'refreshMembers' | 'selfMember'>;
+  value: Omit<AppContextValue, 'members' | 'refreshMembers' | 'selfMember' | 'unreadMessages'> & { unreadMessages?: number };
   initialMembers: Tables<'family_members'>[];
   children: React.ReactNode;
 }) {
@@ -76,7 +78,7 @@ export function AppProvider({
   const selfMember = members.find((m) => m.user_id === value.userId) ?? null;
 
   return (
-    <AppContext.Provider value={{ ...value, members, selfMember, refreshMembers }}>
+    <AppContext.Provider value={{ unreadMessages: 0, ...value, members, selfMember, refreshMembers }}>
       {children}
     </AppContext.Provider>
   );

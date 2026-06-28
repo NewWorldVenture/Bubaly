@@ -7,25 +7,20 @@ import { ChevronDown, Check, Gift, Lock, LogOut, Mic, Moon, Plus, Search, Send, 
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { APP_NAV_GROUPS, MOBILE_TABS, CAPTURE_TAB_INDEX, type NavItem } from '@/lib/constants/navigation';
-import { featureAccessByTier } from '@/lib/features/tiers';
-import type { FeatureTier } from '@/lib/constants/feature-catalog';
 import { ROLE_LABELS } from '@/lib/constants/roles';
 import { tierLabelForLevel } from '@/lib/constants/plans';
 import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { cn } from '@/lib/utils/cn';
 import { useTheme } from '@/components/theme/use-theme';
 import { useApp } from './app-context';
+import { isActive, resolveItems, NavEntry } from './nav-shared';
+import { FreeTierSidebar } from './free-tier-sidebar';
 import { NotificationBell } from './notification-bell';
 import { UpgradeModal } from './upgrade-modal';
 import { QuickCapture } from './quick-capture';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { AIOrb } from './ai-orb';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
-
-function isActive(pathname: string, href: string) {
-  if (href === '/dashboard') return pathname === '/dashboard';
-  return pathname === href || pathname.startsWith(href + '/');
-}
 
 function FamilySwitcher() {
   const { family, families, role, planLevel } = useApp();
@@ -192,63 +187,6 @@ function SidebarDashboardLinks() {
   );
 }
 
-/** Visible nav items for a group given the family's plan + admin tier settings.
- *  Items whose feature is Off are dropped entirely; the rest carry a `locked`
- *  flag (tier above the family's plan) + the level required to unlock. */
-function resolveItems(
-  items: readonly NavItem[],
-  featureTiers: Record<string, FeatureTier>,
-  planLevel: number,
-  isSuperAdmin: boolean,
-): { item: NavItem; locked: boolean; requiredLevel: 1 | 2 }[] {
-  const out: { item: NavItem; locked: boolean; requiredLevel: 1 | 2 }[] = [];
-  for (const item of items) {
-    const tier = featureTiers[item.href];
-    const access = featureAccessByTier(tier, planLevel, isSuperAdmin);
-    if (access === 'hidden') continue; // Off → not shown at all
-    out.push({ item, locked: access === 'locked', requiredLevel: (tier === 'plus' ? 2 : 1) });
-  }
-  return out;
-}
-
-/** A single sidebar destination. Free items navigate; items above the family's
- *  plan render greyed-out with a lock and open the upgrade prompt on click. */
-function NavEntry({ item, variant, locked, onLocked }: {
-  item: NavItem; variant: 'list' | 'grid'; locked: boolean; onLocked: (item: NavItem) => void;
-}) {
-  const pathname = usePathname();
-  const active = !locked && isActive(pathname, item.href);
-
-  const base = variant === 'grid'
-    ? 'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition'
-    : 'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition xl:px-4 xl:py-3 xl:text-base';
-
-  if (locked) {
-    return (
-      <button
-        type="button"
-        onClick={() => onLocked(item)}
-        title={`${item.label} — upgrade to unlock`}
-        className={cn(base, 'text-muted/45 hover:bg-elevated/60 hover:text-muted')}
-      >
-        <item.icon className="h-5 w-5 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-        <Lock className="h-3.5 w-3.5 shrink-0 opacity-70" />
-      </button>
-    );
-  }
-
-  return (
-    <Link
-      href={item.href}
-      className={cn(base, active ? 'bg-brand/15 text-brand shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg')}
-    >
-      <item.icon className="h-5 w-5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-    </Link>
-  );
-}
-
 /** Grouped, plan-gated sidebar navigation. */
 function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
   const { planLevel, isSuperAdmin, featureTiers } = useApp();
@@ -342,23 +280,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="px-5 py-5 xl:px-7 xl:py-7">
           <Logo href="/dashboard" markVariant="home" />
         </div>
-        <SidebarNav onLocked={setUpgradeFor} />
-        <div className="space-y-4 px-3 pb-4 xl:px-4 xl:pb-5">
-          <FamilySwitcher />
-          <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4 text-center xl:p-5">
-            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand/15 xl:h-20 xl:w-20">
-              <Sparkles className="h-8 w-8 text-brand xl:h-10 xl:w-10" />
+        {planLevel === 0 ? (
+          // Free tier → curated sidebar (primary list + shortcuts + All Services + footer).
+          <FreeTierSidebar onLocked={setUpgradeFor} />
+        ) : (
+          // Paid tiers → full grouped navigation + AI-coach footer.
+          <>
+            <SidebarNav onLocked={setUpgradeFor} />
+            <div className="space-y-4 px-3 pb-4 xl:px-4 xl:pb-5">
+              <FamilySwitcher />
+              <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4 text-center xl:p-5">
+                <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand/15 xl:h-20 xl:w-20">
+                  <Sparkles className="h-8 w-8 text-brand xl:h-10 xl:w-10" />
+                </div>
+                <h2 className="mt-3 text-sm font-bold xl:mt-4 xl:text-base">Your AI Chief of Staff</h2>
+                <p className="mt-2 text-xs leading-5 text-muted xl:mt-3 xl:text-sm xl:leading-6">
+                  I&apos;m here to help your family stay organized, save time, and reduce stress.
+                </p>
+                <Link href="/ai" className="mt-3 inline-flex w-full justify-center rounded-lg bg-brand px-4 py-2.5 text-sm font-bold text-brand-fg transition hover:opacity-90 xl:mt-5 xl:py-3">
+                  Learn More
+                </Link>
+              </div>
+              <ThemeSwitch />
             </div>
-            <h2 className="mt-3 text-sm font-bold xl:mt-4 xl:text-base">Your AI Chief of Staff</h2>
-            <p className="mt-2 text-xs leading-5 text-muted xl:mt-3 xl:text-sm xl:leading-6">
-              I&apos;m here to help your family stay organized, save time, and reduce stress.
-            </p>
-            <Link href="/ai" className="mt-3 inline-flex w-full justify-center rounded-lg bg-brand px-4 py-2.5 text-sm font-bold text-brand-fg transition hover:opacity-90 xl:mt-5 xl:py-3">
-              Learn More
-            </Link>
-          </div>
-          <ThemeSwitch />
-        </div>
+          </>
+        )}
       </aside>
 
       {/* Main column */}
