@@ -58,6 +58,11 @@ Last updated: 2026-06-28 — Home "Needs you" decision queue (sources + ranking 
 >   for `allowance_request`, else `decideSpendRequestAction` — then `router.refresh()`. Buttons can't nest in
 >   an `<a>`, so approval cards render as a div with the title linking out + the action island beside it.
 >   `approvalKindByNeedId` maps each `approval:${id}` need back to its kind so the right action is called.
+> - **Calendar conflicts are proactively notified too** — `generateFamilyNotifications` reuses the pure
+>   `detectConflicts` over the next 14d of assigned events and emits a "Schedule conflict" notification to the
+>   double-booked person (or the managers, for a child with no account). Dedup key
+>   `conflict:${sortedEventIds}` so a new alert fires only when the overlapping set changes. Inline (like the
+>   reminder/relationship blocks), no new pure logic.
 > - **Next per the doctrine:** trust has no clean pending table (trust_policies/delegations/scores only), and
 >   concierge status is free-text with no "awaiting decision" state — both skipped; consider an Inbox/Assistant
 >   consolidation, or extend one-tap to other safe decisions (e.g. complete a single overdue reminder).
