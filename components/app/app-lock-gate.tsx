@@ -24,6 +24,14 @@ export function AppLockGate({
   const [digits, setDigits] = useState('');
   const [error, setError] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [attempts, setAttempts] = useState(0);
+  const [cooldownUntil, setCooldownUntil] = useState(0); // epoch ms
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  const MAX_ATTEMPTS = 5;
+  const COOLDOWN_MS = 30_000;
+  const cooldownLeft = Math.max(0, Math.ceil((cooldownUntil - nowMs) / 1000));
+  const inCooldown = cooldownLeft > 0;
 
   useEffect(() => {
     setMounted(true);
@@ -33,6 +41,17 @@ export function AppLockGate({
     } catch { /* ignore */ }
   }, [enabled, userId]);
 
+  // Tick the cooldown countdown; clear the attempt count when it elapses.
+  useEffect(() => {
+    if (cooldownUntil === 0) return;
+    const id = setInterval(() => {
+      const t = Date.now();
+      setNowMs(t);
+      if (t >= cooldownUntil) { setCooldownUntil(0); setAttempts(0); setDigits(''); }
+    }, 250);
+    return () => clearInterval(id);
+  }, [cooldownUntil]);
+
   const submit = useCallback(async (pin: string) => {
     setChecking(true);
     const ok = await verifyPin(pin, { salt, hash });
@@ -41,20 +60,27 @@ export function AppLockGate({
       try { sessionStorage.setItem(unlockKey(userId), '1'); } catch { /* ignore */ }
       setUnlocked(true);
     } else {
+      // Brute-force guard: after MAX_ATTEMPTS wrong tries, lock the keypad for a
+      // cooldown. The "Sign out" escape stays available throughout.
+      setAttempts((a) => {
+        const next = a + 1;
+        if (next >= MAX_ATTEMPTS) setCooldownUntil(Date.now() + COOLDOWN_MS);
+        return next;
+      });
       setError(true);
       setTimeout(() => { setError(false); setDigits(''); }, 600);
     }
   }, [salt, hash, userId]);
 
   const press = useCallback((d: string) => {
-    if (checking || error) return;
+    if (checking || error || inCooldown) return;
     setDigits((prev) => {
       if (prev.length >= 4) return prev;
       const next = prev + d;
       if (next.length === 4) void submit(next);
       return next;
     });
-  }, [checking, error, submit]);
+  }, [checking, error, inCooldown, submit]);
 
   const back = useCallback(() => setDigits((p) => p.slice(0, -1)), []);
 
@@ -92,18 +118,22 @@ export function AppLockGate({
                 i < digits.length ? 'border-brand bg-brand' : 'border-border bg-transparent')} />
           ))}
         </div>
-        {error && <p className="mt-3 text-xs font-medium text-rose-400">Wrong PIN — try again</p>}
+        {inCooldown ? (
+          <p className="mt-3 text-xs font-medium text-amber-400">Too many attempts — try again in {cooldownLeft}s</p>
+        ) : error ? (
+          <p className="mt-3 text-xs font-medium text-rose-400">Wrong PIN — try again</p>
+        ) : null}
 
         {/* Keypad */}
         <div className="mt-8 grid grid-cols-3 gap-3">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((n) => (
-            <button key={n} onClick={() => press(n)} disabled={checking}
+            <button key={n} onClick={() => press(n)} disabled={checking || inCooldown}
               className="h-16 w-16 rounded-full border border-border bg-surface/50 text-2xl font-semibold transition hover:bg-elevated active:scale-95 disabled:opacity-50">
               {n}
             </button>
           ))}
           <span />
-          <button onClick={() => press('0')} disabled={checking}
+          <button onClick={() => press('0')} disabled={checking || inCooldown}
             className="h-16 w-16 rounded-full border border-border bg-surface/50 text-2xl font-semibold transition hover:bg-elevated active:scale-95 disabled:opacity-50">
             0
           </button>

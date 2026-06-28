@@ -44,6 +44,13 @@ export function AppLockSettings() {
     success('App Lock turned off');
   }
 
+  // Re-lock immediately on this device: drop the session unlock flag and reload so
+  // the gate renders the PIN screen again.
+  function lockNow() {
+    try { sessionStorage.removeItem(unlockKey(userId)); } catch { /* ignore */ }
+    window.location.reload();
+  }
+
   async function onSet(pin: string) {
     setSaving(true);
     const cfg = await buildAppLockConfig(pin);
@@ -82,6 +89,7 @@ export function AppLockSettings() {
             <span className="text-xs text-muted">…</span>
           ) : enabled ? (
             <>
+              <Button size="sm" variant="outline" onClick={lockNow} disabled={saving}>Lock now</Button>
               <Button size="sm" variant="outline" onClick={() => setModalOpen(true)} disabled={saving}>Change PIN</Button>
               <button onClick={disable} disabled={saving} className="text-xs font-medium text-muted hover:text-rose-400 disabled:opacity-50">Turn off</button>
             </>
