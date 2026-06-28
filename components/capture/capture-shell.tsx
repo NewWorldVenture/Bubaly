@@ -16,6 +16,8 @@ import { Modal } from '@/components/ui/modal';
 import { createClient } from '@/lib/supabase/client';
 import { saveCapture, undoCapture, type CaptureSaveResult } from '@/lib/capture/save';
 import type { CaptureKind } from '@/lib/capture/parse';
+import { resolveShortcutKeys, sanitizeShortcutKeys } from '@/lib/capture/shortcuts';
+import { saveCaptureShortcutsAction } from '@/app/(app)/capture/shortcuts-actions';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
 
@@ -48,6 +50,7 @@ const SHORTCUT_CATALOG: Shortcut[] = [
   { key: 'goals', icon: Target, label: 'Goals', href: '/dashboard/goals', hint: 'Family goal' },
 ];
 const SHORTCUT_BY_KEY: Record<string, Shortcut> = Object.fromEntries(SHORTCUT_CATALOG.map((s) => [s.key, s]));
+const CATALOG_KEYS = SHORTCUT_CATALOG.map((s) => s.key);
 const DEFAULT_SHORTCUTS = ['calendar', 'tasks', 'grocery', 'home', 'health', 'trip'];
 const SHORTCUTS_STORAGE_KEY = 'bubaly.capture.shortcuts';
 const MAX_SHORTCUTS = 9;
@@ -73,7 +76,7 @@ function routeCapture(text: string): { destination: string; url: string } {
   return { destination: 'AI Assistant', url: `/dashboard/assistant?q=${encodeURIComponent(text)}` };
 }
 
-export function CaptureShell() {
+export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: string[] | null }) {
   const router = useRouter();
   const { error: toastError, success } = useToast();
   const { familyId, userId, selfMember } = useApp();
@@ -86,23 +89,41 @@ export function CaptureShell() {
   const [recording, setRecording] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
-  // Customizable "jump directly to" shortcuts, persisted per device.
-  const [shortcutKeys, setShortcutKeys] = useState<string[]>(DEFAULT_SHORTCUTS);
+  // Customizable "jump directly to" shortcuts. Source of truth is Supabase
+  // (user_preferences.notification_prefs.captureShortcuts via the server actions)
+  // so the layout follows the member across devices; localStorage is an
+  // instant/offline cache. Server value (passed from the page) wins on first paint.
+  const [shortcutKeys, setShortcutKeys] = useState<string[]>(() =>
+    initialShortcuts && initialShortcuts.length
+      ? resolveShortcutKeys(initialShortcuts, CATALOG_KEYS, MAX_SHORTCUTS)
+      : DEFAULT_SHORTCUTS);
   const [editingShortcuts, setEditingShortcuts] = useState(false);
   const [picker, setPicker] = useState<{ mode: 'add' | 'replace'; index: number } | null>(null);
 
   useEffect(() => {
+    // Server layout is authoritative — mirror it into the localStorage cache.
+    if (initialShortcuts && initialShortcuts.length) {
+      try { localStorage.setItem(SHORTCUTS_STORAGE_KEY, JSON.stringify(shortcutKeys)); } catch { /* ignore */ }
+      return;
+    }
+    // No saved server layout yet → fall back to the local cache if present.
     try {
       const raw = localStorage.getItem(SHORTCUTS_STORAGE_KEY);
       if (!raw) return;
-      const valid = (JSON.parse(raw) as string[]).filter((k) => SHORTCUT_BY_KEY[k]);
-      if (valid.length) setShortcutKeys(valid.slice(0, MAX_SHORTCUTS));
+      const valid = sanitizeShortcutKeys(JSON.parse(raw), CATALOG_KEYS, MAX_SHORTCUTS);
+      if (valid.length) setShortcutKeys(valid);
     } catch { /* ignore */ }
+    // Run once on mount; shortcutKeys intentionally not a dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function persistShortcuts(keys: string[]) {
     setShortcutKeys(keys);
     try { localStorage.setItem(SHORTCUTS_STORAGE_KEY, JSON.stringify(keys)); } catch { /* ignore */ }
+    // Persist to Supabase so the layout syncs across devices.
+    void saveCaptureShortcutsAction({ keys }).then((res) => {
+      if (!res.ok) toastError(res.error ?? 'Could not save shortcuts');
+    });
   }
   function removeShortcut(index: number) { persistShortcuts(shortcutKeys.filter((_, i) => i !== index)); }
   function pickShortcut(key: string) {
