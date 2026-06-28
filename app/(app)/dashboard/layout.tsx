@@ -5,8 +5,6 @@ import { planLevel as planLevelOf } from '@/lib/constants/plans';
 import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
 import { AppProvider } from '@/components/app/app-context';
 import { AppShell } from '@/components/app/app-shell';
-import { AppLockGate } from '@/components/app/app-lock-gate';
-import { isAppLockConfig } from '@/lib/security/app-lock';
 import { RegisterSW } from '@/components/pwa/register-sw';
 import { NativeBootstrap } from '@/components/native/native-bootstrap';
 import { PushRegistrar } from '@/components/native/push-registrar';
@@ -24,7 +22,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       .order('created_at'),
     supabase
       .from('user_preferences')
-      .select('default_dashboard, notification_prefs')
+      .select('default_dashboard')
       .eq('user_id', ctx.user.id)
       .maybeSingle(),
     supabase
@@ -42,10 +40,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const planLevel = planLevelOf(sub?.plan ?? null);
   const featureTiers = await getFeatureTiersByHref(supabase);
 
-  // Opt-in App Lock config (per-user, stored in notification_prefs).
-  const appLockRaw = (prefs?.notification_prefs as Record<string, unknown> | null)?.appLock;
-  const appLock = isAppLockConfig(appLockRaw) ? appLockRaw : null;
-
   return (
     <AppProvider
       value={{
@@ -62,14 +56,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       }}
       initialMembers={members ?? []}
     >
-      <AppLockGate
-        enabled={!!appLock?.enabled}
-        salt={appLock?.salt ?? ''}
-        hash={appLock?.hash ?? ''}
-        userId={ctx.user.id}
-      >
-        <AppShell>{children}</AppShell>
-      </AppLockGate>
+      <AppShell>{children}</AppShell>
       <RegisterSW />
       <NativeBootstrap />
       <PushRegistrar />
