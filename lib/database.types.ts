@@ -31,6 +31,8 @@ export type WalletTxnStatus =
 export type StripeAccountStatus = 'pending' | 'restricted' | 'enabled' | 'disabled';
 export type InvestOrderSide = 'buy' | 'sell';
 export type InvestOrderStatus = 'pending' | 'filled' | 'rejected' | 'cancelled';
+export type SocialItemKind = 'post' | 'video' | 'photo' | 'link';
+export type SocialCategory = 'family' | 'friends' | 'groups' | 'other';
 export type EconomyDirection = 'credit' | 'debit';
 export type EconomyRedemptionStatus = 'pending' | 'approved' | 'fulfilled' | 'rejected' | 'cancelled';
 export type SubscriptionStatus =
@@ -485,6 +487,16 @@ export interface Database {
         { key: string; enabled: boolean; description: string | null; updated_at: string },
         { key: string; enabled?: boolean; description?: string | null },
         Partial<{ enabled: boolean; description: string | null }>
+      >;
+      social_reader_sources: T<
+        { id: string; family_id: string; platform: string; display_name: string; handle: string | null; account_count: number; category: SocialCategory; is_active: boolean; sort_order: number; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; platform: string; display_name: string; handle?: string | null; account_count?: number; category?: SocialCategory; is_active?: boolean; sort_order?: number; created_by?: string | null },
+        Partial<{ display_name: string; handle: string | null; account_count: number; category: SocialCategory; is_active: boolean; sort_order: number }>
+      >;
+      social_reader_items: T<
+        { id: string; family_id: string; source_id: string | null; platform: string; author_name: string; author_handle: string | null; avatar_url: string | null; content: string | null; media_urls: string[]; thumbnail_url: string | null; permalink: string | null; kind: SocialItemKind; duration_label: string | null; category: SocialCategory; verified: boolean; is_favorite: boolean; is_read: boolean; external_id: string | null; posted_at: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; source_id?: string | null; platform: string; author_name: string; author_handle?: string | null; avatar_url?: string | null; content?: string | null; media_urls?: string[]; thumbnail_url?: string | null; permalink?: string | null; kind?: SocialItemKind; duration_label?: string | null; category?: SocialCategory; verified?: boolean; is_favorite?: boolean; is_read?: boolean; external_id?: string | null; posted_at?: string; created_by?: string | null },
+        Partial<{ content: string | null; media_urls: string[]; thumbnail_url: string | null; permalink: string | null; kind: SocialItemKind; duration_label: string | null; category: SocialCategory; verified: boolean; is_favorite: boolean; is_read: boolean }>
       >;
       invest_assets: T<
         { id: string; symbol: string; name: string; kind: string; emoji: string; description: string | null; price_cents: number; risk_level: string; is_active: boolean; sort_order: number } & Stamps,

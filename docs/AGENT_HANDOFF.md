@@ -1,6 +1,71 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
+Last updated after Social Feed URL-unfurl ingestion (PR pending). Keep this updated as you ship.
+
+> ## 🔗 SOCIAL FEED — URL-UNFURL INGESTION (PR pending, branch `claude/loving-mccarthy-e1ahq8`)
+> Closes the biggest open gap: the feed had no UN-gated way to get content in (live per-platform
+> OAuth ingestion needs API keys). Now you can **paste ANY link** — a video, post, or article — and
+> it becomes a real feed item. 100% Supabase-wired, no third-party keys required.
+> - **`lib/social/unfurl.ts`** (PURE, **18 tests** in `tests/social-unfurl.test.ts`): `detectPlatform`
+>   (host → platform, unknown → `web`), `isSafePublicUrl` (SSRF guard: http(s) only, blocks
+>   localhost/private/link-local), `normalizeUrl` (drops hash + tracking params → canonical, stable
+>   idempotency key), `parseMeta` (OpenGraph/Twitter-card/`<title>` extraction, order-independent),
+>   `inferKind`, `resolveImage`, `decodeEntities`, `buildItemFromHtml(url, html)` → `UnfurlDraft`.
+> - **`addByUrlAction(url)`** in `social-feed/actions.ts`: validates URL (SSRF-safe), server-fetches the
+>   HTML (real UA, 12s timeout, 600KB cap, html content-type check), unfurls → inserts into
+>   `social_reader_items` with `external_id = canonical url` (idempotent; re-adding a link is a no-op).
+> - **`social-feed-module.tsx`**: a prominent **"Paste any link…" bar** above the feed tabs (Enter or
+>   Add → unfurl → appears); opening a post now marks-read + refreshes so the unread ring clears;
+>   empty state nudges paste-a-link. Generic links render with a calm **"Web"** badge (`WEB_META` in
+>   `lib/social/feed.ts`; `platformMeta('web')`).
+> - **Still integration-gated (separate, optional):** LIVE auto-pull per platform (IG/YouTube/etc.)
+>   needs OAuth/API keys; the worker would call the same insert path (`addFeedItemAction`/`addByUrlAction`),
+>   `external_id` keeps it idempotent. URL-unfurl is the real, shipping ingestion today.
+> - ⚠️ **Migration `0101_social_feed.sql` still NOT applied to prod** — apply it in Supabase so
+>   `social_reader_sources` / `social_reader_items` exist; until then the page renders an empty state.
+> - Verified: tsc clean · eslint clean · suite **1279/1279** (18 new) · build ✓ (`/dashboard/social-feed` 8.83 kB).
+
+> ## 🔓 SOCIAL FEED ACCESS + SUPER-ADMIN FULL UNLOCK (#179 — MERGED)
+> Follow-up to the Social Feed ship (#176, MERGED). Fixes the live `/dashboard/social-feed` 404
+> (route was only on the unmerged branch — now on main, deploys via Vercel), surfaces it in Quick
+> Access, and makes super-admins fully unlocked on the Home dashboard.
+> - **Quick Access button**: added `social_feed` to the dashboard feature registry (`lib/dashboard/registry.ts`,
+>   free tier, icon `rss`) AND to all three `DEFAULT_LAYOUT_BY_TIER` defaults (free/basic/plus) so the
+>   **Social Feed** tile shows by default in the Home "Quick Access" grid and is addable/searchable in Customize.
+>   Added `rss` → `Rss` in `components/dashboard/feature-icons.tsx`. (Nav entry + feature-catalog entry already
+>   shipped with #176.)
+> - **Super-admins fully unlocked on Home**: `components/dashboard/ai-home-dashboard.tsx` now forces
+>   `dashTier = 'plus'` when `isSuperAdmin()` — every Quick Access tile available, nothing locked, the
+>   "Unlock more" upgrade block disappears (`lockedFeatures('plus')` is empty). The sidebar/mobile nav
+>   already unlocked super-admins via `featureAccessByTier(..., isSuperAdmin)`; this closes the last gap.
+> - **`Daniel.Hughen@gmail.com` is a super-admin**: already in the built-in allowlist
+>   (`lib/constants/super-admins.ts`, lowercased `daniel.hughen@gmail.com`) — verified, no change needed.
+>   Super-admin status is also additive via `SUPER_ADMIN_EMAILS` env + the `is_super_admin` RPC.
+> - ⚠️ **Migration `0101_social_feed.sql` still NOT applied to prod** — the route renders (empty state)
+>   but `social_reader_*` tables must be created in Supabase prod before sources/items persist.
+> - Verified: tsc clean · eslint clean · suite **1261/1261** · build ✓ (`/dashboard/social-feed` registered).
+> - (Note: PR #179 also carried the pre-existing "Public marketing forms" `/f/[id]` work that was on the branch.)
+
+> ## 📰 SOCIAL FEED — "All your social feeds. One place." (#176 — MERGED)
+> Branch `claude/social-feed`. A calm, ad-free CONSUMPTION feed at **`/dashboard/social-feed`** —
+> DISTINCT from the existing publishing "Social Command" (`/dashboard/social`). Families connect
+> SOURCES (IG/FB/YouTube/TikTok/X/LinkedIn/Reddit/WhatsApp/Pinterest) → posts land as ITEMS to
+> favorite / mark-read / filter. ⚠️ **Migration `0101_social_feed.sql` NOT APPLIED TO PROD.**
+> - Tables renamed `social_reader_sources` / `social_reader_items` (the names `social_feed_*` were
+>   ALREADY taken by Social Command — do not reuse). Enums `social_item_kind`, `social_category`.
+> - **`lib/social/feed.ts`** (PURE + **14 tests**) — `PLATFORMS` metadata, `buildFeed` (sort+tab+
+>   quickfilter), `quickFilterCounts`, `applyTab`/`applyQuickFilter`.
+> - **`app/(app)/dashboard/social-feed/{page,actions}`** — RLS-scoped; actions: add/remove source,
+>   toggle favorite, mark read / mark-all-read, addFeedItem (manual = the ingestion insert path).
+> - **`components/modules/social-feed-module.tsx`** — mirrors the mock: hero + platform chips, feed
+>   cards (media/video/photo/link, bookmark, open), tabs All/Favorites/Family/Friends/Groups, right
+>   rail Your Sources + Activity + Quick Filters, "Less scrolling. More connecting." Nav + catalog added.
+> - **Integration-gated (like Stripe):** LIVE per-platform ingestion needs OAuth/API keys per network.
+>   Next: an ingestion worker calling `addFeedItemAction`'s insert path with `external_id` (unique index
+>   makes it idempotent). UI + store are complete and real today.
+> - Verified: tsc clean · eslint clean · build ✓ (`/dashboard/social-feed` registered) · suite 1254/1254 (14 new).
+
 Last updated: 2026-06-27 — PR #175: ported standalone data-wiring features + brand manifesto onto main. Keep this updated as you ship.
 
 > **PR #175 (2026-06-27) — STANDALONE FEATURE PORTS onto `main`** (branch `claude/features-onto-main`)
@@ -3236,6 +3301,34 @@ Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionles
 > - **To gate a NEW feature:** add it to `FEATURE_CATALOG` (with `href`) → it
 >   auto-appears in `/admin/tier-features` + the pricing matrix; gate the page/layout
 >   with `requireFeature('<href>')`.
+
+> **Session update (2026-06-22d, branch `claude/loving-mccarthy-e1ahq8`):**
+> - **Public-site wiring #55 DONE — marketing Forms now render & accept submissions
+>   publicly.** Admin could author `marketing_forms` (fields jsonb) but nothing
+>   served them; built the public renderer + submit endpoint, mirroring the #54
+>   landing-page PR. **NO migration** (tables `marketing_forms` /
+>   `marketing_form_submissions` already exist; service-role writes bypass RLS).
+> - **Public route** `app/(marketing)/f/[id]/page.tsx` (service-role read, only
+>   `status='active'` + non-deleted forms with ≥1 field) renders the form via a
+>   client `form-renderer.tsx`. Optional `metadata.{title,description,submit_label,
+>   success_message}` customise it. Pages are `robots: noindex` (utility pages).
+> - **Submit endpoint** `POST /api/forms/submit { formId, values }` — rate-limited
+>   (10/min/IP), validates server-side, inserts a `marketing_form_submissions` row
+>   (service role), and fires `fireAutomationEvent('form_submitted', …)` deduped by
+>   `eventSubjectKey('form_submitted', [formId, submissionId])` (best-effort).
+> - **Pure helper** `lib/marketing/forms.ts` (`parseFormFields` w/ type inference for
+>   legacy label/key fields, `validateSubmission`, `submissionEmail`/`submissionName`,
+>   `inputType`/`fieldAutoComplete`) + tests `tests/marketing-forms.test.ts` (10).
+>   Added `/f` + `/api/forms` to `middleware.ts` PUBLIC.
+> - **Admin** (`/admin/marketing/forms`): each form card now shows an Active/Archived
+>   pill, a "View public form" link (`/f/<id>`) when active, and an Activate/Archive
+>   toggle (`setFormStatus`). New forms are created `active` (live immediately).
+> - **NEXT: Asset Library (DAM)** — `marketing_assets` (kind image/video/doc/brand,
+>   storage_path, tags[], dimensions, alt, usage refs) + private bucket
+>   `marketing-assets`; picker reused by Email/Social/Content/Landing. (Then Video,
+>   Personalization — see "Remaining pillars to build" below.) This completes the
+>   public-site wiring gap (#54 + #55); future builders must ship their public
+>   surface in the same PR.
 
 > **Session update (2026-06-22c, branch `claude/lp-public-renderer`):**
 > - **Public-site wiring #54 DONE — landing pages now render publicly.** Admin

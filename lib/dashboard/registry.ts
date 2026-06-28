@@ -34,6 +34,7 @@ export const DASH_FEATURES: DashFeature[] = [
   F('tasks', 'Tasks', '/dashboard/todos', 'list', 'daily', 'free'),
   F('messages', 'Messenger', '/dashboard/messages', 'message', 'daily', 'free'),
   F('notes', 'Notes', '/dashboard/notes', 'note', 'daily', 'free'),
+  F('social_feed', 'Social Feed', '/dashboard/social-feed', 'rss', 'daily', 'free'),
   F('photos', 'Photos', '/dashboard/photos', 'image', 'daily', 'free'),
   F('contacts', 'Contacts', '/dashboard/contacts', 'users', 'daily', 'free'),
   F('habits', 'Habits', '/dashboard/habits', 'repeat', 'daily', 'free'),
@@ -74,7 +75,7 @@ export function tierForPlanLevel(level: number): DashTier {
 
 /** Tier-correct default layouts (free defaults are free-only, etc.). */
 export const DEFAULT_LAYOUT_BY_TIER: Record<DashTier, string[]> = {
-  free: ['calendar', 'grocery', 'tasks', 'messages', 'notes', 'photos', 'contacts', 'wallet'],
-  basic: ['calendar', 'grocery', 'chores', 'school', 'meals', 'wallet', 'goals', 'recipes'],
-  plus: ['command_center', 'briefing', 'calendar', 'chores', 'meals', 'wallet', 'readiness', 'autopilot'],
+  free: ['calendar', 'grocery', 'tasks', 'messages', 'social_feed', 'photos', 'contacts', 'wallet'],
+  basic: ['calendar', 'grocery', 'chores', 'social_feed', 'meals', 'wallet', 'goals', 'recipes'],
+  plus: ['command_center', 'briefing', 'calendar', 'chores', 'social_feed', 'wallet', 'meals', 'autopilot'],
 };

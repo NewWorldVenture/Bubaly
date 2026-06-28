@@ -6,7 +6,7 @@ import {
   Plus, Sparkles, Calendar, ShoppingCart, ListChecks, MessageCircle, StickyNote, Image as ImageIcon,
   Users, Repeat, NotebookPen, GraduationCap, UtensilsCrossed, CloudSun, Wallet, CreditCard,
   CheckSquare, ChefHat, FolderLock, Target, HeartPulse, Plane, CalendarRange, Gauge, Trophy,
-  Gift, Sun, Command, Rocket, ShieldAlert, CircleDot, type LucideIcon,
+  Gift, Sun, Command, Rocket, ShieldAlert, Rss, CircleDot, type LucideIcon,
 } from 'lucide-react';
 
 const ICONS: Record<string, LucideIcon> = {
@@ -16,6 +16,7 @@ const ICONS: Record<string, LucideIcon> = {
   wallet: Wallet, card: CreditCard, check: CheckSquare, chef: ChefHat, folder: FolderLock,
   target: Target, heart: HeartPulse, plane: Plane, 'calendar-range': CalendarRange, gauge: Gauge,
   trophy: Trophy, gift: Gift, sun: Sun, command: Command, rocket: Rocket, shield: ShieldAlert,
+  rss: Rss,
 };
 
 export function FeatureIcon({ icon, className }: { icon: string; className?: string }) {
