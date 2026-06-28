@@ -23,8 +23,15 @@ Last updated: 2026-06-28 — Home "Needs you" unified decision queue (wired #171
 >   finds per-assignee overlapping timed events (half-open intervals; all-day/unassigned ignored; default
 >   duration when no `ends_at`). Home fetches the next 14d of assigned events and surfaces double-bookings as
 >   urgent `calendar_conflict` needs (a manager sees the whole family's; everyone else only their own).
-> - **Next per the doctrine:** trust has no clean pending table (trust_policies/delegations/scores only), so
->   skip it for now; consider concierge outcomes, then an Inbox/Assistant consolidation.
+> - **Approvals are now proactively notified too** (so Bubaly tells the parent instead of waiting to be
+>   opened): `lib/notifications/approval-reminders.ts` (PURE, **4 tests**) `approvalReminders(approvals,
+>   managers)` → one 'system' notification per manager per pending `parent_approvals` row (per-manager
+>   `related_id` keeps the dedup unique). Wired into `lib/server/notifications.ts` `generateFamilyNotifications`
+>   (new `parent_approvals` fetch + push), delivered through the existing push+email pipeline. (Pre-existing
+>   pipeline already covered renewals/meds/reminders/relationship/docs; approvals were the gap.)
+> - **Next per the doctrine:** trust has no clean pending table (trust_policies/delegations/scores only), and
+>   concierge status is free-text with no "awaiting decision" state — both skipped; consider an Inbox/Assistant
+>   consolidation next.
 
 > ## 🚀 PRODUCTION SYNC (2026-06-28) — pulled 4 stale/open PRs onto `main`
 > Swept the last 48h of PRs; everything merged is on `main`. Then brought the open ones in:

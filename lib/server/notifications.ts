@@ -6,6 +6,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, NotificationType } from '@/lib/database.types';
 import { renewalReminders, opportunityReminders } from '@/lib/notifications/deadline-reminders';
+import { approvalReminders, type ApprovalInput } from '@/lib/notifications/approval-reminders';
 import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
 import { dueFamilyReminderNotices, reminderFetchHorizonIso, type FamilyReminderRow } from '@/lib/reminders/notify';
@@ -60,6 +61,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     { data: meds },
     { data: medSchedules },
     { data: medDoses },
+    { data: approvalsPending },
   ] = await Promise.all([
     supabase.from('family_members').select('id, user_id, display_name, role').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
@@ -75,6 +77,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     supabase.from('medications').select('id, name, dosage, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
     supabase.from('medication_schedules').select('id, medication_id, time_of_day, days_of_week, starts_on, ends_on').eq('family_id', familyId),
     supabase.from('medication_doses').select('schedule_id, scheduled_for, status').eq('family_id', familyId).gte('scheduled_for', todayStartIso),
+    // Pending money approvals → a "decision is waiting on you" ping for parents.
+    supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', familyId).eq('status', 'pending').limit(50),
   ]);
 
   const userByMember = new Map((members ?? []).map((m) => [m.id, m.user_id]));
@@ -153,6 +157,11 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     candidates.push(row);
   }
   for (const row of opportunityReminders(signupsDue ?? [], managerLites, todayKey)) {
+    candidates.push(row);
+  }
+
+  // Pending money approvals → notify the parents who can act on them.
+  for (const row of approvalReminders((approvalsPending ?? []) as ApprovalInput[], managerLites)) {
     candidates.push(row);
   }
 
