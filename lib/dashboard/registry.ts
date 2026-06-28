@@ -43,10 +43,11 @@ export const DASH_FEATURES: DashFeature[] = [
   F('weather', 'Weather', '/dashboard/weather', 'weather', 'daily', 'free'),
   F('wallet', 'Wallet', '/wallet', 'wallet', 'finance', 'free'),
   F('finances', 'Finances', '/dashboard/billing', 'card', 'finance', 'free'),
+  // Free (aligned with the feature catalog — usable on the Free tier).
+  F('chores', 'Chores', '/dashboard/chores', 'check', 'family', 'free'),
+  F('recipes', 'Recipes', '/dashboard/recipes', 'chef', 'daily', 'free'),
+  F('documents', 'Documents', '/dashboard/documents', 'folder', 'daily', 'free'),
   // ── Basic ──
-  F('chores', 'Chores', '/dashboard/chores', 'check', 'family', 'basic'),
-  F('recipes', 'Recipes', '/dashboard/recipes', 'chef', 'daily', 'basic'),
-  F('documents', 'Documents', '/dashboard/documents', 'folder', 'daily', 'basic'),
   F('goals', 'Goals', '/dashboard/goals', 'target', 'family', 'basic'),
   F('health', 'Health', '/dashboard/health', 'heart', 'family', 'basic'),
   F('vacation', 'Vacations', '/dashboard/vacations', 'plane', 'family', 'basic'),
