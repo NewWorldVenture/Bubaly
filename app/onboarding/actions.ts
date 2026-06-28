@@ -194,8 +194,15 @@ export async function completeProfileOnboardingAction(input: {
   const ok = await ensureActiveFamily(supabase, auth.user);
   if (!ok) return { ok: false, error: 'Could not finish setting up your space. Please try again.' };
 
+  // Steps 3–4 write the member colour and the PIN/age/flag. RLS writes have
+  // proven unreliable in this environment (see saveUserProfile + ensure-family),
+  // so persist these through the service-role client too — scoped strictly to the
+  // already-authenticated user — so the colour and (critically) the PIN actually
+  // save instead of silently no-op'ing under RLS.
+  const admin = createServiceClient();
+
   // 3. Resolve the active family + apply the chosen colour to this member.
-  const { data: membership } = await supabase
+  const { data: membership } = await admin
     .from('family_members')
     .select('family_id')
     .eq('user_id', auth.user.id)
@@ -204,21 +211,24 @@ export async function completeProfileOnboardingAction(input: {
     .maybeSingle();
   const familyId = membership?.family_id ?? '';
   if (input.color) {
-    await supabase.from('family_members').update({ color: input.color }).eq('user_id', auth.user.id);
+    const { error: colorErr } = await admin.from('family_members')
+      .update({ color: input.color }).eq('user_id', auth.user.id);
+    if (colorErr) console.error('[onboarding] member colour update failed', colorErr);
   }
 
   // 4. Persist age + hashed PIN + completion flag (merge — never clobber prefs).
-  const { data: prefRow } = await supabase
+  const { data: prefRow } = await admin
     .from('user_preferences').select('notification_prefs').eq('user_id', auth.user.id).maybeSingle();
   const prefs = (prefRow?.notification_prefs as Record<string, unknown> | null) ?? {};
   const merged: Record<string, unknown> = { ...prefs, onboardingComplete: true };
   const age = normalizeAge(input.age);
   if (age !== null) merged.age = age;
   if (input.pin && isValidPin(input.pin)) merged.pinHash = hashPin(input.pin);
-  await supabase.from('user_preferences').upsert(
+  const { error: prefErr } = await admin.from('user_preferences').upsert(
     { user_id: auth.user.id, notification_prefs: merged as never },
     { onConflict: 'user_id' },
   );
+  if (prefErr) console.error('[onboarding] preferences (PIN/age/flag) save failed', prefErr);
 
   await logAudit(supabase, {
     familyId: familyId || null, actorId: auth.user.id,
