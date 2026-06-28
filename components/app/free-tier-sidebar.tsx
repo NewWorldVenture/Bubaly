@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils/cn';
 import { saveDashboardLayoutAction } from '@/app/(app)/dashboard/customize-actions';
 import { useApp } from './app-context';
 import { resolveItems, NavEntry, isActive } from './nav-shared';
+import { SidebarAccount } from './sidebar-account';
 
 // Reverse map: nav route → registry feature key (only routes that ARE a
 // registry feature can be pinned, since pins persist as dashboard feature_keys).
@@ -217,6 +218,11 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
           {SIDEBAR_FOOTER_NAV.map((item) => (
             <NavEntry key={item.href} item={item} variant="list" locked={false} onLocked={onLocked} />
           ))}
+        </div>
+
+        {/* Account details + theme toggle */}
+        <div className="mt-3">
+          <SidebarAccount />
         </div>
       </nav>
 

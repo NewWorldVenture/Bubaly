@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
-import { ChevronDown, Check, Gift, Lock, LogOut, Menu, Mic, Moon, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, Sparkles, SunMedium, UserCog, X } from 'lucide-react';
+import { ChevronDown, Check, Gift, Lock, LogOut, Menu, Mic, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, UserCog, X } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { APP_NAV_GROUPS, MOBILE_TABS, CAPTURE_TAB_INDEX, type NavItem } from '@/lib/constants/navigation';
@@ -11,8 +11,9 @@ import { ROLE_LABELS } from '@/lib/constants/roles';
 import { tierLabelForLevel } from '@/lib/constants/plans';
 import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { cn } from '@/lib/utils/cn';
-import { useTheme } from '@/components/theme/use-theme';
 import { useApp } from './app-context';
+import { ThemeSwitch } from './theme-switch';
+import { SidebarAccount } from './sidebar-account';
 import { isActive, resolveItems, NavEntry } from './nav-shared';
 import { FreeTierSidebar } from './free-tier-sidebar';
 import { NotificationBell } from './notification-bell';
@@ -258,46 +259,6 @@ function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
   );
 }
 
-/** Dark/Light segmented control for the sidebar footer. */
-function ThemeSwitch() {
-  const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const resolved = !mounted
-    ? null
-    : theme === 'system'
-      ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
-      : theme;
-
-  return (
-    <div className="grid grid-cols-2 rounded-xl border border-border bg-surface/40 p-1 text-sm">
-      <button
-        type="button"
-        onClick={() => setTheme('dark')}
-        aria-pressed={resolved === 'dark'}
-        className={cn(
-          'flex items-center justify-center gap-2 rounded-lg py-2.5 transition',
-          resolved === 'dark' ? 'bg-brand/15 font-semibold text-brand' : 'text-muted hover:text-fg',
-        )}
-      >
-        <Moon className="h-4 w-4" /> Dark
-      </button>
-      <button
-        type="button"
-        onClick={() => setTheme('light')}
-        aria-pressed={resolved === 'light'}
-        className={cn(
-          'flex items-center justify-center gap-2 rounded-lg py-2.5 transition',
-          resolved === 'light' ? 'bg-brand/15 font-semibold text-brand' : 'text-muted hover:text-fg',
-        )}
-      >
-        <SunMedium className="h-4 w-4" /> Light
-      </button>
-    </div>
-  );
-}
-
 /** The sidebar navigation body, shared by the desktop rail and the mobile drawer.
  *  Free-tier members (but NOT super admins, who always get the full catalog) get
  *  the curated sidebar; everyone else gets the full grouped nav + AI-coach footer. */
@@ -307,25 +268,13 @@ function SidebarBody({ onLocked }: { onLocked: (item: NavItem) => void }) {
     // Free tier → curated sidebar (primary list + shortcuts + All Services + footer).
     return <FreeTierSidebar onLocked={onLocked} />;
   }
-  // Paid tiers + super admins → full grouped navigation + AI-coach footer.
+  // Paid tiers + super admins → full grouped navigation + account/theme footer.
   return (
     <>
       <SidebarNav onLocked={onLocked} />
-      <div className="space-y-4 px-3 pb-4 xl:px-4 xl:pb-5">
+      <div className="space-y-3 px-3 pb-4 xl:px-4 xl:pb-5">
         <FamilySwitcher />
-        <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4 text-center xl:p-5">
-          <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand/15 xl:h-20 xl:w-20">
-            <Sparkles className="h-8 w-8 text-brand xl:h-10 xl:w-10" />
-          </div>
-          <h2 className="mt-3 text-sm font-bold xl:mt-4 xl:text-base">Your AI Chief of Staff</h2>
-          <p className="mt-2 text-xs leading-5 text-muted xl:mt-3 xl:text-sm xl:leading-6">
-            I&apos;m here to help your family stay organized, save time, and reduce stress.
-          </p>
-          <Link href="/ai" className="mt-3 inline-flex w-full justify-center rounded-lg bg-brand px-4 py-2.5 text-sm font-bold text-brand-fg transition hover:opacity-90 xl:mt-5 xl:py-3">
-            Learn More
-          </Link>
-        </div>
-        <ThemeSwitch />
+        <SidebarAccount />
       </div>
     </>
   );
