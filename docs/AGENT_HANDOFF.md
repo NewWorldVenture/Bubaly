@@ -29,9 +29,15 @@ Last updated: 2026-06-28 — Home "Needs you" unified decision queue (wired #171
 >   `related_id` keeps the dedup unique). Wired into `lib/server/notifications.ts` `generateFamilyNotifications`
 >   (new `parent_approvals` fetch + push), delivered through the existing push+email pipeline. (Pre-existing
 >   pipeline already covered renewals/meds/reminders/relationship/docs; approvals were the gap.)
+> - **One-tap approve/decline on Home** (multi-screen → one tap): money-approval cards in "Needs you" now
+>   render inline **Approve / Decline** buttons (`components/dashboard/home-approval-actions.tsx`, client) that
+>   reuse the SAME authorized wallet server actions the Wallet screen uses — `decideAllowanceRequestAction`
+>   for `allowance_request`, else `decideSpendRequestAction` — then `router.refresh()`. Buttons can't nest in
+>   an `<a>`, so approval cards render as a div with the title linking out + the action island beside it.
+>   `approvalKindByNeedId` maps each `approval:${id}` need back to its kind so the right action is called.
 > - **Next per the doctrine:** trust has no clean pending table (trust_policies/delegations/scores only), and
 >   concierge status is free-text with no "awaiting decision" state — both skipped; consider an Inbox/Assistant
->   consolidation next.
+>   consolidation, or extend one-tap to other safe decisions (e.g. complete a single overdue reminder).
 
 > ## 🚀 PRODUCTION SYNC (2026-06-28) — pulled 4 stale/open PRs onto `main`
 > Swept the last 48h of PRs; everything merged is on `main`. Then brought the open ones in:

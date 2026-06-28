@@ -26,6 +26,7 @@ import { mergeUpcoming } from '@/lib/dashboard/upcoming';
 import { topNeeds, summarizeNeeds, needsHeadline, type NeedItem } from '@/lib/home/needs-attention';
 import { parentApprovalToNeed, renewalToNeed, type ParentApprovalRow, type RenewalRow } from '@/lib/home/needs-sources';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
+import { HomeApprovalActions } from '@/components/dashboard/home-approval-actions';
 
 function greeting() {
   const h = new Date().getHours();
@@ -272,6 +273,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   });
   const needs = topNeeds(homeNeeds, 5);
   const needsHeader = needsHeadline(summarizeNeeds(homeNeeds));
+  // Map each approval need back to its row so the card can offer one-tap approve.
+  const approvalKindByNeedId = new Map<string, string>(
+    ((approvalRows ?? []) as ParentApprovalRow[]).map((a) => [`approval:${a.id}`, a.kind]),
+  );
 
   const name = me.display_name ?? ctx.user.email?.split('@')[0] ?? 'there';
   const hasEvents = (todayEvents ?? []).length > 0;
@@ -438,12 +443,13 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
               const meta = NEED_META[item.kind] ?? DEFAULT_NEED_META;
               const Icon = meta.icon;
               const urgent = item.urgency === 'urgent' || item.urgency === 'emergency';
-              return (
-                <Link key={item.id} href={item.href}
-                  className={cn(
-                    'flex items-center gap-4 rounded-2xl border p-4 transition hover:bg-elevated',
-                    urgent ? 'border-amber-500/20 bg-amber-500/5' : 'border-border bg-surface/40',
-                  )}>
+              const approvalKind = item.kind === 'approval' ? approvalKindByNeedId.get(item.id) : undefined;
+              const cardClass = cn(
+                'flex items-center gap-4 rounded-2xl border p-4 transition',
+                urgent ? 'border-amber-500/20 bg-amber-500/5' : 'border-border bg-surface/40',
+              );
+              const body = (
+                <>
                   <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', meta.iconBg)}>
                     <Icon className="h-5 w-5" />
                   </div>
@@ -451,6 +457,21 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
                     <p className="truncate text-sm font-semibold">{item.title}</p>
                     {meta.subtitle && <p className="mt-0.5 truncate text-xs text-muted">{meta.subtitle}</p>}
                   </div>
+                </>
+              );
+              // Approvals get one-tap Approve/Decline inline (buttons can't nest in
+              // an <a>, so the card is a div with the title linking out).
+              if (approvalKind !== undefined) {
+                return (
+                  <div key={item.id} className={cardClass}>
+                    <Link href={item.href} className="flex min-w-0 flex-1 items-center gap-4 hover:opacity-90">{body}</Link>
+                    <HomeApprovalActions approvalId={item.id.slice('approval:'.length)} kind={approvalKind} />
+                  </div>
+                );
+              }
+              return (
+                <Link key={item.id} href={item.href} className={cn(cardClass, 'hover:bg-elevated')}>
+                  {body}
                   <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-brand">
                     {meta.cta} <ChevronRight className="h-3.5 w-3.5" />
                   </div>
