@@ -67,15 +67,18 @@ export function AppLockSettings() {
 
   async function onSet(pin: string) {
     setSaving(true);
-    const cfg = await buildAppLockConfig(pin); // enabled: true
+    // Setting up for the first time turns the lock on; changing an existing PIN
+    // keeps its current on/off state (don't silently enable a lock that was off).
+    const nextEnabled = hasPin ? enabled : true;
+    const cfg = { ...(await buildAppLockConfig(pin)), enabled: nextEnabled };
     const res = await saveAppLockConfig(cfg);
     setSaving(false);
     if (!res.ok) { toastError(res.error); return; }
     // This device is already authenticated — count it as unlocked for this session.
-    try { sessionStorage.setItem(unlockKey(userId), '1'); } catch { /* ignore */ }
+    try { if (nextEnabled) sessionStorage.setItem(unlockKey(userId), '1'); } catch { /* ignore */ }
     setConfig(cfg);
     setModalOpen(false);
-    success('App Lock is on');
+    success(nextEnabled ? 'App Lock is on' : 'PIN updated');
   }
 
   return (
@@ -122,12 +125,19 @@ export function AppLockSettings() {
         </div>
       </div>
 
-      {modalOpen && <SetPinModal onClose={() => setModalOpen(false)} onConfirm={onSet} saving={saving} />}
+      {modalOpen && (
+        <SetPinModal
+          onClose={() => setModalOpen(false)}
+          onConfirm={onSet}
+          saving={saving}
+          confirmLabel={hasPin && !enabled ? 'Save PIN' : 'Turn on'}
+        />
+      )}
     </div>
   );
 }
 
-function SetPinModal({ onClose, onConfirm, saving }: { onClose: () => void; onConfirm: (pin: string) => void; saving: boolean }) {
+function SetPinModal({ onClose, onConfirm, saving, confirmLabel }: { onClose: () => void; onConfirm: (pin: string) => void; saving: boolean; confirmLabel: string }) {
   const [step, setStep] = useState<'enter' | 'confirm'>('enter');
   const [first, setFirst] = useState('');
   const [val, setVal] = useState('');
@@ -154,7 +164,7 @@ function SetPinModal({ onClose, onConfirm, saving }: { onClose: () => void; onCo
         <div className="flex w-full justify-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
           <Button type="button" size="sm" loading={saving} disabled={saving || val.length !== 4} onClick={() => next(val)}>
-            {step === 'enter' ? 'Next' : 'Turn on'}
+            {step === 'enter' ? 'Next' : confirmLabel}
           </Button>
         </div>
       </div>
