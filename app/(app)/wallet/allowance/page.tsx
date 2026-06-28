@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
-import { planLevel } from '@/lib/constants/plans';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
 import { AllowanceView, type AllowanceRow } from '@/components/wallet/allowance-view';
 
@@ -13,11 +13,11 @@ export default async function WalletAllowancePage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [{ data: childWallets }, { data: members }, { data: rules }, { data: sub }] = await Promise.all([
+  const [{ data: childWallets }, { data: members }, { data: rules }, famPlanLevel] = await Promise.all([
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
     supabase.from('allowance_rules').select('id, child_wallet_id, amount_cents, cadence, is_active, next_run_on').eq('family_id', familyId),
-    supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']).maybeSingle(),
+    resolveFamilyPlanLevel(supabase, familyId),
   ]);
 
   const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));
@@ -36,6 +36,6 @@ export default async function WalletAllowancePage() {
     };
   });
 
-  const tier = walletTierForPlanLevel(await effectivePlanLevel(planLevel(sub?.plan ?? null)));
+  const tier = walletTierForPlanLevel(await effectivePlanLevel(famPlanLevel));
   return <AllowanceView rows={rows} enabled={walletFeatureEnabled(tier, 'allowances')} canManage={isManager(ctx.active.role)} />;
 }

@@ -1,7 +1,7 @@
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isDashboardView } from '@/lib/constants/dashboards';
-import { planLevel as planLevelOf } from '@/lib/constants/plans';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
 import { AppProvider } from '@/components/app/app-context';
 import { AppShell } from '@/components/app/app-shell';
@@ -20,7 +20,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const [{ data: members }, { data: prefs }, { data: sub }, superAdmin, { count: unreadMessages }] = await Promise.all([
+  const [{ data: members }, { data: prefs }, planLevel, superAdmin, { count: unreadMessages }] = await Promise.all([
     supabase
       .from('family_members')
       .select('*')
@@ -32,12 +32,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
       .select('default_dashboard')
       .eq('user_id', ctx.user.id)
       .maybeSingle(),
-    supabase
-      .from('subscriptions')
-      .select('plan, status')
-      .eq('family_id', ctx.active.familyId)
-      .in('status', ['active', 'trialing'])
-      .maybeSingle(),
+    resolveFamilyPlanLevel(supabase, ctx.active.familyId),
     isSuperAdmin(),
     // Unread family messages for this user → sidebar Messages badge. Excludes my
     // own messages; `read_by` (user ids) not containing me = unread.
@@ -53,7 +48,6 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
   const defaultDashboard = isDashboardView(prefs?.default_dashboard)
     ? prefs.default_dashboard
     : 'personal';
-  const planLevel = planLevelOf(sub?.plan ?? null);
   const featureTiers = await getFeatureTiersByHref(supabase);
 
   return (

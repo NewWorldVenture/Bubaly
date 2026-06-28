@@ -4,7 +4,7 @@ import { Gauge, TrendingUp, TrendingDown, Sparkles, ArrowRight } from 'lucide-re
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { computeReadiness, BAND_LABEL, type ReadinessInput } from '@/lib/readiness/score';
-import { planLevel } from '@/lib/constants/plans';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 
 export const metadata: Metadata = { title: 'Family Readiness' };
 export const dynamic = 'force-dynamic';
@@ -30,7 +30,7 @@ export default async function ReadinessPage() {
     { count: eventsUpcoming },
     { count: groceryActive },
     { count: activeMembers },
-    { data: sub },
+    famPlanLevel,
   ] = await Promise.all([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', now.toISOString()),
     supabase.from('reminders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_done', false).lt('remind_at', now.toISOString()),
@@ -38,7 +38,7 @@ export default async function ReadinessPage() {
     supabase.from('calendar_events').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('starts_at', now.toISOString()).lt('starts_at', weekEnd.toISOString()),
     supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_checked', false),
     supabase.from('family_members').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_active', true),
-    supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']).maybeSingle(),
+    resolveFamilyPlanLevel(supabase, familyId),
   ]);
 
   const input: ReadinessInput = {
@@ -50,7 +50,7 @@ export default async function ReadinessPage() {
     activeMembers: activeMembers ?? 0,
   };
   const { score, band, factors } = computeReadiness(input);
-  const isPlus = (await effectivePlanLevel(planLevel(sub?.plan ?? null))) >= 2;
+  const isPlus = (await effectivePlanLevel(famPlanLevel)) >= 2;
 
   // SVG ring math.
   const r = 54, c = 2 * Math.PI * r, dash = (score / 100) * c;

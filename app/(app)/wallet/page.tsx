@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
-import { planLevel } from '@/lib/constants/plans';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
@@ -26,15 +26,15 @@ export default async function WalletPage() {
     return <WalletActivation canActivate={manager} />;
   }
 
-  const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }, { data: sub }, { data: approvals }] = await Promise.all([
+  const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }, famPlanLevel, { data: approvals }] = await Promise.all([
     supabase.from('child_wallets').select('id, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
     supabase.from('wallet_buckets').select('id, child_wallet_id, kind, label, sort_order').eq('family_id', familyId),
     supabase.from('wallet_transactions').select('id, child_wallet_id, bucket_id, type, status, direction, amount_cents, description, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(2000),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
-    supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']).maybeSingle(),
+    resolveFamilyPlanLevel(supabase, familyId),
     supabase.from('parent_approvals').select('id, kind, ref_id, amount_cents, note, requested_by, created_at').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(50),
   ]);
-  const tier = walletTierForPlanLevel(await effectivePlanLevel(planLevel(sub?.plan ?? null)));
+  const tier = walletTierForPlanLevel(await effectivePlanLevel(famPlanLevel));
 
   const bucketKindById = new Map((buckets ?? []).map((b) => [b.id, b.kind as BucketKind]));
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));

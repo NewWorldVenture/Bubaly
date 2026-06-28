@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
 import { Rocket, Gauge, ShieldCheck } from 'lucide-react';
 import { successProbability } from '@/lib/autopilot/engine';
-import { planLevel } from '@/lib/constants/plans';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { tierForPlanLevel, FIXED_FEATURES } from '@/lib/dashboard/registry';
 import { resolvePrimary, availableFeatures, lockedFeatures } from '@/lib/dashboard/layout';
 import { normalizeSettings, canCustomizeDashboard, effectiveSavedKeys } from '@/lib/dashboard/permissions';
@@ -84,7 +84,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { data: activeConcierge },
     { count: unreadCallsCount },
     { data: layoutRows },
-    { data: walletSub },
+    famPlanLevel,
     { data: relDateRows },
     { data: dueReminderRows },
     { data: weekReminderRows },
@@ -137,7 +137,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).eq('is_read', false),
     supabase.from('dashboard_layouts').select('feature_keys, scope, user_id')
       .eq('family_id', familyId).is('deleted_at', null).in('scope', ['user', 'family']),
-    supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']).maybeSingle(),
+    resolveFamilyPlanLevel(supabase, familyId),
     supabase.from('relationship_dates').select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
       .eq('family_id', familyId).neq('status', 'cancelled').limit(100),
     supabase.from('family_reminders').select('id, remind_at, status')
@@ -192,7 +192,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // (every tile available, nothing locked, no "Unlock more"), matching the nav
   // which already treats super-admins as having access to everything.
   const superAdmin = await isSuperAdmin();
-  const dashTier = superAdmin ? 'plus' : tierForPlanLevel(planLevel(walletSub?.plan ?? null));
+  const dashTier = superAdmin ? 'plus' : tierForPlanLevel(famPlanLevel);
   const layouts = (layoutRows ?? []) as { feature_keys: string[]; scope: string; user_id: string | null }[];
   const myLayout = layouts.find((l) => l.scope === 'user' && l.user_id === ctx.user.id);
   const familyLayout = layouts.find((l) => l.scope === 'family');

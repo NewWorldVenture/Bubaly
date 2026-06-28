@@ -2,7 +2,7 @@
 import { redirect, notFound } from 'next/navigation';
 import { createServer } from './server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
-import { planLevel } from '@/lib/constants/plans';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { tierToLevel } from '@/lib/features/tiers';
 import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
@@ -144,14 +144,7 @@ export async function requirePlanLevel(minLevel: 1 | 2): Promise<UserContext> {
   if (await isSuperAdmin()) return ctx;
 
   const supabase = await createServer();
-  const { data: sub } = await supabase
-    .from('subscriptions')
-    .select('plan, status')
-    .eq('family_id', ctx.active.familyId)
-    .in('status', ['active', 'trialing'])
-    .maybeSingle();
-
-  const level = planLevel(sub?.plan ?? null);
+  const level = await resolveFamilyPlanLevel(supabase, ctx.active.familyId);
   if (level < minLevel) {
     redirect(`/dashboard/billing?upgrade=1&need=${minLevel}`);
   }
@@ -172,13 +165,8 @@ export async function requireFeature(key: string): Promise<UserContext> {
   if (await isSuperAdmin()) return ctx;
 
   const supabase = await createServer();
-  const [{ data: sub }, byHref] = await Promise.all([
-    supabase
-      .from('subscriptions')
-      .select('plan, status')
-      .eq('family_id', ctx.active.familyId)
-      .in('status', ['active', 'trialing'])
-      .maybeSingle(),
+  const [level, byHref] = await Promise.all([
+    resolveFamilyPlanLevel(supabase, ctx.active.familyId),
     getFeatureTiersByHref(supabase),
   ]);
 
@@ -187,7 +175,7 @@ export async function requireFeature(key: string): Promise<UserContext> {
   if (tier === 'off') notFound();
 
   const need = tierToLevel(tier); // 0 / 1 / 2
-  if (planLevel(sub?.plan ?? null) < need) {
+  if (level < need) {
     redirect(`/dashboard/billing?upgrade=1&need=${need}`);
   }
   return ctx;

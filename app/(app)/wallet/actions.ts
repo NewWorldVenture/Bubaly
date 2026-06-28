@@ -8,7 +8,7 @@ import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
 import { creditChildWallet, debitSpendBucket, bucketBalanceCents } from '@/lib/wallet/server';
 import { nextRunDate, type Cadence } from '@/lib/wallet/allowance';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
-import { planLevel } from '@/lib/constants/plans';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { normalizeHandle, handleError } from '@/lib/wallet/pay-handle';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
 
@@ -144,10 +144,7 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
 
 /** Resolve the family's wallet tier from its active subscription plan. */
 async function familyWalletTier(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string) {
-  const { data: sub } = await supabase
-    .from('subscriptions').select('plan, status').eq('family_id', familyId)
-    .in('status', ['active', 'trialing']).maybeSingle();
-  return walletTierForPlanLevel(await effectivePlanLevel(planLevel(sub?.plan ?? null)));
+  return walletTierForPlanLevel(await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId)));
 }
 
 /**

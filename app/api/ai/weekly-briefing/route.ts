@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
-import { planLevel } from '@/lib/constants/plans';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { weekWindow, weekRangeLabel, choreCompletionRate, bucketByDay, dayLoad } from '@/lib/ai/weekly';
 import { resolveProvider } from '@/lib/ai/provider';
 
@@ -18,13 +18,7 @@ export async function POST(req: NextRequest) {
 
     // Plus-only — guard here too (the page already gates, but the endpoint is
     // independently reachable). Return 402 so the client can prompt an upgrade.
-    const { data: sub } = await supabase
-      .from('subscriptions')
-      .select('plan, status')
-      .eq('family_id', familyId)
-      .in('status', ['active', 'trialing'])
-      .maybeSingle();
-    if ((await effectivePlanLevel(planLevel(sub?.plan ?? null))) < 2) {
+    if ((await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId))) < 2) {
       return NextResponse.json({ error: 'Weekly AI Briefing is a Family+ feature.' }, { status: 402 });
     }
 

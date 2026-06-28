@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
-import { planLevel } from '@/lib/constants/plans';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { tierForPlanLevel } from '@/lib/dashboard/registry';
 import { validateLayout } from '@/lib/dashboard/layout';
 import { canCustomizeDashboard, normalizeSettings, type DashSettings } from '@/lib/dashboard/permissions';
@@ -23,10 +23,7 @@ function asDevice(value: string | undefined): Device {
 }
 
 async function userTier(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string) {
-  const { data: sub } = await supabase
-    .from('subscriptions').select('plan, status').eq('family_id', familyId)
-    .in('status', ['active', 'trialing']).maybeSingle();
-  return tierForPlanLevel(await effectivePlanLevel(planLevel(sub?.plan ?? null)));
+  return tierForPlanLevel(await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId)));
 }
 
 async function logEvent(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string, userId: string, action: string, featureKey?: string | null, metadata: Record<string, unknown> = {}) {

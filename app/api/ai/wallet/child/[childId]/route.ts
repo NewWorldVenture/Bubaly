@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
-import { planLevel } from '@/lib/constants/plans';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { buildChildCoachPrompt, parseWalletCoach } from '@/lib/wallet/coach';
@@ -28,10 +28,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
     if (!cw) return NextResponse.json({ error: 'Child wallet not found.' }, { status: 404 });
 
     // Tier gate
-    const { data: sub } = await supabase
-      .from('subscriptions').select('plan, status').eq('family_id', familyId)
-      .in('status', ['active', 'trialing']).maybeSingle();
-    const tier = walletTierForPlanLevel(await effectivePlanLevel(planLevel(sub?.plan ?? null)));
+    const tier = walletTierForPlanLevel(await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId)));
     if (aiCoachLevel(tier) === 'none') {
       return NextResponse.json({ error: 'The AI Money Coach is available on the Basic and Plus plans.' }, { status: 403 });
     }
