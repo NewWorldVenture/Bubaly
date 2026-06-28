@@ -161,9 +161,13 @@ Last updated: 2026-06-28 — Phone OTP sign-in/up wired (method chooser now phon
 > `audit_logs` via `adminAuditLog`) updates the family's active/trialing `subscriptions` row (or inserts one)
 > to `free | basic | basic_annual | plus | plus_annual`; `free` → planLevel 0. UI: **`components/admin/
 > set-plan-control.tsx`** (a confirm-gated `<select>`) is wired into the **Admin → Users → Families** table
-> Plan column (covers every family incl. currently-free). No migration. NOTE: a family's plan is only half the
-> story — a **super-admin override** (`super_admins` table / `SUPER_ADMIN_EMAILS` env) force-unlocks to Plus
-> regardless; clear both to make an account truly Free.
+> Plan column (covers every family incl. currently-free). No migration.
+> **Both halves are now self-serve:** the **super-admin override** is also toggleable —
+> `adminSetSuperAdminAction({ email, makeAdmin })` upserts/deletes the `super_admins` row (the DB source for
+> `is_super_admin()`), guarded + audited, with **no self-lockout** and code/env admins immutable.
+> `components/admin/super-admin-toggle.tsx` is an **Admin** column in the Users table (locked "Admin (code)"
+> badge for built-in/`SUPER_ADMIN_EMAILS` admins). So to make an account truly Free: set its family plan to
+> Free **and** toggle its super-admin off here (env-set admins still need removing from `SUPER_ADMIN_EMAILS`).
 >
 > ## ▶️ START HERE (current state — read this first)
 > - **`main` is the source of truth** and deploys to prod (Vercel → www.bubaly.com). As of this update its tip

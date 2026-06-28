@@ -12,6 +12,8 @@ import { UsersToolbar } from '@/components/admin/users-toolbar';
 import { InviteRowActions } from '@/components/admin/invite-row-actions';
 import { MemberRowActions } from '@/components/admin/member-row-actions';
 import { SetPlanControl } from '@/components/admin/set-plan-control';
+import { SuperAdminToggle } from '@/components/admin/super-admin-toggle';
+import { superAdminEmails } from '@/lib/constants/super-admins';
 import { RoleDonut } from '@/components/admin/role-donut';
 import { AlertTriangle } from 'lucide-react';
 import type { Tables } from '@/lib/database.types';
@@ -70,7 +72,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   // Admin-scale dataset: load everything once and enrich/filter/paginate in memory.
   // At real scale this would move to a dedicated aggregating view or RPC — flagged
   // here rather than hidden, since this is the one place in the app doing that.
-  const [profilesRes, membersRes, familiesRes, subscriptionsRes, invitesRes, rolesRes, permissionsRes] =
+  const [profilesRes, membersRes, familiesRes, subscriptionsRes, invitesRes, rolesRes, permissionsRes, superAdminsRes] =
     await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('family_members').select('*').eq('is_active', true).order('created_at'),
@@ -79,6 +81,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
       supabase.from('invites').select('*').order('created_at', { ascending: false }),
       supabase.from('roles').select('*'),
       supabase.from('permissions').select('*'),
+      supabase.from('super_admins').select('email'),
     ]);
 
   // Any query that errored (bad/missing key, unapplied migration, RLS) is reported
@@ -101,6 +104,10 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   const familyById = new Map((families ?? []).map((f) => [f.id, f]));
   const subByFamily = new Map((subscriptions ?? []).map((s) => [s.family_id, s]));
   const profileByUserId = new Map((profiles ?? []).map((p) => [p.id, p]));
+  // Site super-admins: the DB-backed `super_admins` table (toggleable here) plus
+  // the immutable code/env allowlist (shown locked).
+  const superAdminDbEmails = new Set((superAdminsRes.data ?? []).map((r) => r.email.toLowerCase()));
+  const codeAdminEmails = new Set(superAdminEmails());
   const memberCountByFamily = new Map<string, number>();
   for (const m of members ?? []) memberCountByFamily.set(m.family_id, (memberCountByFamily.get(m.family_id) ?? 0) + 1);
 
@@ -246,6 +253,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                         <th className="px-3 py-2 font-medium">Role</th>
                         <th className="px-3 py-2 font-medium">Plan</th>
                         <th className="px-3 py-2 font-medium">Status</th>
+                        <th className="px-3 py-2 font-medium">Admin</th>
                         <th className="px-3 py-2 font-medium">Joined</th>
                         <th className="px-3 py-2 font-medium" />
                       </tr>
@@ -262,6 +270,15 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                           <td className="px-3 py-2.5 text-muted">{u.plan ? PLANS.find((p) => p.id === u.plan)?.name ?? u.plan : '—'}</td>
                           <td className="px-3 py-2.5">
                             <Badge tone={u.hasAccount ? 'success' : 'neutral'}>{u.hasAccount ? 'Active' : 'No account'}</Badge>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            {u.email ? (
+                              <SuperAdminToggle
+                                email={u.email}
+                                isAdmin={superAdminDbEmails.has(u.email.toLowerCase()) || codeAdminEmails.has(u.email.toLowerCase())}
+                                locked={codeAdminEmails.has(u.email.toLowerCase())}
+                              />
+                            ) : '—'}
                           </td>
                           <td className="px-3 py-2.5 text-muted">{fmtDate(u.joinedAt, 'MMM d, yyyy')}</td>
                           <td className="px-3 py-2.5">

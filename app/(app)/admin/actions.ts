@@ -12,6 +12,7 @@ import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { stripeFromKey } from '@/lib/stripe';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { PlanId } from '@/lib/constants/plans';
+import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -169,6 +170,44 @@ export async function adminSetFamilyPlanAction(input: { familyId: string; plan: 
     resourceId: input.familyId, metadata: { plan, previous_plan: previousPlan },
   });
   revalidatePath('/admin/subscriptions');
+  revalidatePath('/admin/users');
+  return { ok: true };
+}
+
+/**
+ * Grant or revoke site super-admin via the `super_admins` table (the DB-backed
+ * source for `is_super_admin()`). Built-in/env admins are immutable here, and an
+ * admin can't remove their own access (no self-lockout). Super-admin only, audited.
+ */
+export async function adminSetSuperAdminAction(input: { email: string; makeAdmin: boolean }): Promise<Result> {
+  const guard = await assertSuperAdmin();
+  if (!guard.ok) return guard;
+
+  const parsed = emailSchema.safeParse(input.email.trim().toLowerCase());
+  if (!parsed.success) return { ok: false, error: 'Enter a valid email address' };
+  const email = parsed.data;
+
+  const me = await getUser();
+  if (!input.makeAdmin && me?.email && me.email.toLowerCase() === email) {
+    return { ok: false, error: 'You can’t remove your own super-admin access.' };
+  }
+  if (!input.makeAdmin && isSuperAdminEmail(email)) {
+    return { ok: false, error: 'This admin is set via code/env and can’t be removed here.' };
+  }
+
+  const supabase = createServiceClient();
+  if (input.makeAdmin) {
+    const { error } = await supabase.from('super_admins').upsert({ email }, { onConflict: 'email' });
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase.from('super_admins').delete().eq('email', email);
+    if (error) return { ok: false, error: error.message };
+  }
+
+  await adminAuditLog({
+    familyId: null, action: input.makeAdmin ? 'grant' : 'revoke', resource: 'super_admins',
+    resourceId: email, metadata: { email },
+  });
   revalidatePath('/admin/users');
   return { ok: true };
 }
