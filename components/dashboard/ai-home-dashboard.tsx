@@ -2,7 +2,7 @@ import Link from 'next/link';
 import {
   Sparkles, Calendar, CheckSquare, ShoppingCart, HeartPulse,
   ArrowRight, Bell, ChevronRight, Home, Pill, GraduationCap,
-  Trophy, Sun, Clock, Users, MessageSquare, Plane, PhoneCall, AlarmClock, RefreshCw, CalendarClock,
+  Trophy, Sun, Clock, Users, MessageSquare, Plane, PhoneCall, AlarmClock, RefreshCw, CalendarClock, FileClock,
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
 import type { UserContext } from '@/lib/supabase/auth';
@@ -24,7 +24,7 @@ import { upcomingRelationship, formatCountdown, milestoneLabel, type RelKind } f
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
 import { mergeUpcoming } from '@/lib/dashboard/upcoming';
 import { topNeeds, summarizeNeeds, needsHeadline, type NeedItem } from '@/lib/home/needs-attention';
-import { parentApprovalToNeed, renewalToNeed, type ParentApprovalRow, type RenewalRow } from '@/lib/home/needs-sources';
+import { parentApprovalToNeed, renewalToNeed, documentExpiryToNeed, type ParentApprovalRow, type RenewalRow, type DocumentRow } from '@/lib/home/needs-sources';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { HomeApprovalActions } from '@/components/dashboard/home-approval-actions';
 
@@ -45,6 +45,7 @@ const NEED_META: Record<string, NeedRenderMeta> = {
   approval: { icon: ShieldCheck, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', subtitle: 'A family member is waiting on your approval.' },
   calendar_conflict: { icon: CalendarClock, iconBg: 'bg-rose-500/15 text-rose-400', cta: 'Resolve', subtitle: 'Two events are double-booked.' },
   renewal: { icon: RefreshCw, iconBg: 'bg-orange-500/15 text-orange-400', cta: 'Renew', subtitle: 'Renew it before it lapses.' },
+  document: { icon: FileClock, iconBg: 'bg-orange-500/15 text-orange-400', cta: 'View', subtitle: 'A document is expiring soon.' },
   chore_signoff: { icon: CheckSquare, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', subtitle: 'Chores are waiting for your sign-off.' },
   reminder_overdue: { icon: AlarmClock, iconBg: 'bg-rose-500/15 text-rose-400', cta: 'Catch up', subtitle: 'These were due earlier.' },
   meds: { icon: Pill, iconBg: 'bg-rose-500/15 text-rose-400', cta: 'View', subtitle: 'Check the medication schedule.' },
@@ -65,6 +66,7 @@ const DEFAULT_NEED_META: NeedRenderMeta = { icon: Bell, iconBg: 'bg-brand/15 tex
 function buildHomeNeeds(data: {
   approvals: ParentApprovalRow[];
   renewals: RenewalRow[];
+  documents: DocumentRow[];
   conflicts: { id: string; assigneeName: string | null; count: number; startsAt: string }[];
   pendingApprovals: number;
   overdueMeds: boolean;
@@ -81,6 +83,7 @@ function buildHomeNeeds(data: {
 
   for (const a of data.approvals) items.push(parentApprovalToNeed(a));
   for (const r of data.renewals) { const n = renewalToNeed(r, data.now); if (n) items.push(n); }
+  for (const d of data.documents) { const n = documentExpiryToNeed(d, data.now); if (n) items.push(n); }
   for (const c of data.conflicts)
     items.push({
       id: `conflict:${c.id}`, kind: 'calendar_conflict',
@@ -140,6 +143,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { data: approvalRows },
     { data: renewalRows },
     { data: conflictEventRows },
+    { data: documentRows },
   ] = await Promise.all([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
@@ -213,6 +217,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .gte('starts_at', todayStart.toISOString())
       .lte('starts_at', new Date(Date.now() + 14 * 86400000).toISOString())
       .order('starts_at').limit(200),
+    // Stored documents expiring within ~30 days (passports, licenses, insurance…).
+    supabase.from('documents').select('id, title, expires_at')
+      .eq('family_id', familyId).not('expires_at', 'is', null)
+      .lte('expires_at', new Date(Date.now() + 30 * 86400000).toISOString()).limit(50),
   ]);
 
   // Soonest relationship date inside its reminder window (gentle proactive nudge).
@@ -261,6 +269,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const homeNeeds = buildHomeNeeds({
     approvals: (approvalRows ?? []) as ParentApprovalRow[],
     renewals: (renewalRows ?? []) as RenewalRow[],
+    documents: (documentRows ?? []) as DocumentRow[],
     conflicts: homeConflicts,
     pendingApprovals: pendingApprovals ?? 0,
     overdueMeds: (overdueMedsCount ?? 0) > 0,

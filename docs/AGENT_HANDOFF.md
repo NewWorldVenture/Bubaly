@@ -34,13 +34,15 @@ Last updated: 2026-06-28 — Home "Needs you" decision queue (sources + ranking 
 > Replaced it with ONE ranked, calm "Needs you" surface driven by #171's pure ranking brain:
 > - **`lib/home/needs-attention.ts`** (already merged via #171) — `rankNeedsAttention` / `summarizeNeeds` /
 >   `needsHeadline` / `topNeeds`. Now actually used.
-> - **`lib/home/needs-sources.ts`** (NEW, PURE, **6 tests**) — `parentApprovalToNeed` (pending money approvals →
+> - **`lib/home/needs-sources.ts`** (NEW, PURE, **8 tests**) — `parentApprovalToNeed` (pending money approvals →
 >   urgent cards, kind→label/href), `renewalToNeed(row, now)` (renewals inside their reminder window/expired →
->   urgent ≤3d else normal; null otherwise), `usdFromCents`.
+>   urgent ≤3d else normal; null otherwise), `documentExpiryToNeed(row, now)` (stored docs — passport/license/
+>   insurance — expiring ≤30d/expired → urgent ≤3d else normal), `usdFromCents`.
 > - **`components/dashboard/ai-home-dashboard.tsx`** — `buildHomeNeeds` unions approvals (`parent_approvals`,
->   managers only) + renewals (`renewals`) + chore sign-offs + overdue/today reminders + meds + chores + grocery
->   + todos into `NeedItem[]`, ranked by urgency then recency; renders a headline ("N things need you") + top-5
->   cards + "+N more". Both new fetches are missing-table-safe (`?? []`). No migration.
+>   managers only) + renewals (`renewals`) + document expiry (`documents`) + calendar conflicts + chore sign-offs
+>   + overdue/today reminders + meds + chores + grocery + todos into `NeedItem[]`, ranked by urgency then recency;
+>   renders a headline ("N things need you") + top-5 cards + "+N more". All new fetches missing-table-safe
+>   (`?? []`). No migration.
 > - Today's events stay in their own "Today" section (not a decision). Verified: tsc · lint · build · full suite.
 > - **Calendar conflicts now wired in too** — `lib/home/conflicts.ts` (PURE, **5 tests**) `detectConflicts`
 >   finds per-assignee overlapping timed events (half-open intervals; all-day/unassigned ignored; default

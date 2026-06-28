@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { usdFromCents, parentApprovalToNeed, renewalToNeed } from '@/lib/home/needs-sources';
+import { usdFromCents, parentApprovalToNeed, renewalToNeed, documentExpiryToNeed } from '@/lib/home/needs-sources';
 
 describe('usdFromCents', () => {
   it('drops cents for whole dollars, keeps them otherwise', () => {
@@ -44,5 +44,23 @@ describe('renewalToNeed', () => {
     expect(renewalToNeed({ id: 'r4', title: 'Far off', expires_at: '2026-12-01T12:00:00Z', reminder_days: 14, status: 'active' }, now)).toBeNull();
     expect(renewalToNeed({ id: 'r5', title: 'Done', expires_at: '2026-06-29T12:00:00Z', reminder_days: 30, status: 'renewed' }, now)).toBeNull();
     expect(renewalToNeed({ id: 'r6', title: 'Gone', expires_at: '2026-06-29T12:00:00Z', reminder_days: 30, status: 'cancelled' }, now)).toBeNull();
+  });
+});
+
+describe('documentExpiryToNeed', () => {
+  const now = new Date('2026-06-28T12:00:00Z');
+
+  it('surfaces a soon/expired document, urgent within 3 days', () => {
+    const soon = documentExpiryToNeed({ id: 'd1', title: 'Passport', expires_at: '2026-06-30T12:00:00Z' }, now);
+    expect(soon).toMatchObject({ kind: 'document', urgency: 'urgent', href: '/dashboard/documents' });
+    expect(soon!.title).toBe('Passport — expires in 2d');
+
+    const later = documentExpiryToNeed({ id: 'd2', title: 'Insurance card', expires_at: '2026-07-20T12:00:00Z' }, now);
+    expect(later!.urgency).toBe('normal');
+  });
+
+  it('returns null when far off or undated', () => {
+    expect(documentExpiryToNeed({ id: 'd3', title: 'Far', expires_at: '2026-12-01T12:00:00Z' }, now)).toBeNull();
+    expect(documentExpiryToNeed({ id: 'd4', title: 'No date', expires_at: null }, now)).toBeNull();
   });
 });

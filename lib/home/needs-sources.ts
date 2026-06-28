@@ -35,6 +35,31 @@ export function parentApprovalToNeed(r: ParentApprovalRow): NeedItem {
   };
 }
 
+export type DocumentRow = { id: string; title: string; expires_at: string | null };
+
+/**
+ * A stored document with an expiry (passport, license, insurance card…) → a
+ * "needs you" item once it's within `windowDays` of expiring (or already
+ * expired). Urgent within 3 days / past due. null when not yet due or undated.
+ */
+export function documentExpiryToNeed(r: DocumentRow, now: Date, windowDays = 30): NeedItem | null {
+  if (!r.expires_at) return null;
+  const t = Date.parse(r.expires_at);
+  if (!Number.isFinite(t)) return null;
+  const days = Math.floor((t - now.getTime()) / 86_400_000);
+  if (days > windowDays) return null;
+  const when = days < 0 ? 'expired' : days === 0 ? 'expires today' : `expires in ${days}d`;
+  const urgency: NeedUrgency = days <= 3 ? 'urgent' : 'normal';
+  return {
+    id: `document:${r.id}`,
+    kind: 'document',
+    title: `${r.title} — ${when}`,
+    href: '/dashboard/documents',
+    urgency,
+    createdAt: r.expires_at,
+  };
+}
+
 export type RenewalRow = { id: string; title: string; expires_at: string; reminder_days: number | null; status: string; created_at?: string };
 
 /**
