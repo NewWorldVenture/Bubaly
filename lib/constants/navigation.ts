@@ -202,7 +202,7 @@ export const ADMIN_NAV: NavItem[] = [
  * CAPTURE_TAB_INDEX marks which tab gets the special treatment.
  */
 export const MOBILE_TABS: NavItem[] = [
-  { href: '/dashboard', label: 'Home', icon: LayoutDashboard, minLevel: 0 },
+  { href: '/dashboard', label: 'Home', icon: Home, minLevel: 0 },
   { href: '/dashboard/assistant', label: 'Assistant', icon: Sparkles, minLevel: 0 },
   { href: '/capture', label: 'Capture', icon: Plus, minLevel: 0 },
   { href: '/dashboard/inbox', label: 'Inbox', icon: Inbox, minLevel: 0 },
