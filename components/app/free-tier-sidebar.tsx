@@ -27,6 +27,43 @@ import { resolveItems, NavEntry, isActive } from './nav-shared';
 // registry feature can be pinned, since pins persist as dashboard feature_keys).
 const KEY_BY_ROUTE = new Map(Object.values(FEATURE_BY_KEY).map((f) => [f.route, f.key]));
 
+/**
+ * Live unread-messages count for the sidebar badge. Seeds from the server
+ * snapshot, then keeps it current: refetches on any `family_messages` change
+ * (realtime) and whenever the tab regains focus (robust even if the table
+ * isn't in the realtime publication — e.g. after the user reads messages).
+ */
+function useLiveUnread(initial: number, familyId: string, userId: string): number {
+  const [count, setCount] = useState(initial);
+  useEffect(() => { setCount(initial); }, [initial]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let active = true;
+    const refetch = async () => {
+      const { count: c } = await supabase
+        .from('family_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('family_id', familyId).is('deleted_at', null)
+        .neq('sender_id', userId).not('read_by', 'cs', `{${userId}}`);
+      if (active && typeof c === 'number') setCount(c);
+    };
+    const channel = supabase
+      .channel(`unread-msgs:${familyId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'family_messages', filter: `family_id=eq.${familyId}` }, () => { void refetch(); })
+      .subscribe();
+    const onVis = () => { if (document.visibilityState === 'visible') void refetch(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      active = false;
+      void supabase.removeChannel(channel);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [familyId, userId]);
+
+  return count;
+}
+
 /** The user's pinned Quick-Access shortcuts, resolved to links. */
 function SidebarShortcuts({ keys }: { keys: string[] }) {
   const pathname = usePathname();
@@ -107,6 +144,7 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
   const { error: toastError } = useToast();
   const [allOpen, setAllOpen] = useState(false);
   const [keys, setKeys] = useState<string[] | null>(null);
+  const liveUnread = useLiveUnread(unreadMessages, familyId, userId);
 
   // Initial pinned set: the user's saved layout, else the family default.
   useEffect(() => {
@@ -151,7 +189,7 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
               variant="list"
               locked={false}
               onLocked={onLocked}
-              badge={item.href === '/dashboard/messages' ? unreadMessages : undefined}
+              badge={item.href === '/dashboard/messages' ? liveUnread : undefined}
             />
           ))}
         </div>

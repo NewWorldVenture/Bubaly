@@ -25,8 +25,11 @@ Last updated: 2026-06-28 — Phone OTP sign-in/up wired (method chooser now phon
 >   non-locked services that map to a registry feature key via `KEY_BY_ROUTE`). `FreeTierSidebar` holds the
 >   pinned keys in state (so the modal + the shortcuts list stay in sync), persists via the existing
 >   `saveDashboardLayoutAction({ featureKeys })` (device 'all' → the SAME row as the Home Quick Access, so
->   favorites are unified across sidebar + dashboard), optimistic with revert-on-error. **Remaining follow-up:**
->   Messages badge is a load-time snapshot (could subscribe to `family_messages` realtime).
+>   favorites are unified across sidebar + dashboard), optimistic with revert-on-error.
+> - **Messages badge is now live**: `useLiveUnread` (in `free-tier-sidebar.tsx`) seeds from the server
+>   `unreadMessages` snapshot, then refetches the count on any `family_messages` realtime change AND on tab
+>   refocus (robust even if the table isn't in the realtime publication — e.g. the count drops after the user
+>   reads messages and returns). The Free-tier sidebar redesign is now feature-complete.
 >
 > ## 📱 PHONE OTP AUTH + METHOD CHOOSER (on branch `claude/phone-otp-auth`)
 > Completes the mockups' multi-method sign-up: the chooser now offers **phone · email · Google · Apple**.
