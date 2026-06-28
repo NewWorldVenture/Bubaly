@@ -56,7 +56,6 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/chores', label: 'Tasks & Chores', icon: CheckSquare, minLevel: 1 },
       { href: '/missions', label: 'Family Missions', icon: Trophy, minLevel: 1 },
       { href: '/dashboard/rewards', label: 'Rewards', icon: Gift, minLevel: 1 },
-      { href: '/wallet', label: 'Family Wallet', icon: Wallet, minLevel: 0 },
       { href: '/dashboard/behavior', label: 'Behavior', icon: Smile, minLevel: 1 },
       { href: '/dashboard/screen-time', label: 'Screen Time', icon: Monitor, minLevel: 1 },
     ],
