@@ -1,7 +1,7 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-28 — Phone OTP sign-in/up wired (method chooser now phone · email · Google · Apple). Keep this updated as you ship.
+Last updated: 2026-06-28 — Mobile-first nav drawer + super-admin excluded from curated sidebar; onboarding "couldn't finish setting up your space" fixed; App Lock hardened + seeded from onboarding PIN; Create Memory + Welcome/More/logout-confirm screens shipped. Keep this updated as you ship.
 
 > ## 🧭 FREE-TIER CURATED DESKTOP SIDEBAR (on `main`)
 > Per the mockup, the **Free tier** (planLevel 0) desktop sidebar is now a calm, curated nav instead of the
@@ -30,6 +30,39 @@ Last updated: 2026-06-28 — Phone OTP sign-in/up wired (method chooser now phon
 >   `unreadMessages` snapshot, then refetches the count on any `family_messages` realtime change AND on tab
 >   refocus (robust even if the table isn't in the realtime publication — e.g. the count drops after the user
 >   reads messages and returns). The Free-tier sidebar redesign is now feature-complete.
+> - **📱 MOBILE-FIRST DRAWER + SUPER-ADMIN EXCLUSION (on `main`)** — the curated sidebar was desktop-only
+>   (`hidden lg:flex`); mobile had only the 5 bottom tabs, so Shortcuts / All Services / the full catalog were
+>   unreachable on phones. `components/app/app-shell.tsx` now extracts **`SidebarBody`** (the planLevel /
+>   super-admin branch: `FreeTierSidebar` for Free, else full `SidebarNav` + AI-coach footer) and renders it in
+>   BOTH the desktop `<aside>` AND a new **mobile slide-over drawer** opened by a header hamburger (`Menu`,
+>   `lg:hidden`); the drawer closes on route change (`useEffect` on `pathname`) via the new `slide-in-left`
+>   Tailwind animation. Mobile family switching stays in the top-bar `UserMenu`. **Super admins are excluded**
+>   from the curated nav — gate is `planLevel === 0 && !isSuperAdmin`, so a Free-plan super admin keeps the full
+>   catalog. tsc · lint · build green.
+>
+> ## 🔐 ONBOARDING + APP LOCK + MEMORY/AUTH SCREENS (all on `main`)
+> Shipped this session — all tsc/lint/build green, no migrations (jsonb merge-writes only):
+> - **Onboarding "Could not finish setting up your space" FIXED** — `lib/server/ensure-family.ts` now provisions
+>   via the **service-role client** (and a parallel PR #190 also inserts the parent member + trial sub explicitly
+>   instead of trusting the `handle_new_family` trigger). Root cause: `families_select` RLS uses `is_family_member()`
+>   which is `STABLE`, so the `insert(families).select()` RETURNING row was filtered before the AFTER-INSERT
+>   trigger's membership was visible to the statement snapshot → empty RETURNING → false failure. Service role
+>   bypasses RLS. Same fix applied to `finalizeOnboardingAction`'s family insert. Real errors now log under
+>   `[ensure-family]`.
+> - **App Lock** (`lib/security/app-lock.ts`, `components/app/app-lock-gate.tsx`, `components/settings/app-lock-settings.tsx`,
+>   `app/(app)/settings/app-lock-actions.ts`): opt-in 4-digit PIN gating the whole `(app)` group, stored in
+>   `user_preferences.notification_prefs.appLock` (salted SHA-256). Hardened with a **brute-force cooldown** (5 wrong
+>   → 30s lock, live countdown, Sign-out escape always available) and a **"Lock now"** control. The **onboarding PIN
+>   now seeds** `appLock` with `enabled:false` (opt-in, off by default) — Settings has a 3-state card (Set up / Turn
+>   on / on) that flips it on without re-entering the PIN.
+> - **Create Memory** (`app/(app)/dashboard/memories/create/page.tsx` + `components/memories/create-memory.tsx`):
+>   photos + title + note → favorited, captioned `family_photos` rows (uploaded to `family-media` bucket) that
+>   surface on the Memories timeline. Note folds into the caption (the generated `family_photos` Insert type omits
+>   `is_favorite`/`metadata`, so favorite via a follow-up `update`). Plus a "Memory created!" confirmation screen.
+> - **Auth/onboarding screens**: reusable **`OtpInput`** (6 segmented boxes) in `PhoneAuth`; **phone-first** login
+>   ordering; **"Continue without email"** on signup; **`/welcome`** get-started card (header CTA enters via it);
+>   **`/dashboard/more`** hub (Manage PIN / Privacy / Help / Contact / About / Terms); reusable **`SignOutButton`**
+>   with an "Are you sure?" confirm (app shell, profile, admin shell).
 >
 > ## 📱 PHONE OTP AUTH + METHOD CHOOSER (on branch `claude/phone-otp-auth`)
 > Completes the mockups' multi-method sign-up: the chooser now offers **phone · email · Google · Apple**.
