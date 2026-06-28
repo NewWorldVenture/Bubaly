@@ -9,7 +9,7 @@ import { Input, Field } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { signUpSchema, fieldErrors } from '@/lib/validation';
-import { OAuthButtons } from '@/components/auth/oauth-buttons';
+import { OAuthButtons, authButtonClass } from '@/components/auth/oauth-buttons';
 import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
 
@@ -116,14 +116,14 @@ export function SignupForm() {
           <button
             type="button"
             onClick={() => setShowPhone(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface/60 px-4 py-3 text-sm font-semibold transition hover:bg-elevated"
+            className={authButtonClass}
           >
             <Smartphone className="h-[18px] w-[18px]" /> Continue with phone
           </button>
           <button
             type="button"
             onClick={() => setShowEmail(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface/60 px-4 py-3 text-sm font-semibold transition hover:bg-elevated"
+            className={authButtonClass}
           >
             <Mail className="h-[18px] w-[18px]" /> Continue with email
           </button>
