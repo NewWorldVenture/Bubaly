@@ -1,7 +1,19 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-28 — Capture shortcuts now persist to Supabase (cross-device) + roadmap refresh. Keep this updated as you ship.
+Last updated: 2026-06-28 — Super-admins 100% unlocked everywhere (effectivePlanLevel on all content gates). Keep this updated as you ship.
+
+> ## 🔓 SUPER-ADMINS = 100% UNLOCKED (on branch `claude/super-admin-full-unlock`)
+> Per the user: a super-admin (e.g. `Daniel.Hughen@gmail.com`) has NOTHING locked — no paywall tiles,
+> no Plus gates, no "Unlock more". Added **`effectivePlanLevel(rawLevel)`** to `lib/supabase/auth.ts`
+> (returns `2` for super-admins, else the raw level) and wrapped every remaining content gate that read raw
+> `planLevel(subscription)`: `wallet/page.tsx`, `wallet/allowance/page.tsx`, `wallet/actions.ts`
+> (`familyWalletTier`), `dashboard/readiness/page.tsx`, `dashboard/customize-actions.ts` (`userTier` — so
+> saving a Quick Access layout with any tile is allowed), and the AI routes `api/ai/wallet`,
+> `api/ai/wallet/child/[childId]`, `api/ai/invest`, `api/ai/weekly-briefing`. **NOT** applied to
+> `api/cron/wallet-allowance` (system context — bills each family by its real plan). Page/nav/Home gates
+> already bypassed for super-admins; this closes the in-content gaps. Verified: tsc · eslint · build ✓ ·
+> suite **1356/1356**. No migration.
 
 > ## 🧷 CAPTURE SHORTCUTS → SUPABASE (cross-device, on branch `claude/capture-shortcuts-supabase`)
 > The Capture "Or jump directly to" grid was already customizable, but its layout only lived in
@@ -31,10 +43,16 @@ Last updated: 2026-06-28 — Capture shortcuts now persist to Supabase (cross-de
 >   are NOT applied, and push/email/Stripe/`CRON_SECRET` envs are NOT set. So any feature needing a NEW table
 >   or those envs is *built* but not *live*. **Prefer changes that reuse already-deployed tables** (e.g. this
 >   Capture change reused `user_preferences`) so they work in prod today.
-> - **Open ambiguity (do NOT silently flip):** super-admin Home Quick Access. `main` currently leaves
->   super-admins fully unlocked (`dashTier='plus'` → no "Unlock more"). A later user request asked for the
->   green "Unlock more" box to stay LOCKED and route to `/pricing` for super-admins; the PR that did this
->   (#181) was CLOSED. These conflict — get an explicit decision before changing `ai-home-dashboard.tsx`.
+> - **DECIDED (2026-06-28): super-admins get EVERYTHING 100% unlocked, everywhere — no locks, no paywalls.**
+>   Page access (`requireFeature`/`requirePlanLevel`), nav (`featureAccessByTier`), and Home Quick Access
+>   (`dashTier='plus'`) already bypassed for super-admins. NEW: `effectivePlanLevel(rawLevel)` in
+>   `lib/supabase/auth.ts` returns 2 (Family+) for super-admins; applied to every remaining CONTENT gate that
+>   read raw `planLevel(subscription)` — wallet tier (`wallet/page`, `wallet/allowance/page`, `wallet/actions`
+>   `familyWalletTier`, `api/ai/wallet`, `api/ai/wallet/child`, `api/ai/invest`), readiness Plus gate,
+>   weekly-briefing Plus gate, and the Quick Access SAVE validation (`customize-actions` `userTier`) so a
+>   super-admin can save any layout. **Excluded the system cron** (`api/cron/wallet-allowance`) — it must
+>   process each family by its REAL plan, not the super-admin's. (Reverses the earlier "keep green box locked
+>   → /pricing for super-admins" idea, which the user overrode: full unlock wins.)
 > - **High-leverage, prod-safe next candidates (reuse existing tables / pure libs):** (a) Global AI search
 >   over existing tables; (b) one-tap on more Home "Needs you" kinds (complete an overdue reminder, RSVP);
 >   (c) AI yearly/era recap from existing photos/events; (d) richer Social Feed (realtime via `useRealtimeQuery`,

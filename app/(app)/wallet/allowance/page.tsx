@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { planLevel } from '@/lib/constants/plans';
@@ -36,6 +36,6 @@ export default async function WalletAllowancePage() {
     };
   });
 
-  const tier = walletTierForPlanLevel(planLevel(sub?.plan ?? null));
+  const tier = walletTierForPlanLevel(await effectivePlanLevel(planLevel(sub?.plan ?? null)));
   return <AllowanceView rows={rows} enabled={walletFeatureEnabled(tier, 'allowances')} canManage={isManager(ctx.active.role)} />;
 }

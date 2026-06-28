@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { planLevel } from '@/lib/constants/plans';
 import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
@@ -19,7 +19,7 @@ export async function POST() {
     const { data: sub } = await supabase
       .from('subscriptions').select('plan, status').eq('family_id', familyId)
       .in('status', ['active', 'trialing']).maybeSingle();
-    const tier = walletTierForPlanLevel(planLevel(sub?.plan ?? null));
+    const tier = walletTierForPlanLevel(await effectivePlanLevel(planLevel(sub?.plan ?? null)));
     if (aiCoachLevel(tier) === 'none') {
       return NextResponse.json({ error: 'The AI Money Coach is available on the Basic and Plus plans.' }, { status: 403 });
     }
