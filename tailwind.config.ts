@@ -74,6 +74,10 @@ const config: Config = {
           from: { transform: 'translateX(100%)' },
           to: { transform: 'translateX(0)' },
         },
+        'slide-in-left': {
+          from: { transform: 'translateX(-100%)' },
+          to: { transform: 'translateX(0)' },
+        },
         'pulse-soft': {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.5' },
@@ -84,6 +88,7 @@ const config: Config = {
         'fade-in-up': 'fade-in-up 0.5s ease-out both',
         'slide-up': 'slide-up 0.3s ease-out both',
         'slide-in-right': 'slide-in-right 0.3s ease-out both',
+        'slide-in-left': 'slide-in-left 0.25s ease-out both',
         'pulse-soft': 'pulse-soft 2s ease-in-out infinite',
       },
     },

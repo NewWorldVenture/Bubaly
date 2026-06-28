@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
-import { ChevronDown, Check, Gift, Lock, LogOut, Mic, Moon, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, Sparkles, SunMedium } from 'lucide-react';
+import { ChevronDown, Check, Gift, Lock, LogOut, Menu, Mic, Moon, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, Sparkles, SunMedium, X } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { APP_NAV_GROUPS, MOBILE_TABS, CAPTURE_TAB_INDEX, type NavItem } from '@/lib/constants/navigation';
@@ -295,14 +295,51 @@ function ThemeSwitch() {
   );
 }
 
+/** The sidebar navigation body, shared by the desktop rail and the mobile drawer.
+ *  Free-tier members (but NOT super admins, who always get the full catalog) get
+ *  the curated sidebar; everyone else gets the full grouped nav + AI-coach footer. */
+function SidebarBody({ onLocked }: { onLocked: (item: NavItem) => void }) {
+  const { planLevel, isSuperAdmin } = useApp();
+  if (planLevel === 0 && !isSuperAdmin) {
+    // Free tier → curated sidebar (primary list + shortcuts + All Services + footer).
+    return <FreeTierSidebar onLocked={onLocked} />;
+  }
+  // Paid tiers + super admins → full grouped navigation + AI-coach footer.
+  return (
+    <>
+      <SidebarNav onLocked={onLocked} />
+      <div className="space-y-4 px-3 pb-4 xl:px-4 xl:pb-5">
+        <FamilySwitcher />
+        <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4 text-center xl:p-5">
+          <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand/15 xl:h-20 xl:w-20">
+            <Sparkles className="h-8 w-8 text-brand xl:h-10 xl:w-10" />
+          </div>
+          <h2 className="mt-3 text-sm font-bold xl:mt-4 xl:text-base">Your AI Chief of Staff</h2>
+          <p className="mt-2 text-xs leading-5 text-muted xl:mt-3 xl:text-sm xl:leading-6">
+            I&apos;m here to help your family stay organized, save time, and reduce stress.
+          </p>
+          <Link href="/ai" className="mt-3 inline-flex w-full justify-center rounded-lg bg-brand px-4 py-2.5 text-sm font-bold text-brand-fg transition hover:opacity-90 xl:mt-5 xl:py-3">
+            Learn More
+          </Link>
+        </div>
+        <ThemeSwitch />
+      </div>
+    </>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { planLevel, isSuperAdmin, featureTiers } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const mobileTabs = resolveItems(MOBILE_TABS, featureTiers, planLevel, isSuperAdmin);
   const upgradeLevel: 1 | 2 = upgradeFor
     ? (featureTiers[upgradeFor.href] === 'plus' ? 2 : 1)
     : 1;
+
+  // Close the mobile nav drawer whenever the route changes.
+  useEffect(() => { setMobileNavOpen(false); }, [pathname]);
 
   return (
     <div className="min-h-dvh bg-bg text-fg lg:flex">
@@ -311,37 +348,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="px-5 py-5 xl:px-7 xl:py-7">
           <Logo href="/dashboard" markVariant="home" />
         </div>
-        {planLevel === 0 ? (
-          // Free tier → curated sidebar (primary list + shortcuts + All Services + footer).
-          <FreeTierSidebar onLocked={setUpgradeFor} />
-        ) : (
-          // Paid tiers → full grouped navigation + AI-coach footer.
-          <>
-            <SidebarNav onLocked={setUpgradeFor} />
-            <div className="space-y-4 px-3 pb-4 xl:px-4 xl:pb-5">
-              <FamilySwitcher />
-              <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4 text-center xl:p-5">
-                <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand/15 xl:h-20 xl:w-20">
-                  <Sparkles className="h-8 w-8 text-brand xl:h-10 xl:w-10" />
-                </div>
-                <h2 className="mt-3 text-sm font-bold xl:mt-4 xl:text-base">Your AI Chief of Staff</h2>
-                <p className="mt-2 text-xs leading-5 text-muted xl:mt-3 xl:text-sm xl:leading-6">
-                  I&apos;m here to help your family stay organized, save time, and reduce stress.
-                </p>
-                <Link href="/ai" className="mt-3 inline-flex w-full justify-center rounded-lg bg-brand px-4 py-2.5 text-sm font-bold text-brand-fg transition hover:opacity-90 xl:mt-5 xl:py-3">
-                  Learn More
-                </Link>
-              </div>
-              <ThemeSwitch />
-            </div>
-          </>
-        )}
+        <SidebarBody onLocked={setUpgradeFor} />
       </aside>
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/60 bg-bg/85 px-3 backdrop-blur-xl sm:h-topbar sm:gap-5 sm:px-5 lg:px-7">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            aria-label="Open menu"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-fg transition hover:bg-elevated lg:hidden"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
           <Link href="/dashboard" className="lg:hidden">
             <LogoMark className="h-8 w-14 sm:h-9 sm:w-16" variant="home" />
           </Link>
@@ -364,6 +385,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <QuickCapture />
       <AIOrb />
+
+      {/* Mobile nav drawer — the full sidebar (curated nav + Shortcuts + All
+          Services, or the full catalog for paid/super-admin) on a slide-over, so
+          mobile reaches everything beyond the 5 bottom tabs. Mobile-first parity
+          with desktop. Closes on navigation (route-change effect above). */}
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setMobileNavOpen(false)} aria-hidden />
+          <div className="absolute inset-y-0 left-0 flex w-[300px] max-w-[86%] flex-col border-r border-border/60 bg-surface animate-slide-in-left">
+            <div className="flex items-center justify-between px-4 py-4">
+              <Logo href="/dashboard" markVariant="home" />
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                aria-label="Close menu"
+                className="grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <SidebarBody onLocked={(item) => { setMobileNavOpen(false); setUpgradeFor(item); }} />
+          </div>
+        </div>
+      )}
 
       {/* Mobile bottom tabs — 5-tab AI-first nav */}
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/90 backdrop-blur-xl lg:hidden">
