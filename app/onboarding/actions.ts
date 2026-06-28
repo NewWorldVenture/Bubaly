@@ -8,7 +8,7 @@ import { createFamilySchema, familyDetailsSchema, finalizeOnboardingSchema, invi
 import { saveUserProfile } from '@/lib/server/profiles';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { isValidPin, normalizeAge } from '@/lib/onboarding/pin';
-import { scryptSync, randomBytes } from 'crypto';
+import { buildAppLockConfig } from '@/lib/security/app-lock';
 import { cleanGoals, cleanReferralSource } from '@/lib/onboarding/family';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
@@ -156,13 +156,6 @@ export async function saveFamilyDetailsAction(input: {
   return { ok: true };
 }
 
-/** Hash a PIN (scrypt, random salt) → "salt:hash" hex. Stored, never logged. */
-function hashPin(pin: string): string {
-  const salt = randomBytes(16);
-  const hash = scryptSync(pin, salt, 32);
-  return `${salt.toString('hex')}:${hash.toString('hex')}`;
-}
-
 /**
  * The lightweight onboarding journey from the product mockups (post sign-in):
  * "Create your profile" (avatar, name, age, color) → "Create a PIN" → done.
@@ -216,14 +209,20 @@ export async function completeProfileOnboardingAction(input: {
     if (colorErr) console.error('[onboarding] member colour update failed', colorErr);
   }
 
-  // 4. Persist age + hashed PIN + completion flag (merge — never clobber prefs).
+  // 4. Persist age + seeded App Lock + completion flag (merge — never clobber prefs).
+  //    The onboarding PIN seeds the App Lock config (same salted-SHA-256 scheme the
+  //    Settings card uses) but is stored DISABLED: App Lock stays off until the user
+  //    flips it on in Settings — at which point they don't have to re-enter the PIN.
+  //    Service-role client so it persists reliably under this env's flaky RLS writes.
   const { data: prefRow } = await admin
     .from('user_preferences').select('notification_prefs').eq('user_id', auth.user.id).maybeSingle();
   const prefs = (prefRow?.notification_prefs as Record<string, unknown> | null) ?? {};
   const merged: Record<string, unknown> = { ...prefs, onboardingComplete: true };
   const age = normalizeAge(input.age);
   if (age !== null) merged.age = age;
-  if (input.pin && isValidPin(input.pin)) merged.pinHash = hashPin(input.pin);
+  if (input.pin && isValidPin(input.pin)) {
+    merged.appLock = { ...(await buildAppLockConfig(input.pin)), enabled: false };
+  }
   const { error: prefErr } = await admin.from('user_preferences').upsert(
     { user_id: auth.user.id, notification_prefs: merged as never },
     { onConflict: 'user_id' },
