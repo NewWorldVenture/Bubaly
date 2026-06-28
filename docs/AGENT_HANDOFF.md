@@ -18,9 +18,11 @@ Last updated: 2026-06-28 — Phone OTP sign-in/up wired (method chooser now phon
 >   user's saved layout) + `AllServicesModal`.
 > - **Messages unread badge is 100% wired**: `app-frame.tsx` counts `family_messages` where
 >   `read_by` ∌ me and `sender_id ≠ me`; passed via **`unreadMessages`** on app-context (optional, defaults 0).
-> - No migration. tsc · lint · build green · suite 1381. **Follow-ups:** family-switcher is omitted from the
->   Free sidebar (rare on free; switch via Settings → Families) — consider moving it into the top-bar UserMenu;
->   SHORTCUTS could become drag-to-pin; badge is a load-time snapshot (could subscribe to realtime).
+> - No migration. tsc · lint · build green · suite 1381.
+> - **Family switching now lives in the top-bar UserMenu** (shown when `families.length > 1`) — closes the
+>   gap from dropping the sidebar switcher for Free tier; available on every tier. **Remaining follow-ups:**
+>   SHORTCUTS could become drag-to-pin (⭐ from All Services → `dashboard_layouts`); Messages badge is a
+>   load-time snapshot (could subscribe to `family_messages` realtime).
 >
 > ## 📱 PHONE OTP AUTH + METHOD CHOOSER (on branch `claude/phone-otp-auth`)
 > Completes the mockups' multi-method sign-up: the chooser now offers **phone · email · Google · Apple**.

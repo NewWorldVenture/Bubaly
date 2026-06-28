@@ -80,9 +80,19 @@ function FamilySwitcher() {
 }
 
 function UserMenu() {
-  const { userEmail, selfMember, isSuperAdmin, role, defaultDashboard } = useApp();
+  const { userEmail, selfMember, isSuperAdmin, role, defaultDashboard, family, families } = useApp();
   const [open, setOpen] = useState(false);
+  const [switching, startSwitch] = useTransition();
   const name = selfMember?.display_name ?? userEmail ?? 'You';
+
+  function switchFamily(familyId: string) {
+    setOpen(false);
+    if (familyId === family.id) return;
+    startSwitch(async () => {
+      await setActiveFamilyAction(familyId);
+      window.location.assign('/dashboard');
+    });
+  }
 
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -130,6 +140,27 @@ function UserMenu() {
               );
             })}
             <div className="my-1 h-px bg-border" />
+            {families.length > 1 && (
+              <>
+                <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Family</p>
+                {families.map((f) => (
+                  <button
+                    key={f.familyId}
+                    onClick={() => switchFamily(f.familyId)}
+                    disabled={switching}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-elevated disabled:opacity-50"
+                  >
+                    <Avatar name={f.name} size={20} className="rounded-md" />
+                    <span className="flex-1 truncate">{f.name}</span>
+                    {f.familyId === family.id && <Check className="h-4 w-4 text-brand" />}
+                  </button>
+                ))}
+                <Link href="/dashboard/settings#families" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted hover:bg-elevated">
+                  <Plus className="h-4 w-4" /> New family
+                </Link>
+                <div className="my-1 h-px bg-border" />
+              </>
+            )}
             {isSuperAdmin && (
               <Link href="/admin" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-brand hover:bg-elevated">
                 <ShieldCheck className="h-4 w-4" /> Site Admin
