@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Lock, ShieldCheck, HelpCircle, Mail, Info, FileText, ChevronRight } from 'lucide-react';
+import { Lock, ShieldCheck, HelpCircle, Mail, Info, FileText, ChevronRight, LayoutGrid } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { MobileServicesCatalog } from '@/components/app/mobile-services-catalog';
 
 export const metadata: Metadata = { title: 'More' };
 
@@ -11,6 +10,10 @@ export const metadata: Metadata = { title: 'More' };
 // link to the existing public pages. Lives in the (app) group, so it sits behind
 // auth + the App Lock gate like every other dashboard page.
 type Row = { href: string; label: string; sub: string; icon: LucideIcon; external?: boolean };
+
+const BROWSE: Row[] = [
+  { href: '/services', label: 'All Services', sub: 'Browse every feature by category', icon: LayoutGrid },
+];
 
 const ACCOUNT: Row[] = [
   { href: '/dashboard/settings#app-lock', label: 'Manage PIN', sub: 'Set, change or turn off your App Lock', icon: Lock },
@@ -60,7 +63,7 @@ export default function MorePage() {
     <div className="mx-auto w-full max-w-xl px-4 py-6 sm:py-8">
       <h1 className="mb-6 text-2xl font-bold tracking-tight">More</h1>
       <div className="space-y-6">
-        <MobileServicesCatalog />
+        <Group title="Browse" rows={BROWSE} />
         <Group title="Account" rows={ACCOUNT} />
         <Group title="Information" rows={INFO} />
       </div>
