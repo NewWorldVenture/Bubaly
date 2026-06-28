@@ -24,7 +24,8 @@ import { upcomingRelationship, formatCountdown, milestoneLabel, type RelKind } f
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
 import { mergeUpcoming } from '@/lib/dashboard/upcoming';
 import { topNeeds, summarizeNeeds, needsHeadline, type NeedItem } from '@/lib/home/needs-attention';
-import { parentApprovalToNeed, renewalToNeed, documentExpiryToNeed, type ParentApprovalRow, type RenewalRow, type DocumentRow } from '@/lib/home/needs-sources';
+import { type ParentApprovalRow, type RenewalRow, type DocumentRow } from '@/lib/home/needs-sources';
+import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { HomeApprovalActions } from '@/components/dashboard/home-approval-actions';
 
@@ -55,59 +56,6 @@ const NEED_META: Record<string, NeedRenderMeta> = {
   todos: { icon: CheckSquare, iconBg: 'bg-teal-500/15 text-teal-400', cta: 'View', subtitle: 'Personal items waiting for you.' },
 };
 const DEFAULT_NEED_META: NeedRenderMeta = { icon: Bell, iconBg: 'bg-brand/15 text-brand', cta: 'View', subtitle: '' };
-
-/**
- * The unified Home "Needs you" decision queue: unions every cross-domain item
- * actually waiting on the family — money approvals, renewals due, chore
- * sign-offs, overdue/today reminders, meds, plus lighter to-dos — into one
- * ranked list (urgency then recency via rankNeedsAttention). Replaces the old
- * scattered ad-hoc cards so the family checks ONE place, not six.
- */
-function buildHomeNeeds(data: {
-  approvals: ParentApprovalRow[];
-  renewals: RenewalRow[];
-  documents: DocumentRow[];
-  conflicts: { id: string; assigneeName: string | null; count: number; startsAt: string }[];
-  pendingApprovals: number;
-  overdueMeds: boolean;
-  overdueReminders: number;
-  dueTodayReminders: number;
-  pendingChores: number;
-  lowGrocery: boolean;
-  openTodos: number;
-  now: Date;
-}): NeedItem[] {
-  const items: NeedItem[] = [];
-  const nowIso = data.now.toISOString();
-  const plural = (n: number) => (n > 1 ? 's' : '');
-
-  for (const a of data.approvals) items.push(parentApprovalToNeed(a));
-  for (const r of data.renewals) { const n = renewalToNeed(r, data.now); if (n) items.push(n); }
-  for (const d of data.documents) { const n = documentExpiryToNeed(d, data.now); if (n) items.push(n); }
-  for (const c of data.conflicts)
-    items.push({
-      id: `conflict:${c.id}`, kind: 'calendar_conflict',
-      title: c.assigneeName ? `${c.assigneeName}: ${c.count} events overlap` : `${c.count} events overlap`,
-      href: '/dashboard/calendar', urgency: 'urgent', createdAt: c.startsAt,
-    });
-
-  if (data.pendingApprovals > 0)
-    items.push({ id: 'chore-signoff', kind: 'chore_signoff', title: `${data.pendingApprovals} chore${plural(data.pendingApprovals)} awaiting approval`, href: '/dashboard/chores', urgency: 'urgent', createdAt: nowIso });
-  if (data.overdueMeds)
-    items.push({ id: 'meds', kind: 'meds', title: 'Medication due today', href: '/dashboard/medications', urgency: 'urgent', createdAt: nowIso });
-  if (data.overdueReminders > 0)
-    items.push({ id: 'reminders-overdue', kind: 'reminder_overdue', title: `${data.overdueReminders} reminder${plural(data.overdueReminders)} overdue`, href: '/dashboard/reminders', urgency: 'urgent', createdAt: nowIso });
-  else if (data.dueTodayReminders > 0)
-    items.push({ id: 'reminders-today', kind: 'reminder_today', title: `${data.dueTodayReminders} reminder${plural(data.dueTodayReminders)} due today`, href: '/dashboard/reminders', urgency: 'normal', createdAt: nowIso });
-  if (data.pendingChores > 0)
-    items.push({ id: 'chores-todo', kind: 'chores_todo', title: `${data.pendingChores} task${plural(data.pendingChores)} to do today`, href: '/dashboard/chores', urgency: 'normal', createdAt: nowIso });
-  if (data.lowGrocery)
-    items.push({ id: 'grocery', kind: 'grocery', title: 'Grocery list needs updating', href: '/dashboard/grocery', urgency: 'normal', createdAt: nowIso });
-  if (data.openTodos > 0)
-    items.push({ id: 'todos', kind: 'todos', title: `${data.openTodos} to-do item${plural(data.openTodos)} open`, href: '/dashboard/todos', urgency: 'normal', createdAt: nowIso });
-
-  return items;
-}
 
 export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const familyId = ctx.active.familyId;

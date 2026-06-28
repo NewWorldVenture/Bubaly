@@ -65,6 +65,11 @@ Last updated: 2026-06-28 — Home "Needs you" decision queue (sources + ranking 
 >   double-booked person (or the managers, for a child with no account). Dedup key
 >   `conflict:${sortedEventIds}` so a new alert fires only when the overlapping set changes. Inline (like the
 >   reminder/relationship blocks), no new pure logic.
+> - **The builder is now shared, and the AI assistant can answer "what needs me?"** — extracted
+>   `buildHomeNeeds` (the pure union) into **`lib/home/needs-build.ts`** (**3 tests**); the dashboard imports it
+>   instead of defining it. Added a **`list_pending_decisions`** read tool to `lib/assistant/tools.ts` that
+>   fetches the same sources, runs `detectConflicts`, calls `buildHomeNeeds` + `rankNeedsAttention`, and returns
+>   the ranked items — so "what's on my plate / anything I'm missing" is answered from the SAME logic as Home.
 > - **Next per the doctrine:** trust has no clean pending table (trust_policies/delegations/scores only), and
 >   concierge status is free-text with no "awaiting decision" state — both skipped; consider an Inbox/Assistant
 >   consolidation, or extend one-tap to other safe decisions (e.g. complete a single overdue reminder).
