@@ -10,6 +10,7 @@ import { rankNeedsAttention } from '@/lib/home/needs-attention';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import type { ParentApprovalRow, RenewalRow, DocumentRow } from '@/lib/home/needs-sources';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
+import { nextRemindAt } from '@/lib/reminders/details';
 
 type DB = SupabaseClient<Database>;
 
@@ -195,6 +196,63 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const forWhom = memberId ? ` for ${str(a.assignee)}` : '';
         const repeats = recurrence !== 'none' ? ` (repeats ${recurrence})` : '';
         return { ok: true, summary: `Reminder set${forWhom}: “${title}”${repeats}.` };
+      },
+    },
+    {
+      name: 'complete_reminder',
+      description: 'Mark a family reminder as done, found by (partial) title. If it repeats, the next occurrence is scheduled automatically. Use for "mark X done", "I finished X", "check off X".',
+      input_schema: {
+        type: 'object',
+        properties: { title: { type: 'string', description: 'Title or part of the reminder to complete' } },
+        required: ['title'],
+      },
+      execute: async (a) => {
+        const q = str(a.title);
+        if (!q) return { ok: false, error: 'title is required' };
+        const { data: rows } = await supabase.from('family_reminders')
+          .select('id, title, notes, kind, priority, recurrence, remind_at, member_id, location_name')
+          .eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${q}%`)
+          .order('remind_at', { ascending: true, nullsFirst: false }).limit(1);
+        const r = rows?.[0];
+        if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
+        const { error } = await supabase.from('family_reminders')
+          .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', r.id);
+        if (error) return { ok: false, error: error.message };
+        // Recurring → schedule the next occurrence (core columns only, so it's
+        // safe regardless of the 0100 detail-columns migration state).
+        const next = r.remind_at && r.recurrence !== 'none' ? nextRemindAt(r.remind_at, r.recurrence) : null;
+        if (next) {
+          await supabase.from('family_reminders').insert({
+            family_id: ctx.familyId, created_by: ctx.userId, title: r.title, notes: r.notes,
+            kind: r.kind, priority: r.priority, recurrence: r.recurrence, location_name: r.location_name,
+            member_id: r.member_id, remind_at: next, status: 'active',
+          });
+        }
+        return { ok: true, summary: `Completed “${r.title}”${next ? ' — next one scheduled' : ''}.` };
+      },
+    },
+    {
+      name: 'snooze_reminder',
+      description: 'Move a family reminder to a new time, found by (partial) title. Use for "remind me about X later/tomorrow instead", "push X to Friday".',
+      input_schema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Title or part of the reminder to reschedule' },
+          remind_at: { type: 'string', description: 'New ISO 8601 datetime' },
+        },
+        required: ['title', 'remind_at'],
+      },
+      execute: async (a) => {
+        const q = str(a.title); const remind_at = str(a.remind_at);
+        if (!q || !remind_at) return { ok: false, error: 'title and remind_at are required' };
+        const { data: rows } = await supabase.from('family_reminders')
+          .select('id, title').eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${q}%`)
+          .order('remind_at', { ascending: true, nullsFirst: false }).limit(1);
+        const r = rows?.[0];
+        if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
+        const { error } = await supabase.from('family_reminders').update({ remind_at }).eq('id', r.id);
+        if (error) return { ok: false, error: error.message };
+        return { ok: true, summary: `Moved “${r.title}” to a new time.` };
       },
     },
     {
