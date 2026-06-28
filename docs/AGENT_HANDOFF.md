@@ -1,7 +1,45 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-28 — Home "Needs you" decision queue (sources + ranking + notifications + one-tap approve) + /economy /referrals shell. Keep this updated as you ship.
+Last updated: 2026-06-28 — Capture shortcuts now persist to Supabase (cross-device) + roadmap refresh. Keep this updated as you ship.
+
+> ## 🧷 CAPTURE SHORTCUTS → SUPABASE (cross-device, on branch `claude/capture-shortcuts-supabase`)
+> The Capture "Or jump directly to" grid was already customizable, but its layout only lived in
+> **localStorage** (per-device, lost on a new device/browser). Now it **persists to Supabase** so a member's
+> shortcuts follow them everywhere — and it's **prod-safe with NO migration** (reuses the core
+> `user_preferences.notification_prefs` jsonb via the same read-merge-write pattern the Google Calendar
+> integration already uses; own-row RLS).
+> - **`lib/capture/shortcuts.ts`** (PURE, **9 tests** in `tests/capture-shortcuts.test.ts`):
+>   `sanitizeShortcutKeys(input, validKeys?, max)` (strings-only, dedupe, optional allow-set, cap),
+>   `resolveShortcutKeys` (sanitize → fallback to defaults so the grid is never blank),
+>   `DEFAULT_CAPTURE_SHORTCUTS`, `MAX_CAPTURE_SHORTCUTS`, `CAPTURE_SHORTCUTS_PREF_KEY`.
+> - **`app/(app)/capture/shortcuts-actions.ts`**: `loadCaptureShortcuts()` (server reader) +
+>   `saveCaptureShortcutsAction({keys})` (read-merge-write into `notification_prefs.captureShortcuts`).
+> - **`app/(app)/capture/page.tsx`** server-loads the layout → passes `initialShortcuts` to `CaptureShell`
+>   (`force-dynamic`); **`capture-shell.tsx`** uses the server value on first paint (authoritative), keeps
+>   localStorage as an offline cache, and on every change writes BOTH the cache and Supabase.
+> - Verified: tsc · eslint · build ✓ (`/capture` 7.2 kB) · full suite **1356/1356** (9 new). No migration.
+
+> ## 🗺️ ROADMAP / GAP NOTES (2026-06-28, for the next agent)
+> Context: the "Build the world's best Family OS" master prompt references a **Cozi presentation that is NOT
+> in the repo** — no agent can "study" it; don't fabricate that analysis. Many master-prompt headline items
+> are ALREADY shipped on `main` by the parallel swarm — **don't duplicate**: AI Command Center = the Home
+> "Needs you" decision queue (+ notifications + one-tap approve + Assistant `list_pending_decisions`); Social
+> Feed (consume + paste-link unfurl ingestion); pinned Social Feed Quick Access tile; customizable Capture
+> shortcuts; Food OS; Wallet/economy. Before building, `git log origin/main` to see what just landed.
+> - **Hard blockers (human-owned, gate "production ready"):** prod migrations `0098*`–`0102` (+ any `0085–0097`)
+>   are NOT applied, and push/email/Stripe/`CRON_SECRET` envs are NOT set. So any feature needing a NEW table
+>   or those envs is *built* but not *live*. **Prefer changes that reuse already-deployed tables** (e.g. this
+>   Capture change reused `user_preferences`) so they work in prod today.
+> - **Open ambiguity (do NOT silently flip):** super-admin Home Quick Access. `main` currently leaves
+>   super-admins fully unlocked (`dashTier='plus'` → no "Unlock more"). A later user request asked for the
+>   green "Unlock more" box to stay LOCKED and route to `/pricing` for super-admins; the PR that did this
+>   (#181) was CLOSED. These conflict — get an explicit decision before changing `ai-home-dashboard.tsx`.
+> - **High-leverage, prod-safe next candidates (reuse existing tables / pure libs):** (a) Global AI search
+>   over existing tables; (b) one-tap on more Home "Needs you" kinds (complete an overdue reminder, RSVP);
+>   (c) AI yearly/era recap from existing photos/events; (d) richer Social Feed (realtime via `useRealtimeQuery`,
+>   AI auto-categorize added links into family/friends/groups). Each: pure logic in tested `lib/*`, wire to
+>   Supabase, ship, update THIS doc.
 
 > ## ▶️ START HERE (current state — read this first)
 > - **`main` is the source of truth** and deploys to prod (Vercel → www.bubaly.com). As of this update its tip
