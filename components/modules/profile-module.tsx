@@ -5,11 +5,12 @@ import { useState } from 'react';
 import {
   User, Settings, Users, Bell, Moon, SunMedium, LogOut,
   ChevronRight, ShieldCheck, CreditCard, HeartPulse, Sparkles,
-  HelpCircle, Star,
+  HelpCircle, Star, LayoutGrid,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { useApp } from '@/components/app/app-context';
+import { SignOutButton } from '@/components/auth/sign-out-button';
 import { useTheme } from '@/components/theme/use-theme';
 import { ROLE_LABELS } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
@@ -110,6 +111,7 @@ export function ProfileModule({ member, userEmail }: ProfileModuleProps) {
         <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted">App</p>
         <Section>
           <Row icon={Sparkles} label="AI Engine" href="/admin/ai" />
+          <Row icon={LayoutGrid} label="More" href="/dashboard/more" />
           <Row icon={Settings} label="All Settings" href="/dashboard/settings" />
           <div className="flex items-center gap-3 px-4 py-3.5">
             {isDark ? <Moon className="h-5 w-5 shrink-0 text-muted" /> : <SunMedium className="h-5 w-5 shrink-0 text-muted" />}
@@ -135,12 +137,10 @@ export function ProfileModule({ member, userEmail }: ProfileModuleProps) {
 
       {/* Sign out */}
       <Section>
-        <form action="/auth/signout" method="post">
-          <button type="submit" className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-medium text-danger transition hover:bg-elevated">
-            <LogOut className="h-5 w-5 shrink-0 text-danger" />
-            Sign out
-          </button>
-        </form>
+        <SignOutButton className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-medium text-danger transition hover:bg-elevated">
+          <LogOut className="h-5 w-5 shrink-0 text-danger" />
+          Sign out
+        </SignOutButton>
       </Section>
     </div>
   );

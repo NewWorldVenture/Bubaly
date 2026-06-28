@@ -7,6 +7,7 @@ import { Bell, ChevronDown, Home, LayoutDashboard, LogOut, Search, ShieldCheck }
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { Avatar } from '@/components/ui/avatar';
+import { SignOutButton } from '@/components/auth/sign-out-button';
 import { ADMIN_NAV } from '@/lib/constants/navigation';
 import { cn } from '@/lib/utils/cn';
 
@@ -141,11 +142,9 @@ export function AdminShell({
                     <Home className="h-4 w-4" /> Go to Family Dashboard
                   </Link>
                   <div className="my-1 h-px bg-border" />
-                  <form action="/auth/signout" method="post">
-                    <button type="submit" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated">
-                      <LogOut className="h-4 w-4" /> Sign out
-                    </button>
-                  </form>
+                  <SignOutButton className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated">
+                    <LogOut className="h-4 w-4" /> Sign out
+                  </SignOutButton>
                 </div>
               </>
             )}

@@ -42,7 +42,7 @@ export function SiteHeader() {
           <Link href="/login" className="hidden h-8 items-center px-3 text-[10px] font-medium text-muted transition hover:text-fg sm:inline-flex">
             Log in
           </Link>
-          <Link href="/signup" className="hidden h-8 items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-[10px] font-semibold text-brand-fg shadow-glow transition hover:brightness-110 sm:inline-flex">
+          <Link href="/welcome" className="hidden h-8 items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-[10px] font-semibold text-brand-fg shadow-glow transition hover:brightness-110 sm:inline-flex">
             Get Started Free
           </Link>
           <button
@@ -76,7 +76,7 @@ export function SiteHeader() {
               <Link href="/login" className="flex-1" onClick={() => setOpen(false)}>
                 <Button variant="secondary" className="w-full">Log in</Button>
               </Link>
-              <Link href="/signup" className="flex-1" onClick={() => setOpen(false)}>
+              <Link href="/welcome" className="flex-1" onClick={() => setOpen(false)}>
                 <Button className="w-full">Get Started Free</Button>
               </Link>
             </div>

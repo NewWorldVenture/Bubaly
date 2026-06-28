@@ -18,6 +18,7 @@ import { useApp } from './app-context';
 import { NotificationBell } from './notification-bell';
 import { UpgradeModal } from './upgrade-modal';
 import { QuickCapture } from './quick-capture';
+import { SignOutButton } from '@/components/auth/sign-out-button';
 import { AIOrb } from './ai-orb';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
 
@@ -148,11 +149,9 @@ function UserMenu() {
               <ThemeSwitch />
             </div>
             <div className="my-1 h-px bg-border" />
-            <form action="/auth/signout" method="post">
-              <button type="submit" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated">
-                <LogOut className="h-4 w-4" /> Sign out
-              </button>
-            </form>
+            <SignOutButton className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated">
+              <LogOut className="h-4 w-4" /> Sign out
+            </SignOutButton>
           </div>
         </>
       )}
