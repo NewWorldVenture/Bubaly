@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MailCheck, Sparkles } from 'lucide-react';
+import { MailCheck, Sparkles, Smartphone, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Field } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { signUpSchema, fieldErrors } from '@/lib/validation';
 import { OAuthButtons } from '@/components/auth/oauth-buttons';
+import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
 
 export function SignupForm() {
@@ -19,6 +20,7 @@ export function SignupForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
+  const [showPhone, setShowPhone] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -92,6 +94,12 @@ export function SignupForm() {
         </p>
       </div>
 
+      {showPhone ? (
+        <div className="mt-7">
+          <PhoneAuth next="/onboarding" onBack={() => setShowPhone(false)} />
+        </div>
+      ) : (
+      <>
       {/* Primary options */}
       <div className="mt-7">
         <OAuthButtons next="/onboarding" />
@@ -104,13 +112,22 @@ export function SignupForm() {
       </div>
 
       {!showEmail ? (
-        <button
-          type="button"
-          onClick={() => setShowEmail(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface/60 px-4 py-3 text-sm font-semibold transition hover:bg-elevated"
-        >
-          Continue with email
-        </button>
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => setShowPhone(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface/60 px-4 py-3 text-sm font-semibold transition hover:bg-elevated"
+          >
+            <Smartphone className="h-[18px] w-[18px]" /> Continue with phone
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowEmail(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface/60 px-4 py-3 text-sm font-semibold transition hover:bg-elevated"
+          >
+            <Mail className="h-[18px] w-[18px]" /> Continue with email
+          </button>
+        </div>
       ) : (
         <form onSubmit={onSubmit} className="space-y-4 animate-fade-in" noValidate>
           <Field label="Your name" error={errors.fullName} required>
@@ -124,6 +141,8 @@ export function SignupForm() {
           </Field>
           <Button type="submit" loading={loading} className="w-full">Create account</Button>
         </form>
+      )}
+      </>
       )}
 
       <LegalConsent />

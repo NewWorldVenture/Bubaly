@@ -8,7 +8,9 @@ import { Input, Field } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { signInSchema, fieldErrors } from '@/lib/validation';
+import { Smartphone } from 'lucide-react';
 import { OAuthButtons } from '@/components/auth/oauth-buttons';
+import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
 import { resolveLandingPathAction } from '@/app/(auth)/actions';
 
@@ -18,6 +20,7 @@ export function LoginForm() {
   const { error: toastError } = useToast();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [showPhone, setShowPhone] = useState(false);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -52,9 +55,23 @@ export function LoginForm() {
       <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
       <p className="mt-1 text-sm text-muted">Sign in to your family.</p>
 
+      {showPhone ? (
+        <div className="mt-6">
+          <PhoneAuth next="/dashboard" onBack={() => setShowPhone(false)} />
+        </div>
+      ) : (
+      <>
       <div className="mt-6">
         <OAuthButtons />
       </div>
+
+      <button
+        type="button"
+        onClick={() => setShowPhone(true)}
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface/60 px-4 py-3 text-sm font-semibold transition hover:bg-elevated"
+      >
+        <Smartphone className="h-[18px] w-[18px]" /> Continue with phone
+      </button>
 
       <div className="relative my-5 flex items-center gap-3">
         <div className="flex-1 border-t border-border" />
@@ -71,6 +88,8 @@ export function LoginForm() {
         </Field>
         <Button type="submit" loading={loading} className="w-full">Sign in</Button>
       </form>
+      </>
+      )}
 
       <LegalConsent className="mt-5 text-center text-xs leading-5 text-muted" />
 
