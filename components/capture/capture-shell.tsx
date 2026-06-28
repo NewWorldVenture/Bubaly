@@ -2,15 +2,17 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Mic, Type, Camera, FileText, Sparkles, X, ArrowRight,
   Calendar, CheckSquare, ShoppingCart, Home, HeartPulse, Plane,
-  Loader2, ChevronDown, Undo2,
+  Loader2, ChevronDown, Undo2, Settings2, Check, Plus,
+  StickyNote, UtensilsCrossed, Bell, Wallet, PawPrint, Target,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/toast';
 import { useApp } from '@/components/app/app-context';
+import { Modal } from '@/components/ui/modal';
 import { createClient } from '@/lib/supabase/client';
 import { saveCapture, undoCapture, type CaptureSaveResult } from '@/lib/capture/save';
 import type { CaptureKind } from '@/lib/capture/parse';
@@ -25,14 +27,30 @@ const URL_TO_KIND: Record<string, CaptureKind> = {
   '/dashboard/chores': 'task',
 };
 
-const QUICK_ROUTES = [
-  { icon: Calendar, label: 'Calendar', href: '/dashboard/calendar', hint: 'Add event' },
-  { icon: CheckSquare, label: 'Tasks', href: '/dashboard/chores', hint: 'Create task' },
-  { icon: ShoppingCart, label: 'Grocery', href: '/dashboard/grocery', hint: 'Add to list' },
-  { icon: Home, label: 'Home', href: '/dashboard/home', hint: 'Home task' },
-  { icon: HeartPulse, label: 'Health', href: '/dashboard/health', hint: 'Log health' },
-  { icon: Plane, label: 'Trip', href: '/dashboard/trips', hint: 'Plan trip' },
+// Catalog of "jump directly to" shortcuts. The visible set is customizable per
+// device (persisted to localStorage); the catalog is the pool the picker draws
+// from. Keys are stable so saved layouts survive label/icon tweaks.
+type Shortcut = { key: string; icon: typeof Calendar; label: string; href: string; hint: string };
+
+const SHORTCUT_CATALOG: Shortcut[] = [
+  { key: 'calendar', icon: Calendar, label: 'Calendar', href: '/dashboard/calendar', hint: 'Add event' },
+  { key: 'tasks', icon: CheckSquare, label: 'Tasks', href: '/dashboard/chores', hint: 'Create task' },
+  { key: 'grocery', icon: ShoppingCart, label: 'Grocery', href: '/dashboard/grocery', hint: 'Add to list' },
+  { key: 'home', icon: Home, label: 'Home Maintenance', href: '/dashboard/home', hint: 'Home task' },
+  { key: 'health', icon: HeartPulse, label: 'Health', href: '/dashboard/health', hint: 'Log health' },
+  { key: 'trip', icon: Plane, label: 'Trip', href: '/dashboard/trips', hint: 'Plan trip' },
+  { key: 'notes', icon: StickyNote, label: 'Notes', href: '/dashboard/notes', hint: 'Jot a note' },
+  { key: 'meals', icon: UtensilsCrossed, label: 'Meals', href: '/dashboard/meals', hint: 'Plan meals' },
+  { key: 'reminders', icon: Bell, label: 'Reminders', href: '/dashboard/reminders', hint: 'Set reminder' },
+  { key: 'documents', icon: FileText, label: 'Documents', href: '/dashboard/documents', hint: 'Add document' },
+  { key: 'wallet', icon: Wallet, label: 'Wallet', href: '/wallet', hint: 'Family wallet' },
+  { key: 'pets', icon: PawPrint, label: 'Pets', href: '/dashboard/pets', hint: 'Pet care' },
+  { key: 'goals', icon: Target, label: 'Goals', href: '/dashboard/goals', hint: 'Family goal' },
 ];
+const SHORTCUT_BY_KEY: Record<string, Shortcut> = Object.fromEntries(SHORTCUT_CATALOG.map((s) => [s.key, s]));
+const DEFAULT_SHORTCUTS = ['calendar', 'tasks', 'grocery', 'home', 'health', 'trip'];
+const SHORTCUTS_STORAGE_KEY = 'bubaly.capture.shortcuts';
+const MAX_SHORTCUTS = 9;
 
 function routeCapture(text: string): { destination: string; url: string } {
   const lower = text.toLowerCase();
@@ -67,6 +85,34 @@ export function CaptureShell() {
   const [undoing, setUndoing] = useState(false);
   const [recording, setRecording] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
+
+  // Customizable "jump directly to" shortcuts, persisted per device.
+  const [shortcutKeys, setShortcutKeys] = useState<string[]>(DEFAULT_SHORTCUTS);
+  const [editingShortcuts, setEditingShortcuts] = useState(false);
+  const [picker, setPicker] = useState<{ mode: 'add' | 'replace'; index: number } | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SHORTCUTS_STORAGE_KEY);
+      if (!raw) return;
+      const valid = (JSON.parse(raw) as string[]).filter((k) => SHORTCUT_BY_KEY[k]);
+      if (valid.length) setShortcutKeys(valid.slice(0, MAX_SHORTCUTS));
+    } catch { /* ignore */ }
+  }, []);
+
+  function persistShortcuts(keys: string[]) {
+    setShortcutKeys(keys);
+    try { localStorage.setItem(SHORTCUTS_STORAGE_KEY, JSON.stringify(keys)); } catch { /* ignore */ }
+  }
+  function removeShortcut(index: number) { persistShortcuts(shortcutKeys.filter((_, i) => i !== index)); }
+  function pickShortcut(key: string) {
+    if (!picker) return;
+    if (picker.mode === 'replace') persistShortcuts(shortcutKeys.map((k, i) => (i === picker.index ? key : k)));
+    else persistShortcuts([...shortcutKeys, key].slice(0, MAX_SHORTCUTS));
+    setPicker(null);
+  }
+  const availableToAdd = SHORTCUT_CATALOG.filter((s) => !shortcutKeys.includes(s.key));
+  const addCardCount = Math.max(0, MAX_SHORTCUTS - shortcutKeys.length);
 
   // One-tap undo: delete the rows the capture just created and restore the input
   // so the user can edit and re-file, or walk away. Frictionless safety net for
@@ -277,21 +323,81 @@ export function CaptureShell() {
           </button>
         )}
 
-        {/* Quick route chips */}
+        {/* Quick route shortcuts — customizable */}
         <div>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Or jump directly to</p>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Or jump directly to</p>
+            <button type="button" onClick={() => setEditingShortcuts((v) => !v)}
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10 transition">
+              {editingShortcuts ? <><Check className="h-3.5 w-3.5" /> Done</> : <><Settings2 className="h-3.5 w-3.5" /> Customize</>}
+            </button>
+          </div>
           <div className="grid grid-cols-3 gap-2">
-            {QUICK_ROUTES.map(({ icon: Icon, label, href, hint }) => (
-              <Link key={label} href={href}
-                className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 p-3 text-center transition hover:border-brand/30 hover:bg-elevated">
-                <Icon className="h-6 w-6 text-brand" />
-                <span className="text-xs font-semibold">{label}</span>
-                <span className="text-[10px] text-muted">{hint}</span>
-              </Link>
+            {shortcutKeys.map((key, index) => {
+              const s = SHORTCUT_BY_KEY[key];
+              if (!s) return null;
+              const Icon = s.icon;
+              if (editingShortcuts) {
+                return (
+                  <div key={key} className="relative">
+                    <button type="button" onClick={() => setPicker({ mode: 'replace', index })}
+                      className="flex w-full flex-col items-center gap-1.5 rounded-2xl border border-brand/30 bg-brand/5 p-3 text-center transition hover:bg-brand/10">
+                      <Icon className="h-6 w-6 text-brand" />
+                      <span className="text-xs font-semibold">{s.label}</span>
+                      <span className="text-[10px] text-brand">Tap to change</span>
+                    </button>
+                    <button type="button" onClick={() => removeShortcut(index)} aria-label={`Remove ${s.label}`}
+                      className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white shadow">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <Link key={key} href={s.href}
+                  className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 p-3 text-center transition hover:border-brand/30 hover:bg-elevated">
+                  <Icon className="h-6 w-6 text-brand" />
+                  <span className="text-xs font-semibold">{s.label}</span>
+                  <span className="text-[10px] text-muted">{s.hint}</span>
+                </Link>
+              );
+            })}
+
+            {/* Add-shortcut cards fill the grid up to the max */}
+            {availableToAdd.length > 0 && Array.from({ length: addCardCount }).map((_, i) => (
+              <button key={`add-${i}`} type="button" onClick={() => setPicker({ mode: 'add', index: shortcutKeys.length })}
+                className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border p-3 text-center text-muted transition hover:border-brand/40 hover:text-brand">
+                <Plus className="h-6 w-6" />
+                <span className="text-xs font-semibold">Add</span>
+                <span className="text-[10px]">Add shortcut</span>
+              </button>
             ))}
           </div>
         </div>
       </div>
+
+      {/* Shortcut picker */}
+      {picker && (
+        <Modal open title={picker.mode === 'replace' ? 'Change shortcut' : 'Add a shortcut'} onClose={() => setPicker(null)}>
+          <div className="grid grid-cols-3 gap-2">
+            {(picker.mode === 'replace'
+              ? SHORTCUT_CATALOG.filter((s) => !shortcutKeys.includes(s.key) || s.key === shortcutKeys[picker.index])
+              : availableToAdd
+            ).map((s) => {
+              const Icon = s.icon;
+              const isCurrent = picker.mode === 'replace' && s.key === shortcutKeys[picker.index];
+              return (
+                <button key={s.key} type="button" onClick={() => pickShortcut(s.key)}
+                  className={cn('flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition',
+                    isCurrent ? 'border-brand bg-brand/10' : 'border-border bg-surface/40 hover:border-brand/40 hover:bg-elevated')}>
+                  <Icon className="h-6 w-6 text-brand" />
+                  <span className="text-xs font-semibold">{s.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
