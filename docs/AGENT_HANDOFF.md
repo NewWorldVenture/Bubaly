@@ -23,6 +23,20 @@ Last updated: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashbo
 > "Dashboard" entry was removed from the top of `PRIMARY_NAV` (Home now leads straight into the everyday list).
 > `isActive` is pathname-only so both links navigate correctly (query-string highlight is a known minor cosmetic).
 >
+> ## 🌱 `/home` DEMO SEED — `supabase/seed_home.sql` (~665 rows, on `main`)
+> A focused, idempotent, pooler-safe seed that populates EVERY `/home` widget with NOW()-relative data for
+> the 5 demo families from `seed.sql` (run `seed.sql` first). Fills `calendar_events` (today + upcoming),
+> `todo_lists`/`todo_items`, `chores`/`chore_assignments` (due today, some approved), `meals`/`meal_plans`
+> (this week incl. today = Tuscan Chicken Pasta), `transactions` (this-month income/expenses),
+> `family_albums`/`family_photos`, `family_conversations`/`family_messages`, `family_reminders`
+> (overdue/today/completed), `family_food_scores`. No new migration — all tables already exist with RLS.
+> Idempotency markers: `external_uid 'seedhome:%'`, `notes='seedhome'`, `chores.category='home_demo'`,
+> album/conversation names `… (demo)`; scoped to the 5 demo family ids so it NEVER touches real data.
+> Run: **`npm run seed:home`** (psql wrapper; needs `$DATABASE_URL` → local/dev) or paste into SQL Editor.
+> Docs: **`docs/home-supabase.md`** (tables, run steps, QA checklist). Watch-outs encoded for the next bot:
+> `family_messages.sender_id` is an `auth.users` FK so demo rows use `sender_id=NULL`+`sender_name`;
+> CHECK-constrained `kind` columns (conversations group/direct, albums general/…, reminders time/…).
+>
 > ## 🏡 NEW `/home` DASHBOARD — DEFAULT LANDING (on `main`)
 > A world-class, mockup-matched family Home at **`/home`**, now the **default post-login landing for
 > everyone except super-admins** (super-admins still land on `/admin`) and the target of the **Home button**.
