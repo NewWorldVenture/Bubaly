@@ -202,7 +202,7 @@ export const ADMIN_NAV: NavItem[] = [
  * CAPTURE_TAB_INDEX marks which tab gets the special treatment.
  */
 export const MOBILE_TABS: NavItem[] = [
-  { href: '/dashboard', label: 'Home', icon: Home, minLevel: 0 },
+  { href: '/home', label: 'Home', icon: Home, minLevel: 0 },
   { href: '/dashboard/assistant', label: 'Assistant', icon: Sparkles, minLevel: 0 },
   { href: '/capture', label: 'Capture', icon: Plus, minLevel: 0 },
   { href: '/dashboard/inbox', label: 'Inbox', icon: Inbox, minLevel: 0 },
@@ -220,7 +220,7 @@ export const CAPTURE_TAB_INDEX = 2;
  * All free (minLevel 0). The Messages entry shows a live unread badge.
  */
 export const PRIMARY_NAV: NavItem[] = [
-  { href: '/dashboard', label: 'Home', icon: Home },
+  { href: '/home', label: 'Home', icon: Home },
   { href: '/dashboard?view=family', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
   { href: '/dashboard/todos', label: 'Tasks', icon: ListChecks },
