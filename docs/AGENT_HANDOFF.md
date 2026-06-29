@@ -1,8 +1,16 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-29 — NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
+Last updated: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🧭 CURATED SIDEBAR — PARENT / FAMILY DASHBOARD LINKS (on `main`)
+> The curated Free-tier sidebar (`components/app/free-tier-sidebar.tsx`, used for both desktop + the mobile
+> drawer via `SidebarBody`) now lists the two role-aware dashboards **below the primary destinations**, in a
+> subtly grouped block above Shortcuts: **Parent Dashboard** → `/dashboard`, **Family Dashboard** →
+> `/dashboard?view=family`. Defined as **`DASHBOARD_NAV`** in `lib/constants/navigation.ts`; the old single
+> "Dashboard" entry was removed from the top of `PRIMARY_NAV` (Home now leads straight into the everyday list).
+> `isActive` is pathname-only so both links navigate correctly (query-string highlight is a known minor cosmetic).
+>
 > ## 🏡 NEW `/home` DASHBOARD — DEFAULT LANDING (on `main`)
 > A world-class, mockup-matched family Home at **`/home`**, now the **default post-login landing for
 > everyone except super-admins** (super-admins still land on `/admin`) and the target of the **Home button**.

@@ -12,7 +12,7 @@ import { usePathname } from 'next/navigation';
 import { Star } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
-  PRIMARY_NAV, SIDEBAR_FOOTER_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS, type NavItem,
+  PRIMARY_NAV, DASHBOARD_NAV, SIDEBAR_FOOTER_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS, type NavItem,
 } from '@/lib/constants/navigation';
 import { FEATURE_BY_KEY } from '@/lib/dashboard/registry';
 import { FeatureIcon } from '@/components/dashboard/feature-icons';
@@ -192,6 +192,13 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
               onLocked={onLocked}
               badge={item.href === '/dashboard/messages' ? liveUnread : undefined}
             />
+          ))}
+        </div>
+
+        {/* Role-aware dashboards — grouped below the primary destinations */}
+        <div className="mt-3 space-y-0.5 rounded-xl bg-elevated/40 p-1">
+          {DASHBOARD_NAV.map((item) => (
+            <NavEntry key={item.href} item={item} variant="list" locked={false} onLocked={onLocked} />
           ))}
         </div>
 
