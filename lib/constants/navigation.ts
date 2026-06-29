@@ -224,10 +224,15 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: '/dashboard?view=family', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
   { href: '/dashboard/todos', label: 'Tasks', icon: ListChecks },
+  // Shopping is table-stakes for family organizers (Cozi/FamilyWall/OurHome/
+  // FamCal/Skylight/Maple all lead with it) — surfaced directly, not buried.
+  { href: '/dashboard/grocery', label: 'Shopping', icon: ShoppingCart },
   { href: '/dashboard/meals', label: 'Meals', icon: UtensilsCrossed },
   { href: '/dashboard/chores', label: 'Chores', icon: CheckSquare },
   { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
   { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle },
+  // Family Inbox — the shared/AI inbox competitors like Maple position as core.
+  { href: '/dashboard/inbox', label: 'Inbox', icon: Inbox },
   { href: '/dashboard/documents', label: 'Files', icon: FolderLock },
   { href: '/dashboard/locator', label: 'Location', icon: MapPin },
   { href: '/dashboard/family-tree', label: 'Family', icon: Users },
