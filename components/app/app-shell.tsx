@@ -33,7 +33,7 @@ function FamilySwitcher() {
     if (familyId === family.id) return;
     startTransition(async () => {
       await setActiveFamilyAction(familyId);
-      window.location.assign('/dashboard');
+      window.location.assign('/home');
     });
   }
 
@@ -91,7 +91,7 @@ function UserMenu() {
     if (familyId === family.id) return;
     startSwitch(async () => {
       await setActiveFamilyAction(familyId);
-      window.location.assign('/dashboard');
+      window.location.assign('/home');
     });
   }
 
@@ -298,7 +298,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar */}
       <aside className="hidden w-sidebar shrink-0 flex-col border-r border-border/60 bg-surface/30 lg:flex">
         <div className="px-5 py-5 xl:px-7 xl:py-7">
-          <Logo href="/dashboard" markVariant="home" />
+          <Logo href="/home" markVariant="home" />
         </div>
         <SidebarBody onLocked={setUpgradeFor} />
       </aside>
@@ -347,7 +347,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setMobileNavOpen(false)} aria-hidden />
           <div className="absolute inset-y-0 left-0 flex w-[300px] max-w-[86%] flex-col border-r border-border/60 bg-surface animate-slide-in-left">
             <div className="flex items-center justify-between px-4 py-4">
-              <Logo href="/dashboard" markVariant="home" />
+              <Logo href="/home" markVariant="home" />
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}

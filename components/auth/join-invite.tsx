@@ -41,7 +41,7 @@ export function JoinInvite() {
       }
       setState({ phase: 'done' });
       setTimeout(() => {
-        router.push('/dashboard');
+        router.push('/home');
         router.refresh();
       }, 1400);
     })();

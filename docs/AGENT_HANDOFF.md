@@ -1,8 +1,47 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-29 — Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
+Last updated: 2026-06-29 — NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🏡 NEW `/home` DASHBOARD — DEFAULT LANDING (on `main`)
+> A world-class, mockup-matched family Home at **`/home`**, now the **default post-login landing for
+> everyone except super-admins** (super-admins still land on `/admin`) and the target of the **Home button**.
+> - **`app/(app)/home/page.tsx`** (server component, `force-dynamic`) — one parallel batch of Supabase reads
+>   (all scoped to `familyId`), then renders the widget grid. 100% live data:
+>   **My Family** (`family_members` + `Avatar`, tagline = Me / age / role via `memberTagline`), **Family Score**
+>   (computed by `lib/home/family-score.ts` from real chore-completion + overdue tasks/reminders → 0–100 ring),
+>   **Today's Schedule** (`calendar_events` today), **Tasks** (`todo_items` open), **Upcoming Events**
+>   (`calendar_events` next 30d), **What's for Dinner** (`meal_plans` dinner this week → `meals`, + Mon–Sun strip
+>   from `weekStrip`), **Chores** (`chore_assignments` + `chores` titles + member), **Family Finances**
+>   (`transactions` this month → income/expenses/remaining donut via `summarizeMonthFinances`), **Recent Memories**
+>   (`family_photos`, public `url`), **Family Messages** (`family_messages`, unread dot via `read_by`).
+>   Top action buttons (Add/Calendar/Task/Meal/More) + every "View all" link to the real working modules.
+> - **`app/(app)/home/layout.tsx`** wraps `<AppFrame>` so it inherits the standard sidebar/top-bar chrome.
+> - **Pure + tested** (`lib/home/family-score.ts`, `lib/home/home-data.ts` — `summarizeMonthFinances`, `usd`,
+>   `memberTagline`, `ageFromBirthday`, `weekStrip`, `isoDate`): **`tests/home-dashboard.test.ts` (14 tests)**.
+> - **Landing wired everywhere → `/home`:** `app/(auth)/actions.ts` `resolveLandingPathAction` (non-admins),
+>   `app/auth/callback/route.ts` (default `next` + onboarding gate + admin→`/admin`), `PRIMARY_NAV[0]` + `MOBILE_TABS[0]`
+>   Home, the `AppShell` logo (`Logo href`), family-switch reloads, and `join-invite` post-join push.
+> - No migration (all reads tolerate empty tables). tsc · eslint · **1395 tests** · build ✓ (`/home` route present).
+> - **⏸️ Stashed WIP (not lost):** a Home "Needs you" one-tap *reminder completion* increment (pure `reminderToNeed`
+>   in needs-sources + `reminderItems` path in needs-build + `completeReminderAction`) was set aside mid-build when
+>   this `/home` task took priority — saved at `scratchpad/reminder-wip/`. Re-wire into the needs queue if desired.
+>
+> ## 🧭 DISCOVERABILITY — NAV + PRICING (#193, on `main`)
+> From the competitive-analysis "Biggest gaps to fix on Bubaly pricing/navigation" list. The analysis'
+> own bottom line: *the biggest win is making the highest-value features easier to understand and find,
+> not adding features.* Everything surfaced here already exists and is wired — this raises visibility only.
+> - **`lib/constants/navigation.ts` → `PRIMARY_NAV`** (the curated Free-tier sidebar): added **Shopping**
+>   (`/dashboard/grocery`, the #1 gap — table-stakes for every competitor) and **Family Inbox**
+>   (`/dashboard/inbox`, the shared/AI inbox Maple-style competitors lead with).
+> - **`app/(marketing)/pricing/pricing-content.tsx`**: added an above-the-fold **`WhySwitch()`** strip
+>   (`SWITCH_HIGHLIGHTS`, rendered between hero and plan cards) — 8 differentiators with plain-language
+>   copy + tier badges: Shopping (Free), AI Family Inbox & Front Desk = "calls, emails, forms, school,
+>   appointments" (Family+), Smart Imports (Basic, now above the fold), Kitchen Mode = "turn any tablet
+>   into a family command center" (Basic), Family Wallet & Allowance (Free), Health/Meds/Records (Basic),
+>   Emergency Hub (Family+), Transportation & Rides (Family+). The #192 matrix + positioning callouts
+>   remain below it. No migration. tsc · eslint · 1381 tests · build all green.
+>
 > ## 🏷️ FEATURE-TIER ALIGNMENT + PRICING REBUILD (#192, on `main`)
 > Applied the shared competitive-analysis tier recommendations. **`lib/constants/feature-catalog.ts`
 > `defaultTier` is the SINGLE source** that drives page gating (`requireFeature(route)`), nav locks
