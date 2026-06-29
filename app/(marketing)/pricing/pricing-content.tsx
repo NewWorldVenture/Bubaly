@@ -54,6 +54,60 @@ const PLUS_FEATURES = [
   { section: 'Family Digital Twin',  items: ['Learns family preferences, routines, habits & activities', 'Proactively makes recommendations'] },
 ];
 
+// ── Above-the-fold differentiators ──────────────────────────────────────────
+// The highest-value Bubaly features, made easy to understand and find (vs. the
+// market). Each is a real, shipped surface — this strip just raises visibility.
+type HiTier = 'Free' | 'Family Basic' | 'Family+';
+const HI_BADGE: Record<HiTier, string> = {
+  'Free': 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/30',
+  'Family Basic': 'bg-blue-500/15 text-blue-300 ring-blue-400/30',
+  'Family+': 'bg-violet-500/15 text-violet-300 ring-violet-400/30',
+};
+
+const SWITCH_HIGHLIGHTS: { emoji: string; title: string; desc: string; tier: HiTier }[] = [
+  { emoji: '🛒', title: 'Shopping & Lists', tier: 'Free',
+    desc: 'Shared shopping and grocery lists the whole family keeps in sync — front and center.' },
+  { emoji: '📥', title: 'AI Family Inbox & Front Desk', tier: 'Family+',
+    desc: 'One place for calls, emails, forms, school notes and appointments — Bubaly reads them and acts.' },
+  { emoji: '📸', title: 'Smart Imports', tier: 'Family Basic',
+    desc: 'Snap a school flyer, PDF or screenshot — AI creates the calendar events, tasks and reminders.' },
+  { emoji: '🖥️', title: 'Kitchen Mode', tier: 'Family Basic',
+    desc: 'Turn any tablet or smart display into a family command center on the counter.' },
+  { emoji: '👛', title: 'Family Wallet & Allowance', tier: 'Free',
+    desc: 'Allowances, chores-to-rewards and family money — built in, not a separate app.' },
+  { emoji: '🩺', title: 'Health, Meds & Records', tier: 'Family Basic',
+    desc: 'Medications, appointments and a secure medical-records locker where competitors are weak.' },
+  { emoji: '🛟', title: 'Emergency Hub', tier: 'Family+',
+    desc: 'Critical info, documents and contacts ready the moment your family needs them.' },
+  { emoji: '🚗', title: 'Transportation & Rides', tier: 'Family+',
+    desc: 'Who’s picking up whom — rides, carpools and pickups planned for you by AI.' },
+];
+
+function WhySwitch() {
+  return (
+    <section className="mt-12">
+      <h2 className="text-center text-2xl font-black">Why families switch to Bubaly</h2>
+      <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">
+        The highest-value things Bubaly does that most family apps don’t — in plain language.
+      </p>
+      <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {SWITCH_HIGHLIGHTS.map((h) => (
+          <div key={h.title} className="flex flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-2xl" aria-hidden>{h.emoji}</span>
+              <span className={cn('rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1', HI_BADGE[h.tier])}>
+                {h.tier}
+              </span>
+            </div>
+            <p className="mt-3 text-sm font-bold">{h.title}</p>
+            <p className="mt-1 text-xs leading-relaxed text-white/65">{h.desc}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ── Plan card ──────────────────────────────────────────────────────────────
 function PlanCard({
   name, goal, icon, price, priceSub, cta, ctaHref, featured, featureSections, prelude, badge,
@@ -274,8 +328,12 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
           </div>
         </section>
 
+        {/* Above-the-fold differentiators — make the highest-value features
+            easy to understand and find before the plan cards. */}
+        <WhySwitch />
+
         {/* Plan cards — 3 columns */}
-        <section className="mt-10 grid gap-5 lg:grid-cols-3">
+        <section className="mt-12 grid gap-5 lg:grid-cols-3">
           <PlanCard
             name="Bubaly Free"
             goal="Become the default family organizer."
