@@ -35,6 +35,40 @@ function anonClient() {
   );
 }
 
+/**
+ * Coerce a JSON `body` of unknown shape into a clean BlogBlock[]. The column is
+ * `Json`, and seeded/imported rows have stored it as an array of blocks, an
+ * array of strings, a JSON-encoded string, or plain text — all are handled here
+ * so the blog page never crashes prerendering (e.g. `body.filter is not a function`).
+ */
+export function normalizeBody(raw: unknown): BlogBlock[] {
+  let val: unknown = raw;
+  if (typeof val === 'string') {
+    const s = val.trim();
+    try {
+      const parsed = JSON.parse(s);
+      // Only treat it as structured if JSON.parse yields an array/object.
+      val = (Array.isArray(parsed) || (parsed && typeof parsed === 'object')) ? parsed : s;
+    } catch {
+      // Not JSON → split plain text into paragraph blocks.
+      return s ? s.split(/\n{2,}/).map((t) => ({ type: 'p' as const, text: t.trim() })).filter((b) => b.text) : [];
+    }
+  }
+  if (!Array.isArray(val)) return [];
+  return val
+    .map((item): BlogBlock | null => {
+      if (typeof item === 'string') return item.trim() ? { type: 'p', text: item } : null;
+      if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>;
+        const text = typeof o.text === 'string' ? o.text : typeof o.content === 'string' ? o.content : '';
+        if (!text) return null;
+        return { type: o.type === 'h2' ? 'h2' : 'p', text };
+      }
+      return null;
+    })
+    .filter((b): b is BlogBlock => b !== null);
+}
+
 function toPost(r: Row): BlogPost {
   return {
     slug: r.slug,
@@ -43,11 +77,11 @@ function toPost(r: Row): BlogPost {
     author: r.author,
     date: r.published_at,
     readingMinutes: r.reading_minutes,
-    tags: r.tags ?? [],
+    tags: Array.isArray(r.tags) ? r.tags.filter((t): t is string => typeof t === 'string') : [],
     category: r.category as BlogCategory,
     featured: r.featured,
     accentColor: r.accent_color ?? undefined,
-    body: (r.body as unknown as BlogBlock[]) ?? [],
+    body: normalizeBody(r.body),
   };
 }
 
@@ -157,8 +191,8 @@ export async function getAdjacentPosts(date: string): Promise<{ prev: BlogPost |
 }
 
 export function extractHeadings(body: BlogBlock[]): { id: string; text: string }[] {
-  return body
-    .filter((b): b is BlogBlock & { type: 'h2' } => b.type === 'h2')
+  return (Array.isArray(body) ? body : [])
+    .filter((b): b is BlogBlock & { type: 'h2' } => b?.type === 'h2' && typeof b?.text === 'string')
     .map((b) => ({
       id: b.text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
       text: b.text,
@@ -166,7 +200,7 @@ export function extractHeadings(body: BlogBlock[]): { id: string; text: string }
 }
 
 export function estimateReadingTime(body: BlogBlock[]): number {
-  const words = body.reduce((acc, b) => acc + b.text.split(/\s+/).length, 0);
+  const words = (Array.isArray(body) ? body : []).reduce((acc, b) => acc + (b?.text ?? '').split(/\s+/).length, 0);
   return Math.max(1, Math.ceil(words / 200));
 }
 

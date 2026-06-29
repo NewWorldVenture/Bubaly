@@ -3,6 +3,18 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🐞 FIXED: PROD BUILD CRASH ON BLOG PRERENDER (on `main`)
+> Vercel prod build was failing at `Generating static pages` for `/blog/seed-blog_posts-172` with
+> `TypeError: a.filter is not a function`. Root cause: `blog_posts.body` is a `Json` column and a seeded post
+> stored it as a **non-array** (JSON-encoded string / object / plain text), but `toPost` cast it straight to
+> `BlogBlock[]` with only a null guard, so `extractHeadings(post.body).filter(...)` threw during prerender. (Local
+> builds passed because dummy Supabase creds return no posts, so that page never generates.) Fix in
+> **`lib/blog/posts.ts`**: new **`normalizeBody(raw)`** coerces any shape → `BlogBlock[]` (array of blocks,
+> array of strings, JSON string, or plain text split on blank lines; `{content}` objects; else `[]`), `tags`
+> coerced to `string[]`, and `extractHeadings`/`estimateReadingTime` hardened with `Array.isArray` guards.
+> Tests: **`tests/blog-body-normalize.test.ts` (8)**. Lesson: treat every `Json` column as untrusted — normalize,
+> don't cast. tsc · eslint · **1403 tests** · build ✓.
+>
 > ## 🧭 CURATED SIDEBAR — PARENT / FAMILY DASHBOARD LINKS (on `main`)
 > The curated Free-tier sidebar (`components/app/free-tier-sidebar.tsx`, used for both desktop + the mobile
 > drawer via `SidebarBody`) now lists the two role-aware dashboards **below the primary destinations**, in a
