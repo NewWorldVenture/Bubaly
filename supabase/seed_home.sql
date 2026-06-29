@@ -219,7 +219,7 @@ select a.family_id, a.id,
        (array['Park day','Backyard picnic','Beach trip','Movie night','Baking together',
               'First soccer goal','Grandma''s visit','Sunday brunch'])[n],
        (now() - ((n*3) || ' days')::interval),
-       'image', (n % 4 = 0), '{}'::text[], '{}'::text[]
+       'image', (n % 4 = 0), '{}'::text[], '{}'::uuid[]
 from alb a
 cross join generate_series(1,8) as n;
 
