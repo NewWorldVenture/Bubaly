@@ -221,7 +221,6 @@ export const CAPTURE_TAB_INDEX = 2;
  */
 export const PRIMARY_NAV: NavItem[] = [
   { href: '/home', label: 'Home', icon: Home },
-  { href: '/dashboard?view=family', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
   { href: '/dashboard/todos', label: 'Tasks', icon: ListChecks },
   // Shopping is table-stakes for family organizers (Cozi/FamilyWall/OurHome/
@@ -236,6 +235,16 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: '/dashboard/documents', label: 'Files', icon: FolderLock },
   { href: '/dashboard/locator', label: 'Location', icon: MapPin },
   { href: '/dashboard/family-tree', label: 'Family', icon: Users },
+];
+
+/**
+ * The two role-aware dashboards, listed BELOW the primary destinations (above
+ * Shortcuts) in the curated sidebar. Parent → the personal/parent home view;
+ * Family → the shared family view. Both are free (everyone).
+ */
+export const DASHBOARD_NAV: NavItem[] = [
+  { href: '/dashboard', label: 'Parent Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard?view=family', label: 'Family Dashboard', icon: LayoutGrid },
 ];
 
 /** Pinned footer of the Free-tier sidebar — always reachable, below All Services. */
