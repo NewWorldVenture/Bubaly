@@ -132,10 +132,35 @@ type FeatureMatrix = { section: string; items: { label: string; tier: MatrixTier
 
 const TIER_COL: { key: MatrixTier; label: string; dot: string }[] = [
   { key: 'free', label: 'Free', dot: 'bg-emerald-400' },
-  { key: 'basic', label: 'Basic', dot: 'bg-blue-400' },
-  { key: 'plus', label: 'Plus', dot: 'bg-violet-400' },
+  { key: 'basic', label: 'Family Basic', dot: 'bg-blue-400' },
+  { key: 'plus', label: 'Family+', dot: 'bg-violet-400' },
 ];
 const TIER_RANK: Record<MatrixTier, number> = { free: 0, basic: 1, plus: 2 };
+
+// Competitor-positioning callouts (how each tier stacks up vs the market).
+const TIER_POSITIONING: { key: MatrixTier; label: string; dot: string; line: string }[] = [
+  { key: 'free', label: 'Free', dot: 'bg-emerald-400',
+    line: 'Better than Cozi Free for modern families — AI requests, documents, contacts, recipes, photos, shopping, tasks, and messenger, all included.' },
+  { key: 'basic', label: 'Family Basic', dot: 'bg-blue-400',
+    line: 'A direct replacement for Cozi Gold, FamilyWall Premium, OurHome, FamCal, and Skylight — at one family price.' },
+  { key: 'plus', label: 'Family+', dot: 'bg-violet-400',
+    line: 'Category creator: your family’s AI Chief of Staff — beyond a traditional organizer.' },
+];
+
+function PositioningCallouts() {
+  return (
+    <div className="mt-7 grid gap-3 sm:grid-cols-3">
+      {TIER_POSITIONING.map((t) => (
+        <div key={t.key} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="flex items-center gap-1.5 text-sm font-bold">
+            <span className={cn('h-2 w-2 rounded-full', t.dot)} /> {t.label}
+          </p>
+          <p className="mt-1.5 text-xs leading-relaxed text-white/65">{t.line}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function FeatureMatrixTable({ matrix }: { matrix: FeatureMatrix }) {
   if (matrix.length === 0) return null;
@@ -145,6 +170,7 @@ function FeatureMatrixTable({ matrix }: { matrix: FeatureMatrix }) {
       <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">
         A check means the feature is included on that plan (and every plan above it).
       </p>
+      <PositioningCallouts />
       <div className="mt-7 overflow-hidden rounded-2xl border border-white/10">
         <table className="w-full text-sm">
           <thead>

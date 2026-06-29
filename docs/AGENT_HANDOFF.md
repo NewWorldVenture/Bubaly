@@ -1,7 +1,39 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-28 — Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
+Last updated: 2026-06-29 — Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
+
+> ## 🏷️ FEATURE-TIER ALIGNMENT + PRICING REBUILD (#192, on `main`)
+> Applied the shared competitive-analysis tier recommendations. **`lib/constants/feature-catalog.ts`
+> `defaultTier` is the SINGLE source** that drives page gating (`requireFeature(route)`), nav locks
+> (`featureAccessByTier`/`tiersByHref`), AND the pricing matrix — so a one-line tier change updates all
+> three at once (admin overrides in Tier & Features still win per-feature). Tier changes made:
+> | Feature | href | Was → Now |
+> |---|---|---|
+> | Family Map (location) | `/dashboard/locator` | free → **basic** |
+> | Pantry | `/dashboard/pantry` | free → **basic** |
+> | Home Inventory | `/dashboard/home` | free → **plus** |
+> | Household Binder | `/dashboard/binder` | basic → **plus** |
+> | Medical Records (info locker) | `/dashboard/medical` | free → **plus** |
+>
+> Already aligned (no change): Celebrations + Wish Lists = free; Memories, Pets, Screen Time, Expense
+> Splitting = basic; Emergency Hub = plus. **Note:** Pantry→Basic and Medical→Plus intentionally
+> SUPERSEDE the earlier `4a1011d` "un-gate to Free" for those two (per user decision).
+> - **Pricing page** (`app/(marketing)/pricing/pricing-content.tsx`): comparison columns relabeled
+>   **Free / Family Basic / Family+**; added `TIER_POSITIONING` + `PositioningCallouts()` (3 cards:
+>   Free beats Cozi Free; Family Basic replaces Cozi Gold/FamilyWall Premium/OurHome/FamCal/Skylight;
+>   Family+ = AI Chief of Staff). Matrix is built from FEATURE_CATALOG + `getResolvedFeatureTiers` in
+>   `pricing/page.tsx` (force-dynamic) — stays in sync with the catalog automatically.
+> - Fixed a **pre-existing** stale test (`tests/dashboard-layout.test.ts`) that still treated `chores`
+>   as Basic after `4a1011d` moved it to Free — repointed those assertions at `goals` (still Basic).
+> - tsc · eslint · **1381/1381** · build ✓ · no migration.
+> - **⚠️ CI INFRA NOTE:** GitHub Actions started **startup-failing on `main` and all PRs from ~2026-06-28
+>   23:37Z** (CI run #475 onward): jobs complete in ~3-5s with `runner_id: 0`, no steps, 404 logs — the
+>   signature of **Actions minutes exhausted / spending-limit reached** on this private repo (ci.yml was
+>   unchanged; runs ≤#474 were green). Not a code failure. Checks are NOT branch-protection-required
+>   (main keeps merging with red CI; PR `mergeable_state: unstable`), so #192 was squash-merged on
+>   verified-local-green per user decision. **To restore CI: raise the GitHub Actions spending limit /
+>   add a payment method in the repo's billing settings** — no code fix applies.
 
 > ## 💳 PLAN / TIER RESOLUTION — single source of truth (on `main`)
 > Symptom: the bottom-left account widget (and nav gating) showed **Free Tier for every account** even when the

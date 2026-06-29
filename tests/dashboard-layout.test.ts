@@ -22,12 +22,12 @@ describe('tier availability', () => {
   it('free sees only free features as primary; basic/plus locked are hidden', () => {
     const free = availableFeatures('free');
     expect(free.every((f) => f.requiredTier === 'free')).toBe(true);
-    expect(free.some((f) => f.key === 'chores')).toBe(false);  // basic
+    expect(free.some((f) => f.key === 'goals')).toBe(false);  // basic
     expect(free.some((f) => f.key === 'sports')).toBe(false);  // plus
   });
   it('basic sees free + basic, not plus', () => {
     const basic = availableFeatures('basic');
-    expect(basic.some((f) => f.key === 'chores')).toBe(true);
+    expect(basic.some((f) => f.key === 'goals')).toBe(true);
     expect(basic.some((f) => f.key === 'sports')).toBe(false);
   });
   it('plus sees everything', () => {
@@ -58,8 +58,8 @@ describe('resolvePrimary', () => {
     expect(keys.length).toBe(MAX_DASH_BUTTONS); // gap-filled, never sparse
   });
   it('makes new features available on upgrade (addable)', () => {
-    expect(addableFeatures(['calendar'], 'basic').some((f) => f.key === 'chores')).toBe(true);
-    expect(addableFeatures(['calendar'], 'free').some((f) => f.key === 'chores')).toBe(false);
+    expect(addableFeatures(['calendar'], 'basic').some((f) => f.key === 'goals')).toBe(true);
+    expect(addableFeatures(['calendar'], 'free').some((f) => f.key === 'goals')).toBe(false);
   });
   it('dedupes and ignores unknown keys', () => {
     const keys = resolvePrimary(['calendar', 'calendar', 'not_a_feature', 'notes'], 'free').map((f) => f.key);
@@ -79,7 +79,7 @@ describe('validateLayout (server-side)', () => {
   });
   it('rejects locked features', () => {
     expect(validateLayout(['calendar', 'sports'], 'free').ok).toBe(false);  // sports is plus
-    expect(validateLayout(['calendar', 'chores'], 'free').ok).toBe(false);  // chores is basic
+    expect(validateLayout(['calendar', 'goals'], 'free').ok).toBe(false);  // goals is basic
   });
   it('rejects fixed buttons being injected', () => {
     expect(validateLayout(['quick_add', 'calendar'], 'plus').ok).toBe(false);
