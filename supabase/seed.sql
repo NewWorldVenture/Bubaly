@@ -57,7 +57,9 @@ insert into public.calendar_events (family_id, title, category, starts_at, ends_
 select f.id,
        (array['Dentist','Soccer practice','Parent-teacher night','Family dinner','Piano lesson',
               'Birthday party','Doctor checkup','School play','Swim meet','Game night'])[1+(n%10)],
-       (array['appointment','sports','school','general','general','birthday','appointment','school','sports','general'])[1+(n%10)]::public.event_category,
+       -- pick from the DB's ACTUAL enum values (some DBs predate newer categories
+       -- like 'appointment'), so this never errors with 22P02 invalid enum input.
+       (enum_range(null::public.event_category))[1 + (n % array_length(enum_range(null::public.event_category), 1))],
        date_trunc('day', now()) + (n || ' days')::interval + interval '17 hours',
        date_trunc('day', now()) + (n || ' days')::interval + interval '18 hours',
        false, null

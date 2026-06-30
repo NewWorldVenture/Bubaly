@@ -12,6 +12,7 @@
     "db:push": "supabase db push",
     "db:seed:calendar": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_calendar.sql",
     "db:types": "supabase gen types typescript --local > lib/database.types.ts",
+    "seed:home": "psql \"$DATABASE_URL\" -f supabase/seed.sql -f supabase/seed_home.sql",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
