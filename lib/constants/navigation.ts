@@ -221,19 +221,13 @@ export const CAPTURE_TAB_INDEX = 2;
  */
 export const PRIMARY_NAV: NavItem[] = [
   { href: '/home', label: 'Home', icon: Home },
-  { href: '/dashboard/planning', label: 'Planning', icon: ClipboardList },
-  { href: '/dashboard/food', label: 'Food', icon: UtensilsCrossed },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
-  { href: '/dashboard/todos', label: 'Tasks', icon: ListChecks },
-  // Shopping is table-stakes for family organizers (Cozi/FamilyWall/OurHome/
-  // FamCal/Skylight/Maple all lead with it) — surfaced directly, not buried.
-  { href: '/dashboard/grocery', label: 'Shopping', icon: ShoppingCart },
+  { href: '/dashboard/todos', label: 'Tasks', icon: CheckSquare },
   { href: '/dashboard/meals', label: 'Meals', icon: UtensilsCrossed },
-  { href: '/dashboard/chores', label: 'Chores', icon: CheckSquare },
+  { href: '/dashboard/chores', label: 'Chores', icon: ListChecks },
   { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
+  { href: '/dashboard/memories', label: 'Memories', icon: ImageGallery },
   { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle },
-  // Family Inbox — the shared/AI inbox competitors like Maple position as core.
-  { href: '/dashboard/inbox', label: 'Inbox', icon: Inbox },
   { href: '/dashboard/documents', label: 'Files', icon: FolderLock },
   { href: '/dashboard/locator', label: 'Location', icon: MapPin },
   { href: '/dashboard/family-tree', label: 'Family', icon: Users },
@@ -247,6 +241,8 @@ export const PRIMARY_NAV: NavItem[] = [
 export const DASHBOARD_NAV: NavItem[] = [
   { href: '/dashboard', label: 'Parent Dashboard', icon: LayoutDashboard },
   { href: '/dashboard?view=family', label: 'Family Dashboard', icon: LayoutGrid },
+  { href: '/dashboard/planning', label: 'Planning Hub', icon: ClipboardList },
+  { href: '/dashboard/food', label: 'Food Hub', icon: UtensilsCrossed },
 ];
 
 /** Pinned footer of the Free-tier sidebar — always reachable, below All Services. */

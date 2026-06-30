@@ -7,21 +7,18 @@
 // so nothing is lost — it's just no longer overwhelming.
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { Star } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
   PRIMARY_NAV, DASHBOARD_NAV, SIDEBAR_FOOTER_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS, type NavItem,
 } from '@/lib/constants/navigation';
 import { FEATURE_BY_KEY } from '@/lib/dashboard/registry';
-import { FeatureIcon } from '@/components/dashboard/feature-icons';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { saveDashboardLayoutAction } from '@/app/(app)/dashboard/customize-actions';
 import { useApp } from './app-context';
-import { resolveItems, NavEntry, isActive } from './nav-shared';
+import { resolveItems, NavEntry } from './nav-shared';
 import { SidebarAccount } from './sidebar-account';
 
 // Reverse map: nav route → registry feature key (only routes that ARE a
@@ -63,33 +60,6 @@ function useLiveUnread(initial: number, familyId: string, userId: string): numbe
   }, [familyId, userId]);
 
   return count;
-}
-
-/** The user's pinned Quick-Access shortcuts, resolved to links. */
-function SidebarShortcuts({ keys }: { keys: string[] }) {
-  const pathname = usePathname();
-  if (keys.length === 0) {
-    return <p className="px-2 py-1 text-xs leading-5 text-muted/60">Pin favorites from All Services.</p>;
-  }
-  return (
-    <>
-      {keys.map((k) => {
-        const f = FEATURE_BY_KEY[k];
-        if (!f) return null;
-        const active = isActive(pathname, f.route);
-        return (
-          <Link key={k} href={f.route}
-            className={cn(
-              'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition xl:px-4',
-              active ? 'bg-brand/15 text-brand shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg',
-            )}>
-            <FeatureIcon icon={f.icon} className="h-5 w-5 shrink-0" />
-            <span className="min-w-0 flex-1 truncate">{f.label}</span>
-          </Link>
-        );
-      })}
-    </>
-  );
 }
 
 /** Full catalog of every module, grouped + plan-gated, with ⭐ pin toggles. */
@@ -195,27 +165,22 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
           ))}
         </div>
 
-        {/* Role-aware dashboards — grouped below the primary destinations */}
-        <div className="mt-3 space-y-0.5 rounded-xl bg-elevated/40 p-1">
-          {DASHBOARD_NAV.map((item) => (
-            <NavEntry key={item.href} item={item} variant="list" locked={false} onLocked={onLocked} />
-          ))}
-        </div>
-
-        {/* Shortcuts */}
-        <div className="mt-5 space-y-0.5">
-          <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted/70">Shortcuts</p>
-          {keys !== null && <SidebarShortcuts keys={keys} />}
-        </div>
-
-        {/* All Services launcher */}
+        {/* Divider, then the All Services launcher */}
+        <div className="my-3 border-t border-border/50" />
         <button
           onClick={() => setAllOpen(true)}
-          className="mt-4 flex items-center gap-3 rounded-xl bg-brand px-3 py-3 text-sm font-bold text-brand-fg shadow-sm transition hover:opacity-90 xl:px-4"
+          className="flex items-center gap-3 rounded-xl bg-brand px-3 py-3 text-sm font-bold text-brand-fg shadow-sm transition hover:opacity-90 xl:px-4"
         >
           <ALL_SERVICES_ICON className="h-5 w-5 shrink-0" />
           All Services
         </button>
+
+        {/* Dashboards & hubs */}
+        <div className="mt-2 space-y-0.5">
+          {DASHBOARD_NAV.map((item) => (
+            <NavEntry key={item.href} item={item} variant="list" locked={false} onLocked={onLocked} />
+          ))}
+        </div>
 
         {/* Push the footer to the bottom */}
         <div className="flex-1" />
