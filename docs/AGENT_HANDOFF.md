@@ -1,8 +1,102 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
+Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-06-30 SESSION — UI redesigns + the PROD RLS-DRIFT discovery (all on `main`)
+> Mock-driven page redesigns plus a systemic production data bug. **Read the RLS section first — it explains
+> why "seeded but page is empty" kept happening and is almost certainly NOT unique to the tables fixed.**
+>
+> ### 🔴 ROOT CAUSE: production RLS drift (the most important thing here)
+> Symptom chased for an hour on the Calendar: data was seeded into the right family, dates correct, clocks
+> matched, `is_family_member(family_id)` returned **true** for the user — yet the app showed **0 rows**. The SQL
+> editor runs as `postgres` (bypasses RLS); the app reads as the user (RLS applied). Diagnosis: the table had
+> **RLS ENABLED but no working `*_select` policy in production** — so every authenticated read returned 0 rows,
+> for ALL families, not just the test one. `0004_rls.sql` is supposed to create `{table}_select using
+> (is_family_member(family_id))` for a list of family tables via a `do $$ … foreach`, but those policies were
+> missing/clobbered in the prod DB (schema drift — migrations applied unevenly).
+> - **Definitive test** (simulate the user under RLS in the SQL editor):
+>   ```sql
+>   begin;
+>   select set_config('request.jwt.claims',
+>     json_build_object('sub',(select id::text from auth.users where lower(email)='<user>'),'role','authenticated')::text, true);
+>   set local role authenticated;
+>   select public.is_family_member('<family_uuid>') as can_read,
+>          (select count(*) from public.<table> where family_id='<family_uuid>') as visible;
+>   rollback;
+>   ```
+>   `can_read=true` but `visible=0` ⇒ missing/broken SELECT policy on `<table>`.
+> - **Repair pattern (idempotent)** — drop+create the 4 verbs with `using (public.is_family_member(family_id))`:
+>   migrations **`0105_calendar_events_rls_repair.sql`**, **`0106_todo_rls_repair.sql`**,
+>   **`0107_meals_media_rls.sql`** do exactly this for their tables.
+> - ⚠️ **TODO for next bot**: audit EVERY family-scoped table in `0004_rls.sql`'s `fam_tables` list (chores,
+>   chore_assignments, rewards, meals, meal_plans, grocery_lists, grocery_items, medications, home_assets,
+>   documents, notes, goals, reminders, ai_conversations, ai_messages, …) against prod with the simulation
+>   above; repair any that come back `visible=0`. This drift is systemic, not table-specific.
+>
+> ### 🧪 Test account / target family (used by all the new seeds)
+> **The Kramer Family** `92298eb2-1a9e-4bdc-9361-677b6c01b499` = the active family of
+> **newworldventurellc@gmail.com** (Parent/Admin, Free Tier). The app resolves the active family as
+> `user_preferences.active_family_id` else the **first `family_members` row** (`lib/supabase/auth.ts:98`) — it
+> NEVER uses `families.created_by`. Early calendar seeds used a `created_by` fallback and seeded the WRONG
+> family → page stayed empty. New seeds are scoped to this exact family (or loop the user's active families).
+> Account tiers on prod: Newworldventurellc@gmail.com=Free, Blackstoneagencyllc@gmail.com=Basic,
+> SurgeServicesllc@gmail.com=Plus; ONLY daniel.hughen@gmail.com is super-admin.
+>
+> ### 🗓️ Calendar `/dashboard/calendar` — redesign (`components/modules/calendar-module.tsx`)
+> Matched the mock + made the view toggle real: **Day / Week / Month** (Month = 6-week grid w/ event chips;
+> Day = single-column time grid; nav arrows step by the active unit; fetch window widened to the visible month
+> so all three share one realtime query). Added a **people popover** + right-rail **Calendars** (per-member
+> eye toggles incl. a "Family"/unassigned entry → `hiddenMembers`), **Show** (birthday/school/holiday →
+> `hiddenCategories`), **Share Calendar** (invite), and a **Sync & Connect** footer (real Google status →
+> `/dashboard/sync`). All client-side visibility filters over the existing `calendar_events` realtime query.
+> Seeds: `supabase/seed_calendar.sql` (500, multi-family) + `supabase/seed_calendar_one_family.sql` (per-user,
+> now-relative dates). Honest gap: Outlook chip not faked (no integration exists).
+>
+> ### ✅ Tasks `/dashboard/todos` — redesign (`components/modules/todos-module.tsx`)
+> Rebuilt the list-centric to-do manager into the aggregated **Tasks** dashboard: tabs (All / My Tasks /
+> Assigned to Me / Completed w/ counts), Overdue/Today/Upcoming/No-date groups, right rail (Task Summary
+> conic-gradient donut, My Top Priorities, Assigned to Others, Quick Add Today/Tomorrow/This Week/Pick Date).
+> Wired to existing `todo_items`+`todo_lists` (the image's "categories" = `todo_lists`). New tasks now set
+> `created_by` so "My Tasks" works; Quick Add auto-ensures a default category. ⚠️ `todo_items` **Update** type
+> excludes `list_id` (set at creation only) — the edit modal disables the category control. Seed:
+> **`supabase/seed_tasks_one_family.sql`** (500 rows, RLS repair baked in, idempotent tag `seed:tasks`).
+>
+> ### 🍽️ Meals `/dashboard/meals` — redesign (`components/modules/meals-module.tsx`)
+> Functional tabs (Meal Plan / Recipes / Groceries / Favorites); week grid now shows **dish photos** (new
+> `meals.image_url`, emoji fallback via `<MealImg>`); **What's for Dinner?** carousel over the week's dinners;
+> **Family Vote** wired to `meal_votes`/`meal_vote_options`/`meal_vote_ballots` (live tallies + one-ballot-per-
+> member, delete-then-insert); Recipes/Favorites read `family_recipes` (photo/time/difficulty + heart →
+> `is_favorite`); Groceries tab + rail toggle `grocery_items`; Recently Cooked from `family_recipes.last_made_at`;
+> Nutrition Overview keeps the AI panel. **Migration `0107`** adds `meals.image_url` + RLS repair for the meals
+> domain; `lib/database.types.ts` updated. Seed **`supabase/seed_meals_one_family.sql`**: ~40 meals, **504
+> meal_plans** (18 wks), 16 recipes, a vote, a 12-item grocery list. ⚠️ **App selects `meals.image_url`** — prod
+> MUST get `alter table public.meals add column if not exists image_url text;` (or apply 0107) or the planner
+> query errors. Honest gaps NOT faked: "Meal Plan Settings" strip (needs a prefs table) + per-meal participant
+> avatars (needs a join table).
+>
+> ### 🎛️ Settings `/dashboard/settings` — tabbed view (`components/modules/settings-module.tsx`)
+> Single scroll → 4 tabs (Profile / Family / Calendar / Security). Active tab round-trips through the URL hash
+> so deep links (`#members`, `#app-lock`, `#families`, `#sync`) work and the tab survives the
+> `window.location.reload()` some save actions trigger. Uses the existing `.tab-bar/.tab-item` classes.
+>
+> ### 🧭 Sidebar + nav polish
+> - `components/app/app-shell.tsx`: mobile top-bar **house logo now → `/home`** (was `/dashboard`; desktop
+>   already went to /home). UserMenu has a **Home (DEFAULT)** entry → `/home`.
+> - `components/app/free-tier-sidebar.tsx`: **All Services** launcher de-emphasized — dropped the hardcoded
+>   purple `bg-brand` CTA styling so it matches the other items (muted, hover, no shadow/bold).
+> - `lib/constants/navigation.ts`: **Family Dashboard** icon `LayoutGrid` → **`UsersRound`** so All Services
+>   (LayoutGrid) / Parent Dashboard (LayoutDashboard) / Family Dashboard (UsersRound) are each distinct.
+>
+> ### 📋 Manual prod steps still owed (next bot or user)
+> 1. **Apply migrations 0105 / 0106 / 0107** to prod (esp. `meals.image_url`). The seeds bake in the RLS
+>    repair, but the `image_url` COLUMN add only ships in 0107.
+> 2. **Run the per-family seeds** in the SQL editor (each is idempotent, RLS-repair-inclusive):
+>    `seed_calendar_one_family.sql`, `seed_tasks_one_family.sql`, `seed_meals_one_family.sql`.
+> 3. **Audit the rest of the `0004_rls.sql` family tables** for the same SELECT-policy drift (see RLS section).
+> Cannot do these from the agent sandbox: no service-role/DB creds; only the RLS-blocked publishable key.
+> tsc · eslint · build ✓ for every change this session.
+>
 > ## 🐞 FIXED: PROD BUILD CRASH ON BLOG PRERENDER (on `main`)
 > Vercel prod build was failing at `Generating static pages` for `/blog/seed-blog_posts-172` with
 > `TypeError: a.filter is not a function`. Root cause: `blog_posts.body` is a `Json` column and a seeded post
