@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Star } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
-  PRIMARY_NAV, DASHBOARD_NAV, SIDEBAR_FOOTER_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS, type NavItem,
+  PRIMARY_NAV, DASHBOARD_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS, type NavItem,
 } from '@/lib/constants/navigation';
 import { FEATURE_BY_KEY } from '@/lib/dashboard/registry';
 import { Modal } from '@/components/ui/modal';
@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils/cn';
 import { saveDashboardLayoutAction } from '@/app/(app)/dashboard/customize-actions';
 import { useApp } from './app-context';
 import { resolveItems, NavEntry } from './nav-shared';
-import { SidebarAccount } from './sidebar-account';
+import { SidebarFooter } from './sidebar-footer';
 
 // Reverse map: nav route → registry feature key (only routes that ARE a
 // registry feature can be pinned, since pins persist as dashboard feature_keys).
@@ -150,7 +150,7 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
 
   return (
     <>
-      <nav className="flex flex-1 flex-col overflow-y-auto px-3 pb-4 xl:px-4">
+      <nav className="flex-1 overflow-y-auto px-3 pb-4 pt-1 xl:px-4">
         {/* Primary destinations */}
         <div className="space-y-0.5">
           {PRIMARY_NAV.map((item) => (
@@ -169,7 +169,7 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
         <div className="my-3 border-t border-border/50" />
         <button
           onClick={() => setAllOpen(true)}
-          className="flex items-center gap-3 rounded-xl bg-brand px-3 py-3 text-sm font-bold text-brand-fg shadow-sm transition hover:opacity-90 xl:px-4"
+          className="flex w-full items-center gap-3 rounded-xl bg-brand px-3 py-3 text-sm font-bold text-brand-fg shadow-sm transition hover:opacity-90 xl:px-4"
         >
           <ALL_SERVICES_ICON className="h-5 w-5 shrink-0" />
           All Services
@@ -181,22 +181,10 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
             <NavEntry key={item.href} item={item} variant="list" locked={false} onLocked={onLocked} />
           ))}
         </div>
-
-        {/* Push the footer to the bottom */}
-        <div className="flex-1" />
-
-        {/* Settings + Help, always reachable */}
-        <div className="space-y-0.5 border-t border-border/50 pt-3">
-          {SIDEBAR_FOOTER_NAV.map((item) => (
-            <NavEntry key={item.href} item={item} variant="list" locked={false} onLocked={onLocked} />
-          ))}
-        </div>
-
-        {/* Account details + theme toggle */}
-        <div className="mt-3">
-          <SidebarAccount />
-        </div>
       </nav>
+
+      {/* Shared bottom-left footer — identical across every page + tier */}
+      <SidebarFooter />
 
       <AllServicesModal
         open={allOpen}
