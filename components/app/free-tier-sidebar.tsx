@@ -174,7 +174,7 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
         <div className="my-3 border-t border-border/50" />
         <button
           onClick={() => setAllOpen(true)}
-          className="flex items-center gap-3 rounded-xl bg-brand px-3 py-3 text-sm font-bold text-brand-fg shadow-sm transition hover:opacity-90 xl:px-4"
+          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg xl:px-4 xl:py-3 xl:text-base"
         >
           <ALL_SERVICES_ICON className="h-5 w-5 shrink-0" />
           All Services

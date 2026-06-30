@@ -240,7 +240,7 @@ export const PRIMARY_NAV: NavItem[] = [
  */
 export const DASHBOARD_NAV: NavItem[] = [
   { href: '/dashboard', label: 'Parent Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard?view=family', label: 'Family Dashboard', icon: LayoutGrid },
+  { href: '/dashboard?view=family', label: 'Family Dashboard', icon: UsersRound },
   { href: '/dashboard/planning', label: 'Planning Hub', icon: ClipboardList },
   { href: '/dashboard/food', label: 'Food Hub', icon: UtensilsCrossed },
 ];
