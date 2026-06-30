@@ -6,7 +6,7 @@
 // ~70-module catalog lives behind All Services (plan-gated with upgrade prompts)
 // so nothing is lost — it's just no longer overwhelming.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Star } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -33,6 +33,11 @@ const KEY_BY_ROUTE = new Map(Object.values(FEATURE_BY_KEY).map((f) => [f.route, 
  */
 function useLiveUnread(initial: number, familyId: string, userId: string): number {
   const [count, setCount] = useState(initial);
+  // Unique per component instance. The browser Supabase client is a singleton,
+  // and the desktop sidebar + the mobile drawer can both mount a FreeTierSidebar
+  // at once — two channels with the SAME topic on one client collide and throw
+  // ("tried to subscribe multiple times"), which broke the hamburger drawer.
+  const channelId = useId();
   useEffect(() => { setCount(initial); }, [initial]);
 
   useEffect(() => {
@@ -47,7 +52,7 @@ function useLiveUnread(initial: number, familyId: string, userId: string): numbe
       if (active && typeof c === 'number') setCount(c);
     };
     const channel = supabase
-      .channel(`unread-msgs:${familyId}`)
+      .channel(`unread-msgs:${familyId}:${channelId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'family_messages', filter: `family_id=eq.${familyId}` }, () => { void refetch(); })
       .subscribe();
     const onVis = () => { if (document.visibilityState === 'visible') void refetch(); };
@@ -57,7 +62,7 @@ function useLiveUnread(initial: number, familyId: string, userId: string): numbe
       void supabase.removeChannel(channel);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [familyId, userId]);
+  }, [familyId, userId, channelId]);
 
   return count;
 }
