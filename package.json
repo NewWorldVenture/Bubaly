@@ -14,6 +14,7 @@
     "db:types": "supabase gen types typescript --local > lib/database.types.ts",
     "seed:home": "psql \"$DATABASE_URL\" -f supabase/seed.sql -f supabase/seed_home.sql",
     "seed:planning": "psql \"$DATABASE_URL\" -f supabase/seed.sql -f supabase/seed_home.sql -f supabase/seed_planning.sql",
+    "seed:food": "psql \"$DATABASE_URL\" -f supabase/seed.sql -f supabase/seed_home.sql -f supabase/seed_food.sql",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

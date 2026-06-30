@@ -128,6 +128,11 @@ type T<Row, Insert, Update> = { Row: Row; Insert: Insert; Update: Update; Relati
 export interface Database {
   public: {
     Tables: {
+      dining_out: T<
+        { id: string; family_id: string; name: string; kind: string; cuisine: string | null; category: string | null; price_level: number | null; rating: number | null; address: string | null; distance_km: number | null; amount_cents: number | null; item_count: number | null; notes: string | null; is_favorite: boolean; visited_at: string | null; metadata: Json; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name: string; kind?: string; cuisine?: string | null; category?: string | null; price_level?: number | null; rating?: number | null; address?: string | null; distance_km?: number | null; amount_cents?: number | null; item_count?: number | null; notes?: string | null; is_favorite?: boolean; visited_at?: string | null; metadata?: Json; created_by?: string | null },
+        Partial<{ name: string; kind: string; cuisine: string | null; category: string | null; price_level: number | null; rating: number | null; address: string | null; distance_km: number | null; amount_cents: number | null; item_count: number | null; notes: string | null; is_favorite: boolean; visited_at: string | null; metadata: Json }>
+      >;
       profiles: T<
         { id: string; email: string | null; full_name: string | null; display_name: string | null; avatar_url: string | null; date_of_birth: string | null; phone: string | null } & Stamps,
         { id: string; email?: string | null; full_name?: string | null; display_name?: string | null; avatar_url?: string | null; date_of_birth?: string | null; phone?: string | null },
