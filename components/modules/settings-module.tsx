@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Settings, Users, Mail, Trash2, Plus, Check, Pencil } from 'lucide-react';
+import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -29,6 +29,27 @@ import { AppLockSettings } from '@/components/settings/app-lock-settings';
 import type { Tables } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/database.types';
 
+const SETTINGS_TABS = [
+  { id: 'profile', label: 'Profile', icon: User },
+  { id: 'family', label: 'Family', icon: Users },
+  { id: 'calendar', label: 'Calendar', icon: RefreshCw },
+  { id: 'security', label: 'Security', icon: Lock },
+] as const;
+type SettingsTab = (typeof SETTINGS_TABS)[number]['id'];
+
+// Map legacy/deep-link hashes (#members, #app-lock, #families, #sync) onto tabs
+// so existing links keep working, and round-trip the active tab through the URL
+// hash so it survives the window.location.reload() that some save actions do.
+const TAB_BY_HASH: Record<string, SettingsTab> = {
+  profile: 'profile', dashboard: 'profile',
+  family: 'family', members: 'family', families: 'family',
+  calendar: 'calendar', sync: 'calendar',
+  security: 'security', 'app-lock': 'security',
+};
+const HASH_BY_TAB: Record<SettingsTab, string> = {
+  profile: 'profile', family: 'members', calendar: 'calendar', security: 'app-lock',
+};
+
 export function SettingsModule() {
   const { family, members, role, userId, userEmail, defaultDashboard } = useApp();
   const admin = isAdmin(role);
@@ -39,6 +60,20 @@ export function SettingsModule() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [dashboardView, setDashboardView] = useState<DashboardView>(defaultDashboard);
   const [savingDashboard, setSavingDashboard] = useState(false);
+  const [tab, setTab] = useState<SettingsTab>('profile');
+
+  // Seed the active tab from the URL hash on mount (deep links + reload survival).
+  useEffect(() => {
+    const h = window.location.hash.replace(/^#/, '').toLowerCase();
+    if (h && TAB_BY_HASH[h]) setTab(TAB_BY_HASH[h]);
+  }, []);
+
+  function changeTab(next: SettingsTab) {
+    setTab(next);
+    // replaceState (not a navigation) keeps the tab in the URL without scrolling
+    // or adding history entries, and persists it across save-triggered reloads.
+    window.history.replaceState(null, '', `#${HASH_BY_TAB[next]}`);
+  }
 
   const selfMember = members.find((m) => m.user_id === userId);
 
@@ -116,6 +151,25 @@ export function SettingsModule() {
     <div className="module-page">
       <PageHeader title="Settings" description="Manage your profile, family, and members." action={<AiInsight kind="settings" />} />
 
+      {/* Tab switcher */}
+      <div className="tab-bar" role="tablist" aria-label="Settings sections">
+        {SETTINGS_TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => changeTab(id)}
+            className={cn('tab-item inline-flex items-center gap-1.5', tab === id ? 'tab-item-active' : 'tab-item-inactive')}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Profile tab */}
+      {tab === 'profile' && (<>
       {/* Profile */}
       <Card>
         <h2 className="mb-4 text-base font-semibold">Your profile</h2>
@@ -203,7 +257,10 @@ export function SettingsModule() {
           })}
         </div>
       </Card>
+      </>)}
 
+      {/* Family tab */}
+      {tab === 'family' && (<>
       {/* Family */}
       {admin && (
         <Card>
@@ -254,14 +311,17 @@ export function SettingsModule() {
           ))}
         </ul>
       </Card>
+      </>)}
 
-      {/* Calendar Sync */}
-      <Card>
-        <CalendarSyncPanel />
-      </Card>
+      {/* Calendar tab */}
+      {tab === 'calendar' && (
+        <Card>
+          <CalendarSyncPanel />
+        </Card>
+      )}
 
-      {/* Security — opt-in App Lock */}
-      <AppLockSettings />
+      {/* Security tab — opt-in App Lock */}
+      {tab === 'security' && <AppLockSettings />}
 
       {inviteOpen && (
         <InviteModal
