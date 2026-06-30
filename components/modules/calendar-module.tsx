@@ -1,10 +1,9 @@
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles, Eye, EyeOff, Users } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -40,8 +39,24 @@ const CATEGORY_DOT: Record<string, string> = {
   birthday: 'bg-pink-400', holiday: 'bg-teal-400', other: 'bg-muted',
 };
 
+// "Show" toggles mirror the image's birthday / school / holiday switches.
+const SHOW_TOGGLES = [
+  { key: 'birthday', label: 'Birthdays', emoji: '🎁' },
+  { key: 'school', label: 'School Events', emoji: '🏫' },
+  { key: 'holiday', label: 'Holidays', emoji: '🎉' },
+] as const;
+
+// Sentinel "calendar" for events with no assignee (shared / whole-family).
+const FAMILY_KEY = '__family__';
+
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am-9pm
 const HOUR_HEIGHT = 64; // px per hour
+
+function GoogleGlyph({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" fill="none"><path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58Z" fill="#EA4335"/></svg>
+  );
+}
 
 function weekStart(offset = 0): Date {
   const d = new Date();
@@ -121,16 +136,58 @@ function MiniCalendar({ current, onSelect }: { current: Date; onSelect: (d: Date
   );
 }
 
+// Full-month grid view (image's "Month" tab).
+function MonthGrid({ gridDays, monthAnchor, eventsByDay, todayStr, onSelect }: {
+  gridDays: Date[]; monthAnchor: Date; eventsByDay: Map<string, Event[]>;
+  todayStr: string; onSelect: (e: Event) => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="grid grid-cols-7 border-b border-border">
+        {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d) => (
+          <div key={d} className="border-l border-border py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-muted first:border-l-0">{d}</div>
+        ))}
+      </div>
+      <div className="grid flex-1 auto-rows-fr grid-cols-7">
+        {gridDays.map((d, i) => {
+          const dStr = d.toISOString().slice(0, 10);
+          const inMonth = d.getMonth() === monthAnchor.getMonth();
+          const isToday = dStr === todayStr;
+          const evs = eventsByDay.get(dStr) ?? [];
+          return (
+            <div key={i} className={cn('min-h-[88px] overflow-hidden border-l border-t border-border p-1', !inMonth && 'bg-surface/30')}>
+              <div className={cn('mb-1 flex h-6 w-6 items-center justify-center rounded-full text-xs', isToday ? 'bg-brand font-bold text-white' : inMonth ? 'text-fg' : 'text-muted')}>{d.getDate()}</div>
+              <div className="space-y-0.5">
+                {evs.slice(0, 3).map((e) => (
+                  <button key={e.id} onClick={() => onSelect(e)}
+                    className={cn('flex w-full items-center gap-1 truncate rounded border px-1 py-0.5 text-left text-[10px]', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', CATEGORY_DOT[e.category] ?? 'bg-muted')} />
+                    <span className="truncate">{e.title}</span>
+                  </button>
+                ))}
+                {evs.length > 3 && <div className="px-1 text-[9px] text-muted">+{evs.length - 3} more</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function CalendarModule() {
   const { familyId, userId, members, selfMember } = useApp();
   const [open, setOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [selected, setSelected] = useState<Event | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
-  const [filterMember, setFilterMember] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [catMenu, setCatMenu] = useState(false);
-  const [view, setView] = useState<'week' | 'month' | 'agenda'>('week');
+  const [memberMenu, setMemberMenu] = useState(false);
+  const [view, setView] = useState<'day' | 'week' | 'month'>('week');
+  // Per-member / per-category visibility (the image's Calendars + Show toggles).
+  const [hiddenMembers, setHiddenMembers] = useState<Set<string>>(new Set());
+  const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
   const [gcalConnected, setGcalConnected] = useState<boolean | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [mobileDayIndex, setMobileDayIndex] = useState(() => {
@@ -142,6 +199,21 @@ export function CalendarModule() {
 
   const monday = useMemo(() => weekStart(weekOffset), [weekOffset]);
   const days = useMemo(() => daysOfWeek(monday), [monday]);
+
+  // Month grid window — also the fetch window, so week / day / month all share
+  // one query (it always covers the visible week too).
+  const monthAnchor = useMemo(() => new Date(monday.getFullYear(), monday.getMonth(), 1), [monday]);
+  const monthGridStart = useMemo(() => {
+    const f = new Date(monthAnchor);
+    f.setDate(1 - ((f.getDay() + 6) % 7));
+    f.setHours(0, 0, 0, 0);
+    return f;
+  }, [monthAnchor]);
+  const monthGridDays = useMemo(
+    () => Array.from({ length: 42 }, (_, i) => { const d = new Date(monthGridStart); d.setDate(d.getDate() + i); return d; }),
+    [monthGridStart],
+  );
+  const fetchEnd = useMemo(() => { const d = new Date(monthGridStart); d.setDate(d.getDate() + 42); return d; }, [monthGridStart]);
 
   useEffect(() => {
     fetch('/api/google/calendar/sync').then(r => r.json()).then((d: { connected: boolean }) => setGcalConnected(d.connected)).catch(() => setGcalConnected(false));
@@ -156,20 +228,24 @@ export function CalendarModule() {
   }, []);
 
   const { data, loading, error, refresh } = useRealtimeQuery<Event>({
-    table: 'calendar_events', familyId, deps: [familyId, monday.toISOString()],
+    table: 'calendar_events', familyId, deps: [familyId, monthGridStart.toISOString()],
     fetcher: (supabase) =>
       supabase.from('calendar_events').select('*').eq('family_id', familyId)
-        .gte('starts_at', days[0].toISOString()).lte('starts_at', new Date(days[6].getTime() + 86400000).toISOString())
+        .gte('starts_at', monthGridStart.toISOString()).lt('starts_at', fetchEnd.toISOString())
         .order('starts_at'),
   });
 
   const memberById = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
 
   const filtered = useMemo(() => {
-    let list = filterMember === 'all' ? data : data.filter(e => e.assignee_id === filterMember);
-    if (filterCategory !== 'all') list = list.filter(e => e.category === filterCategory);
-    return list;
-  }, [data, filterMember, filterCategory]);
+    return data.filter((e) => {
+      if (filterCategory !== 'all' && e.category !== filterCategory) return false;
+      if (hiddenCategories.has(e.category)) return false;
+      const mk = e.assignee_id ?? FAMILY_KEY;
+      if (hiddenMembers.has(mk)) return false;
+      return true;
+    });
+  }, [data, filterCategory, hiddenCategories, hiddenMembers]);
 
   const allDay = filtered.filter(e => e.all_day);
   const timed = filtered.filter(e => !e.all_day);
@@ -194,6 +270,17 @@ export function CalendarModule() {
     }
     return map;
   }, [allDay]);
+
+  // Combined per-day map (month chips + day list).
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, Event[]>();
+    for (const e of filtered) {
+      const key = new Date(e.starts_at).toISOString().slice(0, 10);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(e);
+    }
+    return map;
+  }, [filtered]);
 
   // Upcoming events for sidebar (next 7 days)
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -227,9 +314,38 @@ export function CalendarModule() {
     finally { setSyncing(false); }
   }
 
+  function toggleMember(key: string) {
+    setHiddenMembers((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  }
+  function toggleCategory(key: string) {
+    setHiddenCategories((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  }
+
+  // Navigation honours the active view (day → ±1 day, week → ±1 week, month → ±1 month).
+  function navStep(dir: -1 | 1) {
+    if (view === 'month') { setWeekOffset((w) => w + dir * 4); return; }
+    if (view === 'day') {
+      setMobileDayIndex((i) => {
+        const ni = i + dir;
+        if (ni < 0) { setWeekOffset((w) => w - 1); return 6; }
+        if (ni > 6) { setWeekOffset((w) => w + 1); return 0; }
+        return ni;
+      });
+      return;
+    }
+    setWeekOffset((w) => w + dir);
+  }
+  function goToday() {
+    setWeekOffset(0);
+    setMobileDayIndex((new Date().getDay() + 6) % 7);
+  }
+
   const todayStr = today.toISOString().slice(0, 10);
   const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
   const nowTop = (nowMins - 6 * 60) * (HOUR_HEIGHT / 60);
+
+  // Columns rendered by the time-grid: one day in day-view, the week otherwise.
+  const gridColumns = view === 'day' ? [days[mobileDayIndex]] : days;
 
   // Mobile day data
   const mobileDay = days[mobileDayIndex];
@@ -240,7 +356,17 @@ export function CalendarModule() {
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
-  const dateLabel = `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  const dateLabel = view === 'month'
+    ? monthAnchor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : view === 'day'
+      ? days[mobileDayIndex].toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })
+      : `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+  // "Calendars" list: every member + a synthetic whole-family entry.
+  const calendarRows = [
+    ...members.map((m) => ({ key: m.id, label: m.user_id === userId ? `${m.display_name} (Me)` : m.display_name, color: m.color })),
+    { key: FAMILY_KEY, label: 'Family', color: null as string | null },
+  ];
 
   return (
     <div className="module-with-sidebar">
@@ -250,12 +376,12 @@ export function CalendarModule() {
         <div className="module-page flex-shrink-0 border-b border-border">
           <PageHeader
             title="Calendar"
+            description="Stay on top of your family's schedule."
             action={
               <div className="flex items-center gap-2">
                 {gcalConnected === false && (
                   <a href="/api/google/calendar/auth" className="btn-inline">
-                    <svg width="13" height="13" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58Z" fill="#EA4335"/></svg>
-                    Connect Google
+                    <GoogleGlyph /> Connect Google
                   </a>
                 )}
                 {gcalConnected && (
@@ -278,17 +404,17 @@ export function CalendarModule() {
           {/* Nav + view switcher row */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
-              <button onClick={() => { setWeekOffset(0); }} className="btn-inline">Today</button>
+              <button onClick={goToday} className="btn-inline">Today</button>
               <div className="flex items-center gap-1">
-                <button onClick={() => setWeekOffset(w => w - 1)} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronLeft className="h-4 w-4" /></button>
-                <button onClick={() => setWeekOffset(w => w + 1)} className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronRight className="h-4 w-4" /></button>
+                <button onClick={() => navStep(-1)} aria-label="Previous" className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronLeft className="h-4 w-4" /></button>
+                <button onClick={() => navStep(1)} aria-label="Next" className="rounded-lg p-1.5 hover:bg-elevated transition"><ChevronRight className="h-4 w-4" /></button>
               </div>
               <span className="text-sm font-semibold">{dateLabel}</span>
             </div>
 
             <div className="ml-auto flex items-center gap-2">
               <div className="tab-bar">
-                {(['week', 'month', 'agenda'] as const).map(v => (
+                {(['day', 'week', 'month'] as const).map(v => (
                   <button key={v} onClick={() => setView(v)}
                     className={cn('tab-item capitalize', view === v ? 'tab-item-active' : 'tab-item-inactive')}>
                     {v}
@@ -317,24 +443,34 @@ export function CalendarModule() {
                   </>
                 )}
               </div>
-            </div>
-          </div>
 
-          {/* Member filter pills */}
-          <div className="mt-3 flex items-center gap-2 overflow-x-auto scrollbar-none">
-            <button onClick={() => setFilterMember('all')}
-              className={cn('flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition',
-                filterMember === 'all' ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-              <div className={cn('h-1.5 w-1.5 rounded-full', filterMember === 'all' ? 'bg-brand' : 'bg-muted')} /> All
-            </button>
-            {members.map(m => (
-              <button key={m.id} onClick={() => setFilterMember(m.id === filterMember ? 'all' : m.id)}
-                className={cn('flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition',
-                  filterMember === m.id ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-                <Avatar name={m.display_name} color={m.color} size={18} />
-                {m.display_name}
-              </button>
-            ))}
+              {/* People / member-visibility popover (works on every screen size). */}
+              <div className="relative">
+                <button onClick={() => setMemberMenu(v => !v)} aria-label="Member calendars"
+                  className={cn('grid h-9 w-9 place-items-center rounded-full border border-border transition hover:bg-elevated', hiddenMembers.size > 0 && 'text-brand')}>
+                  <Users className="h-4 w-4" />
+                </button>
+                {memberMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setMemberMenu(false)} />
+                    <div className="absolute right-0 z-20 mt-1 max-h-72 w-52 overflow-y-auto rounded-xl border border-border bg-elevated p-1.5 shadow-lg">
+                      <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">Calendars</p>
+                      {calendarRows.map((row) => {
+                        const visible = !hiddenMembers.has(row.key);
+                        return (
+                          <button key={row.key} onClick={() => toggleMember(row.key)}
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface transition">
+                            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: row.color ?? 'var(--brand, #7c5cff)' }} />
+                            <span className={cn('flex-1 truncate', !visible && 'text-muted line-through')}>{row.label}</span>
+                            {visible ? <Eye className="h-3.5 w-3.5 text-muted" /> : <EyeOff className="h-3.5 w-3.5 text-muted" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -400,91 +536,124 @@ export function CalendarModule() {
           </div>
         </div>
 
-        {/* ===== DESKTOP WEEK GRID (md+) ===== */}
+        {/* ===== DESKTOP GRID (md+) ===== */}
         <div className="hidden min-h-0 flex-1 flex-col overflow-hidden md:flex">
-          {/* Day headers */}
-          <div className="flex flex-shrink-0 border-b border-border">
-            <div className="w-14 flex-shrink-0" />
-            {days.map((d, i) => {
-              const dStr = d.toISOString().slice(0, 10);
-              const isToday = dStr === todayStr;
-              return (
-                <div key={i} className="flex flex-1 flex-col items-center border-l border-border py-2">
-                  <span className={cn('text-[10px] font-semibold uppercase tracking-wide', isToday ? 'text-brand' : 'text-muted')}>
-                    {d.toLocaleDateString('en-US', { weekday: 'short' })}
-                  </span>
-                  <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold', isToday ? 'bg-brand text-white' : 'text-fg')}>
-                    {d.getDate()}
-                  </span>
-                  {/* All-day events */}
-                  <div className="mt-1 w-full space-y-0.5 px-1">
-                    {(allDayByDay.get(dStr) ?? []).map(e => (
-                      <div key={e.id} className={cn('truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
-                        {e.title}
+          {view === 'month' ? (
+            <MonthGrid gridDays={monthGridDays} monthAnchor={monthAnchor} eventsByDay={eventsByDay} todayStr={todayStr} onSelect={setSelected} />
+          ) : (
+            <>
+              {/* Day headers */}
+              <div className="flex flex-shrink-0 border-b border-border">
+                <div className="w-14 flex-shrink-0" />
+                {gridColumns.map((d, i) => {
+                  const dStr = d.toISOString().slice(0, 10);
+                  const isToday = dStr === todayStr;
+                  return (
+                    <div key={i} className="flex flex-1 flex-col items-center border-l border-border py-2">
+                      <span className={cn('text-[10px] font-semibold uppercase tracking-wide', isToday ? 'text-brand' : 'text-muted')}>
+                        {d.toLocaleDateString('en-US', { weekday: 'short' })}
+                      </span>
+                      <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold', isToday ? 'bg-brand text-white' : 'text-fg')}>
+                        {d.getDate()}
+                      </span>
+                      {/* All-day events */}
+                      <div className="mt-1 w-full space-y-0.5 px-1">
+                        {(allDayByDay.get(dStr) ?? []).map(e => (
+                          <div key={e.id} onClick={() => setSelected(e)} className={cn('cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                            {e.title}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Scrollable time grid */}
-          <div ref={gridRef} className="flex min-h-0 flex-1 overflow-y-auto">
-            {/* Time labels */}
-            <div className="w-14 flex-shrink-0">
-              {HOURS.map(h => (
-                <div key={h} style={{ height: HOUR_HEIGHT }} className="relative flex items-start justify-end pr-2 pt-0">
-                  <span className="relative -top-2 text-[10px] text-muted">{fmtHour(h)}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Day columns */}
-            {days.map((d, i) => {
-              const dStr = d.toISOString().slice(0, 10);
-              const isToday = dStr === todayStr;
-              const dayEvents = timedByDay.get(dStr) ?? [];
-              return (
-                <div key={i} className="relative flex-1 border-l border-border" style={{ minHeight: HOURS.length * HOUR_HEIGHT }}>
-                  {/* Hour lines */}
-                  {HOURS.map(h => (
-                    <div key={h} style={{ top: (h - 6) * HOUR_HEIGHT, height: HOUR_HEIGHT }} className="absolute left-0 right-0 border-t border-border/40" />
-                  ))}
-
-                  {/* Current time line */}
-                  {isToday && nowTop >= 0 && nowTop <= HOURS.length * HOUR_HEIGHT && (
-                    <div style={{ top: nowTop }} className="absolute left-0 right-0 z-20 flex items-center">
-                      <div className="h-2 w-2 rounded-full bg-brand" />
-                      <div className="h-px flex-1 bg-brand" />
                     </div>
-                  )}
+                  );
+                })}
+              </div>
 
-                  {/* Events */}
-                  {dayEvents.map(e => {
-                    const top = eventTop(e);
-                    const height = eventHeight(e);
-                    const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
-                    if (top < 0 || top > HOURS.length * HOUR_HEIGHT) return null;
-                    return (
-                      <div key={e.id} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)}
-                        className={cn('absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}
-                        title={e.title}>
-                        <div className="flex items-start justify-between gap-1">
-                          <span className="font-semibold leading-tight truncate">{new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
-                          {height > 30 && member && <Avatar name={member.display_name} color={member.color} size={14} />}
-                        </div>
-                        {height > 24 && <div className="mt-0.5 truncate font-medium leading-tight">{e.title}</div>}
-                        {height > 42 && member && <div className="mt-0.5 truncate text-[9px] opacity-70">{member.display_name}</div>}
-                        {height > 54 && e.location && (
-                          <div className="mt-0.5 flex items-center gap-0.5 text-[9px] opacity-70"><MapPin className="h-2 w-2" />{e.location}</div>
-                        )}
-                      </div>
-                    );
-                  })}
+              {/* Scrollable time grid */}
+              <div ref={gridRef} className="flex min-h-0 flex-1 overflow-y-auto">
+                {/* Time labels */}
+                <div className="w-14 flex-shrink-0">
+                  {HOURS.map(h => (
+                    <div key={h} style={{ height: HOUR_HEIGHT }} className="relative flex items-start justify-end pr-2 pt-0">
+                      <span className="relative -top-2 text-[10px] text-muted">{fmtHour(h)}</span>
+                    </div>
+                  ))}
                 </div>
-              );
-            })}
+
+                {/* Day columns */}
+                {gridColumns.map((d, i) => {
+                  const dStr = d.toISOString().slice(0, 10);
+                  const isToday = dStr === todayStr;
+                  const dayEvents = timedByDay.get(dStr) ?? [];
+                  return (
+                    <div key={i} className="relative flex-1 border-l border-border" style={{ minHeight: HOURS.length * HOUR_HEIGHT }}>
+                      {/* Hour lines */}
+                      {HOURS.map(h => (
+                        <div key={h} style={{ top: (h - 6) * HOUR_HEIGHT, height: HOUR_HEIGHT }} className="absolute left-0 right-0 border-t border-border/40" />
+                      ))}
+
+                      {/* Current time line */}
+                      {isToday && nowTop >= 0 && nowTop <= HOURS.length * HOUR_HEIGHT && (
+                        <div style={{ top: nowTop }} className="absolute left-0 right-0 z-20 flex items-center">
+                          <div className="h-2 w-2 rounded-full bg-brand" />
+                          <div className="h-px flex-1 bg-brand" />
+                        </div>
+                      )}
+
+                      {/* Events */}
+                      {dayEvents.map(e => {
+                        const top = eventTop(e);
+                        const height = eventHeight(e);
+                        const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
+                        if (top < 0 || top > HOURS.length * HOUR_HEIGHT) return null;
+                        return (
+                          <div key={e.id} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)}
+                            className={cn('absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}
+                            title={e.title}>
+                            <div className="flex items-start justify-between gap-1">
+                              <span className="font-semibold leading-tight truncate">{new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                              {height > 30 && member && <Avatar name={member.display_name} color={member.color} size={14} />}
+                            </div>
+                            {height > 24 && <div className="mt-0.5 truncate font-medium leading-tight">{e.title}</div>}
+                            {height > 42 && member && <div className="mt-0.5 truncate text-[9px] opacity-70">{member.display_name}</div>}
+                            {height > 54 && e.location && (
+                              <div className="mt-0.5 flex items-center gap-0.5 text-[9px] opacity-70"><MapPin className="h-2 w-2" />{e.location}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ===== Sync & Connect footer ===== */}
+        <div className="flex-shrink-0 border-t border-border px-4 py-3 sm:px-6">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+            <div className="min-w-0">
+              <div className="font-semibold">Sync &amp; Connect</div>
+              <div className="text-muted">
+                {gcalConnected ? 'Your calendar is connected and up to date.' : 'Connect a calendar to keep everything in sync.'}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <GoogleGlyph size={15} />
+              <div className="leading-tight">
+                <div className="font-medium">Google Calendar</div>
+                <div className={cn('text-[11px]', gcalConnected ? 'text-green-400' : 'text-muted')}>{gcalConnected ? 'Connected' : 'Not connected'}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 text-brand" />
+              <div className="leading-tight">
+                <div className="font-medium">Family Sync</div>
+                <div className="text-[11px] text-green-400">Up to date</div>
+              </div>
+            </div>
+            <a href="/dashboard/sync" className="ml-auto font-medium text-brand hover:underline">Manage Connections →</a>
           </div>
         </div>
       </div>
@@ -501,7 +670,7 @@ export function CalendarModule() {
         <div className="sidebar-card">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-muted uppercase tracking-wide">Upcoming</span>
-            <span className="text-[10px] text-muted">Next 7 days</span>
+            <button onClick={() => setView('month')} className="text-[10px] font-medium text-brand hover:underline">View all</button>
           </div>
           {upcomingByDay.length === 0 ? (
             <p className="text-xs text-muted">Nothing coming up</p>
@@ -534,9 +703,54 @@ export function CalendarModule() {
               </div>
             );
           })}
-          {upcoming.length > 0 && (
-            <button onClick={() => setView('agenda')} className="mt-1 text-xs text-brand hover:underline">View full agenda →</button>
-          )}
+        </div>
+
+        {/* Calendars — per-member visibility toggles */}
+        <div className="sidebar-card">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted uppercase tracking-wide">Calendars</span>
+            <a href="/dashboard/settings#members" className="text-[10px] font-medium text-brand hover:underline">Manage</a>
+          </div>
+          <div className="space-y-0.5">
+            {calendarRows.map((row) => {
+              const visible = !hiddenMembers.has(row.key);
+              return (
+                <button key={row.key} onClick={() => toggleMember(row.key)}
+                  className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-elevated">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: row.color ?? 'var(--brand, #7c5cff)' }} />
+                  <span className={cn('flex-1 truncate text-xs', !visible && 'text-muted line-through')}>{row.label}</span>
+                  {visible ? <Eye className="h-3.5 w-3.5 text-muted" /> : <EyeOff className="h-3.5 w-3.5 text-muted/60" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Show — category visibility toggles */}
+        <div className="sidebar-card">
+          <div className="mb-2 text-xs font-semibold text-muted uppercase tracking-wide">Show</div>
+          <div className="space-y-0.5">
+            {SHOW_TOGGLES.map((t) => {
+              const visible = !hiddenCategories.has(t.key);
+              return (
+                <label key={t.key} className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1.5 transition hover:bg-elevated">
+                  <input type="checkbox" checked={visible} onChange={() => toggleCategory(t.key)}
+                    className="h-4 w-4 shrink-0 accent-brand" />
+                  <span className="flex-1 text-xs">{t.label}</span>
+                  <span aria-hidden>{t.emoji}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Share Calendar */}
+        <div className="sidebar-card">
+          <div className="mb-1 text-xs font-semibold text-muted uppercase tracking-wide">Share Calendar</div>
+          <p className="mb-2 text-xs text-muted">Keep everyone in the loop.</p>
+          <a href="/dashboard/settings#members" className="flex items-center gap-2 text-xs font-medium text-brand hover:underline">
+            <Users className="h-4 w-4" /> Invite People
+          </a>
         </div>
       </div>
 
