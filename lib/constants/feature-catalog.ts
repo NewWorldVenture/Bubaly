@@ -64,10 +64,10 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('pets', 'Pets', 'Daily Life', 'basic', '/dashboard/pets'),
   F('celebrations', 'Celebrations', 'Daily Life', 'free', '/dashboard/celebrations'),
   F('recipes', 'Recipes', 'Daily Life', 'free', '/dashboard/recipes'),
-  F('pantry', 'Pantry', 'Daily Life', 'basic', '/dashboard/pantry'),
+  F('pantry', 'Pantry', 'Daily Life', 'free', '/dashboard/pantry'),
   F('readiness', 'Readiness', 'Daily Life', 'basic', '/dashboard/readiness'),
   F('documents', 'Documents', 'Daily Life', 'free', '/dashboard/documents'),
-  F('family-map', 'Family Map', 'Daily Life', 'basic', '/dashboard/locator'),
+  F('family-map', 'Family Map', 'Daily Life', 'free', '/dashboard/locator'),
   F('notifications', 'Notifications', 'Daily Life', 'basic', '/dashboard/notifications'),
 
   // ── Family & Home ──────────────────────────────────────────
@@ -90,7 +90,7 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('medications', 'Medications', 'Family & Home', 'basic', '/dashboard/medications'),
   F('rides', 'Rides', 'Family & Home', 'basic', '/dashboard/rides'),
   F('care-plans', 'Care Plans', 'Family & Home', 'basic', '/dashboard/care'),
-  F('medical-records', 'Medical Records', 'Family & Home', 'plus', '/dashboard/medical'),
+  F('medical-records', 'Medical Records', 'Family & Home', 'free', '/dashboard/medical'),
   F('dental', 'Dental', 'Family & Home', 'basic', '/dashboard/dental'),
   F('family-goals', 'Family Goals', 'Family & Home', 'basic', '/dashboard/goals'),
   F('kitchen', 'Kitchen', 'Family & Home', 'basic', '/display'),
