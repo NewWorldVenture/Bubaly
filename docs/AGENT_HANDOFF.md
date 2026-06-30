@@ -23,6 +23,20 @@ Last updated: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashbo
 > "Dashboard" entry was removed from the top of `PRIMARY_NAV` (Home now leads straight into the everyday list).
 > `isActive` is pathname-only so both links navigate correctly (query-string highlight is a known minor cosmetic).
 >
+> ## 🗂️ `/dashboard/planning` — PLANNING & ORGANIZATION HUB (on `main`)
+> Category hub matching the "Planning & Organization" showcase: header + intro banner + a responsive
+> **8-card grid**, each card **live-wired to Supabase** (counts + recent items) and linking to the real page.
+> - **`app/(app)/dashboard/planning/page.tsx`** (server, `force-dynamic`) — one parallel batch of 8
+>   family-scoped reads: `calendar_events`, `todo_items`, `family_reminders`, `notes`, `documents`,
+>   `family_contacts`, `family_milestones`, `family_photos` (Family Wall). Cards open
+>   /dashboard/{calendar,todos,reminders,notes,documents,contacts,celebrations,social-feed}. No migration
+>   (all tables exist; RLS already scopes by family). Empty tables → calm empty states.
+> - **`app/(app)/dashboard/planning/layout.tsx`** wraps `<AppFrame>`. **Planning** added to `PRIMARY_NAV`.
+> - **Seed `supabase/seed_planning.sql` (500 rows)** — fills the 4 tables seed_home doesn't: `notes` (120),
+>   `documents` (120), `family_contacts` (130), `family_milestones` (130) for the 5 demo families; idempotent,
+>   pooler-safe, scoped to demo ids. Respects `family_contacts.category` CHECK. Run: **`npm run seed:planning`**.
+>   Docs: **`docs/planning-supabase.md`**. tsc · eslint · 1403 tests · build ✓ (route present).
+>
 > ## 🌱 `/home` DEMO SEED — `supabase/seed_home.sql` (~665 rows, on `main`)
 > A focused, idempotent, pooler-safe seed that populates EVERY `/home` widget with NOW()-relative data for
 > the 5 demo families from `seed.sql` (run `seed.sql` first). Fills `calendar_events` (today + upcoming),
