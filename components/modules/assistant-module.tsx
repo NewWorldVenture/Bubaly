@@ -418,32 +418,7 @@ export function AssistantModule() {
           </>
         ) : (
           /* ===== Welcome hero ===== */
-          <div className="ai-hero-glow -mx-2 mt-2 flex flex-1 flex-col items-center rounded-3xl px-2 py-8 text-center sm:py-12">
-            {/* Glowing orb with floating sparkles */}
-            <div className="relative">
-              <div className="ai-orb h-24 w-24 sm:h-28 sm:w-28">
-                <Sparkles className="h-9 w-9 text-brand drop-shadow sm:h-11 sm:w-11" />
-              </div>
-              <Sparkles className="absolute -right-1 top-2 h-4 w-4 animate-pulse-soft text-brand/70" />
-              <Sparkles className="absolute -left-2 bottom-3 h-3 w-3 animate-pulse-soft text-accent/70" style={{ animationDelay: '0.6s' }} />
-            </div>
-
-            {/* Layered headline */}
-            <h1 className="mt-7 text-3xl font-black leading-tight sm:text-5xl">
-              Hi, {firstName}!{' '}
-              <span className="gradient-text-violet">I&apos;m your family concierge.</span>
-            </h1>
-            <p className="mt-3 max-w-xl text-base text-muted sm:text-lg">
-              I&apos;ll help you plan, organize, and stay ahead of everything your family has going on.
-            </p>
-
-            {/* Sparkle divider */}
-            <div className="my-8 flex w-full max-w-md items-center gap-3">
-              <span className="ai-divider-line flex-1" />
-              <Sparkles className="h-4 w-4 shrink-0 text-brand/60" />
-              <span className="ai-divider-line flex-1" />
-            </div>
-
+          <div className="ai-hero-glow -mx-2 mt-2 flex flex-1 flex-col items-center justify-center rounded-3xl px-2 py-5 text-center">
             {/* Big question */}
             <h2 className="text-2xl font-black sm:text-4xl">What can I help you with today?</h2>
             <p className="mt-2 max-w-lg text-sm text-muted sm:text-base">
@@ -451,12 +426,12 @@ export function AssistantModule() {
             </p>
 
             {/* Hero composer */}
-            <div className="mt-7 w-full max-w-2xl">
+            <div className="mt-6 w-full max-w-2xl">
               <Composer variant="hero" {...composerProps} onMicPress={composerProps.onMic} />
             </div>
 
             {/* Popular requests */}
-            <div className="mt-9 w-full max-w-3xl">
+            <div className="mt-6 w-full max-w-3xl">
               <p className="mb-3 text-sm font-bold tracking-wide text-fg/90">Popular requests</p>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 {POPULAR.map(({ icon: Icon, title, sub, prompt }) => (
@@ -479,13 +454,10 @@ export function AssistantModule() {
             </div>
 
             {/* Trust note */}
-            <div className="mt-9 inline-flex items-center gap-2 text-sm text-muted">
+            <div className="mt-6 inline-flex items-center gap-2 text-xs text-muted sm:text-sm">
               <ShieldCheck className="h-4 w-4 text-success" />
               Your family&apos;s data stays private and secure.
             </div>
-            <p className="mt-2 max-w-lg text-xs text-muted/60">
-              AI can make mistakes. Review important details before acting on them.
-            </p>
           </div>
         )}
       </section>
