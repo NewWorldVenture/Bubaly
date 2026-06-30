@@ -209,9 +209,9 @@ export interface Database {
         Partial<{ reward_id: string | null; reward_title: string; cost_points: number; status: RedemptionStatus; note: string | null; decided_by: string | null; decided_at: string | null }>
       >;
       meals: T<
-        { id: string; family_id: string; name: string; meal_type: MealType; recipe_url: string | null; ingredients: Json; notes: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; name: string; meal_type?: MealType; recipe_url?: string | null; ingredients?: Json; notes?: string | null; created_by?: string | null },
-        Partial<{ name: string; meal_type: MealType; recipe_url: string | null; ingredients: Json; notes: string | null }>
+        { id: string; family_id: string; name: string; meal_type: MealType; recipe_url: string | null; image_url: string | null; ingredients: Json; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; meal_type?: MealType; recipe_url?: string | null; image_url?: string | null; ingredients?: Json; notes?: string | null; created_by?: string | null },
+        Partial<{ name: string; meal_type: MealType; recipe_url: string | null; image_url: string | null; ingredients: Json; notes: string | null }>
       >;
       meal_plans: T<
         { id: string; family_id: string; meal_id: string | null; plan_date: string; meal_type: MealType; created_by: string | null } & Stamps,
