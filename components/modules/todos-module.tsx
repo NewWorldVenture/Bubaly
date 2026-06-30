@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  CheckSquare, Plus, Trash2, Check, Flag, Calendar, User,
-  ChevronLeft, MoreHorizontal, Circle, Tag, Search, X,
-  Pencil, Archive, Filter, Loader2,
+  CheckSquare, Plus, Trash2, Check, Flag, Calendar as CalendarIcon, Search, X,
+  Pencil, Loader2, ListChecks, Sparkles, User as UserIcon,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -13,10 +12,10 @@ import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
@@ -26,11 +25,11 @@ type TodoList = Tables<'todo_lists'>;
 type TodoItem = Tables<'todo_items'>;
 
 const PRIORITY_META = {
-  low:    { label: 'Low',    color: 'text-muted',         dot: 'bg-muted/50',    flag: 'text-muted/50' },
-  medium: { label: 'Medium', color: 'text-blue-400',      dot: 'bg-blue-400',    flag: 'text-blue-400' },
-  high:   { label: 'High',   color: 'text-amber-400',     dot: 'bg-amber-400',   flag: 'text-amber-400' },
-  urgent: { label: 'Urgent', color: 'text-danger',        dot: 'bg-danger',      flag: 'text-danger' },
-};
+  low:    { label: 'Low',    color: 'text-muted',     flag: 'text-muted/50' },
+  medium: { label: 'Medium', color: 'text-blue-400',  flag: 'text-blue-400' },
+  high:   { label: 'High',   color: 'text-amber-400', flag: 'text-amber-400' },
+  urgent: { label: 'Urgent', color: 'text-danger',    flag: 'text-danger' },
+} as const;
 
 const LIST_COLORS: Record<string, string> = {
   violet: 'bg-violet-500/20 text-violet-400',
@@ -43,52 +42,128 @@ const LIST_COLORS: Record<string, string> = {
 
 const LIST_ICONS = ['📋', '🏠', '💼', '🛒', '🎯', '📚', '🏋️', '✈️', '💡', '🎉'];
 
+// Donut segment palette (explicit hex — conic-gradient needs real colors).
+const DONUT = {
+  overdue:   { label: 'Overdue',       hex: '#f43f5e' },
+  today:     { label: 'Due Today',     hex: '#f59e0b' },
+  week:      { label: 'Due This Week', hex: '#6366f1' },
+  completed: { label: 'Completed',     hex: '#22c55e' },
+};
+
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function dueLabel(due: string, todayStr: string, tomorrowStr: string): string {
+  if (due === todayStr) return 'Today';
+  if (due === tomorrowStr) return 'Tomorrow';
+  // due is 'YYYY-MM-DD' — render without TZ surprises.
+  const [y, m, d] = due.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export function TodosModule() {
-  const { familyId, userId, members } = useApp();
+  const { familyId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
+  const selfId = selfMember?.id ?? null;
 
-  const [activeListId, setActiveListId] = useState<string | null>(null);
-  const [newListOpen, setNewListOpen] = useState(false);
-  const [newItemOpen, setNewItemOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<TodoItem | null>(null);
+  const [tab, setTab] = useState<'all' | 'mine' | 'assigned' | 'completed'>('all');
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'active' | 'done' | 'urgent'>('all');
+  const [addOpen, setAddOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<TodoItem | null>(null);
+  const [newListOpen, setNewListOpen] = useState(false);
+  const [quickTitle, setQuickTitle] = useState('');
+  const [quickBusy, setQuickBusy] = useState(false);
 
-  const { data: lists, loading: listsLoading, refresh: refreshLists } = useRealtimeQuery<TodoList>({
+  const { data: lists, refresh: refreshLists } = useRealtimeQuery<TodoList>({
     table: 'todo_lists', familyId, deps: [familyId],
     fetcher: (sb) =>
       sb.from('todo_lists').select('*').eq('family_id', familyId).is('archived_at', null)
         .order('sort_order').order('created_at'),
   });
 
-  const { data: items, loading: itemsLoading, refresh: refreshItems } = useRealtimeQuery<TodoItem>({
-    table: 'todo_items', familyId, deps: [familyId, activeListId],
-    fetcher: (sb) => {
-      if (!activeListId) return Promise.resolve({ data: [], error: null });
-      return sb.from('todo_items').select('*').eq('list_id', activeListId)
-        .order('is_done').order('priority', { ascending: false }).order('due_date').order('sort_order');
-    },
+  const { data: items, loading, refresh: refreshItems } = useRealtimeQuery<TodoItem>({
+    table: 'todo_items', familyId, deps: [familyId],
+    fetcher: (sb) =>
+      sb.from('todo_items').select('*').eq('family_id', familyId)
+        .order('due_date', { ascending: true, nullsFirst: false })
+        .order('priority', { ascending: false }),
   });
 
-  // Auto-select first list (effect, not render-time setState).
-  useEffect(() => {
-    if (lists.length > 0 && !activeListId) setActiveListId(lists[0].id);
-  }, [lists, activeListId]);
+  const listById = useMemo(() => new Map(lists.map((l) => [l.id, l])), [lists]);
+  const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const activeList = lists.find((l) => l.id === activeListId);
+  const now = new Date();
+  const todayStr = ymd(now);
+  const tomorrowStr = ymd(new Date(now.getTime() + 86400000));
+  const weekEndStr = ymd(new Date(now.getTime() + 7 * 86400000));
 
-  const filtered = useMemo(() => {
-    let res = items;
-    if (search) res = res.filter((i) => i.title.toLowerCase().includes(search.toLowerCase()));
-    if (filter === 'active') res = res.filter((i) => !i.is_done);
-    if (filter === 'done')   res = res.filter((i) => i.is_done);
-    if (filter === 'urgent') res = res.filter((i) => i.priority === 'urgent' && !i.is_done);
+  const active = useMemo(() => items.filter((i) => !i.is_done), [items]);
+  const completed = useMemo(() => items.filter((i) => i.is_done), [items]);
+
+  const counts = {
+    all: active.length,
+    mine: active.filter((i) => i.created_by === selfId).length,
+    assigned: active.filter((i) => i.assigned_to_id === selfId).length,
+    completed: completed.length,
+  };
+
+  // Tab → base set, then search.
+  const tabItems = useMemo(() => {
+    let res: TodoItem[];
+    if (tab === 'completed') res = completed;
+    else if (tab === 'mine') res = active.filter((i) => i.created_by === selfId);
+    else if (tab === 'assigned') res = active.filter((i) => i.assigned_to_id === selfId);
+    else res = active;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      res = res.filter((i) => i.title.toLowerCase().includes(q));
+    }
     return res;
-  }, [items, search, filter]);
+  }, [tab, active, completed, selfId, search]);
 
-  const pending = items.filter((i) => !i.is_done);
-  const done    = items.filter((i) => i.is_done);
+  // Group the active tabs by due date.
+  const groups = useMemo(() => {
+    const g = { overdue: [] as TodoItem[], today: [] as TodoItem[], upcoming: [] as TodoItem[], noDate: [] as TodoItem[] };
+    if (tab === 'completed') return g;
+    for (const i of tabItems) {
+      if (!i.due_date) g.noDate.push(i);
+      else if (i.due_date < todayStr) g.overdue.push(i);
+      else if (i.due_date === todayStr) g.today.push(i);
+      else g.upcoming.push(i);
+    }
+    return g;
+  }, [tabItems, tab, todayStr]);
+
+  // Right-rail summary metrics (computed from ALL items, not the active tab).
+  const summary = {
+    total: active.length,
+    overdue: active.filter((i) => i.due_date && i.due_date < todayStr).length,
+    today: active.filter((i) => i.due_date === todayStr).length,
+    week: active.filter((i) => i.due_date && i.due_date > todayStr && i.due_date <= weekEndStr).length,
+    completed: completed.length,
+  };
+
+  const priorities = useMemo(() => {
+    const rank = { urgent: 0, high: 1, medium: 2, low: 3 } as Record<string, number>;
+    return active
+      .filter((i) => i.created_by === selfId || i.assigned_to_id === selfId)
+      .sort((a, b) => {
+        const ao = a.due_date && a.due_date < todayStr ? 0 : 1;
+        const bo = b.due_date && b.due_date < todayStr ? 0 : 1;
+        if (ao !== bo) return ao - bo;
+        const pr = (rank[a.priority] ?? 2) - (rank[b.priority] ?? 2);
+        if (pr !== 0) return pr;
+        return (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999');
+      })
+      .slice(0, 4);
+  }, [active, selfId, todayStr]);
+
+  const assignedToOthers = useMemo(
+    () => active.filter((i) => i.assigned_to_id && i.assigned_to_id !== selfId).slice(0, 6),
+    [active, selfId],
+  );
 
   function toggleItem(item: TodoItem) {
     return run(`toggle:${item.id}`, async () => {
@@ -102,6 +177,7 @@ export function TodosModule() {
   }
 
   function deleteItem(id: string) {
+    if (!confirm('Delete this task?')) return;
     return run(`delete:${id}`, async () => {
       const { error } = await createClient().from('todo_items').delete().eq('id', id);
       if (error) throw error;
@@ -109,218 +185,325 @@ export function TodosModule() {
     });
   }
 
-  function clearDone() {
-    return run('clear-done', async () => {
-      const ids = done.map((i) => i.id);
-      if (!ids.length) return;
-      const { error } = await createClient().from('todo_items').delete().in('id', ids);
-      if (error) throw error;
-      success(`Cleared ${ids.length} completed items`);
-      void refreshItems();
-    });
+  // Ensure there's a list to attach a task to (Quick Add / first Add Task).
+  async function ensureListId(): Promise<string | null> {
+    if (lists.length > 0) return lists[0].id;
+    const { data, error } = await createClient().from('todo_lists')
+      .insert({ family_id: familyId, name: 'Tasks', icon: '📋', color: 'violet', is_shared: true })
+      .select('id').single();
+    if (error || !data) { toastError(describeDbError(error)); return null; }
+    void refreshLists();
+    return data.id;
   }
 
-  if (listsLoading) return <SkeletonList />;
+  async function quickAdd(when: 'today' | 'tomorrow' | 'week') {
+    const title = quickTitle.trim();
+    if (!title) { toastError('Type a task first'); return; }
+    setQuickBusy(true);
+    try {
+      const listId = await ensureListId();
+      if (!listId) return;
+      const due = when === 'today' ? todayStr : when === 'tomorrow' ? tomorrowStr : weekEndStr;
+      const { error } = await createClient().from('todo_items').insert({
+        family_id: familyId, list_id: listId, title, due_date: due,
+        priority: 'medium', created_by: selfId, assigned_to_id: selfId,
+      });
+      if (error) { toastError(describeDbError(error)); return; }
+      setQuickTitle('');
+      success('Task added');
+      void refreshItems();
+    } finally {
+      setQuickBusy(false);
+    }
+  }
+
+  async function openAdd() {
+    if (lists.length === 0) { await ensureListId(); }
+    setAddOpen(true);
+  }
+
+  const TABS = [
+    { id: 'all' as const, label: 'All Tasks', n: counts.all },
+    { id: 'mine' as const, label: 'My Tasks', n: counts.mine },
+    { id: 'assigned' as const, label: 'Assigned to Me', n: counts.assigned },
+    { id: 'completed' as const, label: 'Completed', n: counts.completed },
+  ];
+
+  function TaskRow({ item }: { item: TodoItem }) {
+    const p = PRIORITY_META[item.priority as keyof typeof PRIORITY_META] ?? PRIORITY_META.medium;
+    const list = item.list_id ? listById.get(item.list_id) : undefined;
+    const assignee = item.assigned_to_id ? memberById.get(item.assigned_to_id) : undefined;
+    const overdue = !item.is_done && !!item.due_date && item.due_date < todayStr;
+    const busyToggle = isPending(`toggle:${item.id}`);
+    return (
+      <div className="group flex items-center gap-3 rounded-xl border border-border/70 bg-surface/30 px-3 py-2.5 transition hover:bg-elevated/40">
+        <button onClick={() => toggleItem(item)} disabled={busyToggle}
+          aria-label={item.is_done ? 'Mark not done' : 'Mark done'}
+          className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition disabled:opacity-60',
+            item.is_done ? 'border-success bg-success' : 'border-border hover:border-success/60')}>
+          {busyToggle ? <Loader2 className="h-3 w-3 animate-spin text-muted" /> : item.is_done && <Check className="h-3 w-3 text-white" />}
+        </button>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className={cn('truncate text-sm font-medium', item.is_done && 'text-muted line-through')}>{item.title}</p>
+            {overdue && <span className="shrink-0 rounded-md bg-danger/15 px-1.5 py-0.5 text-[10px] font-semibold text-danger">Overdue</span>}
+            {!overdue && item.priority === 'urgent' && <span className="shrink-0 rounded-md bg-danger/15 px-1.5 py-0.5 text-[10px] font-semibold text-danger">Urgent</span>}
+            {!overdue && item.priority === 'high' && <span className="shrink-0 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">Important</span>}
+          </div>
+          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
+            {list && <span aria-hidden>{list.icon}</span>}
+            <span className="truncate">
+              {assignee ? `${assignee.display_name} · ${list?.name ?? 'Tasks'}` : (list?.name ?? 'Tasks')}
+            </span>
+          </div>
+        </div>
+
+        <div className="hidden items-center gap-1 opacity-0 transition group-hover:opacity-100 sm:flex">
+          <button onClick={() => setEditingItem(item)} aria-label="Edit task" className="rounded p-1 text-muted hover:text-fg">
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label="Delete task"
+            className="rounded p-1 text-muted hover:text-danger disabled:opacity-50">
+            {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          {item.due_date && (
+            <span className={cn('whitespace-nowrap text-xs', overdue ? 'font-semibold text-danger' : 'text-muted')}>
+              {dueLabel(item.due_date, todayStr, tomorrowStr)}
+            </span>
+          )}
+          {assignee
+            ? <Avatar name={assignee.display_name} color={assignee.color} size={26} />
+            : <span className="grid h-[26px] w-[26px] place-items-center rounded-full bg-elevated text-muted"><UserIcon className="h-3.5 w-3.5" /></span>}
+        </div>
+      </div>
+    );
+  }
+
+  function Section({ label, tone, list }: { label: string; tone: string; list: TodoItem[] }) {
+    if (list.length === 0) return null;
+    return (
+      <div className="mb-5">
+        <div className="mb-2 flex items-center gap-2">
+          <h3 className={cn('text-sm font-bold', tone)}>{label}</h3>
+          <span className="grid h-5 min-w-5 place-items-center rounded-full bg-elevated px-1.5 text-[11px] font-bold text-muted">{list.length}</span>
+        </div>
+        <div className="space-y-1.5">{list.map((i) => <TaskRow key={i.id} item={i} />)}</div>
+      </div>
+    );
+  }
+
+  if (loading) return <SkeletonList />;
+
+  const nothing = tabItems.length === 0;
 
   return (
     <div className="module-with-sidebar">
-      {/* ── List sidebar ─────────────────────────────────────── */}
-      <div className="flex w-full flex-col lg:w-52 xl:w-60 flex-shrink-0">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-bold">My Lists</h2>
-          <button onClick={() => setNewListOpen(true)}
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/15 text-brand hover:bg-brand/25 transition">
-            <Plus className="h-3.5 w-3.5" />
-          </button>
-        </div>
+      {/* Main column */}
+      <div className="module-main">
+        <PageHeader
+          title="Tasks"
+          description="Stay organized and get things done—together."
+          action={
+            <div className="flex items-center gap-2">
+              <AiInsight kind="todos" />
+              <Button variant="outline" size="sm" onClick={() => setTab('assigned')}>
+                <UserIcon className="h-4 w-4" /> My Tasks
+              </Button>
+              <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4" /> Add Task</Button>
+            </div>
+          }
+        />
 
-        <div className="space-y-1">
-          {lists.map((list) => {
-            const isActive = list.id === activeListId;
-            const listItems = items.filter((i) => i.list_id === list.id);
-            const pendingCount = listItems.filter((i) => !i.is_done).length;
-            return (
-              <button key={list.id} onClick={() => setActiveListId(list.id)}
-                className={cn(
-                  'group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition',
-                  isActive ? 'bg-brand/15 text-brand' : 'hover:bg-elevated/40 text-muted',
-                )}>
-                <span className="text-lg">{list.icon}</span>
-                <span className={cn('flex-1 truncate text-sm font-medium', isActive && 'text-brand font-bold')}>
-                  {list.name}
-                </span>
-                {pendingCount > 0 && (
-                  <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-bold', isActive ? 'bg-brand/30' : 'bg-elevated text-muted')}>
-                    {pendingCount}
-                  </span>
-                )}
+        {/* Tabs + search */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-border pb-2">
+          <div className="flex flex-1 flex-wrap items-center gap-1">
+            {TABS.map((t) => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={cn('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition',
+                  tab === t.id ? 'bg-brand/15 text-brand' : 'text-muted hover:bg-elevated hover:text-fg')}>
+                {t.label}
+                <span className={cn('grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-bold',
+                  tab === t.id ? 'bg-brand/25 text-brand' : 'bg-elevated text-muted')}>{t.n}</span>
               </button>
-            );
-          })}
-
-          <button onClick={() => setNewListOpen(true)}
-            className="flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-border px-3 py-2 text-sm text-muted hover:border-brand/40 hover:text-brand transition">
-            <Plus className="h-3.5 w-3.5" /> New list
-          </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
+            <Search className="h-3.5 w-3.5 text-muted" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks..."
+              className="w-32 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
+            {search && <button onClick={() => setSearch('')} aria-label="Clear search"><X className="h-3.5 w-3.5 text-muted" /></button>}
+          </div>
         </div>
 
-        {/* Summary */}
-        {activeList && (
-          <div className="mt-4 rounded-xl border border-border bg-surface/40 p-3 text-xs space-y-1.5">
-            <div className="flex justify-between">
-              <span className="text-muted">Total</span>
-              <span className="font-semibold">{items.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted">Active</span>
-              <span className="font-semibold text-brand">{pending.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted">Done</span>
-              <span className="font-semibold text-success">{done.length}</span>
-            </div>
-            <div className="overflow-hidden rounded-full bg-elevated h-1.5 mt-1">
-              <div className="h-full bg-success transition-all"
-                style={{ width: items.length ? `${(done.length / items.length) * 100}%` : '0%' }} />
-            </div>
-          </div>
-        )}
+        {/* Body */}
+        <div className="mt-4">
+          {nothing ? (
+            <EmptyState icon={CheckSquare}
+              title={tab === 'completed' ? 'No completed tasks' : 'All clear!'}
+              description={tab === 'completed' ? 'Finished tasks will show up here.' : 'No tasks here yet — add one to get started.'}
+              action={tab !== 'completed' ? <Button onClick={openAdd}><Plus className="h-4 w-4" /> Add Task</Button> : undefined} />
+          ) : tab === 'completed' ? (
+            <div className="space-y-1.5">{tabItems.map((i) => <TaskRow key={i.id} item={i} />)}</div>
+          ) : (
+            <>
+              <Section label="Overdue" tone="text-danger" list={groups.overdue} />
+              <Section label="Today" tone="text-brand" list={groups.today} />
+              <Section label="Upcoming" tone="text-fg" list={groups.upcoming} />
+              <Section label="No due date" tone="text-muted" list={groups.noDate} />
+            </>
+          )}
+
+          <button onClick={openAdd}
+            className="mt-2 flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-border px-3 py-2.5 text-sm font-medium text-muted transition hover:border-brand/40 hover:text-brand">
+            <Plus className="h-4 w-4" /> Add Task
+          </button>
+        </div>
       </div>
 
-      {/* ── Main to-do view ──────────────────────────────────── */}
-      <div className="module-main">
-        {!activeList ? (
-          <EmptyState icon={CheckSquare} title="No lists yet"
-            description="Create a to-do list to get organized."
-            action={<Button onClick={() => setNewListOpen(true)}><Plus className="h-4 w-4" /> New List</Button>} />
-        ) : (
-          <>
-            {/* Header */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">{activeList.icon}</span>
-                <h2 className="text-xl font-bold">{activeList.name}</h2>
-                {!activeList.is_shared && <Badge>Private</Badge>}
+      {/* Right rail */}
+      <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
+        {/* Task Summary */}
+        <div className="sidebar-card">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><ListChecks className="h-4 w-4 text-brand" /> Task Summary</h3>
+          <SummaryDonut summary={summary} />
+          <div className="mt-3 space-y-1.5">
+            {([['overdue', summary.overdue], ['today', summary.today], ['week', summary.week], ['completed', summary.completed]] as const).map(([k, v]) => (
+              <div key={k} className="flex items-center gap-2 text-xs">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: DONUT[k].hex }} />
+                <span className="flex-1 text-muted">{DONUT[k].label}</span>
+                <span className="font-semibold">{v}</span>
               </div>
-              <div className="ml-auto flex items-center gap-2">
-                <AiInsight kind="todos" />
-                {done.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={clearDone} disabled={isPending('clear-done')}>
-                    <Check className="h-3.5 w-3.5 text-success" /> Clear done
-                  </Button>
-                )}
-                <Button size="sm" onClick={() => setNewItemOpen(true)}>
-                  <Plus className="h-4 w-4" /> Add Task
-                </Button>
-              </div>
-            </div>
+            ))}
+          </div>
+          <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => setTab('all')}>View all tasks</Button>
+        </div>
 
-            {/* Filter + search */}
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex rounded-xl border border-border bg-surface/40 p-1 gap-0.5">
-                {(['all', 'active', 'done', 'urgent'] as const).map((f) => (
-                  <button key={f} onClick={() => setFilter(f)}
-                    className={cn('rounded-lg px-3 py-1 text-xs font-medium capitalize transition',
-                      filter === f ? 'bg-brand text-white' : 'text-muted hover:text-fg')}>
-                    {f}
+        {/* My Top Priorities */}
+        <div className="sidebar-card">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><Flag className="h-4 w-4 text-brand" /> My Top Priorities</h3>
+          {priorities.length === 0 ? (
+            <p className="text-xs text-muted">Nothing assigned to you yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {priorities.map((i) => {
+                const overdue = i.due_date && i.due_date < todayStr;
+                return (
+                  <button key={i.id} onClick={() => setEditingItem(i)} className="flex w-full items-center gap-2 text-left">
+                    <span className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-border" />
+                    <span className="flex-1 truncate text-xs font-medium">{i.title}</span>
+                    {i.due_date && (
+                      <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
+                        overdue ? 'bg-danger/15 text-danger' : i.due_date === todayStr ? 'bg-amber-500/15 text-amber-400' : 'bg-elevated text-muted')}>
+                        {overdue ? 'Overdue' : dueLabel(i.due_date, todayStr, tomorrowStr)}
+                      </span>
+                    )}
                   </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-1.5">
-                <Search className="h-3.5 w-3.5 text-muted" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
-                  className="w-28 bg-transparent text-sm placeholder:text-muted outline-none" />
-                {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
-              </div>
+                );
+              })}
             </div>
+          )}
+          <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => setTab('mine')}>View my tasks</Button>
+        </div>
 
-            {/* Items */}
-            {itemsLoading ? <SkeletonList /> : filtered.length === 0 ? (
-              <EmptyState icon={CheckSquare} title={filter === 'done' ? 'No completed items' : 'Nothing here yet'}
-                description={filter === 'all' ? 'Add your first task above.' : `No ${filter} tasks.`}
-                action={filter === 'all' ? <Button onClick={() => setNewItemOpen(true)}><Plus className="h-4 w-4" /> Add Task</Button> : undefined} />
-            ) : (
-              <div className="space-y-1.5">
-                {filtered.map((item) => {
-                  const p = PRIORITY_META[item.priority as keyof typeof PRIORITY_META] ?? PRIORITY_META.medium;
-                  const assignee = members.find((m) => m.id === item.assigned_to_id);
-                  const isOverdue = !item.is_done && item.due_date && item.due_date < new Date().toISOString().slice(0, 10);
-                  return (
-                    <div key={item.id} className={cn(
-                      'group flex items-start gap-3 rounded-xl border p-3 transition hover:bg-elevated/30',
-                      item.is_done ? 'border-border/30 opacity-60' : 'border-border',
-                    )}>
-                      <button onClick={() => toggleItem(item)} disabled={isPending(`toggle:${item.id}`)} aria-label={item.is_done ? 'Mark not done' : 'Mark done'}
-                        className={cn('mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition disabled:opacity-60',
-                          item.is_done ? 'border-success bg-success' : `border-border hover:border-success/50`)}>
-                        {isPending(`toggle:${item.id}`) ? <Loader2 className="h-3 w-3 animate-spin text-muted" /> : item.is_done && <Check className="h-3 w-3 text-fg" />}
-                      </button>
-
-                      <div className="flex-1 min-w-0">
-                        <p className={cn('text-sm font-medium', item.is_done && 'line-through text-muted')}>
-                          {item.title}
-                        </p>
-                        {item.notes && <p className="mt-0.5 text-xs text-muted line-clamp-1">{item.notes}</p>}
-                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                          {item.priority !== 'low' && (
-                            <span className={cn('flex items-center gap-1 text-[10px] font-semibold', p.flag)}>
-                              <Flag className="h-2.5 w-2.5" /> {p.label}
-                            </span>
-                          )}
-                          {item.due_date && (
-                            <span className={cn('flex items-center gap-1 text-[10px]', isOverdue ? 'text-danger font-semibold' : 'text-muted')}>
-                              <Calendar className="h-2.5 w-2.5" />
-                              {isOverdue ? 'Overdue · ' : ''}{item.due_date}
-                            </span>
-                          )}
-                          {item.tags.map((tag) => (
-                            <span key={tag} className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        {assignee && (
-                          <Avatar name={assignee.display_name} color={assignee.color} size={22} />
-                        )}
-                        <button onClick={() => setEditingItem(item)}
-                          className="rounded p-1 text-muted opacity-0 group-hover:opacity-100 hover:text-fg transition">
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button onClick={() => deleteItem(item.id)} disabled={isPending(`delete:${item.id}`)} aria-label="Delete task"
-                          className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-danger disabled:opacity-50">
-                          {isPending(`delete:${item.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                        </button>
-                      </div>
+        {/* Assigned to Others */}
+        <div className="sidebar-card">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-bold"><UserIcon className="h-4 w-4 text-brand" /> Assigned to Others</h3>
+            <button onClick={() => setTab('all')} className="text-[11px] font-medium text-brand hover:underline">View all</button>
+          </div>
+          {assignedToOthers.length === 0 ? (
+            <p className="text-xs text-muted">No tasks assigned to others.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {assignedToOthers.map((i) => {
+                const m = i.assigned_to_id ? memberById.get(i.assigned_to_id) : undefined;
+                return (
+                  <button key={i.id} onClick={() => setEditingItem(i)} className="flex w-full items-center gap-2.5 text-left">
+                    {m && <Avatar name={m.display_name} color={m.color} size={28} />}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold">{m?.display_name ?? 'Member'}</p>
+                      <p className="truncate text-[11px] text-muted">{i.title}</p>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
+                    {i.due_date && <span className="shrink-0 text-[11px] text-muted">{dueLabel(i.due_date, todayStr, tomorrowStr)}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Quick Add */}
+        <div className="sidebar-card">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-brand" /> Quick Add</h3>
+          <Input value={quickTitle} onChange={(e) => setQuickTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void quickAdd('today'); } }}
+            placeholder="What needs to be done?" disabled={quickBusy} />
+          <div className="mt-2 grid grid-cols-4 gap-1.5">
+            {([['today', 'Today'], ['tomorrow', 'Tomorrow'], ['week', 'This Week']] as const).map(([w, label]) => (
+              <button key={w} onClick={() => void quickAdd(w)} disabled={quickBusy}
+                className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surface/40 py-2 text-[10px] font-medium text-muted transition hover:border-brand/40 hover:text-brand disabled:opacity-50">
+                <CalendarIcon className="h-3.5 w-3.5" /> {label}
+              </button>
+            ))}
+            <button onClick={openAdd} disabled={quickBusy}
+              className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surface/40 py-2 text-[10px] font-medium text-muted transition hover:border-brand/40 hover:text-brand disabled:opacity-50">
+              <CalendarIcon className="h-3.5 w-3.5" /> Pick Date
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Modals */}
       {newListOpen && (
-        <NewListModal familyId={familyId} userId={userId}
+        <NewListModal familyId={familyId}
           onClose={() => setNewListOpen(false)}
-          onCreated={(id) => { setActiveListId(id); setNewListOpen(false); void refreshLists(); }} />
+          onCreated={() => { setNewListOpen(false); void refreshLists(); }} />
       )}
-      {(newItemOpen || editingItem) && activeListId && (
-        <ItemModal familyId={familyId} userId={userId} listId={activeListId} members={members}
+      {(addOpen || editingItem) && (
+        <ItemModal familyId={familyId} selfId={selfId} members={members} lists={lists}
           item={editingItem ?? undefined}
-          onClose={() => { setNewItemOpen(false); setEditingItem(null); }}
-          onSaved={() => { setNewItemOpen(false); setEditingItem(null); void refreshItems(); }} />
+          onNewList={() => setNewListOpen(true)}
+          onClose={() => { setAddOpen(false); setEditingItem(null); }}
+          onSaved={() => { setAddOpen(false); setEditingItem(null); void refreshItems(); }} />
       )}
     </div>
   );
 }
 
-function NewListModal({ familyId, userId, onClose, onCreated }: {
-  familyId: string; userId: string; onClose: () => void; onCreated: (id: string) => void;
+function SummaryDonut({ summary }: { summary: { total: number; overdue: number; today: number; week: number; completed: number } }) {
+  const segs = [
+    { v: summary.overdue, hex: DONUT.overdue.hex },
+    { v: summary.today, hex: DONUT.today.hex },
+    { v: summary.week, hex: DONUT.week.hex },
+    { v: summary.completed, hex: DONUT.completed.hex },
+  ];
+  const sum = segs.reduce((a, s) => a + s.v, 0);
+  let acc = 0;
+  const stops = sum === 0
+    ? 'var(--elevated, #2a2a33) 0% 100%'
+    : segs.filter((s) => s.v > 0).map((s) => {
+        const start = (acc / sum) * 100; acc += s.v; const end = (acc / sum) * 100;
+        return `${s.hex} ${start}% ${end}%`;
+      }).join(', ');
+  return (
+    <div className="flex justify-center">
+      <div className="relative h-32 w-32">
+        <div className="h-32 w-32 rounded-full" style={{ background: `conic-gradient(${stops})` }} />
+        <div className="absolute inset-[14px] grid place-items-center rounded-full bg-surface">
+          <span className="text-2xl font-bold leading-none">{summary.total}</span>
+          <span className="mt-0.5 text-[10px] text-muted">Total Tasks</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NewListModal({ familyId, onClose, onCreated }: {
+  familyId: string; onClose: () => void; onCreated: (id: string) => void;
 }) {
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -333,8 +516,8 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
     e.preventDefault();
     if (loading) return;
     const trimmed = name.trim();
-    if (!trimmed) { toastError('Give your list a name'); return; }
-    if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
+    if (!trimmed) { toastError('Give your category a name'); return; }
+    if (trimmed.length > 80) { toastError('Name is too long (max 80 characters)'); return; }
     setLoading(true);
     try {
       const supabase = createClient();
@@ -351,10 +534,10 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
   }
 
   return (
-    <Modal open onClose={onClose} title="New List">
+    <Modal open onClose={onClose} title="New Category">
       <form onSubmit={create} className="space-y-4">
-        <Field label="List name" required>
-          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="Work, Personal, Shopping…" autoFocus />}
+        <Field label="Name" required>
+          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder="School, Shopping, Chores…" autoFocus />}
         </Field>
         <Field label="Icon">
           {() => (
@@ -391,10 +574,11 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
   );
 }
 
-function ItemModal({ familyId, userId, listId, members, item, onClose, onSaved }: {
-  familyId: string; userId: string; listId: string;
+function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, onNewList }: {
+  familyId: string; selfId: string | null;
+  lists: TodoList[];
   members: ReturnType<typeof useApp>['members'];
-  item?: TodoItem; onClose: () => void; onSaved: () => void;
+  item?: TodoItem; onClose: () => void; onSaved: () => void; onNewList: () => void;
 }) {
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -403,14 +587,7 @@ function ItemModal({ familyId, userId, listId, members, item, onClose, onSaved }
   const [priority, setPriority] = useState(item?.priority ?? 'medium');
   const [dueDate, setDueDate] = useState(item?.due_date ?? '');
   const [assignedTo, setAssignedTo] = useState(item?.assigned_to_id ?? '');
-  const [tagInput, setTagInput] = useState('');
-  const [tags, setTags] = useState<string[]>(item?.tags ?? []);
-
-  function addTag() {
-    const t = tagInput.trim();
-    if (t && !tags.includes(t)) setTags([...tags, t]);
-    setTagInput('');
-  }
+  const [listId, setListId] = useState(item?.list_id ?? lists[0]?.id ?? '');
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -418,17 +595,18 @@ function ItemModal({ familyId, userId, listId, members, item, onClose, onSaved }
     const trimmed = title.trim();
     if (!trimmed) { toastError('Add a task title'); return; }
     if (trimmed.length > 200) { toastError('Title is too long (max 200 characters)'); return; }
+    if (!listId) { toastError('Pick a category'); return; }
     setLoading(true);
     try {
       const supabase = createClient();
+      // list_id is fixed at creation (the generated Update type excludes it).
       const payload = {
         title: trimmed, notes: notes.trim() || null, priority,
-        due_date: dueDate || null, tags,
-        assigned_to_id: assignedTo || null,
+        due_date: dueDate || null, assigned_to_id: assignedTo || null,
       };
       const { error } = item
         ? await supabase.from('todo_items').update(payload).eq('id', item.id)
-        : await supabase.from('todo_items').insert({ ...payload, family_id: familyId, list_id: listId });
+        : await supabase.from('todo_items').insert({ ...payload, family_id: familyId, list_id: listId, created_by: selfId });
       if (error) { toastError(describeDbError(error)); return; }
       onSaved();
     } catch (err) {
@@ -442,10 +620,22 @@ function ItemModal({ familyId, userId, listId, members, item, onClose, onSaved }
     <Modal open onClose={onClose} title={item ? 'Edit Task' : 'New Task'}>
       <form onSubmit={save} className="space-y-4">
         <Field label="Title" required>
-          {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />}
+          {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs to be done?" autoFocus />}
         </Field>
         <Field label="Notes">
           {(id) => <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional details…" />}
+        </Field>
+        <Field label="Category" hint={item ? 'Set when the task is created' : undefined}>
+          {(id) => (
+            <div className="flex gap-2">
+              <select id={id} value={listId} onChange={(e) => setListId(e.target.value)} disabled={!!item}
+                className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-60">
+                {lists.length === 0 && <option value="">No categories yet</option>}
+                {lists.map((l) => <option key={l.id} value={l.id}>{l.icon} {l.name}</option>)}
+              </select>
+              {!item && <Button type="button" variant="secondary" size="sm" onClick={onNewList}>New</Button>}
+            </div>
+          )}
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Priority">
@@ -469,25 +659,6 @@ function ItemModal({ familyId, userId, listId, members, item, onClose, onSaved }
             </select>
           )}
         </Field>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Tags</label>
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {tags.map((t) => (
-              <span key={t} className="flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand">
-                {t}
-                <button type="button" onClick={() => setTags(tags.filter((x) => x !== t))}>
-                  <X className="h-2.5 w-2.5" />
-                </button>
-              </span>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
-              placeholder="Add tag…" />
-            <Button type="button" variant="secondary" size="sm" onClick={addTag}>Add</Button>
-          </div>
-        </div>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={loading}>{item ? 'Save' : 'Add Task'}</Button>
