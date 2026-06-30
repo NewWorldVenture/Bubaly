@@ -92,9 +92,19 @@ BEGIN
   RAISE NOTICE 'Seeded % calendar_events for % (family %).', seeded, v_email, v_fam;
 END $$;
 
-SELECT category, count(*) AS n FROM public.calendar_events
+-- Verification: resolve the target family the same robust way the seed does
+-- (active_family_id → families.created_by → family_members), then count.
+WITH usr AS (
+  SELECT id FROM auth.users WHERE lower(email) = 'newworldventurellc@gmail.com' LIMIT 1
+), fam AS (
+  SELECT COALESCE(
+    (SELECT active_family_id FROM public.user_preferences WHERE user_id = (SELECT id FROM usr)),
+    (SELECT id FROM public.families WHERE created_by = (SELECT id FROM usr) ORDER BY created_at LIMIT 1),
+    (SELECT family_id FROM public.family_members WHERE user_id = (SELECT id FROM usr) AND is_active ORDER BY created_at LIMIT 1)
+  ) AS id
+)
+SELECT category, count(*) AS n
+FROM public.calendar_events
 WHERE description LIKE '%[seed:calendar]%'
-  AND family_id = (SELECT active_family_id FROM public.user_preferences up
-                   JOIN auth.users u ON u.id = up.user_id
-                   WHERE lower(u.email) = 'newworldventurellc@gmail.com' LIMIT 1)
+  AND family_id = (SELECT id FROM fam)
 GROUP BY 1 ORDER BY 2 DESC;
