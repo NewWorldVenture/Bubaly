@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
-import { ChevronDown, Check, Gift, Lock, LogOut, Menu, Mic, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, UserCog, X } from 'lucide-react';
+import { ChevronDown, Check, Gift, Home, Lock, LogOut, Menu, Mic, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, UserCog, X } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { APP_NAV_GROUPS, MOBILE_TABS, CAPTURE_TAB_INDEX, type NavItem } from '@/lib/constants/navigation';
@@ -121,6 +121,17 @@ function UserMenu() {
             </div>
             <div className="my-1 h-px bg-border" />
             <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Dashboard</p>
+            {/* Home is the default post-login landing. */}
+            <Link
+              href="/home"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated"
+            >
+              <Home className="h-4 w-4 text-muted" />
+              <span className="flex-1 truncate">Home</span>
+              <span className="text-[10px] font-semibold uppercase text-muted">Default</span>
+              {pathname === '/home' && <Check className="h-4 w-4 text-brand" />}
+            </Link>
             {DASHBOARD_VIEWS.map((view) => {
               const Icon = dashboardIcon[view];
               const active = onDashboard && currentView === view;
@@ -133,9 +144,6 @@ function UserMenu() {
                 >
                   <Icon className="h-4 w-4 text-muted" />
                   <span className="flex-1 truncate">{dashboardLabel(view, role)}</span>
-                  {view === defaultDashboard && (
-                    <span className="text-[10px] font-semibold uppercase text-muted">Default</span>
-                  )}
                   {active && <Check className="h-4 w-4 text-brand" />}
                 </Link>
               );
