@@ -222,6 +222,7 @@ export const CAPTURE_TAB_INDEX = 2;
 export const PRIMARY_NAV: NavItem[] = [
   { href: '/home', label: 'Home', icon: Home },
   { href: '/dashboard/planning', label: 'Planning', icon: ClipboardList },
+  { href: '/dashboard/food', label: 'Food', icon: UtensilsCrossed },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
   { href: '/dashboard/todos', label: 'Tasks', icon: ListChecks },
   // Shopping is table-stakes for family organizers (Cozi/FamilyWall/OurHome/

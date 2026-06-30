@@ -23,6 +23,21 @@ Last updated: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashbo
 > "Dashboard" entry was removed from the top of `PRIMARY_NAV` (Home now leads straight into the everyday list).
 > `isActive` is pathname-only so both links navigate correctly (query-string highlight is a known minor cosmetic).
 >
+> ## 🍽️ `/dashboard/food` — FOOD & NUTRITION HUB + DINING OUT (on `main`)
+> Category hub matching the "Food & Nutrition" showcase: header + intro + a responsive **7-card grid** +
+> features panel, each card live-wired to Supabase and linking to the real page.
+> - **`app/(app)/dashboard/food/page.tsx`** (server, `force-dynamic`) — parallel reads: `meal_plans`(+`meals`),
+>   `family_recipes` (recent + favorites), `grocery_items`, `pantry_items` (expiring), `family_food_scores`
+>   (nutrition), `dining_out`. Cards open /dashboard/{meals,recipes,grocery,pantry,kitchen,dining}.
+> - **NEW Dining Out** (the one surface lacking infra): `app/(app)/dashboard/dining/` page (Recommended
+>   restaurants + Recent visits) + **migration `0104_dining_out.sql`** (table + indexes + set_updated_at
+>   trigger + RLS `is_family_member`) + `dining_out` added to `lib/database.types.ts`. ⚠️ Apply 0104 to prod
+>   (`supabase db push`); the hub/Dining page tolerate the missing table (`?? []`) until then.
+> - **Food** added to `PRIMARY_NAV`. **Seed `supabase/seed_food.sql` (520 rows)**: family_recipes (250),
+>   pantry_items (150), dining_out (120); idempotent, scoped to demo ids; respects family_recipes category/
+>   difficulty CHECKs + pantry_location enum. Run **`npm run seed:food`**. Docs: **`docs/food-supabase.md`**.
+> - tsc · eslint · 1403 tests · build ✓ (`/dashboard/food` + `/dashboard/dining` routes present).
+>
 > ## 🗂️ `/dashboard/planning` — PLANNING & ORGANIZATION HUB (on `main`)
 > Category hub matching the "Planning & Organization" showcase: header + intro banner + a responsive
 > **8-card grid**, each card **live-wired to Supabase** (counts + recent items) and linking to the real page.
