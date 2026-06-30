@@ -22,13 +22,16 @@ export default async function DiningPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  // Tolerant of the table not being migrated yet (?? []), so the page renders
-  // a clean empty state rather than erroring.
+  // Fail-safe per query: if dining_out isn't migrated on this DB yet (or a query
+  // rejects), the page renders a clean empty state rather than crashing.
+  const safe = async <T,>(q: PromiseLike<{ data: T[] | null }>): Promise<{ data: T[] | null }> => {
+    try { return { data: (await q).data ?? null }; } catch { return { data: null }; }
+  };
   const [{ data: recommended }, { data: recent }] = await Promise.all([
-    supabase.from('dining_out').select('id, name, cuisine, category, price_level, rating, distance_km, is_favorite, amount_cents, item_count, visited_at')
-      .eq('family_id', familyId).eq('kind', 'restaurant').order('rating', { ascending: false, nullsFirst: false }).limit(20),
-    supabase.from('dining_out').select('id, name, cuisine, category, price_level, rating, distance_km, is_favorite, amount_cents, item_count, visited_at')
-      .eq('family_id', familyId).eq('kind', 'visit').order('visited_at', { ascending: false, nullsFirst: false }).limit(20),
+    safe(supabase.from('dining_out').select('id, name, cuisine, category, price_level, rating, distance_km, is_favorite, amount_cents, item_count, visited_at')
+      .eq('family_id', familyId).eq('kind', 'restaurant').order('rating', { ascending: false, nullsFirst: false }).limit(20)),
+    safe(supabase.from('dining_out').select('id, name, cuisine, category, price_level, rating, distance_km, is_favorite, amount_cents, item_count, visited_at')
+      .eq('family_id', familyId).eq('kind', 'visit').order('visited_at', { ascending: false, nullsFirst: false }).limit(20)),
   ]);
 
   const recs = (recommended ?? []) as Place[];

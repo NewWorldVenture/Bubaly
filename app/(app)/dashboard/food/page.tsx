@@ -14,6 +14,13 @@ export const dynamic = 'force-dynamic';
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const fmtDay = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '');
 
+// Per-query fail-safe so one erroring/not-yet-migrated table (e.g. dining_out)
+// degrades to an empty card instead of crashing the whole hub.
+async function safe<T>(q: PromiseLike<{ data: T[] | null; count?: number | null }>): Promise<{ data: T[] | null; count: number | null }> {
+  try { const r = await q; return { data: r.data ?? null, count: r.count ?? null }; }
+  catch { return { data: null, count: null }; }
+}
+
 function FeatureCard({
   index, title, href, icon: Icon, tint, count, countLabel, children,
 }: {
@@ -80,27 +87,27 @@ export default async function FoodPage() {
     { data: scores },
     { data: dining, count: diningCount },
   ] = await Promise.all([
-    supabase.from('meal_plans').select('plan_date, meal_id', { count: 'exact' })
-      .eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', todayIso).lte('plan_date', weekEnd).order('plan_date'),
-    supabase.from('family_recipes').select('id, name, rating', { count: 'exact' })
-      .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4),
-    supabase.from('grocery_items').select('id, name', { count: 'exact' })
-      .eq('family_id', familyId).eq('is_checked', false).limit(4),
-    supabase.from('pantry_items').select('id, name, expires_at, quantity, unit', { count: 'exact' })
-      .eq('family_id', familyId).lte('expires_at', expSoon).order('expires_at', { ascending: true, nullsFirst: false }).limit(4),
-    supabase.from('family_recipes').select('id, name, rating', { count: 'exact' })
-      .eq('family_id', familyId).eq('is_favorite', true).order('rating', { ascending: false, nullsFirst: false }).limit(4),
-    supabase.from('family_food_scores').select('overall, grade, snapshot_date')
-      .eq('family_id', familyId).order('snapshot_date', { ascending: false }).limit(1),
-    supabase.from('dining_out').select('id, name, cuisine, rating', { count: 'exact' })
-      .eq('family_id', familyId).order('rating', { ascending: false, nullsFirst: false }).limit(4),
+    safe(supabase.from('meal_plans').select('plan_date, meal_id', { count: 'exact' })
+      .eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', todayIso).lte('plan_date', weekEnd).order('plan_date')),
+    safe(supabase.from('family_recipes').select('id, name, rating', { count: 'exact' })
+      .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4)),
+    safe(supabase.from('grocery_items').select('id, name', { count: 'exact' })
+      .eq('family_id', familyId).eq('is_checked', false).limit(4)),
+    safe(supabase.from('pantry_items').select('id, name, expires_at, quantity, unit', { count: 'exact' })
+      .eq('family_id', familyId).lte('expires_at', expSoon).order('expires_at', { ascending: true, nullsFirst: false }).limit(4)),
+    safe(supabase.from('family_recipes').select('id, name, rating', { count: 'exact' })
+      .eq('family_id', familyId).eq('is_favorite', true).order('rating', { ascending: false, nullsFirst: false }).limit(4)),
+    safe(supabase.from('family_food_scores').select('overall, grade, snapshot_date')
+      .eq('family_id', familyId).order('snapshot_date', { ascending: false }).limit(1)),
+    safe(supabase.from('dining_out').select('id, name, cuisine, rating', { count: 'exact' })
+      .eq('family_id', familyId).order('rating', { ascending: false, nullsFirst: false }).limit(4)),
   ]);
 
   // Resolve meal names for this week's dinners (kept robust to relation naming).
   const planRows = (dinners ?? []) as { plan_date: string; meal_id: string | null }[];
   const mealIds = [...new Set(planRows.map((p) => p.meal_id).filter((x): x is string => !!x))];
   const { data: meals } = mealIds.length
-    ? await supabase.from('meals').select('id, name').in('id', mealIds)
+    ? await safe(supabase.from('meals').select('id, name').in('id', mealIds))
     : { data: [] as { id: string; name: string }[] };
   const mealName = new Map((meals ?? []).map((m) => [m.id, m.name]));
 

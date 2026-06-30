@@ -15,6 +15,18 @@ export const dynamic = 'force-dynamic';
 const fmtDay = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
 
+// Per-query fail-safe: a single domain erroring (e.g. a table not yet migrated on
+// this database, or a slow/failed count) degrades that one card to empty instead
+// of taking down the whole hub via the error boundary.
+async function safe<T>(q: PromiseLike<{ data: T[] | null; count?: number | null }>): Promise<{ data: T[] | null; count: number | null }> {
+  try {
+    const r = await q;
+    return { data: r.data ?? null, count: r.count ?? null };
+  } catch {
+    return { data: null, count: null };
+  }
+}
+
 // One feature card in the hub grid.
 function FeatureCard({
   index, title, href, icon: Icon, tint, count, countLabel, children,
@@ -76,22 +88,22 @@ export default async function PlanningPage() {
     { data: milestones, count: milestoneCount },
     { data: photos, count: photoCount },
   ] = await Promise.all([
-    supabase.from('calendar_events').select('id, title, starts_at, all_day', { count: 'exact' })
-      .eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(4),
-    supabase.from('todo_items').select('id, title, due_date', { count: 'exact' })
-      .eq('family_id', familyId).eq('is_done', false).order('due_date', { ascending: true, nullsFirst: false }).limit(4),
-    supabase.from('family_reminders').select('id, title, remind_at', { count: 'exact' })
-      .eq('family_id', familyId).eq('status', 'active').order('remind_at', { ascending: true, nullsFirst: false }).limit(4),
-    supabase.from('notes').select('id, title, body, updated_at', { count: 'exact' })
-      .eq('family_id', familyId).order('updated_at', { ascending: false }).limit(4),
-    supabase.from('documents').select('id, title, category, created_at', { count: 'exact' })
-      .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4),
-    supabase.from('family_contacts').select('id, name, relationship', { count: 'exact' })
-      .eq('family_id', familyId).order('name').limit(5),
-    supabase.from('family_milestones').select('id, title, milestone_date', { count: 'exact' })
-      .eq('family_id', familyId).gte('milestone_date', todayIso).order('milestone_date').limit(4),
-    supabase.from('family_photos').select('id, url, thumbnail_url', { count: 'exact' })
-      .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4),
+    safe(supabase.from('calendar_events').select('id, title, starts_at, all_day', { count: 'exact' })
+      .eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(4)),
+    safe(supabase.from('todo_items').select('id, title, due_date', { count: 'exact' })
+      .eq('family_id', familyId).eq('is_done', false).order('due_date', { ascending: true, nullsFirst: false }).limit(4)),
+    safe(supabase.from('family_reminders').select('id, title, remind_at', { count: 'exact' })
+      .eq('family_id', familyId).eq('status', 'active').order('remind_at', { ascending: true, nullsFirst: false }).limit(4)),
+    safe(supabase.from('notes').select('id, title, body, updated_at', { count: 'exact' })
+      .eq('family_id', familyId).order('updated_at', { ascending: false }).limit(4)),
+    safe(supabase.from('documents').select('id, title, category, created_at', { count: 'exact' })
+      .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4)),
+    safe(supabase.from('family_contacts').select('id, name, relationship', { count: 'exact' })
+      .eq('family_id', familyId).order('name').limit(5)),
+    safe(supabase.from('family_milestones').select('id, title, milestone_date', { count: 'exact' })
+      .eq('family_id', familyId).gte('milestone_date', todayIso).order('milestone_date').limit(4)),
+    safe(supabase.from('family_photos').select('id, url, thumbnail_url', { count: 'exact' })
+      .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4)),
   ]);
 
   type Ev = { id: string; title: string; starts_at: string; all_day: boolean };
