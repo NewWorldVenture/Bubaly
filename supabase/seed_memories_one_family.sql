@@ -34,6 +34,18 @@
 --   editor and Run, then hard-refresh /dashboard/memories.
 -- ============================================================================
 
+-- 0) Self-contained schema safeguard --------------------------------------
+-- Normally migration 0108 does this, but fold it in here so the seed runs
+-- standalone: widen the album kind CHECK to allow 'highlight' (the original
+-- 0014 constraint rejected it → error 23514). Idempotent.
+alter table public.family_albums drop constraint if exists family_albums_kind_check;
+alter table public.family_albums
+  add constraint family_albums_kind_check
+  check (kind in (
+    'general', 'vacation', 'school', 'sports', 'milestones',
+    'holiday', 'birthday', 'highlight', 'other'
+  ));
+
 -- 1) RLS safeguard (so the page can READ the seeded rows) ---------------------
 alter table public.family_albums enable row level security;
 drop policy if exists "family members can manage albums" on public.family_albums;
