@@ -1,8 +1,11 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { Download, File, FileText, FolderLock, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ChevronLeft, ChevronRight, Cloud, Download, File, FileArchive, FileText, Folder, FolderPlus,
+  HardDrive, Image as ImageIcon, LayoutGrid, List, Lock, MoreHorizontal, Plus, ScanLine,
+  Search, Sparkles, Star, Table as TableIcon, Trash2, Upload, Video,
+} from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -21,61 +24,120 @@ import type { Tables } from '@/lib/database.types';
 
 type Document = Tables<'documents'>;
 
-const CATEGORIES = ['id', 'medical', 'financial', 'insurance', 'school', 'legal', 'vehicle', 'property', 'other'] as const;
-const CAT_META: Record<string, { label: string; icon: string; color: string; bg: string }> = {
-  id: { label: 'ID Documents', icon: '🪪', color: 'text-brand', bg: 'bg-violet-500/15' },
-  medical: { label: 'Medical Records', icon: '🏥', color: 'text-rose-300', bg: 'bg-rose-500/15' },
-  financial: { label: 'Financial', icon: '💰', color: 'text-emerald-300', bg: 'bg-emerald-500/15' },
-  insurance: { label: 'Insurance', icon: '🛡️', color: 'text-blue-300', bg: 'bg-blue-500/15' },
-  school: { label: 'School', icon: '📚', color: 'text-orange-300', bg: 'bg-orange-500/15' },
-  legal: { label: 'Legal', icon: '⚖️', color: 'text-yellow-300', bg: 'bg-yellow-500/15' },
-  vehicle: { label: 'Vehicle', icon: '🚗', color: 'text-cyan-300', bg: 'bg-cyan-500/15' },
-  property: { label: 'Property', icon: '🏠', color: 'text-indigo-300', bg: 'bg-indigo-500/15' },
-  other: { label: 'Other', icon: '📄', color: 'text-muted', bg: 'bg-surface/40' },
-};
+// ── Formatting helpers ──────────────────────────────────────────────────────
+const GB = 1024 ** 3;
+const STORAGE_LIMIT_GB = 10;
+const STORAGE_LIMIT = STORAGE_LIMIT_GB * GB;
 
 function fmtSize(bytes: number | null): string {
   if (!bytes) return '—';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
   if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
-  return `${(bytes / 1073741824).toFixed(1)} GB`;
+  return `${(bytes / GB).toFixed(1)} GB`;
 }
-
+function fmtGb(bytes: number): string { return `${(bytes / GB).toFixed(1)} GB`; }
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
-
-// Expiry badge state for a document. null → no expiry set. Highlights anything
-// expired or within 30 days so renewals (passports, insurance, registrations)
-// never sneak up on a family.
-function expiryStatus(expiresAt: string | null | undefined): { label: string; cls: string } | null {
-  if (!expiresAt) return null;
-  const exp = new Date(expiresAt).getTime();
-  if (Number.isNaN(exp)) return null;
-  const days = Math.ceil((exp - Date.now()) / 86_400_000);
-  const date = fmtDate(expiresAt);
-  if (days < 0) return { label: 'Expired', cls: 'bg-rose-500/15 text-rose-400' };
-  if (days <= 30) return { label: `${date} · ${days}d`, cls: 'bg-amber-500/15 text-amber-400' };
-  return { label: date, cls: 'bg-surface text-muted' };
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return mins <= 1 ? 'just now' : `${mins} minutes ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  return fmtDate(iso);
 }
 
-function mimeIcon(mime: string | null): string {
-  if (!mime) return '📄';
-  if (mime.includes('pdf')) return '📕';
-  if (mime.includes('image')) return '🖼️';
-  if (mime.includes('word') || mime.includes('document')) return '📝';
-  return '📄';
+// ── File-type detection → icon + color, and coarse storage group ────────────
+type FileMeta = { Icon: typeof FileText; color: string; tint: string };
+function ext(title: string, mime: string | null): string {
+  const m = /\.([a-z0-9]+)$/i.exec(title);
+  if (m) return m[1].toLowerCase();
+  if (mime?.includes('pdf')) return 'pdf';
+  if (mime?.startsWith('image/')) return mime.split('/')[1] ?? 'png';
+  if (mime?.startsWith('video/')) return mime.split('/')[1] ?? 'mp4';
+  return '';
 }
+function fileMeta(title: string, mime: string | null): FileMeta {
+  const e = ext(title, mime);
+  if (e === 'pdf') return { Icon: FileText, color: 'text-rose-400', tint: 'bg-rose-500/15' };
+  if (['doc', 'docx', 'rtf', 'txt', 'pages'].includes(e)) return { Icon: FileText, color: 'text-blue-400', tint: 'bg-blue-500/15' };
+  if (['xls', 'xlsx', 'csv', 'numbers'].includes(e)) return { Icon: TableIcon, color: 'text-emerald-400', tint: 'bg-emerald-500/15' };
+  if (['ppt', 'pptx', 'key'].includes(e)) return { Icon: FileText, color: 'text-orange-400', tint: 'bg-orange-500/15' };
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'svg'].includes(e) || mime?.startsWith('image/')) return { Icon: ImageIcon, color: 'text-sky-400', tint: 'bg-sky-500/15' };
+  if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(e) || mime?.startsWith('video/')) return { Icon: Video, color: 'text-violet-400', tint: 'bg-violet-500/15' };
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(e)) return { Icon: FileArchive, color: 'text-amber-400', tint: 'bg-amber-500/15' };
+  return { Icon: File, color: 'text-muted', tint: 'bg-surface/60' };
+}
+type StorageGroup = 'documents' | 'photos' | 'videos' | 'other';
+function storageGroup(title: string, mime: string | null): StorageGroup {
+  const e = ext(title, mime);
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'svg'].includes(e) || mime?.startsWith('image/')) return 'photos';
+  if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(e) || mime?.startsWith('video/')) return 'videos';
+  if (['pdf', 'doc', 'docx', 'rtf', 'txt', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'pages', 'numbers', 'key'].includes(e)) return 'documents';
+  return 'other';
+}
+const STORAGE_META: Record<StorageGroup, { label: string; color: string }> = {
+  documents: { label: 'Documents', color: '#60a5fa' },
+  photos: { label: 'Photos', color: '#34d399' },
+  videos: { label: 'Videos', color: '#a78bfa' },
+  other: { label: 'Other', color: '#f472b6' },
+};
+
+// Deterministic folder color from its name (so the same folder is always the
+// same hue), matching the multi-colored folders in the design.
+const FOLDER_PALETTE = ['#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#fb923c', '#f472b6', '#38bdf8', '#f87171'];
+function folderColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return FOLDER_PALETTE[h % FOLDER_PALETTE.length];
+}
+function folderLabel(name: string): string {
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+const TYPE_FILTERS: { value: 'all' | StorageGroup; label: string }[] = [
+  { value: 'all', label: 'All Types' },
+  { value: 'documents', label: 'Documents' },
+  { value: 'photos', label: 'Photos' },
+  { value: 'videos', label: 'Videos' },
+  { value: 'other', label: 'Other' },
+];
+const SORTS = [
+  { value: 'modified', label: 'Last Modified' },
+  { value: 'name', label: 'Name (A–Z)' },
+  { value: 'size', label: 'Largest first' },
+  { value: 'oldest', label: 'Oldest first' },
+] as const;
+type SortKey = (typeof SORTS)[number]['value'];
+
+const PAGE_SIZE = 10;
 
 export function DocumentsModule() {
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
+
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: '', category: 'other', member_id: '', expires_at: '' });
+  const [form, setForm] = useState({ title: '', category: 'general', member_id: '', expires_at: '' });
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+
+  const [query, setQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | StorageGroup>('all');
+  const [sort, setSort] = useState<SortKey>('modified');
+  const [view, setView] = useState<'list' | 'grid'>('list');
+  const [folderFilter, setFolderFilter] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [showAllFolders, setShowAllFolders] = useState(false);
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const [confirmDoc, setConfirmDoc] = useState<Document | null>(null);
+  const [favPending, setFavPending] = useState<Record<string, boolean>>({});
 
   const { data, loading, error, refresh } = useRealtimeQuery<Document>({
     table: 'documents', familyId, deps: [familyId],
@@ -83,171 +145,307 @@ export function DocumentsModule() {
   });
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+  const memberByUser = useMemo(() => new Map(members.filter((m) => m.user_id).map((m) => [m.user_id as string, m])), [members]);
+  const activeMembers = useMemo(() => members.filter((m) => m.is_active), [members]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, Document[]>();
+  const isFav = (d: Document) => favPending[d.id] ?? d.is_favorite;
+
+  // Folders derived from the categories present, with counts + contributors.
+  const folders = useMemo(() => {
+    const map = new Map<string, { count: number; contributors: Set<string> }>();
     for (const d of data) {
-      const cat = d.category ?? 'other';
-      if (!map.has(cat)) map.set(cat, []);
-      map.get(cat)!.push(d);
+      const cat = d.category?.trim() || 'general';
+      const entry = map.get(cat) ?? { count: 0, contributors: new Set<string>() };
+      entry.count += 1;
+      if (d.created_by) entry.contributors.add(d.created_by);
+      map.set(cat, entry);
     }
-    return map;
+    return [...map.entries()]
+      .map(([name, v]) => ({ name, count: v.count, contributors: [...v.contributors] }))
+      .sort((a, b) => b.count - a.count);
   }, [data]);
 
-  const totalDocs = data.length;
-  const folders = grouped.size;
-  const totalBytes = useMemo(() => data.reduce((s, d) => s + (d.size_bytes ?? 0), 0), [data]);
+  // Storage breakdown by coarse type group.
+  const storage = useMemo(() => {
+    const by: Record<StorageGroup, number> = { documents: 0, photos: 0, videos: 0, other: 0 };
+    for (const d of data) by[storageGroup(d.title, d.mime_type)] += d.size_bytes ?? 0;
+    const used = by.documents + by.photos + by.videos + by.other;
+    return { by, used };
+  }, [data]);
+  const usedPct = Math.min((storage.used / STORAGE_LIMIT) * 100, 100);
 
-  const STORAGE_LIMIT = 5 * 1024 * 1024 * 1024;
-  const usedPct = totalBytes > 0 ? Math.min((totalBytes / STORAGE_LIMIT) * 100, 100) : 0;
+  // Donut arcs for the storage overview.
   const circ = 251.2;
-  const sharedCount = useMemo(() => data.filter((d) => !d.member_id).length, [data]);
-  const storageUsedLabel = totalBytes > 0 ? fmtSize(totalBytes) : '0 MB';
-  const storageFreeLabel = fmtSize(STORAGE_LIMIT - totalBytes);
+  const storageArcs = useMemo(() => {
+    let offset = 0;
+    const order: StorageGroup[] = ['documents', 'photos', 'videos', 'other'];
+    return order.map((g) => {
+      const pct = storage.used > 0 ? storage.by[g] / storage.used : 0;
+      const dash = pct * circ;
+      const arc = { key: g, dash, offset: circ - offset, color: STORAGE_META[g].color };
+      offset += dash;
+      return arc;
+    });
+  }, [storage]);
 
-  // Real per-category byte breakdown for the sidebar (top 5 by size).
-  const catBytesDisplay: [string, number][] = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const d of data) { const c = d.category ?? 'other'; map[c] = (map[c] ?? 0) + (d.size_bytes ?? 0); }
-    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  }, [data]);
+  // Filter → search → sort.
+  const filtered = useMemo(() => {
+    let rows = data;
+    if (folderFilter) rows = rows.filter((d) => (d.category?.trim() || 'general') === folderFilter);
+    if (typeFilter !== 'all') rows = rows.filter((d) => storageGroup(d.title, d.mime_type) === typeFilter);
+    if (query.trim()) {
+      const q = query.trim().toLowerCase();
+      rows = rows.filter((d) => d.title.toLowerCase().includes(q) || (d.category ?? '').toLowerCase().includes(q));
+    }
+    return [...rows].sort((a, b) => {
+      switch (sort) {
+        case 'name': return a.title.localeCompare(b.title);
+        case 'size': return (b.size_bytes ?? 0) - (a.size_bytes ?? 0);
+        case 'oldest': return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        default: return new Date(b.updated_at ?? b.created_at).getTime() - new Date(a.updated_at ?? a.created_at).getTime();
+      }
+    });
+  }, [data, folderFilter, typeFilter, query, sort]);
 
-  const DONUT_COLORS = ['#7c5dff', '#60a5fa', '#34d399', '#fbbf24', '#f87171'];
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
-  async function remove(doc: Document) {
+  // Reset to page 1 whenever the result set changes shape.
+  useEffect(() => { setPage(1); }, [folderFilter, typeFilter, query, sort]);
+
+  const recentActivity = useMemo(() =>
+    [...data].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5),
+    [data]);
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  async function toggleFavorite(doc: Document) {
+    const next = !isFav(doc);
+    setFavPending((p) => ({ ...p, [doc.id]: next }));
     const sb = createClient();
-    // Remove the underlying storage object first so we never orphan files.
-    if (doc.storage_path) await removeFamilyDocument(sb, doc.storage_path);
-    const { error: err } = await sb.from('documents').delete().eq('id', doc.id);
-    if (err) { toastError(describeDbError(err)); return; }
-    success('Document removed'); refresh();
+    const { error: err } = await sb.from('documents').update({ is_favorite: next }).eq('id', doc.id);
+    if (err) {
+      setFavPending((p) => { const { [doc.id]: _drop, ...rest } = p; return rest; });
+      toastError(describeDbError(err));
+      return;
+    }
+    refresh();
   }
 
   async function download(doc: Document) {
+    setMenuId(null);
     if (!doc.storage_path) { toastError('No file attached to this document'); return; }
     const sb = createClient();
     const { url, error: err } = await getDocumentSignedUrl(sb, doc.storage_path);
-    if (err || !url) { toastError(err ?? 'Could not open document'); return; }
+    if (err || !url) { toastError(err ?? 'Could not open this file'); return; }
     window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  async function remove(doc: Document) {
+    setConfirmDoc(null);
+    const sb = createClient();
+    if (doc.storage_path) await removeFamilyDocument(sb, doc.storage_path);
+    const { error: err } = await sb.from('documents').delete().eq('id', doc.id);
+    if (err) { toastError(describeDbError(err)); return; }
+    success('File deleted'); refresh();
   }
 
   function pickFile(f: File | null) {
     setFile(f);
-    if (f && !form.title) {
-      setForm((prev) => ({ ...prev, title: f.name.replace(/\.[^.]+$/, '') }));
-    }
+    if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name }));
+    if (f) setOpen(true);
   }
 
   async function save() {
     if (!form.title || !file) { toastError('Choose a file and name it'); return; }
     setSaving(true);
     const sb = createClient();
-    // 1) Upload the real file into the private family folder of the documents bucket.
-    const { path, error: upErr } = await uploadFamilyDocument(sb, { familyId, folder: form.category, file });
+    const folder = form.category.trim() || 'general';
+    const { path, error: upErr } = await uploadFamilyDocument(sb, { familyId, folder, file });
     if (upErr || !path) { setSaving(false); toastError(upErr ?? 'Upload failed'); return; }
-    // 2) Record it with the real storage path, size, and mime type.
     const { error: err } = await sb.from('documents').insert({
-      family_id: familyId, title: form.title, category: form.category,
+      family_id: familyId, title: form.title, category: folder,
       member_id: form.member_id || null, created_by: userId,
       storage_path: path, size_bytes: file.size, mime_type: file.type || null,
       expires_at: form.expires_at || null,
     });
     setSaving(false);
-    if (err) {
-      // Roll back the uploaded object so we don't leave an orphan on a failed insert.
-      await removeFamilyDocument(sb, path);
-      toastError('Failed to save document'); return;
-    }
-    success('Document uploaded!');
-    setOpen(false); setForm({ title: '', category: 'other', member_id: '', expires_at: '' }); setFile(null); refresh();
+    if (err) { await removeFamilyDocument(sb, path); toastError('Failed to save file'); return; }
+    success('File uploaded');
+    setOpen(false); setForm({ title: '', category: 'general', member_id: '', expires_at: '' }); setFile(null); refresh();
+  }
+
+  function comingSoon(what: string) {
+    toastError(`${what} isn't connected yet — connect it in Settings → Integrations.`);
   }
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message={error} />;
+  if (error) return <ErrorState message={error} onRetry={refresh} />;
 
-  const displayDocs = data.slice(0, 8);
+  const folderCards = showAllFolders ? folders : folders.slice(0, 6);
+  const hasFilters = Boolean(query || typeFilter !== 'all' || folderFilter);
 
   return (
     <div className="module-with-sidebar">
       <div className="module-main space-y-5">
         <PageHeader
-          title="Documents"
-          description="Store, organize, and access important family documents."
-          action={<div className="flex items-center gap-2"><AiInsight kind="documents" iconOnly /><Button onClick={() => setOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Upload Document</Button></div>}
-        />
-        <div className="grid-stats gap-3">
-          {[
-            { icon: FileText, label: 'Total Documents', value: totalDocs, sub: 'Across all folders', bg: 'bg-brand/15 text-brand' },
-            { icon: FolderLock, label: 'Folders', value: folders, sub: 'Categories in use', bg: 'bg-blue-600/20 text-blue-300' },
-            { icon: FileText, label: 'Shared', value: sharedCount, sub: 'Visible to all members', bg: 'bg-emerald-600/20 text-emerald-300' },
-            { icon: Upload, label: 'Storage Used', value: storageUsedLabel, sub: 'of 5 GB', bg: 'bg-orange-600/20 text-orange-300' },
-          ].map(({ icon: Icon, label, value, sub, bg }) => (
-            <div key={label} className="rounded-2xl border border-border bg-surface/40 p-4">
-              <div className={cn('mb-3 grid h-10 w-10 place-items-center rounded-xl', bg)}><Icon className="h-5 w-5" /></div>
-              <p className="text-2xl font-black">{value}</p><p className="text-sm font-semibold">{label}</p><p className="text-xs text-muted">{sub}</p>
+          title="Files"
+          description="Store, organize, and share important documents with your family."
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={() => { setForm((f) => ({ ...f, title: '', category: 'general' })); setFile(null); setOpen(true); }}><Upload className="h-4 w-4" /> Upload</Button>
+              <Button variant="secondary" onClick={() => { setForm((f) => ({ ...f, title: '', category: '' })); setFile(null); setOpen(true); }}><FolderPlus className="h-4 w-4" /> New Folder</Button>
+              <AiInsight kind="documents" iconOnly />
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search files..."
+                  aria-label="Search files"
+                  className="h-9 w-40 rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none placeholder:text-muted focus:border-brand/50 sm:w-56"
+                />
+              </div>
             </div>
-          ))}
-        </div>
+          }
+        />
+
+        {/* Folders */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">My Folders</h2></div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {CATEGORIES.map((cat) => {
-              const meta = CAT_META[cat] ?? CAT_META.other;
-              const count = grouped.get(cat)?.length ?? 0;
-              return (
-                <div key={cat} className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-border bg-surface/20 p-4 text-center transition hover:border-border hover:bg-surface/40">
-                  <div className={cn('grid h-12 w-12 place-items-center rounded-xl text-2xl', meta.bg)}>{meta.icon}</div>
-                  <p className="text-xs font-semibold leading-tight">{meta.label}</p>
-                  <p className="text-xs text-muted">{count > 0 ? `${count} file${count !== 1 ? 's' : ''}` : 'Empty'}</p>
-                </div>
-              );
-            })}
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-semibold">Folders</h2>
+            {folders.length > 6 && (
+              <button onClick={() => setShowAllFolders((v) => !v)} className="flex items-center gap-0.5 text-xs font-semibold text-brand hover:underline">
+                {showAllFolders ? 'Show less' : 'View all folders'} <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
+          {folders.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted">No folders yet. Upload a file to create one.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+              {folderCards.map((f) => {
+                const active = folderFilter === f.name;
+                const color = folderColor(f.name);
+                return (
+                  <button
+                    key={f.name}
+                    onClick={() => setFolderFilter(active ? null : f.name)}
+                    className={cn('flex flex-col items-center gap-2 rounded-2xl border p-4 text-center transition hover:bg-elevated',
+                      active ? 'border-brand bg-brand/5' : 'border-border bg-surface/20')}
+                  >
+                    <Folder className="h-12 w-12" style={{ color }} fill={color} strokeWidth={1} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{folderLabel(f.name)}</p>
+                      <p className="text-xs text-muted">{f.count} item{f.count === 1 ? '' : 's'}</p>
+                    </div>
+                    <div className="flex -space-x-1.5">
+                      {f.contributors.slice(0, 3).map((uid) => {
+                        const m = memberByUser.get(uid);
+                        return <Avatar key={uid} name={m?.display_name ?? '—'} color={m?.color} size={20} className="ring-2 ring-surface" />;
+                      })}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
-        <div className="rounded-2xl border border-border bg-surface/40">
-          <div className="flex items-center justify-between p-5">
-            <h2 className="font-semibold">Recent Documents</h2>
-            {totalDocs > displayDocs.length && <span className="text-xs text-muted">Showing {displayDocs.length} of {totalDocs}</span>}
+
+        {/* All Files */}
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="font-semibold">
+              All Files
+              {folderFilter && (
+                <button onClick={() => setFolderFilter(null)} className="ml-2 inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
+                  {folderLabel(folderFilter)} ✕
+                </button>
+              )}
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select aria-label="Filter by type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as 'all' | StorageGroup)} className="h-9 w-auto text-sm">
+                {TYPE_FILTERS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </Select>
+              <Select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="h-9 w-auto text-sm">
+                {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </Select>
+              <div className="inline-flex items-center rounded-lg border border-border p-0.5">
+                <button onClick={() => setView('list')} aria-label="List view" className={cn('grid h-7 w-7 place-items-center rounded-md', view === 'list' ? 'bg-elevated text-fg' : 'text-muted')}><List className="h-4 w-4" /></button>
+                <button onClick={() => setView('grid')} aria-label="Grid view" className={cn('grid h-7 w-7 place-items-center rounded-md', view === 'grid' ? 'bg-elevated text-fg' : 'text-muted')}><LayoutGrid className="h-4 w-4" /></button>
+              </div>
+            </div>
           </div>
-          {displayDocs.length > 0 ? (
-            <div className="table-responsive">
+
+          {filtered.length === 0 ? (
+            <div className="py-14 text-center">
+              <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-surface/40"><File className="h-8 w-8 text-muted/60" /></div>
+              <p className="font-semibold text-muted">{hasFilters ? 'No files match your filters' : 'No files yet'}</p>
+              <p className="mt-1 text-sm text-muted/60">{hasFilters ? 'Try clearing the search or filters.' : 'Upload your first file to get started.'}</p>
+              {!hasFilters && <Button onClick={() => setOpen(true)} className="mt-5"><Plus className="h-4 w-4" /> Upload File</Button>}
+            </div>
+          ) : view === 'list' ? (
+            <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead><tr className="border-t border-border text-xs text-muted">
-                  <th className="px-5 py-3 text-left font-medium">Name</th>
-                  <th className="px-4 py-3 text-left font-medium">Member</th>
-                  <th className="px-4 py-3 text-left font-medium">Category</th>
-                  <th className="px-4 py-3 text-left font-medium">Size</th>
-                  <th className="px-4 py-3 text-left font-medium">Date Added</th>
-                  <th className="px-4 py-3 text-left font-medium">Expires</th>
-                  <th className="w-20 px-4 py-3" />
-                </tr></thead>
+                <thead>
+                  <tr className="border-b border-border text-xs text-muted">
+                    <th className="py-2.5 pr-4 text-left font-medium">Name</th>
+                    <th className="hidden py-2.5 pr-4 text-left font-medium sm:table-cell">Shared</th>
+                    <th className="hidden py-2.5 pr-4 text-left font-medium md:table-cell">Modified</th>
+                    <th className="py-2.5 pr-4 text-left font-medium">Size</th>
+                    <th className="w-16 py-2.5" />
+                  </tr>
+                </thead>
                 <tbody className="divide-y divide-border/50">
-                  {displayDocs.map((doc) => {
-                    const member = doc.member_id ? memberById.get(doc.member_id) : undefined;
-                    const cat = CAT_META[doc.category ?? 'other'] ?? CAT_META.other;
+                  {pageRows.map((doc) => {
+                    const meta = fileMeta(doc.title, doc.mime_type);
+                    const uploader = doc.created_by ? memberByUser.get(doc.created_by) : undefined;
+                    const owner = doc.member_id ? memberById.get(doc.member_id) : undefined;
                     return (
-                      <tr key={doc.id} className="hover:bg-surface/20">
-                        <td className="px-5 py-3.5">
+                      <tr key={doc.id} className="group hover:bg-elevated/40">
+                        <td className="py-3 pr-4">
                           <div className="flex items-center gap-3">
-                            <span className="text-xl">{mimeIcon(doc.mime_type)}</span>
-                            <p className="font-medium">{doc.title}</p>
+                            <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', meta.tint)}><meta.Icon className={cn('h-4 w-4', meta.color)} /></span>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">{doc.title}</p>
+                              <p className="truncate text-xs text-muted">{folderLabel(doc.category?.trim() || 'General')}</p>
+                            </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5">
-                          {member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={24} /><span className="text-xs">{member.display_name.split(' ')[0]}</span></div> : <span className="text-muted/60 text-xs">Family</span>}
+                        <td className="hidden py-3 pr-4 sm:table-cell">
+                          {owner ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {owner.display_name.split(' ')[0]}</span>
+                          ) : (
+                            <div className="flex -space-x-1.5">
+                              {activeMembers.slice(0, 4).map((m) => <Avatar key={m.id} name={m.display_name} color={m.color} size={22} className="ring-2 ring-surface" />)}
+                            </div>
+                          )}
                         </td>
-                        <td className="px-4 py-3.5"><span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold', cat.bg, cat.color)}>{cat.icon} {cat.label}</span></td>
-                        <td className="px-4 py-3.5 text-xs text-muted">{fmtSize(doc.size_bytes)}</td>
-                        <td className="px-4 py-3.5 text-xs text-muted">{fmtDate(doc.created_at)}</td>
-                        <td className="px-4 py-3.5 text-xs">{(() => {
-                          const e = expiryStatus(doc.expires_at);
-                          if (!e) return <span className="text-muted/50">—</span>;
-                          return <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold', e.cls)}>{e.label}</span>;
-                        })()}</td>
-                        <td className="px-4 py-3.5">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => download(doc)} title="Download" className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-surface/40 hover:text-fg"><Download className="h-3.5 w-3.5" /></button>
-                            <button onClick={() => remove(doc)} title="Delete" className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-red-500/10 hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                        <td className="hidden py-3 pr-4 md:table-cell">
+                          <p className="text-xs">{fmtDate(doc.updated_at ?? doc.created_at)}</p>
+                          {uploader && <p className="text-[11px] text-muted">by {uploader.display_name.split(' ')[0]}</p>}
+                        </td>
+                        <td className="py-3 pr-4 text-xs text-muted tabular-nums">{fmtSize(doc.size_bytes)}</td>
+                        <td className="py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? 'Unstar' : 'Star'} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                              <Star className={cn('h-4 w-4', isFav(doc) && 'fill-amber-400 text-amber-400')} />
+                            </button>
+                            <div className="relative">
+                              <button onClick={() => setMenuId(menuId === doc.id ? null : doc.id)} aria-label="More actions" className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </button>
+                              {menuId === doc.id && (
+                                <>
+                                  <button className="fixed inset-0 z-10 cursor-default" aria-hidden onClick={() => setMenuId(null)} tabIndex={-1} />
+                                  <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
+                                    <button onClick={() => download(doc)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated"><Download className="h-4 w-4" /> Download</button>
+                                    <button onClick={() => { setMenuId(null); toggleFavorite(doc); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-elevated"><Star className="h-4 w-4" /> {isFav(doc) ? 'Unstar' : 'Star'}</button>
+                                    <button onClick={() => { setMenuId(null); setConfirmDoc(doc); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /> Delete</button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -257,116 +455,211 @@ export function DocumentsModule() {
               </table>
             </div>
           ) : (
-            <div className="p-12 text-center">
-              <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-surface/40"><File className="h-8 w-8 text-muted/60" /></div>
-              <p className="font-semibold text-muted">No documents yet</p>
-              <p className="mt-1 text-sm text-muted/60">Upload your first document to get started.</p>
-              <Button onClick={() => setOpen(true)} className="btn-cta mt-5"><Plus className="h-4 w-4" /> Upload Document</Button>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {pageRows.map((doc) => {
+                const meta = fileMeta(doc.title, doc.mime_type);
+                return (
+                  <div key={doc.id} className="group relative rounded-2xl border border-border bg-surface/20 p-4">
+                    <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? 'Unstar' : 'Star'} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                      <Star className={cn('h-4 w-4', isFav(doc) && 'fill-amber-400 text-amber-400')} />
+                    </button>
+                    <span className={cn('grid h-12 w-12 place-items-center rounded-xl', meta.tint)}><meta.Icon className={cn('h-6 w-6', meta.color)} /></span>
+                    <p className="mt-3 truncate text-sm font-semibold">{doc.title}</p>
+                    <p className="truncate text-xs text-muted">{folderLabel(doc.category?.trim() || 'General')}</p>
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-muted">
+                      <span>{fmtSize(doc.size_bytes)}</span>
+                      <span>{fmtDate(doc.updated_at ?? doc.created_at)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {filtered.length > PAGE_SIZE && (
+            <div className="mt-4 flex flex-col items-center justify-between gap-3 border-t border-border pt-4 sm:flex-row">
+              <p className="text-xs text-muted">
+                Showing {(safePage - 1) * PAGE_SIZE + 1} to {Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length} files
+              </p>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} aria-label="Previous page" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted disabled:opacity-40 hover:bg-elevated"><ChevronLeft className="h-4 w-4" /></button>
+                {pageNumbers(safePage, totalPages).map((p, i) => (
+                  p === '…'
+                    ? <span key={`e${i}`} className="px-1.5 text-sm text-muted">…</span>
+                    : <button key={p} onClick={() => setPage(p as number)} className={cn('h-8 min-w-8 rounded-lg px-2 text-sm font-medium', p === safePage ? 'bg-brand text-brand-fg' : 'border border-border text-muted hover:bg-elevated')}>{p}</button>
+                ))}
+                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} aria-label="Next page" className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted disabled:opacity-40 hover:bg-elevated"><ChevronRight className="h-4 w-4" /></button>
+              </div>
             </div>
           )}
         </div>
       </div>
-      <aside className="module-sidebar hidden lg:flex lg:flex-col gap-5">
+
+      {/* Right rail */}
+      <aside className="module-sidebar flex flex-col gap-5">
+        {/* Storage Overview */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <h2 className="mb-4 font-semibold">Storage Usage</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-semibold">Storage Overview</h2>
+            <span className="text-xs text-muted">{fmtGb(STORAGE_LIMIT)} plan</span>
+          </div>
           <div className="flex items-center gap-4">
-            <div className="relative h-24 w-24 shrink-0">
+            <div className="relative h-28 w-28 shrink-0">
               <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-                <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="14" />
-                <circle cx="50" cy="50" r="40" fill="none" stroke="#7c5dff" strokeWidth="14" strokeDasharray={`${(usedPct / 100) * circ} ${circ}`} strokeLinecap="round" />
+                <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="12" />
+                {storage.used > 0 && storageArcs.map((a) => a.dash > 0 && (
+                  <circle key={a.key} cx="50" cy="50" r="40" fill="none" stroke={a.color} strokeWidth="12" strokeDasharray={`${a.dash} ${circ}`} strokeDashoffset={a.offset} />
+                ))}
               </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-lg font-black">{usedPct.toFixed(0)}%</span>
-                <span className="text-[9px] text-muted">Used</span>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                <span className="text-xl font-black tabular-nums">{fmtGb(storage.used)}</span>
+                <span className="text-[10px] text-muted">of {fmtGb(STORAGE_LIMIT)} used</span>
               </div>
             </div>
-            <div className="space-y-2 flex-1">
-              <div><p className="text-sm font-bold">{storageUsedLabel}</p><p className="text-xs text-muted">Used</p></div>
-              <div><p className="text-sm font-bold">{storageFreeLabel}</p><p className="text-xs text-muted">Free</p></div>
+            <div className="flex-1 space-y-1.5">
+              {(['documents', 'photos', 'videos', 'other'] as StorageGroup[]).map((g) => (
+                <div key={g} className="flex items-center gap-2 text-xs">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: STORAGE_META[g].color }} />
+                  <span className="flex-1 text-muted">{STORAGE_META[g].label}</span>
+                  <span className="font-semibold tabular-nums">{fmtGb(storage.by[g])}</span>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="mt-4 space-y-2">
-            {catBytesDisplay.map(([cat, bytes], i) => {
-              const meta = CAT_META[cat] ?? CAT_META.other;
-              return (
-                <div key={cat} className="flex items-center gap-2 text-xs">
-                  <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }} />
-                  <span className="flex-1 text-muted">{meta.label}</span>
-                  <span className="font-semibold">{fmtSize(bytes)}</span>
-                </div>
-              );
-            })}
+          <div className="mt-4 h-2 rounded-full bg-border">
+            <div className="h-full rounded-full bg-brand" style={{ width: `${usedPct}%` }} />
+          </div>
+          <div className="mt-1.5 flex justify-between text-[11px] text-muted">
+            <span>{usedPct.toFixed(0)}% used</span>
+            <span>{fmtGb(Math.max(STORAGE_LIMIT - storage.used, 0))} free</span>
           </div>
         </div>
+
+        {/* Quick Actions */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <h2 className="mb-4 font-semibold">Quick Actions</h2>
-          <div className="space-y-2">
-            <button onClick={() => setOpen(true)} className="flex w-full items-center gap-3 rounded-xl border border-border px-4 py-2.5 text-sm hover:border-border">
-              <Upload className="h-4 w-4 text-muted" />Upload Document
-            </button>
-            <Link href="/dashboard/assistant" className="flex w-full items-center gap-3 rounded-xl border border-border px-4 py-2.5 text-sm hover:border-border">
-              <Sparkles className="h-4 w-4 text-muted" />Ask the AI assistant
-            </Link>
+          <div className="space-y-1.5">
+            {[
+              { icon: Upload, label: 'Upload Files', onClick: () => { setForm((f) => ({ ...f, title: '', category: 'general' })); setFile(null); setOpen(true); } },
+              { icon: FolderPlus, label: 'Create New Folder', onClick: () => { setForm((f) => ({ ...f, title: '', category: '' })); setFile(null); setOpen(true); } },
+              { icon: ScanLine, label: 'Scan Document', onClick: () => scanInputRef.current?.click() },
+              { icon: HardDrive, label: 'Add from Google Drive', onClick: () => comingSoon('Google Drive') },
+              { icon: Cloud, label: 'Add from Dropbox', onClick: () => comingSoon('Dropbox') },
+            ].map(({ icon: Icon, label, onClick }) => (
+              <button key={label} onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-elevated">
+                <Icon className="h-4 w-4 text-muted" /> {label}
+              </button>
+            ))}
           </div>
         </div>
+
+        {/* Recent Activity */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Recent Activity</h2></div>
-          <div className="space-y-3">
-            {displayDocs.slice(0, 4).map((doc) => {
-              const meta = CAT_META[doc.category ?? 'other'] ?? CAT_META.other;
-              const diff = Math.floor((Date.now() - new Date(doc.created_at).getTime()) / 3600000);
-              const ago = diff < 24 ? `${diff}h ago` : `${Math.floor(diff / 24)}d ago`;
-              return (
-                <div key={doc.id} className="flex items-start gap-3">
-                  <div className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg text-base', meta.bg)}>{meta.icon}</div>
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{doc.title}</p><p className="text-xs text-muted">{meta.label} · {ago}</p></div>
-                </div>
-              );
-            })}
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-semibold">Recent Activity</h2>
+            <AiInsight kind="documents" label="View all" variant="ghost" className="!px-0 text-xs text-brand" />
           </div>
+          {recentActivity.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted">No recent activity.</p>
+          ) : (
+            <div className="space-y-3">
+              {recentActivity.map((doc) => {
+                const uploader = doc.created_by ? memberByUser.get(doc.created_by) : undefined;
+                const meta = fileMeta(doc.title, doc.mime_type);
+                const grp = storageGroup(doc.title, doc.mime_type);
+                const action = grp === 'photos' || grp === 'videos' ? 'uploaded' : doc.member_id ? 'added' : 'shared';
+                return (
+                  <div key={doc.id} className="flex items-start gap-2.5">
+                    <Avatar name={uploader?.display_name ?? 'Family'} color={uploader?.color} size={28} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm leading-tight">
+                        <span className="font-semibold">{uploader ? uploader.display_name.split(' ')[0] : 'Someone'}</span>
+                        <span className="text-muted"> {action} </span>
+                      </p>
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        <span className={cn('grid h-4 w-4 shrink-0 place-items-center rounded', meta.tint)}><meta.Icon className={cn('h-2.5 w-2.5', meta.color)} /></span>
+                        <p className="truncate text-xs font-medium">{doc.title}</p>
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-muted">{timeAgo(doc.created_at)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
+
+        {/* AI Document Assistant */}
         <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
           <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand" /></div>
           <h3 className="font-bold">AI Document Assistant</h3>
           <p className="mt-2 text-xs leading-5 text-muted">Summarize, extract key info, and get insights from any document.</p>
-          <Link href="/dashboard/assistant" className="btn-cta mt-4 inline-flex w-full items-center justify-center">Ask AI</Link>
+          <AiInsight kind="documents" label="Ask AI" variant="primary" className="mt-4 w-full justify-center" />
         </div>
       </aside>
-      <Modal open={open} title="Upload Document" onClose={() => { setOpen(false); setFile(null); }}>
+
+      {/* Hidden input for Scan (mobile camera) */}
+      <input ref={scanInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
+
+      {/* Upload modal */}
+      <Modal open={open} title={form.category === '' ? 'New Folder' : 'Upload File'} onClose={() => { setOpen(false); setFile(null); }}>
         <div className="space-y-4">
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
-          />
+          <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }} />
           <div
             onClick={() => fileInputRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); pickFile(e.dataTransfer.files?.[0] ?? null); }}
+            onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }}
             className="cursor-pointer rounded-xl border-2 border-dashed border-border p-8 text-center transition hover:border-brand/50"
           >
             <Upload className="mx-auto mb-3 h-8 w-8 text-muted/60" />
             {file ? (
-              <>
-                <p className="text-sm font-semibold">{file.name}</p>
-                <p className="mt-1 text-xs text-muted/60">{fmtSize(file.size)} · click to change</p>
-              </>
+              <><p className="text-sm font-semibold">{file.name}</p><p className="mt-1 text-xs text-muted/60">{fmtSize(file.size)} · click to change</p></>
             ) : (
-              <>
-                <p className="text-sm font-semibold text-muted">Drag &amp; drop a file here</p>
-                <p className="mt-1 text-xs text-muted/60">PDF, JPG, PNG, DOCX up to 25 MB</p>
-                <span className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-xs font-semibold">Browse Files</span>
-              </>
+              <><p className="text-sm font-semibold text-muted">Drag &amp; drop a file here</p><p className="mt-1 text-xs text-muted/60">PDF, images, docs, video up to 50 MB</p><span className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-xs font-semibold">Browse Files</span></>
             )}
           </div>
-          <Field label="Document Name">{(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Passport - Emma" />}</Field>
-          <Field label="Category">{(id) => <Select id={id} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>{CATEGORIES.map((c) => <option key={c} value={c}>{CAT_META[c]?.label ?? c}</option>)}</Select>}</Field>
-          <Field label="Member">{(id) => <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">Family (shared)</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label="File Name">{(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Passport - Emma.pdf" />}</Field>
+          <Field label="Folder" hint="Type a new name to create a folder, or reuse an existing one.">{(id) => (
+            <>
+              <Input id={id} list="folder-options" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} placeholder="e.g. School, Finances, Vacation 2025" />
+              <datalist id="folder-options">{folders.map((f) => <option key={f.name} value={f.name} />)}</datalist>
+            </>
+          )}</Field>
+          <Field label="Visibility">{(id) => (
+            <Select id={id} value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))}>
+              <option value="">Shared with family</option>
+              {members.map((m) => <option key={m.id} value={m.id}>Private · {m.display_name}</option>)}
+            </Select>
+          )}</Field>
           <Field label="Expires (optional)" hint="For passports, insurance, registrations — Bubaly reminds you before it lapses.">{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>
-          <Button onClick={save} disabled={saving || !form.title || !file} loading={saving} className="w-full">{saving ? 'Uploading…' : 'Upload Document'}</Button>
+          <Button onClick={save} disabled={saving || !form.title || !file} loading={saving} className="w-full">{saving ? 'Uploading…' : 'Upload File'}</Button>
+        </div>
+      </Modal>
+
+      {/* Delete confirmation */}
+      <Modal open={!!confirmDoc} title="Delete file?" onClose={() => setConfirmDoc(null)}>
+        <div className="space-y-4">
+          <p className="text-sm text-muted">Delete <span className="font-semibold text-fg">{confirmDoc?.title}</span>? This permanently removes the file and cannot be undone.</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setConfirmDoc(null)}>Cancel</Button>
+            <Button variant="danger" onClick={() => confirmDoc && remove(confirmDoc)}>Delete</Button>
+          </div>
         </div>
       </Modal>
     </div>
   );
+}
+
+// Compact page-number list with ellipses: 1 … p-1 p p+1 … N.
+function pageNumbers(current: number, total: number): (number | '…')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const out: (number | '…')[] = [1];
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  if (start > 2) out.push('…');
+  for (let p = start; p <= end; p++) out.push(p);
+  if (end < total - 1) out.push('…');
+  out.push(total);
+  return out;
 }

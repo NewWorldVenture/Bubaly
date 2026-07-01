@@ -3,6 +3,43 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-01 SESSION — Files `/dashboard/documents` redesign (Supabase-wired)
+> Rebuilt the **Files** page from the uploaded mockup. Nav label is "Files" but the route is
+> **`/dashboard/documents`** → `components/modules/documents-module.tsx` (client), backed by the existing
+> **`documents`** table + Supabase Storage (real upload/download/delete via `lib/storage/documents.ts`).
+> Layout now mirrors the mock: header (Upload / New Folder / AI / Search), **Folders** row (colored folder
+> cards derived from `category`, with counts + contributor avatars, click-to-filter), **All Files** table
+> (Name · Shared · Modified "by X" · Size · ⭐ · ⋯) with **All Types** + **sort** dropdowns, **list/grid**
+> toggle, and **pagination** (10/page). Right rail: **Storage Overview** (multi-segment donut by file-type
+> group over a 10 GB plan + % used/free), **Quick Actions** (Upload / New Folder / Scan Document → camera
+> file input / Google Drive + Dropbox → "connect in Settings" toast), **Recent Activity** (from recent docs),
+> and the AI assistant card.
+> - **Folders = free-text `documents.category`** (no enum/CHECK), so typing a new folder name in the upload
+>   modal creates it with its first file (empty folders aren't persisted — there's no folders table).
+> - **Migration `0109_documents_favorite.sql`**: adds `documents.is_favorite boolean default false` (powers
+>   the ⭐ toggle — optimistic + persisted), adds indexes (family+created, family+favorite, family+category),
+>   and re-asserts canonical family-scoped RLS on `documents` (drift guard, all four verbs).
+> - `database.types.ts` `documents` row/insert/update updated for `is_favorite`.
+> - **Seed `supabase/seed_files_one_family.sql`**: **500 documents** across ~10 folders, all file types
+>   (pdf/docx/xlsx/pptx/jpg/png/mp4/mov/zip/txt/csv), sizes KB→GB, shared vs private, favorites, expiries,
+>   dates over ~18 months. Idempotent via `storage_path like 'seed/files/%'`. Folds in 0109's column+RLS so
+>   it runs standalone. Ends with a verify SELECT. **Storage paths are synthetic** — list/grid/filters work;
+>   Download reports a missing object (expected for seed rows).
+> - Shared column: `member_id` null → family avatar stack (RLS makes it truly family-visible); set → 🔒 private
+>   to that member. "by X" / Recent Activity actor = `created_by → family_members.user_id`.
+> - Verified: `tsc --noEmit` clean · eslint clean · `next build` exit 0.
+>
+> ## 🗓️ 2026-07-01 SESSION — Finances `/dashboard/billing` redesign (Supabase-wired)
+> Redesigned the **Finances** Overview from the mockup in `components/modules/billing-module.tsx` (route
+> `/dashboard/billing`, nav "Finances"/"Wallet"). All live from existing tables — no mock data, no migration.
+> New Overview: **Overview** stat block (Total Balance / Income / Expenses / Savings with circular icons),
+> **Budget & Spending** (donut with per-category $ + %, Budget Progress bar vs summed monthly `budgets`),
+> **Recent Transactions**, **Bills & Reminders** (mini month calendar with bill-due dots + Upcoming Bills),
+> **Spending by Person** (`transactions.created_by → family_members`, avatar + age + %), and a **Money Tip**
+> banner (month-over-month expense delta + AI Insights). Right rail trimmed to **Accounts + Savings Goals**
+> (mockup). Removed the old Income-vs-Expenses bar chart + rail Spending-Breakdown/Upcoming-Bills/AI cards.
+> Stripe plan manager + all CRUD modals untouched. Verified tsc/eslint/build green.
+>
 > ## 🗓️ 2026-07-01 SESSION — Memories `/dashboard/memories` redesign (Supabase-wired)
 > Rebuilt the Memories page from the uploaded mockup as a **server component** (`app/(app)/dashboard/memories/page.tsx`),
 > fully wired to Supabase, no mock data. Layout: header actions (Add Memory → `/dashboard/memories/create`,
