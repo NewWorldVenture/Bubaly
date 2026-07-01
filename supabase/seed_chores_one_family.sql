@@ -132,8 +132,9 @@ begin
   -- Ensure the reward catalog exists (create only if missing, matched by title).
   for i in 1..array_length(r_title,1) loop
     if not exists (select 1 from public.rewards where family_id = v_fam and title = r_title[i]) then
+      -- created_by references auth.users(id) → use the signed-in user (nullable).
       insert into public.rewards (family_id, title, description, cost_points, created_by)
-      values (v_fam, r_title[i], r_desc[i], r_cost[i], coalesce(v_self, v_members[1]));
+      values (v_fam, r_title[i], r_desc[i], r_cost[i], v_uid);
     end if;
   end loop;
 
@@ -143,7 +144,7 @@ begin
       (family_id, title, description, points, priority, recurrence, icon, requires_approval, instructions, created_by)
     values
       (v_fam, c_title[i], c_desc[i], c_pts[i], c_prio[i]::public.priority, c_rec[i]::public.recurrence_freq,
-       c_icon[i], true, '[seed:chores]', coalesce(v_self, v_members[1]))
+       c_icon[i], true, '[seed:chores]', v_uid)  -- created_by → auth.users(id)
     returning id into v_id;
     v_chores := array_append(v_chores, v_id);
     v_recur  := array_append(v_recur, c_rec[i]);
