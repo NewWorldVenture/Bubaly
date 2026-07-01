@@ -760,9 +760,24 @@ export interface Database {
         Partial<{ name: string; type: AccountType; institution: string | null; last_four: string | null; balance: number; currency: string }>
       >;
       transactions: T<
-        { id: string; family_id: string; account_id: string | null; member_id: string | null; name: string; amount: number; category: string | null; date: string; type: TransactionType; notes: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; account_id?: string | null; member_id?: string | null; name: string; amount: number; category?: string | null; date?: string; type?: TransactionType; notes?: string | null; created_by?: string | null },
-        Partial<{ account_id: string | null; member_id: string | null; name: string; amount: number; category: string | null; date: string; type: TransactionType; notes: string | null }>
+        { id: string; family_id: string; account_id: string | null; member_id: string | null; name: string; merchant: string | null; amount: number; category: string | null; date: string; type: TransactionType; status: string; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; account_id?: string | null; member_id?: string | null; name: string; merchant?: string | null; amount: number; category?: string | null; date?: string; type?: TransactionType; status?: string; notes?: string | null; created_by?: string | null },
+        Partial<{ account_id: string | null; member_id: string | null; name: string; merchant: string | null; amount: number; category: string | null; date: string; type: TransactionType; status: string; notes: string | null }>
+      >;
+      wallet_cards: T<
+        { id: string; family_id: string; member_id: string | null; name: string; brand: string; kind: string; last_four: string | null; available_cents: number; limit_cents: number | null; color: string | null; is_active: boolean; sort_order: number; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; name: string; brand?: string; kind?: string; last_four?: string | null; available_cents?: number; limit_cents?: number | null; color?: string | null; is_active?: boolean; sort_order?: number; metadata?: Json; created_by?: string | null },
+        Partial<{ member_id: string | null; name: string; brand: string; kind: string; last_four: string | null; available_cents: number; limit_cents: number | null; color: string | null; is_active: boolean; sort_order: number; metadata: Json }>
+      >;
+      wallet_passes: T<
+        { id: string; family_id: string; member_id: string | null; name: string; kind: string; status: string | null; detail: string | null; member_no: string | null; points: number | null; expires_on: string | null; is_active: boolean; sort_order: number; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; name: string; kind?: string; status?: string | null; detail?: string | null; member_no?: string | null; points?: number | null; expires_on?: string | null; is_active?: boolean; sort_order?: number; metadata?: Json; created_by?: string | null },
+        Partial<{ member_id: string | null; name: string; kind: string; status: string | null; detail: string | null; member_no: string | null; points: number | null; expires_on: string | null; is_active: boolean; sort_order: number; metadata: Json }>
+      >;
+      wallet_rewards: T<
+        { id: string; family_id: string; member_id: string | null; name: string; kind: string; balance: number; unit: string; value_cents: number; program: string | null; is_active: boolean; sort_order: number; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; name: string; kind?: string; balance?: number; unit?: string; value_cents?: number; program?: string | null; is_active?: boolean; sort_order?: number; metadata?: Json; created_by?: string | null },
+        Partial<{ member_id: string | null; name: string; kind: string; balance: number; unit: string; value_cents: number; program: string | null; is_active: boolean; sort_order: number; metadata: Json }>
       >;
       budgets: T<
         { id: string; family_id: string; category: string; amount: number; period: BudgetPeriod; created_by: string | null } & Stamps,
