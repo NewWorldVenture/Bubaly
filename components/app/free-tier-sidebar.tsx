@@ -18,7 +18,7 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { saveDashboardLayoutAction } from '@/app/(app)/dashboard/customize-actions';
 import { useApp } from './app-context';
-import { resolveItems, NavEntry } from './nav-shared';
+import { resolveItems, NavEntry, AiAssistantNavButton } from './nav-shared';
 import { SidebarAccount } from './sidebar-account';
 
 // Reverse map: nav route → registry feature key (only routes that ARE a
@@ -156,6 +156,11 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
   return (
     <>
       <nav className="flex flex-1 flex-col overflow-y-auto px-3 pb-4 xl:px-4">
+        {/* AI Assistant — pinned at the very top */}
+        <div className="mb-2">
+          <AiAssistantNavButton />
+        </div>
+
         {/* Primary destinations */}
         <div className="space-y-0.5">
           {PRIMARY_NAV.map((item) => (

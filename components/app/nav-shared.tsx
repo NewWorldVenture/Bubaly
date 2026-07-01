@@ -6,7 +6,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Lock } from 'lucide-react';
+import { Lock, Sparkles } from 'lucide-react';
 import type { NavItem } from '@/lib/constants/navigation';
 import { featureAccessByTier } from '@/lib/features/tiers';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
@@ -15,6 +15,32 @@ import { cn } from '@/lib/utils/cn';
 export function isActive(pathname: string, href: string): boolean {
   if (href === '/dashboard') return pathname === '/dashboard';
   return pathname === href || pathname.startsWith(href + '/');
+}
+
+/**
+ * Pinned "AI Assistant" entry at the very top of the sidebar (both tiers). A
+ * distinct gradient pill linking straight to the full assistant, so the AI
+ * layer is always one tap away regardless of plan.
+ */
+export function AiAssistantNavButton({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname() ?? '';
+  const active = isActive(pathname, '/dashboard/assistant');
+  return (
+    <Link
+      href="/dashboard/assistant"
+      onClick={onNavigate}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'group flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition xl:px-4 xl:py-3 xl:text-base',
+        active
+          ? 'border-brand/40 bg-brand/15 text-brand'
+          : 'border-border/70 bg-gradient-to-r from-brand/10 to-transparent text-fg hover:border-brand/40 hover:from-brand/20',
+      )}
+    >
+      <Sparkles className={cn('h-5 w-5 shrink-0', active ? 'text-brand' : 'text-brand/90')} />
+      AI Assistant
+    </Link>
+  );
 }
 
 /** Visible nav items for a group given the family's plan + admin tier settings.

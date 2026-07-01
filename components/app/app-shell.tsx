@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils/cn';
 import { useApp } from './app-context';
 import { ThemeSwitch } from './theme-switch';
 import { SidebarAccount } from './sidebar-account';
-import { isActive, resolveItems, NavEntry } from './nav-shared';
+import { isActive, resolveItems, NavEntry, AiAssistantNavButton } from './nav-shared';
 import { FreeTierSidebar } from './free-tier-sidebar';
 import { NotificationBell } from './notification-bell';
 import { UpgradeModal } from './upgrade-modal';
@@ -235,6 +235,8 @@ function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
   const { planLevel, isSuperAdmin, featureTiers } = useApp();
   return (
     <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4 xl:px-4">
+      {/* AI Assistant — pinned at the very top */}
+      <AiAssistantNavButton />
       {APP_NAV_GROUPS.map((group) => {
         const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin);
         const isSuggested = group.title === 'Suggested';
