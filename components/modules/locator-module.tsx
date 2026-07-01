@@ -52,6 +52,17 @@ function getPosition(): Promise<GeolocationPosition> {
   });
 }
 
+/** Turn a geolocation failure into a specific, actionable message. */
+function geoErrorMessage(err: unknown): string {
+  // GeolocationPositionError exposes numeric codes: 1 denied, 2 unavailable, 3 timeout.
+  const code = typeof err === 'object' && err !== null && 'code' in err ? (err as { code: number }).code : null;
+  if (code === 1) return 'Location permission denied — allow it for this site in your browser settings.';
+  if (code === 2) return 'Your device couldn’t determine its location. Check that location services are on.';
+  if (code === 3) return 'Location request timed out. Please try again.';
+  if (err instanceof Error && err.message === 'Geolocation unavailable') return 'This device doesn’t support location sharing.';
+  return 'Couldn’t get your location.';
+}
+
 export function LocatorModule() {
   const { familyId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
@@ -138,16 +149,17 @@ export function LocatorModule() {
       const res = await updateMyLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null, battery });
       if (!res.ok) { toastError(res.error ?? 'Failed to update location'); return; }
       setSharing(true);
+      void refreshLocations(); void refreshEvents();
       success(res.place ? `Shared — you're at ${res.place}` : 'Location shared');
     } catch (e) {
-      toastError(e instanceof Error && e.message.includes('denied') ? 'Location permission denied' : 'Couldn’t get your location');
+      toastError(geoErrorMessage(e));
     } finally { setUpdating(false); }
   }
 
   async function toggleShareOff() {
     const res = await setLocationSharing(false);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
-    setSharing(false); success('Location sharing off');
+    setSharing(false); void refreshLocations(); success('Location sharing off');
   }
 
   function refreshAll() {
@@ -166,7 +178,7 @@ export function LocatorModule() {
       const pos = await getPosition();
       setPlaceForm((f) => ({ ...f, latitude: pos.coords.latitude.toFixed(6), longitude: pos.coords.longitude.toFixed(6) }));
       success('Filled in your current coordinates');
-    } catch { toastError('Couldn’t get your location'); }
+    } catch (e) { toastError(geoErrorMessage(e)); }
   }
   async function submitPlace(e: React.FormEvent) {
     e.preventDefault();
@@ -177,13 +189,13 @@ export function LocatorModule() {
     const res = await savePlace({ id: placeForm.id || undefined, name: placeForm.name.trim(), icon: placeForm.icon, address: placeForm.address.trim() || null, latitude: lat, longitude: lng, radius_m: Number(placeForm.radius_m) || 150 });
     setSavingPlace(false);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
-    success(placeForm.id ? 'Place updated' : 'Place added'); setPlaceModal(false);
+    success(placeForm.id ? 'Place updated' : 'Place added'); setPlaceModal(false); void refreshPlaces();
   }
   async function removePlace(p: Place) {
     if (typeof window !== 'undefined' && !window.confirm(`Delete "${p.name}"?`)) return;
     const res = await deletePlace(p.id);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
-    success('Place deleted');
+    success('Place deleted'); void refreshPlaces();
   }
   async function toggleGeofence(p: Place) {
     if (togglingGeo) return;

@@ -3,6 +3,25 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-01 SESSION — Location `/dashboard/locator` wiring review + hardening
+> Full audit of the Location page confirmed it is **100% Supabase-wired** (reads: member_locations /
+> family_places / location_events via `useRealtimeQuery`; writes: `updateMyLocation` / `setLocationSharing`
+> / `savePlace` / `deletePlace` / `setGeofenceEnabled` server actions, self-only for location, family-scoped
+> for places). RLS on all three tables is `FOR ALL … is_family_member(family_id)` (0042); `member_locations`
+> has `UNIQUE(member_id)` so the `onConflict:'member_id'` upsert is correct; 0111 added
+> `family_places.geofence_enabled` + `member_locations.address`. Fixed three real gaps:
+> - **Live updates:** the 3 location tables were **not in the `supabase_realtime` publication**, so
+>   `postgres_changes` never fired → add/edit/delete place & own-sharing didn't reflect until refresh. Added
+>   **migration `0112_location_realtime.sql`** (idempotent ADD TABLE for member_locations/family_places/
+>   location_events) AND belt-and-suspenders client refreshes after `savePlace`/`deletePlace`/`shareNow`/
+>   `toggleShareOff` so the UI updates even without realtime.
+> - **Geolocation errors:** replaced the vague "Couldn't get your location" with `geoErrorMessage()` that maps
+>   `GeolocationPositionError` codes → specific text (permission denied / unavailable / timeout / unsupported).
+>   (The "Couldn't get your location" toasts in testing were desktop geolocation failing, not a wiring bug.)
+> - Note: `member_locations.address` is only populated by the seed; live shares show the saved-place address
+>   via UI fallback, or "—" when on the move (no reverse-geocoder is wired — honest gap). Verified: tsc/eslint
+>   clean, 7 location tests pass, `next build` OK. **Apply migration 0112** for cross-device live updates.
+>
 > ## 🗓️ 2026-07-01 SESSION — Large-family resilience pass (member chip/tile rows)
 > The Family page's **500-member seed** exposed that many surfaces render one chip/tile/row **per
 > family_member** in a `flex flex-wrap` / vertical list, which walls the layout for large families (first
