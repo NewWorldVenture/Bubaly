@@ -227,9 +227,12 @@ export function LocatorModule() {
           }
         />
 
-        {/* Member chips */}
+        {/* Member chips — only members actively sharing a location get a chip
+            (matches the family-map design); everyone else is reachable via
+            "All Family". Without this the chip row would render one tile per
+            family member, which does not scale for large families. */}
         <div className="flex flex-wrap items-center gap-2">
-          {members.map((m) => {
+          {liveMembers.map((m) => {
             const l = locByMember.get(m.id);
             const active = focusMember === m.id;
             return (
