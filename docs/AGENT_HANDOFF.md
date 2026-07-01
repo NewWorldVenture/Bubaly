@@ -3,6 +3,28 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-01 SESSION — Chores page redesign (branch `claude/chores-redesign`)
+> Redesigned `/dashboard/chores` (`components/modules/chores-module.tsx`) to match the gamified kids'
+> chore-board mockup, **100% Supabase-wired, zero mock data**. New layout: header (Add Chore / Chore
+> Templates), tabs (My Chores / All Chores / Completed / Approvals·count / Chore Store), per-child filter
+> pills with live point totals + Add Child, Daily / Weekly / Other grouped chore tables (emoji · assignee ·
+> due · reward · status pill · kebab), Completed grid, and a right rail: Family Chore Points (This Week/Month/
+> All-Time window) · Top Earners (medals) · Chore Streaks 🔥 · Rewards Progress bar · Need Approval.
+> - **Data**: reads `chore_assignments` (+joined `chores`) and `rewards` via `useRealtimeQuery`. All widgets
+>   are pure transforms of those rows in **`lib/chores/dashboard.ts`** (`pointsByMember`, `topEarners`,
+>   `streaksByMember`, `groupByRecurrence`, `rewardsProgress`, `dueLabel`, `choreEmoji`) — unit-tested in
+>   `tests/chores-dashboard.test.ts` (16 tests).
+> - **Wired interactions** (all persist): add chore (+templates prefill), status advance (todo→in_progress→
+>   submitted) via pill/kebab, approve (sets `approved_at`/`approved_by`/`points_awarded`), pay to wallet
+>   (`payChoreRewardAction`, when `cash_cents>0`), delete, redeem from Chore Store (inserts
+>   `reward_redemptions`), Add Child → `/dashboard/settings#members`. Manager-gated actions use `isManager`.
+> - **No migration needed** — `chores.icon`/`category`/`cash_cents` etc. already exist (0043). Chore emoji is
+>   resolved from `chores.icon` or title keywords.
+> - **Seed**: `supabase/seed_chores_one_family.sql` = **500 `chore_assignments`** + ~30-chore catalog +
+>   reward catalog for family `92298eb2-…`; every status/recurrence/due-bucket; idempotent (seeded chores
+>   tagged `instructions='[seed:chores]'`); **RLS-repairs chores/chore_assignments/rewards/reward_redemptions
+>   first** (per the drift note below). Run: `npm run db:seed:chores` (added to package.json).
+> - Docs: `docs/chores-supabase.md`. Verified: `tsc` clean, eslint clean, **1419 tests pass**, `next build` OK.
 > ## 🗓️ 2026-07-01 SESSION — Files `/dashboard/documents` redesign (Supabase-wired)
 > Rebuilt the **Files** page from the uploaded mockup. Nav label is "Files" but the route is
 > **`/dashboard/documents`** → `components/modules/documents-module.tsx` (client), backed by the existing
