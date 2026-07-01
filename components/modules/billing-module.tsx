@@ -778,13 +778,13 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
           { icon: ArrowUpRight, label: 'Expenses', value: fmtCurrency(expenses), sub: 'This month', bg: 'bg-rose-600/20 text-rose-300' },
           { icon: TrendingUp, label: 'Net Savings', value: fmtCurrency(netSavings), sub: 'This month', bg: 'bg-blue-600/20 text-blue-300' },
         ].map(({ icon: Icon, label, value, sub, bg }) => (
-          <div key={label} className="rounded-2xl border border-border bg-surface/40 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div className={cn('grid h-10 w-10 place-items-center rounded-xl', bg)}><Icon className="h-5 w-5" /></div>
+          <div key={label} className="rounded-2xl border border-border bg-surface/40 p-3 sm:p-4">
+            <div className="flex items-start justify-between gap-2">
+              <p className="min-w-0 truncate text-xs font-medium text-muted">{label}</p>
+              <div className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg sm:h-9 sm:w-9', bg)}><Icon className="h-4 w-4" /></div>
             </div>
-            <p className="text-xl font-black">{value}</p>
-            <p className="text-sm font-semibold">{label}</p>
-            <p className="text-xs text-muted">{sub}</p>
+            <p className="mt-1.5 text-lg font-black tabular-nums sm:text-xl">{value}</p>
+            <p className="truncate text-xs text-muted">{sub}</p>
           </div>
         ))}
       </div>
@@ -1240,8 +1240,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         </div>
       </div>
 
-      {/* Sidebar */}
-      <aside className="module-sidebar hidden lg:flex lg:flex-col gap-5">
+      {/* Sidebar — stacks below the main column on mobile, right rail on desktop */}
+      <aside className="module-sidebar flex flex-col gap-5">
         {/* Accounts */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
@@ -1354,7 +1354,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
           </div>
           <h3 className="font-bold">AI Financial Advisor</h3>
           <p className="mt-2 text-xs leading-5 text-muted">Get personalized budgeting tips and financial insights.</p>
-          <button className="btn-cta mt-4 w-full">Ask AI</button>
+          <AiInsight kind="billing" label="Ask AI" variant="primary" className="mt-4 w-full justify-center" />
         </div>
       </aside>
 
