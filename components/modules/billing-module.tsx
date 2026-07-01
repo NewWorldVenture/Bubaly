@@ -7,12 +7,15 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Clock,
   CreditCard,
   DollarSign,
   Filter,
   Landmark,
+  Lightbulb,
+  Link2,
   PiggyBank,
   Plus,
   Receipt,
@@ -33,6 +36,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { PageHeader } from '@/components/app/page-header';
+import { Avatar } from '@/components/ui/avatar';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { isAdmin } from '@/lib/constants/roles';
@@ -201,6 +205,18 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 function categoryColor(cat: string): string {
   return CATEGORY_COLORS[cat] ?? CATEGORY_COLORS.Other;
+}
+
+/** Age in whole years from an ISO birthday, or null if unknown/invalid. */
+function memberAge(birthday: string | null): number | null {
+  if (!birthday) return null;
+  const b = new Date(birthday);
+  if (Number.isNaN(b.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - b.getFullYear();
+  const m = now.getMonth() - b.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+  return age >= 0 && age < 130 ? age : null;
 }
 
 const EXPENSE_CATEGORIES = [
@@ -484,7 +500,7 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
 // ── Main Module ─────────────────────────────────────────────────────────────
 
 export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: string | null } = {}) {
-  const { familyId, userId, role } = useApp();
+  const { familyId, userId, role, members } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
   const search = useSearchParams();
@@ -633,31 +649,6 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       .map(([label, amt]) => ({ label, pct: Math.round((amt / total) * 100), color: categoryColor(label) }));
   }, [currentMonthTransactions]);
 
-  const monthlyData = useMemo(() => {
-    const months: Record<string, { income: number; expense: number }> = {};
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    // last 8 months
-    for (let i = 7; i >= 0; i--) {
-      const d = new Date(currentYear, currentMonth - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      months[key] = { income: 0, expense: 0 };
-    }
-    transactions.forEach((tx) => {
-      const d = new Date(tx.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (months[key]) {
-        if (tx.type === 'income') months[key].income += Math.abs(tx.amount);
-        else if (tx.type === 'expense') months[key].expense += Math.abs(tx.amount);
-      }
-    });
-    return Object.entries(months).map(([key, vals]) => {
-      const [, m] = key.split('-');
-      return { month: monthNames[parseInt(m, 10) - 1], ...vals };
-    });
-  }, [transactions, currentMonth, currentYear]);
-
-  const maxBar = useMemo(() => Math.max(...monthlyData.map((d) => Math.max(d.income, d.expense)), 1), [monthlyData]);
-
   // Budget progress: compute spent per category from current month transactions
   const budgetProgress = useMemo(() => {
     const spentByCategory: Record<string, number> = {};
@@ -680,17 +671,102 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     [bills],
   );
 
-  // Spending donut arcs
   const circ = 251.2;
-  const spendArcs = useMemo(() => {
+
+  // Full category breakdown WITH dollar amounts (Budget & Spending panel).
+  const spendByCategory = useMemo(() => {
+    const byCategory: Record<string, number> = {};
+    currentMonthTransactions
+      .filter((tx) => tx.type === 'expense')
+      .forEach((tx) => {
+        const cat = tx.category || 'Other';
+        byCategory[cat] = (byCategory[cat] ?? 0) + Math.abs(tx.amount);
+      });
+    const total = Object.values(byCategory).reduce((s, v) => s + v, 0);
+    if (total === 0) return [];
+    return Object.entries(byCategory)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 8)
+      .map(([label, amount]) => ({ label, amount, pct: Math.round((amount / total) * 100), color: categoryColor(label) }));
+  }, [currentMonthTransactions]);
+
+  // Big donut arcs (Budget & Spending) from the amount-bearing breakdown.
+  const bigArcs = useMemo(() => {
     let offset = 0;
-    return spendBreakdown.map((s) => {
+    return spendByCategory.map((s) => {
       const dash = (s.pct / 100) * circ;
-      const arc = { dash, offset: circ - offset, color: s.color, label: s.label };
+      const arc = { dash, offset: circ - offset, color: s.color, key: s.label };
       offset += dash;
       return arc;
     });
-  }, [spendBreakdown]);
+  }, [spendByCategory]);
+
+  // Budget Progress: total monthly budget vs total spent this month.
+  const totalMonthlyBudget = useMemo(
+    () => budgets.reduce((s, b) => s + (b.period === 'yearly' ? b.amount / 12 : b.period === 'weekly' ? b.amount * 4.33 : b.amount), 0),
+    [budgets],
+  );
+  const budgetPct = totalMonthlyBudget > 0 ? Math.min(Math.round((expenses / totalMonthlyBudget) * 100), 999) : 0;
+
+  // Spending by Person: this-month expenses grouped by the member who logged
+  // them (transactions.created_by → family_members.user_id).
+  const spendingByPerson = useMemo(() => {
+    const byUser: Record<string, number> = {};
+    currentMonthTransactions
+      .filter((tx) => tx.type === 'expense' && tx.created_by)
+      .forEach((tx) => { byUser[tx.created_by as string] = (byUser[tx.created_by as string] ?? 0) + Math.abs(tx.amount); });
+    const total = Object.values(byUser).reduce((s, v) => s + v, 0);
+    if (total === 0) return [];
+    return Object.entries(byUser)
+      .map(([uid, amount]) => {
+        const m = members.find((mm) => mm.user_id === uid);
+        return {
+          uid,
+          name: m?.display_name ?? 'Someone',
+          color: m?.color ?? null,
+          age: memberAge(m?.birthday ?? null),
+          isSelf: uid === userId,
+          amount,
+          pct: Math.round((amount / total) * 100),
+        };
+      })
+      .sort((a, b) => b.amount - a.amount);
+  }, [currentMonthTransactions, members, userId]);
+
+  // Month-over-month expense delta → the "Money Tip" banner.
+  const lastMonthExpenses = useMemo(() => {
+    const d = new Date(currentYear, currentMonth - 1, 1);
+    return transactions
+      .filter((tx) => tx.type === 'expense' && new Date(tx.date).getMonth() === d.getMonth() && new Date(tx.date).getFullYear() === d.getFullYear())
+      .reduce((s, tx) => s + Math.abs(tx.amount), 0);
+  }, [transactions, currentMonth, currentYear]);
+  const spendDeltaPct = lastMonthExpenses > 0 ? Math.round(((expenses - lastMonthExpenses) / lastMonthExpenses) * 100) : 0;
+
+  // Mini calendar for Bills & Reminders: cells for the current month, each
+  // carrying any bills due that day (colored by status).
+  const calendar = useMemo(() => {
+    const first = new Date(currentYear, currentMonth, 1);
+    const startDow = first.getDay();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const billsByDay: Record<number, Bill[]> = {};
+    bills.forEach((b) => {
+      const d = new Date(b.due_date);
+      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+        (billsByDay[d.getDate()] ??= []).push(b);
+      }
+    });
+    const cells: ({ day: number; bills: Bill[] } | null)[] = [];
+    for (let i = 0; i < startDow; i++) cells.push(null);
+    for (let day = 1; day <= daysInMonth; day++) cells.push({ day, bills: billsByDay[day] ?? [] });
+    return cells;
+  }, [bills, currentMonth, currentYear]);
+  const todayDate = now.getDate();
+
+  function billDotColor(b: Bill): string {
+    if (b.status === 'paid') return 'bg-emerald-500';
+    if (b.status === 'overdue') return 'bg-rose-500';
+    return new Date(b.due_date) > now ? 'bg-amber-500' : 'bg-brand';
+  }
 
   // ── CRUD helpers ────────────────────────────────────────────────────────
   async function deleteTransaction(id: string) {
@@ -765,146 +841,246 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   if (anyError) return <ErrorState message={anyError} onRetry={refreshAll} />;
 
   // ── Render helpers ──────────────────────────────────────────────────────
-  const monthLabel = now.toLocaleString('default', { month: 'short' });
-  const yearLabel = String(currentYear);
-
   const renderOverview = () => (
     <>
-      {/* Stat cards */}
-      <div className="grid-stats">
-        {[
-          { icon: CreditCard, label: 'Total Balance', value: fmtCurrency(totalBalance), sub: 'Across all accounts', bg: 'bg-violet-600/20 text-violet-300' },
-          { icon: ArrowDownLeft, label: 'Income', value: fmtCurrency(income), sub: 'This month', bg: 'bg-emerald-600/20 text-emerald-300' },
-          { icon: ArrowUpRight, label: 'Expenses', value: fmtCurrency(expenses), sub: 'This month', bg: 'bg-rose-600/20 text-rose-300' },
-          { icon: TrendingUp, label: 'Net Savings', value: fmtCurrency(netSavings), sub: 'This month', bg: 'bg-blue-600/20 text-blue-300' },
-        ].map(({ icon: Icon, label, value, sub, bg }) => (
-          <div key={label} className="rounded-2xl border border-border bg-surface/40 p-3 sm:p-4">
-            <div className="flex items-start justify-between gap-2">
-              <p className="min-w-0 truncate text-xs font-medium text-muted">{label}</p>
-              <div className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg sm:h-9 sm:w-9', bg)}><Icon className="h-4 w-4" /></div>
+      {/* Overview */}
+      <div className="rounded-2xl border border-border bg-surface/40 p-4 sm:p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-semibold">Overview</h2>
+          <button onClick={() => setTab('Reports')} className="flex items-center gap-0.5 text-xs font-semibold text-brand hover:underline">View full report <ChevronRight className="h-3.5 w-3.5" /></button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            { icon: Wallet, label: 'Total Balance', value: fmtCurrency(totalBalance), circle: 'bg-violet-600',
+              foot: (
+                <span className={cn('flex items-center gap-1 font-medium', netSavings >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
+                  {netSavings >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownLeft className="h-3 w-3" />}
+                  {fmtCurrency(Math.abs(netSavings))} this month
+                </span>
+              ) },
+            { icon: ArrowDownLeft, label: 'Income', value: fmtCurrency(income), circle: 'bg-emerald-500', foot: <span className="text-muted">This month</span> },
+            { icon: ArrowUpRight, label: 'Expenses', value: fmtCurrency(expenses), circle: 'bg-rose-500', foot: <span className="text-muted">This month</span> },
+            { icon: PiggyBank, label: 'Savings', value: fmtCurrency(netSavings), circle: 'bg-blue-500', foot: <span className="text-muted">This month</span> },
+          ].map(({ icon: Icon, label, value, circle, foot }) => (
+            <div key={label} className="rounded-xl border border-border bg-bg/40 p-3 sm:p-4">
+              <div className="flex items-start justify-between gap-2">
+                <p className="min-w-0 truncate text-xs font-medium text-muted">{label}</p>
+                <div className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-full text-white sm:h-10 sm:w-10', circle)}><Icon className="h-4 w-4 sm:h-5 sm:w-5" /></div>
+              </div>
+              <p className="mt-1.5 text-lg font-black tabular-nums sm:text-2xl">{value}</p>
+              <p className="mt-0.5 truncate text-xs">{foot}</p>
             </div>
-            <p className="mt-1.5 text-lg font-black tabular-nums sm:text-xl">{value}</p>
-            <p className="truncate text-xs text-muted">{sub}</p>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
-      {/* Income vs Expenses chart */}
-      <div className="rounded-2xl border border-border bg-surface/40 p-5">
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="font-semibold">Income vs Expenses</h2>
-          <div className="flex items-center gap-4 text-xs">
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Income</span>
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-rose-400 inline-block" /> Expenses</span>
+      {/* Budget & Spending + Recent Transactions */}
+      <div className="grid gap-5 xl:grid-cols-[1.35fr_1fr]">
+        {/* Budget & Spending */}
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          <h2 className="mb-4 font-semibold">Budget &amp; Spending</h2>
+          {spendByCategory.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted">No spending recorded this month. Add a transaction to see your breakdown.</p>
+          ) : (
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+              <div className="relative mx-auto h-40 w-40 shrink-0">
+                <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="12" />
+                  {bigArcs.map((a) => a.dash > 0 && (
+                    <circle key={a.key} cx="50" cy="50" r="40" fill="none" stroke={a.color} strokeWidth="12"
+                      strokeDasharray={`${a.dash} ${circ}`} strokeDashoffset={a.offset} strokeLinecap="butt" />
+                  ))}
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-lg font-black tabular-nums">{fmtCurrency(expenses)}</span>
+                  <span className="text-[10px] text-muted">Total Spent</span>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 space-y-2">
+                {spendByCategory.map((s) => (
+                  <div key={s.label} className="flex items-center gap-2.5 text-sm">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
+                    <span className="flex-1 truncate text-muted">{s.label}</span>
+                    <span className="shrink-0 font-semibold tabular-nums">{fmtCurrency(s.amount)}</span>
+                    <span className="w-8 shrink-0 text-right text-xs text-muted tabular-nums">{s.pct}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Budget Progress */}
+          <div className="mt-5 border-t border-border pt-4">
+            <div className="mb-1.5 flex items-center justify-between">
+              <p className="text-sm font-semibold">Budget Progress</p>
+              <span className="text-xs font-semibold text-muted tabular-nums">{totalMonthlyBudget > 0 ? `${budgetPct}%` : '—'}</span>
+            </div>
+            {totalMonthlyBudget > 0 ? (
+              <>
+                <p className="mb-2 text-xs text-muted tabular-nums">{fmtCurrency(expenses)} of {fmtCurrency(totalMonthlyBudget)}</p>
+                <div className="h-2.5 rounded-full bg-border">
+                  <div className={cn('h-full rounded-full transition-all', budgetPct > 100 ? 'bg-rose-500' : 'bg-emerald-500')} style={{ width: `${Math.min(budgetPct, 100)}%` }} />
+                </div>
+                <p className={cn('mt-2 text-xs font-medium', budgetPct > 100 ? 'text-rose-400' : 'text-emerald-400')}>
+                  {budgetPct > 100 ? `Over budget by ${fmtCurrency(expenses - totalMonthlyBudget)}` : "You're on track! 🎉"}
+                </p>
+              </>
+            ) : (
+              <button onClick={() => setTab('Budgets')} className="text-xs font-semibold text-brand hover:underline">Set a monthly budget →</button>
+            )}
           </div>
         </div>
-        {monthlyData.every((d) => d.income === 0 && d.expense === 0) ? (
-          <p className="py-8 text-center text-sm text-muted">No transaction data yet. Add transactions to see your chart.</p>
-        ) : (
-          <div className="flex items-end gap-3 h-32">
-            {monthlyData.map(({ month, income: inc, expense: exp }) => (
-              <div key={month} className="flex flex-1 flex-col items-center gap-1.5">
-                <div className="flex w-full items-end justify-center gap-0.5 flex-1">
-                  <div className="w-1/2 rounded-t-sm bg-emerald-500/70" style={{ height: `${(inc / maxBar) * 100}%`, minHeight: inc > 0 ? '2px' : 0 }} />
-                  <div className="w-1/2 rounded-t-sm bg-rose-400/70" style={{ height: `${(exp / maxBar) * 100}%`, minHeight: exp > 0 ? '2px' : 0 }} />
-                </div>
-                <span className="text-[10px] text-muted">{month}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
-      {/* Transactions + Budgets */}
-      <div className="grid gap-5 lg:grid-cols-2">
+        {/* Recent Transactions */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Recent Transactions</h2>
-            <button onClick={() => setTab('Transactions')} className="text-xs font-semibold text-brand">View all &rarr;</button>
+            <button onClick={() => setTab('Transactions')} className="flex items-center gap-0.5 text-xs font-semibold text-brand hover:underline">View all <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           {transactions.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted">No transactions yet.</p>
           ) : (
-            <div className="space-y-1">
-              {transactions.slice(0, 6).map((tx) => (
-                <div key={tx.id} className="flex items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-surface/40">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface/40 text-xl">
-                    {tx.type === 'income' ? <ArrowDownLeft className="h-5 w-5 text-emerald-400" /> : <ArrowUpRight className="h-5 w-5 text-rose-400" />}
+            <div className="space-y-0.5">
+              {transactions.slice(0, 8).map((tx) => (
+                <div key={tx.id} className="flex items-center gap-3 rounded-xl px-1.5 py-2 hover:bg-bg/40">
+                  <div className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', tx.type === 'income' ? 'bg-emerald-500/15' : 'bg-bg/60')}
+                    style={tx.type !== 'income' ? { background: `${categoryColor(tx.category || 'Other')}22` } : undefined}>
+                    {tx.type === 'income'
+                      ? <ArrowDownLeft className="h-4 w-4 text-emerald-400" />
+                      : <span className="h-2.5 w-2.5 rounded-full" style={{ background: categoryColor(tx.category || 'Other') }} />}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{tx.name}</p>
-                    <p className="text-xs text-muted">{tx.category} · {fmtDate(tx.date)}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{tx.name}</p>
+                    <p className="truncate text-xs text-muted">{tx.category || 'Other'}</p>
                   </div>
-                  <p className={cn('text-sm font-bold shrink-0', tx.type === 'income' ? 'text-emerald-400' : 'text-fg')}>
-                    {tx.type === 'income' ? '+' : '-'}{fmtCurrency(Math.abs(tx.amount))}
-                  </p>
+                  <div className="shrink-0 text-right">
+                    <p className={cn('text-sm font-bold tabular-nums', tx.type === 'income' ? 'text-emerald-400' : 'text-fg')}>
+                      {tx.type === 'income' ? '+' : '-'}{fmtCurrency(Math.abs(tx.amount))}
+                    </p>
+                    <p className="text-[11px] text-muted">{fmtDate(tx.date)}</p>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+      </div>
 
+      {/* Bills & Reminders + Spending by Person */}
+      <div className="grid gap-5 xl:grid-cols-[1.35fr_1fr]">
+        {/* Bills & Reminders */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Budget Overview</h2>
-            <button onClick={() => setTab('Budgets')} className="text-xs font-semibold text-brand">Manage budgets &rarr;</button>
+            <h2 className="font-semibold">Bills &amp; Reminders</h2>
+            <button onClick={() => setTab('Bills')} className="flex items-center gap-0.5 text-xs font-semibold text-brand hover:underline">View calendar <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
-          {budgetProgress.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted">No budgets set up yet.</p>
+          <div className="grid gap-5 sm:grid-cols-2">
+            {/* Mini calendar */}
+            <div>
+              <p className="mb-2 text-center text-sm font-semibold">{now.toLocaleString('default', { month: 'long', year: 'numeric' })}</p>
+              <div className="grid grid-cols-7 gap-y-1 text-center text-[10px] text-muted">
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, idx) => <span key={idx}>{d}</span>)}
+              </div>
+              <div className="mt-1 grid grid-cols-7 gap-y-1 text-center text-xs">
+                {calendar.map((cell, idx) => (
+                  <div key={idx} className="flex flex-col items-center gap-0.5 py-0.5">
+                    {cell ? (
+                      <>
+                        <span className={cn('grid h-6 w-6 place-items-center rounded-full tabular-nums',
+                          cell.day === todayDate ? 'bg-brand font-bold text-white' : 'text-fg')}>{cell.day}</span>
+                        <span className="flex h-1.5 items-center gap-0.5">
+                          {cell.bills.slice(0, 3).map((b) => <span key={b.id} className={cn('h-1.5 w-1.5 rounded-full', billDotColor(b))} />)}
+                        </span>
+                      </>
+                    ) : <span className="h-6 w-6" />}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-3 text-[10px] text-muted">
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-brand" /> Bill Due</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Paid</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> Upcoming</span>
+              </div>
+            </div>
+            {/* Upcoming bills */}
+            <div>
+              <p className="mb-2 text-sm font-semibold">Upcoming Bills</p>
+              {upcomingBills.length === 0 ? (
+                <p className="py-4 text-center text-xs text-muted">Nothing due soon.</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {upcomingBills.map((b) => (
+                    <div key={b.id} className="flex items-center gap-2.5">
+                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg" style={{ background: `${categoryColor(b.category || 'Other')}22` }}>
+                        <Receipt className="h-4 w-4" style={{ color: categoryColor(b.category || 'Other') }} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{b.name}</p>
+                        <p className="text-xs text-muted">Due {fmtDate(b.due_date)}</p>
+                      </div>
+                      <p className="shrink-0 text-sm font-bold tabular-nums">{fmtCurrency(b.amount)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Spending by Person */}
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-semibold">Spending by Person</h2>
+            <span className="text-xs text-muted">This Month</span>
+          </div>
+          {spendingByPerson.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted">No attributed spending yet this month.</p>
           ) : (
             <div className="space-y-3.5">
-              {budgetProgress.map((b) => {
-                const pct = Math.min((b.spent / b.amount) * 100, 100);
-                const over = b.spent > b.amount;
-                return (
-                  <div key={b.id}>
-                    <div className="mb-1.5 flex items-center justify-between text-sm">
-                      <span className="font-medium">{b.category}</span>
-                      <span className={cn('text-xs font-semibold', over ? 'text-red-400' : 'text-muted')}>
-                        {fmtCurrency(b.spent)} / {fmtCurrency(b.amount)}
-                      </span>
+              {spendingByPerson.map((p) => (
+                <div key={p.uid} className="flex items-center gap-3">
+                  <Avatar name={p.name} color={p.color} size={36} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-semibold">
+                        {p.name}{p.isSelf ? ' (You)' : p.age != null ? ` (${p.age})` : ''}
+                      </p>
+                      <p className="shrink-0 text-sm font-bold tabular-nums">{fmtCurrency(p.amount)}</p>
                     </div>
-                    <div className="h-2 rounded-full bg-border">
-                      <div className={cn('h-full rounded-full transition-all', over ? 'bg-red-500' : 'bg-emerald-500')} style={{ width: `${pct}%` }} />
+                    <div className="mt-1 flex items-center gap-2">
+                      <div className="h-1.5 flex-1 rounded-full bg-border">
+                        <div className="h-full rounded-full bg-brand" style={{ width: `${p.pct}%` }} />
+                      </div>
+                      <span className="w-8 shrink-0 text-right text-[11px] text-muted tabular-nums">{p.pct}%</span>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
+              <button onClick={() => setTab('Reports')} className="flex w-full items-center justify-center gap-0.5 pt-1 text-sm font-semibold text-brand hover:underline">
+                View full breakdown <ChevronRight className="h-3.5 w-3.5" />
+              </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Savings Goals */}
-      <div className="rounded-2xl border border-border bg-surface/40 p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-semibold">Savings Goals</h2>
-          <button onClick={() => setTab('Savings Goals')} className="text-xs font-semibold text-brand">View all goals &rarr;</button>
-        </div>
-        {savingsGoals.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">No savings goals yet. Set a goal to start tracking.</p>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-3">
-            {savingsGoals.slice(0, 3).map((g) => {
-              const pct = g.target_amount > 0 ? Math.min((g.current_amount / g.target_amount) * 100, 100) : 0;
-              return (
-                <div key={g.id} className="rounded-xl border border-border p-4">
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="text-2xl">{g.emoji || '🎯'}</span>
-                    <div><p className="font-semibold text-sm">{g.name}</p><p className="text-xs text-muted">{pct.toFixed(0)}% saved</p></div>
-                  </div>
-                  <div className="mb-2 h-2 rounded-full bg-border">
-                    <div className="h-full rounded-full bg-brand" style={{ width: `${pct}%` }} />
-                  </div>
-                  <div className="flex justify-between text-xs text-muted">
-                    <span>{fmtCurrency(g.current_amount)}</span>
-                    <span>{fmtCurrency(g.target_amount)}</span>
-                  </div>
-                </div>
-              );
-            })}
+      {/* Money Tip */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-brand/25 bg-gradient-to-r from-violet-600/10 to-blue-900/10 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="flex items-start gap-3">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-400/20 text-amber-300"><Lightbulb className="h-5 w-5" /></div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold">Money Tip</p>
+            <p className="text-xs text-muted">
+              {lastMonthExpenses === 0
+                ? 'Log a full month of spending to unlock personalized insights.'
+                : spendDeltaPct < 0
+                  ? `You've spent ${Math.abs(spendDeltaPct)}% less this month compared to last month. Great job! 🎉`
+                  : spendDeltaPct > 0
+                    ? `You're spending ${spendDeltaPct}% more this month than last. Tap for ways to trim it.`
+                    : 'Your spending is right in line with last month.'}
+            </p>
           </div>
-        )}
+        </div>
+        <AiInsight kind="billing" label="View Insights" variant="primary" className="shrink-0 justify-center" />
       </div>
     </>
   );
@@ -1156,8 +1332,14 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       <div className="module-main module-page">
         <PageHeader
           title="Finances"
-          description="Track spending, budgets, bills, and savings goals."
-          action={<div className="flex items-center gap-2"><AiInsight kind="billing" iconOnly /><Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> Add Transaction</Button></div>}
+          description="Stay on top of your family's money, budgets, and goals."
+          action={
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> Add Transaction</Button>
+              <Button variant="secondary" onClick={() => setShowAddAccount(true)}><Link2 className="h-4 w-4" /> Link Account</Button>
+              <AiInsight kind="billing" iconOnly />
+            </div>
+          }
         />
 
         <div className="flex items-center justify-between border-b border-border">
@@ -1282,79 +1464,41 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
           </button>
         </div>
 
-        {/* Spending Breakdown */}
-        <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <h2 className="mb-4 font-semibold">Spending Breakdown</h2>
-          {spendBreakdown.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted">No spending data this month.</p>
-          ) : (
-            <div className="flex items-center gap-4">
-              <div className="relative h-24 w-24 shrink-0">
-                <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="14" />
-                  {spendArcs.map((a, i) => a.dash > 0 && (
-                    <circle key={i} cx="50" cy="50" r="40" fill="none" stroke={a.color} strokeWidth="14"
-                      strokeDasharray={`${a.dash} ${circ}`} strokeDashoffset={a.offset} />
-                  ))}
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-lg font-black">{monthLabel}</span>
-                  <span className="text-[9px] text-muted">{yearLabel}</span>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                {spendBreakdown.map(({ label, pct, color }) => (
-                  <div key={label} className="flex items-center gap-2 text-xs">
-                    <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
-                    <span className="flex-1 text-muted">{label}</span>
-                    <span className="font-bold">{pct}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Upcoming Bills */}
+        {/* Savings Goals */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Upcoming Bills</h2>
-            <button onClick={() => setTab('Bills')} className="text-xs font-semibold text-brand">View all &rarr;</button>
+            <h2 className="font-semibold">Savings Goals</h2>
+            <button onClick={() => setTab('Savings Goals')} className="flex items-center gap-0.5 text-xs font-semibold text-brand hover:underline">View all <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
-          {upcomingBills.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted">No upcoming bills.</p>
+          {savingsGoals.length === 0 ? (
+            <div className="py-2 text-center">
+              <p className="text-sm text-muted">No savings goals yet.</p>
+              <button onClick={() => setShowAddGoal(true)} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-xs font-semibold text-muted hover:text-fg">
+                <Plus className="h-3.5 w-3.5" /> Add Goal
+              </button>
+            </div>
           ) : (
-            <>
-              <div className="space-y-3">
-                {upcomingBills.map((b) => (
-                  <div key={b.id} className="flex items-center gap-3">
-                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-surface/40">
-                      <Receipt className="h-4 w-4 text-muted" />
+            <div className="space-y-4">
+              {savingsGoals.slice(0, 4).map((g) => {
+                const pct = g.target_amount > 0 ? Math.min(Math.round((g.current_amount / g.target_amount) * 100), 100) : 0;
+                return (
+                  <div key={g.id}>
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-lg">{g.emoji || '🎯'}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{g.name}</p>
+                        <p className="truncate text-xs text-muted tabular-nums">{fmtCurrency(g.current_amount)} of {fmtCurrency(g.target_amount)}</p>
+                      </div>
+                      <span className="shrink-0 text-sm font-bold tabular-nums">{pct}%</span>
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold">{b.name}</p>
-                      <p className="text-xs text-muted">Due {fmtDate(b.due_date)}</p>
+                    <div className="mt-2 h-1.5 rounded-full bg-border">
+                      <div className="h-full rounded-full bg-brand" style={{ width: `${pct}%` }} />
                     </div>
-                    <p className="text-sm font-bold shrink-0">{fmtCurrency(b.amount)}</p>
                   </div>
-                ))}
-              </div>
-              <div className="mt-4 border-t border-border pt-3 flex justify-between text-sm">
-                <span className="text-muted">Total Due</span>
-                <span className="font-black">{fmtCurrency(upcomingBills.reduce((s, b) => s + b.amount, 0))}</span>
-              </div>
-            </>
+                );
+              })}
+            </div>
           )}
-        </div>
-
-        {/* AI Advisor CTA */}
-        <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15">
-            <Sparkles className="h-6 w-6 text-brand" />
-          </div>
-          <h3 className="font-bold">AI Financial Advisor</h3>
-          <p className="mt-2 text-xs leading-5 text-muted">Get personalized budgeting tips and financial insights.</p>
-          <AiInsight kind="billing" label="Ask AI" variant="primary" className="mt-4 w-full justify-center" />
         </div>
       </aside>
 
