@@ -253,6 +253,16 @@ export interface Database {
         { id?: string; family_id: string; subject_type: NutritionSubject; subject_id: string; servings?: number | null; calories?: number | null; protein_g?: number | null; carbs_g?: number | null; fat_g?: number | null; fiber_g?: number | null; sugar_g?: number | null; sodium_mg?: number | null; summary?: string | null; details?: Json | null; created_by?: string | null },
         Partial<{ subject_type: NutritionSubject; subject_id: string; servings: number | null; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null; sugar_g: number | null; sodium_mg: number | null; summary: string | null; details: Json | null }>
       >;
+      family_favorites: T<
+        { id: string; family_id: string; member_id: string | null; kind: string; name: string; notes: string | null; rating: number | null; ref_url: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; kind?: string; name: string; notes?: string | null; rating?: number | null; ref_url?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; kind: string; name: string; notes: string | null; rating: number | null; ref_url: string | null }>
+      >;
+      nutrition_logs: T<
+        { id: string; family_id: string; member_id: string | null; logged_on: string; meal: string; item: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; water_ml: number; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; logged_on?: string; meal?: string; item: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; water_ml?: number; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; logged_on: string; meal: string; item: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; water_ml: number; notes: string | null }>
+      >;
       leftover_inventory: T<
         { id: string; family_id: string; name: string; source_meal: string | null; quantity: string | null; stored_on: string; use_by: string | null; location: string; status: string; notes: string | null; metadata: Json; created_by: string | null; updated_by: string | null } & Stamps,
         { id?: string; family_id: string; name: string; source_meal?: string | null; quantity?: string | null; stored_on?: string; use_by?: string | null; location?: string; status?: string; notes?: string | null; metadata?: Json; created_by?: string | null; updated_by?: string | null },

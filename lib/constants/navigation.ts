@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -224,7 +224,18 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: '/home', label: 'Home', icon: Home },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
   { href: '/dashboard/todos', label: 'Tasks', icon: CheckSquare },
-  { href: '/dashboard/meals', label: 'Meals', icon: UtensilsCrossed },
+  {
+    href: '/dashboard/meals', label: 'Meals', icon: UtensilsCrossed,
+    children: [
+      { href: '/dashboard/meals', label: 'Meal Planner', icon: CalendarRange },
+      { href: '/dashboard/recipes', label: 'Recipes', icon: ChefHat },
+      { href: '/dashboard/grocery', label: 'Grocery List', icon: ShoppingCart },
+      { href: '/dashboard/pantry', label: 'Pantry Inventory', icon: Boxes },
+      { href: '/dashboard/favorites', label: 'Family Favorites', icon: Heart },
+      { href: '/dashboard/nutrition', label: 'Nutrition Tracker', icon: Apple },
+      { href: '/dashboard/dining', label: 'Dining Out', icon: Utensils },
+    ],
+  },
   { href: '/dashboard/chores', label: 'Chores', icon: ListChecks },
   { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
   { href: '/dashboard/memories', label: 'Memories', icon: ImageGallery },
