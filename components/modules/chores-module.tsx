@@ -150,7 +150,8 @@ export function ChoresModule() {
     setBusy(a.id); setMenuFor(null);
     const supabase = createClient();
     const { error } = await supabase.from('chore_assignments').update({
-      status: 'approved', approved_at: new Date().toISOString(), approved_by: userId, points_awarded: a.chore?.points ?? 0,
+      // approved_by is a FK to family_members(id), not auth.users — use the member id.
+      status: 'approved', approved_at: new Date().toISOString(), approved_by: selfMemberId, points_awarded: a.chore?.points ?? 0,
     }).eq('id', a.id);
     setBusy(null);
     if (error) return toastError(describeDbError(error));
