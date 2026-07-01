@@ -890,9 +890,9 @@ export interface Database {
       >;
       // ── Core Platform (0014) ──────────────────────────────────
       family_conversations: T<
-        { id: string; family_id: string; name: string | null; kind: string; avatar_emoji: string | null; member_ids: string[]; participant_ids: string[]; created_by: string | null; last_message_at: string | null; created_at: string; updated_at: string },
-        { id?: string; family_id: string; name?: string | null; kind?: string; avatar_emoji?: string | null; member_ids?: string[]; participant_ids?: string[]; created_by?: string | null },
-        Partial<{ name: string | null; avatar_emoji: string | null; member_ids: string[]; participant_ids: string[]; last_message_at: string | null }>
+        { id: string; family_id: string; name: string | null; kind: string; avatar_emoji: string | null; description: string | null; is_archived: boolean; member_ids: string[]; participant_ids: string[]; created_by: string | null; last_message_at: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; name?: string | null; kind?: string; avatar_emoji?: string | null; description?: string | null; is_archived?: boolean; member_ids?: string[]; participant_ids?: string[]; created_by?: string | null },
+        Partial<{ name: string | null; avatar_emoji: string | null; description: string | null; is_archived: boolean; member_ids: string[]; participant_ids: string[]; last_message_at: string | null }>
       >;
       family_messages: T<
         { id: string; conversation_id: string; family_id: string; sender_id: string | null; sender_name: string | null; sender_avatar: string | null; content: string | null; kind: string; attachment_url: string | null; attachment_name: string | null; attachment_mime: string | null; reply_to_id: string | null; reactions: Json; read_by: string[]; is_pinned: boolean; deleted_at: string | null; created_at: string },
