@@ -229,6 +229,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: '/dashboard/memories', label: 'Memories', icon: ImageGallery },
   { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle },
   { href: '/dashboard/documents', label: 'Files', icon: FolderLock },
+  { href: '/wallet', label: 'Wallet', icon: Wallet },
   { href: '/dashboard/locator', label: 'Location', icon: MapPin },
   { href: '/dashboard/family', label: 'Family', icon: Users },
 ];
