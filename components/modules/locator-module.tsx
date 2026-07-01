@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   MapPin, LocateFixed, Plus, Pencil, Trash2, Home, GraduationCap, Briefcase,
-  Dumbbell, Navigation, BatteryMedium, ShieldCheck, ShieldOff, Clock, Loader2,
+  Dumbbell, ShoppingBag, Navigation, Battery, Clock, Loader2, Share2, MoreHorizontal,
+  ChevronDown, Minus, Users, Bell, RefreshCw,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -13,20 +14,36 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
-import { haversineMeters, distanceLabel, timeAgo, isStale } from '@/lib/location/geo';
-import { updateMyLocation, setLocationSharing, savePlace, deletePlace } from '@/app/(app)/dashboard/locator/actions';
+import {
+  projectPoints, groupHistoryByDay, arrivalAlerts, batteryTone, sinceLabel,
+} from '@/lib/location/overview';
+import { updateMyLocation, setLocationSharing, savePlace, deletePlace, setGeofenceEnabled } from '@/app/(app)/dashboard/locator/actions';
 import type { Tables } from '@/lib/database.types';
 
 type MemberLocation = Tables<'member_locations'>;
 type Place = Tables<'family_places'>;
 type LocationEvent = Tables<'location_events'>;
 
-const PLACE_ICONS: Record<string, typeof Home> = { home: Home, school: GraduationCap, work: Briefcase, gym: Dumbbell, other: MapPin };
-const PLACE_KINDS = ['home', 'school', 'work', 'gym', 'other'];
+const PLACE_ICONS: Record<string, typeof Home> = {
+  home: Home, house: Home, school: GraduationCap, work: Briefcase,
+  gym: Dumbbell, soccer: Dumbbell, sport: Dumbbell, mall: ShoppingBag, shopping: ShoppingBag, other: MapPin,
+};
+const PLACE_ICON_BG: Record<string, string> = {
+  home: 'bg-emerald-500', house: 'bg-violet-500', school: 'bg-blue-500', work: 'bg-slate-500',
+  gym: 'bg-orange-500', soccer: 'bg-orange-500', sport: 'bg-orange-500', mall: 'bg-pink-500', shopping: 'bg-pink-500', other: 'bg-brand',
+};
+const PLACE_KINDS = ['home', 'house', 'school', 'work', 'gym', 'mall', 'other'];
+const MAP_STYLES = [
+  { key: 'traffic', label: 'Traffic', bg: 'from-[#12241c] via-[#14202e] to-[#1a1830]' },
+  { key: 'standard', label: 'Standard', bg: 'from-[#141a26] via-[#151b28] to-[#1a1622]' },
+  { key: 'satellite', label: 'Satellite', bg: 'from-[#0f130f] via-[#131712] to-[#171410]' },
+] as const;
 const blankPlace = { id: '', name: '', icon: 'home', address: '', latitude: '', longitude: '', radius_m: 150 };
+const placeIconFor = (icon: string | null) => PLACE_ICONS[icon ?? 'other'] ?? MapPin;
+const placeBgFor = (icon: string | null) => PLACE_ICON_BG[icon ?? 'other'] ?? 'bg-brand';
 
 function getPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
@@ -46,30 +63,71 @@ export function LocatorModule() {
   const [placeModal, setPlaceModal] = useState(false);
   const [placeForm, setPlaceForm] = useState(blankPlace);
   const [savingPlace, setSavingPlace] = useState(false);
+  const [focusMember, setFocusMember] = useState<string | null>(null);
+  const [mapStyle, setMapStyle] = useState<(typeof MAP_STYLES)[number]['key']>('traffic');
+  const [styleOpen, setStyleOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [togglingGeo, setTogglingGeo] = useState<string | null>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
 
-  const { data: locations, loading } = useRealtimeQuery<MemberLocation>({
+  const { data: locations, loading, refresh: refreshLocations } = useRealtimeQuery<MemberLocation>({
     table: 'member_locations', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('member_locations').select('*').eq('family_id', familyId),
   });
-  const { data: places } = useRealtimeQuery<Place>({
+  const { data: places, refresh: refreshPlaces } = useRealtimeQuery<Place>({
     table: 'family_places', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_places').select('*').eq('family_id', familyId).order('name'),
   });
-  const { data: events } = useRealtimeQuery<LocationEvent>({
+  const { data: events, refresh: refreshEvents } = useRealtimeQuery<LocationEvent>({
     table: 'location_events', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('location_events').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }).limit(20),
+    fetcher: (sb) => sb.from('location_events').select('*').eq('family_id', familyId).order('occurred_at', { ascending: false }).limit(120),
   });
 
   const locByMember = useMemo(() => new Map((locations ?? []).map((l) => [l.member_id, l])), [locations]);
   const placeById = useMemo(() => new Map((places ?? []).map((p) => [p.id, p])), [places]);
-  const memberName = (id: string) => members.find((m) => m.id === id)?.display_name ?? 'Someone';
-  const homePlace = useMemo(() => (places ?? []).find((p) => p.icon === 'home') ?? (places ?? [])[0] ?? null, [places]);
+  const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+  const memberName = (id: string) => memberById.get(id)?.display_name ?? 'Someone';
+
+  // Members that are actively sharing a coordinate → shown live on the map/list.
+  const liveMembers = useMemo(
+    () => members.filter((m) => {
+      const l = locByMember.get(m.id);
+      return l?.is_sharing && l.latitude != null && l.longitude != null;
+    }),
+    [members, locByMember],
+  );
+
+  // Shared projection so places + members sit in the same map viewport.
+  const projected = useMemo(() => {
+    const pts = [
+      ...(places ?? []).map((p) => ({ id: `place:${p.id}`, latitude: p.latitude, longitude: p.longitude })),
+      ...liveMembers.map((m) => {
+        const l = locByMember.get(m.id)!;
+        return { id: `member:${m.id}`, latitude: l.latitude, longitude: l.longitude };
+      }),
+    ];
+    return new Map(projectPoints(pts).map((p) => [p.id, p]));
+  }, [places, liveMembers, locByMember]);
+
+  const alerts = useMemo(() => arrivalAlerts(events ?? [], 6), [events]);
+  const history = useMemo(() => groupHistoryByDay(
+    (events ?? []).map((e) => ({ id: e.id, member_id: e.member_id, place_name: e.place_name, event_type: e.event_type, occurred_at: e.occurred_at })),
+    now,
+  ), [events, now]);
 
   useEffect(() => {
     if (selfMember) setSharing(locByMember.get(selfMember.id)?.is_sharing ?? false);
   }, [selfMember, locByMember]);
+
+  function placeLabel(l: MemberLocation | undefined): string {
+    if (!l || !l.is_sharing) return 'Not sharing';
+    if (l.place_id && placeById.get(l.place_id)) return placeById.get(l.place_id)!.name;
+    if (l.latitude == null) return 'No location';
+    return 'On the move';
+  }
 
   async function shareNow() {
     setUpdating(true);
@@ -77,10 +135,7 @@ export function LocatorModule() {
       const pos = await getPosition();
       const nav = navigator as Navigator & { getBattery?: () => Promise<{ level: number }> };
       const battery = nav.getBattery ? await nav.getBattery().then((b) => Math.round(b.level * 100)).catch(() => null) : null;
-      const res = await updateMyLocation({
-        latitude: pos.coords.latitude, longitude: pos.coords.longitude,
-        accuracy: pos.coords.accuracy ?? null, battery,
-      });
+      const res = await updateMyLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null, battery });
       if (!res.ok) { toastError(res.error ?? 'Failed to update location'); return; }
       setSharing(true);
       success(res.place ? `Shared — you're at ${res.place}` : 'Location shared');
@@ -89,14 +144,18 @@ export function LocatorModule() {
     } finally { setUpdating(false); }
   }
 
-  async function toggleSharing(next: boolean) {
-    if (next) { await shareNow(); return; }
+  async function toggleShareOff() {
     const res = await setLocationSharing(false);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
     setSharing(false); success('Location sharing off');
   }
 
-  // ── Places ────────────────────────────────────────────────
+  function refreshAll() {
+    void refreshLocations(); void refreshPlaces(); void refreshEvents();
+    setNow(new Date()); success('Locations refreshed');
+  }
+
+  // ── Places / geofences ────────────────────────────────────
   function openNewPlace() { setPlaceForm(blankPlace); setPlaceModal(true); }
   function openEditPlace(p: Place) {
     setPlaceForm({ id: p.id, name: p.name, icon: p.icon ?? 'other', address: p.address ?? '', latitude: String(p.latitude), longitude: String(p.longitude), radius_m: p.radius_m });
@@ -113,154 +172,289 @@ export function LocatorModule() {
     e.preventDefault();
     const lat = Number(placeForm.latitude); const lng = Number(placeForm.longitude);
     if (!placeForm.name.trim()) { toastError('Name is required'); return; }
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) { toastError('Valid coordinates are required'); return; }
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) { toastError('Valid coordinates are required'); return; }
     setSavingPlace(true);
-    const res = await savePlace({ id: placeForm.id || undefined, name: placeForm.name, icon: placeForm.icon, address: placeForm.address || null, latitude: lat, longitude: lng, radius_m: Number(placeForm.radius_m) || 150 });
+    const res = await savePlace({ id: placeForm.id || undefined, name: placeForm.name.trim(), icon: placeForm.icon, address: placeForm.address.trim() || null, latitude: lat, longitude: lng, radius_m: Number(placeForm.radius_m) || 150 });
     setSavingPlace(false);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
     success(placeForm.id ? 'Place updated' : 'Place added'); setPlaceModal(false);
   }
   async function removePlace(p: Place) {
-    if (!confirm(`Delete "${p.name}"?`)) return;
+    if (typeof window !== 'undefined' && !window.confirm(`Delete "${p.name}"?`)) return;
     const res = await deletePlace(p.id);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
     success('Place deleted');
   }
-
-  function statusFor(memberId: string): { label: string; tone: string; sub: string | null } {
-    const loc = locByMember.get(memberId);
-    if (!loc || !loc.is_sharing) return { label: 'Not sharing', tone: 'text-muted', sub: null };
-    if (loc.latitude == null || loc.longitude == null) return { label: 'No location yet', tone: 'text-muted', sub: null };
-    const place = loc.place_id ? placeById.get(loc.place_id) : null;
-    const updated = loc.updated_at;
-    const stale = isStale(updated, now, 60);
-    let dist: string | null = null;
-    if (homePlace && (!place || place.id !== homePlace.id)) {
-      dist = `${distanceLabel(haversineMeters({ latitude: homePlace.latitude, longitude: homePlace.longitude }, { latitude: loc.latitude, longitude: loc.longitude }))} from ${homePlace.name}`;
-    }
-    return {
-      label: place ? place.name : 'On the move',
-      tone: place ? 'text-emerald-400' : 'text-amber-400',
-      sub: `${stale ? 'Last seen ' : ''}${timeAgo(updated, now)}${dist ? ` · ${dist}` : ''}`,
-    };
+  async function toggleGeofence(p: Place) {
+    if (togglingGeo) return;
+    setTogglingGeo(p.id);
+    const res = await setGeofenceEnabled(p.id, !p.geofence_enabled);
+    setTogglingGeo(null);
+    if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    void refreshPlaces();
   }
 
-  if (loading) return <SkeletonList count={5} />;
+  if (loading) return <SkeletonList count={6} />;
+
+  const style = MAP_STYLES.find((s) => s.key === mapStyle) ?? MAP_STYLES[0];
 
   return (
-    <div>
-      <PageHeader
-        title="Family Map"
-        description="See where everyone is, set places, and get arrival & departure alerts — opt-in and private to your family."
-        action={
-          <div className="flex items-center gap-2">
-            <Button onClick={shareNow} disabled={updating} className="gap-1.5">
-              {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <LocateFixed className="h-4 w-4" />}
-              {updating ? 'Locating…' : 'Share my location'}
-            </Button>
-          </div>
-        }
-      />
-
-      {/* Self sharing control */}
-      {selfMember && (
-        <div className={cn('flex items-center justify-between rounded-2xl border p-4 mb-6', sharing ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border bg-surface/50')}>
-          <div className="flex items-center gap-3">
-            {sharing ? <ShieldCheck className="h-5 w-5 text-emerald-400" /> : <ShieldOff className="h-5 w-5 text-muted" />}
-            <div>
-              <div className="text-sm font-medium text-fg">Your location sharing is {sharing ? 'on' : 'off'}</div>
-              <div className="text-xs text-muted">{sharing ? 'Your family can see where you are.' : 'Turn on to share your location with your family.'}</div>
-            </div>
-          </div>
-          <button onClick={() => toggleSharing(!sharing)}
-            className={cn('relative h-7 w-12 rounded-full transition-colors', sharing ? 'bg-emerald-500' : 'bg-elevated')}>
-            <span className={cn('absolute top-1 h-5 w-5 rounded-full bg-white transition-transform', sharing ? 'translate-x-6' : 'translate-x-1')} />
-          </button>
-        </div>
-      )}
-
-      {/* Member board */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
-        {members.map((m) => {
-          const st = statusFor(m.id);
-          const loc = locByMember.get(m.id);
-          return (
-            <div key={m.id} className="rounded-2xl border border-border bg-surface/50 p-4">
-              <div className="flex items-start gap-3">
-                <Avatar name={m.display_name} size={40} />
-                <div className="min-w-0 flex-1">
-                  <div className="font-semibold text-fg truncate">{m.display_name}{selfMember?.id === m.id ? ' (you)' : ''}</div>
-                  <div className={cn('mt-0.5 flex items-center gap-1 text-sm font-medium', st.tone)}>
-                    {st.label === 'On the move' ? <Navigation className="h-3.5 w-3.5" /> : st.label !== 'Not sharing' && st.label !== 'No location yet' ? <MapPin className="h-3.5 w-3.5" /> : null}
-                    {st.label}
+    <div className="module-with-sidebar" onClick={() => { setStyleOpen(false); setMoreOpen(false); }}>
+      <div className="module-main module-page">
+        <PageHeader
+          title="Location"
+          description="See where your family is and keep everyone safe."
+          action={
+            <div className="flex items-center gap-2">
+              {canManage && <Button onClick={openNewPlace}><Plus className="h-4 w-4" /> Add Place</Button>}
+              <Button variant="outline" onClick={() => sharing ? toggleShareOff() : shareNow()} disabled={updating}>
+                {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+                {sharing ? 'Stop Sharing' : 'Share Location'}
+              </Button>
+              <div className="relative">
+                <Button variant="outline" size="icon" aria-label="More options" onClick={(e) => { e.stopPropagation(); setMoreOpen((o) => !o); }}>
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+                {moreOpen && (
+                  <div className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => { setMoreOpen(false); refreshAll(); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface"><RefreshCw className="h-3.5 w-3.5" /> Refresh locations</button>
+                    <button onClick={() => { setMoreOpen(false); historyRef.current?.scrollIntoView({ behavior: 'smooth' }); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface"><Clock className="h-3.5 w-3.5" /> Location history</button>
+                    {canManage && <button onClick={() => { setMoreOpen(false); openNewPlace(); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface"><Plus className="h-3.5 w-3.5" /> Add geofence</button>}
                   </div>
-                  {st.sub && <div className="mt-0.5 flex items-center gap-1 text-xs text-muted"><Clock className="h-3 w-3" />{st.sub}</div>}
-                  {loc?.battery != null && loc.is_sharing && (
-                    <div className="mt-1 flex items-center gap-1 text-xs text-muted"><BatteryMedium className="h-3.5 w-3.5" />{loc.battery}%</div>
-                  )}
-                </div>
+                )}
               </div>
             </div>
-          );
-        })}
-      </div>
+          }
+        />
 
-      {/* Saved places */}
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-fg uppercase tracking-wider flex items-center gap-2"><MapPin className="h-4 w-4 text-brand" /> Saved Places</h2>
-        {canManage && <Button variant="outline" size="sm" onClick={openNewPlace} className="gap-1.5"><Plus className="h-4 w-4" /> Add place</Button>}
-      </div>
-      {(places ?? []).length === 0 ? (
-        <EmptyState icon={MapPin} title="No places yet"
-          description={canManage ? 'Add places like Home, School, and Work to get arrival & departure alerts when family members come and go.' : 'No places have been set up yet.'}
-          action={canManage && <Button onClick={openNewPlace} className="gap-1.5"><Plus className="h-4 w-4" /> Add place</Button>} />
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
-          {(places ?? []).map((p) => {
-            const Icon = PLACE_ICONS[p.icon ?? 'other'] ?? MapPin;
-            const here = (locations ?? []).filter((l) => l.place_id === p.id && l.is_sharing).map((l) => memberName(l.member_id));
+        {/* Member chips */}
+        <div className="flex flex-wrap items-center gap-2">
+          {members.map((m) => {
+            const l = locByMember.get(m.id);
+            const active = focusMember === m.id;
             return (
-              <div key={p.id} className="rounded-2xl border border-border bg-surface/50 p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand flex-shrink-0"><Icon className="h-5 w-5" /></div>
-                    <div className="min-w-0">
-                      <div className="font-semibold text-fg truncate">{p.name}</div>
-                      {p.address && <div className="text-xs text-muted truncate">{p.address}</div>}
-                      <div className="text-xs text-muted">{p.radius_m} m radius</div>
-                    </div>
-                  </div>
-                  {canManage && (
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => openEditPlace(p)} aria-label="Edit" className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => removePlace(p)} aria-label="Delete" className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  )}
-                </div>
-                {here.length > 0 && <div className="mt-2 text-xs text-emerald-400">{here.join(', ')} here now</div>}
-              </div>
+              <button key={m.id} onClick={() => setFocusMember(active ? null : m.id)}
+                className={cn('flex items-center gap-2 rounded-2xl border px-3 py-1.5 transition',
+                  active ? 'border-brand bg-brand/10' : 'border-border bg-surface/40 hover:bg-elevated/40')}>
+                <Avatar name={m.display_name} color={m.color} size={28} />
+                <span className="text-left leading-tight">
+                  <span className="block text-sm font-medium">{m.display_name.split(' ')[0]}</span>
+                  <span className="block text-[11px] text-muted">{placeLabel(l)}</span>
+                </span>
+              </button>
             );
           })}
+          <button onClick={() => setFocusMember(null)}
+            className={cn('flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition',
+              focusMember === null ? 'border-brand/50 text-fg' : 'border-border text-muted hover:text-fg')}>
+            <Users className="h-4 w-4" /> All Family
+          </button>
         </div>
-      )}
 
-      {/* Recent activity */}
-      {(events ?? []).length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-fg uppercase tracking-wider mb-3 flex items-center gap-2"><Navigation className="h-4 w-4 text-muted" /> Recent Activity</h2>
-          <div className="space-y-1.5">
-            {(events ?? []).map((ev) => (
-              <div key={ev.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm">
-                <Avatar name={memberName(ev.member_id)} size={22} />
-                <span className="text-fg/90">
-                  {memberName(ev.member_id)} {ev.event_type === 'left' ? 'left' : 'arrived at'} {ev.place_name ?? 'a place'}
-                </span>
-                <span className="text-muted ml-auto text-xs">{timeAgo(ev.occurred_at, now)}</span>
+        {/* Map */}
+        <div className={cn('relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br', style.bg)} style={{ height: 380 }}>
+          {/* faux streets */}
+          <svg className="absolute inset-0 h-full w-full opacity-[0.18]" preserveAspectRatio="none">
+            <defs><pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#8aa" strokeWidth="0.5" /></pattern></defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+            <path d="M0 260 Q 300 200 640 300 T 1200 260" fill="none" stroke="#6b8" strokeWidth="2" opacity="0.5" />
+            <path d="M420 0 Q 460 200 380 400" fill="none" stroke="#4a90d9" strokeWidth="3" opacity="0.35" />
+          </svg>
+
+          {/* Style dropdown */}
+          <div className="absolute right-3 top-3 z-10">
+            <button onClick={(e) => { e.stopPropagation(); setStyleOpen((o) => !o); }}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-bg/70 px-2.5 py-1.5 text-xs backdrop-blur">
+              {style.label} <ChevronDown className="h-3 w-3" />
+            </button>
+            {styleOpen && (
+              <div className="absolute right-0 mt-1 w-32 overflow-hidden rounded-lg border border-border bg-elevated shadow-lg" onClick={(e) => e.stopPropagation()}>
+                {MAP_STYLES.map((s) => (
+                  <button key={s.key} onClick={() => { setMapStyle(s.key); setStyleOpen(false); }}
+                    className={cn('block w-full px-3 py-1.5 text-left text-xs hover:bg-surface', s.key === mapStyle && 'text-brand font-semibold')}>{s.label}</button>
+                ))}
               </div>
-            ))}
+            )}
+          </div>
+
+          {/* Zoom + locate */}
+          <div className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1.5">
+            <button onClick={() => setZoom((z) => Math.min(2, +(z + 0.2).toFixed(2)))} aria-label="Zoom in" className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-bg/70 backdrop-blur hover:bg-elevated"><Plus className="h-4 w-4" /></button>
+            <button onClick={() => setZoom((z) => Math.max(1, +(z - 0.2).toFixed(2)))} aria-label="Zoom out" className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-bg/70 backdrop-blur hover:bg-elevated"><Minus className="h-4 w-4" /></button>
+            <button onClick={shareNow} disabled={updating} aria-label="Locate me" className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-bg/70 backdrop-blur hover:bg-elevated">{updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}</button>
+          </div>
+
+          {/* Pins */}
+          <div className="absolute inset-0 transition-transform duration-300" style={{ transform: `scale(${zoom})` }}>
+            {(places ?? []).map((p) => {
+              const pt = projected.get(`place:${p.id}`);
+              if (!pt) return null;
+              const Icon = placeIconFor(p.icon);
+              return (
+                <div key={p.id} className="absolute flex -translate-x-1/2 -translate-y-full flex-col items-center" style={{ left: `${pt.xPct}%`, top: `${pt.yPct}%` }}>
+                  <div className={cn('grid h-9 w-9 place-items-center rounded-full text-white shadow-lg ring-2 ring-bg', placeBgFor(p.icon))}><Icon className="h-4 w-4" /></div>
+                  <span className="mt-1 whitespace-nowrap rounded bg-bg/70 px-1.5 py-0.5 text-[11px] font-medium backdrop-blur">{p.name}</span>
+                </div>
+              );
+            })}
+            {liveMembers.map((m) => {
+              const pt = projected.get(`member:${m.id}`);
+              if (!pt) return null;
+              const dim = focusMember && focusMember !== m.id;
+              return (
+                <div key={m.id} className={cn('absolute -translate-x-1/2 -translate-y-1/2 transition-opacity', dim && 'opacity-30')} style={{ left: `${pt.xPct}%`, top: `${pt.yPct}%` }}>
+                  <div className={cn('rounded-full ring-2', focusMember === m.id ? 'ring-brand' : 'ring-white/70')}>
+                    <Avatar name={m.display_name} color={m.color} size={30} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <span className="absolute bottom-2 left-3 text-[10px] text-white/50"> Maps</span>
+          <span className="absolute bottom-2 right-3 text-[10px] text-white/40">Legal</span>
+        </div>
+
+        {/* Live Locations */}
+        <section>
+          <h2 className="mb-3 text-base font-semibold">Live Locations</h2>
+          <div className="overflow-hidden rounded-2xl border border-border bg-surface/30 divide-y divide-border/50">
+            {liveMembers.length === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-muted">No one is sharing their location yet. Tap <span className="font-medium text-fg">Share Location</span> to start.</div>
+            ) : liveMembers.map((m) => {
+              const l = locByMember.get(m.id)!;
+              const tone = batteryTone(l.battery);
+              const place = l.place_id ? placeById.get(l.place_id) : null;
+              return (
+                <div key={m.id} className={cn('flex items-center gap-3 px-4 py-3 transition', focusMember === m.id && 'bg-brand/5')}>
+                  <Avatar name={m.display_name} color={m.color} size={40} />
+                  <div className="min-w-0 flex-[1.3]">
+                    <div className="flex items-center gap-1.5 text-sm font-semibold">{m.display_name}{selfMember?.id === m.id && <span className="text-xs font-normal text-muted">(You)</span>}</div>
+                    <div className="flex items-center gap-1 text-xs font-medium text-brand"><MapPin className="h-3 w-3" />{place?.name ?? placeLabel(l)}</div>
+                  </div>
+                  <div className="hidden min-w-0 flex-1 truncate text-sm text-muted sm:block">{l.address ?? place?.address ?? '—'}</div>
+                  <div className="w-24 shrink-0 text-right text-xs text-muted">{sinceLabel(l.updated_at, now)}</div>
+                  <div className="flex w-16 shrink-0 items-center justify-end gap-1.5">
+                    <div className="relative h-3.5 w-7 rounded-[3px] border border-current text-muted">
+                      <span className="absolute -right-[3px] top-1/2 h-1.5 w-[2px] -translate-y-1/2 rounded-r bg-current" />
+                      <span className={cn('absolute inset-y-[2px] left-[2px] rounded-[1px]',
+                        tone === 'ok' ? 'bg-emerald-400' : tone === 'low' ? 'bg-amber-400' : tone === 'critical' ? 'bg-rose-400' : 'bg-muted')}
+                        style={{ width: `${Math.max(6, ((l.battery ?? 0) / 100) * 20)}px` }} />
+                    </div>
+                    <span className="text-xs text-muted">{l.battery != null ? `${l.battery}%` : '—'}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Location History (mobile-visible summary card) */}
+        <a href="#geofence-history" onClick={(e) => { e.preventDefault(); historyRef.current?.scrollIntoView({ behavior: 'smooth' }); }}
+          className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-4 py-3 transition hover:bg-elevated/40 xl:hidden">
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-brand/15 text-brand"><Clock className="h-4 w-4" /></span>
+          <div className="flex-1"><p className="text-sm font-semibold">Location History</p><p className="text-xs text-muted">See where your family has been</p></div>
+          <ChevronDown className="h-4 w-4 -rotate-90 text-muted" />
+        </a>
+      </div>
+
+      {/* Right rail */}
+      <aside className="module-sidebar hidden xl:flex xl:flex-col gap-4" ref={historyRef} id="geofence-history">
+        {/* Place Alerts */}
+        <div className="sidebar-card">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold">Place Alerts</p>
+            <button onClick={() => historyRef.current?.scrollIntoView({ behavior: 'smooth' })} className="text-xs font-medium text-brand hover:underline">View all</button>
+          </div>
+          <div className="space-y-2.5">
+            {alerts.length === 0 ? <p className="text-xs text-muted">No arrivals yet today.</p> : alerts.map((ev) => {
+              const p = ev.place_id ? placeById.get(ev.place_id) : null;
+              const Icon = placeIconFor(p?.icon ?? 'other');
+              return (
+                <div key={ev.id} className="flex items-center gap-2.5">
+                  <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-full text-white', placeBgFor(p?.icon ?? 'other'))}><Icon className="h-4 w-4" /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{ev.place_name ?? 'A place'}</p>
+                    <p className="truncate text-xs text-muted">{memberName(ev.member_id)} arrived</p>
+                  </div>
+                  <span className="shrink-0 text-[11px] text-muted">{new Date(ev.occurred_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
-      )}
+
+        {/* Geofences */}
+        <div className="sidebar-card">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold">Geofences</p>
+            {canManage && <button onClick={openNewPlace} className="text-xs font-medium text-brand hover:underline">Manage</button>}
+          </div>
+          <div className="space-y-2.5">
+            {(places ?? []).length === 0 ? (
+              <p className="text-xs text-muted">No geofences yet.</p>
+            ) : (places ?? []).map((p) => {
+              const Icon = placeIconFor(p.icon);
+              return (
+                <div key={p.id} className="group flex items-center gap-2.5">
+                  <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg text-white', placeBgFor(p.icon))}><Icon className="h-4 w-4" /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{p.name}</p>
+                    <p className="truncate text-[11px] text-muted">{p.address ?? `${p.radius_m} m radius`}</p>
+                  </div>
+                  {canManage && (
+                    <button onClick={() => openEditPlace(p)} aria-label={`Edit ${p.name}`} className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                  )}
+                  <button onClick={() => canManage && toggleGeofence(p)} disabled={!canManage || togglingGeo === p.id} aria-label={`Toggle ${p.name} geofence`}
+                    className={cn('relative h-6 w-11 shrink-0 rounded-full transition-colors', p.geofence_enabled ? 'bg-emerald-500' : 'bg-elevated', !canManage && 'opacity-60')}>
+                    <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform', p.geofence_enabled ? 'translate-x-[22px]' : 'translate-x-0.5')} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          {canManage && (
+            <button onClick={openNewPlace} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-medium text-muted hover:text-fg">
+              <Plus className="h-3.5 w-3.5" /> Add Geofence
+            </button>
+          )}
+        </div>
+
+        {/* Location History */}
+        <div className="sidebar-card">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-1.5 text-sm font-semibold"><Bell className="h-4 w-4 text-brand" /> Location History</p>
+          </div>
+          {history.length === 0 ? (
+            <p className="text-xs text-muted">No history yet.</p>
+          ) : (
+            <div className="space-y-4">
+              {history.slice(0, 3).map((day) => (
+                <div key={day.key}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold">{day.label}</span>
+                    <span className="text-[11px] text-muted">{day.count} {day.count === 1 ? 'place' : 'places'}</span>
+                  </div>
+                  {day.label === 'Today' && (
+                    <div className="space-y-2.5 border-l border-border/60 pl-3">
+                      {day.events.filter((e) => e.event_type === 'arrived').slice(0, 4).map((e, i) => (
+                        <div key={e.id} className="relative">
+                          <span className={cn('absolute -left-[15px] top-1 h-2 w-2 rounded-full', i === 0 ? 'bg-brand' : 'bg-muted/50')} />
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">{e.place_name ?? 'A place'}</span>
+                            <span className="text-[11px] text-muted">{new Date(e.occurred_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{i === 0 ? ' — Now' : ''}</span>
+                          </div>
+                          <span className="text-[10px] text-muted">{memberName(e.member_id)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </aside>
 
       {/* Place modal */}
       <Modal open={placeModal} onClose={() => setPlaceModal(false)} title={placeForm.id ? 'Edit place' : 'Add place'}>
@@ -278,18 +472,18 @@ export function LocatorModule() {
             </Field>
           </div>
           <Field label="Address">
-            {(id) => <Input id={id} value={placeForm.address} onChange={(e) => setPlaceForm((f) => ({ ...f, address: e.target.value }))} placeholder="123 Main St" />}
+            {(id) => <Input id={id} value={placeForm.address} onChange={(e) => setPlaceForm((f) => ({ ...f, address: e.target.value }))} placeholder="123 Family Way, Austin, TX" />}
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Latitude" required>
-              {(id) => <Input id={id} value={placeForm.latitude} onChange={(e) => setPlaceForm((f) => ({ ...f, latitude: e.target.value }))} placeholder="40.7128" />}
+              {(id) => <Input id={id} value={placeForm.latitude} onChange={(e) => setPlaceForm((f) => ({ ...f, latitude: e.target.value }))} placeholder="30.2672" />}
             </Field>
             <Field label="Longitude" required>
-              {(id) => <Input id={id} value={placeForm.longitude} onChange={(e) => setPlaceForm((f) => ({ ...f, longitude: e.target.value }))} placeholder="-74.0060" />}
+              {(id) => <Input id={id} value={placeForm.longitude} onChange={(e) => setPlaceForm((f) => ({ ...f, longitude: e.target.value }))} placeholder="-97.7431" />}
             </Field>
           </div>
           <div className="flex items-center justify-between">
-            <button type="button" onClick={useCurrentForPlace} className="text-xs font-medium text-brand hover:underline inline-flex items-center gap-1">
+            <button type="button" onClick={useCurrentForPlace} className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">
               <LocateFixed className="h-3.5 w-3.5" /> Use my current location
             </button>
             <div className="flex items-center gap-2">
@@ -299,8 +493,13 @@ export function LocatorModule() {
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
+            {placeForm.id && canManage && (
+              <Button type="button" variant="ghost" className="mr-auto text-rose-400" onClick={() => { const p = placeById.get(placeForm.id); if (p) { setPlaceModal(false); void removePlace(p); } }}>
+                <Trash2 className="h-4 w-4" /> Delete
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => setPlaceModal(false)}>Cancel</Button>
-            <Button type="submit" disabled={savingPlace}>{savingPlace ? 'Saving…' : placeForm.id ? 'Save changes' : 'Add place'}</Button>
+            <Button type="submit" loading={savingPlace}>{savingPlace ? 'Saving…' : placeForm.id ? 'Save changes' : 'Add place'}</Button>
           </div>
         </form>
       </Modal>

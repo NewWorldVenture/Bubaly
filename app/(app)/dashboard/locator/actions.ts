@@ -120,3 +120,14 @@ export async function deletePlace(id: string): Promise<LocationResult> {
   revalidatePath('/dashboard/locator');
   return { ok: true };
 }
+
+/** Toggle a place's geofence on/off (drives the Geofences rail switches). */
+export async function setGeofenceEnabled(id: string, enabled: boolean): Promise<LocationResult> {
+  const c = await requireUserContext();
+  const supabase = await createServer();
+  const { error } = await supabase.from('family_places')
+    .update({ geofence_enabled: enabled }).eq('id', id).eq('family_id', c.active.familyId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/dashboard/locator');
+  return { ok: true };
+}

@@ -11,6 +11,7 @@
     "db:reset": "supabase db reset",
     "db:push": "supabase db push",
     "db:seed:calendar": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_calendar.sql",
+    "db:seed:location": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_location_one_family.sql",
     "db:seed:chores": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_chores_one_family.sql",
     "db:seed:messages": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_messages_one_family.sql",
     "db:types": "supabase gen types typescript --local > lib/database.types.ts",

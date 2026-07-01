@@ -3,6 +3,26 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-01 SESSION — Location page redesign (branch `claude/location-redesign`)
+> Redesigned the **Location** page (`/dashboard/locator` → `components/modules/locator-module.tsx`) to
+> match the family-map mockup, **100% Supabase-wired, zero mock data**. Layout: header (Add Place / Share
+> Location / More ▾) · member chips with current-place labels + All Family · a **stylized projected map**
+> (no map lib in the repo — pins are projected from lat/lng via `projectPoints`; Traffic/Standard/Satellite
+> style dropdown, zoom, Locate all functional) · **Live Locations** list (place · address · "since" · battery
+> band) · right rail: **Place Alerts** (recent arrivals) · **Geofences** with on/off toggles · **Location
+> History** (per-day buckets + today timeline).
+> - Data: `family_places` + `member_locations` + `location_events` (all existed, FOR-ALL RLS from 0042).
+> - **Migration `0111_location_geofence_address.sql`**: `family_places.geofence_enabled` (toggles) +
+>   `member_locations.address` (Live Locations line) + `location_events(family_id, occurred_at desc)` index.
+>   `database.types.ts` updated. New server action `setGeofenceEnabled` in the locator `actions.ts`.
+> - Pure helpers `lib/location/overview.ts` (projectPoints, groupHistoryByDay, arrivalAlerts, batteryTone,
+>   sinceLabel) + `tests/location-overview.test.ts` (7 tests).
+> - **Seed `supabase/seed_location_one_family.sql`** = **500 location_events** + 6 places + one live
+>   member_location each; every event type; geofence on/off; today + trailing 3 weeks; idempotent; ensures
+>   0111 columns + repairs RLS first. `npm run db:seed:location`. Docs: `docs/location-supabase.md`.
+>   ⚠️ Apply migration 0111 (or `supabase db push`) before the seed. Verified: tsc/eslint clean, 1440 tests,
+>   `next build` OK.
+>
 > ## 🗓️ 2026-07-01 SESSION — Chores page redesign (branch `claude/chores-redesign`)
 > Redesigned `/dashboard/chores` (`components/modules/chores-module.tsx`) to match the gamified kids'
 > chore-board mockup, **100% Supabase-wired, zero mock data**. New layout: header (Add Chore / Chore
