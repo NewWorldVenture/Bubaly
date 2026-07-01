@@ -5,7 +5,7 @@ import {
   MessageCircle, Plus, Send, Smile, Paperclip, Reply, Pin, Trash2,
   MoreHorizontal, CheckCheck, ArrowLeft, Search, X, Camera, Loader2,
   Check, Phone, Video, Info, Settings, UserPlus, SlidersHorizontal, Mic,
-  Image as ImageIcon, BellOff, Archive, ChevronRight,
+  Image as ImageIcon, BellOff, Archive, ChevronRight, FileText, Download,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
@@ -623,10 +623,11 @@ export function MessagesModule() {
                           {!isMine && sameSender && <div className="mr-2 w-7" />}
 
                           <div className={cn('flex max-w-[75%] flex-col', isMine && 'items-end')}>
-                            {/* Sender name */}
-                            {!isMine && !sameSender && (
-                              <span className="mb-0.5 ml-1 text-[11px] font-semibold text-brand">
-                                {msg.sender_name ?? 'Family member'}
+                            {/* Sender name (incl. "You" on own messages, matching the mock) */}
+                            {!sameSender && (
+                              <span className={cn('mb-0.5 text-[11px] font-semibold',
+                                isMine ? 'mr-1 text-muted' : 'ml-1 text-brand')}>
+                                {isMine ? `${myName} (You)` : (msg.sender_name ?? 'Family member')}
                               </span>
                             )}
 
@@ -663,12 +664,23 @@ export function MessagesModule() {
                                       className="mb-2 max-h-56 rounded-xl object-cover" />
                                   </a>
                                 )}
-                                {/* File */}
+                                {/* File — download card */}
                                 {msg.kind === 'file' && msg.attachment_url && (
-                                  <a href={msg.attachment_url} target="_blank" rel="noreferrer"
-                                    className="flex items-center gap-2 underline">
-                                    <Paperclip className="h-3.5 w-3.5" />
-                                    {msg.attachment_name}
+                                  <a href={msg.attachment_url} target="_blank" rel="noreferrer" download
+                                    className={cn(
+                                      'flex min-w-[13rem] items-center gap-3 rounded-xl border p-2.5',
+                                      isMine ? 'border-brand-fg/25 bg-brand-fg/10' : 'border-border bg-surface/50',
+                                    )}>
+                                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-rose-500/15 text-rose-300">
+                                      <FileText className="h-5 w-5" />
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate text-sm font-medium">{msg.attachment_name ?? 'File'}</span>
+                                      <span className="block text-[11px] opacity-70">
+                                        {(msg.attachment_mime?.split('/')[1] ?? 'file').toUpperCase()}
+                                      </span>
+                                    </span>
+                                    <Download className="h-4 w-4 shrink-0 opacity-70" />
                                   </a>
                                 )}
                                 {/* Text */}
@@ -883,7 +895,7 @@ export function MessagesModule() {
                 const online = m.user_id ? onlineIds.has(m.user_id) : false;
                 const isSelf = m.user_id === userId;
                 return (
-                  <div key={m.id} className="flex items-center gap-3">
+                  <div key={m.id} className="group flex items-center gap-3">
                     <div className="relative shrink-0">
                       <Avatar name={m.display_name} color={m.color} size={36} />
                       {online && <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface bg-emerald-500" />}
@@ -892,6 +904,12 @@ export function MessagesModule() {
                       <p className="truncate text-sm font-medium">{m.display_name}{isSelf && <span className="text-muted"> (You)</span>}</p>
                       <p className="truncate text-xs text-muted">{ROLE_LABELS[m.role]}</p>
                     </div>
+                    {!isSelf && (
+                      <button onClick={() => setNewConvOpen(true)} aria-label={`Message ${m.display_name}`}
+                        className="rounded-lg p-1 text-muted/50 transition hover:text-fg group-hover:text-muted">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
