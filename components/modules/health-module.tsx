@@ -591,7 +591,7 @@ export function HealthModule() {
             {memberStats.every((ms) => ms.steps === 0 && ms.sleep === 0 && ms.hr === 0) ? (
               <EmptyState icon={Heart} title="No member health data" description="Log metrics for family members to see their health at a glance." action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Metric</Button>} />
             ) : (
-              <div className="space-y-3">
+              <div className="max-h-[32rem] space-y-3 overflow-y-auto">
                 {memberStats.map(({ member: m, steps, sleep, hr, pct }) => (
                   <div key={m.id} className="rounded-xl border border-border p-3">
                     <div className="flex items-center gap-3 mb-2.5">

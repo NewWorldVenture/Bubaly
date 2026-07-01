@@ -3,6 +3,22 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-01 SESSION — Large-family resilience pass (member chip/tile rows)
+> The Family page's **500-member seed** exposed that many surfaces render one chip/tile/row **per
+> family_member** in a `flex flex-wrap` / vertical list, which walls the layout for large families (first
+> caught on Location). Fixes:
+> - **New helper `components/family/capped-list.tsx`** (`useCappedList` + `<ShowMoreChip>`) — caps a chip row
+>   and adds a "+N more / Show less" toggle. Applied to the **Chores** child-filter pills.
+> - **Bounded-scroll (`max-h-* overflow-y-auto`)** applied to the other member chip/pill/tile rows so they
+>   scroll instead of growing unbounded: Calendar "Calendars" rail, Medications & Signups member filters,
+>   Care recipients, Wishlists tabs, Find-a-time picker, Health member-stats, Medical-records profiles, Trust
+>   member pills, Rides riders, Expenses participants, Settings members list, `/family/members`, the Wall
+>   **display-grid** members widget, and the Grandparent-portal family grid. (Locator already fixed to show
+>   only sharing members.) `<select><option>` member dropdowns were left as-is (natively scrollable).
+> - Rule of thumb for new member UIs: **never** render an unbounded `members.map()` into a wrap/grid — cap it
+>   (`useCappedList`) or wrap in `max-h-* overflow-y-auto`.
+> - Verified: `tsc` clean, eslint clean (only pre-existing expenses warnings), `next build` exit 0.
+>
 > ## 🗓️ 2026-07-01 SESSION — Location page redesign (branch `claude/location-redesign`)
 > Redesigned the **Location** page (`/dashboard/locator` → `components/modules/locator-module.tsx`) to
 > match the family-map mockup, **100% Supabase-wired, zero mock data**. Layout: header (Add Place / Share

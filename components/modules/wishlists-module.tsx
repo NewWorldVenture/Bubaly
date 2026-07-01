@@ -135,7 +135,7 @@ export function WishlistsModule() {
       />
 
       {/* Member tabs */}
-      <div className="flex flex-wrap gap-1.5 mb-5">
+      <div className="flex max-h-28 flex-wrap gap-1.5 mb-5 overflow-y-auto">
         {members.map((m) => (
           <button key={m.id} onClick={() => setActiveMember(m.id)}
             className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition',

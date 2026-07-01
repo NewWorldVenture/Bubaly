@@ -711,7 +711,7 @@ export function CalendarModule() {
             <span className="text-xs font-semibold text-muted uppercase tracking-wide">Calendars</span>
             <a href="/dashboard/settings#members" className="text-[10px] font-medium text-brand hover:underline">Manage</a>
           </div>
-          <div className="space-y-0.5">
+          <div className="max-h-64 space-y-0.5 overflow-y-auto pr-1">
             {calendarRows.map((row) => {
               const visible = !hiddenMembers.has(row.key);
               return (

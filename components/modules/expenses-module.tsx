@@ -215,7 +215,7 @@ export function ExpensesModule() {
             </div>
             <Field label="Split between (default: everyone)">
               {() => (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
                   {members.map((m) => {
                     const on = form.participants.includes(m.id);
                     return (

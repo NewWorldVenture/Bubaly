@@ -147,7 +147,7 @@ export function CareModule() {
       />
 
       {/* Recipient selector */}
-      <div className="flex flex-wrap items-center gap-2 mb-5">
+      <div className="flex max-h-28 flex-wrap items-center gap-2 mb-5 overflow-y-auto">
         <span className="text-sm text-muted">Caring for:</span>
         {members.map((m) => (
           <button key={m.id} onClick={() => setRecipientId(m.id)}

@@ -78,7 +78,7 @@ export default async function GrandparentPortalPage() {
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold">
           <Users className="h-4 w-4 text-brand" /> Family
         </h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid max-h-[32rem] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3">
           {digest.members.map((m) => (
             <div key={m.name} className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4">
               <Avatar name={m.name} color={m.color} size={40} />

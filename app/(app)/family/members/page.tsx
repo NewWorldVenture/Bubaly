@@ -38,7 +38,7 @@ export default async function FamilyMembersPage() {
 
       <SectionCard title="Members">
         {members && members.length > 0 ? (
-          <ul className="grid gap-3 sm:grid-cols-2">
+          <ul className="grid max-h-[40rem] gap-3 overflow-y-auto sm:grid-cols-2">
             {members.map((m) => (
               <li key={m.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 p-3">
                 <Avatar name={m.display_name} color={m.color} size={44} />

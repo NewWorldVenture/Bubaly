@@ -13,6 +13,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
+import { useCappedList, ShowMoreChip } from '@/components/family/capped-list';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
@@ -91,6 +92,7 @@ export function ChoresModule() {
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const selfMemberId = selfMember?.id ?? null;
+  const memberChips = useCappedList(members);
 
   // Point-window filter for the leaderboard/points widgets.
   const windowed = useMemo(() => {
@@ -246,7 +248,7 @@ export function ChoresModule() {
                 <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-elevated"><Users className="h-3.5 w-3.5" /></span>
                 All
               </button>
-              {members.map((m) => (
+              {memberChips.shown.map((m) => (
                 <button key={m.id} onClick={() => setChildFilter(m.id)}
                   className={cn('flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition',
                     childFilter === m.id ? 'border-brand bg-brand/10' : 'border-border bg-surface/40 hover:bg-elevated/40')}>
@@ -257,6 +259,7 @@ export function ChoresModule() {
                   </span>
                 </button>
               ))}
+              <ShowMoreChip overflow={memberChips.overflow} expanded={memberChips.expanded} onToggle={memberChips.toggle} />
               {manager && (
                 <button onClick={() => router.push('/dashboard/settings#members')}
                   className="flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-2 text-sm text-muted transition hover:text-fg hover:border-brand/50">

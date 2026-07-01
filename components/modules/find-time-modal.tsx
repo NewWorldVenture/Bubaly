@@ -128,7 +128,7 @@ export function FindTimeModal({
         {/* Who */}
         <div>
           <label className="mb-1.5 block text-xs font-semibold text-muted">Who needs to be free</label>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
             {members.map((m) => {
               const on = selectedMembers.includes(m.id);
               return (
