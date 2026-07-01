@@ -760,9 +760,9 @@ export interface Database {
         Partial<{ name: string; type: AccountType; institution: string | null; last_four: string | null; balance: number; currency: string }>
       >;
       transactions: T<
-        { id: string; family_id: string; account_id: string | null; name: string; amount: number; category: string | null; date: string; type: TransactionType; notes: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; account_id?: string | null; name: string; amount: number; category?: string | null; date?: string; type?: TransactionType; notes?: string | null; created_by?: string | null },
-        Partial<{ account_id: string | null; name: string; amount: number; category: string | null; date: string; type: TransactionType; notes: string | null }>
+        { id: string; family_id: string; account_id: string | null; member_id: string | null; name: string; amount: number; category: string | null; date: string; type: TransactionType; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; account_id?: string | null; member_id?: string | null; name: string; amount: number; category?: string | null; date?: string; type?: TransactionType; notes?: string | null; created_by?: string | null },
+        Partial<{ account_id: string | null; member_id: string | null; name: string; amount: number; category: string | null; date: string; type: TransactionType; notes: string | null }>
       >;
       budgets: T<
         { id: string; family_id: string; category: string; amount: number; period: BudgetPeriod; created_by: string | null } & Stamps,

@@ -17,7 +17,11 @@
 --   /dashboard/billing.
 -- ============================================================================
 
--- 0) RLS repair --------------------------------------------------------------
+-- 0) Column + RLS repair -----------------------------------------------------
+-- Ensures the per-member column exists even if migration 0110 hasn't run yet.
+alter table public.transactions
+  add column if not exists member_id uuid references public.family_members(id) on delete set null;
+
 do $$
 declare t text;
 begin
@@ -42,6 +46,7 @@ declare
   v_fam   uuid := '92298eb2-1a9e-4bdc-9361-677b6c01b499';
   v_email text := 'newworldventurellc@gmail.com';
   v_uid uuid; v_accts uuid[] := '{}'; a_check uuid; a_save uuid; a_credit uuid; a_invest uuid;
+  v_members uuid[]; v_member uuid;
   i int; seeded int := 0;
   v_type public.transaction_type; v_cat text; v_name text; v_amt numeric(12,2); v_date date; v_acct uuid;
 
@@ -52,6 +57,7 @@ declare
 begin
   if not exists (select 1 from public.families where id = v_fam) then raise exception 'Family % not found', v_fam; end if;
   select id into v_uid from auth.users where lower(email) = lower(v_email) limit 1;
+  select array_agg(id order by created_at) into v_members from public.family_members where family_id = v_fam and is_active;
 
   -- 1) Accounts (idempotent by name).
   delete from public.financial_accounts where family_id = v_fam
@@ -93,8 +99,17 @@ begin
       v_acct := case when i % 3 = 0 then a_credit else a_check end;
     end if;
 
-    insert into public.transactions (family_id,account_id,name,amount,category,date,type,notes,created_by)
-    values (v_fam, v_acct, v_name, v_amt, v_cat, v_date, v_type, 'Auto-imported. [seed:finance]', v_uid);
+    -- Attribute to a family member (self gets income; expenses spread across all).
+    if v_members is null or array_length(v_members,1) is null then
+      v_member := null;
+    elsif v_type = 'income' then
+      v_member := v_members[1];
+    else
+      v_member := v_members[1 + (i % array_length(v_members,1))];
+    end if;
+
+    insert into public.transactions (family_id,account_id,member_id,name,amount,category,date,type,notes,created_by)
+    values (v_fam, v_acct, v_member, v_name, v_amt, v_cat, v_date, v_type, 'Auto-imported. [seed:finance]', v_uid);
     seeded := seeded + 1;
   end loop;
 
