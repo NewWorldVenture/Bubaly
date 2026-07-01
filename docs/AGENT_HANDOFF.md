@@ -45,6 +45,34 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   tagged `instructions='[seed:chores]'`); **RLS-repairs chores/chore_assignments/rewards/reward_redemptions
 >   first** (per the drift note below). Run: `npm run db:seed:chores` (added to package.json).
 > - Docs: `docs/chores-supabase.md`. Verified: `tsc` clean, eslint clean, **1419 tests pass**, `next build` OK.
+>
+> ## 🗓️ 2026-07-01 SESSION — NEW Family hub `/dashboard/family` (Supabase-wired)
+> Built a brand-new **Family** hub page from the uploaded mockup and **repointed the sidebar "Family" link**
+> (PRIMARY_NAV in `lib/constants/navigation.ts`, line ~233) from `/dashboard/family-tree` → **`/dashboard/family`**.
+> (The Family Tree page/route is untouched; its own "Family Tree" nav entry still points at it.)
+> - **Route/files:** `app/(app)/dashboard/family/page.tsx` → `components/modules/family-module.tsx` (client).
+>   Uses `useApp()` for `family`/`members`/`role`/`refreshMembers`/`planLevel`; fetches the family row,
+>   subscription, upcoming `calendar_events`, `family_albums` highlights, and counts
+>   (`family_contacts` emergency, `documents`, `notes`, `medical_profiles`) in one `Promise.all`.
+> - **Layout matches the mock:** header (Add Member / Invite Family); family profile card (name + plan badge +
+>   Edit Family Profile, member count · city, cover photo, member cards with avatar/role/age/email/phone +
+>   Admin/Adult/Kid-Account badge, "Add Member"); Family Calendar + Family Highlights; Shared Information
+>   cards. Right rail: Family Info (name/address/timezone/subscription/family-code + copy), Upcoming Birthdays
+>   (computed next-birthday + "Turns N"), Quick Actions (real links).
+> - **CRUD, RLS-gated (MANAGER_ROLES = parent/adult):** Add/Edit member (modal → `family_members`
+>   insert/update), Remove member (→ `is_active=false`, confirm dialog), Edit Family Profile (→ `families`
+>   update), Invite (shows/copies `family_code`). Loading skeleton / error / empty states, toasts throughout.
+> - **Migration `0110_family_profile.sql`**: `families` += `cover_url,address,family_code`(unique, backfilled);
+>   `family_members` += `email,phone,avatar_url`; index `(family_id,is_active)`; re-asserts canonical RLS on
+>   both tables (families update = `can_manage_family`; fm insert/update/delete = `can_manage_family`).
+> - `database.types.ts`: `families` + `family_members` rows updated for the new columns.
+> - **Seed `supabase/seed_family_one_family.sql`**: sets the target family's profile + seeds **500
+>   family_members** (all roles, wide birthday range incl. NULLs, active+archived, emails/phones incl. NULLs).
+>   Idempotent via `email like 'seed+%@bubaly.test'`; folds in 0110 so it runs standalone. NOTE: this makes the
+>   test family intentionally large (500 members) — the member grid caps at 12 with a "View all N" expander.
+> - Verified: `tsc --noEmit` clean · eslint clean · `next build` exit 0. Shared-Info "Wi-Fi & Passwords" has
+>   no backing table yet (links to Files, no count) — the only honest gap.
+>
 > ## 🗓️ 2026-07-01 SESSION — Files `/dashboard/documents` redesign (Supabase-wired)
 > Rebuilt the **Files** page from the uploaded mockup. Nav label is "Files" but the route is
 > **`/dashboard/documents`** → `components/modules/documents-module.tsx` (client), backed by the existing

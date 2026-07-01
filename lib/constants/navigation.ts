@@ -230,7 +230,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle },
   { href: '/dashboard/documents', label: 'Files', icon: FolderLock },
   { href: '/dashboard/locator', label: 'Location', icon: MapPin },
-  { href: '/dashboard/family-tree', label: 'Family', icon: Users },
+  { href: '/dashboard/family', label: 'Family', icon: Users },
 ];
 
 /**
