@@ -253,6 +253,34 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   still shows locked.
 > - One-off account tiers were set via `scripts/set-account-tiers.sql` (Supabase SQL editor; no DB creds in the
 >   sandbox). Super admin allowlist (`lib/constants/super-admins.ts`) is ONLY `daniel.hughen@gmail.com`.
+> ## 🧾 RECENTLY SHIPPED — not captured in the (older) sections below (all on `main`)
+> A batch of features landed on `main` that the reorg below predates. Summary so a bot doesn't re-derive:
+> - **🎯 Home "Needs you" decision engine** — the Home dashboard (`components/dashboard/ai-home-dashboard.tsx`)
+>   shows ONE ranked, calm decision queue unioning every cross-domain item waiting on the family: money
+>   approvals (`parent_approvals`) · renewals (`renewals`) · document expiry (`documents`) · calendar
+>   conflicts · chore sign-offs · overdue/today reminders · meds · chores · grocery · to-dos. Pure, tested libs:
+>   `lib/home/needs-attention.ts` (rank/summarize/headline/topNeeds), `lib/home/needs-sources.ts`
+>   (parentApproval/renewal/documentExpiry → NeedItem, 8 tests), `lib/home/needs-build.ts` (`buildHomeNeeds`
+>   union, 3 tests), `lib/home/conflicts.ts` (`detectConflicts`, 5 tests). **One-tap Approve/Decline** on
+>   approval cards (`components/dashboard/home-approval-actions.tsx`, reuses the wallet decide actions).
+> - **Proactive delivery** — `lib/server/notifications.ts` also pushes pending **approvals**
+>   (`lib/notifications/approval-reminders.ts`, 4 tests) and **calendar double-bookings** (reuses
+>   `detectConflicts`) through the existing push+email pipeline (renewals/meds/reminders/relationship/docs
+>   were already covered).
+> - **🤖 Assistant is a real layer over it** — `lib/assistant/tools.ts` gained `list_pending_decisions`
+>   (answers "what needs me?" from the SAME `buildHomeNeeds`), plus `complete_reminder` / `snooze_reminder`
+>   (recurrence-aware via `nextRemindAt`; tests in `tests/assistant-complete-reminder.test.ts`). `add_reminder`
+>   writes to `family_reminders` (not the legacy table).
+> - **🛡️ Admin super-admin per-user toggle** — `adminSetSuperAdminAction({ email, makeAdmin })`
+>   (`app/(app)/admin/actions.ts`, guarded + audited, no self-lockout, code/env admins immutable) +
+>   `components/admin/super-admin-toggle.tsx` as an **Admin** column in the Users table. Pairs with the
+>   **Set Family Plan** control (see the SET FAMILY PLAN section) so account tier is fully self-serve, no SQL.
+> - **📱 ⚠️ REDUNDANCY TO RESOLVE** — I also added `components/app/mobile-services-catalog.tsx` on
+>   **`/dashboard/more`** (searchable, plan-gated catalog) BEFORE the newer, richer **`/services`** hub landed.
+>   Both now exist; a future bot should **consolidate** — likely drop the `/dashboard/more` catalog in favor of
+>   `/services` (the 5th mobile tab), or make `/dashboard/more` link to `/services`.
+>
+> ## 🧭 FREE-TIER CURATED DESKTOP SIDEBAR (on `main`)
 
 > ## 🧭 FREE-TIER CURATED DESKTOP SIDEBAR (on `main`)
 > Per the mockup, the **Free tier** (planLevel 0) desktop sidebar is now a calm, curated nav instead of the
