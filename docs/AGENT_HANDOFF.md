@@ -3,6 +3,27 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-01 SESSION (cont.) — Finances page redesign (branch `claude/chores-redesign`)
+> Redesigned the **Finances** page (`/dashboard/billing` → `components/modules/billing-module.tsx`,
+> the "Finances" nav item) to match the gamified family-finance dashboard mockup, **100% Supabase-wired**.
+> The module was already fully CRUD-wired to `financial_accounts` / `transactions` / `budgets` / `bills`
+> / `savings_goals`; this rebuilt the **Overview** tab layout to match the image:
+> - Header: Add Transaction + **Link Account** + **More ▾** (add budget/bill/goal, full report, jump to
+>   subscription). Tab bar is hidden on Overview (shown with a "← Overview" back on detail tabs).
+> - Overview stat cards (Total Balance/Income/Expenses/Savings with ↗ month deltas) · **Budget & Spending**
+>   donut + category breakdown ($ + %) + Budget Progress bar · Recent Transactions · **Bills & Reminders**
+>   mini-calendar (status dots) + upcoming list · **Spending by Person** · Money Tip banner. Right rail =
+>   Accounts (per-account monthly ↗ change) + Savings Goals.
+> - **Migration `0108_transactions_member.sql`**: adds nullable `transactions.member_id` FK → family_members
+>   (+ index) for Spending by Person. `database.types.ts` updated. Add Transaction modal now has a "Spent by"
+>   member select + amount>0 validation. RLS unchanged (0006's "Members can manage" FOR ALL still governs).
+> - Pure aggregations extracted to **`lib/finances/overview.ts`** (computeTotals, categorySpend, budgetTotals,
+>   spendingByPerson, accountMonthlyChange, moneyTip) + **`tests/finances-overview.test.ts`** (12 tests).
+> - **Seed `supabase/seed_finances_one_family.sql`** = **500 transactions** + 6 accounts + 8 budgets + 5 goals
+>   + ~18 bills; every category/type; this-month + trailing months; member-attributed; idempotent
+>   (`notes='[seed:finances]'`); RLS + member_id repair first. `npm run db:seed:finances`. Docs:
+>   `docs/finances-supabase.md`. ⚠️ Run migration 0108 (or `supabase db push`) before the seed.
+>
 > ## 🗓️ 2026-07-01 SESSION — Chores page redesign (branch `claude/chores-redesign`)
 > Redesigned `/dashboard/chores` (`components/modules/chores-module.tsx`) to match the gamified kids'
 > chore-board mockup, **100% Supabase-wired, zero mock data**. New layout: header (Add Chore / Chore

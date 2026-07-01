@@ -12,6 +12,7 @@
     "db:push": "supabase db push",
     "db:seed:calendar": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_calendar.sql",
     "db:seed:chores": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_chores_one_family.sql",
+    "db:seed:finances": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_finances_one_family.sql",
     "db:types": "supabase gen types typescript --local > lib/database.types.ts",
     "seed:home": "psql \"$DATABASE_URL\" -f supabase/seed.sql -f supabase/seed_home.sql",
     "seed:planning": "psql \"$DATABASE_URL\" -f supabase/seed.sql -f supabase/seed_home.sql -f supabase/seed_planning.sql",
