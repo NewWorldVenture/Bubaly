@@ -318,6 +318,21 @@ export interface Database {
         { id?: string; family_id: string; member_id: string; latitude?: number | null; longitude?: number | null; accuracy_m?: number | null; battery?: number | null; place_id?: string | null; address?: string | null; is_sharing?: boolean },
         Partial<{ latitude: number | null; longitude: number | null; accuracy_m: number | null; battery: number | null; place_id: string | null; address: string | null; is_sharing: boolean }>
       >;
+      safety_check_ins: T<
+        { id: string; family_id: string; member_id: string | null; status: string; place_id: string | null; place_label: string | null; note: string | null; latitude: number | null; longitude: number | null; created_by: string | null; created_at: string },
+        { id?: string; family_id: string; member_id?: string | null; status?: string; place_id?: string | null; place_label?: string | null; note?: string | null; latitude?: number | null; longitude?: number | null; created_by?: string | null },
+        Partial<{ member_id: string | null; status: string; place_id: string | null; place_label: string | null; note: string | null; latitude: number | null; longitude: number | null }>
+      >;
+      driving_trips: T<
+        { id: string; family_id: string; member_id: string | null; label: string | null; started_at: string; ended_at: string | null; distance_miles: number; max_mph: number; hard_brakes: number; rapid_accels: number; phone_use_seconds: number; score: number; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; label?: string | null; started_at?: string; ended_at?: string | null; distance_miles?: number; max_mph?: number; hard_brakes?: number; rapid_accels?: number; phone_use_seconds?: number; score?: number; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; label: string | null; started_at: string; ended_at: string | null; distance_miles: number; max_mph: number; hard_brakes: number; rapid_accels: number; phone_use_seconds: number; score: number; notes: string | null }>
+      >;
+      play_dates: T<
+        { id: string; family_id: string; member_id: string | null; title: string; with_kids: string | null; location: string | null; place_id: string | null; starts_at: string; ends_at: string | null; status: string; contact_name: string | null; contact_phone: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; with_kids?: string | null; location?: string | null; place_id?: string | null; starts_at: string; ends_at?: string | null; status?: string; contact_name?: string | null; contact_phone?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; title: string; with_kids: string | null; location: string | null; place_id: string | null; starts_at: string; ends_at: string | null; status: string; contact_name: string | null; contact_phone: string | null; notes: string | null }>
+      >;
       location_events: T<
         { id: string; family_id: string; member_id: string; place_id: string | null; place_name: string | null; event_type: LocationEventType; latitude: number | null; longitude: number | null; occurred_at: string; created_at: string },
         { id?: string; family_id: string; member_id: string; place_id?: string | null; place_name?: string | null; event_type?: LocationEventType; latitude?: number | null; longitude?: number | null; occurred_at?: string },

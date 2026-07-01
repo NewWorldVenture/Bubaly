@@ -6,12 +6,13 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
- *  0 = Free (everyone), 1 = Family Basic+, 2 = Family+. Omitted = 0 (free). */
-export type NavItem = { href: string; label: string; icon: LucideIcon; minLevel?: number };
+ *  0 = Free (everyone), 1 = Family Basic+, 2 = Family+. Omitted = 0 (free).
+ *  `children` makes the item an expandable group whose sub-items navigate. */
+export type NavItem = { href: string; label: string; icon: LucideIcon; minLevel?: number; children?: NavItem[] };
 
 /** A titled section of the app sidebar. */
 export type NavGroup = { title: string; layout: 'list' | 'grid'; items: NavItem[] };
@@ -231,7 +232,15 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: '/dashboard/documents', label: 'Files', icon: FolderLock },
   { href: '/wallet', label: 'Wallet', icon: Wallet },
   { href: '/dashboard/locator', label: 'Location', icon: MapPin },
-  { href: '/dashboard/family', label: 'Family', icon: Users },
+  {
+    href: '/dashboard/family', label: 'Family', icon: Users,
+    children: [
+      { href: '/dashboard/family/check-in', label: 'Check In', icon: ShieldCheck },
+      { href: '/dashboard/family/find-phone', label: 'Find Phone', icon: Smartphone },
+      { href: '/dashboard/family/driving-safety', label: 'Driving Safety', icon: Car },
+      { href: '/dashboard/family/play-dates', label: 'Play Dates', icon: Heart },
+    ],
+  },
 ];
 
 /**
