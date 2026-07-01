@@ -18,13 +18,26 @@ alter table public.families add column if not exists cover_url   text;
 alter table public.families add column if not exists address     text;
 alter table public.families add column if not exists family_code text;
 
--- Backfill a human-friendly, stable share code for families that lack one:
+-- Backfill a human-friendly share code for families that lack one:
 -- three letters from the name + a 4-char hash suffix, e.g. "PAR-7X9M".
 update public.families
    set family_code = upper(
          coalesce(nullif(regexp_replace(left(name, 3), '[^A-Za-z]', '', 'g'), ''), 'FAM')
        ) || '-' || upper(substr(md5(id::text), 1, 4))
  where family_code is null;
+
+-- The derived code can collide (short hash + shared name prefixes). De-dup by
+-- suffixing a counter to every duplicate so the unique index below can build.
+with dupes as (
+  select id, family_code,
+         row_number() over (partition by family_code order by created_at, id) as rn
+    from public.families
+   where family_code is not null
+)
+update public.families f
+   set family_code = f.family_code || '-' || dupes.rn
+  from dupes
+ where dupes.id = f.id and dupes.rn > 1;
 
 create unique index if not exists idx_families_family_code on public.families (family_code);
 
