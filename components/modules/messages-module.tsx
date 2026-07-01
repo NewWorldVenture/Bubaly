@@ -577,10 +577,10 @@ export function MessagesModule() {
                 </p>
               </div>
               <AiInsight kind="messages" params={{ conversationId: activeConv.id }} variant="ghost" iconOnly />
-              <button onClick={() => toastError('Voice calling isn’t available yet.')} aria-label="Start voice call"
-                className="rounded-lg p-1.5 text-muted hover:text-fg"><Phone className="h-4 w-4" /></button>
               <button onClick={() => toastError('Video calling isn’t available yet.')} aria-label="Start video call"
                 className="rounded-lg p-1.5 text-muted hover:text-fg"><Video className="h-4 w-4" /></button>
+              <button onClick={() => toastError('Voice calling isn’t available yet.')} aria-label="Start voice call"
+                className="rounded-lg p-1.5 text-muted hover:text-fg"><Phone className="h-4 w-4" /></button>
               <button onClick={() => setShowAbout(true)} aria-label="About this chat"
                 className="rounded-lg p-1.5 text-muted hover:text-fg"><Info className="h-4 w-4" /></button>
             </div>
