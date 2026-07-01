@@ -3,6 +3,31 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-01 SESSION — Memories `/dashboard/memories` redesign (Supabase-wired)
+> Rebuilt the Memories page from the uploaded mockup as a **server component** (`app/(app)/dashboard/memories/page.tsx`),
+> fully wired to Supabase, no mock data. Layout: header actions (Add Memory → `/dashboard/memories/create`,
+> Upload Photos / Create Album / ⋯ → `/dashboard/photos`), tab bar (Highlights/Photos/Albums/Videos/Stories via
+> `?tab=`), search (`?q=` GET form), **Recent Highlights** row, **Albums** row, **Timeline**, and a right rail
+> (Family Moments CTA, **Memory Stats** "This Year", **Upcoming Events**, **Shared With You**). Empty/loading
+> states everywhere; images are real thumbnails.
+> - **Data model reuse (no new tables):** highlights = `family_albums` rows with **`kind='highlight'`**;
+>   collections = other kinds; media = `family_photos` (`media_type` image/video, added back in 0082); stats
+>   from count queries on `family_photos`/`family_albums`/`family_memories`; upcoming from `calendar_events`.
+>   "Shared With You" = recent `family_photos` uploaded by members ≠ you, grouped by uploader.
+> - **Migration `0108_album_highlight_kind.sql`**: the original `family_albums_kind_check` (0014) did NOT allow
+>   `'highlight'`, so highlight inserts failed. 0108 widens the CHECK to include it, adds
+>   `idx_family_albums_family_kind`, and re-asserts family-scoped RLS on albums+photos (drift guard). **Apply
+>   0108 before the seed.**
+> - **Pure helpers extracted + unit-tested:** `lib/memories/memories.ts` (`buildTimeline`, `memoryStats`,
+>   `sharedWithYou`, `relativeDay`, `relativeTime` + types `AlbumRow`/`PhotoRow`/`MemberLite`), covered by
+>   `tests/memories.test.ts` (11 tests). The old `lib/memories/timeline.ts` remains (used by trip-memories).
+> - **Seed `supabase/seed_memories_one_family.sql`**: ~28 albums (10 highlight + 18 themed), **500
+>   photos/videos**, ~40 `family_memories`, 6 future `calendar_events`, all for family
+>   `92298eb2-…-6b01b499`. Idempotent (`seed:memories` tag / `[seed:memories]` desc marker). `photo_count` is
+>   left to the existing `trg_sync_album_photo_count` trigger. Ends with a verify SELECT. Run AFTER 0108.
+> - `database.types.ts` already had `media_type`/`duration_seconds` and `kind:string` — no type changes needed.
+> - Verified: `tsc --noEmit` clean, eslint clean, memories tests green, `next build` OK.
+>
 > ## 🗓️ 2026-06-30 SESSION — UI redesigns + the PROD RLS-DRIFT discovery (all on `main`)
 > Mock-driven page redesigns plus a systemic production data bug. **Read the RLS section first — it explains
 > why "seeded but page is empty" kept happening and is almost certainly NOT unique to the tables fixed.**
