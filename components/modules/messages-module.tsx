@@ -1,9 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MessageCircle, Plus, Send, Smile, Paperclip, Reply, Pin, Trash2,
-  MoreHorizontal, Check, CheckCheck, ArrowLeft, Users, Search, X, Camera, Loader2,
+  MoreHorizontal, CheckCheck, ArrowLeft, Search, X, Camera, Loader2,
+  Check, Phone, Video, Info, Settings, UserPlus, SlidersHorizontal, Mic,
+  Image as ImageIcon, BellOff, Archive, ChevronRight, FileText, Download,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
@@ -16,8 +18,11 @@ import { Input } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { ROLE_LABELS } from '@/lib/constants/roles';
-import { fmtRelative, fmtDate } from '@/lib/utils/format';
+import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import {
+  convMatchesTab, previewText, shortTime, summarizeConversations, type ConvTab,
+} from '@/lib/messages/overview';
 import type { Tables, MemberRole } from '@/lib/database.types';
 
 type Conversation = Tables<'family_conversations'>;
@@ -25,6 +30,13 @@ type Message = Tables<'family_messages'>;
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'] as const;
 const QUICK_EMOJIS = ['😀', '🎉', '👏', '✅', '🙏', '💪', '🤣', '😍'];
+
+const CONV_TABS: { key: ConvTab; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'direct', label: 'Direct' },
+  { key: 'group', label: 'Groups' },
+  { key: 'announcement', label: 'Announcements' },
+];
 
 function timeGroup(iso: string): string {
   const d = new Date(iso);
@@ -80,9 +92,21 @@ export function MessagesModule() {
   const [search, setSearch] = useState('');
   const [mobileShowThread, setMobileShowThread] = useState(false);
   const [msgMenu, setMsgMenu] = useState<string | null>(null);
+  const [tab, setTab] = useState<ConvTab>('all');
+  const [showArchived, setShowArchived] = useState(false);
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [summaries, setSummaries] = useState<ReturnType<typeof summarizeConversations>>(
+    { lastByConv: new Map(), unreadByConv: new Map() },
+  );
+  const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
+  const [showAbout, setShowAbout] = useState(false); // mobile drawer for the About panel
+  const [mutedIds, setMutedIds] = useState<Set<string>>(new Set());
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const myName = selfMember?.display_name ?? 'You';
 
@@ -199,6 +223,56 @@ export function MessagesModule() {
     return () => { void supabase.removeChannel(ch); };
   }, [familyId, loadConversations]);
 
+  // ── Per-conversation previews + unread counts ───────────────
+  // One bounded scan of the family's recent messages powers every row's last
+  // message preview and unread badge. Refreshed whenever conversations change
+  // (the last-message trigger bumps family_conversations on every send).
+  const loadSummaries = useCallback(async () => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from('family_messages')
+      .select('conversation_id, content, kind, attachment_name, sender_name, sender_id, created_at, read_by')
+      .eq('family_id', familyId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(400);
+    setSummaries(summarizeConversations(data ?? [], userId));
+  }, [familyId, userId]);
+
+  useEffect(() => { void loadSummaries(); }, [conversations, loadSummaries]);
+
+  // ── Presence: who in the family is online right now ─────────
+  useEffect(() => {
+    const supabase = createClient();
+    const ch = supabase.channel(`presence:family:${familyId}`, { config: { presence: { key: userId } } });
+    ch.on('presence', { event: 'sync' }, () => {
+      const state = ch.presenceState() as Record<string, Array<{ user_id?: string }>>;
+      const ids = new Set<string>();
+      Object.values(state).forEach((arr) => arr.forEach((p) => { if (p.user_id) ids.add(p.user_id); }));
+      setOnlineIds(ids);
+    }).subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') await ch.track({ user_id: userId, at: Date.now() });
+    });
+    return () => { void supabase.removeChannel(ch); };
+  }, [familyId, userId]);
+
+  // ── Per-conversation mute (device-local preference) ─────────
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`muted-convs:${familyId}`);
+      if (raw) setMutedIds(new Set(JSON.parse(raw) as string[]));
+    } catch { /* ignore */ }
+  }, [familyId]);
+
+  const toggleMute = useCallback((convId: string) => {
+    setMutedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(convId)) next.delete(convId); else next.add(convId);
+      try { localStorage.setItem(`muted-convs:${familyId}`, JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  }, [familyId]);
+
   // ── Send message ───────────────────────────────────────────
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
@@ -309,8 +383,23 @@ export function MessagesModule() {
     setMessages([]);
   }
 
-  const filtered = conversations.filter((c) =>
-    !search || (c.name ?? '').toLowerCase().includes(search.toLowerCase())
+  const q = search.trim().toLowerCase();
+  const filtered = conversations.filter((c) => {
+    if (Boolean(c.is_archived) !== showArchived) return false;
+    if (!convMatchesTab(c.kind, tab)) return false;
+    if (unreadOnly && !(summaries.unreadByConv.get(c.id) ?? 0)) return false;
+    if (!q) return true;
+    const last = summaries.lastByConv.get(c.id);
+    return (c.name ?? '').toLowerCase().includes(q) ||
+      (last ? previewText(last, userId).toLowerCase().includes(q) : false);
+  });
+  const archivedCount = conversations.filter((c) => c.is_archived).length;
+  const totalUnread = [...summaries.unreadByConv.values()].reduce((a, b) => a + b, 0);
+
+  // Photos shared in the active conversation → the "Shared Photos" rail.
+  const sharedPhotos = useMemo(
+    () => messages.filter((m) => m.kind === 'image' && m.attachment_url).slice(-6).reverse(),
+    [messages],
   );
 
   const grouped = messages.reduce<{ label: string; msgs: Message[] }[]>((acc, msg) => {
@@ -332,30 +421,70 @@ export function MessagesModule() {
 
   if (loadingConvs) return <SkeletonList />;
 
+  const memberCount = activeConv
+    ? (activeConv.participant_ids?.length || activeConv.member_ids?.length || activeParticipants.length || members.length)
+    : 0;
+  const isMuted = activeConv ? mutedIds.has(activeConv.id) : false;
+
   return (
-    <div className="flex h-[calc(100vh-var(--topbar-height)-2rem)] overflow-hidden rounded-2xl border border-border bg-surface/30">
+    <div className="flex h-[calc(100vh-var(--topbar-height)-1rem)] flex-col gap-4">
+      {/* ── Page header ─────────────────────────────────────── */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Messages</h1>
+          <p className="mt-0.5 text-xs text-muted sm:text-sm">Stay connected with your family.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setNewConvOpen(true)}><Plus className="h-4 w-4" /> New Message</Button>
+          <div className="relative hidden sm:block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search messages"
+              className="h-11 w-56 rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none focus:border-brand" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3-panel workspace ───────────────────────────────── */}
+      <div className="flex min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-surface/30">
 
       {/* ── Conversation list ──────────────────────────────── */}
       <div className={cn(
-        'flex w-full flex-col border-r border-border lg:w-72 xl:w-80',
+        'flex w-full flex-col border-r border-border lg:w-80 xl:w-[22rem]',
         mobileShowThread && 'hidden lg:flex',
       )}>
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="text-base font-bold">Messages</h2>
-          <button onClick={() => setNewConvOpen(true)}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/15 text-brand hover:bg-brand/25 transition">
-            <Plus className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Search */}
-        <div className="border-b border-border px-3 py-2">
-          <div className="flex items-center gap-2 rounded-lg bg-elevated/50 px-3 py-1.5">
-            <Search className="h-3.5 w-3.5 text-muted" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search conversations…"
-              className="flex-1 bg-transparent text-sm text-fg placeholder:text-muted outline-none" />
+        {/* Tabs + filter */}
+        <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+          <div className="flex flex-1 items-center gap-1 overflow-x-auto scrollbar-none">
+            {CONV_TABS.map((t) => (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className={cn('shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                  tab === t.key ? 'bg-brand/15 text-brand' : 'text-muted hover:bg-elevated hover:text-fg')}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="relative">
+            <button onClick={() => setFilterOpen((v) => !v)} aria-label="Filter conversations"
+              className={cn('grid h-8 w-8 place-items-center rounded-lg border border-border text-muted hover:text-fg',
+                unreadOnly && 'border-brand/50 text-brand')}>
+              <SlidersHorizontal className="h-4 w-4" />
+            </button>
+            {filterOpen && (
+              <>
+                <button className="fixed inset-0 z-10 cursor-default" aria-hidden onClick={() => setFilterOpen(false)} />
+                <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-elevated py-1 shadow-glass">
+                  <button onClick={() => { setUnreadOnly((v) => !v); setFilterOpen(false); }}
+                    className="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-surface">
+                    Unread only {unreadOnly && <Check className="h-4 w-4 text-brand" />}
+                  </button>
+                  <button onClick={() => { setShowArchived((v) => !v); setFilterOpen(false); }}
+                    className="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-surface">
+                    {showArchived ? 'Hide archived' : 'Show archived'} <Archive className="h-4 w-4 text-muted" />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -364,37 +493,59 @@ export function MessagesModule() {
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center py-12 text-center">
               <MessageCircle className="mb-2 h-8 w-8 text-muted/50" />
-              <p className="text-sm text-muted">No conversations yet</p>
+              <p className="text-sm text-muted">
+                {showArchived ? 'No archived conversations' : unreadOnly ? 'No unread conversations' : 'No conversations yet'}
+              </p>
             </div>
           ) : (
             filtered.map((conv) => {
               const isActive = activeConv?.id === conv.id;
+              const last = summaries.lastByConv.get(conv.id);
+              const unread = summaries.unreadByConv.get(conv.id) ?? 0;
               return (
                 <button key={conv.id} onClick={() => selectConversation(conv)}
                   className={cn(
-                    'flex w-full items-center gap-3 border-b border-border/40 px-4 py-3 text-left transition',
+                    'flex w-full items-center gap-3 border-b border-border/40 px-3 py-3 text-left transition',
                     isActive ? 'bg-brand/10' : 'hover:bg-elevated/30',
                   )}>
                   <div className={cn(
-                    'flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-lg',
-                    conv.kind === 'group' ? 'bg-brand/20' : 'bg-elevated',
+                    'grid h-12 w-12 flex-shrink-0 place-items-center rounded-full text-lg',
+                    conv.kind === 'direct' ? 'bg-elevated' : 'bg-brand/20',
                   )}>
-                    {conv.avatar_emoji ?? (conv.kind === 'group' ? '👨‍👩‍👧‍👦' : '💬')}
+                    {conv.avatar_emoji ?? (conv.kind === 'direct' ? '💬' : '👨‍👩‍👧‍👦')}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className={cn('truncate text-sm font-semibold', isActive && 'text-brand')}>
-                      {conv.name ?? 'Direct Message'}
-                    </p>
-                    {conv.last_message_at && (
-                      <p className="text-[11px] text-muted">{fmtRelative(conv.last_message_at)}</p>
-                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      <p className={cn('truncate text-sm font-semibold', isActive && 'text-brand')}>
+                        {conv.name ?? 'Direct Message'}
+                      </p>
+                      {last && <span className="shrink-0 text-[11px] text-muted">{shortTime(last.created_at)}</span>}
+                    </div>
+                    <div className="mt-0.5 flex items-center justify-between gap-2">
+                      <p className={cn('truncate text-xs', unread ? 'font-medium text-fg' : 'text-muted')}>
+                        {last ? previewText(last, userId) : 'No messages yet'}
+                      </p>
+                      {mutedIds.has(conv.id) && <BellOff className="h-3 w-3 shrink-0 text-muted/60" />}
+                      {unread > 0 && (
+                        <span className="grid h-5 min-w-[1.25rem] shrink-0 place-items-center rounded-full bg-brand px-1.5 text-[11px] font-bold text-brand-fg">
+                          {unread > 99 ? '99+' : unread}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  {conv.kind === 'group' && <Users className="h-3.5 w-3.5 flex-shrink-0 text-muted/60" />}
                 </button>
               );
             })
           )}
         </div>
+
+        {/* View archived */}
+        <button onClick={() => setShowArchived((v) => !v)}
+          className="flex items-center justify-center gap-1.5 border-t border-border py-3 text-xs font-semibold text-brand hover:bg-elevated/30">
+          {showArchived
+            ? <><ArrowLeft className="h-3.5 w-3.5" /> Back to conversations</>
+            : <>View archived conversations {archivedCount > 0 && `(${archivedCount})`} <ChevronRight className="h-3.5 w-3.5" /></>}
+        </button>
       </div>
 
       {/* ── Message thread ─────────────────────────────────── */}
@@ -414,23 +565,24 @@ export function MessagesModule() {
               <button onClick={() => setMobileShowThread(false)} className="lg:hidden mr-1 text-muted">
                 <ArrowLeft className="h-5 w-5" />
               </button>
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/20 text-base">
+              <div className="grid h-10 w-10 place-items-center rounded-full bg-brand/20 text-lg">
                 {activeConv.avatar_emoji ?? '💬'}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-bold">{activeConv.name ?? 'Direct Message'}</p>
                 <p className="truncate text-[11px] text-muted">
-                  {activeConv.kind !== 'group'
-                    ? 'Direct message'
-                    : activeParticipants.length > 0
-                      ? activeParticipants.map((m) => m.display_name.split(' ')[0]).slice(0, 4).join(', ') +
-                        (activeParticipants.length > 4 ? ` +${activeParticipants.length - 4}` : '')
-                      : `${activeConv.participant_ids?.length || activeConv.member_ids?.length || members.length} members`}
+                  {activeConv.kind === 'direct'
+                    ? (onlineIds.has(activeParticipants.find((m) => m.user_id !== userId)?.user_id ?? '') ? 'Active now' : 'Direct message')
+                    : `${memberCount} members`}
                 </p>
               </div>
               <AiInsight kind="messages" params={{ conversationId: activeConv.id }} variant="ghost" iconOnly />
-              <button className="rounded-lg p-1.5 text-muted hover:text-fg"><Search className="h-4 w-4" /></button>
-              <button className="rounded-lg p-1.5 text-muted hover:text-fg"><MoreHorizontal className="h-4 w-4" /></button>
+              <button onClick={() => toastError('Voice calling isn’t available yet.')} aria-label="Start voice call"
+                className="rounded-lg p-1.5 text-muted hover:text-fg"><Phone className="h-4 w-4" /></button>
+              <button onClick={() => toastError('Video calling isn’t available yet.')} aria-label="Start video call"
+                className="rounded-lg p-1.5 text-muted hover:text-fg"><Video className="h-4 w-4" /></button>
+              <button onClick={() => setShowAbout(true)} aria-label="About this chat"
+                className="rounded-lg p-1.5 text-muted hover:text-fg"><Info className="h-4 w-4" /></button>
             </div>
 
             {/* Messages */}
@@ -471,10 +623,11 @@ export function MessagesModule() {
                           {!isMine && sameSender && <div className="mr-2 w-7" />}
 
                           <div className={cn('flex max-w-[75%] flex-col', isMine && 'items-end')}>
-                            {/* Sender name */}
-                            {!isMine && !sameSender && (
-                              <span className="mb-0.5 ml-1 text-[11px] font-semibold text-brand">
-                                {msg.sender_name ?? 'Family member'}
+                            {/* Sender name (incl. "You" on own messages, matching the mock) */}
+                            {!sameSender && (
+                              <span className={cn('mb-0.5 text-[11px] font-semibold',
+                                isMine ? 'mr-1 text-muted' : 'ml-1 text-brand')}>
+                                {isMine ? `${myName} (You)` : (msg.sender_name ?? 'Family member')}
                               </span>
                             )}
 
@@ -511,12 +664,23 @@ export function MessagesModule() {
                                       className="mb-2 max-h-56 rounded-xl object-cover" />
                                   </a>
                                 )}
-                                {/* File */}
+                                {/* File — download card */}
                                 {msg.kind === 'file' && msg.attachment_url && (
-                                  <a href={msg.attachment_url} target="_blank" rel="noreferrer"
-                                    className="flex items-center gap-2 underline">
-                                    <Paperclip className="h-3.5 w-3.5" />
-                                    {msg.attachment_name}
+                                  <a href={msg.attachment_url} target="_blank" rel="noreferrer" download
+                                    className={cn(
+                                      'flex min-w-[13rem] items-center gap-3 rounded-xl border p-2.5',
+                                      isMine ? 'border-brand-fg/25 bg-brand-fg/10' : 'border-border bg-surface/50',
+                                    )}>
+                                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-rose-500/15 text-rose-300">
+                                      <FileText className="h-5 w-5" />
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate text-sm font-medium">{msg.attachment_name ?? 'File'}</span>
+                                      <span className="block text-[11px] opacity-70">
+                                        {(msg.attachment_mime?.split('/')[1] ?? 'file').toUpperCase()}
+                                      </span>
+                                    </span>
+                                    <Download className="h-4 w-4 shrink-0 opacity-70" />
                                   </a>
                                 )}
                                 {/* Text */}
@@ -611,51 +775,171 @@ export function MessagesModule() {
             )}
 
             {/* Input */}
-            <form onSubmit={sendMessage}
-              className="flex items-end gap-2 border-t border-border bg-surface/50 px-4 py-3">
-              {/* Attachment */}
-              <input ref={fileRef} type="file" accept="image/*,application/pdf,.doc,.docx"
-                className="hidden" onChange={(e) => { if (e.target.files?.[0]) sendFile(e.target.files[0]); e.target.value = ''; }} />
-              <button type="button" onClick={() => fileRef.current?.click()} disabled={uploadingFile} aria-label="Attach file"
-                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50">
-                {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
-              </button>
+            <form onSubmit={sendMessage} className="flex items-center gap-2 border-t border-border bg-surface/50 px-4 py-3">
+              <div className="flex flex-1 items-center gap-2 rounded-2xl border border-border bg-elevated px-3 py-1.5 focus-within:border-brand/50">
+                {/* Hidden file inputs */}
+                <input ref={fileRef} type="file" accept="application/pdf,.doc,.docx,.xls,.xlsx,.txt,image/*"
+                  className="hidden" onChange={(e) => { if (e.target.files?.[0]) sendFile(e.target.files[0]); e.target.value = ''; }} />
+                <input ref={imageRef} type="file" accept="image/*"
+                  className="hidden" onChange={(e) => { if (e.target.files?.[0]) sendFile(e.target.files[0]); e.target.value = ''; }} />
 
-              {/* Emoji */}
-              <div className="relative">
-                <button type="button" onClick={() => setShowPicker(!showPicker)}
-                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg transition">
-                  <Smile className="h-4 w-4" />
+                {/* Text input */}
+                <input ref={inputRef} value={text} onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendMessage(e as unknown as React.FormEvent); } }}
+                  placeholder="Type a message..."
+                  className="min-w-0 flex-1 bg-transparent px-1 py-1.5 text-sm placeholder:text-muted focus:outline-none" />
+
+                {/* Trailing tools */}
+                <button type="button" onClick={() => fileRef.current?.click()} disabled={uploadingFile} aria-label="Attach file"
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-fg disabled:opacity-50">
+                  {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
                 </button>
-                {showPicker && (
-                  <div className="absolute bottom-10 left-0 z-20 rounded-xl border border-border bg-elevated p-2 shadow-xl">
-                    <div className="grid grid-cols-8 gap-1">
-                      {QUICK_EMOJIS.map((e) => (
-                        <button key={e} type="button" onClick={() => { setText((t) => t + e); setShowPicker(false); }}
-                          className="h-8 w-8 rounded-lg text-lg hover:bg-surface transition">{e}</button>
-                      ))}
+                <button type="button" onClick={() => imageRef.current?.click()} disabled={uploadingFile} aria-label="Send a photo"
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-fg disabled:opacity-50">
+                  <ImageIcon className="h-4 w-4" />
+                </button>
+                <div className="relative">
+                  <button type="button" onClick={() => setShowPicker(!showPicker)} aria-label="Emoji"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-fg">
+                    <Smile className="h-4 w-4" />
+                  </button>
+                  {showPicker && (
+                    <div className="absolute bottom-11 right-0 z-20 rounded-xl border border-border bg-elevated p-2 shadow-xl">
+                      <div className="grid grid-cols-8 gap-1">
+                        {QUICK_EMOJIS.map((e) => (
+                          <button key={e} type="button" onClick={() => { setText((t) => t + e); setShowPicker(false); inputRef.current?.focus(); }}
+                            className="h-8 w-8 rounded-lg text-lg hover:bg-surface transition">{e}</button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+                <button type="button" onClick={() => toastError('GIF picker is coming soon.')} aria-label="GIF"
+                  className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-[11px] font-bold text-muted transition hover:bg-surface hover:text-fg">
+                  GIF
+                </button>
               </div>
 
-              {/* Text input */}
-              <input ref={inputRef} value={text} onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendMessage(e as unknown as React.FormEvent); } }}
-                placeholder="Message your family…"
-                className="flex-1 rounded-2xl border border-border bg-elevated px-4 py-2 text-sm placeholder:text-muted focus:border-brand/50 focus:outline-none transition" />
-
-              {/* Send */}
-              <button type="submit" disabled={!text.trim() || sending}
-                className={cn(
-                  'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full transition',
-                  text.trim() ? 'bg-brand text-brand-fg hover:bg-brand/80' : 'text-muted',
-                )}>
-                <Send className="h-4 w-4" />
-              </button>
+              {/* Send when typing, mic affordance when empty (the purple round action) */}
+              {text.trim() ? (
+                <button type="submit" disabled={sending} aria-label="Send message"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+                  {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                </button>
+              ) : (
+                <button type="button" onClick={() => toastError('Voice messages are coming soon.')} aria-label="Record voice message"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90">
+                  <Mic className="h-5 w-5" />
+                </button>
+              )}
             </form>
           </>
         )}
+      </div>
+
+      {/* ── About this chat ─────────────────────────────────── */}
+      {activeConv && (
+        <aside className={cn(
+          'flex-col gap-5 overflow-y-auto border-l border-border bg-surface/20 p-5',
+          showAbout
+            ? 'fixed inset-0 z-40 flex w-full bg-bg xl:relative xl:inset-auto xl:z-auto xl:w-80 xl:bg-surface/20'
+            : 'hidden xl:flex xl:w-80',
+        )}>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">About this chat</h2>
+            <button onClick={() => setShowAbout(false)} className="rounded-lg p-1 text-muted hover:text-fg xl:hidden" aria-label="Close">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Group card */}
+          <div>
+            <div className="mb-3 flex items-center gap-3">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand/20 text-xl">
+                {activeConv.avatar_emoji ?? (activeConv.kind === 'direct' ? '💬' : '👨‍👩‍👧‍👦')}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{activeConv.name ?? 'Direct Message'}</p>
+                <p className="text-xs text-muted">
+                  {activeConv.kind === 'direct' ? 'Direct message' : `Family group • ${memberCount} members`}
+                </p>
+              </div>
+            </div>
+            {activeConv.description && <p className="text-sm text-muted">{activeConv.description}</p>}
+          </div>
+
+          {/* Actions */}
+          <div className="grid grid-cols-4 gap-1 border-y border-border py-3 text-center text-[11px] text-muted">
+            <button onClick={() => setNewConvOpen(true)} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
+              <UserPlus className="h-5 w-5" /> Add
+            </button>
+            <button onClick={() => { setShowAbout(false); searchRef.current?.focus(); }} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
+              <Search className="h-5 w-5" /> Search
+            </button>
+            <button onClick={() => toggleMute(activeConv.id)} className={cn('flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg', isMuted && 'text-brand')}>
+              <BellOff className="h-5 w-5" /> {isMuted ? 'Unmute' : 'Mute'}
+            </button>
+            <a href="/dashboard/settings#members" className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
+              <Settings className="h-5 w-5" /> Settings
+            </a>
+          </div>
+
+          {/* Members */}
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-semibold">Members ({activeConv.kind === 'direct' ? Math.max(memberCount, activeParticipants.length) : memberCount})</h3>
+              <button onClick={() => setNewConvOpen(true)} className="text-xs font-semibold text-brand">Add members</button>
+            </div>
+            <div className="space-y-2.5">
+              {(activeParticipants.length ? activeParticipants : members).map((m) => {
+                const online = m.user_id ? onlineIds.has(m.user_id) : false;
+                const isSelf = m.user_id === userId;
+                return (
+                  <div key={m.id} className="group flex items-center gap-3">
+                    <div className="relative shrink-0">
+                      <Avatar name={m.display_name} color={m.color} size={36} />
+                      {online && <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface bg-emerald-500" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{m.display_name}{isSelf && <span className="text-muted"> (You)</span>}</p>
+                      <p className="truncate text-xs text-muted">{ROLE_LABELS[m.role]}</p>
+                    </div>
+                    {!isSelf && (
+                      <button onClick={() => setNewConvOpen(true)} aria-label={`Message ${m.display_name}`}
+                        className="rounded-lg p-1 text-muted/50 transition hover:text-fg group-hover:text-muted">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Shared Photos */}
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-semibold">Shared Photos</h3>
+              <a href="/dashboard/photos" className="text-xs font-semibold text-brand">View all</a>
+            </div>
+            {sharedPhotos.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-border py-4 text-center text-xs text-muted">
+                Photos shared in this chat appear here.
+              </p>
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                {sharedPhotos.map((p) => (
+                  <a key={p.id} href={p.attachment_url ?? '#'} target="_blank" rel="noreferrer"
+                    className="aspect-square overflow-hidden rounded-lg bg-elevated">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.attachment_url ?? ''} alt={p.attachment_name ?? 'Shared photo'} className="h-full w-full object-cover" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </aside>
+      )}
       </div>
 
       {/* New Conversation */}

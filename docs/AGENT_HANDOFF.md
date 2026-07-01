@@ -3,27 +3,6 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
-> ## 🗓️ 2026-07-01 SESSION (cont.) — Finances page redesign (branch `claude/chores-redesign`)
-> Redesigned the **Finances** page (`/dashboard/billing` → `components/modules/billing-module.tsx`,
-> the "Finances" nav item) to match the gamified family-finance dashboard mockup, **100% Supabase-wired**.
-> The module was already fully CRUD-wired to `financial_accounts` / `transactions` / `budgets` / `bills`
-> / `savings_goals`; this rebuilt the **Overview** tab layout to match the image:
-> - Header: Add Transaction + **Link Account** + **More ▾** (add budget/bill/goal, full report, jump to
->   subscription). Tab bar is hidden on Overview (shown with a "← Overview" back on detail tabs).
-> - Overview stat cards (Total Balance/Income/Expenses/Savings with ↗ month deltas) · **Budget & Spending**
->   donut + category breakdown ($ + %) + Budget Progress bar · Recent Transactions · **Bills & Reminders**
->   mini-calendar (status dots) + upcoming list · **Spending by Person** · Money Tip banner. Right rail =
->   Accounts (per-account monthly ↗ change) + Savings Goals.
-> - **Migration `0108_transactions_member.sql`**: adds nullable `transactions.member_id` FK → family_members
->   (+ index) for Spending by Person. `database.types.ts` updated. Add Transaction modal now has a "Spent by"
->   member select + amount>0 validation. RLS unchanged (0006's "Members can manage" FOR ALL still governs).
-> - Pure aggregations extracted to **`lib/finances/overview.ts`** (computeTotals, categorySpend, budgetTotals,
->   spendingByPerson, accountMonthlyChange, moneyTip) + **`tests/finances-overview.test.ts`** (12 tests).
-> - **Seed `supabase/seed_finances_one_family.sql`** = **500 transactions** + 6 accounts + 8 budgets + 5 goals
->   + ~18 bills; every category/type; this-month + trailing months; member-attributed; idempotent
->   (`notes='[seed:finances]'`); RLS + member_id repair first. `npm run db:seed:finances`. Docs:
->   `docs/finances-supabase.md`. ⚠️ Run migration 0108 (or `supabase db push`) before the seed.
->
 > ## 🗓️ 2026-07-01 SESSION — Chores page redesign (branch `claude/chores-redesign`)
 > Redesigned `/dashboard/chores` (`components/modules/chores-module.tsx`) to match the gamified kids'
 > chore-board mockup, **100% Supabase-wired, zero mock data**. New layout: header (Add Chore / Chore
@@ -46,6 +25,67 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   tagged `instructions='[seed:chores]'`); **RLS-repairs chores/chore_assignments/rewards/reward_redemptions
 >   first** (per the drift note below). Run: `npm run db:seed:chores` (added to package.json).
 > - Docs: `docs/chores-supabase.md`. Verified: `tsc` clean, eslint clean, **1419 tests pass**, `next build` OK.
+> ## 🗓️ 2026-07-01 SESSION — Files `/dashboard/documents` redesign (Supabase-wired)
+> Rebuilt the **Files** page from the uploaded mockup. Nav label is "Files" but the route is
+> **`/dashboard/documents`** → `components/modules/documents-module.tsx` (client), backed by the existing
+> **`documents`** table + Supabase Storage (real upload/download/delete via `lib/storage/documents.ts`).
+> Layout now mirrors the mock: header (Upload / New Folder / AI / Search), **Folders** row (colored folder
+> cards derived from `category`, with counts + contributor avatars, click-to-filter), **All Files** table
+> (Name · Shared · Modified "by X" · Size · ⭐ · ⋯) with **All Types** + **sort** dropdowns, **list/grid**
+> toggle, and **pagination** (10/page). Right rail: **Storage Overview** (multi-segment donut by file-type
+> group over a 10 GB plan + % used/free), **Quick Actions** (Upload / New Folder / Scan Document → camera
+> file input / Google Drive + Dropbox → "connect in Settings" toast), **Recent Activity** (from recent docs),
+> and the AI assistant card.
+> - **Folders = free-text `documents.category`** (no enum/CHECK), so typing a new folder name in the upload
+>   modal creates it with its first file (empty folders aren't persisted — there's no folders table).
+> - **Migration `0109_documents_favorite.sql`**: adds `documents.is_favorite boolean default false` (powers
+>   the ⭐ toggle — optimistic + persisted), adds indexes (family+created, family+favorite, family+category),
+>   and re-asserts canonical family-scoped RLS on `documents` (drift guard, all four verbs).
+> - `database.types.ts` `documents` row/insert/update updated for `is_favorite`.
+> - **Seed `supabase/seed_files_one_family.sql`**: **500 documents** across ~10 folders, all file types
+>   (pdf/docx/xlsx/pptx/jpg/png/mp4/mov/zip/txt/csv), sizes KB→GB, shared vs private, favorites, expiries,
+>   dates over ~18 months. Idempotent via `storage_path like 'seed/files/%'`. Folds in 0109's column+RLS so
+>   it runs standalone. Ends with a verify SELECT. **Storage paths are synthetic** — list/grid/filters work;
+>   Download reports a missing object (expected for seed rows).
+> - Shared column: `member_id` null → family avatar stack (RLS makes it truly family-visible); set → 🔒 private
+>   to that member. "by X" / Recent Activity actor = `created_by → family_members.user_id`.
+> - Verified: `tsc --noEmit` clean · eslint clean · `next build` exit 0.
+>
+> ## 🗓️ 2026-07-01 SESSION — Finances `/dashboard/billing` redesign (Supabase-wired)
+> Redesigned the **Finances** Overview from the mockup in `components/modules/billing-module.tsx` (route
+> `/dashboard/billing`, nav "Finances"/"Wallet"). All live from existing tables — no mock data, no migration.
+> New Overview: **Overview** stat block (Total Balance / Income / Expenses / Savings with circular icons),
+> **Budget & Spending** (donut with per-category $ + %, Budget Progress bar vs summed monthly `budgets`),
+> **Recent Transactions**, **Bills & Reminders** (mini month calendar with bill-due dots + Upcoming Bills),
+> **Spending by Person** (`transactions.created_by → family_members`, avatar + age + %), and a **Money Tip**
+> banner (month-over-month expense delta + AI Insights). Right rail trimmed to **Accounts + Savings Goals**
+> (mockup). Removed the old Income-vs-Expenses bar chart + rail Spending-Breakdown/Upcoming-Bills/AI cards.
+> Stripe plan manager + all CRUD modals untouched. Verified tsc/eslint/build green.
+>
+> ## 🗓️ 2026-07-01 SESSION — Memories `/dashboard/memories` redesign (Supabase-wired)
+> Rebuilt the Memories page from the uploaded mockup as a **server component** (`app/(app)/dashboard/memories/page.tsx`),
+> fully wired to Supabase, no mock data. Layout: header actions (Add Memory → `/dashboard/memories/create`,
+> Upload Photos / Create Album / ⋯ → `/dashboard/photos`), tab bar (Highlights/Photos/Albums/Videos/Stories via
+> `?tab=`), search (`?q=` GET form), **Recent Highlights** row, **Albums** row, **Timeline**, and a right rail
+> (Family Moments CTA, **Memory Stats** "This Year", **Upcoming Events**, **Shared With You**). Empty/loading
+> states everywhere; images are real thumbnails.
+> - **Data model reuse (no new tables):** highlights = `family_albums` rows with **`kind='highlight'`**;
+>   collections = other kinds; media = `family_photos` (`media_type` image/video, added back in 0082); stats
+>   from count queries on `family_photos`/`family_albums`/`family_memories`; upcoming from `calendar_events`.
+>   "Shared With You" = recent `family_photos` uploaded by members ≠ you, grouped by uploader.
+> - **Migration `0108_album_highlight_kind.sql`**: the original `family_albums_kind_check` (0014) did NOT allow
+>   `'highlight'`, so highlight inserts failed. 0108 widens the CHECK to include it, adds
+>   `idx_family_albums_family_kind`, and re-asserts family-scoped RLS on albums+photos (drift guard). **Apply
+>   0108 before the seed.**
+> - **Pure helpers extracted + unit-tested:** `lib/memories/memories.ts` (`buildTimeline`, `memoryStats`,
+>   `sharedWithYou`, `relativeDay`, `relativeTime` + types `AlbumRow`/`PhotoRow`/`MemberLite`), covered by
+>   `tests/memories.test.ts` (11 tests). The old `lib/memories/timeline.ts` remains (used by trip-memories).
+> - **Seed `supabase/seed_memories_one_family.sql`**: ~28 albums (10 highlight + 18 themed), **500
+>   photos/videos**, ~40 `family_memories`, 6 future `calendar_events`, all for family
+>   `92298eb2-…-6b01b499`. Idempotent (`seed:memories` tag / `[seed:memories]` desc marker). `photo_count` is
+>   left to the existing `trg_sync_album_photo_count` trigger. Ends with a verify SELECT. Run AFTER 0108.
+> - `database.types.ts` already had `media_type`/`duration_seconds` and `kind:string` — no type changes needed.
+> - Verified: `tsc --noEmit` clean, eslint clean, memories tests green, `next build` OK.
 >
 > ## 🗓️ 2026-06-30 SESSION — UI redesigns + the PROD RLS-DRIFT discovery (all on `main`)
 > Mock-driven page redesigns plus a systemic production data bug. **Read the RLS section first — it explains
@@ -297,6 +337,34 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   still shows locked.
 > - One-off account tiers were set via `scripts/set-account-tiers.sql` (Supabase SQL editor; no DB creds in the
 >   sandbox). Super admin allowlist (`lib/constants/super-admins.ts`) is ONLY `daniel.hughen@gmail.com`.
+> ## 🧾 RECENTLY SHIPPED — not captured in the (older) sections below (all on `main`)
+> A batch of features landed on `main` that the reorg below predates. Summary so a bot doesn't re-derive:
+> - **🎯 Home "Needs you" decision engine** — the Home dashboard (`components/dashboard/ai-home-dashboard.tsx`)
+>   shows ONE ranked, calm decision queue unioning every cross-domain item waiting on the family: money
+>   approvals (`parent_approvals`) · renewals (`renewals`) · document expiry (`documents`) · calendar
+>   conflicts · chore sign-offs · overdue/today reminders · meds · chores · grocery · to-dos. Pure, tested libs:
+>   `lib/home/needs-attention.ts` (rank/summarize/headline/topNeeds), `lib/home/needs-sources.ts`
+>   (parentApproval/renewal/documentExpiry → NeedItem, 8 tests), `lib/home/needs-build.ts` (`buildHomeNeeds`
+>   union, 3 tests), `lib/home/conflicts.ts` (`detectConflicts`, 5 tests). **One-tap Approve/Decline** on
+>   approval cards (`components/dashboard/home-approval-actions.tsx`, reuses the wallet decide actions).
+> - **Proactive delivery** — `lib/server/notifications.ts` also pushes pending **approvals**
+>   (`lib/notifications/approval-reminders.ts`, 4 tests) and **calendar double-bookings** (reuses
+>   `detectConflicts`) through the existing push+email pipeline (renewals/meds/reminders/relationship/docs
+>   were already covered).
+> - **🤖 Assistant is a real layer over it** — `lib/assistant/tools.ts` gained `list_pending_decisions`
+>   (answers "what needs me?" from the SAME `buildHomeNeeds`), plus `complete_reminder` / `snooze_reminder`
+>   (recurrence-aware via `nextRemindAt`; tests in `tests/assistant-complete-reminder.test.ts`). `add_reminder`
+>   writes to `family_reminders` (not the legacy table).
+> - **🛡️ Admin super-admin per-user toggle** — `adminSetSuperAdminAction({ email, makeAdmin })`
+>   (`app/(app)/admin/actions.ts`, guarded + audited, no self-lockout, code/env admins immutable) +
+>   `components/admin/super-admin-toggle.tsx` as an **Admin** column in the Users table. Pairs with the
+>   **Set Family Plan** control (see the SET FAMILY PLAN section) so account tier is fully self-serve, no SQL.
+> - **📱 ⚠️ REDUNDANCY TO RESOLVE** — I also added `components/app/mobile-services-catalog.tsx` on
+>   **`/dashboard/more`** (searchable, plan-gated catalog) BEFORE the newer, richer **`/services`** hub landed.
+>   Both now exist; a future bot should **consolidate** — likely drop the `/dashboard/more` catalog in favor of
+>   `/services` (the 5th mobile tab), or make `/dashboard/more` link to `/services`.
+>
+> ## 🧭 FREE-TIER CURATED DESKTOP SIDEBAR (on `main`)
 
 > ## 🧭 FREE-TIER CURATED DESKTOP SIDEBAR (on `main`)
 > Per the mockup, the **Free tier** (planLevel 0) desktop sidebar is now a calm, curated nav instead of the
