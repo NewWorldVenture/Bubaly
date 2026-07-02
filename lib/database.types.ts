@@ -434,9 +434,9 @@ export interface Database {
         Partial<{ asset_id: string | null; title: string; description: string | null; status: TaskStatus; priority: Priority; recurrence: RecurrenceFreq; interval_days: number | null; due_at: string | null; completed_at: string | null; assignee_id: string | null }>
       >;
       documents: T<
-        { id: string; family_id: string; title: string; category: string | null; storage_path: string; mime_type: string | null; size_bytes: number | null; expires_at: string | null; member_id: string | null; asset_id: string | null; is_favorite: boolean; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; title: string; category?: string | null; storage_path: string; mime_type?: string | null; size_bytes?: number | null; expires_at?: string | null; member_id?: string | null; asset_id?: string | null; is_favorite?: boolean; created_by?: string | null },
-        Partial<{ title: string; category: string | null; expires_at: string | null; member_id: string | null; asset_id: string | null; is_favorite: boolean }>
+        { id: string; family_id: string; title: string; category: string | null; storage_path: string; mime_type: string | null; size_bytes: number | null; expires_at: string | null; member_id: string | null; asset_id: string | null; is_favorite: boolean; is_secure: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; title: string; category?: string | null; storage_path: string; mime_type?: string | null; size_bytes?: number | null; expires_at?: string | null; member_id?: string | null; asset_id?: string | null; is_favorite?: boolean; is_secure?: boolean; created_by?: string | null },
+        Partial<{ title: string; category: string | null; expires_at: string | null; member_id: string | null; asset_id: string | null; is_favorite: boolean; is_secure: boolean }>
       >;
       notes: T<
         { id: string; family_id: string; title: string | null; body: string; is_pinned: boolean; checklist: Json | null; created_by: string | null } & Stamps,
