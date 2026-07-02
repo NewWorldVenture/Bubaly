@@ -13,6 +13,8 @@
 --      realistic mix of file TYPES (pdf, docx, xlsx, pptx, jpg, png, mp4, mov,
 --      zip, txt, csv), sizes (KB → GB), owners, shared-vs-private visibility,
 --      favorites, expiries, and created/updated dates spread over ~18 months.
+--      ~30% are marked is_secure (migration 0117) so the Files hub sub-pages —
+--      /dashboard/files/cloud, /vault, /shared — all populate.
 --
 -- TABLES TOUCHED: public.documents (only).
 --
@@ -33,8 +35,10 @@
 --   /dashboard/documents. Verify with the SELECT at the bottom.
 -- ============================================================================
 
--- 0) Self-contained schema safeguard (folds in migration 0109) ----------------
+-- 0) Self-contained schema safeguard (folds in migrations 0109 + 0117) --------
 alter table public.documents add column if not exists is_favorite boolean not null default false;
+alter table public.documents add column if not exists is_secure boolean not null default false;
+create index if not exists idx_documents_family_secure on public.documents(family_id, is_secure);
 
 -- 1) RLS safeguard (so the page can READ the seeded rows) ----------------------
 alter table public.documents enable row level security;
@@ -59,6 +63,7 @@ declare
 
   v_cat text;  v_kind int;  v_ext text;  v_mime text;  v_title text;
   v_size bigint;  v_created timestamptz;  v_expires date;  v_member uuid;  v_fav boolean;
+  v_secure boolean;  -- Secure Vault flag (Files hub: vault vs shared split)
 
   -- Folders (documents.category is free text — these become the folder cards).
   cats text[] := ARRAY['School','Finances','Vacation 2025','Health','Photos','Backups','Chores','Insurance','Legal','General'];
@@ -136,13 +141,17 @@ begin
 
     v_fav := random() < 0.15;
 
+    -- Secure Vault: sensitive folders lean secure, plus a light random sprinkle
+    -- elsewhere (~30% overall). Drives /dashboard/files/vault vs /shared.
+    v_secure := (v_cat in ('Legal','Insurance','Finances') and (i % 2) = 0) or (i % 10) < 2;
+
     insert into public.documents
       (family_id, title, category, storage_path, mime_type, size_bytes,
-       expires_at, member_id, created_by, is_favorite, created_at, updated_at)
+       expires_at, member_id, created_by, is_favorite, is_secure, created_at, updated_at)
     values (
       v_fam, v_title, v_cat,
       'seed/files/' || i || '.' || v_ext, v_mime, v_size,
-      v_expires, v_member, v_uids[1 + (i % n_uid)], v_fav,
+      v_expires, v_member, v_uids[1 + (i % n_uid)], v_fav, v_secure,
       v_created, v_created + (floor(random() * 72) || ' hours')::interval
     );
     seeded := seeded + 1;
@@ -156,6 +165,8 @@ select
   count(*)                                                              as total,
   count(distinct category)                                             as folders,
   count(*) filter (where is_favorite)                                  as favorites,
+  count(*) filter (where is_secure)                                    as vault,
+  count(*) filter (where not is_secure)                                as shared_hub,
   count(*) filter (where member_id is not null)                        as private_files,
   count(*) filter (where member_id is null)                            as shared_files,
   count(*) filter (where expires_at is not null)                       as with_expiry,

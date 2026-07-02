@@ -6,12 +6,13 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Cloud, Lock, FileText, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
- *  0 = Free (everyone), 1 = Family Basic+, 2 = Family+. Omitted = 0 (free). */
-export type NavItem = { href: string; label: string; icon: LucideIcon; minLevel?: number };
+ *  0 = Free (everyone), 1 = Family Basic+, 2 = Family+. Omitted = 0 (free).
+ *  `children` makes the item an expandable section (e.g. Files → sub-pages). */
+export type NavItem = { href: string; label: string; icon: LucideIcon; minLevel?: number; children?: NavItem[] };
 
 /** A titled section of the app sidebar. */
 export type NavGroup = { title: string; layout: 'list' | 'grid'; items: NavItem[] };
@@ -228,7 +229,16 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
   { href: '/dashboard/memories', label: 'Memories', icon: ImageGallery },
   { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle },
-  { href: '/dashboard/documents', label: 'Files', icon: FolderLock },
+  {
+    href: '/dashboard/documents', label: 'Files', icon: FolderLock,
+    children: [
+      { href: '/dashboard/documents', label: 'File Manager', icon: FileText },
+      { href: '/dashboard/files/cloud', label: 'Cloud Storage', icon: Cloud },
+      { href: '/dashboard/files/vault', label: 'Secure Vault', icon: Lock },
+      { href: '/dashboard/files/shared', label: 'Shared Files', icon: Share2 },
+      { href: '/dashboard/scan', label: 'Document Scanner', icon: ScanLine },
+    ],
+  },
   { href: '/dashboard/locator', label: 'Location', icon: MapPin },
   { href: '/dashboard/family-tree', label: 'Family', icon: Users },
 ];

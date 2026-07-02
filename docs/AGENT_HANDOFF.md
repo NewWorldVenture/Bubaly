@@ -3,6 +3,27 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-02 SESSION — Files expandable left-nav + hub sub-pages (branch `claude/files-nav-expand`)
+> The **Files** item in the curated sidebar is now an **expandable group**. Mechanism: `NavItem` gains
+> optional `children?: NavItem[]` (`lib/constants/navigation.ts`); `NavEntry` (`components/app/nav-shared.tsx`)
+> renders any parent-with-children as a new `ExpandableNavEntry` — row navigates, caret toggles, group
+> auto-expands when the route is inside it. Works in BOTH the desktop sidebar and mobile drawer (both render
+> via NavEntry). Files children: File Manager (/dashboard/documents, existing) · **Cloud Storage
+> (/dashboard/files/cloud)** · **Secure Vault (/dashboard/files/vault)** · **Shared Files
+> (/dashboard/files/shared)** · Document Scanner (/dashboard/scan, existing).
+> - The 3 new pages share ONE module `components/modules/files-hub-module.tsx` parameterized by view:
+>   summary tiles, folder chips, search + sort, kind-aware file grid (Open via signed URL / favorite /
+>   move-to-Vault toggle / delete with storage cleanup), real Storage uploads (Vault uploads flagged secure).
+>   Reuses the `documents` table + `lib/storage/documents.ts`; gated by `requireFeature('/dashboard/documents')`.
+> - **Migration `0117_documents_secure.sql`**: `documents.is_secure boolean default false` + index
+>   `(family_id, is_secure)`. `database.types.ts` updated. RLS unchanged (documents policy already family-scoped).
+> - Pure helpers `lib/files/overview.ts` (filterByView/searchDocs/sortDocs/groupByCategory/formatBytes/
+>   storageSummary/fileKind) + `tests/files-overview.test.ts` (9 tests).
+> - Seed: extended the existing **`supabase/seed_files_one_family.sql`** (500 documents) to set `is_secure`
+>   on ~30% of rows + folds in the 0117 column, and added `npm run db:seed:files`. Docs:
+>   `docs/files-hub-supabase.md`. ⚠️ NOTE: a parallel session ("Daniel") was building this same feature —
+>   if a duplicate lands on main, reconcile by keeping ONE implementation (this one is additive + self-contained).
+>
 > ## 🗓️ 2026-07-01 SESSION — Location page redesign (branch `claude/location-redesign`)
 > Redesigned the **Location** page (`/dashboard/locator` → `components/modules/locator-module.tsx`) to
 > match the family-map mockup, **100% Supabase-wired, zero mock data**. Layout: header (Add Place / Share

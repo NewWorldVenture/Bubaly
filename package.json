@@ -14,6 +14,7 @@
     "db:seed:location": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_location_one_family.sql",
     "db:seed:chores": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_chores_one_family.sql",
     "db:seed:messages": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_messages_one_family.sql",
+    "db:seed:files": "psql \"${SUPABASE_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -f supabase/seed_files_one_family.sql",
     "db:types": "supabase gen types typescript --local > lib/database.types.ts",
     "seed:home": "psql \"$DATABASE_URL\" -f supabase/seed.sql -f supabase/seed_home.sql",
     "seed:planning": "psql \"$DATABASE_URL\" -f supabase/seed.sql -f supabase/seed_home.sql -f supabase/seed_planning.sql",
