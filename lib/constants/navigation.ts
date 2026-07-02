@@ -8,6 +8,7 @@ import {
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
   Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, type LucideIcon,
 } from 'lucide-react';
+import { AllServicesIcon } from '@/components/app/icons/all-services-icon';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
  *  0 = Free (everyone), 1 = Family Basic+, 2 = Family+. Omitted = 0 (free).
@@ -324,8 +325,6 @@ export const DEFAULT_SIDEBAR_NAV_KEYS: string[] = PRIMARY_NAV.map((i) => i.href)
 export const DASHBOARD_NAV: NavItem[] = [
   { href: '/dashboard', label: 'Parent Dashboard', icon: LayoutDashboard },
   { href: '/dashboard?view=family', label: 'Family Dashboard', icon: UsersRound },
-  { href: '/dashboard/planning', label: 'Planning Hub', icon: ClipboardList },
-  { href: '/dashboard/food', label: 'Food Hub', icon: UtensilsCrossed },
 ];
 
 /** Pinned footer of the Free-tier sidebar — always reachable, below All Services. */
@@ -335,4 +334,4 @@ export const SIDEBAR_FOOTER_NAV: NavItem[] = [
 ];
 
 /** Icon for the "All Services" launcher that opens the full catalog. */
-export const ALL_SERVICES_ICON = LayoutGrid;
+export const ALL_SERVICES_ICON = AllServicesIcon;
