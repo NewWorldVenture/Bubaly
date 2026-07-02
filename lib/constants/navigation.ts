@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, type LucideIcon,
 } from 'lucide-react';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
@@ -237,7 +237,21 @@ export const PRIMARY_NAV: NavItem[] = [
     ],
   },
   { href: '/dashboard/chores', label: 'Chores', icon: ListChecks },
-  { href: '/dashboard/billing', label: 'Finances', icon: CreditCard },
+  {
+    href: '/dashboard/billing', label: 'Finances', icon: CreditCard,
+    children: [
+      { href: '/dashboard/budgets', label: 'Budget Planner', icon: PiggyBank },
+      { href: '/wallet', label: 'My Wallet', icon: Wallet },
+      { href: '/wallet/allowance', label: 'Allowances', icon: Coins },
+      { href: '/dashboard/expenses', label: 'Expense Tracker', icon: Receipt },
+      { href: '/dashboard/savings', label: 'Savings Goals', icon: Target },
+      { href: '/dashboard/bills', label: 'Bill Manager', icon: FileText },
+      { href: '/dashboard/subscriptions', label: 'Subscriptions', icon: RefreshCw },
+      { href: '/dashboard/payments', label: 'Payment History', icon: History },
+      { href: '/dashboard/autopay', label: 'Auto Pay', icon: Repeat },
+      { href: '/dashboard/due', label: 'Due Reminders', icon: Bell },
+    ],
+  },
   { href: '/dashboard/memories', label: 'Memories', icon: ImageGallery },
   { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle },
   { href: '/dashboard/documents', label: 'Files', icon: FolderLock },
