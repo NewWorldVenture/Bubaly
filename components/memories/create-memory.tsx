@@ -8,11 +8,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Image as ImageIcon, Plus, X, Check, Sparkles, Loader2, ArrowLeft } from 'lucide-react';
+import { Image as ImageIcon, Plus, X, Check, Sparkles, Loader2, ArrowLeft, Camera } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input, Field, Textarea } from '@/components/ui/input';
+import { CameraCapture } from '@/components/ui/camera-capture';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 
@@ -29,6 +30,7 @@ export function CreateMemory() {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   // Revoke object URLs on unmount / when replaced to avoid leaks.
   useEffect(() => () => { picks.forEach((p) => URL.revokeObjectURL(p.preview)); }, [picks]);
@@ -38,6 +40,11 @@ export function CreateMemory() {
     const images = Array.from(list).filter((f) => f.type.startsWith('image/'));
     if (!images.length) { toastError('Please choose image files.'); return; }
     setPicks((prev) => [...prev, ...images.map((file) => ({ file, preview: URL.createObjectURL(file) }))]);
+  }
+
+  // A photo captured from the live camera (already a JPEG File).
+  function addCaptured(file: File) {
+    setPicks((prev) => [...prev, { file, preview: URL.createObjectURL(file) }]);
   }
 
   function removeAt(i: number) {
@@ -153,15 +160,27 @@ export function CreateMemory() {
         ))}
         <button
           type="button"
+          onClick={() => setCameraOpen(true)}
+          className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border text-muted transition hover:border-brand/50 hover:bg-brand/5 hover:text-brand"
+        >
+          <Camera className="h-7 w-7" />
+          <span className="text-xs font-medium">Take photo</span>
+        </button>
+        <button
+          type="button"
           onClick={() => fileRef.current?.click()}
           className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border text-muted transition hover:border-brand/50 hover:bg-brand/5 hover:text-brand"
         >
           <Plus className="h-7 w-7" />
-          <span className="text-xs font-medium">Add photo</span>
+          <span className="text-xs font-medium">Upload</span>
         </button>
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
           onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
       </div>
+
+      {cameraOpen && (
+        <CameraCapture onCapture={addCaptured} onClose={() => setCameraOpen(false)} />
+      )}
 
       {/* Details */}
       <div className="mt-6 space-y-4">
