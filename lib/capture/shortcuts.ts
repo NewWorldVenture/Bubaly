@@ -10,8 +10,8 @@ export const CAPTURE_SHORTCUTS_PREF_KEY = 'captureShortcuts';
 /** Default visible shortcuts (keys must exist in the client SHORTCUT_CATALOG). */
 export const DEFAULT_CAPTURE_SHORTCUTS = ['calendar', 'tasks', 'grocery', 'home', 'health', 'trip'];
 
-/** Max shortcuts shown in the grid — 10 rows of the 3-column layout. */
-export const MAX_CAPTURE_SHORTCUTS = 30;
+/** Max shortcuts a member can pin — 10 rows total, per product spec. */
+export const MAX_CAPTURE_SHORTCUTS = 10;
 
 /**
  * Sanitize a persisted/incoming shortcut list into a clean key array:
@@ -43,3 +43,31 @@ export function sanitizeShortcutKeys(
   return out;
 }
 
+/**
+ * Resolve the layout to actually render: a sanitized list, or the defaults when
+ * the saved layout is empty/invalid (so the grid is never blank).
+ */
+export function resolveShortcutKeys(
+  input: unknown,
+  validKeys?: readonly string[],
+  max: number = MAX_CAPTURE_SHORTCUTS,
+): string[] {
+  const clean = sanitizeShortcutKeys(input, validKeys, max);
+  return clean.length ? clean : sanitizeShortcutKeys(DEFAULT_CAPTURE_SHORTCUTS, validKeys, max);
+}
+
+/**
+ * Resolve a SAVED layout while honoring an explicit "no shortcuts" choice:
+ * - `null`/`undefined`/non-array → the member never customized → defaults.
+ * - an array (even `[]`, even all-invalid after sanitize) → their choice, as-is.
+ * This is what lets "only show what the user selected" include selecting none,
+ * while brand-new members still get a helpful starter set.
+ */
+export function resolveSavedShortcuts(
+  saved: unknown,
+  validKeys?: readonly string[],
+  max: number = MAX_CAPTURE_SHORTCUTS,
+): string[] {
+  if (!Array.isArray(saved)) return sanitizeShortcutKeys(DEFAULT_CAPTURE_SHORTCUTS, validKeys, max);
+  return sanitizeShortcutKeys(saved, validKeys, max);
+}

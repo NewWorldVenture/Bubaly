@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils/cn';
 import { parseEvent, parseDueDate, suggestKind, splitItems } from '@/lib/capture/parse';
 import { saveCapture, undoCapture } from '@/lib/capture/save';
 import { isOpenCaptureKey, isSaveHotkey, isTypingTarget } from '@/lib/capture/shortcut';
+import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
 
 /** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
 function formatWhen(startsAt: Date, allDay: boolean): string {
@@ -147,6 +148,10 @@ export function QuickCapture() {
               </button>
             ))}
           </div>
+
+          {/* Member's own shortcuts — only their picks show; "Customize" reveals
+              add/change/remove (up to 10). Same layout as /capture, synced. */}
+          <CaptureShortcuts columns={4} onNavigate={() => setOpen(false)} />
 
           {suggested && (
             <button

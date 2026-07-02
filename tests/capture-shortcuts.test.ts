@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  sanitizeShortcutKeys,
+  sanitizeShortcutKeys, resolveShortcutKeys, resolveSavedShortcuts,
   DEFAULT_CAPTURE_SHORTCUTS, MAX_CAPTURE_SHORTCUTS,
 } from '@/lib/capture/shortcuts';
 
@@ -34,18 +34,30 @@ describe('sanitizeShortcutKeys', () => {
   });
 });
 
-describe('capture shortcut limits', () => {
-  it('allows 10 rows of the 3-column grid', () => {
-    expect(MAX_CAPTURE_SHORTCUTS).toBe(30);
+describe('resolveShortcutKeys', () => {
+  it('falls back to defaults when empty/invalid', () => {
+    expect(resolveShortcutKeys(null, VALID)).toEqual(DEFAULT_CAPTURE_SHORTCUTS);
+    expect(resolveShortcutKeys([], VALID)).toEqual(DEFAULT_CAPTURE_SHORTCUTS);
+    expect(resolveShortcutKeys(['nope'], VALID)).toEqual(DEFAULT_CAPTURE_SHORTCUTS);
   });
-  it('defaults are a valid subset of the max', () => {
-    expect(DEFAULT_CAPTURE_SHORTCUTS.length).toBeGreaterThan(0);
-    expect(DEFAULT_CAPTURE_SHORTCUTS.length).toBeLessThanOrEqual(MAX_CAPTURE_SHORTCUTS);
+  it('uses a valid saved layout as-is', () => {
+    expect(resolveShortcutKeys(['meals', 'wallet'], VALID)).toEqual(['meals', 'wallet']);
   });
-  it('an explicitly-empty layout sanitizes to [] (no default fallback)', () => {
-    // The Capture grid respects a deliberately-emptied layout; only a
-    // never-saved (null) layout uses the defaults — that branch lives in the
-    // component, not here.
-    expect(sanitizeShortcutKeys([], VALID)).toEqual([]);
+});
+
+describe('resolveSavedShortcuts (explicit-empty aware)', () => {
+  it('never-customized (null/undefined/non-array) → starter defaults', () => {
+    expect(resolveSavedShortcuts(null, VALID)).toEqual(DEFAULT_CAPTURE_SHORTCUTS);
+    expect(resolveSavedShortcuts(undefined, VALID)).toEqual(DEFAULT_CAPTURE_SHORTCUTS);
+    expect(resolveSavedShortcuts('junk', VALID)).toEqual(DEFAULT_CAPTURE_SHORTCUTS);
+  });
+  it('an explicit empty selection stays empty (user chose none)', () => {
+    expect(resolveSavedShortcuts([], VALID)).toEqual([]);
+  });
+  it('a saved layout is honored, sanitized, and capped at 10', () => {
+    expect(resolveSavedShortcuts(['meals', 'nope', 'wallet'], VALID)).toEqual(['meals', 'wallet']);
+    const many = [...VALID, ...VALID];
+    expect(resolveSavedShortcuts(many, VALID).length).toBeLessThanOrEqual(MAX_CAPTURE_SHORTCUTS);
+    expect(MAX_CAPTURE_SHORTCUTS).toBe(10);
   });
 });
