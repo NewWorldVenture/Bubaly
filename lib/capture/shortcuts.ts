@@ -10,8 +10,8 @@ export const CAPTURE_SHORTCUTS_PREF_KEY = 'captureShortcuts';
 /** Default visible shortcuts (keys must exist in the client SHORTCUT_CATALOG). */
 export const DEFAULT_CAPTURE_SHORTCUTS = ['calendar', 'tasks', 'grocery', 'home', 'health', 'trip'];
 
-/** Max shortcuts shown in the grid. */
-export const MAX_CAPTURE_SHORTCUTS = 15;
+/** Max shortcuts shown in the grid — 10 rows of the 3-column layout. */
+export const MAX_CAPTURE_SHORTCUTS = 30;
 
 /**
  * Sanitize a persisted/incoming shortcut list into a clean key array:
@@ -43,15 +43,3 @@ export function sanitizeShortcutKeys(
   return out;
 }
 
-/**
- * Resolve the layout to actually render: a sanitized list, or the defaults when
- * the saved layout is empty/invalid (so the grid is never blank).
- */
-export function resolveShortcutKeys(
-  input: unknown,
-  validKeys?: readonly string[],
-  max: number = MAX_CAPTURE_SHORTCUTS,
-): string[] {
-  const clean = sanitizeShortcutKeys(input, validKeys, max);
-  return clean.length ? clean : sanitizeShortcutKeys(DEFAULT_CAPTURE_SHORTCUTS, validKeys, max);
-}

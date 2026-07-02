@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  sanitizeShortcutKeys, resolveShortcutKeys,
+  sanitizeShortcutKeys,
   DEFAULT_CAPTURE_SHORTCUTS, MAX_CAPTURE_SHORTCUTS,
 } from '@/lib/capture/shortcuts';
 
@@ -34,13 +34,18 @@ describe('sanitizeShortcutKeys', () => {
   });
 });
 
-describe('resolveShortcutKeys', () => {
-  it('falls back to defaults when empty/invalid', () => {
-    expect(resolveShortcutKeys(null, VALID)).toEqual(DEFAULT_CAPTURE_SHORTCUTS);
-    expect(resolveShortcutKeys([], VALID)).toEqual(DEFAULT_CAPTURE_SHORTCUTS);
-    expect(resolveShortcutKeys(['nope'], VALID)).toEqual(DEFAULT_CAPTURE_SHORTCUTS);
+describe('capture shortcut limits', () => {
+  it('allows 10 rows of the 3-column grid', () => {
+    expect(MAX_CAPTURE_SHORTCUTS).toBe(30);
   });
-  it('uses a valid saved layout as-is', () => {
-    expect(resolveShortcutKeys(['meals', 'wallet'], VALID)).toEqual(['meals', 'wallet']);
+  it('defaults are a valid subset of the max', () => {
+    expect(DEFAULT_CAPTURE_SHORTCUTS.length).toBeGreaterThan(0);
+    expect(DEFAULT_CAPTURE_SHORTCUTS.length).toBeLessThanOrEqual(MAX_CAPTURE_SHORTCUTS);
+  });
+  it('an explicitly-empty layout sanitizes to [] (no default fallback)', () => {
+    // The Capture grid respects a deliberately-emptied layout; only a
+    // never-saved (null) layout uses the defaults — that branch lives in the
+    // component, not here.
+    expect(sanitizeShortcutKeys([], VALID)).toEqual([]);
   });
 });

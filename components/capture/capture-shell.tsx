@@ -9,6 +9,8 @@ import {
   Loader2, ChevronDown, Undo2, Settings2, Check, Plus,
   StickyNote, UtensilsCrossed, Bell, Wallet, PawPrint, Target,
   CreditCard, Users, Image as ImageIcon, GraduationCap, Gift, MessageCircle,
+  BookHeart, PiggyBank, Receipt, RefreshCw, MapPin, NotebookPen,
+  Repeat, CloudSun, Cake, Megaphone, ChefHat, ListChecks,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/toast';
@@ -17,7 +19,7 @@ import { Modal } from '@/components/ui/modal';
 import { createClient } from '@/lib/supabase/client';
 import { saveCapture, undoCapture, type CaptureSaveResult } from '@/lib/capture/save';
 import type { CaptureKind } from '@/lib/capture/parse';
-import { resolveShortcutKeys, sanitizeShortcutKeys } from '@/lib/capture/shortcuts';
+import { sanitizeShortcutKeys, MAX_CAPTURE_SHORTCUTS } from '@/lib/capture/shortcuts';
 import { saveCaptureShortcutsAction } from '@/app/(app)/capture/shortcuts-actions';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
@@ -49,19 +51,31 @@ const SHORTCUT_CATALOG: Shortcut[] = [
   { key: 'wallet', icon: Wallet, label: 'Wallet', href: '/wallet', hint: 'Family wallet' },
   { key: 'pets', icon: PawPrint, label: 'Pets', href: '/dashboard/pets', hint: 'Pet care' },
   { key: 'goals', icon: Target, label: 'Goals', href: '/dashboard/goals', hint: 'Family goal' },
-  // 6 additional destinations to fill out the customizable grid.
   { key: 'finances', icon: CreditCard, label: 'Finances', href: '/dashboard/billing', hint: 'Track money' },
   { key: 'contacts', icon: Users, label: 'Contacts', href: '/dashboard/contacts', hint: 'Add contact' },
   { key: 'photos', icon: ImageIcon, label: 'Photos', href: '/dashboard/photos', hint: 'Add photo' },
   { key: 'school', icon: GraduationCap, label: 'School', href: '/dashboard/school', hint: 'School item' },
   { key: 'wishlists', icon: Gift, label: 'Wish Lists', href: '/dashboard/wishlists', hint: 'Add a wish' },
   { key: 'messages', icon: MessageCircle, label: 'Messages', href: '/dashboard/messages', hint: 'Send a message' },
+  // Extended pool so a member can fill all 10 rows (30 tiles) with real routes.
+  { key: 'memories', icon: BookHeart, label: 'Memories', href: '/dashboard/memories', hint: 'Save a moment' },
+  { key: 'budgets', icon: PiggyBank, label: 'Budgets', href: '/dashboard/budgets', hint: 'Set budgets' },
+  { key: 'bills', icon: Receipt, label: 'Bills', href: '/dashboard/bills', hint: 'Manage bills' },
+  { key: 'subscriptions', icon: RefreshCw, label: 'Subscriptions', href: '/dashboard/subscriptions', hint: 'Track plans' },
+  { key: 'locator', icon: MapPin, label: 'Family Map', href: '/dashboard/locator', hint: 'Find family' },
+  { key: 'journal', icon: NotebookPen, label: 'Journal', href: '/dashboard/journal', hint: 'Write entry' },
+  { key: 'habits', icon: Repeat, label: 'Habits', href: '/dashboard/habits', hint: 'Track habit' },
+  { key: 'weather', icon: CloudSun, label: 'Weather', href: '/dashboard/weather', hint: 'Check forecast' },
+  { key: 'celebrations', icon: Cake, label: 'Celebrations', href: '/dashboard/celebrations', hint: 'Mark occasion' },
+  { key: 'announcements', icon: Megaphone, label: 'Announcements', href: '/dashboard/announcements', hint: 'Tell everyone' },
+  { key: 'recipes', icon: ChefHat, label: 'Recipes', href: '/dashboard/recipes', hint: 'Find recipe' },
+  { key: 'todos', icon: ListChecks, label: 'To-Dos', href: '/dashboard/todos', hint: 'Make a list' },
 ];
 const SHORTCUT_BY_KEY: Record<string, Shortcut> = Object.fromEntries(SHORTCUT_CATALOG.map((s) => [s.key, s]));
 const CATALOG_KEYS = SHORTCUT_CATALOG.map((s) => s.key);
 const DEFAULT_SHORTCUTS = ['calendar', 'tasks', 'grocery', 'home', 'health', 'trip'];
 const SHORTCUTS_STORAGE_KEY = 'bubaly.capture.shortcuts';
-const MAX_SHORTCUTS = 15;
+const MAX_SHORTCUTS = MAX_CAPTURE_SHORTCUTS; // 10 rows × 3 columns
 
 function routeCapture(text: string): { destination: string; url: string } {
   const lower = text.toLowerCase();
@@ -101,16 +115,17 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
   // (user_preferences.notification_prefs.captureShortcuts via the server actions)
   // so the layout follows the member across devices; localStorage is an
   // instant/offline cache. Server value (passed from the page) wins on first paint.
+  // `null` = never saved (use the defaults); `[]` = deliberately emptied (respect it).
   const [shortcutKeys, setShortcutKeys] = useState<string[]>(() =>
-    initialShortcuts && initialShortcuts.length
-      ? resolveShortcutKeys(initialShortcuts, CATALOG_KEYS, MAX_SHORTCUTS)
+    initialShortcuts != null
+      ? sanitizeShortcutKeys(initialShortcuts, CATALOG_KEYS, MAX_SHORTCUTS)
       : DEFAULT_SHORTCUTS);
   const [editingShortcuts, setEditingShortcuts] = useState(false);
   const [picker, setPicker] = useState<{ mode: 'add' | 'replace'; index: number } | null>(null);
 
   useEffect(() => {
     // Server layout is authoritative — mirror it into the localStorage cache.
-    if (initialShortcuts && initialShortcuts.length) {
+    if (initialShortcuts != null) {
       try { localStorage.setItem(SHORTCUTS_STORAGE_KEY, JSON.stringify(shortcutKeys)); } catch { /* ignore */ }
       return;
     }
@@ -118,8 +133,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
     try {
       const raw = localStorage.getItem(SHORTCUTS_STORAGE_KEY);
       if (!raw) return;
-      const valid = sanitizeShortcutKeys(JSON.parse(raw), CATALOG_KEYS, MAX_SHORTCUTS);
-      if (valid.length) setShortcutKeys(valid);
+      setShortcutKeys(sanitizeShortcutKeys(JSON.parse(raw), CATALOG_KEYS, MAX_SHORTCUTS));
     } catch { /* ignore */ }
     // Run once on mount; shortcutKeys intentionally not a dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -136,13 +150,19 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
   function removeShortcut(index: number) { persistShortcuts(shortcutKeys.filter((_, i) => i !== index)); }
   function pickShortcut(key: string) {
     if (!picker) return;
-    if (picker.mode === 'replace') persistShortcuts(shortcutKeys.map((k, i) => (i === picker.index ? key : k)));
-    else persistShortcuts([...shortcutKeys, key].slice(0, MAX_SHORTCUTS));
-    setPicker(null);
+    if (picker.mode === 'replace') {
+      persistShortcuts(shortcutKeys.map((k, i) => (i === picker.index ? key : k)));
+      setPicker(null);
+      return;
+    }
+    // Add mode is multi-add: each tap adds instantly and the picker stays open,
+    // so filling several rows takes seconds. It closes itself only when full.
+    const next = [...shortcutKeys, key].slice(0, MAX_SHORTCUTS);
+    persistShortcuts(next);
+    if (next.length >= MAX_SHORTCUTS || SHORTCUT_CATALOG.length === next.length) setPicker(null);
   }
   const availableToAdd = SHORTCUT_CATALOG.filter((s) => !shortcutKeys.includes(s.key));
-  // Never render more "Add" slots than there are remaining destinations to add.
-  const addCardCount = Math.min(Math.max(0, MAX_SHORTCUTS - shortcutKeys.length), availableToAdd.length);
+  const canAddMore = shortcutKeys.length < MAX_SHORTCUTS && availableToAdd.length > 0;
 
   // One-tap undo: delete the rows the capture just created and restore the input
   // so the user can edit and re-file, or walk away. Frictionless safety net for
@@ -353,78 +373,113 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
           </button>
         )}
 
-        {/* Quick route shortcuts — customizable */}
+        {/* Quick route shortcuts — customizable. Normal view shows ONLY the
+            member's chosen shortcuts; the "Add" affordances live behind
+            Customize, so the everyday grid stays clean. Up to 10 rows (30). */}
         <div>
           <div className="mb-3 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">Or jump directly to</p>
-            <button type="button" onClick={() => setEditingShortcuts((v) => !v)}
-              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10 transition">
-              {editingShortcuts ? <><Check className="h-3.5 w-3.5" /> Done</> : <><Settings2 className="h-3.5 w-3.5" /> Customize</>}
-            </button>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {shortcutKeys.map((key, index) => {
-              const s = SHORTCUT_BY_KEY[key];
-              if (!s) return null;
-              const Icon = s.icon;
-              if (editingShortcuts) {
-                return (
-                  <div key={key} className="relative">
-                    <button type="button" onClick={() => setPicker({ mode: 'replace', index })}
-                      className="flex w-full flex-col items-center gap-1.5 rounded-2xl border border-brand/30 bg-brand/5 p-3 text-center transition hover:bg-brand/10">
-                      <Icon className="h-6 w-6 text-brand" />
-                      <span className="text-xs font-semibold">{s.label}</span>
-                      <span className="text-[10px] text-brand">Tap to change</span>
-                    </button>
-                    <button type="button" onClick={() => removeShortcut(index)} aria-label={`Remove ${s.label}`}
-                      className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white shadow">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                );
-              }
-              return (
-                <Link key={key} href={s.href}
-                  className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 p-3 text-center transition hover:border-brand/30 hover:bg-elevated">
-                  <Icon className="h-6 w-6 text-brand" />
-                  <span className="text-xs font-semibold">{s.label}</span>
-                  <span className="text-[10px] text-muted">{s.hint}</span>
-                </Link>
-              );
-            })}
-
-            {/* Add-shortcut cards fill the grid up to the max */}
-            {availableToAdd.length > 0 && Array.from({ length: addCardCount }).map((_, i) => (
-              <button key={`add-${i}`} type="button" onClick={() => setPicker({ mode: 'add', index: shortcutKeys.length })}
-                className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border p-3 text-center text-muted transition hover:border-brand/40 hover:text-brand">
-                <Plus className="h-6 w-6" />
-                <span className="text-xs font-semibold">Add</span>
-                <span className="text-[10px]">Add shortcut</span>
+            <div className="flex items-center gap-2">
+              {editingShortcuts && (
+                <span className="text-[11px] tabular-nums text-muted">{shortcutKeys.length} of {MAX_SHORTCUTS}</span>
+              )}
+              <button type="button" onClick={() => { setEditingShortcuts((v) => !v); setPicker(null); }}
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10 transition">
+                {editingShortcuts ? <><Check className="h-3.5 w-3.5" /> Done</> : <><Settings2 className="h-3.5 w-3.5" /> Customize</>}
               </button>
-            ))}
+            </div>
           </div>
+
+          {!editingShortcuts && shortcutKeys.length === 0 ? (
+            // Deliberately-empty layout → one quiet invitation instead of a bare gap.
+            <button type="button" onClick={() => setEditingShortcuts(true)}
+              className="flex w-full flex-col items-center gap-1.5 rounded-2xl border-2 border-dashed border-border p-5 text-center text-muted transition hover:border-brand/40 hover:text-brand">
+              <Settings2 className="h-6 w-6" />
+              <span className="text-xs font-semibold">Customize your shortcuts</span>
+              <span className="text-[10px]">Pick the destinations you use most</span>
+            </button>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {shortcutKeys.map((key, index) => {
+                const s = SHORTCUT_BY_KEY[key];
+                if (!s) return null;
+                const Icon = s.icon;
+                if (editingShortcuts) {
+                  return (
+                    <div key={key} className="relative">
+                      <button type="button" onClick={() => setPicker({ mode: 'replace', index })}
+                        className="flex w-full flex-col items-center gap-1.5 rounded-2xl border border-brand/30 bg-brand/5 p-3 text-center transition hover:bg-brand/10">
+                        <Icon className="h-6 w-6 text-brand" />
+                        <span className="text-xs font-semibold">{s.label}</span>
+                        <span className="text-[10px] text-brand">Tap to change</span>
+                      </button>
+                      <button type="button" onClick={() => removeShortcut(index)} aria-label={`Remove ${s.label}`}
+                        className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white shadow">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <Link key={key} href={s.href}
+                    className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 p-3 text-center transition hover:border-brand/30 hover:bg-elevated">
+                    <Icon className="h-6 w-6 text-brand" />
+                    <span className="text-xs font-semibold">{s.label}</span>
+                    <span className="text-[10px] text-muted">{s.hint}</span>
+                  </Link>
+                );
+              })}
+
+              {/* The Add tile appears ONLY while customizing */}
+              {editingShortcuts && canAddMore && (
+                <button type="button" onClick={() => setPicker({ mode: 'add', index: shortcutKeys.length })}
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border p-3 text-center text-muted transition hover:border-brand/40 hover:text-brand">
+                  <Plus className="h-6 w-6" />
+                  <span className="text-xs font-semibold">Add</span>
+                  <span className="text-[10px]">Add shortcut</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {editingShortcuts && !canAddMore && shortcutKeys.length >= MAX_SHORTCUTS && (
+            <p className="mt-2 text-center text-[11px] text-muted">You&apos;ve filled all 10 rows — remove one to add something else.</p>
+          )}
         </div>
       </div>
 
-      {/* Shortcut picker */}
+      {/* Shortcut picker. Add mode is multi-add: every tap adds instantly and
+          the sheet stays open, so building a full grid is a few quick taps. */}
       {picker && (
-        <Modal open title={picker.mode === 'replace' ? 'Change shortcut' : 'Add a shortcut'} onClose={() => setPicker(null)}>
-          <div className="grid grid-cols-3 gap-2">
-            {(picker.mode === 'replace'
-              ? SHORTCUT_CATALOG.filter((s) => !shortcutKeys.includes(s.key) || s.key === shortcutKeys[picker.index])
-              : availableToAdd
-            ).map((s) => {
-              const Icon = s.icon;
-              const isCurrent = picker.mode === 'replace' && s.key === shortcutKeys[picker.index];
-              return (
-                <button key={s.key} type="button" onClick={() => pickShortcut(s.key)}
-                  className={cn('flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition',
-                    isCurrent ? 'border-brand bg-brand/10' : 'border-border bg-surface/40 hover:border-brand/40 hover:bg-elevated')}>
-                  <Icon className="h-6 w-6 text-brand" />
-                  <span className="text-xs font-semibold">{s.label}</span>
-                </button>
-              );
-            })}
+        <Modal open title={picker.mode === 'replace' ? 'Change shortcut' : 'Add shortcuts'} onClose={() => setPicker(null)}>
+          <div className="space-y-3">
+            {picker.mode === 'add' && (
+              <p className="text-xs text-muted">Tap to add — they appear on your grid instantly. {MAX_SHORTCUTS - shortcutKeys.length} spot{MAX_SHORTCUTS - shortcutKeys.length === 1 ? '' : 's'} left.</p>
+            )}
+            <div className="grid max-h-[60vh] grid-cols-3 gap-2 overflow-y-auto pr-1">
+              {(picker.mode === 'replace'
+                ? SHORTCUT_CATALOG.filter((s) => !shortcutKeys.includes(s.key) || s.key === shortcutKeys[picker.index])
+                : availableToAdd
+              ).map((s) => {
+                const Icon = s.icon;
+                const isCurrent = picker.mode === 'replace' && s.key === shortcutKeys[picker.index];
+                return (
+                  <button key={s.key} type="button" onClick={() => pickShortcut(s.key)}
+                    className={cn('flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition',
+                      isCurrent ? 'border-brand bg-brand/10' : 'border-border bg-surface/40 hover:border-brand/40 hover:bg-elevated')}>
+                    <Icon className="h-6 w-6 text-brand" />
+                    <span className="text-xs font-semibold">{s.label}</span>
+                    <span className="text-[10px] text-muted">{s.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {picker.mode === 'add' && (
+              <button type="button" onClick={() => setPicker(null)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-brand/10 py-2.5 text-sm font-semibold text-brand transition hover:bg-brand/15">
+                <Check className="h-4 w-4" /> Done
+              </button>
+            )}
           </div>
         </Modal>
       )}
