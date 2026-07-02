@@ -418,7 +418,7 @@ export function AssistantModule() {
           </>
         ) : (
           /* ===== Welcome hero ===== */
-          <div className="ai-hero-glow -mx-2 mt-2 flex flex-1 flex-col items-center justify-center rounded-3xl px-2 py-5 text-center">
+          <div className="ai-hero-glow -mx-2 mt-2 flex flex-1 flex-col items-center justify-start rounded-3xl px-2 pb-5 pt-6 text-center sm:pt-8">
             {/* Big question */}
             <h2 className="text-2xl font-black sm:text-4xl">What can I help you with today?</h2>
             <p className="mt-2 max-w-lg text-sm text-muted sm:text-base">

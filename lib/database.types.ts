@@ -139,14 +139,14 @@ export interface Database {
         Partial<{ email: string | null; full_name: string | null; display_name: string | null; avatar_url: string | null; date_of_birth: string | null; phone: string | null }>
       >;
       families: T<
-        { id: string; name: string; avatar_url: string | null; timezone: string; created_by: string | null } & Stamps,
-        { id?: string; name: string; avatar_url?: string | null; timezone?: string; created_by?: string | null },
-        Partial<{ name: string; avatar_url: string | null; timezone: string }>
+        { id: string; name: string; avatar_url: string | null; cover_url: string | null; address: string | null; family_code: string | null; timezone: string; created_by: string | null } & Stamps,
+        { id?: string; name: string; avatar_url?: string | null; cover_url?: string | null; address?: string | null; family_code?: string | null; timezone?: string; created_by?: string | null },
+        Partial<{ name: string; avatar_url: string | null; cover_url: string | null; address: string | null; family_code: string | null; timezone: string }>
       >;
       family_members: T<
-        { id: string; family_id: string; user_id: string | null; role: MemberRole; display_name: string; color: string | null; birthday: string | null; is_active: boolean } & Stamps,
-        { id?: string; family_id: string; user_id?: string | null; role?: MemberRole; display_name: string; color?: string | null; birthday?: string | null; is_active?: boolean },
-        Partial<{ role: MemberRole; display_name: string; color: string | null; birthday: string | null; is_active: boolean }>
+        { id: string; family_id: string; user_id: string | null; role: MemberRole; display_name: string; color: string | null; birthday: string | null; email: string | null; phone: string | null; avatar_url: string | null; is_active: boolean } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; role?: MemberRole; display_name: string; color?: string | null; birthday?: string | null; email?: string | null; phone?: string | null; avatar_url?: string | null; is_active?: boolean },
+        Partial<{ role: MemberRole; display_name: string; color: string | null; birthday: string | null; email: string | null; phone: string | null; avatar_url: string | null; is_active: boolean }>
       >;
       roles: T<
         { role: MemberRole; label: string; description: string | null },
@@ -253,6 +253,16 @@ export interface Database {
         { id?: string; family_id: string; subject_type: NutritionSubject; subject_id: string; servings?: number | null; calories?: number | null; protein_g?: number | null; carbs_g?: number | null; fat_g?: number | null; fiber_g?: number | null; sugar_g?: number | null; sodium_mg?: number | null; summary?: string | null; details?: Json | null; created_by?: string | null },
         Partial<{ subject_type: NutritionSubject; subject_id: string; servings: number | null; calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null; sugar_g: number | null; sodium_mg: number | null; summary: string | null; details: Json | null }>
       >;
+      family_favorites: T<
+        { id: string; family_id: string; member_id: string | null; kind: string; name: string; notes: string | null; rating: number | null; ref_url: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; kind?: string; name: string; notes?: string | null; rating?: number | null; ref_url?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; kind: string; name: string; notes: string | null; rating: number | null; ref_url: string | null }>
+      >;
+      nutrition_logs: T<
+        { id: string; family_id: string; member_id: string | null; logged_on: string; meal: string; item: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; water_ml: number; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; logged_on?: string; meal?: string; item: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; water_ml?: number; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; logged_on: string; meal: string; item: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; water_ml: number; notes: string | null }>
+      >;
       leftover_inventory: T<
         { id: string; family_id: string; name: string; source_meal: string | null; quantity: string | null; stored_on: string; use_by: string | null; location: string; status: string; notes: string | null; metadata: Json; created_by: string | null; updated_by: string | null } & Stamps,
         { id?: string; family_id: string; name: string; source_meal?: string | null; quantity?: string | null; stored_on?: string; use_by?: string | null; location?: string; status?: string; notes?: string | null; metadata?: Json; created_by?: string | null; updated_by?: string | null },
@@ -317,6 +327,21 @@ export interface Database {
         { id: string; family_id: string; member_id: string; latitude: number | null; longitude: number | null; accuracy_m: number | null; battery: number | null; place_id: string | null; address: string | null; is_sharing: boolean } & Stamps,
         { id?: string; family_id: string; member_id: string; latitude?: number | null; longitude?: number | null; accuracy_m?: number | null; battery?: number | null; place_id?: string | null; address?: string | null; is_sharing?: boolean },
         Partial<{ latitude: number | null; longitude: number | null; accuracy_m: number | null; battery: number | null; place_id: string | null; address: string | null; is_sharing: boolean }>
+      >;
+      safety_check_ins: T<
+        { id: string; family_id: string; member_id: string | null; status: string; place_id: string | null; place_label: string | null; note: string | null; latitude: number | null; longitude: number | null; created_by: string | null; created_at: string },
+        { id?: string; family_id: string; member_id?: string | null; status?: string; place_id?: string | null; place_label?: string | null; note?: string | null; latitude?: number | null; longitude?: number | null; created_by?: string | null },
+        Partial<{ member_id: string | null; status: string; place_id: string | null; place_label: string | null; note: string | null; latitude: number | null; longitude: number | null }>
+      >;
+      driving_trips: T<
+        { id: string; family_id: string; member_id: string | null; label: string | null; started_at: string; ended_at: string | null; distance_miles: number; max_mph: number; hard_brakes: number; rapid_accels: number; phone_use_seconds: number; score: number; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; label?: string | null; started_at?: string; ended_at?: string | null; distance_miles?: number; max_mph?: number; hard_brakes?: number; rapid_accels?: number; phone_use_seconds?: number; score?: number; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; label: string | null; started_at: string; ended_at: string | null; distance_miles: number; max_mph: number; hard_brakes: number; rapid_accels: number; phone_use_seconds: number; score: number; notes: string | null }>
+      >;
+      play_dates: T<
+        { id: string; family_id: string; member_id: string | null; title: string; with_kids: string | null; location: string | null; place_id: string | null; starts_at: string; ends_at: string | null; status: string; contact_name: string | null; contact_phone: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; with_kids?: string | null; location?: string | null; place_id?: string | null; starts_at: string; ends_at?: string | null; status?: string; contact_name?: string | null; contact_phone?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; title: string; with_kids: string | null; location: string | null; place_id: string | null; starts_at: string; ends_at: string | null; status: string; contact_name: string | null; contact_phone: string | null; notes: string | null }>
       >;
       location_events: T<
         { id: string; family_id: string; member_id: string; place_id: string | null; place_name: string | null; event_type: LocationEventType; latitude: number | null; longitude: number | null; occurred_at: string; created_at: string },
@@ -760,9 +785,24 @@ export interface Database {
         Partial<{ name: string; type: AccountType; institution: string | null; last_four: string | null; balance: number; currency: string }>
       >;
       transactions: T<
-        { id: string; family_id: string; account_id: string | null; member_id: string | null; name: string; amount: number; category: string | null; date: string; type: TransactionType; notes: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; account_id?: string | null; member_id?: string | null; name: string; amount: number; category?: string | null; date?: string; type?: TransactionType; notes?: string | null; created_by?: string | null },
-        Partial<{ account_id: string | null; member_id: string | null; name: string; amount: number; category: string | null; date: string; type: TransactionType; notes: string | null }>
+        { id: string; family_id: string; account_id: string | null; member_id: string | null; name: string; merchant: string | null; amount: number; category: string | null; date: string; type: TransactionType; status: string; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; account_id?: string | null; member_id?: string | null; name: string; merchant?: string | null; amount: number; category?: string | null; date?: string; type?: TransactionType; status?: string; notes?: string | null; created_by?: string | null },
+        Partial<{ account_id: string | null; member_id: string | null; name: string; merchant: string | null; amount: number; category: string | null; date: string; type: TransactionType; status: string; notes: string | null }>
+      >;
+      wallet_cards: T<
+        { id: string; family_id: string; member_id: string | null; name: string; brand: string; kind: string; last_four: string | null; available_cents: number; limit_cents: number | null; color: string | null; is_active: boolean; sort_order: number; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; name: string; brand?: string; kind?: string; last_four?: string | null; available_cents?: number; limit_cents?: number | null; color?: string | null; is_active?: boolean; sort_order?: number; metadata?: Json; created_by?: string | null },
+        Partial<{ member_id: string | null; name: string; brand: string; kind: string; last_four: string | null; available_cents: number; limit_cents: number | null; color: string | null; is_active: boolean; sort_order: number; metadata: Json }>
+      >;
+      wallet_passes: T<
+        { id: string; family_id: string; member_id: string | null; name: string; kind: string; status: string | null; detail: string | null; member_no: string | null; points: number | null; expires_on: string | null; is_active: boolean; sort_order: number; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; name: string; kind?: string; status?: string | null; detail?: string | null; member_no?: string | null; points?: number | null; expires_on?: string | null; is_active?: boolean; sort_order?: number; metadata?: Json; created_by?: string | null },
+        Partial<{ member_id: string | null; name: string; kind: string; status: string | null; detail: string | null; member_no: string | null; points: number | null; expires_on: string | null; is_active: boolean; sort_order: number; metadata: Json }>
+      >;
+      wallet_rewards: T<
+        { id: string; family_id: string; member_id: string | null; name: string; kind: string; balance: number; unit: string; value_cents: number; program: string | null; is_active: boolean; sort_order: number; metadata: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; name: string; kind?: string; balance?: number; unit?: string; value_cents?: number; program?: string | null; is_active?: boolean; sort_order?: number; metadata?: Json; created_by?: string | null },
+        Partial<{ member_id: string | null; name: string; kind: string; balance: number; unit: string; value_cents: number; program: string | null; is_active: boolean; sort_order: number; metadata: Json }>
       >;
       budgets: T<
         { id: string; family_id: string; category: string; amount: number; period: BudgetPeriod; created_by: string | null } & Stamps,
@@ -770,9 +810,9 @@ export interface Database {
         Partial<{ category: string; amount: number; period: BudgetPeriod }>
       >;
       bills: T<
-        { id: string; family_id: string; name: string; amount: number; due_date: string; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; name: string; amount: number; due_date: string; is_recurring?: boolean; recurrence?: string | null; status?: BillStatus; category?: string | null; created_by?: string | null },
-        Partial<{ name: string; amount: number; due_date: string; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null }>
+        { id: string; family_id: string; name: string; amount: number; due_date: string; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null; autopay: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; amount: number; due_date: string; is_recurring?: boolean; recurrence?: string | null; status?: BillStatus; category?: string | null; autopay?: boolean; created_by?: string | null },
+        Partial<{ name: string; amount: number; due_date: string; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null; autopay: boolean }>
       >;
       savings_goals: T<
         { id: string; family_id: string; name: string; target_amount: number; current_amount: number; target_date: string | null; emoji: string | null; created_by: string | null } & Stamps,

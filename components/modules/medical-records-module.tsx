@@ -356,7 +356,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold"><ClipboardList className="h-4 w-4 text-brand" /> Health Profiles</h2>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid max-h-[36rem] gap-3 overflow-y-auto sm:grid-cols-2">
           {members.map((m) => {
             const prof = profileByMember.get(m.id);
             return (

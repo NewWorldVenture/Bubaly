@@ -178,14 +178,16 @@ export function SignupsModule() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-1.5 mb-5">
-        {[{ id: 'all', label: 'Everyone' }, ...members.map((m) => ({ id: m.id, label: m.display_name }))].map((opt) => (
-          <button key={opt.id} onClick={() => setMemberFilter(opt.id)}
-            className={cn('px-3 py-1.5 rounded-lg text-sm font-medium transition', memberFilter === opt.id ? 'bg-brand text-white' : 'bg-surface/50 text-muted hover:text-fg border border-border')}>
-            {opt.label}
-          </button>
-        ))}
-        <label className="ml-auto flex items-center gap-2 text-sm text-muted">
+      <div className="flex items-start gap-2 mb-5">
+        <div className="flex max-h-24 flex-1 flex-wrap items-center gap-1.5 overflow-y-auto">
+          {[{ id: 'all', label: 'Everyone' }, ...members.map((m) => ({ id: m.id, label: m.display_name }))].map((opt) => (
+            <button key={opt.id} onClick={() => setMemberFilter(opt.id)}
+              className={cn('px-3 py-1.5 rounded-lg text-sm font-medium transition', memberFilter === opt.id ? 'bg-brand text-white' : 'bg-surface/50 text-muted hover:text-fg border border-border')}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <label className="flex shrink-0 items-center gap-2 text-sm text-muted">
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="h-4 w-4 rounded border-border" />
           Show decided
         </label>

@@ -8,6 +8,7 @@ import {
   Calendar, CheckSquare, ShoppingCart, Home, HeartPulse, Plane,
   Loader2, ChevronDown, Undo2, Settings2, Check, Plus,
   StickyNote, UtensilsCrossed, Bell, Wallet, PawPrint, Target,
+  CreditCard, Users, Image as ImageIcon, GraduationCap, Gift, MessageCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/toast';
@@ -48,12 +49,19 @@ const SHORTCUT_CATALOG: Shortcut[] = [
   { key: 'wallet', icon: Wallet, label: 'Wallet', href: '/wallet', hint: 'Family wallet' },
   { key: 'pets', icon: PawPrint, label: 'Pets', href: '/dashboard/pets', hint: 'Pet care' },
   { key: 'goals', icon: Target, label: 'Goals', href: '/dashboard/goals', hint: 'Family goal' },
+  // 6 additional destinations to fill out the customizable grid.
+  { key: 'finances', icon: CreditCard, label: 'Finances', href: '/dashboard/billing', hint: 'Track money' },
+  { key: 'contacts', icon: Users, label: 'Contacts', href: '/dashboard/contacts', hint: 'Add contact' },
+  { key: 'photos', icon: ImageIcon, label: 'Photos', href: '/dashboard/photos', hint: 'Add photo' },
+  { key: 'school', icon: GraduationCap, label: 'School', href: '/dashboard/school', hint: 'School item' },
+  { key: 'wishlists', icon: Gift, label: 'Wish Lists', href: '/dashboard/wishlists', hint: 'Add a wish' },
+  { key: 'messages', icon: MessageCircle, label: 'Messages', href: '/dashboard/messages', hint: 'Send a message' },
 ];
 const SHORTCUT_BY_KEY: Record<string, Shortcut> = Object.fromEntries(SHORTCUT_CATALOG.map((s) => [s.key, s]));
 const CATALOG_KEYS = SHORTCUT_CATALOG.map((s) => s.key);
 const DEFAULT_SHORTCUTS = ['calendar', 'tasks', 'grocery', 'home', 'health', 'trip'];
 const SHORTCUTS_STORAGE_KEY = 'bubaly.capture.shortcuts';
-const MAX_SHORTCUTS = 9;
+const MAX_SHORTCUTS = 15;
 
 function routeCapture(text: string): { destination: string; url: string } {
   const lower = text.toLowerCase();
@@ -133,7 +141,8 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
     setPicker(null);
   }
   const availableToAdd = SHORTCUT_CATALOG.filter((s) => !shortcutKeys.includes(s.key));
-  const addCardCount = Math.max(0, MAX_SHORTCUTS - shortcutKeys.length);
+  // Never render more "Add" slots than there are remaining destinations to add.
+  const addCardCount = Math.min(Math.max(0, MAX_SHORTCUTS - shortcutKeys.length), availableToAdd.length);
 
   // One-tap undo: delete the rows the capture just created and restore the input
   // so the user can edit and re-file, or walk away. Frictionless safety net for

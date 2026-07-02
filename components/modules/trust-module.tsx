@@ -502,7 +502,7 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto">
         {members.map(m => (
           <button key={m.id} onClick={() => setSelected(m.id)}
             className={cn('flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition',

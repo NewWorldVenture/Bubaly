@@ -348,7 +348,7 @@ export function MedicationsModule() {
       </div>
 
       {/* Member filter */}
-      <div className="flex flex-wrap gap-1.5 mb-4">
+      <div className="flex flex-wrap gap-1.5 mb-4 max-h-28 overflow-y-auto">
         {[{ id: 'all', label: 'All' }, { id: WHOLE_FAMILY, label: 'Whole family' }, ...members.map((m) => ({ id: m.id, label: m.display_name }))].map((opt) => (
           <button key={opt.id} onClick={() => setMemberFilter(opt.id)}
             className={cn('px-3 py-1.5 rounded-lg text-sm font-medium transition',

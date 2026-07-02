@@ -11,7 +11,7 @@ export const CAPTURE_SHORTCUTS_PREF_KEY = 'captureShortcuts';
 export const DEFAULT_CAPTURE_SHORTCUTS = ['calendar', 'tasks', 'grocery', 'home', 'health', 'trip'];
 
 /** Max shortcuts shown in the grid. */
-export const MAX_CAPTURE_SHORTCUTS = 9;
+export const MAX_CAPTURE_SHORTCUTS = 15;
 
 /**
  * Sanitize a persisted/incoming shortcut list into a clean key array:

@@ -293,7 +293,7 @@ export function RidesModule() {
           </Field>
           <div>
             <span className="block text-sm font-medium text-fg mb-1.5">Riders</span>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
               {members.map((m) => (
                 <button key={m.id} type="button" onClick={() => toggleRider(m.id)}
                   className={cn('inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition',

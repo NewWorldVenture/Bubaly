@@ -3,6 +3,7 @@
 Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+<<<<<<< HEAD
 > ## 🗓️ 2026-07-02 SESSION — Files expandable left-nav + hub sub-pages (branch `claude/files-nav-expand`)
 > The **Files** item in the curated sidebar is now an **expandable group**. Mechanism: `NavItem` gains
 > optional `children?: NavItem[]` (`lib/constants/navigation.ts`); `NavEntry` (`components/app/nav-shared.tsx`)
@@ -23,6 +24,42 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   on ~30% of rows + folds in the 0117 column, and added `npm run db:seed:files`. Docs:
 >   `docs/files-hub-supabase.md`. ⚠️ NOTE: a parallel session ("Daniel") was building this same feature —
 >   if a duplicate lands on main, reconcile by keeping ONE implementation (this one is additive + self-contained).
+=======
+> ## 🗓️ 2026-07-01 SESSION — Location `/dashboard/locator` wiring review + hardening
+> Full audit of the Location page confirmed it is **100% Supabase-wired** (reads: member_locations /
+> family_places / location_events via `useRealtimeQuery`; writes: `updateMyLocation` / `setLocationSharing`
+> / `savePlace` / `deletePlace` / `setGeofenceEnabled` server actions, self-only for location, family-scoped
+> for places). RLS on all three tables is `FOR ALL … is_family_member(family_id)` (0042); `member_locations`
+> has `UNIQUE(member_id)` so the `onConflict:'member_id'` upsert is correct; 0111 added
+> `family_places.geofence_enabled` + `member_locations.address`. Fixed three real gaps:
+> - **Live updates:** the 3 location tables were **not in the `supabase_realtime` publication**, so
+>   `postgres_changes` never fired → add/edit/delete place & own-sharing didn't reflect until refresh. Added
+>   **migration `0112_location_realtime.sql`** (idempotent ADD TABLE for member_locations/family_places/
+>   location_events) AND belt-and-suspenders client refreshes after `savePlace`/`deletePlace`/`shareNow`/
+>   `toggleShareOff` so the UI updates even without realtime.
+> - **Geolocation errors:** replaced the vague "Couldn't get your location" with `geoErrorMessage()` that maps
+>   `GeolocationPositionError` codes → specific text (permission denied / unavailable / timeout / unsupported).
+>   (The "Couldn't get your location" toasts in testing were desktop geolocation failing, not a wiring bug.)
+> - Note: `member_locations.address` is only populated by the seed; live shares show the saved-place address
+>   via UI fallback, or "—" when on the move (no reverse-geocoder is wired — honest gap). Verified: tsc/eslint
+>   clean, 7 location tests pass, `next build` OK. **Apply migration 0112** for cross-device live updates.
+>
+> ## 🗓️ 2026-07-01 SESSION — Large-family resilience pass (member chip/tile rows)
+> The Family page's **500-member seed** exposed that many surfaces render one chip/tile/row **per
+> family_member** in a `flex flex-wrap` / vertical list, which walls the layout for large families (first
+> caught on Location). Fixes:
+> - **New helper `components/family/capped-list.tsx`** (`useCappedList` + `<ShowMoreChip>`) — caps a chip row
+>   and adds a "+N more / Show less" toggle. Applied to the **Chores** child-filter pills.
+> - **Bounded-scroll (`max-h-* overflow-y-auto`)** applied to the other member chip/pill/tile rows so they
+>   scroll instead of growing unbounded: Calendar "Calendars" rail, Medications & Signups member filters,
+>   Care recipients, Wishlists tabs, Find-a-time picker, Health member-stats, Medical-records profiles, Trust
+>   member pills, Rides riders, Expenses participants, Settings members list, `/family/members`, the Wall
+>   **display-grid** members widget, and the Grandparent-portal family grid. (Locator already fixed to show
+>   only sharing members.) `<select><option>` member dropdowns were left as-is (natively scrollable).
+> - Rule of thumb for new member UIs: **never** render an unbounded `members.map()` into a wrap/grid — cap it
+>   (`useCappedList`) or wrap in `max-h-* overflow-y-auto`.
+> - Verified: `tsc` clean, eslint clean (only pre-existing expenses warnings), `next build` exit 0.
+>>>>>>> origin/main
 >
 > ## 🗓️ 2026-07-01 SESSION — Location page redesign (branch `claude/location-redesign`)
 > Redesigned the **Location** page (`/dashboard/locator` → `components/modules/locator-module.tsx`) to
@@ -66,6 +103,34 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   tagged `instructions='[seed:chores]'`); **RLS-repairs chores/chore_assignments/rewards/reward_redemptions
 >   first** (per the drift note below). Run: `npm run db:seed:chores` (added to package.json).
 > - Docs: `docs/chores-supabase.md`. Verified: `tsc` clean, eslint clean, **1419 tests pass**, `next build` OK.
+>
+> ## 🗓️ 2026-07-01 SESSION — NEW Family hub `/dashboard/family` (Supabase-wired)
+> Built a brand-new **Family** hub page from the uploaded mockup and **repointed the sidebar "Family" link**
+> (PRIMARY_NAV in `lib/constants/navigation.ts`, line ~233) from `/dashboard/family-tree` → **`/dashboard/family`**.
+> (The Family Tree page/route is untouched; its own "Family Tree" nav entry still points at it.)
+> - **Route/files:** `app/(app)/dashboard/family/page.tsx` → `components/modules/family-module.tsx` (client).
+>   Uses `useApp()` for `family`/`members`/`role`/`refreshMembers`/`planLevel`; fetches the family row,
+>   subscription, upcoming `calendar_events`, `family_albums` highlights, and counts
+>   (`family_contacts` emergency, `documents`, `notes`, `medical_profiles`) in one `Promise.all`.
+> - **Layout matches the mock:** header (Add Member / Invite Family); family profile card (name + plan badge +
+>   Edit Family Profile, member count · city, cover photo, member cards with avatar/role/age/email/phone +
+>   Admin/Adult/Kid-Account badge, "Add Member"); Family Calendar + Family Highlights; Shared Information
+>   cards. Right rail: Family Info (name/address/timezone/subscription/family-code + copy), Upcoming Birthdays
+>   (computed next-birthday + "Turns N"), Quick Actions (real links).
+> - **CRUD, RLS-gated (MANAGER_ROLES = parent/adult):** Add/Edit member (modal → `family_members`
+>   insert/update), Remove member (→ `is_active=false`, confirm dialog), Edit Family Profile (→ `families`
+>   update), Invite (shows/copies `family_code`). Loading skeleton / error / empty states, toasts throughout.
+> - **Migration `0110_family_profile.sql`**: `families` += `cover_url,address,family_code`(unique, backfilled);
+>   `family_members` += `email,phone,avatar_url`; index `(family_id,is_active)`; re-asserts canonical RLS on
+>   both tables (families update = `can_manage_family`; fm insert/update/delete = `can_manage_family`).
+> - `database.types.ts`: `families` + `family_members` rows updated for the new columns.
+> - **Seed `supabase/seed_family_one_family.sql`**: sets the target family's profile + seeds **500
+>   family_members** (all roles, wide birthday range incl. NULLs, active+archived, emails/phones incl. NULLs).
+>   Idempotent via `email like 'seed+%@bubaly.test'`; folds in 0110 so it runs standalone. NOTE: this makes the
+>   test family intentionally large (500 members) — the member grid caps at 12 with a "View all N" expander.
+> - Verified: `tsc --noEmit` clean · eslint clean · `next build` exit 0. Shared-Info "Wi-Fi & Passwords" has
+>   no backing table yet (links to Files, no count) — the only honest gap.
+>
 > ## 🗓️ 2026-07-01 SESSION — Files `/dashboard/documents` redesign (Supabase-wired)
 > Rebuilt the **Files** page from the uploaded mockup. Nav label is "Files" but the route is
 > **`/dashboard/documents`** → `components/modules/documents-module.tsx` (client), backed by the existing

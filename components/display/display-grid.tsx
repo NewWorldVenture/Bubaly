@@ -231,7 +231,7 @@ function WidgetBody({ widget, data, memberById }: {
 
     case 'members':
       return (
-        <div className="flex flex-wrap gap-4">
+        <div className="flex max-h-full flex-wrap gap-4 overflow-y-auto">
           {data.members.map((m) => (
             <div key={m.id} className="flex flex-col items-center gap-1">
               <Avatar name={m.display_name} color={m.color} size={44} />

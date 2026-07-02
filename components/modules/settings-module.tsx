@@ -288,7 +288,7 @@ export function SettingsModule() {
             </Button>
           )}
         </div>
-        <ul className="space-y-2">
+        <ul className="max-h-[36rem] space-y-2 overflow-y-auto">
           {activeMembers.map((m) => (
             <li key={m.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5">
               <Avatar name={m.display_name} color={m.color} size={36} />
