@@ -278,6 +278,45 @@ export const PRIMARY_NAV: NavItem[] = [
 ];
 
 /**
+ * Routes that are fixed sidebar chrome — never part of the customizable primary
+ * list. AI Assistant is the top pill; Settings + Help & Support are the footer.
+ */
+const FIXED_SIDEBAR_ROUTES = new Set<string>(['/dashboard/assistant', '/dashboard/settings', '/dashboard/more']);
+
+/**
+ * The pool of destinations a member can put in their curated sidebar. It's the
+ * curated PRIMARY_NAV (which carries the expandable Meals/Finances/Family groups)
+ * plus every other **free** (minLevel 0) module from the full catalog, deduped by
+ * route, minus the fixed chrome. Ordering here is the order they appear in the
+ * "add a destination" picker. Built once at module load.
+ */
+export const NAV_CATALOG: NavItem[] = (() => {
+  const out: NavItem[] = [];
+  const seen = new Set<string>();
+  const push = (item: NavItem) => {
+    if (seen.has(item.href) || FIXED_SIDEBAR_ROUTES.has(item.href)) return;
+    seen.add(item.href);
+    out.push(item);
+  };
+  for (const item of PRIMARY_NAV) push(item);
+  for (const group of APP_NAV_GROUPS) {
+    for (const item of group.items) {
+      if ((item.minLevel ?? 0) === 0) push({ href: item.href, label: item.label, icon: item.icon });
+    }
+  }
+  return out;
+})();
+
+/** Fast route → catalog item lookup for resolving a saved layout to real items. */
+export const NAV_CATALOG_BY_HREF: Map<string, NavItem> = new Map(NAV_CATALOG.map((i) => [i.href, i]));
+
+/** Every selectable route (the customization allowlist). */
+export const NAV_CATALOG_KEYS: string[] = NAV_CATALOG.map((i) => i.href);
+
+/** Default primary-sidebar layout (the curated order) as a list of routes. */
+export const DEFAULT_SIDEBAR_NAV_KEYS: string[] = PRIMARY_NAV.map((i) => i.href);
+
+/**
  * The two role-aware dashboards, listed BELOW the primary destinations (above
  * Shortcuts) in the curated sidebar. Parent → the personal/parent home view;
  * Family → the shared family view. Both are free (everyone).

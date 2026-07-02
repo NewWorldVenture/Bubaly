@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw } from 'lucide-react';
+import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw, Compass } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -26,12 +26,14 @@ import { splitFullName } from '@/lib/onboarding/profile';
 import { cn } from '@/lib/utils/cn';
 import { CalendarSyncPanel } from '@/components/dashboard/calendar-sync-panel';
 import { AppLockSettings } from '@/components/settings/app-lock-settings';
+import { NavigationChoices } from '@/components/settings/navigation-choices';
 import type { Tables } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/database.types';
 
 const SETTINGS_TABS = [
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'family', label: 'Family', icon: Users },
+  { id: 'navigation', label: 'Navigation Choices', icon: Compass },
   { id: 'calendar', label: 'Calendar', icon: RefreshCw },
   { id: 'security', label: 'Security', icon: Lock },
 ] as const;
@@ -43,11 +45,12 @@ type SettingsTab = (typeof SETTINGS_TABS)[number]['id'];
 const TAB_BY_HASH: Record<string, SettingsTab> = {
   profile: 'profile', dashboard: 'profile',
   family: 'family', members: 'family', families: 'family',
+  navigation: 'navigation', 'navigation-choices': 'navigation', sidebar: 'navigation',
   calendar: 'calendar', sync: 'calendar',
   security: 'security', 'app-lock': 'security',
 };
 const HASH_BY_TAB: Record<SettingsTab, string> = {
-  profile: 'profile', family: 'members', calendar: 'calendar', security: 'app-lock',
+  profile: 'profile', family: 'members', navigation: 'navigation', calendar: 'calendar', security: 'app-lock',
 };
 
 export function SettingsModule() {
@@ -312,6 +315,9 @@ export function SettingsModule() {
         </ul>
       </Card>
       </>)}
+
+      {/* Navigation Choices tab */}
+      {tab === 'navigation' && <NavigationChoices />}
 
       {/* Calendar tab */}
       {tab === 'calendar' && (
