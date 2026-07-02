@@ -1,22 +1,31 @@
 // lib/navigation/customize.ts — pure helpers for the customizable Free-tier
-// sidebar. The visible primary destinations are user-customizable (reorder, add,
-// remove, shorten/lengthen) and persist to Supabase
-// (user_preferences.notification_prefs.sidebarNav) so the layout follows the
-// member across devices, with localStorage as an offline cache.
+// sidebar. Both the top-level destinations AND each expandable group's sub-pages
+// are user-customizable (reorder, add, remove, shorten/lengthen) and persist to
+// Supabase (user_preferences.notification_prefs.sidebarNav +
+// .sidebarNavChildren) so the layout follows the member across devices, with
+// localStorage as an offline cache.
 //
 // AI Assistant, Settings, and Help & Support are intentionally NOT part of this
 // list — they render as fixed chrome (top pill + footer) and are never editable.
 //
 // No React/Supabase here — just deterministic sanitization. Tested.
 
-/** Where the persisted sidebar layout lives inside notification_prefs (jsonb). */
+/** Where the persisted top-level layout lives inside notification_prefs (jsonb). */
 export const SIDEBAR_NAV_PREF_KEY = 'sidebarNav';
 
-/** localStorage cache key for instant/offline first paint of the sidebar. */
-export const SIDEBAR_NAV_STORAGE_KEY = 'bubaly.sidebarNav';
+/** Where per-group sub-page layouts live: { parentHref: childHref[] }. */
+export const SIDEBAR_NAV_CHILDREN_PREF_KEY = 'sidebarNavChildren';
 
-/** Same-tab broadcast so the live sidebar updates the moment Settings saves. */
+/** localStorage cache keys for instant/offline first paint of the sidebar. */
+export const SIDEBAR_NAV_STORAGE_KEY = 'bubaly.sidebarNav';
+export const SIDEBAR_NAV_CHILDREN_STORAGE_KEY = 'bubaly.sidebarNavChildren';
+
+/** Same-tab broadcast so the live sidebar updates the moment Settings saves.
+ *  detail: { nav: string[]; children: Record<string, string[]> } */
 export const SIDEBAR_NAV_EVENT = 'bubaly:sidebar-nav-changed';
+
+/** Per-parent map of the sub-pages a member wants, in order. */
+export type NavChildMap = Record<string, string[]>;
 
 /** Max primary destinations the sidebar will render. */
 export const MAX_SIDEBAR_NAV = 20;
@@ -72,4 +81,48 @@ export function resolveNavKeys(
 ): string[] {
   const clean = sanitizeNavKeys(input, validKeys, max);
   return clean.length ? clean : sanitizeNavKeys(defaults, validKeys, max);
+}
+
+/**
+ * Resolve the sub-pages to render under one expandable parent.
+ * - Parent absent from the saved map → the full catalog order (default: show all).
+ * - Parent present → the saved order, filtered to the catalog. This CAN be empty
+ *   (the member removed every sub-page), which turns the parent into a plain link
+ *   — a deliberate, re-addable outcome, so there is NO fallback-to-default here.
+ */
+export function resolveChildKeys(
+  saved: NavChildMap | null | undefined,
+  parentHref: string,
+  childCatalogKeys: readonly string[],
+): string[] {
+  if (!saved || typeof saved !== 'object' || !Object.prototype.hasOwnProperty.call(saved, parentHref)) {
+    return [...childCatalogKeys];
+  }
+  return sanitizeNavKeys(saved[parentHref], childCatalogKeys, MAX_SIDEBAR_NAV);
+}
+
+/**
+ * Sanitize a persisted/incoming child map into a clean { parentHref: childHref[] }.
+ * - drops non-object input and blank parent keys,
+ * - when `validByParent` is given, drops unknown parents and filters each list to
+ *   that parent's valid children,
+ * - keeps explicitly-empty arrays (a removed-all group stays a plain link).
+ */
+export function sanitizeChildMap(
+  input: unknown,
+  validByParent?: ReadonlyMap<string, readonly string[]>,
+): NavChildMap {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  const out: NavChildMap = {};
+  for (const [parent, arr] of Object.entries(input as Record<string, unknown>)) {
+    if (!parent.trim()) continue;
+    if (validByParent) {
+      const valid = validByParent.get(parent);
+      if (!valid) continue; // unknown parent → drop
+      out[parent] = sanitizeNavKeys(arr, valid, MAX_SIDEBAR_NAV);
+    } else {
+      out[parent] = sanitizeNavKeys(arr, undefined, MAX_SIDEBAR_NAV);
+    }
+  }
+  return out;
 }

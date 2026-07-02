@@ -11,17 +11,20 @@ import { Star } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
   DASHBOARD_NAV, SIDEBAR_FOOTER_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS,
-  NAV_CATALOG_BY_HREF, NAV_CATALOG_KEYS, DEFAULT_SIDEBAR_NAV_KEYS, type NavItem,
+  NAV_CATALOG_BY_HREF, NAV_CATALOG_KEYS, DEFAULT_SIDEBAR_NAV_KEYS,
+  NAV_CHILD_KEYS_BY_PARENT, type NavItem,
 } from '@/lib/constants/navigation';
 import {
-  resolveNavKeys, sanitizeNavKeys, SIDEBAR_NAV_STORAGE_KEY, SIDEBAR_NAV_EVENT,
+  resolveNavKeys, sanitizeNavKeys, resolveChildKeys, sanitizeChildMap,
+  SIDEBAR_NAV_STORAGE_KEY, SIDEBAR_NAV_CHILDREN_STORAGE_KEY, SIDEBAR_NAV_EVENT,
+  type NavChildMap,
 } from '@/lib/navigation/customize';
 import { FEATURE_BY_KEY } from '@/lib/dashboard/registry';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { saveDashboardLayoutAction } from '@/app/(app)/dashboard/customize-actions';
-import { loadSidebarNav } from '@/app/(app)/dashboard/navigation-actions';
+import { loadSidebarPrefs } from '@/app/(app)/dashboard/navigation-actions';
 import { useApp } from './app-context';
 import { resolveItems, NavEntry, AiAssistantNavButton } from './nav-shared';
 import { SidebarAccount } from './sidebar-account';
@@ -72,9 +75,19 @@ function useLiveUnread(initial: number, familyId: string, userId: string): numbe
   return count;
 }
 
+function readCachedChildMap(): NavChildMap {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(SIDEBAR_NAV_CHILDREN_STORAGE_KEY);
+    if (raw) return sanitizeChildMap(JSON.parse(raw), NAV_CHILD_KEYS_BY_PARENT);
+  } catch { /* ignore */ }
+  return {};
+}
+
 /**
- * The member's customized primary destinations (Navigation Choices). Source of
- * truth is Supabase (user_preferences.notification_prefs.sidebarNav via the
+ * The member's customized primary destinations AND per-group sub-pages
+ * (Navigation Choices). Source of truth is Supabase
+ * (user_preferences.notification_prefs.sidebarNav + .sidebarNavChildren via the
  * server action); localStorage is an instant/offline cache and a same-tab
  * `SIDEBAR_NAV_EVENT` keeps the live rail in sync the moment Settings saves.
  * Falls back to the curated default order until a saved layout loads.
@@ -91,15 +104,23 @@ function useSidebarNav(): NavItem[] {
     } catch { /* ignore */ }
     return DEFAULT_SIDEBAR_NAV_KEYS;
   });
+  const [childMap, setChildMap] = useState<NavChildMap>(readCachedChildMap);
 
   // Supabase is authoritative — reconcile once on mount.
   useEffect(() => {
     let active = true;
-    loadSidebarNav().then((saved) => {
-      if (!active || saved == null) return;
-      const clean = resolveNavKeys(saved, DEFAULT_SIDEBAR_NAV_KEYS, NAV_CATALOG_KEYS);
-      setKeys(clean);
-      try { window.localStorage.setItem(SIDEBAR_NAV_STORAGE_KEY, JSON.stringify(clean)); } catch { /* ignore */ }
+    loadSidebarPrefs().then(({ nav, children }) => {
+      if (!active) return;
+      if (nav != null) {
+        const clean = resolveNavKeys(nav, DEFAULT_SIDEBAR_NAV_KEYS, NAV_CATALOG_KEYS);
+        setKeys(clean);
+        try { window.localStorage.setItem(SIDEBAR_NAV_STORAGE_KEY, JSON.stringify(clean)); } catch { /* ignore */ }
+      }
+      if (children != null) {
+        const clean = sanitizeChildMap(children, NAV_CHILD_KEYS_BY_PARENT);
+        setChildMap(clean);
+        try { window.localStorage.setItem(SIDEBAR_NAV_CHILDREN_STORAGE_KEY, JSON.stringify(clean)); } catch { /* ignore */ }
+      }
     });
     return () => { active = false; };
   }, []);
@@ -107,8 +128,9 @@ function useSidebarNav(): NavItem[] {
   // Live update when the Settings editor saves a new layout in this tab.
   useEffect(() => {
     const onChange = (e: Event) => {
-      const next = (e as CustomEvent<string[]>).detail;
-      setKeys(resolveNavKeys(next, DEFAULT_SIDEBAR_NAV_KEYS, NAV_CATALOG_KEYS));
+      const detail = (e as CustomEvent<{ nav: string[]; children: NavChildMap }>).detail;
+      if (detail?.nav) setKeys(resolveNavKeys(detail.nav, DEFAULT_SIDEBAR_NAV_KEYS, NAV_CATALOG_KEYS));
+      if (detail?.children) setChildMap(sanitizeChildMap(detail.children, NAV_CHILD_KEYS_BY_PARENT));
     };
     window.addEventListener(SIDEBAR_NAV_EVENT, onChange);
     return () => window.removeEventListener(SIDEBAR_NAV_EVENT, onChange);
@@ -117,8 +139,18 @@ function useSidebarNav(): NavItem[] {
   return useMemo(
     () => resolveNavKeys(keys, DEFAULT_SIDEBAR_NAV_KEYS, NAV_CATALOG_KEYS)
       .map((href) => NAV_CATALOG_BY_HREF.get(href))
-      .filter((i): i is NavItem => Boolean(i)),
-    [keys],
+      .filter((i): i is NavItem => Boolean(i))
+      .map((item) => {
+        const childCatalog = item.children;
+        if (!childCatalog || childCatalog.length === 0) return item;
+        // Override the group's sub-pages with the member's chosen order/subset.
+        const byHref = new Map(childCatalog.map((c) => [c.href, c]));
+        const children = resolveChildKeys(childMap, item.href, childCatalog.map((c) => c.href))
+          .map((h) => byHref.get(h))
+          .filter((c): c is NavItem => Boolean(c));
+        return { ...item, children };
+      }),
+    [keys, childMap],
   );
 }
 

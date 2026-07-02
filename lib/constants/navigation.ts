@@ -317,6 +317,17 @@ export const NAV_CATALOG_KEYS: string[] = NAV_CATALOG.map((i) => i.href);
 /** Default primary-sidebar layout (the curated order) as a list of routes. */
 export const DEFAULT_SIDEBAR_NAV_KEYS: string[] = PRIMARY_NAV.map((i) => i.href);
 
+/** Per-parent catalog of sub-pages (only for the expandable groups). The full
+ *  set a member can reorder/remove/re-add under each group. */
+export const NAV_CHILD_CATALOG_BY_PARENT: Map<string, NavItem[]> = new Map(
+  NAV_CATALOG.filter((i) => i.children && i.children.length > 0).map((i) => [i.href, i.children as NavItem[]]),
+);
+
+/** Per-parent default (and valid) sub-page routes, in catalog order. */
+export const NAV_CHILD_KEYS_BY_PARENT: Map<string, string[]> = new Map(
+  [...NAV_CHILD_CATALOG_BY_PARENT.entries()].map(([parent, kids]) => [parent, kids.map((k) => k.href)]),
+);
+
 /**
  * The two role-aware dashboards, listed BELOW the primary destinations (above
  * Shortcuts) in the curated sidebar. Parent → the personal/parent home view;
