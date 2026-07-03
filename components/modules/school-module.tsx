@@ -353,7 +353,7 @@ export function SchoolModule() {
                             </td>
                             <td className="px-4 py-3.5 capitalize text-fg">{(e.event_type ?? 'general').replace('_', ' ')}</td>
                             <td className="px-4 py-3.5"><p className="font-medium">{due.label}</p><p className={cn('text-xs', due.urgent ? 'text-orange-400' : 'text-muted')}>{due.sub}</p></td>
-                            <td className="px-4 py-3.5"><button className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
+                            <td className="px-4 py-3.5"><button aria-label="More options" className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
                           </tr>
                         );
                       })}

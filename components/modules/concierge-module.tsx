@@ -439,7 +439,7 @@ function PlanDetail({ plan, familyId, userId, onClose, onDelete, onRefresh }: {
   return (
     <div className="sidebar-card space-y-4">
       <div className="flex items-center gap-2">
-        <button onClick={onClose} className="text-muted hover:text-fg"><ArrowLeft className="h-4 w-4" /></button>
+        <button onClick={onClose} aria-label="Back" className="text-muted hover:text-fg"><ArrowLeft className="h-4 w-4" /></button>
         <div className={cn('grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg', cfg.color)}>
           <cfg.icon className="h-3.5 w-3.5" />
         </div>

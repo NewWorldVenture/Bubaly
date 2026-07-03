@@ -237,7 +237,7 @@ export function SportsModule() {
                           <td className="px-4 py-3.5">
                             <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold', isGame ? 'bg-violet-500/15 text-violet-300 border border-violet-500/25' : 'bg-blue-500/15 text-blue-300 border border-blue-500/25')}>{e.event_type}</span>
                           </td>
-                          <td className="px-4 py-3.5"><button className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
+                          <td className="px-4 py-3.5"><button aria-label="More options" className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
                         </tr>
                       );
                     })}

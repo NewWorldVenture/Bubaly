@@ -399,7 +399,7 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 border-b border-border px-4 py-3 flex-shrink-0">
-        <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-fg">
+        <button onClick={onClose} aria-label="Back" className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-fg">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className={cn('grid h-9 w-9 place-items-center rounded-xl flex-shrink-0', st.color)}>

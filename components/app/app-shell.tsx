@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
-import { ChevronDown, Check, Gift, Home, Lock, LogOut, Menu, Mic, Plus, Search, Send, Settings as SettingsIcon, ShieldCheck, UserCog, X } from 'lucide-react';
+import { ChevronDown, Check, Gift, Home, Lock, LogOut, Menu, Plus, Search, Settings as SettingsIcon, ShieldCheck, UserCog, X } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { APP_NAV_GROUPS, MOBILE_TABS, CAPTURE_TAB_INDEX, type NavItem } from '@/lib/constants/navigation';
@@ -435,20 +435,3 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function AssistantInputBar() {
-  return (
-    <div className="flex min-h-20 items-center gap-2 rounded-2xl border border-border bg-surface/40 px-3 sm:min-h-24 sm:gap-3 sm:px-4">
-      <Plus className="h-5 w-5 text-muted sm:h-6 sm:w-6" />
-      <input
-        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted sm:text-base"
-        placeholder="Ask anything or give a command..."
-      />
-      <button className="grid h-10 w-10 place-items-center rounded-full bg-brand sm:h-12 sm:w-12">
-        <Mic className="h-5 w-5 text-brand-fg sm:h-6 sm:w-6" />
-      </button>
-      <button className="grid h-10 w-10 place-items-center rounded-full bg-elevated sm:h-12 sm:w-12">
-        <Send className="h-5 w-5 sm:h-6 sm:w-6" />
-      </button>
-    </div>
-  );
-}

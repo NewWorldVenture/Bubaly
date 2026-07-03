@@ -275,8 +275,8 @@ function HabitCard({ habit, today, logDates, memberName, onToggle, onEdit, onArc
       </div>
 
       <div className="mt-3 flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
-        <button onClick={onEdit} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-        <button onClick={() => { if (confirm('Archive this habit?')) onArchive(); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Archive className="h-3.5 w-3.5" /></button>
+        <button onClick={onEdit} aria-label="Edit habit" className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+        <button onClick={() => { if (confirm('Archive this habit?')) onArchive(); }} aria-label="Archive habit" className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Archive className="h-3.5 w-3.5" /></button>
       </div>
     </div>
   );
