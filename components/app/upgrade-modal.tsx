@@ -11,6 +11,7 @@ import {
 } from '@/lib/constants/plans';
 import type { StripePlan } from '@/lib/stripe';
 import { useApp } from './app-context';
+import { describeDbError } from '@/lib/supabase/errors';
 
 /** Stripe checkout — same endpoint the billing module uses. */
 async function startCheckout(plan: StripePlan): Promise<string | null> {
@@ -76,7 +77,7 @@ export function UpgradeModal({
       if (url) window.location.href = url;
     } catch (err) {
       setPending(null);
-      toastError(err instanceof Error ? err.message : 'Could not start checkout');
+      toastError(describeDbError(err, 'Could not start checkout'));
     }
   }
 

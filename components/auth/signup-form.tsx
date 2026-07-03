@@ -12,6 +12,7 @@ import { signUpSchema, fieldErrors } from '@/lib/validation';
 import { OAuthButtons, authButtonClass } from '@/components/auth/oauth-buttons';
 import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
+import { describeDbError } from '@/lib/supabase/errors';
 
 export function SignupForm() {
   const router = useRouter();
@@ -57,7 +58,7 @@ export function SignupForm() {
       router.push('/onboarding');
       router.refresh();
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Could not create account');
+      toastError(describeDbError(err, 'Could not create account'));
     } finally {
       setLoading(false);
     }

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { contactSchema, fieldErrors } from '@/lib/validation';
 import { useToast } from '@/components/ui/toast';
+import { describeDbError } from '@/lib/supabase/errors';
 
 export function ContactForm() {
   const { error: toastError } = useToast();
@@ -41,7 +42,7 @@ export function ContactForm() {
       }
       setDone(true);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Something went wrong');
+      toastError(describeDbError(err, 'Something went wrong'));
     } finally {
       setLoading(false);
     }

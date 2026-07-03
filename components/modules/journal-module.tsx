@@ -130,7 +130,7 @@ function PromptCard({ onWrite }: { onWrite: (prompt: string) => void }) {
       if (!res.ok || !json.prompt) throw new Error(json.error || 'Could not get a prompt');
       setPrompt(json.prompt);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Could not get a prompt');
+      toastError(describeDbError(err, 'Could not get a prompt'));
     } finally {
       setLoading(false);
     }

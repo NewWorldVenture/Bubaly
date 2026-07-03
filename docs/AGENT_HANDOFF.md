@@ -1,9 +1,22 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-07-03 — Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
+Last updated: 2026-07-03 — Mobile polish merged (#210: scrollable wide tables, safe-area overlays, a11y labels), public-route overflow e2e guard (`tests/e2e/overflow.spec.ts`), and the FINAL describeDbError sweep (zero raw `err.message` toast paths remain). Earlier same day: Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-03 SESSION — Mobile polish shipped (#210) + overflow e2e guard + last describeDbError sweep (branch `claude/db-error-sweep`)
+> - **#210 MERGED to main**: 6 broken wide tables → `overflow-x-auto` + `min-w`; safe-area padding on all
+>   full-screen overlays (camera, photos lightbox, briefing, Front Desk/Inbox panels, Messages About drawer,
+>   admin header → `.app-topbar`); icon-only `aria-label` pass; dead `AssistantInputBar` removed from app-shell.
+> - **NEW `tests/e2e/overflow.spec.ts`** — public-route no-horizontal-scroll guard (12 routes × 320/390/768/1024,
+>   ≤1px tolerance). Passes locally (12/12 in 3.3m) and runs in CI's existing e2e job. Extend `PUBLIC_ROUTES`
+>   to authed routes once CI can log in.
+> - **describeDbError sweep COMPLETE**: the last 20 files still showing raw `err.message` in toasts now go
+>   through `describeDbError(err, fallback)` (auth forms, quick-capture, capture-shell, wallet dashboard +
+>   child detail, calendar/habits/journal/notes/recipes/focus/autopilot, find-time, avatar-picker,
+>   upgrade-modal, contact + public form renderers, admin subscriptions). Repo-wide there are now ZERO
+>   `err instanceof Error ? err.message` toast paths left.
+>
 > ## 🗓️ 2026-07-03 SESSION — Migration-chain repair + consolidated RLS drift healer (branch `claude/handoff-continue`)
 > Closed the standing "audit EVERY family-scoped table for RLS drift" TODO and made the migration chain
 > **replayable from scratch** (validated 0001→0118 end-to-end on a throwaway PG16 with auth/storage stubs).
@@ -140,11 +153,11 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 > changed files, **1496 tests pass**, `next build` exit 0.
 >
 > **REMAINING mobile work (prioritized, per-route — NOT yet done):**
-> - **Live responsive/overflow testing** could not run here (the app needs auth + Supabase env to boot; only
->   static marketing pages render via `npm start`). Add a Playwright pass in CI that logs in and asserts
->   `document.documentElement.scrollWidth <= window.innerWidth` (no horizontal scroll) on each route at widths
->   **320/360/375/390/414/430/768/820/834/1024/1280**, portrait + landscape. This is the single most valuable
->   next step — it will surface the real per-page overflow offenders.
+> - **Live responsive/overflow testing**: PUBLIC ROUTES DONE (2026-07-03) — `tests/e2e/overflow.spec.ts`
+>   asserts zero horizontal overflow (≤1px subpixel tolerance) on all 12 public routes at widths
+>   **320/390/768/1024** (one navigation per route, viewport resizes between assertions; runs in the existing
+>   CI e2e job; all pass). REMAINING: extend to authenticated routes once CI has a Supabase login (needs a
+>   seeded test user + env secrets) — that's where the per-module offenders will surface.
 > - **Wide tables / grids**: DONE (2026-07-03) — audited every `<table` in the repo; 6 lacked a scroll
 >   wrapper (4 used `overflow-hidden`, which CLIPS on phones). All now use `overflow-x-auto` (+ `min-w`
 >   so columns keep shape): sports standings, social posts-list, auto + home service history, pricing
@@ -156,8 +169,10 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   `var(--safe-top/bottom)`; the admin sticky header reuses `.app-topbar`. (capture-shell was already safe.)
 > - **Native niceties** (Capacitor plugins are installed but not all wired): pull-to-refresh, `@capacitor/haptics`
 >   on key actions, Android hardware back-button handling on modals/drawers (`@capacitor/app` `backButton`).
-> - **A11y sweep**: icon-only buttons missing `aria-label` (grep `<button` without `aria-label`), color-contrast
->   audit of `text-muted` on `bg-surface`, and Dynamic Type / larger-text testing.
+> - **A11y sweep**: icon-only `aria-label` pass DONE (2026-07-03, #210) — scanned every `<button` for
+>   icon-only content with no accessible name; labeled habit edit/archive, Front Desk/Inbox/Concierge back
+>   buttons, school/sports/grocery kebabs, vacations calendar prev/next. REMAINING: color-contrast audit of
+>   `text-muted` on `bg-surface`, Dynamic Type / larger-text testing.
 >
 > ---
 > ## 🗓️ 2026-07-02 SESSION — Files expandable left-nav + hub sub-pages (branch `claude/files-nav-expand`)

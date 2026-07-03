@@ -90,7 +90,7 @@ export function RecipesModule() {
       if (!res.ok) throw new Error(json.error ?? 'Could not get suggestions');
       setTonightPicks(json.picks ?? []);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Could not get suggestions');
+      toastError(describeDbError(err, 'Could not get suggestions'));
     } finally {
       setTonightBusy(false);
     }
@@ -143,7 +143,7 @@ export function RecipesModule() {
       success('AI variant saved to your recipes');
       setViewing(null);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Could not generate variant');
+      toastError(describeDbError(err, 'Could not generate variant'));
     } finally {
       setAiBusy(null);
     }

@@ -13,6 +13,7 @@ import { parseEvent, parseDueDate, suggestKind, splitItems } from '@/lib/capture
 import { saveCapture, undoCapture } from '@/lib/capture/save';
 import { isOpenCaptureKey, isSaveHotkey, isTypingTarget } from '@/lib/capture/shortcut';
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
+import { describeDbError } from '@/lib/supabase/errors';
 
 /** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
 function formatWhen(startsAt: Date, allDay: boolean): string {
@@ -78,7 +79,7 @@ export function QuickCapture() {
       reset();
       setOpen(false);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Could not save');
+      toastError(describeDbError(err, 'Could not save'));
     } finally {
       setSaving(false);
     }
