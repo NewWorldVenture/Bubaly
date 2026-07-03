@@ -12,6 +12,7 @@ import {
   buildTimeline, memoryStats, sharedWithYou, relativeTime,
   type AlbumRow, type PhotoRow, type MemberLite,
 } from '@/lib/memories/memories';
+import { pickOnThisDay } from '@/lib/memories/on-this-day';
 
 export const metadata: Metadata = { title: 'Memories' };
 export const dynamic = 'force-dynamic';
@@ -98,6 +99,8 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const stats = memoryStats({ photos: photoCount ?? 0, videos: videoCount ?? 0, albums: albumCount ?? 0, memories: memoriesCount ?? 0 });
   const shared = sharedWithYou(photos, memberList, myUserId, now);
   const sharedById = new Map(memberList.map((m) => [m.user_id ?? m.id, m]));
+  // Delight: photos taken on today's date in past years (from the already-loaded set).
+  const onThisDay = pickOnThisDay(photos.filter((p) => p.url), now, 6);
 
   const HeaderButton = ({ href, icon: Icon, label, primary }: { href: string; icon: typeof Plus; label: string; primary?: boolean }) => (
     <Link href={href} className={cn(
@@ -298,6 +301,29 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
 
         {/* Right rail */}
         <aside className="space-y-6">
+          {/* On this day — today's memories from past years (only when present). */}
+          {onThisDay.length > 0 && (
+            <div className="rounded-2xl border border-accent/25 bg-gradient-to-br from-accent/10 to-transparent p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-accent" />
+                <h3 className="text-base font-bold">On this day</h3>
+              </div>
+              <p className="mb-3 text-xs text-muted">
+                {onThisDay.length === 1 ? onThisDay[0].label : `${onThisDay.length} memories · from ${onThisDay[onThisDay.length - 1].label}`}
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {onThisDay.slice(0, 6).map((m) => (
+                  <div key={m.id} className="relative aspect-square overflow-hidden rounded-xl bg-elevated">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={m.thumbnail_url || m.url || ''} alt={m.caption ?? 'Family memory'} className="h-full w-full object-cover" loading="lazy" />
+                    <span className="absolute bottom-1 left-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-semibold text-white">{m.label}</span>
+                  </div>
+                ))}
+              </div>
+              {onThisDay[0].caption && <p className="mt-3 truncate text-xs text-muted">“{onThisDay[0].caption}”</p>}
+            </div>
+          )}
+
           {/* Family Moments */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <h3 className="mb-4 text-base font-bold">Family Moments</h3>

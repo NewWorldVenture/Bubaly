@@ -13,8 +13,10 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 > (`taken_at`/`url` not null, newest 400) via `useRealtimeQuery`, filters client-side, and shows a warm strip
 > (accent-tinted, thumbnail stack, span label) linking to `/dashboard/memories`. **Renders `null` on an
 > ordinary day**, so it only appears as a gift, never clutter. Mounted in `app/(app)/home/page.tsx` under the
-> Moments banner. No migration, no writes — pure read. (Next: a fuller `/dashboard/memories` "On this day"
-> section + optional push notification on match.)
+> Moments banner. No migration, no writes — pure read. **Also a dedicated accent card at the top of the
+> `/dashboard/memories` right rail** (server-rendered from the page's already-loaded `family_photos`, reusing
+> `pickOnThisDay` — no new query, 3-col thumbnail grid with per-photo "N years ago" badges; only renders when
+> there are matches). (Next: optional push notification on match.)
 >
 > ## 🗓️ 2026-07-03 SESSION — Anticipatory "Moments" (life-moment orchestration)
 >
