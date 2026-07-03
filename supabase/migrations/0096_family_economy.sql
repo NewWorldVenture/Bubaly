@@ -13,7 +13,13 @@
 -- ============================================================================
 
 DO $$ BEGIN CREATE TYPE economy_direction AS ENUM ('credit','debit'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+-- redemption_status already exists from 0028 with ('requested','approved',
+-- 'fulfilled','rejected'); the swallowed CREATE TYPE here silently left it
+-- without the economy values, so DEFAULT 'pending' below could never apply.
+-- Extend the existing enum idempotently instead (additive, non-breaking).
 DO $$ BEGIN CREATE TYPE redemption_status AS ENUM ('pending','approved','fulfilled','rejected','cancelled'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+ALTER TYPE redemption_status ADD VALUE IF NOT EXISTS 'pending';
+ALTER TYPE redemption_status ADD VALUE IF NOT EXISTS 'cancelled';
 
 -- ---------- the custom currencies ----------
 CREATE TABLE IF NOT EXISTS public.family_currencies (

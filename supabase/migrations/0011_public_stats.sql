@@ -6,6 +6,11 @@
 -- without any row-level access to the underlying tables.
 -- ============================================================
 
+-- Replay-safety: this function references task_status 'done', which historic
+-- databases gained out-of-band (formally backfilled in 0103). Adding it here
+-- idempotently keeps a fresh `db reset` replayable; it is a no-op on prod.
+ALTER TYPE public.task_status ADD VALUE IF NOT EXISTS 'done';
+
 CREATE OR REPLACE FUNCTION public.public_stats()
 RETURNS TABLE (families bigint, members bigint, tasks_completed bigint)
 LANGUAGE sql
