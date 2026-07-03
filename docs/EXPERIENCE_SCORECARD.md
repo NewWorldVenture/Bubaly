@@ -23,7 +23,7 @@ next*); this is *how good each journey is now*.
 |---|---|---|---|---|---|---|---|---|
 | **Capture a thought** (type→filed) | 2–3 | 1 | 0 | ~8s | ✅ | ✅ optimistic + Undo toast | ✅ Undo | FAB/`c` → type → AI routes. Strong. |
 | **Get ready for an event** (set leave-by reminder) | **1** | 0 | **0** | ~3s | ✅ | ✅ inline states | ✅ reversible (reminders) | Home banner inline "Remind me" (Friction #1). Was 3+ taps + a screen switch. |
-| **Add snacks for the game** | 1 | 0 | 0 | ~3s | ✅ | ✅ | ⚠️ no undo on add | Moment "Add N" → deduped grocery insert (Friction/​Moments). Add an undo. |
+| **Add snacks for the game** | 1 | 0 | 0 | ~3s | ✅ | ✅ | ✅ **Undo** in toast | Moment "Add N" → deduped grocery insert; toast offers Undo that deletes exactly the inserted rows. |
 | **Add a memory** (photo→saved) | 3–5 | 1 | 0–1 | ~20s | ✅ | ⚠️ upload has no progress bar | ⚠️ | In-app camera OR upload; multi-shot. Add upload progress. |
 | **Plan tonight's dinner** | 4–6 | 0–1 | 1–2 | ~30s | ✅ | ✅ | ✅ | Meals module. Candidate for a one-tap "plan tonight" NL command (backlog #2). |
 | **Check "what needs me now"** | 0–1 | 0 | 0 | ~5s read | ✅ | ✅ | n/a | Home Mission Control + moment banner. Static across day → backlog #7 (time-of-day). |

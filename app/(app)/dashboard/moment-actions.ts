@@ -55,7 +55,7 @@ export async function setMomentPrepDoneAction(input: { eventId: string; doneIds:
  *  (case-insensitive), so tapping twice never duplicates. Returns how many were added. */
 export async function addMomentGroceryAction(input: {
   familyId: string; items: string[];
-}): Promise<Result & { added?: number }> {
+}): Promise<Result & { added?: number; ids?: string[] }> {
   const ctx = await requireUserContext();
   const names = Array.from(new Set((input.items ?? [])
     .map((s) => (typeof s === 'string' ? s.trim() : ''))
@@ -82,13 +82,25 @@ export async function addMomentGroceryAction(input: {
     .select('name').eq('list_id', listId).eq('is_checked', false);
   const have = new Set((existing ?? []).map((r) => r.name.trim().toLowerCase()));
   const toAdd = names.filter((n) => !have.has(n.toLowerCase()));
-  if (toAdd.length === 0) return { ok: true, added: 0 };
+  if (toAdd.length === 0) return { ok: true, added: 0, ids: [] };
 
-  const { error } = await supabase.from('grocery_items').insert(
+  const { data: inserted, error } = await supabase.from('grocery_items').insert(
     toAdd.map((name) => ({ family_id: input.familyId, list_id: listId as string, name, created_by: ctx.user.id })),
-  );
+  ).select('id');
   if (error) return { ok: false, error: error.message };
-  return { ok: true, added: toAdd.length };
+  return { ok: true, added: toAdd.length, ids: (inserted ?? []).map((r) => r.id) };
+}
+
+/** Undo an "add to grocery" — deletes exactly the rows the moment just inserted. */
+export async function removeMomentGroceryAction(input: { ids: string[] }): Promise<Result> {
+  await requireUserContext();
+  const ids = (input.ids ?? []).filter((v) => typeof v === 'string' && v);
+  if (ids.length === 0) return { ok: true };
+  const supabase = await createServer();
+  // RLS scopes the delete to the caller's family; ids came straight from the insert.
+  const { error } = await supabase.from('grocery_items').delete().in('id', ids);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 /** Turn a prep step into a real reminder (e.g. "Leave for Soccer game" at the leave-by time). */

@@ -29,6 +29,7 @@ import { findOverlaps } from '@/lib/moments/conflicts';
 import { reminderTimeFor } from '@/lib/moments/reminders';
 import {
   loadMomentPrep, setMomentPrepDoneAction, createMomentReminderAction, addMomentGroceryAction,
+  removeMomentGroceryAction,
 } from '@/app/(app)/dashboard/moment-actions';
 
 type Event = Tables<'calendar_events'>;
@@ -100,7 +101,20 @@ export function MomentsView() {
     const res = await addMomentGroceryAction({ familyId, items: item.groceryItems });
     setPending((p) => { const n = new Set(p); n.delete(key); return n; });
     if (!res.ok) return toastError(res.error ?? 'Could not add to list');
-    success(res.added ? `Added ${res.added} to your grocery list` : 'Already on your list');
+    if (res.added && res.ids?.length) {
+      const ids = res.ids;
+      success(`Added ${res.added} to your grocery list`, {
+        label: 'Undo',
+        onClick: () => {
+          void removeMomentGroceryAction({ ids }).then((r) => {
+            if (!r.ok) toastError(r.error ?? 'Could not undo');
+            else if ((done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
+          });
+        },
+      });
+    } else {
+      success('Already on your list');
+    }
     if (!(done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
   }
 
