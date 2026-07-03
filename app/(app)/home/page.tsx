@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
 import { familyScore } from '@/lib/home/family-score';
 import { HomeMomentCard } from '@/components/moments/home-moment-card';
+import { OnThisDayCard } from '@/components/memories/on-this-day-card';
 import {
   summarizeMonthFinances, usd, memberTagline, weekStrip, isoDate, type HomeTxn,
 } from '@/lib/home/home-data';
@@ -230,6 +231,9 @@ export default async function HomePage() {
       {/* Anticipatory "Get ready" banner — the next imminent moment's prep, or
           nothing when the horizon is clear. See /dashboard/moments. */}
       <HomeMomentCard />
+
+      {/* Delight: today's memories from past years, or nothing on an ordinary day. */}
+      <OnThisDayCard />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* My Family */}
