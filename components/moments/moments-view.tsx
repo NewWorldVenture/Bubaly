@@ -28,6 +28,7 @@ import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { findOverlaps } from '@/lib/moments/conflicts';
 import { reminderTimeFor } from '@/lib/moments/reminders';
 import { groupMoments } from '@/lib/moments/grouping';
+import { summarizeMoments } from '@/lib/moments/summary';
 import {
   loadMomentPrep, setMomentPrepDoneAction, createMomentReminderAction, addMomentGroceryAction,
   removeMomentGroceryAction,
@@ -85,6 +86,8 @@ export function MomentsView() {
 
   // Real double-bookings among the upcoming timed events (before they surprise you).
   const clashes = useMemo(() => findOverlaps(rows ?? []), [rows]);
+  // One-glance tally for the summary strip.
+  const summary = useMemo(() => summarizeMoments(moments, done, clashes), [moments, done, clashes]);
 
   async function toggle(eventId: string, itemId: string) {
     const current = done[eventId] ?? [];
@@ -141,6 +144,21 @@ export function MomentsView() {
         title="Moments"
         description="Your next events, already prepped. FamilyOS lines up everything each one needs — you just tap."
       />
+
+      {!loading && moments.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+          <span className="rounded-full bg-elevated px-2.5 py-1 text-muted">{summary.total} upcoming</span>
+          {summary.needPrep > 0 && (
+            <span className="rounded-full bg-brand/15 px-2.5 py-1 text-brand">{summary.needPrep} need prep</span>
+          )}
+          {summary.ready > 0 && (
+            <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-emerald-500">{summary.ready} ready</span>
+          )}
+          {summary.conflicts > 0 && (
+            <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-amber-500">{summary.conflicts} conflict{summary.conflicts === 1 ? '' : 's'}</span>
+          )}
+        </div>
+      )}
 
       {loading ? <SkeletonList /> : moments.length === 0 ? (
         <EmptyState
