@@ -45,6 +45,7 @@ over adding another form.
 | 8 | Roles (child/teen/grandparent/caregiver/babysitter/guest) largely see the same surfaces. | Role-tailored Home + nav density/language per `family_members.role`. | Med | L | ★ | ui | roles | Todo |
 | 9 | ~24 internal `/admin/**` tables still clip on mobile (family-facing ones fixed). | Wrap in `overflow-x-auto` in an admin-mobile pass. | Low | S | ★★ | admin | — | Todo |
 | 10 | Recurring routines (school mornings, weekly practice) aren't recognized as reusable templates. | Detect recurring event clusters → offer a saved "routine" with its prep bundle. | Med | L | ★ | engine | autopilot twin | Todo |
+| 11 | Moment reminders all fired at a blanket ~20h/2h, so a packing nudge and a shopping nudge landed at the same unhelpful time. | Per-domain lead times (packing → night before, shopping → 2 days out, photo → at event). | Med | S | ★★★ | engine | — | ✅ **DONE** (5887a60+) |
 
 *(Re-rank as items ship. Add newly-found friction with a one-line "felt problem".)*
 
@@ -64,3 +65,12 @@ over adding another form.
   used by both surfaces — removed the duplicated effect from `MomentsView`.
   Next: **#4** (Autopilot self-completion, High / M) or **#7** (time-of-day
   Mission Control, Med / M).
+- **2026-07-03** — Shipped **#11** (newly surfaced): smart reminder timing.
+  `lib/moments/reminders.ts` (`reminderLeadMinutes` / `reminderTimeFor`, tested,
+  6 cases) picks a per-domain lead time (packing → night before, shopping →
+  ~2 days out, photo → at the event, leave-by → the leave time) and clamps to
+  the future. Wired into both remind paths (Moments page + Home banner),
+  replacing the blanket 20h/2h. Expected benefit: reminders arrive when they're
+  actually actionable. #4 and #7 remain (bigger; #4 touches the shared Autopilot
+  engine + cron, #7 the contended home/page.tsx — sequence carefully vs parallel
+  sessions).

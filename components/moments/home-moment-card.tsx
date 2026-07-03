@@ -18,6 +18,7 @@ import type { Tables } from '@/lib/database.types';
 import { buildMomentPrep, momentWhen, type PrepDomain, type MomentEvent } from '@/lib/moments/prep';
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { weatherAdvisory, dayKey } from '@/lib/moments/weather';
+import { reminderTimeFor } from '@/lib/moments/reminders';
 import { useDefaultForecast } from '@/components/moments/use-default-forecast';
 import { createMomentReminderAction } from '@/app/(app)/dashboard/moment-actions';
 
@@ -68,12 +69,12 @@ export function HomeMomentCard() {
   const primaryReminder = useMemo(() => {
     if (!moment) return null;
     const { event, prep } = moment;
-    if (prep.leaveByISO) return { title: `Leave for ${event.title}`, at: prep.leaveByISO };
+    if (prep.leaveByISO) {
+      return { title: `Leave for ${event.title}`, at: reminderTimeFor({ domain: 'time', stepId: 'leave-by', eventStartsAtISO: event.starts_at, leaveByISO: prep.leaveByISO }) };
+    }
     const step = prep.items.find((i) => i.reminderTitle);
     if (!step) return null;
-    const start = new Date(event.starts_at).getTime();
-    const at = new Date(Math.max(Date.now() + 60000, start - 20 * 3600000)).toISOString();
-    return { title: step.reminderTitle as string, at };
+    return { title: step.reminderTitle as string, at: reminderTimeFor({ domain: step.domain, stepId: step.id, eventStartsAtISO: event.starts_at }) };
   }, [moment]);
 
   if (!moment) return null;

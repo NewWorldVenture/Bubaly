@@ -26,6 +26,7 @@ import {
 } from '@/lib/moments/prep';
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { findOverlaps } from '@/lib/moments/conflicts';
+import { reminderTimeFor } from '@/lib/moments/reminders';
 import {
   loadMomentPrep, setMomentPrepDoneAction, createMomentReminderAction, addMomentGroceryAction,
 } from '@/app/(app)/dashboard/moment-actions';
@@ -107,11 +108,9 @@ export function MomentsView() {
     const key = `${event.id}:${item.id}`;
     if (pending.has(key)) return;
     setPending((p) => new Set(p).add(key));
-    // Leave-by fires at the leave time; other steps nudge the evening before (or 2h out).
-    const start = new Date(event.starts_at).getTime();
-    const remindAtISO = item.id === 'leave-by' && leaveByISO
-      ? leaveByISO
-      : new Date(Math.max(Date.now() + 60000, start - 20 * 3600000)).toISOString();
+    // Fire at a sensible per-domain lead time (leave-by → leave time, packing →
+    // night before, shopping → a couple days out, photo → at the event).
+    const remindAtISO = reminderTimeFor({ domain: item.domain, stepId: item.id, eventStartsAtISO: event.starts_at, leaveByISO });
     const res = await createMomentReminderAction({
       familyId, title: item.reminderTitle ?? item.label, remindAtISO, eventId: event.id,
     });
