@@ -29,6 +29,7 @@ export function CreateMemory() {
   const [title, setTitle] = useState('');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [done, setDone] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
 
@@ -59,6 +60,7 @@ export function CreateMemory() {
   async function save() {
     if (!canSave) return;
     setSaving(true);
+    setProgress({ done: 0, total: picks.length });
     const supabase = createClient();
     const trimmedNote = note.trim();
     // Fold the note into the caption: the Memories timeline surfaces any captioned
@@ -66,30 +68,40 @@ export function CreateMemory() {
     const caption = trimmedNote ? `${title.trim()} — ${trimmedNote}` : title.trim();
     const takenAt = new Date().toISOString();
     let saved = 0;
-    for (const { file } of picks) {
+    for (let i = 0; i < picks.length; i++) {
+      const { file } = picks[i];
       const ext = file.name.split('.').pop() || 'jpg';
       const path = `${familyId}/photos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { data: stored, error: upErr } = await supabase.storage
         .from('family-media')
         .upload(path, file, { upsert: false, cacheControl: '31536000' });
-      if (upErr) { toastError(`Couldn’t upload ${file.name}: ${upErr.message}`); continue; }
-      const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
-      const { data: row, error: insErr } = await supabase.from('family_photos').insert({
-        family_id: familyId,
-        uploaded_by: userId,
-        storage_path: stored.path,
-        url: publicUrl,
-        caption,
-        taken_at: takenAt,
-        size_bytes: file.size,
-        media_type: 'image',
-      }).select('id').single();
-      if (insErr || !row) { toastError(describeDbError(insErr ?? { message: 'Could not save memory' })); continue; }
-      // Mark it a favorite so it also shows in the Photos "Favorites" tab.
-      await supabase.from('family_photos').update({ is_favorite: true }).eq('id', row.id);
-      saved++;
+      if (upErr) {
+        toastError(`Couldn’t upload ${file.name}: ${upErr.message}`);
+      } else {
+        const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
+        const { data: row, error: insErr } = await supabase.from('family_photos').insert({
+          family_id: familyId,
+          uploaded_by: userId,
+          storage_path: stored.path,
+          url: publicUrl,
+          caption,
+          taken_at: takenAt,
+          size_bytes: file.size,
+          media_type: 'image',
+        }).select('id').single();
+        if (insErr || !row) {
+          toastError(describeDbError(insErr ?? { message: 'Could not save memory' }));
+        } else {
+          // Mark it a favorite so it also shows in the Photos "Favorites" tab.
+          await supabase.from('family_photos').update({ is_favorite: true }).eq('id', row.id);
+          saved++;
+        }
+      }
+      // Advance the visible progress after each file (success or skip).
+      setProgress({ done: i + 1, total: picks.length });
     }
     setSaving(false);
+    setProgress(null);
     if (saved === 0) return; // errors already surfaced
     setDone(true);
   }
@@ -194,8 +206,28 @@ export function CreateMemory() {
 
       <Button className="mt-7 w-full" disabled={!canSave} onClick={save}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-        {saving ? 'Saving…' : 'Save memory'}
+        {saving
+          ? progress && progress.total > 1
+            ? `Uploading ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…`
+            : 'Saving…'
+          : `Save memory${picks.length > 1 ? ` (${picks.length} photos)` : ''}`}
       </Button>
+
+      {/* Upload progress — honest per-file bar so multi-photo saves aren't a blind wait. */}
+      {saving && progress && (
+        <div className="mt-3" aria-live="polite">
+          <div className="h-1.5 overflow-hidden rounded-full bg-border">
+            <div
+              className="h-full rounded-full bg-brand transition-[width] duration-300"
+              style={{ width: `${Math.round((progress.done / Math.max(progress.total, 1)) * 100)}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-center text-xs text-muted">
+            {progress.done} of {progress.total} uploaded
+          </p>
+        </div>
+      )}
+
       {picks.length === 0 && (
         <p className="mt-2 text-center text-xs text-muted">Add at least one photo to save a memory.</p>
       )}
