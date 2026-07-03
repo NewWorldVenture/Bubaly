@@ -9,7 +9,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Sparkles, Clock, CloudSun, Backpack, ShoppingCart, PiggyBank, Stethoscope,
-  Camera, CalendarDays, ChevronRight, Bell, Check, Loader2,
+  Camera, CalendarDays, ChevronRight, Bell, Check, Loader2, AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -19,6 +19,7 @@ import { buildMomentPrep, momentWhen, type PrepDomain, type MomentEvent } from '
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { weatherAdvisory, dayKey } from '@/lib/moments/weather';
 import { reminderTimeFor } from '@/lib/moments/reminders';
+import { findOverlaps } from '@/lib/moments/conflicts';
 import { useDefaultForecast } from '@/components/moments/use-default-forecast';
 import { createMomentReminderAction } from '@/app/(app)/dashboard/moment-actions';
 
@@ -80,6 +81,8 @@ export function HomeMomentCard() {
   if (!moment) return null;
   const { event, prep } = moment;
   const steps = prep.items.slice(0, 4);
+  // Warn on Home too if this moment double-books with another event.
+  const clash = findOverlaps(rows ?? [])[event.id];
 
   async function setReminder() {
     if (!primaryReminder || remindState !== 'idle') return;
@@ -105,6 +108,12 @@ export function HomeMomentCard() {
           </div>
           <p className="truncate text-sm font-bold sm:text-base">{event.title}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {clash?.length ? (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 px-2 py-1 text-xs font-semibold text-amber-500">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                Overlaps {clash[0]}{clash.length > 1 ? ` +${clash.length - 1}` : ''}
+              </span>
+            ) : null}
             {prep.leaveByISO && (
               <span className="inline-flex items-center gap-1 rounded-lg bg-elevated px-2 py-1 text-xs font-semibold">
                 <Clock className="h-3.5 w-3.5 text-brand" />

@@ -26,7 +26,7 @@ next*); this is *how good each journey is now*.
 | **Add snacks for the game** | 1 | 0 | 0 | ~3s | ✅ | ✅ | ✅ **Undo** in toast | Moment "Add N" → deduped grocery insert; toast offers Undo that deletes exactly the inserted rows. |
 | **Add a memory** (photo→saved) | 3–5 | 1 | 0–1 | ~20s | ✅ | ⚠️ upload has no progress bar | ⚠️ | In-app camera OR upload; multi-shot. Add upload progress. |
 | **Plan tonight's dinner** | 4–6 | 0–1 | 1–2 | ~30s | ✅ | ✅ | ✅ | Meals module. Candidate for a one-tap "plan tonight" NL command (backlog #2). |
-| **Check "what needs me now"** | 0–1 | 0 | 0 | ~5s read | ✅ | ✅ | n/a | Home Mission Control + moment banner. Static across day → backlog #7 (time-of-day). |
+| **Check "what needs me now"** | 0–1 | 0 | 0 | ~5s read | ✅ | ✅ | n/a | Home Mission Control + moment banner (now shows leave-by, real weather, birthdays, **double-booking warnings**, one-tap remind). Static across day → backlog #7 (time-of-day). |
 | **Onboarding → first value** | ~8–12 | 3–5 | several | ~2–4 min | ⚠️ | ⚠️ | ⚠️ | Longest journey; biggest opportunity to defer/infer fields. Not yet audited this session. |
 | **Customize the sidebar** | 2–4/change | 0 | 0 | ~15s | ✅ | ✅ live | ✅ reset | Settings → Navigation Choices. Solid. |
 
