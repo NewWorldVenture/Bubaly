@@ -6,6 +6,7 @@ import { uploadAvatar } from '@/lib/storage/avatars';
 import { createClient } from '@/lib/supabase/client';
 import { initials } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { describeDbError } from '@/lib/supabase/errors';
 
 function presetSvgUrl(from: string, to: string, id: string): string {
   const svg = [
@@ -67,7 +68,7 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
       if (upErr) throw new Error(upErr);
       setSelected(url ?? '');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      setError(describeDbError(err, 'Upload failed'));
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';

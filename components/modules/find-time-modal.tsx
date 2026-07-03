@@ -75,7 +75,7 @@ export function FindTimeModal({
       if (json.error) throw new Error(json.error);
       setSlots(json.slots ?? []);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Could not find times');
+      toastError(describeDbError(err, 'Could not find times'));
       setSlots([]);
     } finally {
       setLoading(false);

@@ -26,6 +26,7 @@ import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import {
   addFundsAction, requestSpendAction, decideSpendRequestAction, sendMoneyAction, decideAllowanceRequestAction,
 } from '@/app/(app)/wallet/actions';
+import { describeDbError } from '@/lib/supabase/errors';
 
 type Coaching = { headline: string; insights: string[]; suggestion: string };
 
@@ -100,7 +101,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
       if (!res.ok || !json.coaching) throw new Error(json.error || 'Could not get coaching');
       setCoach(json.coaching);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Coach failed');
+      toastError(describeDbError(err, 'Coach failed'));
     } finally {
       setCoachLoading(false);
     }

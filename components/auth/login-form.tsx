@@ -13,6 +13,7 @@ import { OAuthButtons, authButtonClass } from '@/components/auth/oauth-buttons';
 import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
 import { resolveLandingPathAction } from '@/app/(auth)/actions';
+import { describeDbError } from '@/lib/supabase/errors';
 
 export function LoginForm() {
   const router = useRouter();
@@ -44,7 +45,7 @@ export function LoginForm() {
       router.push(destination);
       router.refresh();
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Could not sign in');
+      toastError(describeDbError(err, 'Could not sign in'));
     } finally {
       setLoading(false);
     }

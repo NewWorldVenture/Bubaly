@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/client';
 import { saveCapture, undoCapture, type CaptureSaveResult } from '@/lib/capture/save';
 import type { CaptureKind } from '@/lib/capture/parse';
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
+import { describeDbError } from '@/lib/supabase/errors';
 
 type CaptureMode = 'type' | 'voice' | 'photo' | 'document';
 
@@ -73,7 +74,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
       setMode('type');
       textRef.current?.focus();
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Could not undo');
+      toastError(describeDbError(err, 'Could not undo'));
     } finally {
       setUndoing(false);
     }
@@ -99,7 +100,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
         const res = await saveCapture(createClient(), { kind, text: value, familyId, userId, memberId: selfMember?.id ?? null });
         setCreated({ ...res, destination: route.destination });
       } catch (err) {
-        toastError(err instanceof Error ? err.message : 'Could not save');
+        toastError(describeDbError(err, 'Could not save'));
       } finally {
         setRouting(false);
       }

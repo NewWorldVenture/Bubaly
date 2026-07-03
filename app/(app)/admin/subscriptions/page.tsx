@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/states';
 import { PLANS, type Plan } from '@/lib/constants/plans';
 import { fmtDate, fmtMoney } from '@/lib/utils/format';
 import { GrowthChart } from '@/components/admin/growth-chart';
+import { describeDbError } from '@/lib/supabase/errors';
 
 export const metadata: Metadata = { title: 'Subscriptions', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -110,7 +111,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
         };
       });
     } catch (err) {
-      stripeError = err instanceof Error ? err.message : 'Stripe is not configured';
+      stripeError = describeDbError(err, 'Stripe is not configured');
     }
   }
 

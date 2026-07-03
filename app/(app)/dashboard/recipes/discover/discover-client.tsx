@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Search, Plus, Check, ChefHat, Loader2, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { saveDiscoveredRecipe } from './actions';
+import { describeDbError } from '@/lib/supabase/errors';
 
 type Result = {
   sourceProvider: string; sourceRecipeId: string; sourceUrl: string | null;
@@ -34,7 +35,7 @@ export function DiscoverClient() {
       if (!res.ok) throw new Error(json.error ?? 'Search failed');
       setResults(json.recipes ?? []);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Search failed');
+      toastError(describeDbError(err, 'Search failed'));
       setResults([]);
     } finally {
       setSearching(false);

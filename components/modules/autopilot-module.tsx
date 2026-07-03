@@ -59,7 +59,7 @@ export function AutopilotModule() {
       if (json.autoExecuted && json.autoExecuted > 0) success(`Autopilot handled ${json.autoExecuted} thing${json.autoExecuted === 1 ? '' : 's'} for you`);
       void refresh();
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Scan failed');
+      toastError(describeDbError(err, 'Scan failed'));
     } finally {
       setScanning(false);
     }

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { validateSubmission, fieldAutoComplete, inputType, type FormField } from '@/lib/marketing/forms';
+import { describeDbError } from '@/lib/supabase/errors';
 
 /**
  * Public form renderer. Validates locally (mirroring the server) for instant
@@ -48,7 +49,7 @@ export function PublicForm({ formId, fields, submitLabel, successMessage }: {
       }
       setDone(true);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Something went wrong');
+      toastError(describeDbError(err, 'Something went wrong'));
     } finally {
       setLoading(false);
     }

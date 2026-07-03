@@ -26,6 +26,7 @@ import { fmtRelative } from '@/lib/utils/format';
 import { formatCents, goalProgress, type BucketKind, type Split } from '@/lib/wallet/ledger';
 import { txnTypeLabel, signedAmountCents, groupByDay, type ActivityTxn } from '@/lib/wallet/activity';
 import { addFundsAction, requestSpendAction, sendMoneyAction, requestAllowanceAction } from '@/app/(app)/wallet/actions';
+import { describeDbError } from '@/lib/supabase/errors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -185,7 +186,7 @@ function AICoachCard({ childId }: { childId: string }) {
       setCoaching(json.coaching);
       setDismissed(false);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Coach unavailable');
+      toastError(describeDbError(err, 'Coach unavailable'));
     } finally {
       setLoading(false);
     }

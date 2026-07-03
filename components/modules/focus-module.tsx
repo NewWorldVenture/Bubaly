@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonList } from '@/components/ui/states';
 import { fmtTime } from '@/lib/utils/format';
+import { describeDbError } from '@/lib/supabase/errors';
 
 type FocusItem = {
   id: string;
@@ -87,7 +88,7 @@ export function FocusModule() {
     if (!current) return;
     if (current.complete) {
       try { await current.complete(); setDoneCount((n) => n + 1); success('Done — nice.'); }
-      catch (err) { return toastError(err instanceof Error ? err.message : 'Could not update'); }
+      catch (err) { return toastError(describeDbError(err, 'Could not update')); }
     }
     setIndex((i) => i + 1);
   }
