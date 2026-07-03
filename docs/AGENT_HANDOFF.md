@@ -222,9 +222,17 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   `fetchForecast` (same keyless client the Weather module uses, 16-day range), then replaces the generic
 >   "Check the forecast" step with the real advisory for each weather-sensitive moment's date. Best-effort: no
 >   location / offline / beyond range → the generic step stays. Engine stays pure (enrichment is view-layer).
+> - **Conflict detection (shipped):** `lib/moments/conflicts.ts` (`findOverlaps`, tested
+>   `tests/moments-conflicts.test.ts` 5 cases) finds genuine double-bookings among upcoming **timed** events
+>   using real `ends_at` (falls back to a 60-min window; all-day/undated ignored; merely-adjacent events do NOT
+>   clash — precise, not noisy). `MomentsView` shows an amber "Overlaps Sam's recital (+N)" chip on each
+>   clashing moment card. Works off the raw `calendar_events` rows (birthdays never clash).
 > - **Next extensions** (deliberately scoped out): travel buffer from a real routing/ETA source (currently a
 >   sensible per-category constant); folding moment prep into the Autopilot confidence engine so high-confidence
 >   steps self-complete; push-notify on an imminent moment/birthday.
+> - **Mobile wide-table overflow** — the family-facing tables (posts-list / auto+home service-client / sports
+>   standings) were fixed to `overflow-x-auto` + `min-w` by a **parallel session** (already on main); only the
+>   ~24 internal `/admin/**` tables remain for a future admin-mobile pass.
 >
 > ## 🗓️ 2026-07-03 SESSION — Mobile-readiness FOUNDATION pass (iOS / iPadOS / Android)
 >

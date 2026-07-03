@@ -10,7 +10,7 @@ import Link from 'next/link';
 import {
   Sparkles, Clock, CloudSun, Backpack, ShoppingCart, PiggyBank, Stethoscope,
   Camera, Bell, ChevronRight, CalendarClock, Check, PartyPopper, Trophy, Plane,
-  GraduationCap, Trees, CalendarDays, Plus,
+  GraduationCap, Trees, CalendarDays, Plus, AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -26,6 +26,7 @@ import {
   buildMomentPrep, momentWhen, type PrepDomain, type PrepItem, type MomentCategory, type MomentEvent,
 } from '@/lib/moments/prep';
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
+import { findOverlaps } from '@/lib/moments/conflicts';
 import {
   loadMomentPrep, setMomentPrepDoneAction, createMomentReminderAction, addMomentGroceryAction,
 } from '@/app/(app)/dashboard/moment-actions';
@@ -98,6 +99,9 @@ export function MomentsView() {
     return all.map((e) => ({ event: e, prep: buildMomentPrep(e) }))
       .filter((m) => m.prep.items.length > 0);
   }, [rows, members]);
+
+  // Real double-bookings among the upcoming timed events (before they surprise you).
+  const clashes = useMemo(() => findOverlaps(rows ?? []), [rows]);
 
   async function toggle(eventId: string, itemId: string) {
     const current = done[eventId] ?? [];
@@ -172,6 +176,12 @@ export function MomentsView() {
                     </div>
                     <h2 className="mt-0.5 truncate text-base font-bold">{event.title}</h2>
                     {event.location && <p className="truncate text-xs text-muted">{event.location}</p>}
+                    {clashes[event.id]?.length ? (
+                      <p className="mt-1 inline-flex items-center gap-1 rounded-lg bg-amber-500/15 px-2 py-1 text-[11px] font-semibold text-amber-500">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        Overlaps {clashes[event.id][0]}{clashes[event.id].length > 1 ? ` +${clashes[event.id].length - 1}` : ''}
+                      </p>
+                    ) : null}
                   </div>
                   <span className={cn('shrink-0 text-xs font-semibold tabular-nums', allReady ? 'text-emerald-400' : 'text-muted')}>
                     {allReady ? 'Ready' : `${complete}/${total}`}
