@@ -20,8 +20,9 @@ import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import {
-  buildMomentPrep, momentWhen, type PrepDomain, type PrepItem, type MomentCategory,
+  buildMomentPrep, momentWhen, type PrepDomain, type PrepItem, type MomentCategory, type MomentEvent,
 } from '@/lib/moments/prep';
+import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import {
   loadMomentPrep, setMomentPrepDoneAction, createMomentReminderAction, addMomentGroceryAction,
 } from '@/app/(app)/dashboard/moment-actions';
@@ -42,7 +43,7 @@ const CAT_LABEL: Record<MomentCategory, string> = {
 };
 
 export function MomentsView() {
-  const { familyId } = useApp();
+  const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
 
   const nowISO = useMemo(() => new Date().toISOString(), []);
@@ -58,11 +59,19 @@ export function MomentsView() {
 
   useEffect(() => { loadMomentPrep().then(setDone).catch(() => { /* first-paint best effort */ }); }, []);
 
-  const moments = useMemo(
-    () => (rows ?? []).map((e) => ({ event: e, prep: buildMomentPrep(e) }))
-      .filter((m) => m.prep.items.length > 0),
-    [rows],
-  );
+  // Real calendar events + synthetic upcoming-birthday moments, merged by time.
+  // Birthdays live on family_members (not the calendar), so this is the only place
+  // they become anticipated moments — and they reuse the same celebration prep.
+  const moments = useMemo(() => {
+    const evs: MomentEvent[] = (rows ?? []).map((e) => ({
+      id: e.id, title: e.title, category: e.category, location: e.location,
+      starts_at: e.starts_at, all_day: e.all_day, description: e.description,
+    }));
+    const all = [...evs, ...upcomingBirthdayEvents(members, new Date(), 30)]
+      .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    return all.map((e) => ({ event: e, prep: buildMomentPrep(e) }))
+      .filter((m) => m.prep.items.length > 0);
+  }, [rows, members]);
 
   async function toggle(eventId: string, itemId: string) {
     const current = done[eventId] ?? [];
@@ -73,7 +82,7 @@ export function MomentsView() {
     if (!res.ok) { setDone(prev); toastError(res.error ?? 'Could not save'); }
   }
 
-  async function addToList(event: Event, item: PrepItem) {
+  async function addToList(event: MomentEvent, item: PrepItem) {
     const key = `${event.id}:${item.id}`;
     if (pending.has(key) || !item.groceryItems?.length) return;
     setPending((p) => new Set(p).add(key));
@@ -84,7 +93,7 @@ export function MomentsView() {
     if (!(done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
   }
 
-  async function remind(event: Event, item: PrepItem, leaveByISO: string | null) {
+  async function remind(event: MomentEvent, item: PrepItem, leaveByISO: string | null) {
     const key = `${event.id}:${item.id}`;
     if (pending.has(key)) return;
     setPending((p) => new Set(p).add(key));

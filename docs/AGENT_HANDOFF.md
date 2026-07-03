@@ -43,6 +43,13 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   `createMomentReminderAction()` inserts a real family-scoped `reminders` row linked to the event
 >   (`related_type:'calendar_event'`). 100% Supabase-wired, zero mock data.
 > - Verified: tsc clean, eslint clean on new files, **1506 tests pass**, `next build` exit 0.
+> - **Birthdays as moments:** `lib/moments/birthdays.ts` (`nextBirthdayDate`/`daysUntil`/`upcomingBirthdayEvents`,
+>   tested `tests/moments-birthdays.test.ts` 5 cases) projects each `family_members.birthday` to its next
+>   occurrence and emits a **synthetic MomentEvent** (`id: 'birthday:<memberId>'`, category `birthday`, all-day,
+>   title "Mia turns 8" when the birth year is known) for any within 30 days. `MomentsView` merges these with
+>   real `calendar_events` (by time) so they flow through the **same** `buildMomentPrep` → celebration prep
+>   (gift reminder, cake/candles/plates→Grocery, budget, plan, photos). Zero new prep logic; done-state +
+>   reminders + grocery all reuse the existing actions.
 > - **Surfaced on Home:** `components/moments/home-moment-card.tsx` shows the single most imminent moment
 >   (within a **36h horizon**) as a full-width "Get ready" banner above the Home grid — leave-by time + top
 >   prep chips, deep-linking to `/dashboard/moments`. Renders **`null` when the horizon is clear**, so Home
