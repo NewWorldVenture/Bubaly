@@ -12,6 +12,7 @@ import { medicationDueReminders } from '@/lib/notifications/medication-reminders
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
 import { dueFamilyReminderNotices, reminderFetchHorizonIso, type FamilyReminderRow } from '@/lib/reminders/notify';
 import { onThisDayNotice } from '@/lib/memories/on-this-day';
+import { imminentMomentNotices } from '@/lib/moments/notify';
 
 type DB = SupabaseClient<Database>;
 
@@ -65,7 +66,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     { data: medDoses },
     { data: approvalsPending },
   ] = await Promise.all([
-    supabase.from('family_members').select('id, user_id, display_name, role').eq('family_id', familyId).eq('is_active', true),
+    supabase.from('family_members').select('id, user_id, display_name, role, birthday').eq('family_id', familyId).eq('is_active', true),
     supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
     supabase.from('chore_assignments').select('id, due_at, member_id, chore_id, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', in24).gte('due_at', nowIso),
     supabase.from('school_events').select('id, title, starts_at, member_id, event_type').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
@@ -214,6 +215,22 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     candidates.push({
       type: 'system', related_type: 'family_photos', related_id: memoryNotice.relatedId,
       user_id: null, title: memoryNotice.title, body: memoryNotice.body,
+    });
+  }
+
+  // Imminent life-moments (sports/trips/parties/appointments within 36h, plus
+  // today/tomorrow birthdays) → one family-wide "get ready" nudge each, carrying
+  // the leave-by time and top prep steps from the Moments engine. The related_id
+  // embeds the event's date, so each occurrence pings at most once and 'general'
+  // events stay covered by the plain calendar_event notification above.
+  for (const m of imminentMomentNotices(
+    (events ?? []).map((e) => ({ id: e.id, title: e.title, category: null, location: e.location, starts_at: e.starts_at, all_day: e.all_day })),
+    members ?? [],
+    now,
+  )) {
+    candidates.push({
+      type: 'system', related_type: 'calendar_events', related_id: m.relatedId,
+      user_id: null, title: m.title, body: m.body,
     });
   }
 
