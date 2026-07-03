@@ -65,9 +65,9 @@ export function VacationsCalendar() {
 
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
         <div className="mb-3 flex items-center justify-between">
-          <button onClick={prev} className="rounded-lg p-1.5 hover:bg-elevated"><ChevronLeft className="h-5 w-5" /></button>
+          <button onClick={prev} aria-label="Previous month" className="rounded-lg p-1.5 hover:bg-elevated"><ChevronLeft className="h-5 w-5" /></button>
           <h2 className="font-semibold">{MONTHS[month]} {year}</h2>
-          <button onClick={next} className="rounded-lg p-1.5 hover:bg-elevated"><ChevronRight className="h-5 w-5" /></button>
+          <button onClick={next} aria-label="Next month" className="rounded-lg p-1.5 hover:bg-elevated"><ChevronRight className="h-5 w-5" /></button>
         </div>
         <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted">{DOW.map((d) => <div key={d} className="py-1">{d}</div>)}</div>
         <div className="grid grid-cols-7 gap-1">

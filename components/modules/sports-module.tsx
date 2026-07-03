@@ -237,7 +237,7 @@ export function SportsModule() {
                           <td className="px-4 py-3.5">
                             <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold', isGame ? 'bg-violet-500/15 text-violet-300 border border-violet-500/25' : 'bg-blue-500/15 text-blue-300 border border-blue-500/25')}>{e.event_type}</span>
                           </td>
-                          <td className="px-4 py-3.5"><button className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
+                          <td className="px-4 py-3.5"><button aria-label="More options" className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
                         </tr>
                       );
                     })}
@@ -349,7 +349,8 @@ export function SportsModule() {
           {standings.length === 0 ? (
             <p className="text-sm text-muted">No standings data yet. Log game results to see standings.</p>
           ) : (
-            <table className="w-full text-xs">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[320px] text-xs">
               <thead><tr className="text-muted"><th className="pb-2 text-left">#</th><th className="pb-2 text-left">Team</th><th className="pb-2 text-right">W</th><th className="pb-2 text-right">L</th><th className="pb-2 text-right">T</th><th className="pb-2 text-right">PCT</th></tr></thead>
               <tbody className="divide-y divide-border">
                 {standings.map((s, i) => (
@@ -364,6 +365,7 @@ export function SportsModule() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
 

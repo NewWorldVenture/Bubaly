@@ -91,7 +91,7 @@ export function AdminShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex h-topbar items-center gap-3 border-b border-border/60 bg-bg/85 px-4 backdrop-blur-xl sm:gap-4 sm:px-6">
+        <header className="app-topbar sticky top-0 z-30 flex items-center gap-3 border-b border-border/60 bg-bg/85 px-4 backdrop-blur-xl sm:gap-4 sm:px-6">
           <Link href="/admin" className="lg:hidden">
             <LogoMark className="h-9 w-16" />
           </Link>

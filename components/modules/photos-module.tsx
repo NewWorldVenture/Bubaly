@@ -350,7 +350,7 @@ export function PhotosModule() {
 
       {/* ── Lightbox ──────────────────────────────────────────── */}
       {lightboxIdx !== null && photos[lightboxIdx] && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 pt-[var(--safe-top)] pb-[var(--safe-bottom)]"
           onClick={() => setLightboxIdx(null)}>
           {/* Nav */}
           {lightboxIdx > 0 && (
