@@ -14,6 +14,9 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { createClient } from '@/lib/supabase/client';
+import { fetchForecast } from '@/lib/weather/open-meteo';
+import { weatherAdvisory, dayKey, type DayWx } from '@/lib/moments/weather';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, EmptyState } from '@/components/ui/states';
@@ -56,8 +59,31 @@ export function MomentsView() {
 
   const [done, setDone] = useState<Record<string, string[]>>({});
   const [pending, setPending] = useState<Set<string>>(new Set()); // `${eventId}:${itemId}` in flight
+  const [wxByDate, setWxByDate] = useState<Record<string, DayWx>>({}); // forecast keyed by local day
 
   useEffect(() => { loadMomentPrep().then(setDone).catch(() => { /* first-paint best effort */ }); }, []);
+
+  // Real forecast for the family's default location, once — so weather-sensitive
+  // moments say exactly what to pack ("Rain likely 70% — umbrellas") instead of a
+  // generic "check the forecast". Best-effort: no location / offline → generic step.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data: locs } = await createClient().from('weather_locations')
+        .select('latitude, longitude, is_default').eq('family_id', familyId)
+        .order('is_default', { ascending: false }).order('sort_order').limit(1);
+      const loc = locs?.[0];
+      if (!loc) return;
+      const forecast = await fetchForecast(loc.latitude, loc.longitude, 16).catch(() => null);
+      if (!active || !forecast) return;
+      const map: Record<string, DayWx> = {};
+      for (const d of forecast.daily) {
+        map[d.date] = { tempMax: d.tempMax, tempMin: d.tempMin, precipProb: d.precipProb, code: d.code };
+      }
+      setWxByDate(map);
+    })();
+    return () => { active = false; };
+  }, [familyId]);
 
   // Real calendar events + synthetic upcoming-birthday moments, merged by time.
   // Birthdays live on family_members (not the calendar), so this is the only place
@@ -157,13 +183,19 @@ export function MomentsView() {
                     const isDone = doneIds.includes(item.id);
                     const DIcon = DOMAIN_ICON[item.domain];
                     const key = `${event.id}:${item.id}`;
+                    // Weather step: replace the generic prompt with the real forecast
+                    // advisory for the moment's day, when we have one.
+                    const wxDay = item.domain === 'weather' ? wxByDate[dayKey(event.starts_at)] : undefined;
+                    const adv = wxDay ? weatherAdvisory(wxDay) : null;
+                    const label = adv ? adv.label : item.label;
+                    const hint = adv ? adv.hint : item.hint;
                     return (
                       <li key={item.id} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2.5 transition', isDone ? 'border-border/50 bg-surface/20' : 'border-border bg-surface/40')}>
                         <button
                           type="button"
                           onClick={() => toggle(event.id, item.id)}
                           aria-pressed={isDone}
-                          aria-label={isDone ? `Mark "${item.label}" not done` : `Mark "${item.label}" done`}
+                          aria-label={isDone ? `Mark "${label}" not done` : `Mark "${label}" done`}
                           className={cn('grid h-6 w-6 shrink-0 place-items-center rounded-md border-2 transition',
                             isDone ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-border text-transparent hover:border-brand')}
                         >
@@ -173,8 +205,8 @@ export function MomentsView() {
                           <DIcon className="h-4 w-4" />
                         </span>
                         <div className="min-w-0 flex-1">
-                          <p className={cn('truncate text-sm font-medium', isDone && 'text-muted line-through')}>{item.label}</p>
-                          {item.hint && <p className="truncate text-xs text-muted">{item.hint}</p>}
+                          <p className={cn('truncate text-sm font-medium', isDone && 'text-muted line-through')}>{label}</p>
+                          {hint && <p className="truncate text-xs text-muted">{hint}</p>}
                         </div>
                         {item.groceryItems?.length ? (
                           <button

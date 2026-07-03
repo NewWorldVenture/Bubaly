@@ -63,9 +63,16 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   already on the list** (case-insensitive, idempotent), and inserts the rest into `grocery_items`. The
 >   Moments card shows an "Add N" button that adds + marks the step done. Test asserts `groceryItems` on the
 >   sports shop step.
-> - **Next extensions** (deliberately scoped out): weather-API-driven "bring an umbrella"; travel buffer from a
->   real routing/ETA source (currently a sensible per-category constant); folding moment prep into the Autopilot
->   confidence engine so high-confidence steps self-complete.
+> - **Weather-driven packing (shipped):** `lib/moments/weather.ts` (tested `tests/moments-weather.test.ts`,
+>   6 cases) — `weatherAdvisory(day)` maps one Open-Meteo daily forecast → a concrete line ("Rain likely 70%
+>   — pack umbrellas" / snow / storms / cold / hot, snow-first priority), `dayKey(iso)` matches a moment to its
+>   day. `MomentsView` fetches the family's **default `weather_locations`** once and calls the existing
+>   `fetchForecast` (same keyless client the Weather module uses, 16-day range), then replaces the generic
+>   "Check the forecast" step with the real advisory for each weather-sensitive moment's date. Best-effort: no
+>   location / offline / beyond range → the generic step stays. Engine stays pure (enrichment is view-layer).
+> - **Next extensions** (deliberately scoped out): travel buffer from a real routing/ETA source (currently a
+>   sensible per-category constant); folding moment prep into the Autopilot confidence engine so high-confidence
+>   steps self-complete; push-notify on an imminent moment/birthday.
 >
 > ## 🗓️ 2026-07-03 SESSION — Mobile-readiness FOUNDATION pass (iOS / iPadOS / Android)
 >
