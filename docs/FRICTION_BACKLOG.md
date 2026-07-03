@@ -59,6 +59,12 @@ this Register = *what to fix next*, the Scorecard = *current journey health*.
 ---
 
 ## Iteration log
+- **2026-07-03** — Per user request: aligned the Free-tier left nav to the
+  **Navigation Choices** page exactly — removed the "Parent Dashboard" +
+  "Family Dashboard" (`DASHBOARD_NAV`) links from `FreeTierSidebar`, since that
+  page doesn't manage them. Sidebar's editable region now == the Navigation
+  Choices list; fixed chrome (AI Assistant / Settings / Help) + the All Services
+  launcher stay. `/dashboard` routes remain reachable by URL.
 - **2026-07-03** — Backlog created. Shipped **#1**: the Home "Get ready" banner
   now has an inline **"Remind me"** button — the body still opens Moments, but
   the leave-by (or top) reminder can be set in one tap without a screen switch.

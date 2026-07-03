@@ -10,7 +10,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { Star } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
-  DASHBOARD_NAV, SIDEBAR_FOOTER_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS,
+  SIDEBAR_FOOTER_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS,
   NAV_CATALOG_BY_HREF, NAV_CATALOG_KEYS, DEFAULT_SIDEBAR_NAV_KEYS,
   NAV_CHILD_KEYS_BY_PARENT, type NavItem,
 } from '@/lib/constants/navigation';
@@ -272,13 +272,6 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
           <ALL_SERVICES_ICON className="h-5 w-5 shrink-0" />
           All Services
         </button>
-
-        {/* Dashboards & hubs */}
-        <div className="mt-2 space-y-0.5">
-          {DASHBOARD_NAV.map((item) => (
-            <NavEntry key={item.href} item={item} variant="list" locked={false} onLocked={onLocked} />
-          ))}
-        </div>
 
         {/* Push the footer to the bottom */}
         <div className="flex-1" />
