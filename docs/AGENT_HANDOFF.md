@@ -4,6 +4,23 @@ Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-07-03 — Trust Engine wired into ALL wallet money movement (Trust TODO #1 closed; see top session block). Earlier same day: Mobile polish merged (#210: scrollable wide tables, safe-area overlays, a11y labels), public-route overflow e2e guard (`tests/e2e/overflow.spec.ts`), and the FINAL describeDbError sweep (zero raw `err.message` toast paths remain). Earlier same day: Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-03 SESSION — Moments push notifications (branch `claude/moments-notify`)
+> Closed the Moments "next extension": **push-notify on an imminent moment/birthday**.
+> - **NEW pure `lib/moments/notify.ts`** — `imminentMomentNotices(events, members, now, horizonHours=36)`:
+>   merges upcoming calendar events with today/tomorrow birthdays (same synthetic projection the Moments
+>   page uses), runs each through `buildMomentPrep`, and emits one family-wide notice per moment with the
+>   leave-by time + top 3 prep steps. `general` events are skipped (the plain calendar_event notification
+>   already covers them); soonest-first, capped at 6. `relatedId = moment:<eventId>:<date>` so the engine's
+>   permanent dedup pings each occurrence once and recurring birthdays ping again next year.
+>   Tested: `tests/moments-notify.test.ts` (7 cases).
+> - **Wired into `lib/server/notifications.ts`** (`generateFamilyNotifications`): reuses the engine's
+>   already-fetched 48h calendar events + members (members select now also pulls `birthday`); pushes
+>   family-wide 'system' candidates through the standard dedup. No migration, no new queries beyond the
+>   extra column.
+> - Also verified this session: the spending-control editor "pending" item is ALREADY SHIPPED
+>   (`money-cards-view.tsx` → `updateCardControlsAction`).
+> Verified: tsc clean, eslint clean, **1531 tests pass** (+7), `next build` exit 0.
+>
 > ## 🗓️ 2026-07-03 SESSION — iPad Messages master-detail + contrast audit + stale-TODO sweep (branch `claude/ipad-master-detail`)
 > - **Messages master-detail from `md` (768px)**: the list/thread split in `components/modules/messages-module.tsx`
 >   previously started at `lg` (1024px), so iPad portrait (768–834) got the phone one-pane-at-a-time layout.
