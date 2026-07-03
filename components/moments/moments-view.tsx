@@ -27,6 +27,7 @@ import {
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { findOverlaps } from '@/lib/moments/conflicts';
 import { reminderTimeFor } from '@/lib/moments/reminders';
+import { groupMoments } from '@/lib/moments/grouping';
 import {
   loadMomentPrep, setMomentPrepDoneAction, createMomentReminderAction, addMomentGroceryAction,
   removeMomentGroceryAction,
@@ -149,8 +150,15 @@ export function MomentsView() {
           action={<Link href="/dashboard/calendar" className="btn-cta">Open Calendar</Link>}
         />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {moments.map(({ event, prep }) => {
+        <div className="space-y-6">
+          {groupMoments(moments, (m) => m.event.starts_at).map((group) => (
+          <section key={group.bucket}>
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-muted">
+              {group.label}
+              <span className="rounded-full bg-elevated px-1.5 text-[11px] font-semibold text-muted/70">{group.items.length}</span>
+            </h2>
+            <div className="grid gap-4 lg:grid-cols-2">
+          {group.items.map(({ event, prep }) => {
             const CatIcon = CAT_ICON[prep.category];
             const doneIds = done[event.id] ?? [];
             const total = prep.items.length;
@@ -241,6 +249,9 @@ export function MomentsView() {
               </section>
             );
           })}
+            </div>
+          </section>
+          ))}
         </div>
       )}
     </div>

@@ -52,6 +52,7 @@ this Register = *what to fix next*, the Scorecard = *current journey health*.
 | 11 | Moment reminders all fired at a blanket ~20h/2h, so a packing nudge and a shopping nudge landed at the same unhelpful time. | Per-domain lead times (packing → night before, shopping → 2 days out, photo → at event). | Med | S | ★★★ | engine | — | ✅ **DONE** (5887a60+) |
 | 12 | "Add N to grocery" from a moment had **no undo** — an unexpected write with no reversal (Scorecard-flagged trust gap). | Return inserted ids + `removeMomentGroceryAction`; toast offers **Undo** that deletes exactly those rows. | Med | S | ★★★ | engine | — | ✅ **DONE** (02e7c0d+) |
 | 13 | Double-booking warning only showed on the Moments page, not Home — but Home is where families glance. | Surface the same `findOverlaps` "Overlaps X" amber chip on the Home "Get ready" banner. | Med | S | ★★★ | engine | `lib/moments/conflicts` | ✅ **DONE** (c4d6718+) |
+| 14 | The Moments page is a flat grid; with 30-day birthdays + events it grows long and undifferentiated (scanning effort, no "what's now" hierarchy). | Group into **Today / Tomorrow / This week / Later** sections with headers + counts. | Med | S | ★★★ | engine | — | ✅ **DONE** (73d6036+) |
 
 *(Re-rank as items ship. Add newly-found friction with a one-line "felt problem".)*
 
