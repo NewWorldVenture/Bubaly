@@ -29,12 +29,30 @@ const ICONS = {
   info: Info,
 } as const;
 
+/** Native haptic tap alongside a toast (Capacitor shell only; web no-ops).
+ *  Toasts fire exactly on the app's key actions, so this one hook gives every
+ *  save/approve/error a physical acknowledgment without per-module wiring. */
+function hapticFor(tone: ToastTone) {
+  void (async () => {
+    try {
+      const { Capacitor } = await import('@capacitor/core');
+      if (!Capacitor.isNativePlatform()) return;
+      const { Haptics, NotificationType } = await import('@capacitor/haptics');
+      if (tone === 'info') return;
+      await Haptics.notification({ type: tone === 'success' ? NotificationType.Success : NotificationType.Error });
+    } catch {
+      // No haptics engine — silence is fine.
+    }
+  })();
+}
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counter = useRef(0);
 
   const push = useCallback((message: string, tone: ToastTone = 'info', action?: ToastAction) => {
     const id = ++counter.current;
+    hapticFor(tone);
     setToasts((t) => [...t, { id, tone, message, action }]);
     // Actionable toasts linger a little longer so there's time to tap them.
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), action ? 7000 : 4200);

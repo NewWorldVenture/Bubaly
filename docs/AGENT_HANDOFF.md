@@ -4,6 +4,24 @@ Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-07-03 — Trust Engine wired into ALL wallet money movement (Trust TODO #1 closed; see top session block). Earlier same day: Mobile polish merged (#210: scrollable wide tables, safe-area overlays, a11y labels), public-route overflow e2e guard (`tests/e2e/overflow.spec.ts`), and the FINAL describeDbError sweep (zero raw `err.message` toast paths remain). Earlier same day: Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-03 SESSION — Native niceties: Android back button + haptics (branch `claude/native-niceties`)
+> Two of the three "native niceties" from the mobile remaining-work list (Capacitor plugins were installed
+> but unwired):
+> - **Android hardware back button** — NEW `components/app/android-back-handler.tsx`, mounted once in the
+>   root layout (renders null on web/iOS). Priority: (1) close the topmost open `[role="dialog"]` overlay —
+>   dispatches Escape (the shared Modal listens) and falls back to clicking the overlay's `.overlay-scrim`
+>   or `aria-label^="Close"` button for overlays without an Escape handler (e.g. the mobile nav drawer);
+>   (2) otherwise history back; (3) at the root, `App.minimizeApp()` per platform convention.
+> - **Haptics on key actions** — one central hook in `components/ui/toast.tsx`: every success/error toast
+>   now fires `Haptics.notification` (Success/Error type) on native; info toasts and web stay silent.
+>   Toasts already fire exactly on save/approve/delete/error paths, so no per-module wiring was needed.
+> - REMAINING nicety (deliberately skipped): pull-to-refresh — it fights scroll gestures in overflow
+>   containers; revisit with a dedicated design. Also still open from the mobile list: authed-route
+>   overflow e2e (needs CI Supabase login), iPad master-detail, color-contrast audit, Dynamic Type.
+> - NOTE: the "per-day AI-coach metering" wallet TODO was found ALREADY DONE (app/api/ai/wallet/route.ts
+>   meters via `ai_coach_call` wallet_audit_logs rows against AI_COACH_DAILY_LIMIT).
+> Verified: tsc clean, eslint clean, 1524 tests pass, `next build` exit 0.
+>
 > ## 🗓️ 2026-07-03 SESSION — Trust Engine now governs ALL wallet money movement (branch `claude/trust-money-wiring`)
 > Closed **Trust TODO #1** ("wire `evaluateTrust` into `issueCardAction`/money movement"). Previously only
 > `requestSpendAction` + `sendMoneyAction` consulted the Trust Engine; every other money path bypassed it.
