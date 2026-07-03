@@ -37,7 +37,7 @@ over adding another form.
 |---|---|---|---|---|---|---|---|---|
 | 1 | Home surfaces the next moment but to act you must open `/dashboard/moments` — an extra screen switch for the single most common action (setting the leave-by reminder). | Add a **one-tap "Set reminder"** inline on the Home "Get ready" banner (reuses `createMomentReminderAction`). | High | S | ★★★ | engine | — | ✅ **DONE** (892241b+) |
 | 2 | No universal natural-language entry on every screen — users still navigate to the assistant. "Plan Emma's birthday" should work from anywhere. | Global **⌘K / "+" command bar** that routes NL → assistant/capture/moment actions. Capture already parses; extend to a floating omni-input. | High | L | ★★ | engine+ui | assistant, capture parse | Todo |
-| 3 | Weather advisory only appears on the Moments page, not the Home "Get ready" banner (which shows a generic "check forecast" chip). | Pass the forecast advisory into `HomeMomentCard` too (reuse `weatherAdvisory`), or fetch once at the Home level. | Med | S | ★★★ | engine | `lib/moments/weather` | Todo |
+| 3 | Weather advisory only appears on the Moments page, not the Home "Get ready" banner (which shows a generic "check forecast" chip). | Pass the forecast advisory into `HomeMomentCard` too (reuse `weatherAdvisory`), or fetch once at the Home level. | Med | S | ★★★ | engine | `lib/moments/weather` | ✅ **DONE** (3a362d5+) |
 | 4 | Moment prep steps are all manual checkoffs; high-confidence ones (e.g. "add team snacks") could self-complete or pre-stage. | Fold moment prep into the **Autopilot confidence engine** so ≥90% steps auto-execute reversibly (it already does this for reminders). | High | M | ★★ | engine | `lib/autopilot/*` | Todo |
 | 5 | Nothing reaches the family when they're **not** in the app — an imminent moment/birthday should push. | Push-notify on imminent moment/leave-by/birthday via the existing web-push + `PushNotifications` plugin + a scheduled scan (autopilot cron already runs per-family). | High | M | ★★ | platform | web-push, cron | Todo |
 | 6 | Travel buffer (leave-by) is a per-category constant, not a real ETA — can be wrong in traffic. | Derive buffer from a routing/ETA source using the family's home + event location. | Med | M | ★ | platform | maps/ETA API, home location | Todo |
@@ -57,3 +57,10 @@ over adding another form.
   Expected benefit: removes 1 navigation + 2 taps from the day's most common
   action. Next up: **#3** (weather advisory on the Home banner, Impact Med / S)
   or **#4** (Autopilot self-completion, High / M).
+- **2026-07-03** — Shipped **#3**: the Home "Get ready" banner now shows the real
+  forecast advisory ("Rain likely 70% — pack umbrellas") on its weather chip,
+  matching the Moments page. Refactored the forecast fetch into a shared
+  `useDefaultForecast(familyId)` hook (`components/moments/use-default-forecast.ts`)
+  used by both surfaces — removed the duplicated effect from `MomentsView`.
+  Next: **#4** (Autopilot self-completion, High / M) or **#7** (time-of-day
+  Mission Control, Med / M).

@@ -17,6 +17,8 @@ import { useToast } from '@/components/ui/toast';
 import type { Tables } from '@/lib/database.types';
 import { buildMomentPrep, momentWhen, type PrepDomain, type MomentEvent } from '@/lib/moments/prep';
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
+import { weatherAdvisory, dayKey } from '@/lib/moments/weather';
+import { useDefaultForecast } from '@/components/moments/use-default-forecast';
 import { createMomentReminderAction } from '@/app/(app)/dashboard/moment-actions';
 
 type Event = Tables<'calendar_events'>;
@@ -34,6 +36,7 @@ export function HomeMomentCard() {
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
   const nowISO = useMemo(() => new Date().toISOString(), []);
+  const wxByDate = useDefaultForecast(familyId);
   const [remindState, setRemindState] = useState<'idle' | 'saving' | 'done'>('idle');
 
   const { data: rows } = useRealtimeQuery<Event>({
@@ -109,9 +112,13 @@ export function HomeMomentCard() {
             )}
             {steps.filter((s) => s.domain !== 'time').slice(0, 3).map((s) => {
               const Icon = DOMAIN_ICON[s.domain];
+              // Weather chip: show the real forecast advisory when we have one.
+              const wxDay = s.domain === 'weather' ? wxByDate[dayKey(event.starts_at)] : undefined;
+              const adv = wxDay ? weatherAdvisory(wxDay) : null;
+              const label = adv ? adv.label : s.label;
               return (
                 <span key={s.id} className="inline-flex items-center gap-1 rounded-lg bg-elevated px-2 py-1 text-xs text-muted">
-                  <Icon className="h-3.5 w-3.5" /> {s.label}
+                  <Icon className="h-3.5 w-3.5" /> {label}
                 </span>
               );
             })}

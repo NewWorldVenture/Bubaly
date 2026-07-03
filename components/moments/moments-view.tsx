@@ -14,9 +14,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { createClient } from '@/lib/supabase/client';
-import { fetchForecast } from '@/lib/weather/open-meteo';
-import { weatherAdvisory, dayKey, type DayWx } from '@/lib/moments/weather';
+import { weatherAdvisory, dayKey } from '@/lib/moments/weather';
+import { useDefaultForecast } from '@/components/moments/use-default-forecast';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, EmptyState } from '@/components/ui/states';
@@ -60,31 +59,12 @@ export function MomentsView() {
 
   const [done, setDone] = useState<Record<string, string[]>>({});
   const [pending, setPending] = useState<Set<string>>(new Set()); // `${eventId}:${itemId}` in flight
-  const [wxByDate, setWxByDate] = useState<Record<string, DayWx>>({}); // forecast keyed by local day
+  // Real forecast for the family's default location — so weather-sensitive moments
+  // say exactly what to pack ("Rain likely 70% — umbrellas") instead of a generic
+  // "check the forecast". Shared with the Home banner via the same hook.
+  const wxByDate = useDefaultForecast(familyId);
 
   useEffect(() => { loadMomentPrep().then(setDone).catch(() => { /* first-paint best effort */ }); }, []);
-
-  // Real forecast for the family's default location, once — so weather-sensitive
-  // moments say exactly what to pack ("Rain likely 70% — umbrellas") instead of a
-  // generic "check the forecast". Best-effort: no location / offline → generic step.
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      const { data: locs } = await createClient().from('weather_locations')
-        .select('latitude, longitude, is_default').eq('family_id', familyId)
-        .order('is_default', { ascending: false }).order('sort_order').limit(1);
-      const loc = locs?.[0];
-      if (!loc) return;
-      const forecast = await fetchForecast(loc.latitude, loc.longitude, 16).catch(() => null);
-      if (!active || !forecast) return;
-      const map: Record<string, DayWx> = {};
-      for (const d of forecast.daily) {
-        map[d.date] = { tempMax: d.tempMax, tempMin: d.tempMin, precipProb: d.precipProb, code: d.code };
-      }
-      setWxByDate(map);
-    })();
-    return () => { active = false; };
-  }, [familyId]);
 
   // Real calendar events + synthetic upcoming-birthday moments, merged by time.
   // Birthdays live on family_members (not the calendar), so this is the only place
