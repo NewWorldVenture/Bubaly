@@ -481,6 +481,49 @@ body::before {
   .safe-top {
     padding-top: var(--safe-top);
   }
+  /* Horizontal safe insets — for landscape notch/camera cutouts. Combines with
+     a sensible minimum so nothing hugs the rounded corner or the sensor housing. */
+  .safe-x {
+    padding-left: max(0px, var(--safe-left));
+    padding-right: max(0px, var(--safe-right));
+  }
+}
+
+/* ============================================================
+   Authenticated app chrome — safe-area aware header + main.
+   With statusBarStyle "black-translucent" + viewport-fit=cover the web
+   content extends under the Dynamic Island / notch / home indicator, so the
+   fixed/sticky chrome must pad by the safe insets itself. These classes bake
+   the responsive horizontal padding together with the safe insets via max(),
+   so content never sits under a cutout and never loses its base gutter.
+   ============================================================ */
+.app-topbar {
+  padding-top: var(--safe-top);
+  min-height: calc(4rem + var(--safe-top));
+  padding-left: max(0.75rem, var(--safe-left));
+  padding-right: max(0.75rem, var(--safe-right));
+}
+.app-main {
+  padding-left: max(0.75rem, var(--safe-left));
+  padding-right: max(0.75rem, var(--safe-right));
+}
+@media (min-width: 640px) {
+  .app-topbar {
+    min-height: calc(var(--topbar-height) + var(--safe-top));
+    padding-left: max(1.25rem, var(--safe-left));
+    padding-right: max(1.25rem, var(--safe-right));
+  }
+  .app-main {
+    padding-left: max(1.25rem, var(--safe-left));
+    padding-right: max(1.25rem, var(--safe-right));
+  }
+}
+@media (min-width: 1024px) {
+  .app-topbar,
+  .app-main {
+    padding-left: max(1.75rem, var(--safe-left));
+    padding-right: max(1.75rem, var(--safe-right));
+  }
 }
 
 /* Touch device optimizations */

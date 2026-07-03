@@ -1,9 +1,70 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
+Last updated: 2026-07-03 — Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
-<<<<<<< HEAD
+> ## 🗓️ 2026-07-03 SESSION — Mobile-readiness FOUNDATION pass (iOS / iPadOS / Android)
+>
+> **Scope reality:** the request was a full "make every one of ~190 routes native-quality" audit. That is a
+> multi-week effort; this session shipped the **global foundation layer** — the CSS, viewport, safe-areas,
+> touch targets, dialogs, and app chrome that propagate correct mobile behavior to **every** screen at once —
+> plus fixed the concrete cross-cutting bugs found. All changes are build- + test-verified. The per-route
+> deep audit is scoped out below as prioritized remaining work so the next agent can continue.
+>
+> **What was already solid (do NOT redo):** `app/layout.tsx` has `viewport-fit: cover`, theme-color,
+> `appleWebApp` (black-translucent), manifest, icons. `app/globals.css` already had `--safe-*` env() vars,
+> iOS focus-zoom prevention (`input{font-size:16px}` ≤640px), `overscroll-behavior:none`, tap-highlight
+> transparent, `prefers-reduced-motion` global + AI-orb, themed scrollbars, print styles. `components/ui/modal.tsx`
+> was already a bottom-sheet with `pb-[max(1rem,env(safe-area-inset-bottom))]` + `max-h-[85dvh]`. `capacitor.config.ts`
+> is solid (app-bound domains, `allowNavigation` for Supabase/Google auth, StatusBar/SplashScreen/Keyboard
+> `resize:native`/Push presentation). This app is a **Capacitor remote-URL shell over the hosted Next.js app**
+> (NOT React Native/Expo, NOT a static export) — so mobile fixes are CSS/DOM in the web app, not native code.
+>
+> **Fixed this session (all in the global chrome → every authenticated screen):**
+> 1. **Safe-area TOP on the app header** — `components/app/app-shell.tsx` header had no top inset, so with
+>    black-translucent + viewport-fit=cover its content sat **under the Dynamic Island / notch**. New
+>    `.app-topbar` class (`app/globals.css`) bakes `padding-top: var(--safe-top)` + `min-height:
+>    calc(topbar + safe-top)` + responsive horizontal `max(gutter, safe-left/right)`.
+> 2. **Safe-area LEFT/RIGHT (landscape notch)** — new `.app-main` class on `<main>` + `.safe-x` util; header,
+>    main, and the bottom-tab bar now use `max(gutter, env(safe-area-inset-*))` so nothing hides under a
+>    landscape sensor housing / rounded corner.
+> 3. **Mobile nav drawer** — now pads `var(--safe-top/left/bottom)`, uses the token `overlay-scrim`, and has
+>    `role="dialog"` + `aria-modal` + `aria-label`.
+> 4. **Modal focus management** (`components/ui/modal.tsx`) — the comment claimed "focus-trapped" but there was
+>    none. Added a real **focus trap** (Tab/Shift-Tab cycle), **initial focus** into the dialog, **focus
+>    restore** to the trigger on close, `aria-labelledby`/`aria-describedby`, and a 44px close-button target.
+>    This touches **every dialog in the app** (Modal is the shared primitive).
+> 5. **Touch targets** — `components/ui/button.tsx` base now has `[@media(pointer:coarse)]:min-h-[44px]`, so
+>    every Button (incl. `size="sm"` which was 36px) meets 44px on touch **without** changing mouse/desktop
+>    density.
+> 6. **Floating elements are safe-area aware** — QuickCapture FAB, AI-orb FAB, and the AI-orb mobile overlay
+>    now offset by `var(--safe-bottom/right/top)` so they clear the home indicator + the (now taller) tab bar.
+>
+> **Files modified:** `app/globals.css` (+.app-topbar/.app-main/.safe-x), `app/layout.tsx` (unchanged — already
+> good), `components/app/app-shell.tsx`, `components/ui/modal.tsx`, `components/ui/button.tsx`,
+> `components/app/quick-capture.tsx`, `components/app/ai-orb.tsx`. Verified: `tsc` clean, eslint clean on
+> changed files, **1496 tests pass**, `next build` exit 0.
+>
+> **REMAINING mobile work (prioritized, per-route — NOT yet done):**
+> - **Live responsive/overflow testing** could not run here (the app needs auth + Supabase env to boot; only
+>   static marketing pages render via `npm start`). Add a Playwright pass in CI that logs in and asserts
+>   `document.documentElement.scrollWidth <= window.innerWidth` (no horizontal scroll) on each route at widths
+>   **320/360/375/390/414/430/768/820/834/1024/1280**, portrait + landscape. This is the single most valuable
+>   next step — it will surface the real per-page overflow offenders.
+> - **Wide tables / grids**: audit modules that render tables (Documents, Payments, admin/*, Health, Medical)
+>   for `overflow-x-auto` wrappers (`.table-responsive` exists — apply it). Grep `('<table'`.
+> - **Tablet (iPad) two-column**: the app is single-column < `lg`; iPad portrait (768–834) currently gets the
+>   phone layout. Consider a `md:`/`lg:` master-detail for list+detail modules (Messages, Files, Contacts).
+> - **Per-route safe-area**: any component with its own `fixed`/`sticky` bars or full-screen overlays (e.g.
+>   `components/capture/capture-shell.tsx`, camera, print sheets) should reuse `.safe-x`/`--safe-*` — grep
+>   `fixed inset-0` and `sticky top-0`.
+> - **Native niceties** (Capacitor plugins are installed but not all wired): pull-to-refresh, `@capacitor/haptics`
+>   on key actions, Android hardware back-button handling on modals/drawers (`@capacitor/app` `backButton`).
+> - **A11y sweep**: icon-only buttons missing `aria-label` (grep `<button` without `aria-label`), color-contrast
+>   audit of `text-muted` on `bg-surface`, and Dynamic Type / larger-text testing.
+>
+> ---
 > ## 🗓️ 2026-07-02 SESSION — Files expandable left-nav + hub sub-pages (branch `claude/files-nav-expand`)
 > The **Files** item in the curated sidebar is now an **expandable group**. Mechanism: `NavItem` gains
 > optional `children?: NavItem[]` (`lib/constants/navigation.ts`); `NavEntry` (`components/app/nav-shared.tsx`)
@@ -24,7 +85,6 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   on ~30% of rows + folds in the 0117 column, and added `npm run db:seed:files`. Docs:
 >   `docs/files-hub-supabase.md`. ⚠️ NOTE: a parallel session ("Daniel") was building this same feature —
 >   if a duplicate lands on main, reconcile by keeping ONE implementation (this one is additive + self-contained).
-=======
 > ## 🗓️ 2026-07-01 SESSION — Location `/dashboard/locator` wiring review + hardening
 > Full audit of the Location page confirmed it is **100% Supabase-wired** (reads: member_locations /
 > family_places / location_events via `useRealtimeQuery`; writes: `updateMyLocation` / `setLocationSharing`
@@ -59,7 +119,6 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 > - Rule of thumb for new member UIs: **never** render an unbounded `members.map()` into a wrap/grid — cap it
 >   (`useCappedList`) or wrap in `max-h-* overflow-y-auto`.
 > - Verified: `tsc` clean, eslint clean (only pre-existing expenses warnings), `next build` exit 0.
->>>>>>> origin/main
 >
 > ## 🗓️ 2026-07-01 SESSION — Location page redesign (branch `claude/location-redesign`)
 > Redesigned the **Location** page (`/dashboard/locator` → `components/modules/locator-module.tsx`) to

@@ -123,7 +123,7 @@ export function QuickCapture() {
         onClick={() => setOpen(true)}
         aria-label="Quick capture"
         title="Quick capture (press C)"
-        className="fixed bottom-20 right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-brand text-white shadow-glow transition hover:brightness-110 active:scale-95 lg:bottom-6 lg:right-6"
+        className="fixed bottom-[calc(5rem+var(--safe-bottom))] right-[calc(1rem+var(--safe-right))] z-40 grid h-14 w-14 place-items-center rounded-full bg-brand text-white shadow-glow transition hover:brightness-110 active:scale-95 lg:bottom-6 lg:right-6"
       >
         <Plus className="h-7 w-7" />
       </button>

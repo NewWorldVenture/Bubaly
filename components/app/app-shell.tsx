@@ -315,8 +315,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar */}
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/60 bg-bg/85 px-3 backdrop-blur-xl sm:h-topbar sm:gap-5 sm:px-5 lg:px-7">
+        {/* Top bar — .app-topbar bakes in safe-area top + horizontal insets so
+            it never sits under the Dynamic Island / notch (black-translucent). */}
+        <header className="app-topbar sticky top-0 z-30 flex items-center gap-3 border-b border-border/60 bg-bg/85 backdrop-blur-xl sm:gap-5">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
@@ -340,7 +341,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <UserMenu />
         </header>
 
-        <main className="flex-1 px-3 pb-24 pt-4 sm:px-5 sm:pt-6 lg:px-7 lg:pb-8">
+        <main className="app-main flex-1 pb-24 pt-4 sm:pt-6 lg:pb-8">
           <div className="mx-auto max-w-[1480px]">{children}</div>
         </main>
       </div>
@@ -354,8 +355,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           with desktop. Closes on navigation (route-change effect above). */}
       {mobileNavOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setMobileNavOpen(false)} aria-hidden />
-          <div className="absolute inset-y-0 left-0 flex w-[300px] max-w-[86%] flex-col border-r border-border/60 bg-surface animate-slide-in-left">
+          <div className="overlay-scrim absolute inset-0 backdrop-blur-sm animate-fade-in" onClick={() => setMobileNavOpen(false)} aria-hidden />
+          <div
+            className="absolute inset-y-0 left-0 flex w-[300px] max-w-[86%] flex-col border-r border-border/60 bg-surface animate-slide-in-left"
+            style={{ paddingTop: 'var(--safe-top)', paddingLeft: 'var(--safe-left)', paddingBottom: 'var(--safe-bottom)' }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation menu"
+          >
             <div className="flex items-center justify-between px-4 py-4">
               <Logo href="/home" markVariant="home" />
               <button
@@ -372,8 +379,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      {/* Mobile bottom tabs — 5-tab AI-first nav */}
-      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/90 backdrop-blur-xl lg:hidden">
+      {/* Mobile bottom tabs — 5-tab AI-first nav. safe-bottom clears the home
+          indicator; safe-x keeps the end tabs off a landscape notch. */}
+      <nav className="safe-bottom safe-x fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/90 backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex max-w-lg items-end justify-around px-1">
           {mobileTabs.map(({ item, locked }, idx) => {
             const isCapture = idx === CAPTURE_TAB_INDEX;

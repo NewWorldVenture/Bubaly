@@ -34,7 +34,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex select-none items-center justify-center rounded-xl font-medium transition active:scale-[0.98] focus-ring disabled:cursor-not-allowed disabled:opacity-50',
+        // On touch devices every button meets the 44px minimum target without
+        // affecting mouse/desktop density (coarse-pointer only).
+        'inline-flex select-none items-center justify-center rounded-xl font-medium transition active:scale-[0.98] focus-ring disabled:cursor-not-allowed disabled:opacity-50 [@media(pointer:coarse)]:min-h-[44px]',
         VARIANTS[variant],
         SIZES[size],
         className,

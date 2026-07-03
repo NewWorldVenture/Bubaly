@@ -57,7 +57,7 @@ export function AIOrb() {
         aria-label="Ask the AI assistant"
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="group fixed bottom-36 right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-blue-600 text-white shadow-glow transition hover:brightness-110 active:scale-95 lg:bottom-24 lg:right-6"
+        className="group fixed bottom-[calc(9rem+var(--safe-bottom))] right-[calc(1rem+var(--safe-right))] z-40 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-blue-600 text-white shadow-glow transition hover:brightness-110 active:scale-95 lg:bottom-24 lg:right-6"
       >
         <Sparkles className="h-6 w-6" />
         <span className="pointer-events-none absolute right-16 hidden whitespace-nowrap rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-fg shadow-lg group-hover:block lg:block lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100">
@@ -73,7 +73,10 @@ export function AIOrb() {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute inset-x-2 bottom-2 top-14 flex flex-col overflow-hidden rounded-3xl border border-border bg-bg shadow-glass animate-slide-up">
+          <div
+            className="absolute inset-x-2 flex flex-col overflow-hidden rounded-3xl border border-border bg-bg shadow-glass animate-slide-up"
+            style={{ top: 'calc(3.5rem + var(--safe-top))', bottom: 'calc(0.5rem + var(--safe-bottom))' }}
+          >
             <div className="flex shrink-0 items-center justify-end p-2">
               <button
                 onClick={() => setOpen(false)}
