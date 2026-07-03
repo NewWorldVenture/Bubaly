@@ -35,10 +35,16 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   (within a **36h horizon**) as a full-width "Get ready" banner above the Home grid — leave-by time + top
 >   prep chips, deep-linking to `/dashboard/moments`. Renders **`null` when the horizon is clear**, so Home
 >   stays calm. Mounted in `app/(app)/home/page.tsx`. Reuses the same pure engine (no new logic/tests).
+> - **One-tap "Add to list" (shipped):** the shopping step now carries concrete inferred items per category
+>   (sports → Water bottles / Orange slices / Granola bars; outdoors → picnic; celebration → cake/candles/
+>   plates/napkins; trip → road-trip snacks) on `PrepItem.groceryItems`. `addMomentGroceryAction` resolves the
+>   family's active grocery list (or creates "Groceries", same rule as the Grocery module), **skips items
+>   already on the list** (case-insensitive, idempotent), and inserts the rest into `grocery_items`. The
+>   Moments card shows an "Add N" button that adds + marks the step done. Test asserts `groceryItems` on the
+>   sports shop step.
 > - **Next extensions** (deliberately scoped out): weather-API-driven "bring an umbrella"; travel buffer from a
->   real routing/ETA source (currently a sensible per-category constant); auto-adding snack items to the
->   grocery list in one tap (currently deep-links); folding moment prep into the Autopilot confidence engine so
->   high-confidence steps self-complete.
+>   real routing/ETA source (currently a sensible per-category constant); folding moment prep into the Autopilot
+>   confidence engine so high-confidence steps self-complete.
 >
 > ## 🗓️ 2026-07-03 SESSION — Mobile-readiness FOUNDATION pass (iOS / iPadOS / Android)
 >

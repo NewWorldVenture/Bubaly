@@ -26,6 +26,8 @@ export type PrepItem = {
   hint?: string;
   actionHref?: string;
   reminderTitle?: string;
+  /** When set, the step can add these concrete items to the family grocery list in one tap. */
+  groceryItems?: string[];
 };
 
 export type MomentEvent = {
@@ -122,9 +124,9 @@ export function buildMomentPrep(event: MomentEvent, opts: { now?: Date } = {}): 
   const bring = bringList(category);
   if (bring) push({ id: 'pack', domain: 'packing', label: bring, hint: 'Pack the night before', reminderTitle: `Pack for ${event.title}` });
 
-  // 4) Shopping — snacks/gift/supplies straight into the grocery list.
+  // 4) Shopping — snacks/gift/supplies added straight to the grocery list in one tap.
   const shop = shopHint(category);
-  if (shop) push({ id: 'shop', domain: 'shopping', label: shop.label, hint: shop.hint, actionHref: '/dashboard/grocery' });
+  if (shop) push({ id: 'shop', domain: 'shopping', label: shop.label, hint: shop.hint, actionHref: '/dashboard/grocery', groceryItems: shop.items });
 
   // 5) Budget — a gentle heads-up for spendy moments.
   if (category === 'trip' || category === 'celebration') {
@@ -155,12 +157,12 @@ function bringList(category: MomentCategory): string | null {
   }
 }
 
-function shopHint(category: MomentCategory): { label: string; hint: string } | null {
+function shopHint(category: MomentCategory): { label: string; hint: string; items: string[] } | null {
   switch (category) {
-    case 'sports': return { label: 'Add team snacks to Grocery', hint: 'For the sideline' };
-    case 'outdoors': return { label: 'Add picnic items to Grocery', hint: 'Food & drinks' };
-    case 'celebration': return { label: 'Add party supplies to Grocery', hint: 'Cake, candles, plates' };
-    case 'trip': return { label: 'Add road-trip snacks to Grocery', hint: 'For the drive' };
+    case 'sports': return { label: 'Add team snacks to Grocery', hint: 'For the sideline', items: ['Water bottles', 'Orange slices', 'Granola bars'] };
+    case 'outdoors': return { label: 'Add picnic items to Grocery', hint: 'Food & drinks', items: ['Sandwiches', 'Chips', 'Fruit', 'Drinks'] };
+    case 'celebration': return { label: 'Add party supplies to Grocery', hint: 'Cake, candles, plates', items: ['Cake', 'Candles', 'Paper plates', 'Napkins'] };
+    case 'trip': return { label: 'Add road-trip snacks to Grocery', hint: 'For the drive', items: ['Water bottles', 'Trail mix', 'Chips', 'Fruit'] };
     default: return null;
   }
 }

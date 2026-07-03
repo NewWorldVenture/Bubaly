@@ -50,6 +50,47 @@ export async function setMomentPrepDoneAction(input: { eventId: string; doneIds:
   return { ok: true };
 }
 
+/** Add inferred shopping items (e.g. team snacks) straight to the family's active
+ *  grocery list — creating the list if needed and skipping items already on it
+ *  (case-insensitive), so tapping twice never duplicates. Returns how many were added. */
+export async function addMomentGroceryAction(input: {
+  familyId: string; items: string[];
+}): Promise<Result & { added?: number }> {
+  const ctx = await requireUserContext();
+  const names = Array.from(new Set((input.items ?? [])
+    .map((s) => (typeof s === 'string' ? s.trim() : ''))
+    .filter(Boolean))).slice(0, 20);
+  if (names.length === 0) return { ok: false, error: 'Nothing to add' };
+  const supabase = await createServer();
+
+  // Resolve the active (non-archived) list, or create "Groceries" — same rule the
+  // Grocery module uses, so the moment's items land exactly where the family shops.
+  const { data: lists } = await supabase.from('grocery_lists')
+    .select('id').eq('family_id', input.familyId).eq('is_archived', false)
+    .order('created_at').limit(1);
+  let listId = lists?.[0]?.id;
+  if (!listId) {
+    const { data: created, error: listErr } = await supabase.from('grocery_lists')
+      .insert({ family_id: input.familyId, name: 'Groceries', created_by: ctx.user.id })
+      .select('id').single();
+    if (listErr || !created) return { ok: false, error: listErr?.message ?? 'Could not create a list' };
+    listId = created.id;
+  }
+
+  // Skip items already present (unchecked) so re-tapping is idempotent.
+  const { data: existing } = await supabase.from('grocery_items')
+    .select('name').eq('list_id', listId).eq('is_checked', false);
+  const have = new Set((existing ?? []).map((r) => r.name.trim().toLowerCase()));
+  const toAdd = names.filter((n) => !have.has(n.toLowerCase()));
+  if (toAdd.length === 0) return { ok: true, added: 0 };
+
+  const { error } = await supabase.from('grocery_items').insert(
+    toAdd.map((name) => ({ family_id: input.familyId, list_id: listId as string, name, created_by: ctx.user.id })),
+  );
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, added: toAdd.length };
+}
+
 /** Turn a prep step into a real reminder (e.g. "Leave for Soccer game" at the leave-by time). */
 export async function createMomentReminderAction(input: {
   familyId: string; title: string; remindAtISO: string; eventId: string;

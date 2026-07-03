@@ -32,6 +32,10 @@ describe('buildMomentPrep', () => {
     expect(ids).toContain('weather');   // sports is weather-sensitive
     expect(ids).toContain('shop');      // team snacks
     expect(ids).toContain('photo');
+    // The shopping step carries concrete, addable items (one-tap → grocery list).
+    const shop = prep.items.find((i) => i.id === 'shop');
+    expect(shop?.groceryItems?.length).toBeGreaterThan(0);
+    expect(shop?.groceryItems).toContain('Water bottles');
   });
 
   it('emits no leave-by for an all-day event and no packing for a bare appointment', () => {

@@ -10,7 +10,7 @@ import Link from 'next/link';
 import {
   Sparkles, Clock, CloudSun, Backpack, ShoppingCart, PiggyBank, Stethoscope,
   Camera, Bell, ChevronRight, CalendarClock, Check, PartyPopper, Trophy, Plane,
-  GraduationCap, Trees, CalendarDays,
+  GraduationCap, Trees, CalendarDays, Plus,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -23,7 +23,7 @@ import {
   buildMomentPrep, momentWhen, type PrepDomain, type PrepItem, type MomentCategory,
 } from '@/lib/moments/prep';
 import {
-  loadMomentPrep, setMomentPrepDoneAction, createMomentReminderAction,
+  loadMomentPrep, setMomentPrepDoneAction, createMomentReminderAction, addMomentGroceryAction,
 } from '@/app/(app)/dashboard/moment-actions';
 
 type Event = Tables<'calendar_events'>;
@@ -42,7 +42,7 @@ const CAT_LABEL: Record<MomentCategory, string> = {
 };
 
 export function MomentsView() {
-  const { familyId, userId } = useApp();
+  const { familyId } = useApp();
   const { success, error: toastError } = useToast();
 
   const nowISO = useMemo(() => new Date().toISOString(), []);
@@ -71,6 +71,17 @@ export function MomentsView() {
     setDone({ ...done, [eventId]: next });
     const res = await setMomentPrepDoneAction({ eventId, doneIds: next });
     if (!res.ok) { setDone(prev); toastError(res.error ?? 'Could not save'); }
+  }
+
+  async function addToList(event: Event, item: PrepItem) {
+    const key = `${event.id}:${item.id}`;
+    if (pending.has(key) || !item.groceryItems?.length) return;
+    setPending((p) => new Set(p).add(key));
+    const res = await addMomentGroceryAction({ familyId, items: item.groceryItems });
+    setPending((p) => { const n = new Set(p); n.delete(key); return n; });
+    if (!res.ok) return toastError(res.error ?? 'Could not add to list');
+    success(res.added ? `Added ${res.added} to your grocery list` : 'Already on your list');
+    if (!(done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
   }
 
   async function remind(event: Event, item: PrepItem, leaveByISO: string | null) {
@@ -156,10 +167,15 @@ export function MomentsView() {
                           <p className={cn('truncate text-sm font-medium', isDone && 'text-muted line-through')}>{item.label}</p>
                           {item.hint && <p className="truncate text-xs text-muted">{item.hint}</p>}
                         </div>
-                        {item.actionHref ? (
-                          <Link href={item.actionHref} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg" aria-label={`Open: ${item.label}`}>
-                            <ChevronRight className="h-4 w-4" />
-                          </Link>
+                        {item.groceryItems?.length ? (
+                          <button
+                            type="button"
+                            onClick={() => addToList(event, item)}
+                            disabled={pending.has(key)}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-brand/40 bg-brand/5 px-2.5 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand/10 disabled:opacity-50"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Add {item.groceryItems.length}
+                          </button>
                         ) : item.reminderTitle ? (
                           <button
                             type="button"
@@ -169,6 +185,10 @@ export function MomentsView() {
                           >
                             <Bell className="h-3.5 w-3.5" /> Remind
                           </button>
+                        ) : item.actionHref ? (
+                          <Link href={item.actionHref} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg" aria-label={`Open: ${item.label}`}>
+                            <ChevronRight className="h-4 w-4" />
+                          </Link>
                         ) : null}
                       </li>
                     );
