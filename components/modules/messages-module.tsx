@@ -450,8 +450,10 @@ export function MessagesModule() {
 
       {/* ── Conversation list ──────────────────────────────── */}
       <div className={cn(
-        'flex w-full flex-col border-r border-border lg:w-80 xl:w-[22rem]',
-        mobileShowThread && 'hidden lg:flex',
+        // Master-detail from md up (iPad portrait included) — below md one pane
+        // shows at a time, toggled by mobileShowThread.
+        'flex w-full flex-col border-r border-border md:w-72 lg:w-80 xl:w-[22rem]',
+        mobileShowThread && 'hidden md:flex',
       )}>
         {/* Tabs + filter */}
         <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
@@ -551,7 +553,7 @@ export function MessagesModule() {
       {/* ── Message thread ─────────────────────────────────── */}
       <div className={cn(
         'flex flex-1 flex-col overflow-hidden',
-        !mobileShowThread && 'hidden lg:flex',
+        !mobileShowThread && 'hidden md:flex',
       )}>
         {!activeConv ? (
           <div className="flex flex-1 flex-col items-center justify-center">
@@ -562,7 +564,7 @@ export function MessagesModule() {
           <>
             {/* Thread header */}
             <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-              <button onClick={() => setMobileShowThread(false)} className="lg:hidden mr-1 text-muted">
+              <button onClick={() => setMobileShowThread(false)} className="md:hidden mr-1 text-muted" aria-label="Back to conversations">
                 <ArrowLeft className="h-5 w-5" />
               </button>
               <div className="grid h-10 w-10 place-items-center rounded-full bg-brand/20 text-lg">
