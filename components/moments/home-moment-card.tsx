@@ -13,7 +13,8 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import type { Tables } from '@/lib/database.types';
-import { buildMomentPrep, momentWhen, type PrepDomain } from '@/lib/moments/prep';
+import { buildMomentPrep, momentWhen, type PrepDomain, type MomentEvent } from '@/lib/moments/prep';
+import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 
 type Event = Tables<'calendar_events'>;
 
@@ -27,7 +28,7 @@ const DOMAIN_ICON: Record<PrepDomain, typeof Clock> = {
 const HORIZON_MS = 36 * 3600 * 1000;
 
 export function HomeMomentCard() {
-  const { familyId } = useApp();
+  const { familyId, members } = useApp();
   const nowISO = useMemo(() => new Date().toISOString(), []);
 
   const { data: rows } = useRealtimeQuery<Event>({
@@ -38,13 +39,21 @@ export function HomeMomentCard() {
   });
 
   const moment = useMemo(() => {
-    for (const e of rows ?? []) {
+    // Merge real events with any birthday landing today/tomorrow, so Home's
+    // banner can surface "Mia turns 8 tomorrow" just like the Moments page.
+    const evs: MomentEvent[] = (rows ?? []).map((e) => ({
+      id: e.id, title: e.title, category: e.category, location: e.location,
+      starts_at: e.starts_at, all_day: e.all_day, description: e.description,
+    }));
+    const merged = [...evs, ...upcomingBirthdayEvents(members, new Date(), 2)]
+      .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    for (const e of merged) {
       if (new Date(e.starts_at).getTime() - Date.now() > HORIZON_MS) break;
       const prep = buildMomentPrep(e);
       if (prep.items.length > 0) return { event: e, prep };
     }
     return null;
-  }, [rows]);
+  }, [rows, members]);
 
   if (!moment) return null;
   const { event, prep } = moment;

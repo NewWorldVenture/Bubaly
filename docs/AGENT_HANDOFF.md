@@ -52,8 +52,10 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   reminders + grocery all reuse the existing actions.
 > - **Surfaced on Home:** `components/moments/home-moment-card.tsx` shows the single most imminent moment
 >   (within a **36h horizon**) as a full-width "Get ready" banner above the Home grid — leave-by time + top
->   prep chips, deep-linking to `/dashboard/moments`. Renders **`null` when the horizon is clear**, so Home
->   stays calm. Mounted in `app/(app)/home/page.tsx`. Reuses the same pure engine (no new logic/tests).
+>   prep chips, deep-linking to `/dashboard/moments`. **Birthday-aware** too: it merges `upcomingBirthdayEvents`
+>   (today/tomorrow) with real events, so Home can surface "Mia turns 8 tomorrow · cake, gift". Renders
+>   **`null` when the horizon is clear**, so Home stays calm. Mounted in `app/(app)/home/page.tsx`. Reuses the
+>   same pure engines (no new logic/tests).
 > - **One-tap "Add to list" (shipped):** the shopping step now carries concrete inferred items per category
 >   (sports → Water bottles / Orange slices / Granola bars; outdoors → picnic; celebration → cake/candles/
 >   plates/napkins; trip → road-trip snacks) on `PrepItem.groceryItems`. `addMomentGroceryAction` resolves the
