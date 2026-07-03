@@ -16,6 +16,10 @@ then **update this file** (mark done, re-rank, add newly-discovered friction).
 Keep entries small and independently shippable. Prefer **inferring the answer**
 over adding another form.
 
+**Companion artifact:** `docs/EXPERIENCE_SCORECARD.md` measures how good each
+journey is *now* (taps / time / a11y / recovery). Read both before every cycle —
+this Register = *what to fix next*, the Scorecard = *current journey health*.
+
 ---
 
 ## ✅ Already shipped (do NOT redo — see AGENT_HANDOFF.md for detail)

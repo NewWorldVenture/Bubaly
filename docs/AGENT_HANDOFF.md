@@ -4,6 +4,61 @@ Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-07-03 — Trust Engine wired into ALL wallet money movement (Trust TODO #1 closed; see top session block). Earlier same day: Mobile polish merged (#210: scrollable wide tables, safe-area overlays, a11y labels), public-route overflow e2e guard (`tests/e2e/overflow.spec.ts`), and the FINAL describeDbError sweep (zero raw `err.message` toast paths remain). Earlier same day: Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🧭 2026-07-03 — ANTICIPATION + DELIGHT arc + the living roadmap (READ FIRST)
+>
+> This session built the **anticipatory "Moments"** spine + a **delight** layer, and — per the "Project Zero
+> Friction" / "FamilyOS X" directives — established a **living roadmap** so world-class UX is a continuous
+> process, not a one-time milestone. All shipped to `main`, each 100% Supabase-wired, tsc/eslint/1542-tests/
+> `next build` clean per commit.
+>
+> **The two permanent roadmap artifacts (review before every cycle):**
+> - **`docs/FRICTION_BACKLOG.md`** — the **Opportunity Register**: every remaining friction point with
+>   felt-problem → fix → **Impact / Effort / Score / Lane / Deps / Status** + an iteration log. It has a `Lane`
+>   column (`engine` / `ui` / `platform` / `admin`) specifically to avoid colliding with parallel sessions.
+>   **The loop:** pick top-scoring item → implement a materially better experience → verify → mark done + re-rank.
+>   Done so far: #1 (Home one-tap "Remind me"), #3 (real weather advisory on Home banner), #11 (smart per-domain
+>   reminder timing). Queued: #4 (Autopilot self-completion, High/M — touches shared `lib/autopilot/*` + cron),
+>   #7 (time-of-day Mission Control on Home, Med/M — contended `home/page.tsx`), #2 (universal NL command bar).
+> - **`docs/EXPERIENCE_SCORECARD.md`** — objective per-journey metrics (taps / typing / switches / time / a11y /
+>   perceived perf / recovery) with target thresholds. Values are **design-time estimates** (flagged) until
+>   telemetry + a Playwright "taps-to-complete" harness land — the doc says exactly how to make them real.
+>   Read it with the Backlog before each cycle: Scorecard = "how good is each journey now", Backlog = "what next".
+>
+> **Anticipatory "Moments" — one event/birthday → a coordinated, cross-module prep bundle** (the vision's
+> soccer-tournament example, made real). Pure, tested engines (do NOT duplicate — extend):
+> - `lib/moments/prep.ts` — `classifyMoment` + `buildMomentPrep` → leave-by, weather, packing, snacks, budget,
+>   health, photo `PrepItem`s (each `actionHref` or `reminderTitle` or `groceryItems`); `momentWhen`.
+> - `lib/moments/birthdays.ts` — projects `family_members.birthday` → synthetic celebration MomentEvents.
+> - `lib/moments/weather.ts` — `weatherAdvisory` (Open-Meteo daily → "Rain likely 70% — umbrellas"); `dayKey`.
+> - `lib/moments/conflicts.ts` — `findOverlaps` (real `ends_at` double-booking detection, precise not noisy).
+> - `lib/moments/reminders.ts` — `reminderTimeFor` per-domain lead times (packing→night before, etc.).
+> - Shared client hook `components/moments/use-default-forecast.ts` (forecast fetch, used by both surfaces).
+> - **Surfaces:** `/dashboard/moments` (`components/moments/moments-view.tsx` — full prep cards, check-off,
+>   one-tap reminder + grocery-add, conflict chips) · Home "Get ready" banner (`home-moment-card.tsx` — most
+>   imminent moment within 36h incl. birthdays, inline "Remind me", real weather chip; renders `null` when
+>   clear). **Server actions** `app/(app)/dashboard/moment-actions.ts`: `loadMomentPrep` /
+>   `setMomentPrepDoneAction` (checked steps in `user_preferences.notification_prefs.momentPrep`, no migration),
+>   `createMomentReminderAction` (real `reminders` row), `addMomentGroceryAction` (resolves active list, dedupes).
+>   Discoverable via APP_NAV_GROUPS "Suggested" (free) → also in the Navigation Choices catalog.
+> - Tests: `tests/moments-{prep,birthdays,weather,conflicts,reminders}.test.ts` (30 cases).
+>
+> **Delight — "On this day"** memory resurfacing (`lib/memories/on-this-day.ts` `pickOnThisDay`, tested):
+> Home strip (`components/memories/on-this-day-card.tsx`) + a card on the Memories page right rail. Renders
+> `null` on ordinary days — a gift, never clutter.
+>
+> **Mobile foundation** (see the dedicated section below): safe-area chrome (`.app-topbar`/`.app-main`/`.safe-x`),
+> Modal focus-trap, 44px coarse-pointer touch targets, safe-area-aware FABs. Family-facing wide-table overflow
+> was handled by a parallel session (already on main); ~24 internal `/admin/**` tables remain.
+>
+> **NEXT-BOT GUIDANCE (FamilyOS X — "make it obsolete by inventing what comes next"):** the highest-leverage
+> un-started items are (a) **push-notify** on an imminent moment/leave-by/birthday (the app never reaching the
+> family when they're NOT in it is the biggest remaining gap — web-push + `PushNotifications` plugin +
+> autopilot cron already exist; backlog #5); (b) **Autopilot self-completion** of ≥90%-confidence prep steps
+> (backlog #4, `lib/autopilot/*`); (c) a **Family Memory / knowledge layer** (preferences, traditions, routines)
+> the AI reads — no table yet. Prefer the `engine` lane; coordinate on `ui`/`home/page.tsx` (parallel sessions
+> touch it often). Always: add the friction to `FRICTION_BACKLOG.md`, ship one materially-better change, verify
+> (tsc/eslint/vitest/build), push to `main` as a fast-forward, update this doc.
+>
 > ## 🗓️ 2026-07-03 SESSION — Complete the sitemap (legal pages + dynamic blog posts) (branch `claude/sitemap-complete`)
 > `app/sitemap.ts` was a static 12-route list missing the **legal pages** (`/terms`, `/privacy`, `/cookies`,
 > `/acceptable-use`) and **every blog post** — so published articles and policy pages weren't discoverable.
