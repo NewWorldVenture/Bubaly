@@ -4,6 +4,38 @@ Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-07-03 — Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-03 SESSION — Anticipatory "Moments" (life-moment orchestration)
+>
+> **The vision ask:** make FamilyOS anticipatory — "one soccer tournament automatically influences calendar,
+> packing, weather, travel time, snacks, budget, photos… the user never opens multiple modules." The
+> *pending-item* anticipation spine already existed (`lib/autopilot/*` confidence-tiered `autopilot_suggestions`
+> engine + cron; `lib/home/needs-attention.ts` Home Mission Control). The **missing** piece was **life-moment
+> orchestration**: turning ONE upcoming event into a coordinated cross-module prep bundle. Built exactly that.
+>
+> **New surface `/dashboard/moments`** (added to APP_NAV_GROUPS "Suggested", free tier → also in NAV_CATALOG,
+> so it's pinnable via Settings → Navigation Choices). Reads the next 8 upcoming `calendar_events`
+> (`useRealtimeQuery`, live) and for each renders a **prep bundle**: leave-by time, weather check, packing,
+> snacks→Grocery, budget, bring-records, capture-photos — each a one-tap step that either deep-links into the
+> owning module or sets a real reminder. Checked steps persist per-event; a "3/5 → Ready" progress reads at a
+> glance.
+>
+> - **Pure engine `lib/moments/prep.ts`** (fully tested, `tests/moments-prep.test.ts`, 8 tests):
+>   `classifyMoment(event)` (sports/celebration/trip/appointment/school/outdoors/general from DB category +
+>   title/description keywords) · `buildMomentPrep(event, {now})` → deterministic `{category, leaveByISO,
+>   travelBufferMins, weatherSensitive, items: PrepItem[]}` (leave-by = start − category buffer for
+>   located/timed events; category-specific packing/shopping/budget/health/photo steps, each with
+>   `actionHref` or `reminderTitle`) · `momentWhen()` relative-time label.
+> - **Server actions `app/(app)/dashboard/moment-actions.ts`**: `loadMomentPrep()` /
+>   `setMomentPrepDoneAction({eventId,doneIds})` persist checked steps under
+>   `user_preferences.notification_prefs.momentPrep[eventId]` (read-merge-write, **no migration**, own-row RLS);
+>   `createMomentReminderAction()` inserts a real family-scoped `reminders` row linked to the event
+>   (`related_type:'calendar_event'`). 100% Supabase-wired, zero mock data.
+> - Verified: tsc clean, eslint clean on new files, **1506 tests pass**, `next build` exit 0.
+> - **Next extensions** (deliberately scoped out): weather-API-driven "bring an umbrella"; travel buffer from a
+>   real routing/ETA source (currently a sensible per-category constant); auto-adding snack items to the
+>   grocery list in one tap (currently deep-links); rolling the moment prep into the Home "Coming up" card and
+>   into the Autopilot confidence engine so high-confidence steps self-complete.
+>
 > ## 🗓️ 2026-07-03 SESSION — Mobile-readiness FOUNDATION pass (iOS / iPadOS / Android)
 >
 > **Scope reality:** the request was a full "make every one of ~190 routes native-quality" audit. That is a
