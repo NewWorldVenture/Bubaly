@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import { ChevronDown, Check, Gift, Home, Lock, LogOut, Menu, Plus, Search, Settings as SettingsIcon, ShieldCheck, UserCog, X } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
@@ -22,6 +22,40 @@ import { QuickCapture } from './quick-capture';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { AIOrb } from './ai-orb';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
+
+/** Desktop top-bar search. Submitting hands the query to the AI Assistant via
+ *  its existing `?q=` deep-link (the assistant auto-sends and strips the param),
+ *  so "Ask anything…" is a real entry point, not decoration. */
+function HeaderSearch() {
+  const router = useRouter();
+  const [q, setQ] = useState('');
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const query = q.trim();
+    if (!query) return;
+    setQ('');
+    router.push(`/dashboard/assistant?q=${encodeURIComponent(query)}`);
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      role="search"
+      className="hidden h-10 w-full max-w-[320px] items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 text-muted focus-within:border-brand md:flex lg:max-w-[360px] xl:h-12 xl:gap-3 xl:px-4"
+    >
+      <Search className="h-4 w-4 shrink-0" />
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        enterKeyHint="search"
+        aria-label="Ask the AI assistant"
+        className="min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-muted"
+        placeholder="Ask anything..."
+      />
+    </form>
+  );
+}
 
 function FamilySwitcher() {
   const { family, families, role, planLevel } = useApp();
@@ -330,10 +364,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <LogoMark className="h-8 w-14 sm:h-9 sm:w-16" variant="home" />
           </Link>
           <div className="flex-1" />
-          <label className="hidden h-10 w-full max-w-[320px] items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 text-muted md:flex lg:max-w-[360px] xl:h-12 xl:gap-3 xl:px-4">
-            <Search className="h-4 w-4 shrink-0" />
-            <input className="min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-muted" placeholder="Ask anything..." />
-          </label>
+          <HeaderSearch />
           <Link href="/dashboard/notifications" className="hidden h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg md:inline-flex">
             <Gift className="h-5 w-5" />
           </Link>
