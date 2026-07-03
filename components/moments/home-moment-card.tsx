@@ -1,20 +1,23 @@
 'use client';
 
-// The single most imminent "moment", surfaced on Home so the family sees the
-// next-best-action without opening anything. Reuses the pure prep engine. Renders
-// nothing when there's no upcoming event that needs prep, so Home stays calm.
+// The single most imminent "moment", surfaced on Home so the family sees — and
+// can ACT on — the next-best-action without opening anything. Reuses the pure
+// prep engine. Renders nothing when there's no upcoming event that needs prep,
+// so Home stays calm.
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Sparkles, Clock, CloudSun, Backpack, ShoppingCart, PiggyBank, Stethoscope,
-  Camera, CalendarDays, ChevronRight,
+  Camera, CalendarDays, ChevronRight, Bell, Check, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useToast } from '@/components/ui/toast';
 import type { Tables } from '@/lib/database.types';
 import { buildMomentPrep, momentWhen, type PrepDomain, type MomentEvent } from '@/lib/moments/prep';
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
+import { createMomentReminderAction } from '@/app/(app)/dashboard/moment-actions';
 
 type Event = Tables<'calendar_events'>;
 
@@ -29,7 +32,9 @@ const HORIZON_MS = 36 * 3600 * 1000;
 
 export function HomeMomentCard() {
   const { familyId, members } = useApp();
+  const { success, error: toastError } = useToast();
   const nowISO = useMemo(() => new Date().toISOString(), []);
+  const [remindState, setRemindState] = useState<'idle' | 'saving' | 'done'>('idle');
 
   const { data: rows } = useRealtimeQuery<Event>({
     table: 'calendar_events', familyId, deps: [familyId],
@@ -55,42 +60,84 @@ export function HomeMomentCard() {
     return null;
   }, [rows, members]);
 
+  // The single best reminder to offer inline: the leave-by time, else the first
+  // step that can become a reminder (nudged the evening before / 2h out).
+  const primaryReminder = useMemo(() => {
+    if (!moment) return null;
+    const { event, prep } = moment;
+    if (prep.leaveByISO) return { title: `Leave for ${event.title}`, at: prep.leaveByISO };
+    const step = prep.items.find((i) => i.reminderTitle);
+    if (!step) return null;
+    const start = new Date(event.starts_at).getTime();
+    const at = new Date(Math.max(Date.now() + 60000, start - 20 * 3600000)).toISOString();
+    return { title: step.reminderTitle as string, at };
+  }, [moment]);
+
   if (!moment) return null;
   const { event, prep } = moment;
   const steps = prep.items.slice(0, 4);
 
+  async function setReminder() {
+    if (!primaryReminder || remindState !== 'idle') return;
+    setRemindState('saving');
+    const res = await createMomentReminderAction({
+      familyId, title: primaryReminder.title, remindAtISO: primaryReminder.at, eventId: event.id,
+    });
+    if (!res.ok) { setRemindState('idle'); toastError(res.error ?? 'Could not set reminder'); return; }
+    setRemindState('done');
+    success('Reminder set');
+  }
+
   return (
-    <Link
-      href="/dashboard/moments"
-      className="group flex items-center gap-4 rounded-2xl border border-brand/30 bg-gradient-to-r from-brand/10 to-transparent p-4 transition hover:border-brand/50 hover:from-brand/15 sm:p-5"
-    >
-      <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand">
-        <Sparkles className="h-6 w-6" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-brand">Get ready</span>
-          <span className="text-xs font-medium text-muted">· {momentWhen(event.starts_at, event.all_day)}</span>
-        </div>
-        <p className="truncate text-sm font-bold sm:text-base">{event.title}</p>
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {prep.leaveByISO && (
-            <span className="inline-flex items-center gap-1 rounded-lg bg-elevated px-2 py-1 text-xs font-semibold">
-              <Clock className="h-3.5 w-3.5 text-brand" />
-              Leave {new Date(prep.leaveByISO).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-            </span>
-          )}
-          {steps.filter((s) => s.domain !== 'time').slice(0, 3).map((s) => {
-            const Icon = DOMAIN_ICON[s.domain];
-            return (
-              <span key={s.id} className="inline-flex items-center gap-1 rounded-lg bg-elevated px-2 py-1 text-xs text-muted">
-                <Icon className="h-3.5 w-3.5" /> {s.label}
+    <div className="flex items-center gap-4 rounded-2xl border border-brand/30 bg-gradient-to-r from-brand/10 to-transparent p-4 sm:p-5">
+      <Link href="/dashboard/moments" className="group flex min-w-0 flex-1 items-center gap-4" aria-label={`Get ready for ${event.title}`}>
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand">
+          <Sparkles className="h-6 w-6" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-brand">Get ready</span>
+            <span className="text-xs font-medium text-muted">· {momentWhen(event.starts_at, event.all_day)}</span>
+          </div>
+          <p className="truncate text-sm font-bold sm:text-base">{event.title}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {prep.leaveByISO && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-elevated px-2 py-1 text-xs font-semibold">
+                <Clock className="h-3.5 w-3.5 text-brand" />
+                Leave {new Date(prep.leaveByISO).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
               </span>
-            );
-          })}
+            )}
+            {steps.filter((s) => s.domain !== 'time').slice(0, 3).map((s) => {
+              const Icon = DOMAIN_ICON[s.domain];
+              return (
+                <span key={s.id} className="inline-flex items-center gap-1 rounded-lg bg-elevated px-2 py-1 text-xs text-muted">
+                  <Icon className="h-3.5 w-3.5" /> {s.label}
+                </span>
+              );
+            })}
+          </div>
         </div>
-      </div>
-      <ChevronRight className="h-5 w-5 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand" />
-    </Link>
+      </Link>
+
+      {/* One-tap action — set the reminder without leaving Home. */}
+      {primaryReminder ? (
+        <button
+          type="button"
+          onClick={setReminder}
+          disabled={remindState !== 'idle'}
+          aria-label={remindState === 'done' ? 'Reminder set' : `Remind me: ${primaryReminder.title}`}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2 text-xs font-semibold text-brand transition hover:bg-brand/15 disabled:opacity-60"
+        >
+          {remindState === 'saving' ? <Loader2 className="h-4 w-4 animate-spin" />
+            : remindState === 'done' ? <Check className="h-4 w-4" />
+            : <Bell className="h-4 w-4" />}
+          <span className="hidden sm:inline">{remindState === 'done' ? 'Reminder set' : 'Remind me'}</span>
+        </button>
+      ) : (
+        <Link href="/dashboard/moments" aria-label="Open Moments" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:text-brand">
+          <ChevronRight className="h-5 w-5" />
+        </Link>
+      )}
+    </div>
   );
 }

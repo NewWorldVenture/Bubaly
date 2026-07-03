@@ -1,0 +1,59 @@
+# FamilyOS — Friction Backlog ("Project Zero Friction")
+
+A **living, prioritized list of remaining friction** — the measurable roadmap
+toward *"Less Managing Life. More Living It."* Every session should: pick the
+top actionable item, implement a materially better experience, verify, ship,
+then **update this file** (mark done, re-rank, add newly-discovered friction).
+
+**How to read it**
+- **Impact** = how much cognitive load / taps / stress it removes (High/Med/Low).
+- **Effort** = build size (S ≤ ~1 session · M = 1–2 · L = multi-session).
+- **Score** = rough priority = Impact ÷ Effort (do High/S first).
+- **Lane** — to avoid colliding with parallel sessions: `engine` (pure libs +
+  Moments/AI, this thread's lane) · `ui` (layout/design-system) · `platform`
+  (infra/push/cron/Stripe) · `admin`.
+
+Keep entries small and independently shippable. Prefer **inferring the answer**
+over adding another form.
+
+---
+
+## ✅ Already shipped (do NOT redo — see AGENT_HANDOFF.md for detail)
+- **Anticipatory "Moments"** — one event/birthday → coordinated cross-module prep
+  (leave-by, **real weather** advisory, snacks→one-tap Grocery, budget, health,
+  photos), with **conflict detection** ("Overlaps Sam's recital"). `/dashboard/moments`
+  + Home "Get ready" banner. Engines: `lib/moments/{prep,birthdays,weather,conflicts}.ts`.
+- **Delight** — "On this day" memory resurfacing (Home strip + Memories card).
+- **Mobile foundation** — safe-area chrome, dialog focus-trap, 44px touch targets,
+  wide-table overflow (family-facing).
+- **Customization** — Navigation Choices (sidebar + sub-pages), Capture shortcuts
+  (chosen-only, Customize-gated, 10 rows), in-app camera on Create Memory.
+
+---
+
+## 🔥 Prioritized backlog
+
+| # | Friction (the felt problem) | Fix (infer / remove / merge) | Impact | Effort | Score | Lane | Deps | Status |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Home surfaces the next moment but to act you must open `/dashboard/moments` — an extra screen switch for the single most common action (setting the leave-by reminder). | Add a **one-tap "Set reminder"** inline on the Home "Get ready" banner (reuses `createMomentReminderAction`). | High | S | ★★★ | engine | — | ✅ **DONE** (892241b+) |
+| 2 | No universal natural-language entry on every screen — users still navigate to the assistant. "Plan Emma's birthday" should work from anywhere. | Global **⌘K / "+" command bar** that routes NL → assistant/capture/moment actions. Capture already parses; extend to a floating omni-input. | High | L | ★★ | engine+ui | assistant, capture parse | Todo |
+| 3 | Weather advisory only appears on the Moments page, not the Home "Get ready" banner (which shows a generic "check forecast" chip). | Pass the forecast advisory into `HomeMomentCard` too (reuse `weatherAdvisory`), or fetch once at the Home level. | Med | S | ★★★ | engine | `lib/moments/weather` | Todo |
+| 4 | Moment prep steps are all manual checkoffs; high-confidence ones (e.g. "add team snacks") could self-complete or pre-stage. | Fold moment prep into the **Autopilot confidence engine** so ≥90% steps auto-execute reversibly (it already does this for reminders). | High | M | ★★ | engine | `lib/autopilot/*` | Todo |
+| 5 | Nothing reaches the family when they're **not** in the app — an imminent moment/birthday should push. | Push-notify on imminent moment/leave-by/birthday via the existing web-push + `PushNotifications` plugin + a scheduled scan (autopilot cron already runs per-family). | High | M | ★★ | platform | web-push, cron | Todo |
+| 6 | Travel buffer (leave-by) is a per-category constant, not a real ETA — can be wrong in traffic. | Derive buffer from a routing/ETA source using the family's home + event location. | Med | M | ★ | platform | maps/ETA API, home location | Todo |
+| 7 | Home is static across the day; morning vs. night should show different "what matters now". | **Time-of-day Mission Control** — reorder/condense Home sections by hour (morning: schedule/weather/school; night: tomorrow/reflection). | Med | M | ★★ | ui | home data | Todo |
+| 8 | Roles (child/teen/grandparent/caregiver/babysitter/guest) largely see the same surfaces. | Role-tailored Home + nav density/language per `family_members.role`. | Med | L | ★ | ui | roles | Todo |
+| 9 | ~24 internal `/admin/**` tables still clip on mobile (family-facing ones fixed). | Wrap in `overflow-x-auto` in an admin-mobile pass. | Low | S | ★★ | admin | — | Todo |
+| 10 | Recurring routines (school mornings, weekly practice) aren't recognized as reusable templates. | Detect recurring event clusters → offer a saved "routine" with its prep bundle. | Med | L | ★ | engine | autopilot twin | Todo |
+
+*(Re-rank as items ship. Add newly-found friction with a one-line "felt problem".)*
+
+---
+
+## Iteration log
+- **2026-07-03** — Backlog created. Shipped **#1**: the Home "Get ready" banner
+  now has an inline **"Remind me"** button — the body still opens Moments, but
+  the leave-by (or top) reminder can be set in one tap without a screen switch.
+  Expected benefit: removes 1 navigation + 2 taps from the day's most common
+  action. Next up: **#3** (weather advisory on the Home banner, Impact Med / S)
+  or **#4** (Autopilot self-completion, High / M).
