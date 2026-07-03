@@ -37,7 +37,7 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 > Moments banner. No migration, no writes — pure read. **Also a dedicated accent card at the top of the
 > `/dashboard/memories` right rail** (server-rendered from the page's already-loaded `family_photos`, reusing
 > `pickOnThisDay` — no new query, 3-col thumbnail grid with per-photo "N years ago" badges; only renders when
-> there are matches). (Next: optional push notification on match.)
+> there are matches). (Push notification on match: DONE — `onThisDayNotice` in the same pure module, wired into `lib/server/notifications.ts`; family-wide 'system' notice, related_id `onthisday:YYYY-MM-DD` so the permanent dedup fires ≤1/day.)
 >
 > ## 🗓️ 2026-07-03 SESSION — Anticipatory "Moments" (life-moment orchestration)
 >

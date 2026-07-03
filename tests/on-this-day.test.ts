@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickOnThisDay, yearsAgoLabel, type DatedPhoto } from '@/lib/memories/on-this-day';
+import { pickOnThisDay, yearsAgoLabel, onThisDayNotice, type DatedPhoto } from '@/lib/memories/on-this-day';
 
 const now = new Date('2026-07-04T10:00:00');
 const p = (id: string, taken_at: string | null): DatedPhoto => ({ id, taken_at });
@@ -34,5 +34,24 @@ describe('pickOnThisDay', () => {
   it('caps the result', () => {
     const many = Array.from({ length: 12 }, (_, i) => p(`m${i}`, `20${10 + i}-07-04T00:00:00`));
     expect(pickOnThisDay(many, now, 5)).toHaveLength(5);
+  });
+});
+
+describe('onThisDayNotice', () => {
+  it('returns null on an ordinary day', () => {
+    expect(onThisDayNotice([p('x', '2020-01-01T00:00:00')], now)).toBeNull();
+  });
+
+  it('builds a singular notice keyed to today', () => {
+    const n = onThisDayNotice([p('a', '2024-07-04T12:00:00')], now)!;
+    expect(n.relatedId).toBe('onthisday:2026-07-04');
+    expect(n.title).toContain('2 years ago');
+    expect(n.body).toContain('A family memory');
+  });
+
+  it('counts multiple matches and leads with the most recent year', () => {
+    const n = onThisDayNotice([p('a', '2023-07-04T12:00:00'), p('b', '2025-07-04T09:00:00')], now)!;
+    expect(n.title).toContain('1 year ago');
+    expect(n.body).toContain('2 family memories');
   });
 });

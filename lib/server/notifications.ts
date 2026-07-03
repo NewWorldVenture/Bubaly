@@ -11,6 +11,7 @@ import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
 import { dueFamilyReminderNotices, reminderFetchHorizonIso, type FamilyReminderRow } from '@/lib/reminders/notify';
+import { onThisDayNotice } from '@/lib/memories/on-this-day';
 
 type DB = SupabaseClient<Database>;
 
@@ -198,6 +199,21 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null,
       title: `Reminder: ${n.title}`,
       body: `Due ${timeLabel(n.remindAtIso)}`,
+    });
+  }
+
+  // "On this day" memories → one warm family-wide ping on days that resurface
+  // past photos. The related_id embeds today's date, so the permanent dedup
+  // sends it at most once per day; ordinary days produce nothing.
+  const { data: datedPhotos } = await supabase.from('family_photos')
+    .select('id, taken_at')
+    .eq('family_id', familyId).not('taken_at', 'is', null)
+    .order('taken_at', { ascending: false }).limit(400);
+  const memoryNotice = onThisDayNotice(datedPhotos ?? [], now);
+  if (memoryNotice) {
+    candidates.push({
+      type: 'system', related_type: 'family_photos', related_id: memoryNotice.relatedId,
+      user_id: null, title: memoryNotice.title, body: memoryNotice.body,
     });
   }
 
