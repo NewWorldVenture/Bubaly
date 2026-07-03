@@ -73,10 +73,10 @@ CREATE POLICY "front_desk_select" ON front_desk_settings FOR SELECT USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = front_desk_settings.family_id AND user_id = auth.uid() AND is_active)
 );
 CREATE POLICY "front_desk_insert" ON front_desk_settings FOR INSERT WITH CHECK (
-  EXISTS (SELECT 1 FROM family_members fm WHERE fm.family_id = front_desk_settings.family_id AND fm.user_id = auth.uid() AND fm.role IN ('owner','admin') AND fm.is_active)
+  public.can_manage_family(front_desk_settings.family_id)
 );
 CREATE POLICY "front_desk_update" ON front_desk_settings FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM family_members fm WHERE fm.family_id = front_desk_settings.family_id AND fm.user_id = auth.uid() AND fm.role IN ('owner','admin') AND fm.is_active)
+  public.can_manage_family(front_desk_settings.family_id)
 );
 
 -- Call logs: any active member can read/write their family's calls.
@@ -90,7 +90,7 @@ CREATE POLICY "call_logs_update" ON call_logs FOR UPDATE USING (
   EXISTS (SELECT 1 FROM family_members WHERE family_id = call_logs.family_id AND user_id = auth.uid() AND is_active)
 );
 CREATE POLICY "call_logs_delete" ON call_logs FOR DELETE USING (
-  EXISTS (SELECT 1 FROM family_members fm WHERE fm.family_id = call_logs.family_id AND fm.user_id = auth.uid() AND fm.role IN ('owner','admin') AND fm.is_active)
+  public.can_manage_family(call_logs.family_id)
 );
 
 -- ─── Realtime ──────────────────────────────────────────────────────────────

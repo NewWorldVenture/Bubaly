@@ -4,6 +4,27 @@ Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-07-03 — Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-03 SESSION — Migration-chain repair + consolidated RLS drift healer (branch `claude/handoff-continue`)
+> Closed the standing "audit EVERY family-scoped table for RLS drift" TODO and made the migration chain
+> **replayable from scratch** (validated 0001→0118 end-to-end on a throwaway PG16 with auth/storage stubs).
+> - **NEW `0118_rls_drift_repair.sql`** — one idempotent pass: (A) re-enables RLS on every public table,
+>   (B) re-asserts 0004's special-case policies VERBATIM (profiles/families/family_members/invites/
+>   notifications/audit_logs/billing_customers/subscriptions/user_preferences), (C) for every OTHER
+>   `family_id` table, heals the 4-verb `is_family_member` policy set **only if the table has NO select
+>   policy at all** (the drift symptom) — custom/stricter policies are never touched — then (D) raises a
+>   post-repair audit NOTICE/WARNING. Validated on the throwaway: drift-simulated tables healed (4 policies
+>   each), audit_logs' manager-only select untouched, and a simulated `authenticated` member saw exactly
+>   their own family's rows. ⚠️ **Apply 0118 to prod** — it supersedes the piecemeal 0105/0106/0107/0109-style
+>   repairs for ALL tables at once, including any tables that drifted since.
+> - **Fixed 4 real defects that made `supabase db reset` un-replayable (two would fail on ANY apply):**
+>   1. `0011` used task_status `'done'` before 0103 backfilled it → `ADD VALUE IF NOT EXISTS` added in 0011.
+>   2. `0082` used the `moddatetime` extension without creating it → `CREATE EXTENSION IF NOT EXISTS` + drop/re-create trigger.
+>   3. `0090` + `0092` policies checked `family_members.role IN ('owner','admin')` — values that DON'T EXIST
+>      in member_role, so those CREATE POLICYs could never apply → replaced with `public.can_manage_family(family_id)`.
+>   4. `0096` re-declared `redemption_status` with different values but swallowed the duplicate-type error, so
+>      its `DEFAULT 'pending'` could never apply → extend the 0028 enum via `ADD VALUE IF NOT EXISTS 'pending'/'cancelled'`.
+>   All patches are no-ops on databases where the values/extension already exist. Verified: tsc clean, 1521 tests pass.
+>
 > ## 🗓️ 2026-07-03 SESSION — Delight: "On this day" memory resurfacing
 >
 > The **delight** pillar ("surface family memories at meaningful times"). Pure engine

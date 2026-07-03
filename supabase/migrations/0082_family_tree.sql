@@ -35,6 +35,12 @@ CREATE POLICY family_tree_nodes_update ON family_tree_nodes FOR UPDATE
 CREATE POLICY family_tree_nodes_delete ON family_tree_nodes FOR DELETE
   USING (family_id IN (SELECT family_id FROM family_members WHERE user_id = auth.uid()));
 
+-- Replay-safety: moddatetime lives in an extension that historic databases had
+-- enabled out-of-band. Creating it here idempotently keeps a fresh reset
+-- replayable; no-op where it already exists.
+CREATE EXTENSION IF NOT EXISTS moddatetime;
+
+DROP TRIGGER IF EXISTS set_family_tree_nodes_updated_at ON family_tree_nodes;
 CREATE TRIGGER set_family_tree_nodes_updated_at
   BEFORE UPDATE ON family_tree_nodes
   FOR EACH ROW EXECUTE FUNCTION moddatetime(updated_at);

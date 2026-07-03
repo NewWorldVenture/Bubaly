@@ -68,7 +68,7 @@ CREATE POLICY "comms_family_update" ON family_communications
 
 CREATE POLICY "comms_family_delete" ON family_communications
   FOR DELETE USING (
-    EXISTS (SELECT 1 FROM family_members fm WHERE fm.family_id = family_communications.family_id AND fm.user_id = auth.uid() AND fm.role IN ('owner','admin') AND fm.is_active)
+    public.can_manage_family(family_communications.family_id)
   );
 
 -- ─── Realtime ─────────────────────────────────────────────────────────────
