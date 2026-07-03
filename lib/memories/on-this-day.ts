@@ -52,3 +52,24 @@ export function pickOnThisDay<T extends DatedPhoto>(
   out.sort((a, b) => a.yearsAgo - b.yearsAgo || (b.taken_at ?? '').localeCompare(a.taken_at ?? ''));
   return out.slice(0, max);
 }
+
+export type OnThisDayNotice = { title: string; body: string; relatedId: string };
+
+/**
+ * One family-wide notification for a day that resurfaces memories, or null on
+ * an ordinary day. `relatedId` embeds today's calendar date, so the engine's
+ * permanent related_id dedup fires this at most once per day — and naturally
+ * again when the same date comes around with matches in a future year.
+ */
+export function onThisDayNotice(photos: DatedPhoto[], now: Date = new Date()): OnThisDayNotice | null {
+  const matches = pickOnThisDay(photos, now, 50);
+  if (matches.length === 0) return null;
+  const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return {
+    relatedId: `onthisday:${key}`,
+    title: `📸 On this day ${matches[0].label}`,
+    body: matches.length === 1
+      ? 'A family memory from this day — tap to relive it.'
+      : `${matches.length} family memories from this day — tap to relive them.`,
+  };
+}
