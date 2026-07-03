@@ -1,9 +1,25 @@
 # Agent Handoff — Bubaly / FamilyOS
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-07-03 — Mobile polish merged (#210: scrollable wide tables, safe-area overlays, a11y labels), public-route overflow e2e guard (`tests/e2e/overflow.spec.ts`), and the FINAL describeDbError sweep (zero raw `err.message` toast paths remain). Earlier same day: Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
+Last updated: 2026-07-03 — Trust Engine wired into ALL wallet money movement (Trust TODO #1 closed; see top session block). Earlier same day: Mobile polish merged (#210: scrollable wide tables, safe-area overlays, a11y labels), public-route overflow e2e guard (`tests/e2e/overflow.spec.ts`), and the FINAL describeDbError sweep (zero raw `err.message` toast paths remain). Earlier same day: Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-03 SESSION — Trust Engine now governs ALL wallet money movement (branch `claude/trust-money-wiring`)
+> Closed **Trust TODO #1** ("wire `evaluateTrust` into `issueCardAction`/money movement"). Previously only
+> `requestSpendAction` + `sendMoneyAction` consulted the Trust Engine; every other money path bypassed it.
+> Now **every** action that moves money or issues a payment instrument runs `evaluateTrust` first (explainable
+> `trust_audit_logs` row always written; `openApproval: false` since the wallet owns its own approval UX):
+> - `wallet/actions.ts`: `addFundsAction`, `payChoreRewardAction`, `fundGoalAction` (capability `automate`);
+>   `approveGiftAction`, `decideSpendRequestAction` + `decideAllowanceRequestAction` approve-paths
+>   (capability `approve` — the approver themselves can be constrained by a deny grant);
+>   `recordBabysitterPaymentAction` (`automate`).
+> - `wallet/invest/actions.ts`: `placeInvestOrderAction` (explicit-deny-only block, same rule as
+>   `requestSpendAction` — a role-default "no" still lets a child *ask*), `decideInvestOrderAction` (`approve`).
+> - `money/actions.ts`: `issueCardAction` (capability `create`, evaluated via the service client).
+> Semantics unchanged for allowed flows: parent-initiated movements block **only on an explicit deny**
+> (deny grant or household policy); config-only actions (rules, goals-create, freeze) intentionally unwired.
+> Verified: tsc clean, eslint clean, 1524 tests pass, `next build` exit 0.
+>
 > ## 🗓️ 2026-07-03 SESSION — Mobile polish shipped (#210) + overflow e2e guard + last describeDbError sweep (branch `claude/db-error-sweep`)
 > - **#210 MERGED to main**: 6 broken wide tables → `overflow-x-auto` + `min-w`; safe-area padding on all
 >   full-screen overlays (camera, photos lightbox, briefing, Front Desk/Inbox panels, Messages About drawer,
@@ -1493,6 +1509,7 @@ Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionles
 > - **Spending-control editor** (limit/window/blocked categories) on `/wallet/cards` (schema + webhook
 >   enforcement already support it; just needs the form + an `updateCardControlsAction`).
 > - Wire **`evaluateTrust`** (Trust Engine) into `issueCardAction`/money movement per Trust TODO #1.
+>   ✅ DONE 2026-07-03 — see the "Trust Engine now governs ALL wallet money movement" session block at the top.
 
 > **Session update (2026-06-25g) — DASHBOARD CUSTOMIZATION: FAMILY PERMISSIONS.**
 > Completed §10 (role/family permissions) of the customizable-dashboard spec. Branch `claude/festive-bohr-m4cbeg`.
