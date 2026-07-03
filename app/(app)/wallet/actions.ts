@@ -109,6 +109,15 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
   ]);
   if (!cw) return { ok: false, error: 'That wallet was not found.' };
 
+  // Trust Engine governs the money movement (explainable audit + household policy).
+  const { decision } = await evaluateTrust(supabase, familyId, {
+    actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+    domain: 'finances', capability: 'automate',
+    title: `Add funds ${(amount / 100).toFixed(2)}`,
+    context: { amountCents: amount }, openApproval: false,
+  });
+  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+
   const split = normalizeSplit(rule?.split as Partial<Split> | null);
   const parts = allocate(amount, split);
   const bucketByKind = new Map((buckets ?? []).map((b) => [b.kind, b.id]));
@@ -177,6 +186,14 @@ export async function payChoreRewardAction(input: { choreAssignmentId: string })
   const { data: cw } = await supabase
     .from('child_wallets').select('id').eq('family_id', familyId).eq('member_id', assignment.member_id).maybeSingle();
   if (!cw) return { ok: false, error: 'This child has no wallet. Activate the Family Wallet first.' };
+
+  const { decision } = await evaluateTrust(supabase, familyId, {
+    actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+    domain: 'finances', capability: 'automate',
+    title: `Pay chore reward ${(amount / 100).toFixed(2)}`,
+    context: { amountCents: amount }, openApproval: false,
+  });
+  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
 
   const res = await creditChildWallet(supabase, {
     familyId, childWalletId: cw.id, amountCents: amount, type: 'chore_reward',
@@ -279,6 +296,14 @@ export async function fundGoalAction(input: { goalId: string; amountCents: numbe
   const available = (saveTxns ?? []).reduce((s, t) => s + (t.status === 'completed' ? (t.direction === 'credit' ? t.amount_cents : -t.amount_cents) : 0), 0);
   if (amount > available) return { ok: false, error: `Only ${(available / 100).toFixed(2)} available in Save.` };
 
+  const { decision } = await evaluateTrust(supabase, familyId, {
+    actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+    domain: 'finances', capability: 'automate',
+    title: `Fund goal "${goal.title}" ${(amount / 100).toFixed(2)}`,
+    context: { amountCents: amount }, openApproval: false,
+  });
+  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+
   const { error: txErr } = await supabase.from('wallet_transactions').insert({
     family_id: familyId, child_wallet_id: goal.child_wallet_id, bucket_id: saveBucket?.id ?? null,
     type: 'goal_transfer', status: 'completed', direction: 'debit', amount_cents: amount,
@@ -336,6 +361,14 @@ export async function approveGiftAction(input: { giftPaymentId: string }): Promi
   if (!gift) return { ok: false, error: 'Gift not found.' };
   if (gift.status === 'completed' || gift.applied_txn_id) return { ok: false, error: 'This gift was already applied.' };
   if (!gift.child_wallet_id) return { ok: false, error: 'This gift has no child wallet.' };
+
+  const { decision } = await evaluateTrust(supabase, familyId, {
+    actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+    domain: 'finances', capability: 'approve',
+    title: `Approve gift ${(gift.amount_cents / 100).toFixed(2)}`,
+    context: { amountCents: gift.amount_cents }, openApproval: false,
+  });
+  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
 
   const res = await creditChildWallet(supabase, {
     familyId, childWalletId: gift.child_wallet_id, amountCents: gift.amount_cents, type: 'gift_received',
@@ -416,6 +449,15 @@ export async function recordBabysitterPaymentAction(input: {
   if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can record payments.' };
   if (!Number.isFinite(input.amountCents) || input.amountCents <= 0) return { ok: false, error: 'Enter a payment amount.' };
   const supabase = await createServer();
+
+  const { decision } = await evaluateTrust(supabase, ctx.active.familyId, {
+    actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+    domain: 'finances', capability: 'automate',
+    title: `Record babysitter payment ${(input.amountCents / 100).toFixed(2)}`,
+    context: { amountCents: input.amountCents }, openApproval: false,
+  });
+  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+
   const { error } = await supabase.from('babysitter_payments').insert({
     family_id: ctx.active.familyId,
     babysitter_id: input.babysitterId,
@@ -632,6 +674,15 @@ export async function decideSpendRequestAction(input: {
   if (!txn) return { ok: false, error: 'Transaction not found.' };
 
   if (input.decision === 'approved') {
+    // The approver themselves can be constrained (e.g. a deny grant on finances/approve).
+    const { decision } = await evaluateTrust(supabase, familyId, {
+      actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+      domain: 'finances', capability: 'approve',
+      title: `Approve spend ${((txn.amount_cents ?? 0) / 100).toFixed(2)}`,
+      context: { amountCents: txn.amount_cents ?? 0 }, openApproval: false,
+    });
+    if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+
     // Re-validate against the live Spend balance so a stale request can't overdraw.
     if (txn.child_wallet_id) {
       const { available } = await bucketBalanceCents(supabase, { familyId, childWalletId: txn.child_wallet_id, kind: 'spend' });
@@ -773,6 +824,14 @@ export async function decideAllowanceRequestAction(input: {
   if (input.decision === 'approved') {
     const amount = appr.amount_cents ?? 0;
     if (amount <= 0) return { ok: false, error: 'Invalid amount on this request.' };
+
+    const { decision } = await evaluateTrust(supabase, familyId, {
+      actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+      domain: 'finances', capability: 'approve',
+      title: `Approve allowance request ${(amount / 100).toFixed(2)}`,
+      context: { amountCents: amount }, openApproval: false,
+    });
+    if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
 
     const res = await creditChildWallet(supabase, {
       familyId, childWalletId: appr.ref_id, amountCents: amount, type: 'parent_top_up',

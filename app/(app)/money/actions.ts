@@ -16,6 +16,7 @@ import { ensureConnectedAccount, createOnboardingLink, syncConnectedAccount } fr
 import { ensureFinancialAccount } from '@/lib/stripe/treasury';
 import { ensureCardholder, issueCard, setCardFrozen, updateCardControls } from '@/lib/stripe/issuing';
 import { clampSpendLimitCents, normalizeSpendWindow, normalizeBlockedCategories } from '@/lib/wallet/card-controls';
+import { evaluateTrust, roleOf } from '@/lib/trust/server';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -105,6 +106,16 @@ export async function issueCardAction(input: {
   ]);
   if (!acct?.card_issuing_enabled) return { ok: false, error: 'Finish account setup first.' };
   if (!wallet) return { ok: false, error: 'Child wallet not found.' };
+
+  // Trust Engine governs issuing a payment instrument (Trust TODO #1).
+  const { decision } = await evaluateTrust(svc, ctx.active.familyId, {
+    actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+    domain: 'finances', capability: 'create',
+    title: `Issue ${input.type} card`,
+    context: { amountCents: input.spendLimitCents ?? undefined }, openApproval: false,
+  });
+  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+
   const { data: member } = await svc.from('family_members').select('display_name').eq('id', wallet.member_id).maybeSingle();
 
   try {

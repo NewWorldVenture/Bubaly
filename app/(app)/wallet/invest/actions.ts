@@ -9,6 +9,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { orderAmountCents } from '@/lib/invest/portfolio';
+import { evaluateTrust, roleOf } from '@/lib/trust/server';
 
 type Result = { ok: boolean; error?: string };
 
@@ -52,6 +53,18 @@ export async function placeInvestOrderAction(input: { childWalletId: string; ass
     if (!holding || holding.shares < shares) return { ok: false, error: 'Not enough shares to sell.' };
   }
 
+  // Trust Engine: only an EXPLICIT denial blocks placing an order — a role
+  // default "no" still lets a child *ask*, since fills are parent-approved.
+  const { decision } = await evaluateTrust(supabase, familyId, {
+    actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+    domain: 'finances', capability: 'automate',
+    title: `Invest order: ${input.side} ${(amount / 100).toFixed(2)}`,
+    context: { amountCents: amount }, openApproval: false,
+  });
+  if (decision.effect === 'deny' && (decision.basis === 'deny_grant' || decision.basis === 'policy')) {
+    return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  }
+
   const { error } = await supabase.from('invest_orders').insert({
     family_id: familyId, child_wallet_id: input.childWalletId, asset_id: input.assetId,
     side: input.side, shares, price_cents: asset.price_cents, amount_cents: amount,
@@ -81,6 +94,14 @@ export async function decideInvestOrderAction(input: { orderId: string; approve:
     revalidatePath('/wallet/invest');
     return { ok: true };
   }
+
+  const { decision } = await evaluateTrust(supabase, familyId, {
+    actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+    domain: 'finances', capability: 'approve',
+    title: `Fill invest order ${(order.amount_cents / 100).toFixed(2)}`,
+    context: { amountCents: order.amount_cents }, openApproval: false,
+  });
+  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
 
   const { bucketId, balance } = await investBucketBalance(supabase, familyId, order.child_wallet_id);
 
