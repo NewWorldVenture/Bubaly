@@ -304,24 +304,11 @@ function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
 }
 
 /** The sidebar navigation body, shared by the desktop rail and the mobile drawer.
- *  Free-tier members (but NOT super admins, who always get the full catalog) get
- *  the curated sidebar; everyone else gets the full grouped nav + AI-coach footer. */
+ *  Every account — free, paid, and super-admin — gets the SAME curated,
+ *  customizable accordion sidebar so the left navigation is identical for
+ *  everyone (super-admins still reach /admin via the top-bar account menu). */
 function SidebarBody({ onLocked }: { onLocked: (item: NavItem) => void }) {
-  const { planLevel, isSuperAdmin } = useApp();
-  if (planLevel === 0 && !isSuperAdmin) {
-    // Free tier → curated sidebar (primary list + shortcuts + All Services + footer).
-    return <FreeTierSidebar onLocked={onLocked} />;
-  }
-  // Paid tiers + super admins → full grouped navigation + account/theme footer.
-  return (
-    <>
-      <SidebarNav onLocked={onLocked} />
-      <div className="space-y-3 px-3 pb-4 xl:px-4 xl:pb-5">
-        <FamilySwitcher />
-        <SidebarAccount />
-      </div>
-    </>
-  );
+  return <FreeTierSidebar onLocked={onLocked} />;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
