@@ -11,6 +11,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
 import { familyScore } from '@/lib/home/family-score';
+import { HomeMomentCard } from '@/components/moments/home-moment-card';
 import {
   summarizeMonthFinances, usd, memberTagline, weekStrip, isoDate, type HomeTxn,
 } from '@/lib/home/home-data';
@@ -225,6 +226,10 @@ export default async function HomePage() {
           ))}
         </div>
       </div>
+
+      {/* Anticipatory "Get ready" banner — the next imminent moment's prep, or
+          nothing when the horizon is clear. See /dashboard/moments. */}
+      <HomeMomentCard />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* My Family */}

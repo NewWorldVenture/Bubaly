@@ -31,10 +31,14 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   `createMomentReminderAction()` inserts a real family-scoped `reminders` row linked to the event
 >   (`related_type:'calendar_event'`). 100% Supabase-wired, zero mock data.
 > - Verified: tsc clean, eslint clean on new files, **1506 tests pass**, `next build` exit 0.
+> - **Surfaced on Home:** `components/moments/home-moment-card.tsx` shows the single most imminent moment
+>   (within a **36h horizon**) as a full-width "Get ready" banner above the Home grid — leave-by time + top
+>   prep chips, deep-linking to `/dashboard/moments`. Renders **`null` when the horizon is clear**, so Home
+>   stays calm. Mounted in `app/(app)/home/page.tsx`. Reuses the same pure engine (no new logic/tests).
 > - **Next extensions** (deliberately scoped out): weather-API-driven "bring an umbrella"; travel buffer from a
 >   real routing/ETA source (currently a sensible per-category constant); auto-adding snack items to the
->   grocery list in one tap (currently deep-links); rolling the moment prep into the Home "Coming up" card and
->   into the Autopilot confidence engine so high-confidence steps self-complete.
+>   grocery list in one tap (currently deep-links); folding moment prep into the Autopilot confidence engine so
+>   high-confidence steps self-complete.
 >
 > ## 🗓️ 2026-07-03 SESSION — Mobile-readiness FOUNDATION pass (iOS / iPadOS / Android)
 >
