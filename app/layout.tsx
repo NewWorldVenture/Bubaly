@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ThemeScript } from '@/components/theme/theme-script';
 import { ToastProvider } from '@/components/ui/toast';
+import { AndroidBackHandler } from '@/components/app/android-back-handler';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
@@ -56,6 +57,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeScript />
       </head>
       <body className="font-sans antialiased">
+        <AndroidBackHandler />
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
