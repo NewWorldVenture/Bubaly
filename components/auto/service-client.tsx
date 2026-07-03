@@ -35,8 +35,8 @@ export function AutoServiceClient({ records, vehicles }: { records: AutoService[
       ) : (
         <>
           <Badge tone="neutral">Total logged: ${totalSpend.toLocaleString()}</Badge>
-          <div className="overflow-hidden rounded-2xl border border-border">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-2xl border border-border">
+            <table className="w-full min-w-[560px] text-sm">
               <thead className="bg-elevated text-left text-xs text-muted"><tr><th className="px-3 py-2 font-medium">Service</th><th className="px-3 py-2 font-medium">Vehicle</th><th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Mileage</th><th className="px-3 py-2 font-medium">Cost</th><th /></tr></thead>
               <tbody>
                 {records.map((r) => (

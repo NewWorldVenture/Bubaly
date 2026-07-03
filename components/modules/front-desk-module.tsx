@@ -307,7 +307,7 @@ export function FrontDeskModule() {
 
       {/* Detail panel */}
       {selected && (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
+        <div className="fixed inset-0 z-50 bg-background flex flex-col pt-[var(--safe-top)] lg:pt-0 lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
           <CallDetail call={selected} familyId={familyId} userId={userId} onClose={() => setSelected(null)} onDelete={() => void deleteCall(selected)} canDelete={manager} />
         </div>
       )}

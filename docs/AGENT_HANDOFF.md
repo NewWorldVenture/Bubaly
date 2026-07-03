@@ -145,13 +145,15 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 >   `document.documentElement.scrollWidth <= window.innerWidth` (no horizontal scroll) on each route at widths
 >   **320/360/375/390/414/430/768/820/834/1024/1280**, portrait + landscape. This is the single most valuable
 >   next step — it will surface the real per-page overflow offenders.
-> - **Wide tables / grids**: audit modules that render tables (Documents, Payments, admin/*, Health, Medical)
->   for `overflow-x-auto` wrappers (`.table-responsive` exists — apply it). Grep `('<table'`.
+> - **Wide tables / grids**: DONE (2026-07-03) — audited every `<table` in the repo; 6 lacked a scroll
+>   wrapper (4 used `overflow-hidden`, which CLIPS on phones). All now use `overflow-x-auto` (+ `min-w`
+>   so columns keep shape): sports standings, social posts-list, auto + home service history, pricing
+>   matrix, admin social usage.
 > - **Tablet (iPad) two-column**: the app is single-column < `lg`; iPad portrait (768–834) currently gets the
 >   phone layout. Consider a `md:`/`lg:` master-detail for list+detail modules (Messages, Files, Contacts).
-> - **Per-route safe-area**: any component with its own `fixed`/`sticky` bars or full-screen overlays (e.g.
->   `components/capture/capture-shell.tsx`, camera, print sheets) should reuse `.safe-x`/`--safe-*` — grep
->   `fixed inset-0` and `sticky top-0`.
+> - **Per-route safe-area**: DONE (2026-07-03) for the full-screen overlays — camera-capture, photos
+>   lightbox, briefing player, Front Desk + Inbox mobile panels, Messages About drawer now pad
+>   `var(--safe-top/bottom)`; the admin sticky header reuses `.app-topbar`. (capture-shell was already safe.)
 > - **Native niceties** (Capacitor plugins are installed but not all wired): pull-to-refresh, `@capacitor/haptics`
 >   on key actions, Android hardware back-button handling on modals/drawers (`@capacitor/app` `backButton`).
 > - **A11y sweep**: icon-only buttons missing `aria-label` (grep `<button` without `aria-label`), color-contrast

@@ -30,6 +30,7 @@ export default async function AdminUsagePage() {
         <EmptyState icon={Gauge} title="No usage recorded yet" description="Usage events accrue as families generate AI content and publish." />
       ) : (
         <Card>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted"><tr><th className="px-2 py-1.5 font-medium">Event</th><th className="px-2 py-1.5 font-medium">Total</th></tr></thead>
             <tbody>
@@ -41,6 +42,7 @@ export default async function AdminUsagePage() {
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
     </div>

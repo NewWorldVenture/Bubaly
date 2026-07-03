@@ -225,8 +225,8 @@ function FeatureMatrixTable({ matrix }: { matrix: FeatureMatrix }) {
         A check means the feature is included on that plan (and every plan above it).
       </p>
       <PositioningCallouts />
-      <div className="mt-7 overflow-hidden rounded-2xl border border-white/10">
-        <table className="w-full text-sm">
+      <div className="mt-7 overflow-x-auto rounded-2xl border border-white/10">
+        <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b border-white/10 bg-white/[0.03]">
               <th className="px-4 py-3 text-left font-bold">Feature</th>

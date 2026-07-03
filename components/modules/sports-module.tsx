@@ -349,7 +349,8 @@ export function SportsModule() {
           {standings.length === 0 ? (
             <p className="text-sm text-muted">No standings data yet. Log game results to see standings.</p>
           ) : (
-            <table className="w-full text-xs">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[320px] text-xs">
               <thead><tr className="text-muted"><th className="pb-2 text-left">#</th><th className="pb-2 text-left">Team</th><th className="pb-2 text-right">W</th><th className="pb-2 text-right">L</th><th className="pb-2 text-right">T</th><th className="pb-2 text-right">PCT</th></tr></thead>
               <tbody className="divide-y divide-border">
                 {standings.map((s, i) => (
@@ -364,6 +365,7 @@ export function SportsModule() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
 

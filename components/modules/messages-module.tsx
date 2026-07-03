@@ -842,7 +842,7 @@ export function MessagesModule() {
         <aside className={cn(
           'flex-col gap-5 overflow-y-auto border-l border-border bg-surface/20 p-5',
           showAbout
-            ? 'fixed inset-0 z-40 flex w-full bg-bg xl:relative xl:inset-auto xl:z-auto xl:w-80 xl:bg-surface/20'
+            ? 'fixed inset-0 z-40 flex w-full bg-bg pt-[calc(1.25rem+var(--safe-top))] xl:relative xl:inset-auto xl:z-auto xl:w-80 xl:bg-surface/20 xl:pt-5'
             : 'hidden xl:flex xl:w-80',
         )}>
           <div className="flex items-center justify-between">

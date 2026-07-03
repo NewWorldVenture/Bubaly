@@ -42,8 +42,8 @@ export function ServiceClient({ records, assets }: { records: ServiceRecord[]; a
       {records.length === 0 ? (
         <EmptyState icon={Wrench} title="No service history yet" description="Log repairs and maintenance as they happen to build a full home record." action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> Log service</Button>} />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-2xl border border-border">
+          <table className="w-full min-w-[560px] text-sm">
             <thead className="bg-elevated text-left text-xs text-muted">
               <tr><th className="px-3 py-2 font-medium">Service</th><th className="px-3 py-2 font-medium">Asset</th><th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Cost</th><th className="px-3 py-2 font-medium">Next due</th><th /></tr>
             </thead>

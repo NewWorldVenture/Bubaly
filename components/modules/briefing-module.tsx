@@ -513,7 +513,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
   const dayStr   = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#07070d] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-[#07070d] flex flex-col overflow-hidden pt-[var(--safe-top)] pb-[var(--safe-bottom)]">
       {/* Header bar */}
       <div className="flex items-center justify-between px-8 py-4 border-b border-border">
         <div className="flex items-center gap-3">
