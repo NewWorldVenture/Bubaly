@@ -108,7 +108,7 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   `components/modules/routines-panel.tsx` in the calendar right rail (detect → "Save as routine",
   create/edit with weekday toggles + ordered steps, "Apply to this week" with one-tap Undo, delete).
   100% Supabase/realtime. tsc/eslint/**1612 tests**/build green.
-- [ ] Onboarding → first value: target time-to-first-value < 90s; defer/infer non-essential fields. *(not yet audited)*
+- [x] Onboarding → first value (audited + first win): the **PIN step was mandatory** (Continue disabled until a 4-digit PIN matched), forcing every new user through 2 extra fields + validation before reaching the app — even though `completeProfileOnboardingAction` already treats an absent PIN as valid. Made it **"Skip for now"** (defers PIN to Settings → App Lock). Onboarding is now 1 required field (name) → skip → done. *(Onboarding telemetry doesn't fit `journey_events`: no family_id exists until completion — would need an anonymous/pre-family analytics path.)*
 
 ## Dead / stubbed UI to finish or hide
 - [ ] Messages → GIF picker (`messages-module.tsx`): toasts "coming soon" — needs a GIF provider key.

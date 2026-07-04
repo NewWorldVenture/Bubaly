@@ -40,14 +40,16 @@ export function OnboardingWizard({ initialName = '' }: { initialName?: string })
   const firstName = name.trim().split(' ')[0] || 'there';
   const pinMatches = isValidPin(pin) && pin === confirm;
 
-  async function finish() {
+  // `usePin` lets the user reach first value now and add a PIN later — the
+  // server action already treats an absent PIN as valid (defer, don't block).
+  async function finish(usePin: boolean) {
     setSaving(true);
     const res = await completeProfileOnboardingAction({
       firstName: name.trim(),
       age: age || null,
       avatarUrl: avatarUrl || undefined,
       color,
-      pin: isValidPin(pin) ? pin : undefined,
+      pin: usePin && isValidPin(pin) ? pin : undefined,
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Something went wrong');
@@ -117,9 +119,10 @@ export function OnboardingWizard({ initialName = '' }: { initialName?: string })
       {step === 'pin' && (
         <div>
           <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand"><Lock className="h-7 w-7" /></div>
-          <h1 className="text-center text-2xl font-bold">Create a PIN for {firstName}</h1>
+          <h1 className="text-center text-2xl font-bold">Add a PIN for {firstName}?</h1>
           <p className="mx-auto mt-1 max-w-sm text-center text-sm text-muted">
-            This PIN helps keep {firstName}&rsquo;s profile safe and private.
+            Optional — a PIN keeps {firstName}&rsquo;s profile private. You can skip this and add one
+            anytime in Settings.
           </p>
 
           <div className="mt-6 space-y-4">
@@ -161,10 +164,14 @@ export function OnboardingWizard({ initialName = '' }: { initialName?: string })
 
           <div className="mt-6 flex gap-2">
             <Button variant="secondary" onClick={() => setStep('profile')}>Back</Button>
-            <Button className="flex-1" disabled={!pinMatches || saving} onClick={finish}>
+            <Button className="flex-1" disabled={!pinMatches || saving} onClick={() => finish(true)}>
               {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null} Continue
             </Button>
           </div>
+          <button type="button" onClick={() => finish(false)} disabled={saving}
+            className="mt-3 w-full text-center text-sm font-medium text-muted transition hover:text-fg disabled:opacity-50">
+            Skip for now
+          </button>
         </div>
       )}
 
