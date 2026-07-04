@@ -5,8 +5,9 @@
 // preferences, account numbers). 100% Supabase via useRealtimeQuery, backed by
 // the family_facts table (migration 0123).
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
-  Brain, Plus, Search, Pin, PinOff, Pencil, Trash2, Copy, Check,
+  Brain, Plus, Search, Pin, PinOff, Pencil, Trash2, Copy, Check, Database,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -33,7 +34,7 @@ const blank = {
   label: '', value: '', notes: '',
 };
 
-export function KnowledgeBaseModule() {
+export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) {
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -111,7 +112,17 @@ export function KnowledgeBaseModule() {
       <PageHeader
         title="Family Knowledge Base"
         description="Everything the family should never have to re-remember — sizes, allergies, key contacts, preferences — in one searchable place."
-        action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add a fact</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            {canSeed && (
+              <Link href="/dashboard/knowledge/seed"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg">
+                <Database className="h-4 w-4" /> Seed test data
+              </Link>
+            )}
+            <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Add a fact</Button>
+          </div>
+        }
       />
 
       {/* Filters */}
