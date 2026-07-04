@@ -4,7 +4,7 @@
 // open tasks, and time-boxed opportunities into ONE prioritized worklist so the
 // answer to "what should we do next?" is a real, ranked, one-tap list. 100%
 // Supabase via useRealtimeQuery; ranking is the pure lib/opportunities/next-actions.
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import {
   Target, CalendarPlus, CheckSquare, Trophy, Check, ArrowRight, Sparkles, AlertCircle,
@@ -16,6 +16,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { useJourney } from '@/lib/analytics/use-journey';
 import { cn } from '@/lib/utils/cn';
 import {
   rankNextActions, attentionCount, BUCKET_ORDER, BUCKET_LABELS,
@@ -44,6 +45,13 @@ const PRIORITIES = new Set<ActionPriority>(['low', 'medium', 'high']);
 export function NextActionsModule() {
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
+  const journey = useJourney('next_actions');
+  // Telemetry: the journey is "land here → clear an action". Starts on mount;
+  // completes when the first task is cleared below.
+  useEffect(() => {
+    journey.start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const today = dayKey(new Date());
   // 45-day horizon keeps the list focused on what's actually actionable soon.
   const horizon = dayKey(new Date(Date.now() + 45 * 86_400_000));
@@ -102,6 +110,7 @@ export function NextActionsModule() {
     const { error: err } = await sb.from('todo_items')
       .update({ is_done: true, completed_at: new Date().toISOString() }).eq('id', taskId);
     if (err) { toastError(describeDbError(err)); return; }
+    journey.complete(); // first clear completes the journey (no-op thereafter)
     success('Nice — one less thing');
   }
 

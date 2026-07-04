@@ -17,6 +17,7 @@ import { SkeletonList } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { saveCapture, undoCapture, tableForKind } from '@/lib/capture/save';
+import { useJourney } from '@/lib/analytics/use-journey';
 import { classifyVoiceCommand, describeRoute } from '@/lib/voice/command-router';
 import type { CaptureKind } from '@/lib/capture/parse';
 import type { Tables } from '@/lib/database.types';
@@ -53,6 +54,7 @@ export function VoiceModule() {
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const speech = useSpeechRecognition();
+  const journey = useJourney('voice_command');
   const [text, setText] = useState('');
   const [running, setRunning] = useState(false);
 
@@ -85,8 +87,9 @@ export function VoiceModule() {
     if (!raw || running) return;
     if (speech.listening) speech.stop();
     setRunning(true);
+    journey.start();
     const route = classifyVoiceCommand(raw);
-    if (!route.text) { setRunning(false); toastError("Didn't catch a command — try again."); return; }
+    if (!route.text) { setRunning(false); journey.abandon(); toastError("Didn't catch a command — try again."); return; }
     const sb = createClient();
     try {
       const res = await saveCapture(sb, {
@@ -105,9 +108,11 @@ export function VoiceModule() {
           undoCapture(createClient(), res.undo).then(() => success('Undone')).catch(() => toastError('Could not undo'));
         } },
       );
+      journey.complete();
       setText('');
       speech.reset();
     } catch (err) {
+      journey.abandon();
       // Record the failed attempt so the history is honest.
       await sb.from('voice_commands').insert({
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: raw,

@@ -16,6 +16,7 @@ import { Input, Field, Textarea } from '@/components/ui/input';
 import { CameraCapture } from '@/components/ui/camera-capture';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
+import { useJourney } from '@/lib/analytics/use-journey';
 import { partitionBySize, oversizeMessage } from '@/lib/storage/family-media';
 
 type Pick = { file: File; preview: string };
@@ -25,6 +26,14 @@ export function CreateMemory() {
   const { familyId, userId } = useApp();
   const { error: toastError, success } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
+  const journey = useJourney('add_memory');
+
+  // Telemetry: the "add a memory" journey starts on arrival (Experience
+  // Scorecard); completion is recorded on a successful save below.
+  useEffect(() => {
+    journey.start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [picks, setPicks] = useState<Pick[]>([]);
   const [title, setTitle] = useState('');
@@ -114,6 +123,7 @@ export function CreateMemory() {
     setProgress(null);
     if (saved === 0) return; // errors already surfaced
     setCreated(createdRows);
+    journey.complete();
     setDone(true);
   }
 
