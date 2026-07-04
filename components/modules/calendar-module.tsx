@@ -17,6 +17,7 @@ import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { eventSchema, fieldErrors } from '@/lib/validation';
 import { EventDetailModal } from './event-detail-modal';
 import { FindTimeModal } from './find-time-modal';
+import { RoutinesPanel } from './routines-panel';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -743,6 +744,9 @@ export function CalendarModule() {
             })}
           </div>
         </div>
+
+        {/* Routines — detected + saved recurring-routine templates */}
+        <RoutinesPanel events={data} weekStartMonday={monday} onApplied={refresh} />
 
         {/* Share Calendar */}
         <div className="sidebar-card">

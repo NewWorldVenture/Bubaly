@@ -168,6 +168,16 @@ export interface Database {
         { id?: string; family_id: string; title: string; description?: string | null; location?: string | null; category?: EventCategory; starts_at: string; ends_at?: string | null; all_day?: boolean; recurrence?: RecurrenceFreq; recurrence_until?: string | null; assignee_id?: string | null; feed_id?: string | null; external_uid?: string | null; created_by?: string | null },
         Partial<{ title: string; description: string | null; location: string | null; category: EventCategory; starts_at: string; ends_at: string | null; all_day: boolean; recurrence: RecurrenceFreq; recurrence_until: string | null; assignee_id: string | null; feed_id: string | null; external_uid: string | null }>
       >;
+      routine_templates: T<
+        { id: string; family_id: string; name: string; icon: string | null; color: string | null; weekday_mask: number; is_active: boolean; source: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; icon?: string | null; color?: string | null; weekday_mask?: number; is_active?: boolean; source?: string; created_by?: string | null },
+        Partial<{ name: string; icon: string | null; color: string | null; weekday_mask: number; is_active: boolean; source: string }>
+      >;
+      routine_template_items: T<
+        { id: string; template_id: string; family_id: string; title: string; category: EventCategory; start_minutes: number; duration_minutes: number; assignee_id: string | null; sort_order: number } & Stamps,
+        { id?: string; template_id: string; family_id: string; title: string; category?: EventCategory; start_minutes?: number; duration_minutes?: number; assignee_id?: string | null; sort_order?: number },
+        Partial<{ title: string; category: EventCategory; start_minutes: number; duration_minutes: number; assignee_id: string | null; sort_order: number }>
+      >;
       calendar_feeds: T<
         { id: string; family_id: string; name: string; url: string; color: string; last_status: string; last_error: string | null; last_synced_at: string | null; event_count: number; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name: string; url: string; color?: string; last_status?: string; last_error?: string | null; last_synced_at?: string | null; event_count?: number; created_by?: string | null },
