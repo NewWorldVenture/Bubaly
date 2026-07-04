@@ -6,7 +6,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
 import { creditChildWallet, debitSpendBucket, bucketBalanceCents } from '@/lib/wallet/server';
-import { nextRunDate, type Cadence } from '@/lib/wallet/allowance';
+import { nextRunDate, rollForward, type Cadence } from '@/lib/wallet/allowance';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { normalizeHandle, handleError } from '@/lib/wallet/pay-handle';
@@ -245,6 +245,62 @@ export async function toggleAllowanceRuleAction(input: { id: string; isActive: b
   if (error) return { ok: false, error: error.message };
   revalidatePath('/wallet/allowance');
   return { ok: true };
+}
+
+/**
+ * Parent-triggered "run allowances now": pays every allowance rule that is due
+ * (next_run_on ≤ today), crediting each child's wallet from the immutable ledger
+ * (allocated by the rule's split) and advancing next_run_on. Idempotent with the
+ * Vercel cron — both act only on DUE rules, so if the cron already ran, nothing
+ * is due and this pays nothing (no double-pay). Trust-gated + Basic-tier-gated.
+ */
+export async function runDueAllowancesAction(): Promise<Result & { ranCount?: number; paidCents?: number }> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only a parent/guardian can run allowances.' };
+  const familyId = ctx.active.familyId;
+  const supabase = await createServer();
+
+  const tier = await familyWalletTier(supabase, familyId);
+  if (!walletFeatureEnabled(tier, 'allowances')) {
+    return { ok: false, error: 'Automated allowances are a Basic plan feature. Upgrade to enable them.' };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: rules } = await supabase
+    .from('allowance_rules')
+    .select('id, child_wallet_id, amount_cents, cadence, split, next_run_on')
+    .eq('family_id', familyId).eq('is_active', true).lte('next_run_on', today);
+  if ((rules ?? []).length === 0) return { ok: true, ranCount: 0, paidCents: 0 };
+
+  const totalDue = (rules ?? []).reduce((s, r) => s + r.amount_cents, 0);
+  // One Trust check for the batch (parent-initiated money movement).
+  const { decision } = await evaluateTrust(supabase, familyId, {
+    actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+    domain: 'finances', capability: 'automate',
+    title: `Run ${rules!.length} due allowance${rules!.length === 1 ? '' : 's'}`,
+    context: { amountCents: totalDue }, openApproval: false,
+  });
+  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+
+  let ranCount = 0;
+  let paidCents = 0;
+  for (const rule of rules ?? []) {
+    const { runs, next } = rollForward(rule.next_run_on ?? today, rule.cadence as Cadence, today, 1);
+    if (runs > 0) {
+      const res = await creditChildWallet(supabase, {
+        familyId, childWalletId: rule.child_wallet_id, amountCents: rule.amount_cents, type: 'allowance',
+        description: 'Allowance (manual run)', createdBy: ctx.user.id,
+        relatedType: 'allowance_rules', relatedId: rule.id,
+        splitOverride: rule.split as Partial<Split> | null,
+      });
+      if (res.ok) { ranCount++; paidCents += rule.amount_cents; }
+    }
+    await supabase.from('allowance_rules').update({ next_run_on: next, last_run_on: today }).eq('id', rule.id).eq('family_id', familyId);
+  }
+
+  revalidatePath('/wallet/allowance');
+  revalidatePath('/wallet');
+  return { ok: true, ranCount, paidCents };
 }
 
 /** Create a savings goal (child-specific when childWalletId is given, else family-wide). */

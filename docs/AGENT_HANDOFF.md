@@ -10,6 +10,32 @@ Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-07-04 — **Marketplace** (migration `0120`, `/dashboard/marketplace` + 500-record seed) AND **Voice Control** (migration `0121_voice_commands`, `lib/voice/command-router.ts`, `/dashboard/voice`) both shipped to `main` — completing all 12 roadmap features. Repo-root **`todo.md`** is the build guide. See the "🛒🎙️ 2026-07-04" block below. Earlier: 2026-07-03 — Trust Engine wired into ALL wallet money movement (Trust TODO #1 closed; see top session block). Earlier same day: Mobile polish merged (#210: scrollable wide tables, safe-area overlays, a11y labels), public-route overflow e2e guard (`tests/e2e/overflow.spec.ts`), and the FINAL describeDbError sweep (zero raw `err.message` toast paths remain). Earlier same day: Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## ⌘K + 💸 2026-07-04 SESSION — Universal command bar (Friction #2) + parent allowance run (Allowance #3) (branch `claude/command-bar`)
+> Two items in one branch (both verified: tsc/eslint clean, **1588 tests** (+10), `next build` exit 0):
+>
+> **Friction Backlog #2 — universal ⌘K natural-language command bar (DONE):**
+> - **NEW pure `lib/command-bar/route.ts`** — `routeCommand(query, navCatalog, now)` → ranked
+>   `CommandResult[]` across three destinations: **navigate** (fuzzy `navMatchScore` over `NAV_CATALOG`,
+>   both directions so "billing looks wrong" still finds Billing), **capture** (reuses the SAME
+>   `classifyVoiceCommand` → `lib/capture/parse` engine as Voice Control — one parser, not three), and an
+>   **assistant** fallback that's always last so Enter is never a dead end. Explicit intents outrank weak
+>   nav; single bare words don't spawn a capture. Tests `tests/command-bar-route.test.ts` (8).
+> - **NEW `components/app/command-bar.tsx`** — global palette mounted once in `app-shell` (next to
+>   QuickCapture/AIOrb). Opens on **⌘K / Ctrl+K** anywhere, or **"/"** when nothing's focused; ↑/↓ + Enter;
+>   Esc/scrim close. navigate → `router.push`; capture → `saveCapture` (real row) + toast w/ **Undo**;
+>   assistant → `/dashboard/assistant?q=`. Reuses `useApp`/`createClient`/`describeDbError`. No new backend.
+>
+> **Roadmap #3 — Allowance (COMPLETED the open box):** audit confirmed allowance was already wired
+> (cron `/api/cron/wallet-allowance` credits the immutable ledger via `creditChildWallet`; AI coach reads
+> ledger balances) — so the "confirm" box is satisfied. Added the missing **parent control**: allowances
+> were cron-only, so a parent couldn't trigger them.
+> - **NEW `runDueAllowancesAction()`** (`app/(app)/wallet/actions.ts`) — pays every rule with
+>   `next_run_on ≤ today`, crediting the ledger (split-allocated) + advancing `next_run_on`. **Idempotent
+>   with the cron** (both act only on DUE rules → no double-pay). Manager-only, Basic-tier-gated,
+>   Trust-Engine-gated (finances/automate, one batch check). Returns `{ranCount, paidCents}`.
+> - **NEW pure `dueAllowances(rules, today)`** in `lib/wallet/allowance.ts` (+2 tests) + a **"Run due now"**
+>   banner in `allowance-view.tsx` (shows count + total; only when manager + enabled + something due).
+>
 > ## 🎙️ 2026-07-04 SESSION — Voice Control completion: 500-row voice_commands seed (branch `claude/voice-seed-complete`)
 > The parallel session shipped Voice Control (0121, `/dashboard/voice`, `command-router.ts`, module, 3 test
 > files, nav). Audited it against `todo.md`'s done-checklist — everything present (types in
