@@ -98,7 +98,13 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   at the top of `/home` (morning: schedule/weather/school · night: tomorrow/get-ready/reflect). Additive —
   did not refactor the contended grid. Server-time based (no per-user tz yet).
 - [ ] #8 Role-tailored surfaces (density/language per `family_members.role`).
-- [ ] #10 Recurring-routine templates (detect clusters → saved routine + prep bundle).
+- [x] #10 Recurring-routine templates — **DONE**. Migration `0122_routine_templates.sql`
+  (`routine_templates` + `routine_template_items`, weekday bitmask, family-scoped RLS) +
+  pure `lib/routines/detect.ts` (13 tests: `detectRoutines` finds title+weekday+time repeating
+  ≥3 weeks; `materializeRoutine` expands a template → concrete `calendar_events`) +
+  `components/modules/routines-panel.tsx` in the calendar right rail (detect → "Save as routine",
+  create/edit with weekday toggles + ordered steps, "Apply to this week" with one-tap Undo, delete).
+  100% Supabase/realtime. tsc/eslint/**1612 tests**/build green.
 - [ ] Onboarding → first value: target time-to-first-value < 90s; defer/infer non-essential fields. *(not yet audited)*
 
 ## Dead / stubbed UI to finish or hide
@@ -125,9 +131,11 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 - **Universal ⌘K command bar** (Friction #2) shipped: `lib/command-bar/route.ts` (pure, 8 tests) + `components/app/command-bar.tsx` (global palette in app-shell; ⌘K / "/" open; navigate/capture/assistant; reuses the Voice/capture parser). 1588 tests / tsc / eslint / build green.
 - **Allowance** (roadmap #3) completed: parent-run `runDueAllowancesAction()` + "Run due now" banner on `/wallet/allowance` (idempotent with the cron, Trust+tier gated) + pure `dueAllowances` helper (2 tests). Wallet also gained CSV **statement export** + a 500-row child-ledger seed (`seed_wallet_ledger_one_family.sql`).
 - **Time-of-day Home Mission Control** (Friction #7) shipped: `lib/home/time-of-day.ts` (pure, 6 tests) + `components/home/time-of-day-focus.tsx` "Focus now" strip at the top of `/home`, phase-adaptive (morning: schedule/weather/school · night: tomorrow/get-ready/reflect). Additive; 1599 tests / tsc / eslint / build green.
+- **Recurring-routine templates** (Friction #10) shipped: migration `0122`, `lib/routines/detect.ts`
+  (13 tests), `RoutinesPanel` in the calendar rail (detect → save → apply-to-week w/ Undo). Commit on
+  `main` via merge of `claude/routine-templates`. 1612 tests / tsc / eslint / build green.
 - **Next up:** all 12 roadmap features built + wired + seeded. Remaining agent-doable Friction Backlog:
-  **#8 role-tailored surfaces** (density/language per `family_members.role`; `ui`) · **#10 recurring-routine
-  templates** (detect calendar clusters → saved routine + prep bundle; `engine`) · **#4 Autopilot
+  **#8 role-tailored surfaces** (density/language per `family_members.role`; `ui`) · **#4 Autopilot
   self-completion of ≥90%-confidence moment-prep** (`engine`, touches shared `lib/autopilot/*`) · the
   **onboarding time-to-value < 90s** audit. Blocked/human-owned: #6 ETA travel buffer (maps API key),
   Stripe Issuing cards, applying pending prod migrations (0118/0120/0121…) in the Supabase SQL editor,
