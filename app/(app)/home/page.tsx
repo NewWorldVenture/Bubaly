@@ -231,7 +231,7 @@ export default async function HomePage() {
 
       {/* Time-of-day "Focus now" strip — surfaces what matters at this hour
           (morning: schedule/weather/school · night: tomorrow/prep/reflect). */}
-      <TimeOfDayFocus />
+      <TimeOfDayFocus role={me.role} />
 
       {/* Anticipatory "Get ready" banner — the next imminent moment's prep, or
           nothing when the horizon is clear. See /dashboard/moments. */}

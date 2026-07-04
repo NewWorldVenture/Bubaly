@@ -9,6 +9,8 @@ import {
   ShoppingCart, UtensilsCrossed, Sparkles, BookOpen, Sunrise, Sun, Sunset, Moon,
 } from 'lucide-react';
 import { dayPhase, phaseBlurb, focusForPhase, type DayPhase } from '@/lib/home/time-of-day';
+import { roleSurface, focusHeadline } from '@/lib/ui/role-surface';
+import type { MemberRole } from '@/lib/constants/roles';
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   CalendarClock, CalendarDays, CloudSun, GraduationCap, ListChecks, MessageCircle,
@@ -19,9 +21,11 @@ const PHASE_ICON: Record<DayPhase, React.ComponentType<{ className?: string }>> 
   morning: Sunrise, midday: Sun, evening: Sunset, night: Moon,
 };
 
-export function TimeOfDayFocus({ now = new Date() }: { now?: Date }) {
+export function TimeOfDayFocus({ now = new Date(), role = null }: { now?: Date; role?: MemberRole | null }) {
   const phase = dayPhase(now);
-  const items = focusForPhase(phase);
+  // Role-tailored (Friction #8): kids/guests get a shorter, simpler focus set,
+  // and the heading language matches who's reading.
+  const items = focusForPhase(phase, roleSurface(role).focusMax);
   const PhaseIcon = PHASE_ICON[phase];
 
   return (
@@ -30,7 +34,7 @@ export function TimeOfDayFocus({ now = new Date() }: { now?: Date }) {
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand">
           <PhaseIcon className="h-4 w-4" />
         </span>
-        <p className="text-sm font-semibold">Focus now <span className="font-normal text-muted">· {phaseBlurb(phase)}</span></p>
+        <p className="text-sm font-semibold">{focusHeadline(role)} <span className="font-normal text-muted">· {phaseBlurb(phase)}</span></p>
       </div>
       <div className="flex flex-wrap gap-2">
         {items.map((it) => {
