@@ -10,6 +10,30 @@ Living context doc so another agent can continue without re-deriving everything.
 Last updated: 2026-07-04 — **Marketplace** (migration `0120`, `/dashboard/marketplace` + 500-record seed) AND **Voice Control** (migration `0121_voice_commands`, `lib/voice/command-router.ts`, `/dashboard/voice`) both shipped to `main` — completing all 12 roadmap features. Repo-root **`todo.md`** is the build guide. See the "🛒🎙️ 2026-07-04" block below. Earlier: 2026-07-03 — Trust Engine wired into ALL wallet money movement (Trust TODO #1 closed; see top session block). Earlier same day: Mobile polish merged (#210: scrollable wide tables, safe-area overlays, a11y labels), public-route overflow e2e guard (`tests/e2e/overflow.spec.ts`), and the FINAL describeDbError sweep (zero raw `err.message` toast paths remain). Earlier same day: Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🗓️ 2026-07-04 SESSION — Wallet build-out: CSV statement export + 500-row ledger seed (branch `claude/wallet-statement-export`)
+> Working `todo.md` #2 "Wallet — full family financial OS". Audit first: the wallet is **already deeply
+> wired** — allowance cron (`app/api/cron/wallet-allowance`) credits the immutable ledger via
+> `creditChildWallet` and advances `next_run_on`; the AI coach (`/api/ai/wallet`) computes balances from the
+> ledger; reconcile is surfaced at `/admin/wallet/reconciliation`. The only "coming soon" left is the
+> **Stripe-Issuing cards** (money-cards-view / child-detail card face) — legit future infra, kept honest.
+> The real missing feature for a "financial OS": **exportable statements**. Added it:
+> - **`lib/wallet/activity.ts`** — new pure `toStatementCsv(txns)` (RFC-4180 escaping; running balance
+>   computed oldest→newest over **completed** rows so the newest row shows the current total; columns
+>   Date/Time/Type/Description/Child/Direction/Amount/Status/Balance) + `statementFilename(now)`
+>   (`bubaly-wallet-statement-YYYY-MM-DD.csv`). Tests: `tests/wallet-activity.test.ts` +6 (now 10).
+> - **`components/wallet/activity-view.tsx`** — "Statement" download button (respects the active
+>   child/type/direction filters; disabled when empty). Client-side Blob download, no server round-trip.
+> - **`components/wallet/child-detail-view.tsx`** — per-child "Statement" button in the Activity header.
+> - **`supabase/seed_wallet_ledger_one_family.sql`** + `db:seed:wallet-ledger` — 500
+>   `wallet_transactions` (the 0088 child ledger this feature reads; distinct from the 0113 money-hub
+>   `transactions` seeded by `db:seed:wallet`) for the target family: ensures family wallet + child_wallet
+>   with Spend/Save/Give/Invest buckets per non-manager member, then 500 txns across 8 types / both
+>   directions / 4 statuses / ~180 days. RLS preamble, `metadata->>'seed'='wallet_ledger'` idempotent tag.
+>   Validated on PG16 (500 rows, idempotent re-run, every row bucket-resolved, parent excluded).
+> Verified: tsc clean, eslint clean, **1536 tests pass** (+5), `next build` exit 0.
+> Remaining wallet gaps for a follow-up: Stripe Issuing (blocked on keys), a parent "run allowance now"/
+> catch-up trigger (cron-only today), and a dedicated statement date-range picker.
+>
 > ## 🛒🎙️ 2026-07-04 — MARKETPLACE + VOICE CONTROL shipped + roadmap build guide (READ FIRST)
 >
 > Ran the **roadmap build** (the product roadmap: Wallet, Allowance, Concierge, Family Memory,
