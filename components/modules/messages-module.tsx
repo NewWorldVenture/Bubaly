@@ -326,13 +326,15 @@ export function MessagesModule() {
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
       const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
       const isImage = file.type.startsWith('image/');
+      const isAudio = file.type.startsWith('audio/');
+      const kind = isImage ? 'image' : isAudio ? 'audio' : 'file';
       const { error: insErr } = await supabase.from('family_messages').insert({
         conversation_id: activeConv.id,
         family_id: familyId,
         sender_id: userId,
         sender_name: myName,
-        content: isImage ? null : file.name,
-        kind: isImage ? 'image' : 'file',
+        content: isImage || isAudio ? null : file.name,
+        kind,
         attachment_url: publicUrl,
         attachment_name: file.name,
         attachment_mime: file.type,
@@ -348,6 +350,56 @@ export function MessagesModule() {
       setUploadingFile(false);
     }
   }
+
+  // ── Record voice message ─────────────────────────────────────
+  // Uses MediaRecorder → uploads the clip through the same sendFile path
+  // (kind 'audio'). Discardable, with a live timer; no extra deps.
+  const [recording, setRecording] = useState(false);
+  const [recSeconds, setRecSeconds] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const discardRef = useRef(false);
+
+  async function startRecording() {
+    if (recording || uploadingFile || !activeConv) return;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices || typeof MediaRecorder === 'undefined') {
+      toastError('Voice recording isn’t supported in this browser.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      chunksRef.current = [];
+      discardRef.current = false;
+      rec.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null; }
+        setRecording(false);
+        setRecSeconds(0);
+        if (discardRef.current) { chunksRef.current = []; return; }
+        const type = rec.mimeType || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type });
+        chunksRef.current = [];
+        if (blob.size === 0) return;
+        const ext = (type.split('/')[1] || 'webm').split(';')[0];
+        await sendFile(new File([blob], `voice-${Date.now()}.${ext}`, { type }));
+      };
+      recorderRef.current = rec;
+      rec.start();
+      setRecording(true);
+      setRecSeconds(0);
+      recTimerRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
+    } catch {
+      toastError('Microphone access was blocked.');
+    }
+  }
+  function stopRecording(discard = false) {
+    discardRef.current = discard;
+    recorderRef.current?.stop();
+  }
+  useEffect(() => () => { if (recTimerRef.current) clearInterval(recTimerRef.current); }, []);
 
   // ── React to message ─────────────────────────────────────────
   async function reactTo(msg: Message, emoji: string) {
@@ -685,6 +737,11 @@ export function MessagesModule() {
                                     <Download className="h-4 w-4 shrink-0 opacity-70" />
                                   </a>
                                 )}
+                                {/* Voice message — inline audio player */}
+                                {msg.kind === 'audio' && msg.attachment_url && (
+                                  <audio controls preload="none" src={msg.attachment_url}
+                                    className="mb-1 h-10 w-56 max-w-full" aria-label="Voice message" />
+                                )}
                                 {/* Text */}
                                 {msg.content && <span>{msg.content}</span>}
 
@@ -822,16 +879,31 @@ export function MessagesModule() {
                 </button>
               </div>
 
-              {/* Send when typing, mic affordance when empty (the purple round action) */}
+              {/* Send when typing · recording controls while recording · mic when empty */}
               {text.trim() ? (
                 <button type="submit" disabled={sending} aria-label="Send message"
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50">
                   {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                 </button>
+              ) : recording ? (
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button type="button" onClick={() => stopRecording(true)} aria-label="Cancel recording"
+                    className="grid h-9 w-9 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-rose-400">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium tabular-nums text-rose-400" aria-live="polite">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500" />
+                    {Math.floor(recSeconds / 60)}:{String(recSeconds % 60).padStart(2, '0')}
+                  </span>
+                  <button type="button" onClick={() => stopRecording(false)} aria-label="Stop and send voice message"
+                    className="grid h-11 w-11 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90">
+                    <Send className="h-5 w-5" />
+                  </button>
+                </div>
               ) : (
-                <button type="button" onClick={() => toastError('Voice messages are coming soon.')} aria-label="Record voice message"
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90">
-                  <Mic className="h-5 w-5" />
+                <button type="button" onClick={startRecording} disabled={uploadingFile} aria-label="Record voice message"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50">
+                  {uploadingFile ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
                 </button>
               )}
             </form>

@@ -112,7 +112,7 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 
 ## Dead / stubbed UI to finish or hide
 - [ ] Messages → GIF picker (`messages-module.tsx`): toasts "coming soon" — needs a GIF provider key.
-- [ ] Messages → Voice messages (`messages-module.tsx`): "coming soon" — record → upload → playback.
+- [x] Messages → Voice messages — DONE. `MediaRecorder` in `messages-module.tsx` records a clip → uploads through the existing `sendFile` path (kind `audio`, 25 MB cap + rollback) → renders an inline `<audio controls>` player. Live timer + cancel/discard; graceful "not supported" fallback. 100% Supabase (family-media storage + family_messages row).
 - [x] Family page → "Wi-Fi & Passwords" — shipped as the Family Vault: `family_credentials` table + `/dashboard/passwords` (CRUD, mask/reveal/copy, RLS). *(parallel session)*
 
 ## Polish / consistency
