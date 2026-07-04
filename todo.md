@@ -1,54 +1,110 @@
-# FamilyOS — Open TODOs
+# FamilyOS — Roadmap Build TODO
 
-A single, current list of open work. Source-of-truth detail lives in
-`docs/FRICTION_BACKLOG.md` (what to fix next) and `docs/EXPERIENCE_SCORECARD.md`
-(journey health). Keep this file in sync as items ship.
+**Goal:** Ship every roadmap feature below at **100% fully developed** and **100% wired to
+Supabase** (real family-scoped tables + RLS, no mock data). This file is the single source of
+truth for the build — work top to bottom, keep it in sync, and don't mark a feature `DONE`
+until every box under it is checked.
 
-_Last updated: 2026-07-03._
+Companion docs: `docs/FRICTION_BACKLOG.md` (what to fix next) and
+`docs/EXPERIENCE_SCORECARD.md` (journey health).
 
-## 🔥 Open friction backlog (from docs/FRICTION_BACKLOG.md)
-- [ ] **#2 — Global command bar** (High / L): ⌘K + "+" omni-input on every screen that routes natural language → assistant/capture/moment actions. (Capture parse already exists.)
-- [ ] **#4 — Autopilot self-completes moment prep** (High / M): fold high-confidence (≥90%) moment prep steps into the Autopilot confidence engine so they auto-execute reversibly. *(engine lane — may be in progress)*
-- [ ] **#6 — Real travel-buffer ETA** (Med / M): derive leave-by from a routing/ETA source (home + event location) instead of a per-category constant. *(needs a maps/ETA API key)*
-- [ ] **#7 — Time-of-day Mission Control** (Med / M): reorder/condense Home sections by hour (morning: schedule/weather/school · night: tomorrow/reflection).
-- [ ] **#8 — Role-tailored surfaces** (Med / L): Home + nav density/language per `family_members.role` (child/teen/grandparent/caregiver/babysitter/guest).
-- [ ] **#10 — Recurring-routine templates** (Med / L): detect recurring event clusters → offer a saved "routine" with its prep bundle.
+**Definition of "done" per feature (the checklist each one must pass):**
+- [ ] **Schema** — additive, idempotent migration with family-scoped RLS via `public.is_family_member`, validated on PG16.
+- [ ] **Types** — hand-maintained rows added to `lib/database.types.ts` (`T<Row,Insert,Update>`).
+- [ ] **Server lib** — pure/tested logic + Supabase reads/writes (no mock data anywhere in the path).
+- [ ] **UI module** — production component, optimistic where sensible, undo/confirm on destructive.
+- [ ] **Route** — `app/(app)/dashboard/<feature>/page.tsx` using `requireUserContext()`.
+- [ ] **Nav** — entry in `lib/constants/navigation.ts` + Navigation Choices catalog.
+- [ ] **Verified** — `tsc`, `eslint`, `vitest`, `next build` all green.
 
-### ✅ Recently verified done (were listed open but already shipped)
-- #5 Push on imminent moment/leave-by/birthday — `generateFamilyNotifications` creates them + `dispatchPendingPushes` cron delivers. (Confirmed 2026-07-03.)
-- #9 Admin tables clip on mobile — every `/admin/**` table already wrapped in `.table-responsive`. (Confirmed 2026-07-03.)
+Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 
-## 🧭 Scorecard journey gaps (from docs/EXPERIENCE_SCORECARD.md)
-- [ ] **Onboarding → first value** (biggest opportunity): ~8–12 taps, 3–5 typed fields, several switches, ~2–4 min. Target time-to-first-value < 90s — defer/infer every non-essential field. *(not yet audited)*
-- [x] Add a memory — per-file upload progress (2026-07-03).
-- [x] Add a memory — Undo on the success screen (2026-07-03).
-- [x] Add a memory / Photos upload — 25 MB pre-check with friendly skip message (2026-07-03).
+---
 
-## 🧩 Dead / stubbed UI to finish or hide
-- [ ] **Messages → GIF picker** (`messages-module.tsx`): currently toasts "coming soon". Needs a GIF provider (GIPHY/Tenor) API key, then insert as an attachment.
-- [ ] **Messages → Voice messages** (`messages-module.tsx`): "coming soon". Needs record → upload (family-media) → playback.
-- [ ] **Wallet → Spending cards / real-time balance** (`money-cards-view.tsx`, `child-detail-view.tsx`): "coming soon" (Stripe Issuing) — legitimately future; keep honest until infra lands.
-- [x] **Family page → "Wi-Fi & Passwords"** — ✅ shipped the Family Vault: `family_credentials` table (migration 0119) + `/dashboard/passwords` (full CRUD, mask/reveal/copy, RLS) + Family card wired to a live count + seed across all profiles (`seed_credentials_all_families.sql`). See `docs/family-vault.md`. (2026-07-03)
+## Roadmap features (from the product roadmap)
 
-## 🧱 Polish / consistency
-- [ ] Extend the upload progress + 25 MB guard pattern to the Files/documents single-upload (`documents-module.tsx`) and `trip-memories-module.tsx` for consistency.
-- [ ] Instrument journeys (a `journey_started/completed` event + step counter) so the Scorecard uses real medians instead of estimates.
+### 1. Marketplace — "Buy, sell, rent, borrow within the platform"  ☑ DONE
+- [x] Migration `0120_marketplace.sql`: `marketplace_listings` (kind sell/rent/borrow/free/wanted, price_cents, rent_period, category, condition, status, claimed_by), `marketplace_offers` (interest/claim/offer), family-scoped RLS. Validated: all 120 migrations apply on PG16, idempotent re-run clean, RLS+trigger+FK verified.
+- [x] Types for both tables in `lib/database.types.ts`.
+- [x] `lib/marketplace/listings.ts` — labels, money math, filter/rank, offer/claim state machine (pure). Tests `tests/marketplace-listings.test.ts` (10 tests).
+- [x] `components/modules/marketplace-module.tsx` — browse+filter, post/edit, interest/claim, owner offer review (accept→hand-off, decline), withdraw/complete. 100% Supabase via `useRealtimeQuery`.
+- [x] Route `/dashboard/marketplace` + admin-only `/dashboard/marketplace/seed` (500-record test seed screen).
+- [x] Nav entry (Family & Home group, `Store` icon).
+- [x] Verified: tsc, eslint, vitest (1562), build.
 
-## 🗺️ Planned roadmap (product vision — status: Planned)
-Larger, category-defining bets. All marked **Planned**.
-- [ ] **Wallet** — Full family financial OS.
-- [ ] **Allowance** — AI allowance coaching.
-- [ ] **AI Concierge** — Become category-defining.
-- [ ] **Family Memory** — Build a persistent family knowledge graph.
-- [ ] **Voice Control** — Full conversational interface.
-- [ ] **Phone Concierge** — AI receptionist for families.
-- [ ] **Email Concierge** — AI inbox management.
-- [ ] **Predictive Planning** — Recommend next best actions.
-- [ ] **AI Automation** — Multi-step autonomous workflows.
-- [ ] **Home Management** — Maintenance and inventory automation.
-- [ ] **Vehicle Management** — AI maintenance scheduling.
-- [ ] **Marketplace** — Buy, sell, rent, borrow within the platform.
-- [ ] **Family Operating System** — Own this positioning (north-star framing for all of the above).
+### 2. Wallet — "Full family financial OS"  ◐ (already wired)
+Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
+surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:
+- [ ] Spending cards / real-time balance (`money-cards-view.tsx`, `child-detail-view.tsx`) say "coming soon" — needs Stripe Issuing (legit future infra; keep honest until it lands).
 
-## ⛔ Standing rules (see /memory.md)
-- Do **not** modify the global left navigation for all accounts without explicit instruction. Per-user Navigation Choices customization is fine.
+### 3. Allowance — "AI allowance coaching"  ◐ (wired under Wallet)
+Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surfaced under `/wallet`.
+- [ ] Confirm allowance schedule posts to the economy ledger and coaching reads real balances.
+
+### 4. AI Concierge — "Become category defining"  ◐ (already wired)
+`/dashboard/concierge`, `lib/concierge/digest.ts`; module has 6 `.from()` + realtime. No mock data.
+- [ ] Stretch: deeper write-back of accepted recommendations.
+
+### 5. Family Memory — "Build persistent family knowledge graph"  ◐
+`/dashboard/family-memory` + `/dashboard/family-knowledge-graph`, `lib/memories/*`.
+- [ ] Confirm the knowledge-graph view has a persistent Supabase store (no `family_memory` table in types yet — verify backing store or add one).
+
+### 6. Voice Control — "Full conversational interface"  ☐ NEXT (only roadmap surface with no route)
+Has `lib/voice/transcript.ts` (pure helpers). No route/nav.
+- [ ] Voice command center: Web Speech capture → parse (reuse `lib/capture/parse`) → save real rows (reuse `saveCapture`) → persist a `voice_commands` history table (family-scoped RLS).
+- [ ] Route `/dashboard/voice` + nav + verified.
+
+### 7. Phone Concierge — "AI receptionist for families"  ◐ (already wired)
+`/dashboard/front-desk`; module has 8 `.from()` + realtime. Wired.
+
+### 8. Email Concierge — "AI inbox management"  ◐ (already wired)
+`/dashboard/inbox` Communications Hub; module has 10 `.from()` + realtime. Wired.
+
+### 9. Predictive Planning — "Recommend next best actions"  ◐ (wired via Moments)
+`lib/opportunities/deadlines.ts` + Moments engine surface next-best-actions on Home. Wired.
+- [ ] Stretch: dedicated "Next best actions" feed page.
+
+### 10. AI Automation — "Multi-step autonomous workflows"  ◐ (already wired)
+`/dashboard/family-automation`, `/dashboard/autopilot`, `lib/autopilot/engine.ts`. Wired.
+- [ ] #4 Fold ≥90%-confidence moment-prep steps into the Autopilot engine (reversible auto-exec).
+
+### 11. Home Management — "Maintenance and inventory automation"  ◐ (already wired)
+`/dashboard/home`, `lib/home/maintenance.ts`, `lib/home/devices.ts`; module has 10 `.from()`. Wired.
+
+### 12. Vehicle Management — "AI maintenance scheduling"  ◐ (already wired)
+`vehicles` + `vehicle_registrations/inspections` (0037), `/dashboard/auto/vehicles`, `lib/auto/*`. Wired.
+
+### 13. Family Operating System — "Own this positioning"  (meta)
+- [ ] Cross-feature cohesion: consistent nav, Home surfaces every hub, Navigation Choices covers all.
+
+---
+
+## Other open features (carried from the Friction Backlog / Scorecard)
+- [ ] #2 Universal ⌘K natural-language command bar (routes NL → assistant/capture/moment).
+- [ ] #6 ETA-based travel buffer for leave-by (needs a maps/ETA API key).
+- [ ] #7 Time-of-day Home Mission Control (reorder Home by hour).
+- [ ] #8 Role-tailored surfaces (density/language per `family_members.role`).
+- [ ] #10 Recurring-routine templates (detect clusters → saved routine + prep bundle).
+- [ ] Onboarding → first value: target time-to-first-value < 90s; defer/infer non-essential fields. *(not yet audited)*
+
+## Dead / stubbed UI to finish or hide
+- [ ] Messages → GIF picker (`messages-module.tsx`): toasts "coming soon" — needs a GIF provider key.
+- [ ] Messages → Voice messages (`messages-module.tsx`): "coming soon" — record → upload → playback.
+- [x] Family page → "Wi-Fi & Passwords" — shipped as the Family Vault: `family_credentials` table + `/dashboard/passwords` (CRUD, mask/reveal/copy, RLS). *(parallel session)*
+
+## Polish / consistency
+- [ ] Extend upload-progress + 25 MB guard to `documents-module.tsx` and `trip-memories-module.tsx`.
+- [ ] Instrument journeys (`journey_started/completed` + step counter) → replace Scorecard estimates with real medians.
+
+## Standing rules (see /memory.md)
+- Do **not** modify the global left navigation for all accounts without explicit instruction. Per-user Navigation Choices customization is fine. (The Marketplace nav entry above was an explicit roadmap build.)
+
+---
+
+## Build log (append as features land)
+- **Marketplace** shipped (migration 0120, lib+tests, module, route, nav). Commit `213718d`.
+- **Marketplace test seed**: `lib/marketplace/seed-sql.ts` (500 listings + ~290 offers,
+  all kinds/statuses, idempotent full-reseed per family) + admin-only screen at
+  `/dashboard/marketplace/seed` (Copy SQL button, iPad-friendly). Validated on PG16:
+  500 rows, every pending listing has offers, re-run stays 500.
+- **Next up:** Voice Control (only roadmap surface with no route yet — lib/voice exists).

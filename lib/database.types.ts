@@ -343,6 +343,16 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; title: string; with_kids?: string | null; location?: string | null; place_id?: string | null; starts_at: string; ends_at?: string | null; status?: string; contact_name?: string | null; contact_phone?: string | null; notes?: string | null; created_by?: string | null },
         Partial<{ member_id: string | null; title: string; with_kids: string | null; location: string | null; place_id: string | null; starts_at: string; ends_at: string | null; status: string; contact_name: string | null; contact_phone: string | null; notes: string | null }>
       >;
+      marketplace_listings: T<
+        { id: string; family_id: string; member_id: string | null; title: string; description: string | null; kind: string; category: string; condition: string | null; price_cents: number; rent_period: string | null; photo_url: string | null; location: string | null; status: string; claimed_by: string | null; claimed_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; description?: string | null; kind?: string; category?: string; condition?: string | null; price_cents?: number; rent_period?: string | null; photo_url?: string | null; location?: string | null; status?: string; claimed_by?: string | null; claimed_at?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; title: string; description: string | null; kind: string; category: string; condition: string | null; price_cents: number; rent_period: string | null; photo_url: string | null; location: string | null; status: string; claimed_by: string | null; claimed_at: string | null }>
+      >;
+      marketplace_offers: T<
+        { id: string; family_id: string; listing_id: string; member_id: string | null; kind: string; amount_cents: number | null; message: string | null; status: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; listing_id: string; member_id?: string | null; kind?: string; amount_cents?: number | null; message?: string | null; status?: string; created_by?: string | null },
+        Partial<{ member_id: string | null; kind: string; amount_cents: number | null; message: string | null; status: string }>
+      >;
       location_events: T<
         { id: string; family_id: string; member_id: string; place_id: string | null; place_name: string | null; event_type: LocationEventType; latitude: number | null; longitude: number | null; occurred_at: string; created_at: string },
         { id?: string; family_id: string; member_id: string; place_id?: string | null; place_name?: string | null; event_type?: LocationEventType; latitude?: number | null; longitude?: number | null; occurred_at?: string },
