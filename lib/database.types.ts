@@ -954,6 +954,11 @@ export interface Database {
         { id?: string; family_id: string; name: string; relationship?: string | null; category?: string; phone?: string | null; phone_alt?: string | null; email?: string | null; address?: string | null; notes?: string | null; photo_url?: string | null; is_emergency?: boolean; birthday_month?: number | null; birthday_day?: number | null; specialty?: string | null; organization?: string | null; created_by?: string | null },
         Partial<{ name: string; relationship: string | null; category: string; phone: string | null; phone_alt: string | null; email: string | null; address: string | null; notes: string | null; is_emergency: boolean; birthday_month: number | null; birthday_day: number | null; specialty: string | null; organization: string | null; updated_at: string }>
       >;
+      family_credentials: T<
+        { id: string; family_id: string; category: string; label: string; username: string | null; secret: string; url: string | null; notes: string | null; member_id: string | null; is_favorite: boolean; created_by: string | null; created_at: string; updated_at: string; deleted_at: string | null },
+        { id?: string; family_id: string; category?: string; label: string; username?: string | null; secret?: string; url?: string | null; notes?: string | null; member_id?: string | null; is_favorite?: boolean; created_by?: string | null },
+        Partial<{ category: string; label: string; username: string | null; secret: string; url: string | null; notes: string | null; member_id: string | null; is_favorite: boolean; deleted_at: string | null }>
+      >;
       front_desk_settings: T<
         { family_id: string; enabled: boolean; greeting: string; screening_mode: string; voicemail_enabled: boolean; forward_number: string | null; quiet_hours_start: number | null; quiet_hours_end: number | null; block_spam: boolean; block_unknown: boolean; blocked_numbers: unknown[]; allowed_numbers: unknown[]; created_at: string; updated_at: string },
         { family_id: string; enabled?: boolean; greeting?: string; screening_mode?: string; voicemail_enabled?: boolean; forward_number?: string | null; quiet_hours_start?: number | null; quiet_hours_end?: number | null; block_spam?: boolean; block_unknown?: boolean; blocked_numbers?: unknown[]; allowed_numbers?: unknown[] },

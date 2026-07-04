@@ -28,7 +28,7 @@ _Last updated: 2026-07-03._
 - [ ] **Messages → GIF picker** (`messages-module.tsx`): currently toasts "coming soon". Needs a GIF provider (GIPHY/Tenor) API key, then insert as an attachment.
 - [ ] **Messages → Voice messages** (`messages-module.tsx`): "coming soon". Needs record → upload (family-media) → playback.
 - [ ] **Wallet → Spending cards / real-time balance** (`money-cards-view.tsx`, `child-detail-view.tsx`): "coming soon" (Stripe Issuing) — legitimately future; keep honest until infra lands.
-- [ ] **Family page → "Wi-Fi & Passwords"** (`family-module.tsx`): links to Files with no count — no backing table yet (a secure-vault/passwords store would give it a real destination + count).
+- [x] **Family page → "Wi-Fi & Passwords"** — ✅ shipped the Family Vault: `family_credentials` table (migration 0119) + `/dashboard/passwords` (full CRUD, mask/reveal/copy, RLS) + Family card wired to a live count + seed across all profiles (`seed_credentials_all_families.sql`). See `docs/family-vault.md`. (2026-07-03)
 
 ## 🧱 Polish / consistency
 - [ ] Extend the upload progress + 25 MB guard pattern to the Files/documents single-upload (`documents-module.tsx`) and `trip-memories-module.tsx` for consistency.

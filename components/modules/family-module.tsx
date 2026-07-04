@@ -100,7 +100,7 @@ export function FamilyModule() {
   const [sub, setSub] = useState<{ plan: string; current_period_end: string | null } | null>(null);
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [highlights, setHighlights] = useState<Album[]>([]);
-  const [counts, setCounts] = useState({ contacts: 0, documents: 0, notes: 0, medical: 0 });
+  const [counts, setCounts] = useState({ contacts: 0, documents: 0, notes: 0, medical: 0, credentials: 0 });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -116,7 +116,7 @@ export function FamilyModule() {
     const sb = createClient();
     const nowIso = new Date().toISOString();
     try {
-      const [fam, subRes, evRes, alRes, cContacts, cDocs, cNotes, cMedical] = await Promise.all([
+      const [fam, subRes, evRes, alRes, cContacts, cDocs, cNotes, cMedical, cCreds] = await Promise.all([
         sb.from('families').select('*').eq('id', familyId).maybeSingle(),
         sb.from('subscriptions').select('plan, current_period_end').eq('family_id', familyId).maybeSingle(),
         sb.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(4),
@@ -125,6 +125,7 @@ export function FamilyModule() {
         sb.from('documents').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
         sb.from('notes').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
         sb.from('medical_profiles').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
+        sb.from('family_credentials').select('id', { count: 'exact', head: true }).eq('family_id', familyId).is('deleted_at', null),
       ]);
       setFamily(fam.data ?? null);
       setSub(subRes.data ?? null);
@@ -134,7 +135,7 @@ export function FamilyModule() {
       setHighlights((hl.length ? hl : albums).slice(0, 4));
       setCounts({
         contacts: cContacts.count ?? 0, documents: cDocs.count ?? 0,
-        notes: cNotes.count ?? 0, medical: cMedical.count ?? 0,
+        notes: cNotes.count ?? 0, medical: cMedical.count ?? 0, credentials: cCreds.count ?? 0,
       });
       setLoadError(null);
     } catch {
@@ -177,7 +178,7 @@ export function FamilyModule() {
     { icon: PhoneIcon, tint: 'bg-rose-500/15 text-rose-400', label: 'Emergency Contacts', count: counts.contacts, unit: 'contacts', href: '/dashboard/contacts' },
     { icon: FileText, tint: 'bg-blue-500/15 text-blue-400', label: 'Important Documents', count: counts.documents, unit: 'files', href: '/dashboard/documents' },
     { icon: Shield, tint: 'bg-emerald-500/15 text-emerald-400', label: 'Family Rules', count: counts.notes, unit: 'notes', href: '/dashboard/notes' },
-    { icon: Wifi, tint: 'bg-orange-500/15 text-orange-400', label: 'Wi-Fi & Passwords', count: null as number | null, unit: '', href: '/dashboard/documents' },
+    { icon: Wifi, tint: 'bg-orange-500/15 text-orange-400', label: 'Wi-Fi & Passwords', count: counts.credentials, unit: 'saved', href: '/dashboard/passwords' },
     { icon: HeartPulse, tint: 'bg-violet-500/15 text-violet-400', label: 'Medical Info', count: counts.medical, unit: 'profiles', href: '/dashboard/health' },
   ];
 
