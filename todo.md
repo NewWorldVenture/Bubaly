@@ -97,7 +97,10 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   phaseGreeting / phaseBlurb / focusForPhase) + `components/home/time-of-day-focus.tsx` "Focus now" strip
   at the top of `/home` (morning: schedule/weather/school · night: tomorrow/get-ready/reflect). Additive —
   did not refactor the contended grid. Server-time based (no per-user tz yet).
-- [ ] #8 Role-tailored surfaces (density/language per `family_members.role`).
+- [◐] #8 Role-tailored surfaces — **slice 1 shipped**: pure `lib/ui/role-surface.ts` (10 tests) —
+  `roleSurface(role)` → { density, tone, canManage, focusMax } + `roleGreeting`/`focusHeadline` — applied
+  to the Home "Focus now" strip (role-tailored heading + trimmed focus set for kids/guests). Density +
+  management-affordance rollout to more surfaces (nav, dashboards) = follow-up.
 - [x] #10 Recurring-routine templates — **DONE**. Migration `0122_routine_templates.sql`
   (`routine_templates` + `routine_template_items`, weekday bitmask, family-scoped RLS) +
   pure `lib/routines/detect.ts` (13 tests: `detectRoutines` finds title+weekday+time repeating
