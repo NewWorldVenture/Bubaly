@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, CheckSquare, StickyNote, CalendarPlus, ShoppingCart, X, CalendarClock, Sparkles } from 'lucide-react';
+import { Plus, CheckSquare, StickyNote, CalendarPlus, ShoppingCart, X, CalendarClock, Sparkles, Settings2, Check } from 'lucide-react';
 import { useApp } from './app-context';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
@@ -44,6 +44,7 @@ export function QuickCapture() {
   const [type, setType] = useState<CaptureType>('task');
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
 
   function reset() { setText(''); setType('task'); }
 
@@ -129,7 +130,21 @@ export function QuickCapture() {
         <Plus className="h-7 w-7" />
       </button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Quick capture">
+      <Modal
+        open={open}
+        onClose={() => { setOpen(false); setCustomizing(false); }}
+        title="Quick capture"
+        headerAction={
+          <button
+            type="button"
+            onClick={() => setCustomizing((v) => !v)}
+            aria-pressed={customizing}
+            className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand transition hover:bg-brand/10"
+          >
+            {customizing ? <><Check className="h-3.5 w-3.5" /> Done</> : <><Settings2 className="h-3.5 w-3.5" /> Customize</>}
+          </button>
+        }
+      >
         <form
           onSubmit={save}
           onKeyDown={(e) => { if (isSaveHotkey(e)) { e.preventDefault(); e.currentTarget.requestSubmit(); } }}
@@ -150,9 +165,16 @@ export function QuickCapture() {
             ))}
           </div>
 
-          {/* Member's own shortcuts — only their picks show; "Customize" reveals
-              add/change/remove (up to 10). Same layout as /capture, synced. */}
-          <CaptureShortcuts columns={4} heading="" onNavigate={() => setOpen(false)} />
+          {/* Member's own shortcuts — only their picks show. The "Customize"
+              toggle is hoisted into the modal header (controlled here). */}
+          <CaptureShortcuts
+            columns={4}
+            heading=""
+            onNavigate={() => setOpen(false)}
+            editing={customizing}
+            onEditingChange={setCustomizing}
+            showCustomizeButton={false}
+          />
 
           {suggested && (
             <button

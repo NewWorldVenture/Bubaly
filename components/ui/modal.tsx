@@ -16,6 +16,7 @@ export function Modal({
   description,
   children,
   className,
+  headerAction,
 }: {
   open: boolean;
   onClose: () => void;
@@ -23,6 +24,8 @@ export function Modal({
   description?: string;
   children: React.ReactNode;
   className?: string;
+  /** Optional control rendered in the header, just left of the close button. */
+  headerAction?: React.ReactNode;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -90,17 +93,20 @@ export function Modal({
         )}
       >
         <div className="mb-3 flex items-start justify-between gap-3 sm:mb-4 sm:gap-4">
-          <div>
+          <div className="min-w-0">
             <h2 id={titleId} className="text-base font-semibold tracking-tight sm:text-lg">{title}</h2>
             {description && <p id={descId} className="mt-1 text-xs text-muted sm:text-sm">{description}</p>}
           </div>
-          <button
-            onClick={onClose}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted hover:bg-elevated hover:text-fg focus-ring"
-            aria-label="Close dialog"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {headerAction}
+            <button
+              onClick={onClose}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted hover:bg-elevated hover:text-fg focus-ring"
+              aria-label="Close dialog"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
         {children}
       </div>

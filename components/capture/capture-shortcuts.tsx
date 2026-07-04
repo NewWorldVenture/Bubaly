@@ -135,16 +135,30 @@ export function useCaptureShortcuts(initialKeys?: string[] | null) {
   return { keys, persist };
 }
 
-export function CaptureShortcuts({ initialKeys, heading = 'Shortcuts', columns = 4, onNavigate }: {
+export function CaptureShortcuts({
+  initialKeys, heading = 'Shortcuts', columns = 4, onNavigate,
+  editing: editingProp, onEditingChange, showCustomizeButton = true,
+}: {
   initialKeys?: string[] | null;
   heading?: string;
   /** Grid columns: 3 on the roomy /capture page, 4 in the compact modal. */
   columns?: 3 | 4;
   /** Called when a shortcut is tapped (e.g. close the hosting modal). */
   onNavigate?: () => void;
+  /** Controlled edit mode — pass with onEditingChange to drive it from outside
+   *  (e.g. a "Customize" button hoisted into the modal header). */
+  editing?: boolean;
+  onEditingChange?: (v: boolean) => void;
+  /** Hide the built-in Customize/Done toggle when the host renders its own. */
+  showCustomizeButton?: boolean;
 }) {
   const { keys, persist } = useCaptureShortcuts(initialKeys);
-  const [editing, setEditing] = useState(false);
+  const [editingInternal, setEditingInternal] = useState(false);
+  const editing = editingProp ?? editingInternal;
+  const setEditing = (v: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof v === 'function' ? v(editing) : v;
+    if (onEditingChange) onEditingChange(next); else setEditingInternal(next);
+  };
   const [picker, setPicker] = useState<{ mode: 'add' | 'replace'; index: number } | null>(null);
 
   const availableToAdd = SHORTCUT_CATALOG.filter((s) => !keys.includes(s.key));
@@ -162,18 +176,22 @@ export function CaptureShortcuts({ initialKeys, heading = 'Shortcuts', columns =
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
-        {heading ? <p className="text-xs font-semibold uppercase tracking-wide text-muted">{heading}</p> : <span />}
-        <button
-          type="button"
-          onClick={() => { setEditing((v) => !v); setPicker(null); }}
-          className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand transition hover:bg-brand/10"
-        >
-          {editing
-            ? <><span className="text-muted">{keys.length}/{MAX_CAPTURE_SHORTCUTS} ·</span> <Check className="h-3.5 w-3.5" /> Done</>
-            : <><Settings2 className="h-3.5 w-3.5" /> Customize</>}
-        </button>
-      </div>
+      {(heading || showCustomizeButton) && (
+        <div className="mb-2 flex items-center justify-between">
+          {heading ? <p className="text-xs font-semibold uppercase tracking-wide text-muted">{heading}</p> : <span />}
+          {showCustomizeButton && (
+            <button
+              type="button"
+              onClick={() => { setEditing((v) => !v); setPicker(null); }}
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand transition hover:bg-brand/10"
+            >
+              {editing
+                ? <><span className="text-muted">{keys.length}/{MAX_CAPTURE_SHORTCUTS} ·</span> <Check className="h-3.5 w-3.5" /> Done</>
+                : <><Settings2 className="h-3.5 w-3.5" /> Customize</>}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Empty (only reachable by explicitly removing everything) */}
       {keys.length === 0 && !editing && (
