@@ -17,7 +17,9 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 > adult); `roleGreeting(role,name,phase)` + `focusHeadline(role)` tone-match the reader. **Applied** to the Home
 > "Focus now" strip: `components/home/time-of-day-focus.tsx` now takes `role` → trims the focus set via
 > `focusMax` (kids/guests see fewer) and swaps the heading ("Focus now" / "Your focus" / "Let's go");
-> `app/(app)/home/page.tsx` passes `me.role`. Additive, no refactor. tsc/eslint/**1622 tests**/build green.
+> `app/(app)/home/page.tsx` passes `me.role`. The Home **greeting** is now role-tailored too — replaced the
+> local time-only `greeting()` with `roleGreeting(role, name, phase)` (parents formal, adults/teens casual,
+> kids playful+emoji). Additive, no refactor. tsc/eslint/**1622 tests**/build green.
 > FOLLOW-UP for a future agent to finish #8: wire `density`/`canManage` into more surfaces (dashboards, nav
 > affordances, module headers) — the pure helper is ready to consume.
 >
