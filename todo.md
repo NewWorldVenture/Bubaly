@@ -49,10 +49,12 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 `/dashboard/family-memory` + `/dashboard/family-knowledge-graph`, `lib/memories/*`.
 - [ ] Confirm the knowledge-graph view has a persistent Supabase store (no `family_memory` table in types yet — verify backing store or add one).
 
-### 6. Voice Control — "Full conversational interface"  ☐ NEXT (only roadmap surface with no route)
-Has `lib/voice/transcript.ts` (pure helpers). No route/nav.
-- [ ] Voice command center: Web Speech capture → parse (reuse `lib/capture/parse`) → save real rows (reuse `saveCapture`) → persist a `voice_commands` history table (family-scoped RLS).
-- [ ] Route `/dashboard/voice` + nav + verified.
+### 6. Voice Control — "Full conversational interface"  ☑ DONE
+- [x] `lib/voice/command-router.ts` — wake-word stripping + intent routing → capture kind, reusing `suggestKind`/`parseEvent`. Tests `tests/voice-command-router.test.ts` (12 cases).
+- [x] Migration `0121_voice_commands.sql` — family-scoped RLS history log. Validated on PG16 (RLS, 4 policies, check constraint, idempotent).
+- [x] `components/modules/voice-module.tsx` — Voice Command Center: `useSpeechRecognition` mic + editable transcript + live routing preview → `saveCapture` (real rows) → logs `voice_commands` → toast w/ Undo. Recent-commands history (realtime) with one-tap re-run + delete. Graceful type-only fallback when Web Speech unsupported.
+- [x] Route `/dashboard/voice` + nav (Family AI OS, `Mic` icon).
+- [x] Verified: tsc, eslint, vitest (1578), build.
 
 ### 7. Phone Concierge — "AI receptionist for families"  ◐ (already wired)
 `/dashboard/front-desk`; module has 8 `.from()` + realtime. Wired.
@@ -107,4 +109,5 @@ Has `lib/voice/transcript.ts` (pure helpers). No route/nav.
   all kinds/statuses, idempotent full-reseed per family) + admin-only screen at
   `/dashboard/marketplace/seed` (Copy SQL button, iPad-friendly). Validated on PG16:
   500 rows, every pending listing has offers, re-run stays 500.
-- **Next up:** Voice Control (only roadmap surface with no route yet — lib/voice exists).
+- **Voice Control** shipped (migration 0121, `lib/voice/command-router.ts`+12 tests, `voice-module.tsx`, `/dashboard/voice`, nav). Web Speech → route → real capture rows + `voice_commands` history. Verified: tsc/eslint/1578 tests/build.
+- **Next up:** all 12 roadmap features are now built + Supabase-wired. Remaining: Friction Backlog items (#2 command bar, #6 ETA, #7 time-of-day Home, #8 roles, #10 routines) + onboarding audit.

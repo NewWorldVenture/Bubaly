@@ -353,6 +353,11 @@ export interface Database {
         { id?: string; family_id: string; listing_id: string; member_id?: string | null; kind?: string; amount_cents?: number | null; message?: string | null; status?: string; created_by?: string | null },
         Partial<{ member_id: string | null; kind: string; amount_cents: number | null; message: string | null; status: string }>
       >;
+      voice_commands: T<
+        { id: string; family_id: string; member_id: string | null; transcript: string; resolved_kind: string | null; action_table: string | null; action_count: number; status: string; created_by: string | null; created_at: string },
+        { id?: string; family_id: string; member_id?: string | null; transcript: string; resolved_kind?: string | null; action_table?: string | null; action_count?: number; status?: string; created_by?: string | null },
+        Partial<{ member_id: string | null; transcript: string; resolved_kind: string | null; action_table: string | null; action_count: number; status: string }>
+      >;
       location_events: T<
         { id: string; family_id: string; member_id: string; place_id: string | null; place_name: string | null; event_type: LocationEventType; latitude: number | null; longitude: number | null; occurred_at: string; created_at: string },
         { id?: string; family_id: string; member_id: string; place_id?: string | null; place_name?: string | null; event_type?: LocationEventType; latitude?: number | null; longitude?: number | null; occurred_at?: string },
