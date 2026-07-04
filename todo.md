@@ -71,7 +71,7 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 
 ### 9. Predictive Planning — "Recommend next best actions"  ◐ (wired via Moments)
 `lib/opportunities/deadlines.ts` + Moments engine surface next-best-actions on Home. Wired.
-- [ ] Stretch: dedicated "Next best actions" feed page.
+- [x] Dedicated "Next Best Actions" feed page — `lib/opportunities/next-actions.ts` (pure, 7 tests: bucketing overdue→someday, priority tie-break, human reasons) + `components/modules/next-actions-module.tsx` merging real events + open tasks + open opportunities into one ranked worklist at `/dashboard/next-best-actions` (nav: Suggested, `Target` icon). Inline task-complete. No migration (reads existing tables). Verified tsc/eslint/1629 tests/build.
 
 ### 10. AI Automation — "Multi-step autonomous workflows"  ◐ (already wired)
 `/dashboard/family-automation`, `/dashboard/autopilot`, `lib/autopilot/engine.ts`. Wired.
