@@ -5,7 +5,7 @@ import {
   Image as ImageIcon, Plus, Upload, X, Star, StarOff, Trash2,
   ChevronLeft, ChevronRight, ZoomIn, Edit2, Grid3X3, List,
   Camera, Heart, Mountain, GraduationCap, Trophy, Calendar,
-  Download, Share2, Search, Tag, MoreHorizontal, Film, Play,
+  Download, Share2, Search, Tag, MoreHorizontal, Film, Play, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -45,6 +45,7 @@ export function PhotosModule() {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [newAlbumOpen, setNewAlbumOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [editPhoto, setEditPhoto] = useState<Photo | null>(null);
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
@@ -74,31 +75,38 @@ export function PhotosModule() {
   // ── Upload handler ────────────────────────────────────────
   async function uploadFiles(files: FileList | null) {
     if (!files || !files.length) return;
+    const valid = Array.from(files).filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
+    if (!valid.length) { toastError('Choose image or video files to upload.'); return; }
     const supabase = createClient();
+    setUploadProgress({ done: 0, total: valid.length });
     let uploaded = 0;
-    for (const file of Array.from(files)) {
-      const isImage = file.type.startsWith('image/');
+    for (let i = 0; i < valid.length; i++) {
+      const file = valid[i];
       const isVideo = file.type.startsWith('video/');
-      if (!isImage && !isVideo) continue;
       const ext = file.name.split('.').pop();
       const folder = isVideo ? 'videos' : 'photos';
       const path = `${familyId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { data: stored, error: upErr } = await supabase.storage
         .from('family-media')
         .upload(path, file, { upsert: false, cacheControl: '31536000' });
-      if (upErr) { toastError(`Failed to upload ${file.name}: ${upErr.message}`); continue; }
-      const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
-      await supabase.from('family_photos').insert({
-        family_id: familyId,
-        album_id: activeAlbum?.id ?? null,
-        uploaded_by: userId,
-        storage_path: stored.path,
-        url: publicUrl,
-        size_bytes: file.size,
-        media_type: isVideo ? 'video' : 'image',
-      });
-      uploaded++;
+      if (upErr) {
+        toastError(`Failed to upload ${file.name}: ${upErr.message}`);
+      } else {
+        const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
+        await supabase.from('family_photos').insert({
+          family_id: familyId,
+          album_id: activeAlbum?.id ?? null,
+          uploaded_by: userId,
+          storage_path: stored.path,
+          url: publicUrl,
+          size_bytes: file.size,
+          media_type: isVideo ? 'video' : 'image',
+        });
+        uploaded++;
+      }
+      setUploadProgress({ done: i + 1, total: valid.length });
     }
+    setUploadProgress(null);
     if (uploaded > 0) {
       success(`${uploaded} file${uploaded > 1 ? 's' : ''} uploaded`);
       void refreshPhotos();
@@ -421,7 +429,8 @@ export function PhotosModule() {
       {uploadOpen && (
         <UploadModal
           onClose={() => setUploadOpen(false)}
-          onUpload={uploadFiles} />
+          onUpload={uploadFiles}
+          progress={uploadProgress} />
       )}
 
       {/* Edit caption modal */}
@@ -488,10 +497,13 @@ function NewAlbumModal({ familyId, userId, onClose, onCreated }: {
   );
 }
 
-function UploadModal({ onClose, onUpload }: { onClose: () => void; onUpload: (f: FileList) => void }) {
+function UploadModal({ onClose, onUpload, progress }: {
+  onClose: () => void; onUpload: (f: FileList) => void; progress?: { done: number; total: number } | null;
+}) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [selected, setSelected] = useState<File[]>([]);
+  const busy = !!progress;
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) setSelected(Array.from(e.target.files));
@@ -499,19 +511,22 @@ function UploadModal({ onClose, onUpload }: { onClose: () => void; onUpload: (f:
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault(); setDragging(false);
+    if (busy) return;
     if (e.dataTransfer.files) setSelected(Array.from(e.dataTransfer.files));
   }
 
   return (
-    <Modal open onClose={onClose} title="Upload Photos & Videos">
+    <Modal open onClose={() => { if (!busy) onClose(); }} title="Upload Photos & Videos">
       <div className="space-y-4">
-        <div onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        <div onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={handleDrop}
-          onClick={() => fileRef.current?.click()}
+          onClick={() => { if (!busy) fileRef.current?.click(); }}
+          aria-disabled={busy}
           className={cn(
-            'flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-10 text-center transition',
-            dragging ? 'border-brand bg-brand/10' : 'border-border hover:border-brand/50 hover:bg-brand/5',
+            'flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-10 text-center transition',
+            busy ? 'cursor-not-allowed border-border opacity-60' : 'cursor-pointer',
+            dragging ? 'border-brand bg-brand/10' : !busy && 'border-border hover:border-brand/50 hover:bg-brand/5',
           )}>
           <Upload className="h-10 w-10 text-muted" />
           <div>
@@ -536,14 +551,27 @@ function UploadModal({ onClose, onUpload }: { onClose: () => void; onUpload: (f:
           </div>
         )}
 
+        {/* Live upload progress — honest per-file bar so multi-file uploads aren't a blind wait. */}
+        {busy && progress && (
+          <div aria-live="polite">
+            <div className="h-1.5 overflow-hidden rounded-full bg-border">
+              <div className="h-full rounded-full bg-brand transition-[width] duration-300"
+                style={{ width: `${Math.round((progress.done / Math.max(progress.total, 1)) * 100)}%` }} />
+            </div>
+            <p className="mt-1.5 text-center text-xs text-muted">{progress.done} of {progress.total} uploaded</p>
+          </div>
+        )}
+
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button disabled={!selected.length} onClick={() => {
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button disabled={!selected.length || busy} onClick={() => {
             const dt = new DataTransfer();
             selected.forEach((f) => dt.items.add(f));
             onUpload(dt.files);
           }}>
-            <Upload className="h-4 w-4" /> Upload {selected.length > 0 ? `${selected.length} photo${selected.length > 1 ? 's' : ''}` : ''}
+            {busy && progress
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading {Math.min(progress.done + 1, progress.total)} of {progress.total}…</>
+              : <><Upload className="h-4 w-4" /> Upload {selected.length > 0 ? `${selected.length} file${selected.length > 1 ? 's' : ''}` : ''}</>}
           </Button>
         </div>
       </div>
