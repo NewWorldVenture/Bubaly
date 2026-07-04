@@ -11,6 +11,8 @@
 //   70-89  → approve: do it, but confirm with the family first
 //   < 70   → ask   : surface as awareness / a question
 
+import { buildMomentPrep } from '@/lib/moments/prep';
+
 export type ConfidenceTier = 'auto' | 'approve' | 'ask';
 
 export const AUTO_THRESHOLD = 90;
@@ -44,7 +46,7 @@ export type AppointmentSignal = { id: string; title: string; startsAt: string; m
 export type ChoreSignal = { id: string; title: string; dueAt: string | null; memberId: string | null };
 export type BirthdaySignal = { memberId: string; name: string; birthday: string; giftIdeas?: string[] }; // birthday = YYYY-MM-DD (year ignored); giftIdeas from their wishlist
 export type GrocerySignal = { id: string; name: string; addedAt: string };
-export type EventSignal = { id: string; title: string; startsAt: string; endsAt: string | null; memberId: string | null };
+export type EventSignal = { id: string; title: string; startsAt: string; endsAt: string | null; memberId: string | null; allDay?: boolean; location?: string | null };
 export type SubscriptionSignal = { id: string; name: string; costCents: number; cadence: string; nextCharge: string | null; lastUsed: string | null; status: string };
 export type StressSignal = { memberId: string | null; weight: number; occurredOn: string };
 export type MedicationSignal = { id: string; name: string; memberId: string | null; refillOn: string; reminderDays: number };
@@ -478,6 +480,60 @@ export function applyMemberTraits(draft: SuggestionDraft, traitsByMember: Map<st
  * first. Optionally pass the Digital Twin's `traitsByMember` so per-member
  * reliability modulates each suggestion's confidence + urgency.
  */
+/**
+ * Moment prep → Autopilot (Friction #4). For imminent events (≤2 days) that
+ * classify as prep-worthy "moments", fold the SAFE, REVERSIBLE steps into the
+ * autopilot at auto-tier confidence so they self-complete:
+ *   • the leave-by reminder  (→ a reminders row, reused 'create_reminder' exec)
+ *   • the snacks/supplies list (→ grocery_items rows, 'add_groceries' exec)
+ * Weather/packing/photo prep stay as on-screen suggestions — never auto-run.
+ * Reuses the shared `buildMomentPrep` engine, so there's one prep brain.
+ */
+export function momentPrepSuggestions(s: FamilySnapshot): SuggestionDraft[] {
+  const out: SuggestionDraft[] = [];
+  const now = new Date(`${s.today}T00:00:00Z`);
+  for (const e of s.events) {
+    const d = daysUntil(s.today, e.startsAt);
+    if (d < 0 || d > 2) continue; // only imminent moments auto-prep
+
+    const prep = buildMomentPrep(
+      { id: e.id, title: e.title, category: null, location: e.location ?? null, starts_at: e.startsAt, all_day: e.allDay ?? false },
+      { now },
+    );
+
+    // Leave-by reminder — safe + reversible; reuses the existing reminder exec.
+    if (prep.leaveByISO) {
+      out.push({
+        kind: 'moment',
+        title: `Leave on time for ${e.title}`,
+        detail: 'Autopilot set a reminder for when to head out.',
+        confidence: 92, urgency: 2,
+        actionType: 'create_reminder', actionLabel: 'Reminder set',
+        payload: { title: `Leave for ${e.title}`, at: prep.leaveByISO },
+        sourceKind: 'calendar_events', sourceId: e.id, memberId: e.memberId,
+        dedupeKey: `moment-leaveby:${e.id}`, expiresAt: e.startsAt,
+      });
+    }
+
+    // Snacks / supplies — reversible grocery rows.
+    const shop = prep.items.find((it) => (it.groceryItems?.length ?? 0) > 0);
+    if (shop?.groceryItems?.length) {
+      const items = shop.groceryItems.slice(0, 6);
+      out.push({
+        kind: 'moment',
+        title: `${shop.label} for ${e.title}`,
+        detail: `Autopilot added ${items.join(', ')} to your shopping list.`,
+        confidence: 91, urgency: 1,
+        actionType: 'add_groceries', actionLabel: 'Added to list',
+        payload: { items },
+        sourceKind: 'calendar_events', sourceId: e.id, memberId: e.memberId,
+        dedupeKey: `moment-shop:${e.id}`, expiresAt: e.startsAt,
+      });
+    }
+  }
+  return out;
+}
+
 export function buildSuggestions(s: FamilySnapshot, traitsByMember?: Map<string, MemberTraits>): SuggestionDraft[] {
   let all = [
     ...renewalSuggestions(s),
@@ -491,6 +547,7 @@ export function buildSuggestions(s: FamilySnapshot, traitsByMember?: Map<string,
     ...medicationSuggestions(s),
     ...mealSuggestions(s),
     ...insuranceSuggestions(s),
+    ...momentPrepSuggestions(s),
   ];
   if (traitsByMember && traitsByMember.size > 0) {
     all = all.map((d) => applyMemberTraits(d, traitsByMember));

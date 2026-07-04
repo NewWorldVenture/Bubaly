@@ -4,6 +4,7 @@ import {
   renewalSuggestions, appointmentSuggestions, choreSuggestions, birthdaySuggestions,
   grocerySuggestions, conflictSuggestions, expenseSuggestions, burnoutSuggestions,
   medicationSuggestions, mealSuggestions, insuranceSuggestions, monthlyCents, buildSuggestions, applyMemberTraits, successProbability, partitionByTier,
+  momentPrepSuggestions,
   type FamilySnapshot,
 } from '@/lib/autopilot/engine';
 import type { MemberTraits } from '@/lib/autopilot/twin';
@@ -289,5 +290,63 @@ describe('buildSuggestions + helpers', () => {
     const p = successProbability(buildSuggestions(snap));
     expect(p).toBeLessThan(100);
     expect(p).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('momentPrepSuggestions (Friction #4 — fold reversible prep into autopilot)', () => {
+  const TODAY = '2026-06-24';
+  const soon = '2026-06-25T17:00:00Z'; // 1 day out
+
+  it('emits an auto-tier leave-by reminder + snacks list for an imminent sports moment', () => {
+    const out = momentPrepSuggestions(base({
+      today: TODAY,
+      events: [{ id: 'e1', title: 'Soccer game vs Hawks', startsAt: soon, endsAt: null, memberId: 'm1', allDay: false, location: 'Field 3' }],
+    }));
+    const reminder = out.find((d) => d.actionType === 'create_reminder');
+    const grocery = out.find((d) => d.actionType === 'add_groceries');
+
+    expect(reminder).toBeTruthy();
+    expect(reminder!.confidence).toBeGreaterThanOrEqual(90); // auto-executes
+    expect(confidenceTier(reminder!.confidence)).toBe('auto');
+    expect(reminder!.dedupeKey).toBe('moment-leaveby:e1');
+    expect(typeof reminder!.payload.at).toBe('string');
+
+    expect(grocery).toBeTruthy();
+    expect(confidenceTier(grocery!.confidence)).toBe('auto');
+    expect(grocery!.dedupeKey).toBe('moment-shop:e1');
+    expect(grocery!.payload.items).toEqual(expect.arrayContaining(['Water bottles']));
+  });
+
+  it('without a location there is no leave-by, but snacks still apply', () => {
+    const out = momentPrepSuggestions(base({
+      today: TODAY,
+      events: [{ id: 'e2', title: 'Basketball practice', startsAt: soon, endsAt: null, memberId: null, allDay: false, location: null }],
+    }));
+    expect(out.find((d) => d.actionType === 'create_reminder')).toBeUndefined();
+    expect(out.find((d) => d.actionType === 'add_groceries')).toBeTruthy();
+  });
+
+  it('ignores events more than 2 days out', () => {
+    const out = momentPrepSuggestions(base({
+      today: TODAY,
+      events: [{ id: 'e3', title: 'Soccer game', startsAt: '2026-06-28T17:00:00Z', endsAt: null, memberId: 'm1', allDay: false, location: 'Field 3' }],
+    }));
+    expect(out).toHaveLength(0);
+  });
+
+  it('a plain event with no prep signal yields nothing', () => {
+    const out = momentPrepSuggestions(base({
+      today: TODAY,
+      events: [{ id: 'e4', title: 'Quiet afternoon', startsAt: soon, endsAt: null, memberId: null, allDay: false, location: null }],
+    }));
+    expect(out).toHaveLength(0);
+  });
+
+  it('is folded into buildSuggestions', () => {
+    const drafts = buildSuggestions(base({
+      today: TODAY,
+      events: [{ id: 'e5', title: 'Swim meet', startsAt: soon, endsAt: null, memberId: 'm1', allDay: false, location: 'Aquatic Center' }],
+    }));
+    expect(drafts.some((d) => d.kind === 'moment')).toBe(true);
   });
 });

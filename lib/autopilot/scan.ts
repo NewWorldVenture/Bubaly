@@ -16,6 +16,17 @@ export type AutopilotScanResult = { scanned: number; autoExecuted: number; clear
 
 const RESOLVED = new Set(['dismissed', 'snoozed', 'executed', 'approved', 'auto_executed']);
 
+/** Get-or-create the family's active shopping list (mirrors lib/capture/save). */
+async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: string | null): Promise<string | null> {
+  const { data: existing } = await supabase.from('grocery_lists').select('id')
+    .eq('family_id', familyId).eq('is_archived', false)
+    .order('created_at', { ascending: true }).limit(1).maybeSingle();
+  if (existing) return existing.id;
+  const { data: created } = await supabase.from('grocery_lists')
+    .insert({ family_id: familyId, name: 'Shopping List', created_by: userId }).select('id').maybeSingle();
+  return created?.id ?? null;
+}
+
 export async function runAutopilotScan(supabase: DB, familyId: string, userId: string | null): Promise<AutopilotScanResult> {
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
@@ -36,7 +47,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     supabase.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null).limit(50),
     supabase.from('grocery_items').select('id, name, created_at, is_checked').eq('family_id', familyId).eq('is_checked', false).limit(200),
     supabase.from('reminders').select('related_id').eq('family_id', familyId).eq('related_type', 'appointment').eq('is_done', false).limit(200),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(100),
+    supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id, all_day, location').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(100),
     supabase.from('subscriptions_tracked').select('id, name, cost_cents, cadence, next_charge, last_used, status').eq('family_id', familyId).in('status', ['active', 'trial']).limit(200),
     supabase.from('family_stress_signals').select('member_id, weight, occurred_on').eq('family_id', familyId).eq('status', 'active').gte('occurred_on', since60).limit(500),
     supabase.from('medications').select('id, name, member_id, refill_on, refill_reminder_days').eq('family_id', familyId).eq('is_active', true).not('refill_on', 'is', null).limit(200),
@@ -87,7 +98,7 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     })),
     birthdays: (members ?? []).map((m) => ({ memberId: m.id, name: m.display_name, birthday: m.birthday as string, giftIdeas: giftsByMember.get(m.id) })),
     lingeringGroceries: (groceries ?? []).map((g) => ({ id: g.id, name: g.name, addedAt: g.created_at })),
-    events: (events ?? []).map((e) => ({ id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, memberId: e.assignee_id })),
+    events: (events ?? []).map((e) => ({ id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, memberId: e.assignee_id, allDay: e.all_day, location: e.location })),
     subscriptions: (subs ?? []).map((x) => ({ id: x.id, name: x.name, costCents: x.cost_cents, cadence: x.cadence, nextCharge: x.next_charge, lastUsed: x.last_used, status: x.status })),
     stressSignals: (stress ?? []).map((x) => ({ memberId: x.member_id, weight: Number(x.weight), occurredOn: x.occurred_on })),
     medications: (meds ?? []).map((x) => ({ id: x.id, name: x.name, memberId: x.member_id, refillOn: x.refill_on as string, reminderDays: x.refill_reminder_days })),
@@ -155,16 +166,33 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
 
     if (isAuto && d.actionType === 'create_reminder') {
       const at = (d.payload.at as string) ?? `${today}T09:00:00Z`;
+      const relatedType = d.sourceKind === 'appointments' ? 'appointment'
+        : d.sourceKind === 'calendar_events' ? 'event' : 'renewal';
       const { error: remErr } = await supabase.from('reminders').insert({
         family_id: familyId,
         title: (d.payload.title as string) ?? d.title,
         remind_at: at,
         member_id: d.memberId,
-        related_type: d.sourceKind === 'appointments' ? 'appointment' : 'renewal',
+        related_type: relatedType,
         related_id: d.sourceId,
         created_by: userId,
       });
       if (!remErr) { status = 'auto_executed'; autoExecuted++; }
+    }
+
+    // Moment prep: add snacks/supplies to the family's active shopping list —
+    // reversible (they're normal grocery_items the family can delete).
+    if (isAuto && d.actionType === 'add_groceries') {
+      const items = (d.payload.items as string[] | undefined) ?? [];
+      if (items.length > 0) {
+        const listId = await getOrCreateGroceryListId(supabase, familyId, userId);
+        if (listId) {
+          const { error: gErr } = await supabase.from('grocery_items').insert(
+            items.map((name) => ({ family_id: familyId, list_id: listId, name, created_by: userId })),
+          );
+          if (!gErr) { status = 'auto_executed'; autoExecuted++; }
+        }
+      }
     }
 
     const { data: inserted } = await supabase.from('autopilot_suggestions').insert({
