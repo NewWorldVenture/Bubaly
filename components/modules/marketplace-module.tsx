@@ -1,9 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   Store, Plus, Search, Tag, Clock, HandHeart, Check, X, Pencil, Trash2,
-  ShoppingBag, Package, Gift, HelpCircle, MapPin, Inbox,
+  ShoppingBag, Package, Gift, HelpCircle, MapPin, Inbox, Database,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -45,7 +46,7 @@ const blank = {
   price: '', rent_period: 'day' as RentPeriod, location: '',
 };
 
-export function MarketplaceModule() {
+export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
@@ -183,7 +184,17 @@ export function MarketplaceModule() {
       <PageHeader
         title="Family Marketplace"
         description="Buy, sell, rent, borrow or give away within the family. Post an item and everyone can claim it."
-        action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Post a listing</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            {canSeed && (
+              <Link href="/dashboard/marketplace/seed"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg">
+                <Database className="h-4 w-4" /> Seed test data
+              </Link>
+            )}
+            <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Post a listing</Button>
+          </div>
+        }
       />
 
       {/* Filters */}
