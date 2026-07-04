@@ -57,3 +57,67 @@ export function groupByDay<T extends ActivityTxn>(txns: T[]): Array<{ date: stri
 export function netCents(txns: ActivityTxn[]): number {
   return txns.reduce((s, t) => (t.status === 'completed' ? s + signedAmountCents(t) : s), 0);
 }
+
+// ── Statement export (CSV) ────────────────────────────────────────────────────
+// A family financial OS needs an exportable record. This is pure + deterministic
+// so it's unit-tested and callable from a client "Download statement" button.
+
+type CsvTxn = ActivityTxn & { childName?: string | null };
+
+/** Escape one CSV field per RFC 4180: wrap in quotes when it contains a comma,
+ *  quote, or newline, doubling any embedded quotes. */
+function csvField(value: string | number): string {
+  const s = String(value);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Dollars string with sign, from signed cents: 12345 → "123.45", -50 → "-0.50". */
+function dollars(cents: number): string {
+  const sign = cents < 0 ? '-' : '';
+  const abs = Math.abs(cents);
+  return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`;
+}
+
+/**
+ * Render transactions (assumed newest-first) to a CSV statement string with a
+ * header row and a trailing running-balance column computed OLDEST→newest over
+ * completed rows only, so the last data row's balance is the current total.
+ * Columns: Date, Time, Type, Description, Child, Direction, Amount, Status, Balance.
+ */
+export function toStatementCsv(txns: CsvTxn[]): string {
+  const header = ['Date', 'Time', 'Type', 'Description', 'Child', 'Direction', 'Amount', 'Status', 'Balance'];
+
+  // Running balance accrues oldest→newest (completed only); map back to the
+  // incoming newest-first order for output.
+  const oldestFirst = [...txns].reverse();
+  const balanceById = new Map<string, number>();
+  let running = 0;
+  for (const t of oldestFirst) {
+    if (t.status === 'completed') running += signedAmountCents(t);
+    balanceById.set(t.id, running);
+  }
+
+  const rows = txns.map((t) => {
+    const iso = t.created_at;
+    const date = iso.slice(0, 10);
+    const time = iso.slice(11, 19) || '';
+    return [
+      date,
+      time,
+      txnTypeLabel(t.type),
+      t.description ?? '',
+      t.childName ?? '',
+      t.direction === 'credit' ? 'in' : 'out',
+      dollars(signedAmountCents(t)),
+      t.status.replace(/_/g, ' '),
+      dollars(balanceById.get(t.id) ?? 0),
+    ].map(csvField).join(',');
+  });
+
+  return [header.join(','), ...rows].join('\r\n');
+}
+
+/** Stable, date-stamped statement filename, e.g. "bubaly-wallet-statement-2026-07-03.csv". */
+export function statementFilename(now: Date = new Date()): string {
+  return `bubaly-wallet-statement-${now.toISOString().slice(0, 10)}.csv`;
+}

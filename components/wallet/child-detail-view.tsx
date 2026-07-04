@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Plus, Target, PiggyBank, ShoppingBag, HandHeart, TrendingUp, Receipt,
   Sparkles, CreditCard, Send, HandCoins, X, ChevronRight, ChevronDown,
-  ArrowDownLeft, ArrowUpRight, Check, Clock, Banknote,
+  ArrowDownLeft, ArrowUpRight, Check, Clock, Banknote, Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
@@ -24,7 +24,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { fmtRelative } from '@/lib/utils/format';
 import { formatCents, goalProgress, type BucketKind, type Split } from '@/lib/wallet/ledger';
-import { txnTypeLabel, signedAmountCents, groupByDay, type ActivityTxn } from '@/lib/wallet/activity';
+import { txnTypeLabel, signedAmountCents, groupByDay, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
 import { addFundsAction, requestSpendAction, sendMoneyAction, requestAllowanceAction } from '@/app/(app)/wallet/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 
@@ -594,6 +594,19 @@ export function ChildDetailView({
   const groups = groupByDay(history);
   const visibleGroups = activityExpanded ? groups : groups.slice(0, 3);
   const hasMore = groups.length > 3;
+
+  function downloadStatement() {
+    const csv = toStatementCsv(history.map((h) => ({ ...h, childName: child.name })));
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = statementFilename();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
   const activeGoals = goals.filter((g) => g.status !== 'reached' && g.status !== 'cancelled');
   const reachedGoals = goals.filter((g) => g.status === 'reached');
 
@@ -742,7 +755,14 @@ export function ChildDetailView({
           <h2 className="flex items-center gap-2 text-sm font-bold">
             <Receipt className="h-4 w-4 text-brand" /> Activity
           </h2>
-          <Link href="/wallet/activity" className="text-xs font-semibold text-brand hover:underline">All activity →</Link>
+          <div className="flex items-center gap-3">
+            {history.length > 0 && (
+              <button type="button" onClick={downloadStatement} className="inline-flex items-center gap-1 text-xs font-semibold text-muted hover:text-fg" aria-label="Download this child's statement as CSV">
+                <Download className="h-3.5 w-3.5" /> Statement
+              </button>
+            )}
+            <Link href="/wallet/activity" className="text-xs font-semibold text-brand hover:underline">All activity →</Link>
+          </div>
         </div>
         {history.length === 0 ? (
           <div className="py-4">

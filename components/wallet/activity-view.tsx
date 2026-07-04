@@ -1,10 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Receipt, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { Receipt, ArrowDownLeft, ArrowUpRight, Download } from 'lucide-react';
 import { EmptyState } from '@/components/ui/states';
 import { formatCents } from '@/lib/wallet/ledger';
-import { txnTypeLabel, signedAmountCents, filterTxns, groupByDay, netCents, type ActivityTxn } from '@/lib/wallet/activity';
+import { txnTypeLabel, signedAmountCents, filterTxns, groupByDay, netCents, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 
 type Row = ActivityTxn & { childName: string | null };
@@ -30,6 +30,21 @@ export function WalletActivityView({ rows, childOptions }: { rows: Row[]; childO
   const groups = useMemo(() => groupByDay(filtered), [filtered]);
   const net = useMemo(() => netCents(filtered), [filtered]);
 
+  function downloadStatement() {
+    // Export exactly what's in view (respects the active filters). Pure CSV +
+    // a client-side Blob download — no server round-trip, no external deps.
+    const csv = toStatementCsv(filtered);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = statementFilename();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   const selCls = 'h-9 rounded-lg border border-border bg-bg px-2 text-sm';
 
   return (
@@ -50,6 +65,15 @@ export function WalletActivityView({ rows, childOptions }: { rows: Row[]; childO
             <option value="credit">Money in</option>
             <option value="debit">Money out</option>
           </select>
+          <button
+            type="button"
+            onClick={downloadStatement}
+            disabled={filtered.length === 0}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 text-sm font-medium hover:bg-elevated disabled:opacity-50"
+            aria-label="Download statement as CSV"
+          >
+            <Download className="h-4 w-4" /> Statement
+          </button>
         </div>
       </div>
 
