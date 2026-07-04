@@ -16,6 +16,7 @@ import { Input, Field, Textarea } from '@/components/ui/input';
 import { CameraCapture } from '@/components/ui/camera-capture';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
+import { partitionBySize, oversizeMessage } from '@/lib/storage/family-media';
 
 type Pick = { file: File; preview: string };
 
@@ -40,7 +41,12 @@ export function CreateMemory() {
     if (!list) return;
     const images = Array.from(list).filter((f) => f.type.startsWith('image/'));
     if (!images.length) { toastError('Please choose image files.'); return; }
-    setPicks((prev) => [...prev, ...images.map((file) => ({ file, preview: URL.createObjectURL(file) }))]);
+    // Drop anything over the family-media bucket limit before it can fail mid-upload.
+    const { ok, tooBig } = partitionBySize(images);
+    const msg = oversizeMessage(tooBig.length);
+    if (msg) toastError(msg);
+    if (!ok.length) return;
+    setPicks((prev) => [...prev, ...ok.map((file) => ({ file, preview: URL.createObjectURL(file) }))]);
   }
 
   // A photo captured from the live camera (already a JPEG File).

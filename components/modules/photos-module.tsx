@@ -11,6 +11,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
+import { partitionBySize, oversizeMessage } from '@/lib/storage/family-media';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -75,8 +76,13 @@ export function PhotosModule() {
   // ── Upload handler ────────────────────────────────────────
   async function uploadFiles(files: FileList | null) {
     if (!files || !files.length) return;
-    const valid = Array.from(files).filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
-    if (!valid.length) { toastError('Choose image or video files to upload.'); return; }
+    const media = Array.from(files).filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
+    if (!media.length) { toastError('Choose image or video files to upload.'); return; }
+    // Skip anything over the family-media bucket limit before it fails mid-upload.
+    const { ok: valid, tooBig } = partitionBySize(media);
+    const overMsg = oversizeMessage(tooBig.length);
+    if (overMsg) toastError(overMsg);
+    if (!valid.length) return;
     const supabase = createClient();
     setUploadProgress({ done: 0, total: valid.length });
     let uploaded = 0;
