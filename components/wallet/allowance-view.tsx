@@ -5,7 +5,7 @@
 // (/api/cron/wallet-allowance) pays them into the ledger automatically.
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarClock, Pause, Play, Pencil, Lock, X } from 'lucide-react';
+import { CalendarClock, Pause, Play, Pencil, Lock, X, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -15,8 +15,9 @@ import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { formatCents } from '@/lib/wallet/ledger';
+import { dueAllowances } from '@/lib/wallet/allowance';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
-import { saveAllowanceRuleAction, toggleAllowanceRuleAction } from '@/app/(app)/wallet/actions';
+import { saveAllowanceRuleAction, toggleAllowanceRuleAction, runDueAllowancesAction } from '@/app/(app)/wallet/actions';
 
 export type AllowanceRow = {
   childWalletId: string; name: string; ruleId: string | null;
@@ -27,6 +28,10 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [editing, setEditing] = useState<AllowanceRow | null>(null);
+  const [running, setRunning] = useState(false);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const due = dueAllowances(rows.map((r) => ({ isActive: r.isActive && !!r.ruleId, nextRunOn: r.nextRunOn, amountCents: r.amountCents })), today);
 
   async function toggle(row: AllowanceRow) {
     if (!row.ruleId) return;
@@ -36,10 +41,32 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
     router.refresh();
   }
 
+  async function runDue() {
+    setRunning(true);
+    const res = await runDueAllowancesAction();
+    setRunning(false);
+    if (!res.ok) return toastError(res.error ?? 'Could not run allowances');
+    success(res.ranCount ? `Paid ${res.ranCount} allowance${res.ranCount === 1 ? '' : 's'} · ${formatCents(res.paidCents ?? 0)}` : 'Nothing due right now');
+    router.refresh();
+  }
+
   return (
     <div className="module-page">
       <PageHeader title="Family Wallet" description="Automate weekly, biweekly, or monthly allowances." />
       <WalletSubnav />
+
+      {enabled && canManage && due.count > 0 && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand/20 bg-brand/5 p-4">
+          <div className="flex items-center gap-3">
+            <Zap className="h-5 w-5 flex-shrink-0 text-brand" />
+            <p className="text-sm">
+              <span className="font-semibold">{due.count} allowance{due.count === 1 ? '' : 's'} due</span>
+              <span className="text-muted"> · {formatCents(due.totalCents)}. They pay automatically, or run them now.</span>
+            </p>
+          </div>
+          <Button size="sm" onClick={runDue} loading={running}>Run due now</Button>
+        </div>
+      )}
 
       {!enabled && (
         <div className="mb-5 flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">

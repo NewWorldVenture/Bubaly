@@ -21,6 +21,7 @@ import { UpgradeModal } from './upgrade-modal';
 import { QuickCapture } from './quick-capture';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { AIOrb } from './ai-orb';
+import { CommandBar } from './command-bar';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
 
 /** Desktop top-bar search. Submitting hands the query to the AI Assistant via
@@ -365,6 +366,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <QuickCapture />
+      <CommandBar />
       <AIOrb />
 
       {/* Mobile nav drawer — the full sidebar (curated nav + Shortcuts + All

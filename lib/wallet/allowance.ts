@@ -45,3 +45,18 @@ export function rollForward(nextRunOn: string, cadence: Cadence, today: string, 
   while (cursor <= isoDay(today)) cursor = nextRunDate(cursor, cadence);
   return { runs, next: cursor };
 }
+
+export type DueRule = { isActive: boolean; nextRunOn: string | null; amountCents: number };
+
+/** Summary of allowance rules that are due to pay (next_run_on ≤ today), used to
+ *  drive the parent "Run due now" button. Only active, dated, positive rules count. */
+export function dueAllowances(rules: DueRule[], today: string): { count: number; totalCents: number } {
+  const t = isoDay(today);
+  let count = 0;
+  let totalCents = 0;
+  for (const r of rules) {
+    if (!r.isActive || !r.nextRunOn || r.amountCents <= 0) continue;
+    if (isoDay(r.nextRunOn) <= t) { count += 1; totalCents += r.amountCents; }
+  }
+  return { count, totalCents };
+}

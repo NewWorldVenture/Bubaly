@@ -37,9 +37,13 @@ Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:
 - [ ] Spending cards / real-time balance (`money-cards-view.tsx`, `child-detail-view.tsx`) say "coming soon" — needs Stripe Issuing (legit future infra; keep honest until it lands).
 
-### 3. Allowance — "AI allowance coaching"  ◐ (wired under Wallet)
+### 3. Allowance — "AI allowance coaching"  ☑ DONE
 Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surfaced under `/wallet`.
-- [ ] Confirm allowance schedule posts to the economy ledger and coaching reads real balances.
+- [x] Confirmed: allowance schedule posts to the immutable ledger (cron `/api/cron/wallet-allowance` →
+  `creditChildWallet`, split-allocated, advances `next_run_on`) and the AI coach reads real ledger balances.
+- [x] **Parent control added:** `runDueAllowancesAction()` — a "Run due now" banner on `/wallet/allowance`
+  (manager-only, Basic-gated, Trust-gated) pays every due rule, idempotent with the cron (no double-pay).
+  Pure `dueAllowances(rules, today)` helper (+2 tests) drives the count/total. Was cron-only before.
 
 ### 4. AI Concierge — "Become category defining"  ◐ (already wired)
 `/dashboard/concierge`, `lib/concierge/digest.ts`; module has 6 `.from()` + realtime. No mock data.
@@ -85,7 +89,9 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 ---
 
 ## Other open features (carried from the Friction Backlog / Scorecard)
-- [ ] #2 Universal ⌘K natural-language command bar (routes NL → assistant/capture/moment).
+- [x] #2 Universal ⌘K natural-language command bar — DONE. `lib/command-bar/route.ts` (pure, 8 tests) +
+  `components/app/command-bar.tsx` (global palette in app-shell, ⌘K / "/" open, navigate/capture/assistant,
+  reuses the Voice/capture parser). See the "⌘K + 💸" handoff block.
 - [ ] #6 ETA-based travel buffer for leave-by (needs a maps/ETA API key).
 - [ ] #7 Time-of-day Home Mission Control (reorder Home by hour).
 - [ ] #8 Role-tailored surfaces (density/language per `family_members.role`).
@@ -112,15 +118,13 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   all kinds/statuses, idempotent full-reseed per family) + admin-only screen at
   `/dashboard/marketplace/seed` (Copy SQL button, iPad-friendly). Validated on PG16:
   500 rows, every pending listing has offers, re-run stays 500.
-- **Voice Control** shipped (migration 0121, `lib/voice/command-router.ts`+12 tests, `voice-module.tsx`, `/dashboard/voice`, nav). Web Speech → route → real capture rows + `voice_commands` history. Verified: tsc/eslint/1578 tests/build.
-- **Voice Control test seed** added (`seed_voice_one_family.sql` + `db:seed:voice`) — 500 `voice_commands`,
-  PG16-validated, idempotent. Voice Control feature is now 100% complete incl. seeded history.
-- **Wallet build-out** (separate branch, in flight): CSV statement export on `/wallet/activity` + per-child
-  (`toStatementCsv`/`statementFilename` in `lib/wallet/activity.ts`, +6 tests) + `seed_wallet_ledger_one_family.sql`
-  (500 child-ledger `wallet_transactions`, `db:seed:wallet-ledger`, PG16-validated).
-- **Next up:** all 12 roadmap features built + Supabase-wired + seeded. Remaining agent-doable work is the
-  **Friction Backlog** (`docs/FRICTION_BACKLOG.md`) — top items: **#2 universal ⌘K natural-language command
-  bar** (routes NL → assistant/capture/moment; highest leverage, `ui` lane), #7 time-of-day Home Mission
-  Control, #8 role-tailored surfaces, #10 recurring-routine templates — plus the onboarding time-to-value
-  audit. Human-owned/blocked: Stripe Issuing keys (wallet cards), applying pending prod migrations
-  (0118/0120/0121…) in the Supabase SQL editor, per-platform OAuth keys, CI Supabase login for authed e2e.
+- **Voice Control** shipped (migration 0121, `lib/voice/command-router.ts`+12 tests, `voice-module.tsx`, `/dashboard/voice`, nav). Web Speech → route → real capture rows + `voice_commands` history. Verified: tsc/eslint/1578 tests/build. **+ 500-row `voice_commands` seed** (`seed_voice_one_family.sql` / `db:seed:voice`, PG16-validated).
+- **Universal ⌘K command bar** (Friction #2) shipped: `lib/command-bar/route.ts` (pure, 8 tests) + `components/app/command-bar.tsx` (global palette in app-shell; ⌘K / "/" open; navigate/capture/assistant; reuses the Voice/capture parser). 1588 tests / tsc / eslint / build green.
+- **Allowance** (roadmap #3) completed: parent-run `runDueAllowancesAction()` + "Run due now" banner on `/wallet/allowance` (idempotent with the cron, Trust+tier gated) + pure `dueAllowances` helper (2 tests). Wallet also gained CSV **statement export** + a 500-row child-ledger seed (`seed_wallet_ledger_one_family.sql`).
+- **Next up:** all 12 roadmap features built + wired + seeded. Remaining agent-doable Friction Backlog:
+  **#7 time-of-day Home Mission Control** (`ui`; reorder Home sections by hour) · **#8 role-tailored surfaces**
+  (density/language per `family_members.role`) · **#10 recurring-routine templates** · **#4 Autopilot
+  self-completion of ≥90%-confidence moment-prep** (`engine`) · the **onboarding time-to-value < 90s** audit.
+  Blocked/human-owned: #6 ETA travel buffer (maps API key), Stripe Issuing cards, applying pending prod
+  migrations (0118/0120/0121…) in the Supabase SQL editor, per-platform OAuth keys, CI Supabase login for
+  authed e2e. **Recommended next:** #7 (self-contained, high daily value, `ui` lane).
