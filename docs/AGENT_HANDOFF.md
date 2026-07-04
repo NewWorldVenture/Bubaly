@@ -7,18 +7,35 @@
 > constants globally is not — confirm with the user first.
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-07-04 — **Marketplace** feature shipped (family buy/sell/rent/borrow board, migration `0120_marketplace.sql`, `lib/marketplace/*`, `/dashboard/marketplace` + admin seed screen, 500-record seed) and repo-root **`todo.md`** roadmap build guide added. Voice Control is next but **owned by another agent** — don't touch it. See the "🛒 2026-07-04 — MARKETPLACE" block below. Earlier: 2026-07-03 — Trust Engine wired into ALL wallet money movement (Trust TODO #1 closed; see top session block). Earlier same day: Mobile polish merged (#210: scrollable wide tables, safe-area overlays, a11y labels), public-route overflow e2e guard (`tests/e2e/overflow.spec.ts`), and the FINAL describeDbError sweep (zero raw `err.message` toast paths remain). Earlier same day: Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
+Last updated: 2026-07-04 — **Marketplace** (migration `0120`, `/dashboard/marketplace` + 500-record seed) AND **Voice Control** (migration `0121_voice_commands`, `lib/voice/command-router.ts`, `/dashboard/voice`) both shipped to `main` — completing all 12 roadmap features. Repo-root **`todo.md`** is the build guide. See the "🛒🎙️ 2026-07-04" block below. Earlier: 2026-07-03 — Trust Engine wired into ALL wallet money movement (Trust TODO #1 closed; see top session block). Earlier same day: Mobile polish merged (#210: scrollable wide tables, safe-area overlays, a11y labels), public-route overflow e2e guard (`tests/e2e/overflow.spec.ts`), and the FINAL describeDbError sweep (zero raw `err.message` toast paths remain). Earlier same day: Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
-> ## 🛒 2026-07-04 — MARKETPLACE shipped + roadmap build guide (READ FIRST)
+> ## 🛒🎙️ 2026-07-04 — MARKETPLACE + VOICE CONTROL shipped + roadmap build guide (READ FIRST)
 >
-> Kicked off the **roadmap build** (the product roadmap: Wallet, Allowance, Concierge, Family Memory,
+> Ran the **roadmap build** (the product roadmap: Wallet, Allowance, Concierge, Family Memory,
 > Voice, Phone/Email Concierge, Predictive, Automation, Home, Vehicle, **Marketplace**). The new
 > **`todo.md`** at repo root is the single source of truth for this build — per-feature checklist
 > (schema → types → lib → module → route → nav → verified) + a build log. **Audit finding:** 11 of the
-> 12 roadmap features are *already* 100% Supabase-wired (real `.from()`+realtime, no mock data); the
-> only greenfield one was Marketplace, now done. The remaining genuine gap is **Voice Control** (has
-> `lib/voice/*` but no route) — **another agent is building it as of 2026-07-04; do NOT touch Voice.**
+> 12 roadmap features were *already* 100% Supabase-wired (real `.from()`+realtime, no mock data). The
+> two that weren't — **Marketplace** (greenfield) and **Voice Control** (had `lib/voice/*` but no
+> route/table) — are **both now built, wired, verified, and on `main`.** All 12 roadmap features + the
+> "Family OS" positioning are now shipped. Remaining work = Friction Backlog + onboarding audit.
+>
+> **Voice Control — new feature, 100% wired, on `main`** ("Full conversational interface",
+> `/dashboard/voice`, nav in Family AI OS group with `Mic` icon):
+> - **Migration `0121_voice_commands.sql`** — family-scoped RLS log of every spoken command
+>   (`transcript`, `resolved_kind` task/note/event/shopping, `action_table`, `action_count`, `status`
+>   routed/failed/dismissed). Validated on PG16 (RLS, 4 policies, kind check constraint, idempotent).
+> - **`lib/voice/command-router.ts`** — pure, tested (`tests/voice-command-router.test.ts`, 12 cases):
+>   `stripWakeWords` (peels "hey bubaly"/politeness), `classifyVoiceCommand` (explicit intents:
+>   "remind me to…"→task, "add X to the shopping list"→shopping, "note that…"→note, "schedule…"→event;
+>   respects a concrete event time over shopping verbs; else falls back to `suggestKind`). **Reuses
+>   `lib/capture/parse` — extend, don't duplicate.**
+> - **`components/modules/voice-module.tsx`** — Voice Command Center: reuses the existing
+>   `useSpeechRecognition` hook (Web Speech API, SSR-safe) → editable transcript + live routing preview
+>   → `saveCapture` writes REAL rows (todo_items/notes/calendar_events/grocery_items) → logs
+>   `voice_commands` → toast with Undo (`undoCapture`). Realtime "recent commands" history with one-tap
+>   re-run + delete. **Graceful type-only fallback** when Web Speech is unsupported (desktop Safari/FF).
 >
 > **Marketplace — new feature, 100% wired, on `main`** ("Buy, sell, rent, borrow within the family"):
 > - **Migration `0120_marketplace.sql`** (note: `0119` was taken by a parallel session's
