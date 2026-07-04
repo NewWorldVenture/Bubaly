@@ -11,9 +11,11 @@ export const dynamic = 'force-dynamic';
 
 const TYPE_COLOR: Record<string, string> = {
   member: '#7c5dff', team: '#14b8a6', routine: '#f59e0b',
-  class: '#3b82f6', goal: '#ec4899', event: '#22c55e',
+  class: '#3b82f6', goal: '#ec4899', event: '#22c55e', fact: '#22d3ee',
 };
 const SIZE = 640;
+// Cap facts shown per member so the graph stays legible (pinned facts win).
+const FACTS_PER_MEMBER = 3;
 
 export default async function FamilyKnowledgeGraphPage() {
   const ctx = await requireUserContext();
@@ -22,13 +24,16 @@ export default async function FamilyKnowledgeGraphPage() {
   const now = new Date().toISOString();
   const in14 = new Date(Date.now() + 14 * 86400000).toISOString();
 
-  const [{ data: members }, { data: teams }, { data: routines }, { data: classes }, { data: goals }, { data: events }] = await Promise.all([
+  const [{ data: members }, { data: teams }, { data: routines }, { data: classes }, { data: goals }, { data: events }, { data: facts }] = await Promise.all([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('teams').select('id, team_name, member_id').eq('family_id', familyId).eq('is_active', true).limit(12),
     supabase.from('family_routines').select('id, title, member_id').eq('family_id', familyId).eq('status', 'active').limit(12),
     supabase.from('school_classes').select('id, subject, member_id').eq('family_id', familyId).limit(12),
     supabase.from('goals').select('id, title').eq('family_id', familyId).eq('is_complete', false).limit(8),
     supabase.from('sports_events').select('id, title, member_id').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in14).limit(10),
+    // Member-tagged facts become knowledge nodes (pinned first). Missing table
+    // (pre-0123) degrades to null → no fact nodes, never an error.
+    supabase.from('family_facts').select('id, label, member_id, is_pinned').eq('family_id', familyId).not('member_id', 'is', null).order('is_pinned', { ascending: false }).limit(60),
   ]);
 
   // Build a real, data-backed graph: members at the center, their owned items
@@ -50,6 +55,16 @@ export default async function FamilyKnowledgeGraphPage() {
     push(`g:${g.id}`, g.title, 'goal');
     for (const m of members ?? []) edges.push({ source: `m:${m.id}`, target: `g:${g.id}`, relation: 'works_toward' });
   }
+  // Facts the family knows about each member — capped per member (pinned first,
+  // which the query already ordered) so the map reads as knowledge, not noise.
+  const factCountByMember = new Map<string, number>();
+  for (const fct of facts ?? []) {
+    const owner = fct.member_id!;
+    const n = factCountByMember.get(owner) ?? 0;
+    if (n >= FACTS_PER_MEMBER) continue;
+    factCountByMember.set(owner, n + 1);
+    link(`f:${fct.id}`, fct.label, 'fact', owner, 'knows');
+  }
 
   const positioned = layout(nodes, edges, { width: SIZE, height: SIZE });
   const lines = edgeLines(edges, positioned);
@@ -60,10 +75,11 @@ export default async function FamilyKnowledgeGraphPage() {
     <div className="space-y-5">
       <PageHeader title="Family Knowledge Graph" description="How everyone and everything in your household connects — and what the AI reasons over." />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatTile label="People" value={members?.length ?? 0} icon={Users} accent="bg-violet-600" />
         <StatTile label="Nodes" value={nodes.length} icon={Network} accent="bg-blue-600" />
         <StatTile label="Connections" value={edges.length} icon={Share2} accent="bg-emerald-600" />
+        <StatTile label="Facts known" value={facts?.length ?? 0} icon={Network} accent="bg-cyan-600" />
         <StatTile label="Goals linked" value={goals?.length ?? 0} icon={Share2} accent="bg-pink-600" />
       </div>
 
@@ -96,7 +112,7 @@ export default async function FamilyKnowledgeGraphPage() {
             </div>
           </div>
         ) : (
-          <MiniEmpty icon={Network} text="Add members, teams, classes and goals to grow the graph." />
+          <MiniEmpty icon={Network} text="Add members, teams, classes, goals and Knowledge Base facts to grow the graph." />
         )}
       </SectionCard>
 
