@@ -7,9 +7,50 @@
 > constants globally is not — confirm with the user first.
 
 Living context doc so another agent can continue without re-deriving everything.
-Last updated: 2026-07-03 — Trust Engine wired into ALL wallet money movement (Trust TODO #1 closed; see top session block). Earlier same day: Mobile polish merged (#210: scrollable wide tables, safe-area overlays, a11y labels), public-route overflow e2e guard (`tests/e2e/overflow.spec.ts`), and the FINAL describeDbError sweep (zero raw `err.message` toast paths remain). Earlier same day: Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
+Last updated: 2026-07-04 — **Marketplace** feature shipped (family buy/sell/rent/borrow board, migration `0120_marketplace.sql`, `lib/marketplace/*`, `/dashboard/marketplace` + admin seed screen, 500-record seed) and repo-root **`todo.md`** roadmap build guide added. Voice Control is next but **owned by another agent** — don't touch it. See the "🛒 2026-07-04 — MARKETPLACE" block below. Earlier: 2026-07-03 — Trust Engine wired into ALL wallet money movement (Trust TODO #1 closed; see top session block). Earlier same day: Mobile polish merged (#210: scrollable wide tables, safe-area overlays, a11y labels), public-route overflow e2e guard (`tests/e2e/overflow.spec.ts`), and the FINAL describeDbError sweep (zero raw `err.message` toast paths remain). Earlier same day: Mobile-readiness **foundation** pass (see the "2026-07-03 SESSION — Mobile foundation" section immediately below). Also recently shipped to `main`: customizable sidebar (Settings → **Navigation Choices**, top-level + per-group sub-pages, `user_preferences.notification_prefs.sidebarNav`/`.sidebarNavChildren`); Capture grid shows only chosen shortcuts with Add gated behind **Customize** (cap 30 = 10 rows, multi-add picker); **in-app camera** on Create Memory (`components/ui/camera-capture.tsx`); removed Planning/Food Hub nav links; new custom **All Services** icon (`components/app/icons/all-services-icon.tsx`).
 Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo → /home, sidebar polish (All Services de-emphasized + distinct dashboard icons), Calendar redesign (Day/Week/Month + Calendars/Show/Share rail + Sync footer), Tasks page redesign + 500-row seed, Meals page redesign (photos/tabs/votes) + `meals.image_url` + 500-row seed — AND the big systemic find: **production RLS drift** (RLS enabled but family-scoped SELECT policies missing in prod) was silently returning 0 rows for whole tables; repaired via migrations 0105 (calendar_events), 0106 (todo_lists/todo_items), 0107 (meals domain). See the "2026-06-30 SESSION" section directly below. Previously: 2026-06-29 — Curated sidebar now lists Parent Dashboard (/dashboard) + Family Dashboard (/dashboard?view=family) as a grouped pair below the primary nav (DASHBOARD_NAV); NEW `/home` dashboard (mockup-matched, Supabase-wired) is now the default post-login landing + the Home button target for everyone except super-admins; Discoverability pass (#193): Shopping + Family Inbox added to the curated Free-tier PRIMARY_NAV, and an above-the-fold "Why families switch" highlights strip on /pricing for the 8 differentiators; Feature tiers aligned to the competitive-analysis recommendations + pricing matrix rebuilt (#192); plus the prior 2026-06-28 work: Plan/tier resolution made bulletproof (service-role read + highest-plan-across-rows + noStore, fixing "everyone shows Free Tier"); Free-tier core nav un-gated (Files/Location/Family/Family Members → free, Dashboard link fixed); Services hub; mobile-first nav drawer; super-admin excluded from curated sidebar; sidebar account+theme footer (AI-coach box removed); onboarding fix; App Lock; Create Memory + Welcome/More/logout screens. Keep this updated as you ship.
 
+> ## 🛒 2026-07-04 — MARKETPLACE shipped + roadmap build guide (READ FIRST)
+>
+> Kicked off the **roadmap build** (the product roadmap: Wallet, Allowance, Concierge, Family Memory,
+> Voice, Phone/Email Concierge, Predictive, Automation, Home, Vehicle, **Marketplace**). The new
+> **`todo.md`** at repo root is the single source of truth for this build — per-feature checklist
+> (schema → types → lib → module → route → nav → verified) + a build log. **Audit finding:** 11 of the
+> 12 roadmap features are *already* 100% Supabase-wired (real `.from()`+realtime, no mock data); the
+> only greenfield one was Marketplace, now done. The remaining genuine gap is **Voice Control** (has
+> `lib/voice/*` but no route) — **another agent is building it as of 2026-07-04; do NOT touch Voice.**
+>
+> **Marketplace — new feature, 100% wired, on `main`** ("Buy, sell, rent, borrow within the family"):
+> - **Migration `0120_marketplace.sql`** (note: `0119` was taken by a parallel session's
+>   `family_credentials`/Family Vault — hence 0120). Two family-scoped RLS tables:
+>   `marketplace_listings` (kind sell/rent/borrow/free/wanted, `price_cents`, `rent_period`, category,
+>   condition, status available/pending/claimed/completed/withdrawn, `claimed_by`) +
+>   `marketplace_offers` (interest/claim/offer, status open/accepted/declined/withdrawn).
+>   `updated_at` triggers + indexes. Validated by replaying the **full ~134-migration chain on a real
+>   PG16** (see "Validating migrations locally" note below) — applies clean, idempotent, RLS+FK+trigger
+>   verified functionally.
+> - **`lib/marketplace/listings.ts`** — pure, tested (`tests/marketplace-listings.test.ts`, 10 cases):
+>   labels, money math (`formatCents`/`priceLabel`/`dollarsToCents`), `filterListings` (browsable-only,
+>   ranked available>pending>claimed then newest), and the offer/claim/ownership state machine
+>   (`canOffer`/`isOwner`/`openOffersFor`). **Extend this, don't duplicate.**
+> - **`components/modules/marketplace-module.tsx`** — browse+filter (kind/category/search), post/edit,
+>   express interest / claim, owner offer-review modal (accept → hands off + auto-declines the rest),
+>   withdraw/complete. Live via `useRealtimeQuery` on both tables. Takes `canSeed` prop.
+> - **Route** `/dashboard/marketplace` + admin-only **`/dashboard/marketplace/seed`**
+>   (`components/marketplace/seed-screen.tsx`). Nav entry in Family & Home group (`Store` icon).
+> - **Test seed:** `lib/marketplace/seed-sql.ts` (`MARKETPLACE_SEED_SQL`) — paste-ready SQL, **500
+>   listings + ~290 offers** across every kind/category/status, targets a family by email
+>   (`v_email` default `newworldventurellc@gmail.com`), **idempotent** (clears that family's rows first
+>   → always exactly 500). Rendered on the seed screen with a Copy button (iPad-friendly). Validated on
+>   PG16: 500 rows, every `pending` listing has offers, re-run stays 500.
+>
+> **Validating migrations locally (reusable recipe):** there's no npm script — spin up a throwaway
+> PG16 as the `postgres` OS user (`initdb` refuses root), bootstrap the Supabase-provided objects the
+> migrations assume (schema `auth` with `users`/`uid()`/`jwt()`/`raw_user_meta_data`, roles
+> anon/authenticated/service_role, schema `storage` with `buckets`(incl. `file_size_limit`,
+> `allowed_mime_types`)/`objects`/`foldername()`, `create publication supabase_realtime`), then apply
+> `supabase/migrations/*.sql` in sorted order with `-v ON_ERROR_STOP=1`. This caught the 0119 collision.
+>
 > ## 🧭 2026-07-03 — ANTICIPATION + DELIGHT arc + the living roadmap (READ FIRST)
 >
 > This session built the **anticipatory "Moments"** spine + a **delight** layer, and — per the "Project Zero
