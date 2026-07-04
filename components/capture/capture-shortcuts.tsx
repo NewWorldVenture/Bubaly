@@ -163,7 +163,7 @@ export function CaptureShortcuts({ initialKeys, heading = 'Shortcuts', columns =
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted">{heading}</p>
+        {heading ? <p className="text-xs font-semibold uppercase tracking-wide text-muted">{heading}</p> : <span />}
         <button
           type="button"
           onClick={() => { setEditing((v) => !v); setPicker(null); }}

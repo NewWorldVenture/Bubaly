@@ -152,7 +152,7 @@ export function QuickCapture() {
 
           {/* Member's own shortcuts — only their picks show; "Customize" reveals
               add/change/remove (up to 10). Same layout as /capture, synced. */}
-          <CaptureShortcuts columns={4} onNavigate={() => setOpen(false)} />
+          <CaptureShortcuts columns={4} heading="" onNavigate={() => setOpen(false)} />
 
           {suggested && (
             <button
