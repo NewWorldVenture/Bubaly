@@ -23,7 +23,7 @@ type Pick = { file: File; preview: string };
 export function CreateMemory() {
   const router = useRouter();
   const { familyId, userId } = useApp();
-  const { error: toastError } = useToast();
+  const { error: toastError, success } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [picks, setPicks] = useState<Pick[]>([]);
@@ -31,6 +31,8 @@ export function CreateMemory() {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [created, setCreated] = useState<{ id: string; path: string }[]>([]);
+  const [undoing, setUndoing] = useState(false);
   const [done, setDone] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
 
@@ -73,6 +75,7 @@ export function CreateMemory() {
     // (or favorited) photo, and uses the caption as the memory's title/blurb.
     const caption = trimmedNote ? `${title.trim()} — ${trimmedNote}` : title.trim();
     const takenAt = new Date().toISOString();
+    const createdRows: { id: string; path: string }[] = [];
     let saved = 0;
     for (let i = 0; i < picks.length; i++) {
       const { file } = picks[i];
@@ -100,6 +103,7 @@ export function CreateMemory() {
         } else {
           // Mark it a favorite so it also shows in the Photos "Favorites" tab.
           await supabase.from('family_photos').update({ is_favorite: true }).eq('id', row.id);
+          createdRows.push({ id: row.id, path: stored.path });
           saved++;
         }
       }
@@ -109,7 +113,24 @@ export function CreateMemory() {
     setSaving(false);
     setProgress(null);
     if (saved === 0) return; // errors already surfaced
+    setCreated(createdRows);
     setDone(true);
+  }
+
+  // Reverse the just-created memory: delete its photo rows + storage objects,
+  // then return to the form (picks/title/note are still in state) so nothing is lost.
+  async function undo() {
+    if (undoing) return;
+    setUndoing(true);
+    const supabase = createClient();
+    const ids = created.map((c) => c.id);
+    const paths = created.map((c) => c.path);
+    if (paths.length) await supabase.storage.from('family-media').remove(paths);
+    if (ids.length) await supabase.from('family_photos').delete().in('id', ids);
+    setCreated([]);
+    setUndoing(false);
+    setDone(false);
+    success('Memory undone — nothing was saved.');
   }
 
   // ── Memory Created (screen 10) ───────────────────────────────
@@ -138,10 +159,20 @@ export function CreateMemory() {
           <Button
             variant="outline"
             className="w-full"
-            onClick={() => { setPicks([]); setTitle(''); setNote(''); setDone(false); }}
+            onClick={() => { setPicks([]); setTitle(''); setNote(''); setCreated([]); setDone(false); }}
           >
             <Plus className="h-4 w-4" /> Create another
           </Button>
+          {created.length > 0 && (
+            <button
+              onClick={undo}
+              disabled={undoing}
+              className="mx-auto flex items-center gap-1.5 text-sm font-medium text-muted underline underline-offset-2 hover:text-danger disabled:opacity-50"
+            >
+              {undoing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {undoing ? 'Undoing…' : 'Undo — remove this memory'}
+            </button>
+          )}
         </div>
       </div>
     );
