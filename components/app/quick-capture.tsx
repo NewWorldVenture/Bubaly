@@ -13,6 +13,7 @@ import { parseEvent, parseDueDate, suggestKind, splitItems } from '@/lib/capture
 import { saveCapture, undoCapture } from '@/lib/capture/save';
 import { isOpenCaptureKey, isSaveHotkey, isTypingTarget } from '@/lib/capture/shortcut';
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
+import { useJourney } from '@/lib/analytics/use-journey';
 import { describeDbError } from '@/lib/supabase/errors';
 
 /** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
@@ -45,6 +46,7 @@ export function QuickCapture() {
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [customizing, setCustomizing] = useState(false);
+  const journey = useJourney('capture');
 
   function reset() { setText(''); setType('task'); }
 
@@ -59,6 +61,13 @@ export function QuickCapture() {
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  // Telemetry: a capture "journey" starts when the sheet opens (Experience
+  // Scorecard). Completion is recorded on a successful save below.
+  useEffect(() => {
+    if (open) journey.start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   async function save(e: React.FormEvent) {
@@ -77,6 +86,7 @@ export function QuickCapture() {
             .catch(() => toastError('Could not undo'));
         } },
       );
+      journey.complete();
       reset();
       setOpen(false);
     } catch (err) {
