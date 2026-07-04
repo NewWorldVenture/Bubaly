@@ -5,7 +5,11 @@
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 
 const BUCKET = 'documents';
-const MAX_BYTES = 25 * 1024 * 1024; // matches the bucket's file_size_limit
+/** The "documents" bucket's file_size_limit (migration 0007 = 26214400). Exported
+ *  so UI can pre-check + display the real limit instead of guessing. */
+export const DOCUMENT_MAX_BYTES = 25 * 1024 * 1024;
+export const DOCUMENT_MAX_MB = 25;
+const MAX_BYTES = DOCUMENT_MAX_BYTES;
 
 function sanitizeFileName(name: string): string {
   return name.replace(/[^a-zA-Z0-9.\-_]/g, '_').slice(-120);

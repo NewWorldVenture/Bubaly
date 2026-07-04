@@ -10,7 +10,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
-import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
+import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_BYTES, DOCUMENT_MAX_MB } from '@/lib/storage/documents';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -251,6 +251,11 @@ export function DocumentsModule() {
   }
 
   function pickFile(f: File | null) {
+    // Fail fast at pick time (before the form) with the real bucket limit.
+    if (f && f.size > DOCUMENT_MAX_BYTES) {
+      toastError(`“${f.name}” is too large (max ${DOCUMENT_MAX_MB} MB).`);
+      return;
+    }
     setFile(f);
     if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name }));
     if (f) setOpen(true);
@@ -616,7 +621,7 @@ export function DocumentsModule() {
             {file ? (
               <><p className="text-sm font-semibold">{file.name}</p><p className="mt-1 text-xs text-muted/60">{fmtSize(file.size)} · click to change</p></>
             ) : (
-              <><p className="text-sm font-semibold text-muted">Drag &amp; drop a file here</p><p className="mt-1 text-xs text-muted/60">PDF, images, docs, video up to 50 MB</p><span className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-xs font-semibold">Browse Files</span></>
+              <><p className="text-sm font-semibold text-muted">Drag &amp; drop a file here</p><p className="mt-1 text-xs text-muted/60">PDF, images, docs, video up to {DOCUMENT_MAX_MB} MB</p><span className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-xs font-semibold">Browse Files</span></>
             )}
           </div>
           <Field label="File Name">{(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Passport - Emma.pdf" />}</Field>
