@@ -13,6 +13,7 @@ import { fmtTime } from '@/lib/utils/format';
 import { familyScore } from '@/lib/home/family-score';
 import { HomeMomentCard } from '@/components/moments/home-moment-card';
 import { OnThisDayCard } from '@/components/memories/on-this-day-card';
+import { TimeOfDayFocus } from '@/components/home/time-of-day-focus';
 import {
   summarizeMonthFinances, usd, memberTagline, weekStrip, isoDate, type HomeTxn,
 } from '@/lib/home/home-data';
@@ -227,6 +228,10 @@ export default async function HomePage() {
           ))}
         </div>
       </div>
+
+      {/* Time-of-day "Focus now" strip — surfaces what matters at this hour
+          (morning: schedule/weather/school · night: tomorrow/prep/reflect). */}
+      <TimeOfDayFocus />
 
       {/* Anticipatory "Get ready" banner — the next imminent moment's prep, or
           nothing when the horizon is clear. See /dashboard/moments. */}

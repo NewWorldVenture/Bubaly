@@ -93,7 +93,10 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   `components/app/command-bar.tsx` (global palette in app-shell, ⌘K / "/" open, navigate/capture/assistant,
   reuses the Voice/capture parser). See the "⌘K + 💸" handoff block.
 - [ ] #6 ETA-based travel buffer for leave-by (needs a maps/ETA API key).
-- [ ] #7 Time-of-day Home Mission Control (reorder Home by hour).
+- [x] #7 Time-of-day Home Mission Control — DONE. `lib/home/time-of-day.ts` (pure, 6 tests: dayPhase /
+  phaseGreeting / phaseBlurb / focusForPhase) + `components/home/time-of-day-focus.tsx` "Focus now" strip
+  at the top of `/home` (morning: schedule/weather/school · night: tomorrow/get-ready/reflect). Additive —
+  did not refactor the contended grid. Server-time based (no per-user tz yet).
 - [ ] #8 Role-tailored surfaces (density/language per `family_members.role`).
 - [ ] #10 Recurring-routine templates (detect clusters → saved routine + prep bundle).
 - [ ] Onboarding → first value: target time-to-first-value < 90s; defer/infer non-essential fields. *(not yet audited)*
@@ -121,10 +124,12 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 - **Voice Control** shipped (migration 0121, `lib/voice/command-router.ts`+12 tests, `voice-module.tsx`, `/dashboard/voice`, nav). Web Speech → route → real capture rows + `voice_commands` history. Verified: tsc/eslint/1578 tests/build. **+ 500-row `voice_commands` seed** (`seed_voice_one_family.sql` / `db:seed:voice`, PG16-validated).
 - **Universal ⌘K command bar** (Friction #2) shipped: `lib/command-bar/route.ts` (pure, 8 tests) + `components/app/command-bar.tsx` (global palette in app-shell; ⌘K / "/" open; navigate/capture/assistant; reuses the Voice/capture parser). 1588 tests / tsc / eslint / build green.
 - **Allowance** (roadmap #3) completed: parent-run `runDueAllowancesAction()` + "Run due now" banner on `/wallet/allowance` (idempotent with the cron, Trust+tier gated) + pure `dueAllowances` helper (2 tests). Wallet also gained CSV **statement export** + a 500-row child-ledger seed (`seed_wallet_ledger_one_family.sql`).
+- **Time-of-day Home Mission Control** (Friction #7) shipped: `lib/home/time-of-day.ts` (pure, 6 tests) + `components/home/time-of-day-focus.tsx` "Focus now" strip at the top of `/home`, phase-adaptive (morning: schedule/weather/school · night: tomorrow/get-ready/reflect). Additive; 1599 tests / tsc / eslint / build green.
 - **Next up:** all 12 roadmap features built + wired + seeded. Remaining agent-doable Friction Backlog:
-  **#7 time-of-day Home Mission Control** (`ui`; reorder Home sections by hour) · **#8 role-tailored surfaces**
-  (density/language per `family_members.role`) · **#10 recurring-routine templates** · **#4 Autopilot
-  self-completion of ≥90%-confidence moment-prep** (`engine`) · the **onboarding time-to-value < 90s** audit.
-  Blocked/human-owned: #6 ETA travel buffer (maps API key), Stripe Issuing cards, applying pending prod
-  migrations (0118/0120/0121…) in the Supabase SQL editor, per-platform OAuth keys, CI Supabase login for
-  authed e2e. **Recommended next:** #7 (self-contained, high daily value, `ui` lane).
+  **#8 role-tailored surfaces** (density/language per `family_members.role`; `ui`) · **#10 recurring-routine
+  templates** (detect calendar clusters → saved routine + prep bundle; `engine`) · **#4 Autopilot
+  self-completion of ≥90%-confidence moment-prep** (`engine`, touches shared `lib/autopilot/*`) · the
+  **onboarding time-to-value < 90s** audit. Blocked/human-owned: #6 ETA travel buffer (maps API key),
+  Stripe Issuing cards, applying pending prod migrations (0118/0120/0121…) in the Supabase SQL editor,
+  per-platform OAuth keys, CI Supabase login for authed e2e. **Recommended next:** #10 recurring-routine
+  templates (high value, self-contained `engine` lane) or #8 role-tailored surfaces.
