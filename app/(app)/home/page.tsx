@@ -14,19 +14,14 @@ import { familyScore } from '@/lib/home/family-score';
 import { HomeMomentCard } from '@/components/moments/home-moment-card';
 import { OnThisDayCard } from '@/components/memories/on-this-day-card';
 import { TimeOfDayFocus } from '@/components/home/time-of-day-focus';
+import { dayPhase } from '@/lib/home/time-of-day';
+import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
 import {
   summarizeMonthFinances, usd, memberTagline, weekStrip, isoDate, type HomeTxn,
 } from '@/lib/home/home-data';
 
 export const metadata: Metadata = { title: 'Home' };
 export const dynamic = 'force-dynamic';
-
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
 
 // ── Small shared UI ───────────────────────────────────────────────────────────
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -213,7 +208,10 @@ export default async function HomePage() {
       {/* Header: greeting + quick actions */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-2xl font-black sm:text-3xl">{greeting()}, {firstName}! <span aria-hidden>👋</span></h1>
+          <h1 className="text-2xl font-black sm:text-3xl">
+            {roleGreeting(me.role, firstName, dayPhase(now))}
+            {roleSurface(me.role).tone !== 'kid' && <span aria-hidden> 👋</span>}
+          </h1>
           <p className="mt-1 text-sm text-muted">Here&apos;s what&apos;s happening with your family today.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
