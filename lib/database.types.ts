@@ -368,6 +368,11 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; transcript: string; resolved_kind?: string | null; action_table?: string | null; action_count?: number; status?: string; created_by?: string | null },
         Partial<{ member_id: string | null; transcript: string; resolved_kind: string | null; action_table: string | null; action_count: number; status: string }>
       >;
+      family_facts: T<
+        { id: string; family_id: string; member_id: string | null; category: string; label: string; value: string; notes: string | null; is_pinned: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; category?: string; label: string; value: string; notes?: string | null; is_pinned?: boolean; created_by?: string | null },
+        Partial<{ member_id: string | null; category: string; label: string; value: string; notes: string | null; is_pinned: boolean }>
+      >;
       location_events: T<
         { id: string; family_id: string; member_id: string; place_id: string | null; place_name: string | null; event_type: LocationEventType; latitude: number | null; longitude: number | null; occurred_at: string; created_at: string },
         { id?: string; family_id: string; member_id: string; place_id?: string | null; place_name?: string | null; event_type?: LocationEventType; latitude?: number | null; longitude?: number | null; occurred_at?: string },

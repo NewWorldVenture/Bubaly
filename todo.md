@@ -51,7 +51,7 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 
 ### 5. Family Memory — "Build persistent family knowledge graph"  ◐
 `/dashboard/family-memory` + `/dashboard/family-knowledge-graph`, `lib/memories/*`.
-- [ ] Confirm the knowledge-graph view has a persistent Supabase store (no `family_memory` table in types yet — verify backing store or add one).
+- [x] Persistent store shipped — **Family Knowledge Base**: migration `0123_family_facts.sql` (family-scoped RLS; sizes/allergies/contacts/preferences/accounts, member-tagged or family-level, pinnable), pure `lib/memory/facts.ts` (8 tests: filter/search/group), `components/modules/knowledge-base-module.tsx` at `/dashboard/knowledge` (search + member/category filters, add/edit/pin/copy/delete). Nav: Family AI OS, `Brain` icon. Validated on PG16; verified tsc/eslint/1637 tests/build. *(The `/dashboard/family-knowledge-graph` visualization can now read this store.)*
 
 ### 6. Voice Control — "Full conversational interface"  ☑ DONE
 - [x] `lib/voice/command-router.ts` — wake-word stripping + intent routing → capture kind, reusing `suggestKind`/`parseEvent`. Tests `tests/voice-command-router.test.ts` (12 cases).

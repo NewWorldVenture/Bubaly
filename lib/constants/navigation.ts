@@ -167,6 +167,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/family-school', label: 'School Hub', icon: GraduationCap, minLevel: 2 },
       { href: '/dashboard/family-sports', label: 'Sports Hub', icon: Trophy, minLevel: 2 },
       { href: '/dashboard/family-memory', label: 'Memory Brain', icon: BookHeart, minLevel: 2 },
+      { href: '/dashboard/knowledge', label: 'Knowledge Base', icon: Brain, minLevel: 0 },
       { href: '/dashboard/family-emergency', label: 'Emergency Hub', icon: ShieldAlert, minLevel: 2 },
       { href: '/dashboard/family-stress', label: 'Stress Prediction', icon: Gauge, minLevel: 2 },
       { href: '/dashboard/family-automation', label: 'Life Automation', icon: Zap, minLevel: 2 },
