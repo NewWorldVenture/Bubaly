@@ -53,8 +53,11 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 - [x] `lib/voice/command-router.ts` — wake-word stripping + intent routing → capture kind, reusing `suggestKind`/`parseEvent`. Tests `tests/voice-command-router.test.ts` (12 cases).
 - [x] Migration `0121_voice_commands.sql` — family-scoped RLS history log. Validated on PG16 (RLS, 4 policies, check constraint, idempotent).
 - [x] `components/modules/voice-module.tsx` — Voice Command Center: `useSpeechRecognition` mic + editable transcript + live routing preview → `saveCapture` (real rows) → logs `voice_commands` → toast w/ Undo. Recent-commands history (realtime) with one-tap re-run + delete. Graceful type-only fallback when Web Speech unsupported.
-- [x] Route `/dashboard/voice` + nav (Family AI OS, `Mic` icon).
-- [x] Verified: tsc, eslint, vitest (1578), build.
+- [x] Route `/dashboard/voice` + nav (Family AI OS, `Mic` icon; auto-included in NAV_CATALOG / Navigation Choices).
+- [x] **Test seed** `supabase/seed_voice_one_family.sql` + `db:seed:voice` — 500 `voice_commands` for the
+  target family (task/note/event/shopping + failed/dismissed, ~90 days). Deterministic-UUID idempotency
+  (no tag column). Validated on PG16 (500 rows, idempotent re-run). So `/dashboard/voice` history renders full.
+- [x] Verified: tsc, eslint, vitest, build.
 
 ### 7. Phone Concierge — "AI receptionist for families"  ◐ (already wired)
 `/dashboard/front-desk`; module has 8 `.from()` + realtime. Wired.
@@ -110,4 +113,14 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   `/dashboard/marketplace/seed` (Copy SQL button, iPad-friendly). Validated on PG16:
   500 rows, every pending listing has offers, re-run stays 500.
 - **Voice Control** shipped (migration 0121, `lib/voice/command-router.ts`+12 tests, `voice-module.tsx`, `/dashboard/voice`, nav). Web Speech → route → real capture rows + `voice_commands` history. Verified: tsc/eslint/1578 tests/build.
-- **Next up:** all 12 roadmap features are now built + Supabase-wired. Remaining: Friction Backlog items (#2 command bar, #6 ETA, #7 time-of-day Home, #8 roles, #10 routines) + onboarding audit.
+- **Voice Control test seed** added (`seed_voice_one_family.sql` + `db:seed:voice`) — 500 `voice_commands`,
+  PG16-validated, idempotent. Voice Control feature is now 100% complete incl. seeded history.
+- **Wallet build-out** (separate branch, in flight): CSV statement export on `/wallet/activity` + per-child
+  (`toStatementCsv`/`statementFilename` in `lib/wallet/activity.ts`, +6 tests) + `seed_wallet_ledger_one_family.sql`
+  (500 child-ledger `wallet_transactions`, `db:seed:wallet-ledger`, PG16-validated).
+- **Next up:** all 12 roadmap features built + Supabase-wired + seeded. Remaining agent-doable work is the
+  **Friction Backlog** (`docs/FRICTION_BACKLOG.md`) — top items: **#2 universal ⌘K natural-language command
+  bar** (routes NL → assistant/capture/moment; highest leverage, `ui` lane), #7 time-of-day Home Mission
+  Control, #8 role-tailored surfaces, #10 recurring-routine templates — plus the onboarding time-to-value
+  audit. Human-owned/blocked: Stripe Issuing keys (wallet cards), applying pending prod migrations
+  (0118/0120/0121…) in the Supabase SQL editor, per-platform OAuth keys, CI Supabase login for authed e2e.
