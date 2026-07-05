@@ -19,9 +19,18 @@ authoritative list.
   migration in order. Safe: every migration below is **additive + idempotent**
   (guarded with `IF NOT EXISTS` / `EXCEPTION WHEN duplicate_object` / drift-safe
   policy re-creates), so re-running an already-applied one is a no-op.
-- **Supabase SQL editor (manual):** paste each file below **in numeric order**
+- **Supabase SQL editor — ONE paste (easiest):** open
+  **`supabase/APPLY_PENDING_0118-0125.sql`**, copy the whole file, paste into the
+  SQL editor, and Run. It's all 8 migrations concatenated in order inside a single
+  `BEGIN/COMMIT` (verified free of transaction-hostile statements), so it either
+  fully applies or rolls back cleanly with nothing half-done. Re-running is a no-op.
+- **Supabase SQL editor (per file):** paste each file below **in numeric order**
   and Run. Order matters only in that later migrations may reference earlier
-  tables; applying 0118 → 0124 in sequence is always safe.
+  tables; applying 0118 → 0125 in sequence is always safe.
+
+> **Agents cannot execute this** — there are no prod DB credentials or Supabase
+> CLI in the build sandbox (verified). Applying to prod is human-owned; the
+> consolidated bundle exists so it's one paste, not a scavenger hunt.
 
 After applying, hard-refresh the app: Marketplace, `/dashboard/voice`,
 `/dashboard/knowledge`, the calendar Routines panel, `/wallet/activity`, and
