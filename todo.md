@@ -96,11 +96,24 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 - [x] **"Since yesterday" card** on `/dashboard/family-operating-index` (headline + cleared/new/±dim
   chips). Reuses the state vector — zero contended files touched. tsc/eslint/**1669 tests**/build.
 
+### ▶ Pillar #4 ✅ SHIPPED: Outcomes-not-features launcher
+- [x] **Engine** `lib/outcomes/launcher.ts` (pure, **10 tests**) — the eight outcomes (Run Today ·
+  Feed the Family · Plan a Trip · Prepare for School · Manage Money · Keep Everyone Healthy ·
+  Celebrate Together · Prepare for the Unexpected); `buildOutcomePlan(id, ctx)` assembles each
+  outcome's capability steps (deep-linked) and auto-badges the urgent ones from a real
+  `OutcomeContext` (events today, overdue tasks, birthdays soon, open grocery items);
+  `outcomeUrgencyCount` for the card badge. DOM-free.
+- [x] **Route** `/dashboard/outcomes` — server reads the real family snapshot (count queries +
+  birthday compute), builds badged plans, hands them to `components/modules/outcomes-launcher.tsx`
+  (goal-first picker → the exact capabilities to get it done, with live badges). 100% Supabase, no
+  new migration (reads existing tables).
+- [x] **Nav** entry (Suggested → Outcomes, `Wand2`, minLevel 0 → free + in Navigation Choices catalog).
+- [x] **Verified** tsc · eslint · **1709 vitest** · `next build`.
+
 **Next slices (build order):** #1 wire the five orchestrator questions ("what's likely to go wrong
 tomorrow / who's overloaded / what to decide next / what info is missing") off the same snapshot ·
-#2 turn the snapshot into the Digital Twin's state vector for simulation · #4 the
-outcomes-not-features launcher ("Run Today / Feed the Family / …") · adopt `summarizeChange` inside
-the existing Command Center / Daily Briefing surfaces (ui lane — coordinate vs. parallel session).
+#2 turn the snapshot into the Digital Twin's state vector for simulation · adopt `summarizeChange`
+inside the existing Command Center / Daily Briefing surfaces (ui lane — coordinate vs. parallel session).
 
 *(Why FOI first: it's the one pillar with no existing surface, it forces the reasoning core to
 read across the entire household — the seed of pillar #1 — and it makes the north-star metric
