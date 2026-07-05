@@ -6,6 +6,26 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-05 (later) — Knowledge Graph + Twin projector shipped (READ FIRST)
+>
+> **The moat build.** Added the reasoning substrate the twin/agents/decision-engine compose on:
+> - **`0129_family_graph.sql`** — `graph_entities` (typed nodes: person/activity/place/org/event/
+>   item/pet/topic) + `graph_edges` (directed, weighted, typed relations), family RLS. Plain unique
+>   index `uq_graph_entities_ref (family_id, ref_table, ref_id)` so the projector can `.upsert()`
+>   (PostgREST can't target a *partial* index — learned the hard way; NULL refs stay distinct so
+>   manual/seed nodes are unconstrained). **⚠️ apply to prod.** Next free migration: **0130**.
+> - **`lib/graph/reason.ts`** (pure, **16 tests**) — `buildIndex`, `neighbours`, `findPath` (BFS),
+>   `reachable`, **`propagateImpact`** (multiplicative blast-radius = the payoff), `hubs`, `orphans`,
+>   `describePath`.
+> - **`lib/twin/project.ts`** (pure, **8 tests**) + **`projectTwinAction`** (`app/(app)/dashboard/
+>   graph/twin-actions.ts`) — reads real members/pets/vehicles/school_classes/teams/family_routines/
+>   family_places/financial_accounts and upserts them as graph entities+edges. This is pillar #2's
+>   "continuously-updated linked cross-domain model" — the half that wasn't built before. Idempotent.
+> - **`/dashboard/graph`** ("Reasoning Graph", nav minLevel 0) — path-finder, connections, impact
+>   ripple bars, hubs, add-entity/link, **Rebuild from data** button. `seed_graph.sql` (500+500).
+> - Verified: **1769 tests**, tsc, eslint green. Remainder: auto-refresh on data change (today it's a
+>   one-tap rebuild); doctors/smart-home domains when those tables land.
+>
 > ## ★ 2026-07-05 SESSION — The Family Operating Layer begins (READ FIRST)
 >
 > **New north star** (see `todo.md` ★ section): pivot from systems-of-record to a **system of

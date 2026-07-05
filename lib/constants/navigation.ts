@@ -53,6 +53,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/family-operating-index', label: 'Operating Index', icon: Gauge, minLevel: 0 },
       { href: '/dashboard/outcomes', label: 'Outcomes', icon: Wand2, minLevel: 0 },
       { href: '/dashboard/agents', label: 'Family Assistant', icon: Bot, minLevel: 0 },
+      { href: '/dashboard/graph', label: 'Reasoning Graph', icon: GitBranch, minLevel: 0 },
       { href: '/dashboard/calm', label: 'Calm', icon: Leaf, minLevel: 0 },
       { href: '/dashboard/connections', label: 'Connections', icon: Network, minLevel: 0 },
       { href: '/dashboard/trust', label: 'Trust & Permissions', icon: ShieldCheck, minLevel: 0 },

@@ -37,11 +37,23 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
    completed automatically today? Who's overloaded this week? What should the family decide next?
    What information is missing before an important event?* The AI is an **orchestrator**, not a
    collection of assistants.
-2. **Household Digital Twin** — one continuously-updated model linking people, relationships,
-   calendars, home, vehicles, pets, schools, doctors, finances, documents, shopping, inventory,
-   travel, smart-home. Enables **safe simulation before deciding** ("if we accept this tournament,
-   what has to move?"; "can we add two nights and stay in budget?"). *(Scaffold page exists at
-   `/dashboard/family-digital-twin` — needs the real linked model + simulation.)*
+2. **Household Digital Twin** ✅ SHIPPED — one continuously-updated model linking people,
+   relationships, calendars, home, vehicles, pets, schools, finances, etc. **Both halves now built:**
+   (a) **decision simulation** (`lib/twin/simulate.ts`, `/dashboard/family-digital-twin`) — "if we
+   accept this tournament, what has to move?"; and (b) the **cross-domain linked model** — the
+   Knowledge Graph (see below): a wired **twin projector** (`lib/twin/project.ts` + `projectTwinAction`)
+   reads the family's real members/pets/vehicles/schools/teams/routines/places/accounts and
+   materializes them as typed graph entities + edges, kept in sync on demand. Remaining scope:
+   auto-refresh on data change (currently a one-tap "Rebuild from data") + doctors/smart-home once
+   those domains land.
+
+★ **Knowledge Graph — the reasoning substrate** ✅ SHIPPED (moat build) — migration `0129`
+   (`graph_entities` + `graph_edges`, typed nodes + directed weighted edges, family RLS), pure
+   engine `lib/graph/reason.ts` (16 tests: index/neighbours/`findPath`/`reachable`/`propagateImpact`
+   impact blast-radius/`hubs`/`orphans`/`describePath`), `/dashboard/graph` ("Reasoning Graph")
+   with path-finder, connection view, impact ripple bars, hubs, add-entity/link, and **Rebuild from
+   data** (twin projector). 500-row `seed_graph.sql`. This is what lets the AI *reason across*
+   relationships (Emma→Soccer→Field→Weather→Dinner) instead of retrieving isolated rows.
 3. **Family Intelligence Layer / Playbook** — every interaction improves understanding; build a
    family playbook (favorite meals, birthday/holiday traditions, travel styles, homework habits,
    shopping patterns, communication styles). Family stays in control (visible + editable — the
@@ -344,6 +356,7 @@ idempotent, stable across re-runs):
 | Memories / trips | `family_memories`, `trip_memories` | `seed_memories.sql` |
 | Autopilot | `autopilot_suggestions`, `approval_requests` | `seed_autopilot.sql` |
 | Family Vault | `family_credentials` | `seed_vault.sql` |
+| Knowledge Graph / Twin | `graph_entities`, `graph_edges` | `seed_graph.sql` |
 | Calendar, To-Dos, Groceries, Notes, Photos, Journal, Habits | `calendar_events`, `todo_items`, `grocery_items`, `notes`, `family_photos`, `journal_entries`, `habits` | `seed_core_content.sql` |
 | #1 AI Orchestrator | `family_events`, `family_polls` | `seed_pillar1_orchestrator.sql` |
 | #2 Household Twin | `budgets`, `calendar_events`, `family_routines`, `school_classes`, `teams` | `seed_pillar2_twin.sql` |

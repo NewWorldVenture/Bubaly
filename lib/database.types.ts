@@ -393,6 +393,16 @@ export interface Database {
         { id?: string; family_id: string; provider: string; category?: string; status?: string; account_label?: string | null; external_account_id?: string | null; last_synced_at?: string | null; error_message?: string | null; metadata?: Json; created_by?: string | null },
         Partial<{ provider: string; category: string; status: string; account_label: string | null; external_account_id: string | null; last_synced_at: string | null; error_message: string | null; metadata: Json }>
       >;
+      graph_entities: T<
+        { id: string; family_id: string; kind: string; name: string; ref_table: string | null; ref_id: string | null; attributes: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; kind?: string; name: string; ref_table?: string | null; ref_id?: string | null; attributes?: Json; created_by?: string | null },
+        Partial<{ kind: string; name: string; ref_table: string | null; ref_id: string | null; attributes: Json }>
+      >;
+      graph_edges: T<
+        { id: string; family_id: string; source_id: string; target_id: string; relation: string; weight: number; attributes: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; source_id: string; target_id: string; relation: string; weight?: number; attributes?: Json; created_by?: string | null },
+        Partial<{ source_id: string; target_id: string; relation: string; weight: number; attributes: Json }>
+      >;
       family_operating_index: T<
         { id: string; family_id: string; as_of_date: string; composite: number; band: string; dimensions: Json; suggestions: Json; created_at: string; updated_at: string },
         { id?: string; family_id: string; as_of_date?: string; composite: number; band?: string; dimensions?: Json; suggestions?: Json },
