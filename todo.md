@@ -132,8 +132,18 @@ state vector and the Command Center's evening "what changed" source.)*
   headroom). Server action `simulateDecisionAction` (family-scoped reads) + client `DecisionSimulator`
   on `/dashboard/family-digital-twin`. tsc/eslint/**1679 tests**/build. *(Full linked state-vector
   reuse of the FOI snapshot = follow-up; this slice ships the category-defining simulation first.)*
-- [ ] **Slice 6 — Family Playbook** (pillar #3): learn durable preferences/traditions into
-  `family_facts` from real usage; surface + edit.
+- [x] **Slice 6 — Family Playbook** (pillar #3) ✅: Bubaly learns durable preferences/traditions
+  from real usage and proposes them; the family confirms → real `family_facts` rows.
+  Migration `0126_family_playbook.sql` (`family_playbook_suggestions`: category/label/value/
+  evidence/confidence/signature/status suggested→accepted/dismissed/`fact_id`, `unique(family_id,
+  signature)`, family-scoped RLS). Pure `lib/playbook/learn.ts` (**10 tests**) `learnPlaybook(signals)`
+  → deduped/ranked/capped suggestions from meal/grocery/favorite/tradition signals. Server actions
+  `refreshPlaybookAction` (mines meal_plans+meals, grocery_items, family_favorites, yearly
+  calendar_events → upsert, `ignoreDuplicates` so dismissed/accepted never resurface) /
+  `acceptSuggestionAction` (writes family_facts) / `dismissSuggestionAction`. `/dashboard/playbook`
+  (`components/modules/playbook-module.tsx`: review cards w/ confidence + evidence, Save/Dismiss,
+  realtime) + nav (Family AI OS, `Wand2`, free). Seed `seed_playbook_all_families.sql` across ALL
+  families. tsc/eslint/**1699 tests**/build; migration+seed validated on PG16 (idempotent).
 - [ ] **Slice 7 — Outcomes launcher** (pillar #4): "Run Today / Feed the Family / Plan a Trip /
   Prepare for School / Manage Money / Keep Everyone Healthy / Celebrate / Prepare for the
   Unexpected" goal launcher that auto-selects capabilities.
@@ -191,9 +201,10 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 `/dashboard/concierge`, `lib/concierge/digest.ts`; module has 6 `.from()` + realtime. No mock data.
 - [ ] Stretch: deeper write-back of accepted recommendations.
 
-### 5. Family Memory — "Build persistent family knowledge graph"  ◐
+### 5. Family Memory — "Build persistent family knowledge graph"  ☑ DONE
 `/dashboard/family-memory` + `/dashboard/family-knowledge-graph`, `lib/memories/*`.
 - [x] Persistent store shipped — **Family Knowledge Base**: migration `0123_family_facts.sql` (family-scoped RLS; sizes/allergies/contacts/preferences/accounts, member-tagged or family-level, pinnable), pure `lib/memory/facts.ts` (8 tests: filter/search/group), `components/modules/knowledge-base-module.tsx` at `/dashboard/knowledge` (search + member/category filters, add/edit/pin/copy/delete). Nav: Family AI OS, `Brain` icon. Validated on PG16; verified tsc/eslint/1637 tests/build. *(The `/dashboard/family-knowledge-graph` visualization can now read this store.)*
+- [x] **Learning layer shipped** — the **Family Playbook** (North Star slice 6, see above) mines real household usage into suggested facts the family confirms into this same `family_facts` store. `/dashboard/playbook` + `0126_family_playbook.sql`.
 
 ### 6. Voice Control — "Full conversational interface"  ☑ DONE
 - [x] `lib/voice/command-router.ts` — wake-word stripping + intent routing → capture kind, reusing `suggestKind`/`parseEvent`. Tests `tests/voice-command-router.test.ts` (12 cases).

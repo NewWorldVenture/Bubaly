@@ -373,6 +373,11 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; category?: string; label: string; value: string; notes?: string | null; is_pinned?: boolean; created_by?: string | null },
         Partial<{ member_id: string | null; category: string; label: string; value: string; notes: string | null; is_pinned: boolean }>
       >;
+      family_playbook_suggestions: T<
+        { id: string; family_id: string; member_id: string | null; category: string; label: string; value: string; evidence: string | null; confidence: number; signature: string; status: string; fact_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; category?: string; label: string; value: string; evidence?: string | null; confidence?: number; signature: string; status?: string; fact_id?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; category: string; label: string; value: string; evidence: string | null; confidence: number; status: string; fact_id: string | null }>
+      >;
       journey_events: T<
         { id: string; family_id: string; member_id: string | null; journey: string; phase: string; step: number; session_id: string; duration_ms: number | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; journey: string; phase?: string; step?: number; session_id: string; duration_ms?: number | null },
