@@ -17,8 +17,14 @@
 > | 1 | #7 FOI | `lib/operating-index/score.ts` + `server.ts` + `/dashboard/family-operating-index` + migration `0125` | #227 | ✅ merged |
 > | 2 | #5 | "Since yesterday" recap `lib/operating-index/summary.ts` | #228 | ✅ merged |
 > | 3 | #1 | Orchestrator 5 questions `lib/operating-index/orchestrator.ts` (chief-of-staff card) | #230 | ✅ merged |
-> | 5 | #2 | Digital Twin **decision simulator** `lib/twin/simulate.ts` + simulator on twin page | #231 | ⏳ CI/merge in flight |
-> | 6 | #3 | Family **Playbook** `lib/playbook/learn.ts` — learns facts from behavior → one-tap into `family_facts` | #232(this) | ⏳ building/CI |
+> | 5 | #2 | Digital Twin **decision simulator** `lib/twin/simulate.ts` + simulator on twin page | #231 | ✅ merged |
+> | 6 | #3 | Family **Playbook** `lib/playbook/learn.ts` — learns facts from behavior → one-tap into `family_facts` | #232(this) | ⏳ CI green→merge armed |
+>
+> **SESSION-END STATE:** main is at `f360e7b` (#231 merged). Slices 1/2/3/5 are **on main / in prod**;
+> slice 6 (#232) is this branch (`claude/playbook-intelligence`), verified locally (tsc·eslint·**1689
+> vitest**·build), merge-when-green cron armed. If a fresh session picks up: check PR #232 first, merge
+> if green, then continue the OPEN WORK TRACKER. Also PR #229 shipped the **one-paste prod migration
+> bundle** — still needs a human to run it.
 >
 > **The shared state vector is `loadOperatingIndex()`** (`lib/operating-index/server.ts`) — it returns
 > `{ index, change, orchestrator, trend }`. Future slices (outcomes launcher #4, Design-for-Calm #8)

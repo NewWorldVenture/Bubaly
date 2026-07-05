@@ -111,6 +111,10 @@ state vector and the Command Center's evening "what changed" source.)*
 
 ## ☐ OPEN WORK TRACKER (single source of truth for what's left — keep in sync)
 
+> **STATUS (2026-07-05):** Operating Layer slices **1, 2, 3, 5 in prod on main** (`f360e7b`); slice **6
+> (Playbook) = PR #232**, verified, merge-when-green armed. Next: **#4 Outcomes launcher** or the **FOI
+> financial follow-ups**. Human-owned blocker: run `supabase/APPLY_PENDING_0118-0125.sql` on prod.
+
 ### A. Operating Layer slices still to build (agent-doable, build top-down)
 - [x] **Slice 1 — Family Operating Index** (engine + page + 0125). PR #227. ✅
 - [x] **Slice 2 — "Since yesterday" evening recap** (pillar #5, off the FOI snapshot). PR #228. ✅
