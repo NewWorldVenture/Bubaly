@@ -319,21 +319,33 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 > below resolve the family by email, are re-runnable (delete-by-sentinel / ON CONFLICT), and
 > were validated on a throwaway PG16 (500 rows each, stable across re-runs).
 
-**☐ IN PROGRESS — remaining user-facing tables to seed at 500 rows** (top priority; each gets
-the same validated/idempotent treatment as `seed_core_content.sql`, validated on PG16):
-- [ ] Messages — `family_messages` (all kinds: text/image/audio)
-- [ ] Chores — `chores` / `chore_assignments`
-- [ ] Meals / recipes — `meals`, `recipes`, `meal_plan_entries`
-- [ ] Documents / Vault — `documents`, `family_credentials`
-- [ ] Location / Safety — `location_pings`, `safe_zones`
-- [ ] Finance hub — `transactions`, `accounts`, `bills`
-- [ ] Memories / trips — `memories`, `trip_memories`
-- [ ] Autopilot — `autopilot_suggestions`, `approval_requests`
+**✅ DONE — secondary user-facing tables now seeded at 500 rows** (all validated on PG16,
+idempotent, stable across re-runs):
+- [x] Messages — `family_messages` (all kinds) → `seed_messages.sql`
+- [x] Chores — `chores` + `chore_assignments` (full status lifecycle) → `seed_chores.sql`
+- [x] Meals — `meals` + `family_recipes` + `meal_plans` → `seed_meals.sql`
+- [x] Documents — `documents` (categories + expiry + secure) → `seed_documents.sql`
+- [x] Location / Safety — `family_places` + `member_locations` + `location_events` → `seed_location.sql`
+- [x] Finance hub — `financial_accounts` + `transactions` + `bills` → `seed_finance.sql`
+- [x] Memories / trips — `family_memories` + `trip_memories` → `seed_memories.sql`
+- [x] Autopilot — `autopilot_suggestions` + `approval_requests` → `seed_autopilot.sql`
+
+> Only gap: **Family Vault credentials** (`family_credentials`) — its migration isn't in the
+> PG16 validation set (parallel-session table), so it wasn't validated here; add via the same
+> pattern once that migration lands.
 
 **☑ Validated 500-row seeds (paste-ready in `supabase/`):**
 
 | Feature / surface | Table(s) seeded | File |
 |---|---|---|
+| Messages | `family_messages` | `seed_messages.sql` |
+| Chores | `chores`, `chore_assignments` | `seed_chores.sql` |
+| Meals | `meals`, `family_recipes`, `meal_plans` | `seed_meals.sql` |
+| Documents | `documents` | `seed_documents.sql` |
+| Location / Safety | `family_places`, `member_locations`, `location_events` | `seed_location.sql` |
+| Finance hub | `financial_accounts`, `transactions`, `bills` | `seed_finance.sql` |
+| Memories / trips | `family_memories`, `trip_memories` | `seed_memories.sql` |
+| Autopilot | `autopilot_suggestions`, `approval_requests` | `seed_autopilot.sql` |
 | Calendar, To-Dos, Groceries, Notes, Photos, Journal, Habits | `calendar_events`, `todo_items`, `grocery_items`, `notes`, `family_photos`, `journal_entries`, `habits` | `seed_core_content.sql` |
 | #1 AI Orchestrator | `family_events`, `family_polls` | `seed_pillar1_orchestrator.sql` |
 | #2 Household Twin | `budgets`, `calendar_events`, `family_routines`, `school_classes`, `teams` | `seed_pillar2_twin.sql` |
