@@ -37,9 +37,19 @@
 > card renders on the FOI page. Calm tone, silent on a flat day. tsc/eslint/**1669 tests**/build.
 > `summarizeChange` is exported so the existing Command Center / Daily Briefing (ui lane) can adopt it.
 >
+> **Slice 3 shipped — Orchestrator questions (pillar #1):** `lib/operating-index/orchestrator.ts`
+> (pure, **10 tests**) `orchestrate(input, now)` answers the five daily chief-of-staff questions
+> (go-wrong-tomorrow · auto-today · overloaded · decide-next · missing-info). The server builds its
+> input from a tomorrow-events slice + open ≥90-confidence `autopilot_suggestions` (read-only reuse
+> of the autopilot output — NO engine edit) + pending approvals + missing-location events, and reuses
+> the FOI snapshot's `overloaded`/`openVotes`. "Your family chief of staff" section on the FOI page.
+> Shipped together with the migration bundle in one PR (single-branch constraint). tsc/eslint/**1679
+> tests**/build.
+>
 > **Reuse note for the next slices:** the FOI snapshot is deliberately the shared *state vector* — the
-> five orchestrator questions (pillar #1) and the Digital Twin's simulation baseline (pillar #2)
-> should read it rather than re-query. Don't fork the snapshot builder.
+> Digital Twin's simulation baseline (pillar #2), the outcomes launcher (#4), and Design-for-Calm (#8)
+> should read `loadOperatingIndex` rather than re-query. Don't fork the snapshot builder. Also: a prod
+> **one-paste migration bundle** now lives at `supabase/APPLY_PENDING_0118-0125.sql` (human runs it).
 >
 > ## ✅ 2026-07-05 SESSION — push cadence fix + backlog reconciled (READ FIRST)
 >

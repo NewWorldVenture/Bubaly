@@ -4,6 +4,7 @@ import {
   Gauge, TrendingUp, TrendingDown, Minus, ArrowRight, CalendarClock, ListChecks,
   CalendarX2, Wallet, Home as HomeIcon, MessageSquare, Repeat, Target, Sparkles,
   Moon, ArrowUpRight, ArrowDownRight, CheckCircle2, CircleDot,
+  Compass, AlertTriangle, Bot, Users, Vote, HelpCircle, Check,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -33,6 +34,10 @@ const IMPACT_CHIP: Record<'high' | 'medium' | 'low', string> = {
   low: 'bg-brand/10 text-brand',
 };
 
+const Q_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
+  go_wrong: AlertTriangle, auto_today: Bot, overloaded: Users, decide_next: Vote, missing_info: HelpCircle,
+};
+
 function barColor(score: number): string {
   if (score >= 85) return 'bg-emerald-500';
   if (score >= 70) return 'bg-brand';
@@ -46,7 +51,7 @@ function barColor(score: number): string {
 export default async function FamilyOperatingIndexPage() {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { index, priorComposite, trend, change } = await loadOperatingIndex(supabase, ctx.active.familyId);
+  const { index, priorComposite, trend, change, orchestrator } = await loadOperatingIndex(supabase, ctx.active.familyId);
   const band = BAND_COPY[index.band];
 
   // SVG ring geometry.
@@ -135,6 +140,55 @@ export default async function FamilyOperatingIndexPage() {
           )}
         </section>
       )}
+
+      {/* Chief of Staff — the five orchestrator questions (pillar #1) */}
+      <section className="mt-5">
+        <div className="mb-2 flex items-center gap-2">
+          <Compass className="h-4 w-4 text-brand" />
+          <h2 className="text-sm font-semibold">Your family chief of staff</h2>
+          {orchestrator.allClear && (
+            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              <Check className="h-3 w-3" /> All clear
+            </span>
+          )}
+        </div>
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {orchestrator.answers.map((a) => {
+            const Icon = Q_ICON[a.id] ?? Compass;
+            const attention = a.status === 'attention';
+            return (
+              <div
+                key={a.id}
+                className={cn(
+                  'rounded-xl border p-3.5',
+                  attention ? 'border-brand/25 bg-brand/[0.04]' : 'border-border bg-surface/40',
+                )}
+              >
+                <div className="mb-1 flex items-start gap-2">
+                  <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', attention ? 'text-brand' : 'text-muted')} />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-muted">{a.question}</p>
+                    <p className={cn('text-sm', attention ? 'font-medium text-fg' : 'text-muted')}>{a.headline}</p>
+                  </div>
+                </div>
+                {a.items.length > 0 && (
+                  <ul className="mt-1.5 space-y-1 pl-6">
+                    {a.items.map((it, i) => (
+                      <li key={i} className="text-xs text-muted">
+                        {it.href ? (
+                          <Link href={it.href} className="inline-flex items-center gap-1 hover:text-brand">
+                            {it.label} <ArrowRight className="h-3 w-3" />
+                          </Link>
+                        ) : it.label}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {/* Top suggestions — the "system of execution" payoff */}
       <section className="mt-5">

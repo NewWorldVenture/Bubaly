@@ -11,13 +11,14 @@
 // unset inputs as "not flagged", which is the truthful default.
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database, Json, TaskStatus } from '@/lib/database.types';
+import type { Database, Json, TaskStatus, EventCategory } from '@/lib/database.types';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import {
   computeOperatingIndex, dimensionsToRecord, compositeTrend,
   type HouseholdSnapshot, type MemberLoad, type OperatingIndex,
 } from './score';
 import { summarizeChange, type SnapshotView, type ChangeSummary } from './summary';
+import { orchestrate, type OrchestratorReport, type DayEvent, type OrchestratorItem } from './orchestrator';
 
 type DB = SupabaseClient<Database>;
 
@@ -25,6 +26,11 @@ const DAY_MS = 86_400_000;
 const OPEN_TASK: TaskStatus[] = ['todo', 'in_progress', 'submitted'];
 const OPEN_MAINT: TaskStatus[] = ['todo', 'in_progress'];
 const DONE_TASK: TaskStatus[] = ['done', 'approved'];
+// Autopilot suggestions at/above this confidence are things it can auto-handle.
+const AUTO_CONFIDENCE = 90;
+// Event categories that imply a place you travel to (so a missing location matters).
+const NEEDS_LOCATION_LIST: EventCategory[] = ['appointment', 'sports', 'school', 'medication'];
+const NEEDS_LOCATION = new Set<string>(NEEDS_LOCATION_LIST);
 
 /** UTC calendar day (YYYY-MM-DD) this snapshot represents. */
 export function asOfDate(now: Date): string {
@@ -129,6 +135,52 @@ export interface OperatingIndexResult {
   trend: number | null;
   /** Evening "what changed since yesterday" recap (pillar #5). */
   change: ChangeSummary;
+  /** The five orchestrator answers (pillar #1). */
+  orchestrator: OrchestratorReport;
+}
+
+/**
+ * Build the orchestrator's inputs from live data: tomorrow's events, the
+ * auto-handleable Autopilot suggestions, decisions awaiting the family, and
+ * upcoming events missing a location. Reuses the FOI snapshot's overloaded
+ * member + open-vote count (passed in) so nothing is recomputed.
+ */
+async function buildOrchestratorReport(
+  supabase: DB, familyId: string, index: OperatingIndex, openVotes: number, now: Date,
+): Promise<OrchestratorReport> {
+  const startOfTomorrow = new Date(now); startOfTomorrow.setUTCHours(0, 0, 0, 0); startOfTomorrow.setUTCDate(startOfTomorrow.getUTCDate() + 1);
+  const startOfDayAfter = new Date(startOfTomorrow.getTime() + DAY_MS);
+  const nowIso = now.toISOString();
+  const in14 = new Date(now.getTime() + 14 * DAY_MS).toISOString();
+
+  const [tomorrowRes, autoRes, approvalsRes, missingRes] = await Promise.all([
+    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id, location, category')
+      .eq('family_id', familyId).gte('starts_at', startOfTomorrow.toISOString()).lt('starts_at', startOfDayAfter.toISOString()).order('starts_at').limit(200),
+    supabase.from('autopilot_suggestions').select('id, title, action_label')
+      .eq('family_id', familyId).eq('status', 'open').gte('confidence', AUTO_CONFIDENCE).order('urgency', { ascending: false }).limit(10),
+    supabase.from('approval_requests').select('id, title').eq('family_id', familyId).eq('status', 'pending').order('created_at').limit(10),
+    supabase.from('calendar_events').select('id, title, starts_at, location, category')
+      .eq('family_id', familyId).is('location', null).gte('starts_at', nowIso).lte('starts_at', in14)
+      .in('category', NEEDS_LOCATION_LIST).order('starts_at').limit(10),
+  ]);
+
+  const tomorrowEvents: DayEvent[] = (tomorrowRes.data ?? []).map((e) => ({
+    id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, allDay: e.all_day,
+    assigneeId: e.assignee_id, location: e.location, needsLocation: NEEDS_LOCATION.has(e.category),
+  }));
+  const autoCompletable: OrchestratorItem[] = (autoRes.data ?? []).map((s) => ({
+    label: s.action_label || s.title, href: '/dashboard/autopilot',
+  }));
+  const pendingApprovals: OrchestratorItem[] = (approvalsRes.data ?? []).map((a) => ({
+    label: a.title, href: '/dashboard/trust',
+  }));
+  const missingInfo: OrchestratorItem[] = (missingRes.data ?? []).map((e) => ({
+    label: `“${e.title}” — no location`, href: '/dashboard/calendar',
+  }));
+
+  return orchestrate({
+    tomorrowEvents, autoCompletable, overloaded: index.overloaded, pendingApprovals, openVotes, missingInfo,
+  }, now);
 }
 
 /** Coerce a persisted snapshot's jsonb suggestions into {id,title} pairs. */
@@ -172,6 +224,9 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, now: Da
   } : null;
   const change = summarizeChange(currentView, priorView);
 
+  // The five orchestrator questions (pillar #1), reusing the snapshot's signals.
+  const orchestrator = await buildOrchestratorReport(supabase, familyId, index, snapshot.openVotes, now);
+
   // Idempotent upsert of today's snapshot.
   try {
     await supabase.from('family_operating_index').upsert({
@@ -186,5 +241,5 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, now: Da
     // Persisting is best-effort; the live index still renders.
   }
 
-  return { index, asOf: today, priorComposite, trend: compositeTrend(index.composite, priorComposite), change };
+  return { index, asOf: today, priorComposite, trend: compositeTrend(index.composite, priorComposite), change, orchestrator };
 }
