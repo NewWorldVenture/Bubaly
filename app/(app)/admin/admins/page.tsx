@@ -176,7 +176,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                 <div className="mt-6"><EmptyState icon={UserCog} title="No admins match these filters" /></div>
               ) : (
                 <div className="table-responsive mt-4">
-                  <table className="w-full text-sm">
+                  <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                     <thead>
                       <tr className="border-b border-border text-left text-xs text-muted">
                         <th className="px-3 py-2 font-medium">Admin</th>
@@ -241,7 +241,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                         );
                       })}
                     </tbody>
-                  </table>
+                  </table></div>
                 </div>
               )}
 
@@ -384,7 +384,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
         <Card>
           <h2 className="mb-4 text-base font-semibold">Admin Activity Log</h2>
           <div className="table-responsive">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted">
                   <th className="px-3 py-2 font-medium">Event</th>
@@ -411,7 +411,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </Card>
       )}

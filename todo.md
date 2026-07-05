@@ -93,6 +93,9 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   `components/app/command-bar.tsx` (global palette in app-shell, ⌘K / "/" open, navigate/capture/assistant,
   reuses the Voice/capture parser). See the "⌘K + 💸" handoff block.
 - [ ] #6 ETA-based travel buffer for leave-by (needs a maps/ETA API key).
+- [x] #9 Admin-mobile table overflow — DONE. Audited every `<table>` under `app/(app)/admin` (27 total):
+  14 already wrapped, **13 wrapped** in `overflow-x-auto` + `min-w-[720px]` (admins, users, audit-logs,
+  audit, content, security, subscriptions, support-tickets, sync). Class-only; tsc/eslint/build green.
 - [x] #7 Time-of-day Home Mission Control — DONE. `lib/home/time-of-day.ts` (pure, 6 tests: dayPhase /
   phaseGreeting / phaseBlurb / focusForPhase) + `components/home/time-of-day-focus.tsx` "Focus now" strip
   at the top of `/home` (morning: schedule/weather/school · night: tomorrow/get-ready/reflect). Additive —

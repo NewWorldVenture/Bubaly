@@ -203,7 +203,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
               <div className="mt-6"><EmptyState icon={TicketCheck} title="No tickets match these filters" /></div>
             ) : (
               <div className="table-responsive mt-4">
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-xs text-muted">
                       <th className="px-3 py-2 font-medium">Ticket ID</th>
@@ -270,7 +270,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </div>
             )}
 
