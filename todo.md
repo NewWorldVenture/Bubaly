@@ -114,12 +114,13 @@ state vector and the Command Center's evening "what changed" source.)*
 ### A. Operating Layer slices still to build (agent-doable, build top-down)
 - [x] **Slice 1 — Family Operating Index** (engine + page + 0125). PR #227. ✅
 - [x] **Slice 2 — "Since yesterday" evening recap** (pillar #5, off the FOI snapshot). PR #228. ✅
-- [ ] **Slice 3 — Orchestrator questions** (pillar #1): the five daily questions —
+- [x] **Slice 3 — Orchestrator questions** (pillar #1) ✅: the five daily questions —
   *what's most likely to go wrong tomorrow · what can auto-complete today · who's
   overloaded this week · what should we decide next · what info is missing before an
-  important event.* Pure `lib/operating-index/orchestrator.ts` over the FOI snapshot
-  (+ a tomorrow slice) reusing autopilot `auto`-tier suggestions for Q2; "Orchestrator"
-  section on the FOI page. **← building now.**
+  important event.* Pure `lib/operating-index/orchestrator.ts` (**10 tests**) over the
+  FOI snapshot + a tomorrow slice; reads open ≥90-confidence `autopilot_suggestions`
+  for Q2 (read-only reuse, no engine edit); "Your family chief of staff" section on the
+  FOI page. tsc/eslint/**1679 tests**/build.
 - [ ] **Slice 4 — Command Center adopts the recap** (pillar #5 finish): surface
   `summarizeChange` inside `/dashboard/command-center` + `/dashboard/briefing` (ui lane —
   coordinate vs. parallel session).
