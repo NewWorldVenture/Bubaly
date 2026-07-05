@@ -18,7 +18,10 @@ export type PlaybookSignal =
   // An explicit family favorite (family_favorites), optionally per-member.
   | { type: 'favorite'; kind: string; name: string; memberId?: string | null; rating?: number | null }
   // A calendar event that recurs around the same date across years → tradition.
-  | { type: 'tradition'; title: string; when: string; years: number };
+  | { type: 'tradition'; title: string; when: string; years: number }
+  // A recurring travel pattern (trip kind or season) → travel style. `count` =
+  // trips fitting the style.
+  | { type: 'travel'; style: string; count: number };
 
 export type PlaybookSuggestion = {
   signature: string;            // stable dedupe key (survives re-runs)
@@ -31,7 +34,7 @@ export type PlaybookSuggestion = {
 };
 
 /** Minimum signal strength before we bother suggesting anything. */
-const MIN = { meal: 3, grocery: 4, tradition: 2 } as const;
+const MIN = { meal: 3, grocery: 4, tradition: 2, travel: 3 } as const;
 
 /** Default cap so a busy family's inbox stays reviewable, not overwhelming. */
 export const DEFAULT_SUGGESTION_CAP = 24;
@@ -107,6 +110,20 @@ function fromSignal(sig: PlaybookSignal): PlaybookSuggestion | null {
         value,
         evidence: `Happened ${sig.years} years running around ${tidy(sig.when)}`,
         confidence: clampConf(55 + sig.years * 10),
+      };
+    }
+    case 'travel': {
+      if (sig.count < MIN.travel) return null;
+      const value = tidy(sig.style);
+      if (!value) return null;
+      return {
+        signature: `travel:${slug(value)}`,
+        memberId: null,
+        category: 'preference',
+        label: 'Travel style',
+        value,
+        evidence: `${sig.count} of your trips fit this`,
+        confidence: clampConf(48 + sig.count * 7),
       };
     }
   }

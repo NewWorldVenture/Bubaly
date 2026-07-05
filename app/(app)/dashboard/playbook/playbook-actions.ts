@@ -17,6 +17,22 @@ type Result = { ok: boolean; error?: string; added?: number };
 const DAY = 24 * 60 * 60 * 1000;
 const MONTH_FMT: Intl.DateTimeFormatOptions = { month: 'long' };
 
+/** VacationKind → a human "travel style" phrase ('other' is intentionally omitted). */
+const TRAVEL_KIND_STYLE: Record<string, string> = {
+  road_trip: 'Road trips', flight: 'Flying trips', cruise: 'Cruises',
+  theme_park: 'Theme-park getaways', international: 'International travel',
+  domestic: 'Domestic trips', staycation: 'Staycations', camping: 'Camping trips',
+};
+
+/** Season name from a YYYY-MM-DD date (northern-hemisphere buckets). */
+function travelSeason(date: string): string {
+  const m = new Date(date).getMonth(); // 0-11
+  if (m <= 1 || m === 11) return 'Winter';
+  if (m <= 4) return 'Spring';
+  if (m <= 7) return 'Summer';
+  return 'Fall';
+}
+
 /**
  * Mine the household for durable patterns and (idempotently) stock the
  * suggestions inbox. Never resurrects a dismissed/accepted suggestion — new
@@ -84,6 +100,18 @@ export async function refreshPlaybookAction(): Promise<Result> {
     const when = new Date(t.earliest).toLocaleDateString('en-US', MONTH_FMT);
     signals.push({ type: 'tradition', title: t.title, when, years });
   }
+
+  // 5) Travel style — recurring trip kind + season across the family's vacations.
+  const { data: trips } = await sb.from('vacations')
+    .select('kind,start_date').eq('family_id', familyId).limit(500);
+  const styleCounts = new Map<string, number>();
+  const bump = (style: string) => styleCounts.set(style, (styleCounts.get(style) ?? 0) + 1);
+  for (const v of trips ?? []) {
+    const kindStyle = TRAVEL_KIND_STYLE[v.kind as string];
+    if (kindStyle) bump(kindStyle);
+    if (v.start_date) bump(`${travelSeason(v.start_date)} trips`);
+  }
+  for (const [style, count] of styleCounts) signals.push({ type: 'travel', style, count });
 
   const suggestions = learnPlaybook(signals);
   if (!suggestions.length) return { ok: true, added: 0 };

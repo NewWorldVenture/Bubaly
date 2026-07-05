@@ -86,6 +86,31 @@ describe('learnPlaybook', () => {
   });
 });
 
+describe('travel style signals', () => {
+  it('suggests a travel style once >= 3 trips fit, with a stable signature', () => {
+    const [s] = learnPlaybook([{ type: 'travel', style: 'Beach getaways', count: 4 }]);
+    expect(s.label).toBe('Travel style');
+    expect(s.value).toBe('Beach getaways');
+    expect(s.category).toBe('preference');
+    expect(s.signature).toBe('travel:beach-getaways');
+    expect(s.evidence).toBe('4 of your trips fit this');
+    expect(s.confidence).toBe(48 + 4 * 7);
+  });
+
+  it('drops travel styles below the 3-trip threshold', () => {
+    expect(learnPlaybook([{ type: 'travel', style: 'Cruises', count: 2 }])).toEqual([]);
+  });
+
+  it('dedupes duplicate styles to the highest-confidence instance', () => {
+    const out = learnPlaybook([
+      { type: 'travel', style: 'Camping trips', count: 3 },
+      { type: 'travel', style: 'Camping trips', count: 6 },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].confidence).toBe(48 + 6 * 7);
+  });
+});
+
 function clampMeal(count: number) {
   return Math.max(0, Math.min(100, Math.round(50 + count * 8)));
 }
