@@ -319,6 +319,17 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 > below resolve the family by email, are re-runnable (delete-by-sentinel / ON CONFLICT), and
 > were validated on a throwaway PG16 (500 rows each, stable across re-runs).
 
+**☐ IN PROGRESS — remaining user-facing tables to seed at 500 rows** (top priority; each gets
+the same validated/idempotent treatment as `seed_core_content.sql`, validated on PG16):
+- [ ] Messages — `family_messages` (all kinds: text/image/audio)
+- [ ] Chores — `chores` / `chore_assignments`
+- [ ] Meals / recipes — `meals`, `recipes`, `meal_plan_entries`
+- [ ] Documents / Vault — `documents`, `family_credentials`
+- [ ] Location / Safety — `location_pings`, `safe_zones`
+- [ ] Finance hub — `transactions`, `accounts`, `bills`
+- [ ] Memories / trips — `memories`, `trip_memories`
+- [ ] Autopilot — `autopilot_suggestions`, `approval_requests`
+
 **☑ Validated 500-row seeds (paste-ready in `supabase/`):**
 
 | Feature / surface | Table(s) seeded | File |
@@ -335,17 +346,6 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 | Marketplace | `marketplace_listings`, `marketplace_offers` | `lib/marketplace/seed-sql.ts` → `/dashboard/marketplace/seed` |
 | Voice Control | `voice_commands` | `seed_voice_one_family.sql` |
 | Wallet / Allowance | child ledger | `seed_wallet_ledger_one_family.sql` |
-
-**☐ Remaining user-facing tables to add 500-row seeds for** (next pass — each needs the same
-validated/idempotent treatment; not yet done, listed transparently):
-- [ ] Messages — `family_messages` (single-family seed exists; bump to 500 + all kinds)
-- [ ] Chores — `chores` / `chore_assignments` (single-family seed exists; scale to 500)
-- [ ] Meals / recipes — `meals`, `recipes`, `meal_plan_entries`
-- [ ] Documents / Vault — `documents`, `family_credentials`
-- [ ] Location / Safety — `location_pings`, `safe_zones`
-- [ ] Finance hub — `transactions`, `accounts`, `bills`
-- [ ] Memories / trips — `memories`, `trip_memories`
-- [ ] Autopilot — `autopilot_suggestions`, `approval_requests`
 
 > **Honest note:** seeding + validating *all* 354 tables in one pass isn't feasible — most are
 > internal (junction, settings, audit, materialized). The list above covers every table behind a
