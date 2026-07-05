@@ -21,6 +21,83 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 
 ---
 
+## ★ NORTH STAR — The Family Operating Layer (category-defining, 2026-07-05)
+
+> **Thesis:** today's products (ours included, so far) are **systems of record** — they
+> store calendars, lists, notes. Bubaly's category-defining move is to become a **system of
+> execution**: an AI-native operating layer that actively helps families *get things done* and
+> **measurably reduces time spent on family administration**. The defining metric is NOT daily
+> active users — it's **hours of coordination/decision effort removed**. Don't compete
+> feature-for-feature; define the category others chase.
+
+**The nine pillars (build order is top-down from the reasoning core):**
+
+1. **AI Operating Layer** — a *platform layer* (not per-feature AI) that continuously reasons
+   across the whole household and answers: *What's most likely to go wrong tomorrow? What can be
+   completed automatically today? Who's overloaded this week? What should the family decide next?
+   What information is missing before an important event?* The AI is an **orchestrator**, not a
+   collection of assistants.
+2. **Household Digital Twin** — one continuously-updated model linking people, relationships,
+   calendars, home, vehicles, pets, schools, doctors, finances, documents, shopping, inventory,
+   travel, smart-home. Enables **safe simulation before deciding** ("if we accept this tournament,
+   what has to move?"; "can we add two nights and stay in budget?"). *(Scaffold page exists at
+   `/dashboard/family-digital-twin` — needs the real linked model + simulation.)*
+3. **Family Intelligence Layer / Playbook** — every interaction improves understanding; build a
+   family playbook (favorite meals, birthday/holiday traditions, travel styles, homework habits,
+   shopping patterns, communication styles). Family stays in control (visible + editable — the
+   Knowledge Base `family_facts` is the seed of this).
+4. **Outcomes, not features** — organize around goals (**Run Today · Feed the Family · Plan a Trip
+   · Prepare for School · Manage Money · Keep Everyone Healthy · Celebrate Together · Prepare for
+   the Unexpected**); the AI picks the underlying capabilities automatically.
+5. **Family Command Center** — a concise morning operational briefing (today's priorities,
+   conflicts, weather impacts, budget alerts, deliveries, health reminders, school updates, AI
+   recs) and an evening summary of what changed + tomorrow prepped. *(Scaffolds exist:
+   `/dashboard/command-center`, `/dashboard/briefing` — unify + make the briefing generative.)*
+6. **Specialized AI agents behind one interface** — Chief of Staff · Scheduler · Meal Planner ·
+   Budget Coach · Household Manager · School Coordinator · Health Guide · Travel Planner · Memory
+   Keeper · Communications Assistant. User sees one assistant; agents collaborate internally.
+7. **Family Operating Index (FOI)** — measure how well the household is *functioning* (not to
+   judge): planning confidence, schedule stability, financial preparedness, household readiness,
+   communication responsiveness, routine completion, goal progress. Surface **practical
+   suggestions**, not vanity scores. **← FIRST SLICE, building now.**
+8. **Design for Calm** — the strongest differentiator: fewer notifications, ONE prioritized inbox,
+   AI daily digests, clear explanations for recs, gentle escalation only when necessary. Reduce
+   mental load, do not maximize engagement.
+9. **Family API** — long term, become the orchestration hub that *connects* external services
+   (calendars, email, banking, grocery/delivery, travel, smart home, schools, health) rather than
+   replacing them.
+
+### ▶ Slice 1 ✅ SHIPPED: Family Operating Index — the measurable core of the Operating Layer
+- [x] **Schema** `0125_family_operating_index.sql` — append-only daily snapshots (composite +
+  per-dimension jsonb + suggestions), family-scoped RLS (select/insert/update), one row/family/day
+  (`unique(family_id, as_of_date)`). PG16-validated: idempotent re-run, upsert-in-place, RLS + 3 policies.
+- [x] **Engine** `lib/operating-index/score.ts` (pure, **12 tests**) — `computeOperatingIndex(snapshot,
+  now)` → 7 dimension scores (0–100) + weighted composite + band (thriving/steady/stretched/overloaded)
+  + ranked practical suggestions (each deep-linked) + `mostLoaded()` overload detection. Deterministic,
+  DOM-free. Calm/empty household reads as *thriving*, never zero.
+- [x] **Server** `lib/operating-index/server.ts` — builds the snapshot from real tables (calendar,
+  reminders, chore_assignments, documents, maintenance, bills, approvals, votes/polls, goals + reuses
+  `detectConflicts`), computes, **upserts today's snapshot idempotently**, returns current + prior
+  composite for the trend arrow. *(Two financial inputs — budget overspend, negative ledger balances —
+  intentionally 0 in slice 1; need an expenses join / ledger sum. Follow-ups.)*
+- [x] **Route** `/dashboard/family-operating-index` — composite ring dial + band, trend vs. yesterday,
+  "Do these next" ranked suggestions (deep-linked), per-dimension bars w/ honest one-line summaries,
+  "who's overloaded" line. 100% Supabase.
+- [x] **Nav** entry (Operating Index, `Gauge`, minLevel 0 → free + auto in Navigation Choices catalog).
+- [x] **Verified** tsc · eslint · **1661 vitest** · `next build`; migration validated on PG16.
+
+**Next slices (build order):** #5 make the **Command Center evening summary** generative off the FOI
+snapshot trend ("what changed since yesterday") · #1 wire the five orchestrator questions off the same
+snapshot · #2 turn the snapshot into the Digital Twin's state vector for simulation · #4 the
+outcomes-not-features launcher ("Run Today / Feed the Family / …").
+
+*(Why FOI first: it's the one pillar with no existing surface, it forces the reasoning core to
+read across the entire household — the seed of pillar #1 — and it makes the north-star metric
+[reduced admin effort] measurable from day one. Later slices reuse its snapshot as the twin's
+state vector and the Command Center's evening "what changed" source.)*
+
+---
+
 ## Roadmap features (from the product roadmap)
 
 ### 1. Marketplace — "Buy, sell, rent, borrow within the platform"  ☑ DONE

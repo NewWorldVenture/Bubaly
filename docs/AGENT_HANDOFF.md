@@ -6,6 +6,35 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-05 SESSION — The Family Operating Layer begins (READ FIRST)
+>
+> **New north star** (see `todo.md` ★ section): pivot from systems-of-record to a **system of
+> execution** — an AI-native Operating Layer whose defining metric is *hours of family admin
+> removed*, not DAU. Nine pillars documented; build order is top-down from the reasoning core.
+>
+> **Shipped slice 1 — the Family Operating Index (FOI):** the measurable core, and the one pillar
+> with no prior surface. New, self-contained namespace (zero collision with the parallel session):
+> - **`0125_family_operating_index.sql`** — append-only daily snapshots (`composite`, per-dimension
+>   `dimensions` jsonb, `suggestions` jsonb), family-scoped RLS (select/insert/update),
+>   `unique(family_id, as_of_date)`. **⚠️ apply to prod** (see `PENDING_PROD_MIGRATIONS.md`); the page
+>   renders live without it — the table only backs the day-over-day trend. Next free migration: **0126**.
+> - **`lib/operating-index/score.ts`** (pure, **12 tests**) — `computeOperatingIndex(snapshot, now)` →
+>   7 weighted dimensions (planning · routine · stability · financial · readiness · communication ·
+>   goals) → composite 0–100 + band + ranked deep-linked suggestions + `mostLoaded()` overload
+>   detection. Missing data reads as *calm* (thriving), never a fabricated penalty.
+> - **`lib/operating-index/server.ts`** — builds the snapshot from real family-scoped tables (reuses
+>   `detectConflicts`), computes, idempotently upserts today's row, returns current + prior composite
+>   for the trend. *(Budget-overspend + negative-ledger-balance inputs are 0 in slice 1 — need an
+>   expenses join / ledger sum; tracked as follow-ups.)*
+> - **`/dashboard/family-operating-index`** — ring dial + band + trend, "Do these next" ranked
+>   suggestions, per-dimension bars, "who's overloaded". Nav: Operating Index, `Gauge`, minLevel 0
+>   (free + auto in Navigation Choices). Verified: tsc · eslint · **1661 vitest** · `next build`.
+>
+> **Reuse note for the next slices:** the FOI snapshot is deliberately the shared *state vector* — the
+> Command Center's evening "what changed" summary (pillar #5), the five orchestrator questions
+> (pillar #1), and the Digital Twin's simulation baseline (pillar #2) should all read it rather than
+> re-query. Don't fork the snapshot builder.
+>
 > ## ✅ 2026-07-05 SESSION — push cadence fix + backlog reconciled (READ FIRST)
 >
 > The roadmap and friction backlog were already cleared of everything shippable
