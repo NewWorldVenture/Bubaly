@@ -109,6 +109,54 @@ state vector and the Command Center's evening "what changed" source.)*
 
 ---
 
+## ☐ OPEN WORK TRACKER (single source of truth for what's left — keep in sync)
+
+### A. Operating Layer slices still to build (agent-doable, build top-down)
+- [x] **Slice 1 — Family Operating Index** (engine + page + 0125). PR #227. ✅
+- [x] **Slice 2 — "Since yesterday" evening recap** (pillar #5, off the FOI snapshot). PR #228. ✅
+- [ ] **Slice 3 — Orchestrator questions** (pillar #1): the five daily questions —
+  *what's most likely to go wrong tomorrow · what can auto-complete today · who's
+  overloaded this week · what should we decide next · what info is missing before an
+  important event.* Pure `lib/operating-index/orchestrator.ts` over the FOI snapshot
+  (+ a tomorrow slice) reusing autopilot `auto`-tier suggestions for Q2; "Orchestrator"
+  section on the FOI page. **← building now.**
+- [ ] **Slice 4 — Command Center adopts the recap** (pillar #5 finish): surface
+  `summarizeChange` inside `/dashboard/command-center` + `/dashboard/briefing` (ui lane —
+  coordinate vs. parallel session).
+- [ ] **Slice 5 — Household Digital Twin state + simulation** (pillar #2): promote the FOI
+  snapshot into a linked state vector; add safe "if we do X, what moves?" simulation on
+  `/dashboard/family-digital-twin`.
+- [ ] **Slice 6 — Family Playbook** (pillar #3): learn durable preferences/traditions into
+  `family_facts` from real usage; surface + edit.
+- [ ] **Slice 7 — Outcomes launcher** (pillar #4): "Run Today / Feed the Family / Plan a Trip /
+  Prepare for School / Manage Money / Keep Everyone Healthy / Celebrate / Prepare for the
+  Unexpected" goal launcher that auto-selects capabilities.
+- [ ] **Slice 8 — Specialized agents behind one interface** (pillar #6): Chief of Staff /
+  Scheduler / Meal Planner / Budget Coach / Household Manager / School Coordinator / Health
+  Guide / Travel Planner / Memory Keeper / Comms — cooperating specialists.
+- [ ] **Slice 9 — Design for Calm** (pillar #8): one prioritized inbox + AI daily digest +
+  gentle escalation, consuming the push + FOI work already shipped.
+- [ ] **Slice 10 — Family API** (pillar #9): orchestration hub connecting external
+  calendars/email/banking/grocery/travel/smart-home. *(Needs provider keys — partially blocked.)*
+
+### B. Smaller follow-ups (agent-doable)
+- [ ] FOI financial dimension: real **budget-overspend** (budgets vs expenses) + **negative
+  ledger balance** detection (currently 0 — placeholders in `lib/operating-index/server.ts`).
+- [ ] Onboarding: infer/defer more; anonymous **pre-family telemetry** path (`journey_events`
+  is family-scoped, no family_id until completion).
+- [ ] AI Concierge: deeper **write-back of accepted recommendations**.
+
+### C. Human-owned / blocked (NOT agent-doable — surfaced, not buildable here)
+- [ ] **Apply pending prod migrations 0118→0125** — one paste of
+  `supabase/APPLY_PENDING_0118-0125.sql` in the Supabase SQL editor, or `supabase db push`.
+  **Highest leverage** (Marketplace/Voice/Knowledge/FOI-trend stay empty in prod until applied).
+  *Agent cannot execute — no prod DB creds/CLI in sandbox (verified).*
+- [ ] **VAPID/FCM keys** → lights up the push path (already built).
+- [ ] **Maps/ETA key** (Friction #6 travel buffer) · **GIF provider key** (Messages picker) ·
+  **Stripe Issuing** (real-time Wallet card balances) · **CI Supabase login** (authed e2e).
+
+---
+
 ## Roadmap features (from the product roadmap)
 
 ### 1. Marketplace — "Buy, sell, rent, borrow within the platform"  ☑ DONE
