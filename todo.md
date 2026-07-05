@@ -80,9 +80,21 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
      calm inbox; a digest header, "Needs you" + "For today" sections, and everything else
      deliberately collapsed. **No migration** (pure aggregation of shipped tables). 100% Supabase.
    - Nav: Suggested → Calm (`Leaf`, free). Verified: tsc · eslint · **1730 vitest** · build.
-9. **Family API** — long term, become the orchestration hub that *connects* external services
-   (calendars, email, banking, grocery/delivery, travel, smart home, schools, health) rather than
-   replacing them.
+9. **Family API** ✅ SHIPPED (hub) — the orchestration hub that *connects* external services
+   (calendars, email, banking, grocery/delivery, smart home) rather than replacing them.
+   - Pure `lib/connections/providers.ts` (**8 tests**): the provider registry (11 providers × 5
+     categories) + `mergeConnections(rows)` folding the catalog with a family's saved connections
+     (live-wins-over-disconnected), `groupByCategory`, `connectedCount`.
+   - Migration `0128_family_connections.sql` — durable, family-scoped RLS connection records
+     (provider/category/status/account_label/last_synced_at; `unique(family_id,provider,external_account_id)`).
+     PG16-validated. **No tokens stored here** — those belong in a secret store.
+   - `/dashboard/connections` (`components/modules/connections-module.tsx`): grouped provider hub,
+     Connect (upsert a real connection) / Disconnect, live status, realtime. 100% Supabase.
+   - Nav: Suggested → Connections (`Network`, free). Seed `supabase/seed_pillar9_connections.sql`
+     (500 records, all providers × statuses, idempotent).
+   - **Gated for later (needs provider keys):** the actual OAuth/token exchange + live two-way data
+     sync per provider. The hub, model, and CRUD are production-ready now; enabling a provider = wiring
+     its OAuth against these records. Verified: tsc · eslint · **1738 vitest** · build.
 
 ### ▶ Slice 1 ✅ SHIPPED: Family Operating Index — the measurable core of the Operating Layer
 - [x] **Schema** `0125_family_operating_index.sql` — append-only daily snapshots (composite +
