@@ -329,10 +329,7 @@ idempotent, stable across re-runs):
 - [x] Finance hub — `financial_accounts` + `transactions` + `bills` → `seed_finance.sql`
 - [x] Memories / trips — `family_memories` + `trip_memories` → `seed_memories.sql`
 - [x] Autopilot — `autopilot_suggestions` + `approval_requests` → `seed_autopilot.sql`
-
-> Only gap: **Family Vault credentials** (`family_credentials`) — its migration isn't in the
-> PG16 validation set (parallel-session table), so it wasn't validated here; add via the same
-> pattern once that migration lands.
+- [x] Family Vault — `family_credentials` (all 9 categories, migration 0119 applied + validated) → `seed_vault.sql`
 
 **☑ Validated 500-row seeds (paste-ready in `supabase/`):**
 
@@ -346,6 +343,7 @@ idempotent, stable across re-runs):
 | Finance hub | `financial_accounts`, `transactions`, `bills` | `seed_finance.sql` |
 | Memories / trips | `family_memories`, `trip_memories` | `seed_memories.sql` |
 | Autopilot | `autopilot_suggestions`, `approval_requests` | `seed_autopilot.sql` |
+| Family Vault | `family_credentials` | `seed_vault.sql` |
 | Calendar, To-Dos, Groceries, Notes, Photos, Journal, Habits | `calendar_events`, `todo_items`, `grocery_items`, `notes`, `family_photos`, `journal_entries`, `habits` | `seed_core_content.sql` |
 | #1 AI Orchestrator | `family_events`, `family_polls` | `seed_pillar1_orchestrator.sql` |
 | #2 Household Twin | `budgets`, `calendar_events`, `family_routines`, `school_classes`, `teams` | `seed_pillar2_twin.sql` |
