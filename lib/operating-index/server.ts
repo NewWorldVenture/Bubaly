@@ -5,14 +5,15 @@
 // Center can later say "what changed since yesterday").
 //
 // Everything here is honest: absent tables/rows contribute 0 (calm), never a
-// fabricated penalty. Two financial inputs (budget overspend, negative ledger
-// balances) are intentionally left at 0 in this first slice — they need an
-// expenses join / ledger sum and are tracked as follow-ups; the engine treats
-// unset inputs as "not flagged", which is the truthful default.
+// fabricated penalty. Every input now reads real family-scoped data — including
+// the financial signals (budget overspend, accounts below zero), low pantry
+// inventory, events missing a location, and threads the family hasn't caught up
+// on. Nothing is hardcoded to a stub.
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, TaskStatus, EventCategory } from '@/lib/database.types';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
+import { countOverspentBudgets, type BudgetRow, type ExpenseRow } from './inputs';
 import {
   computeOperatingIndex, dimensionsToRecord, compositeTrend,
   type HouseholdSnapshot, type MemberLoad, type OperatingIndex,
@@ -47,12 +48,17 @@ export async function buildSnapshot(supabase: DB, familyId: string, now: Date = 
   const in30date = in30.slice(0, 10);
   const since7 = new Date(now.getTime() - 7 * DAY_MS).toISOString();
 
+  // Financial windows: fetch this-year expenses so weekly/monthly/yearly budgets
+  // can all be evaluated; bounded by the row limit.
+  const yearStart = `${now.getUTCFullYear()}-01-01`;
+
   const [
     membersRes, eventsRes, remindersRes, recentChoresRes, openChoresRes,
     docsRes, maintRes, billsRes, approvalsRes, mealVotesRes, pollsRes, goalsRes,
+    budgetsRes, expensesRes, accountsRes, pantryRes, messagesRes,
   ] = await Promise.all([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id')
+    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id, location, category')
       .eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in7).order('starts_at').limit(400),
     supabase.from('family_reminders').select('id, remind_at, status')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lt('remind_at', nowIso).limit(200),
@@ -66,6 +72,13 @@ export async function buildSnapshot(supabase: DB, familyId: string, now: Date = 
     supabase.from('meal_votes').select('id').eq('family_id', familyId).eq('status', 'open').limit(100),
     supabase.from('family_polls').select('id, status').eq('family_id', familyId).eq('status', 'open').limit(100),
     supabase.from('goals').select('id, progress, target_date').eq('family_id', familyId).eq('is_complete', false).limit(200),
+    supabase.from('budgets').select('category, amount, period').eq('family_id', familyId).limit(200),
+    supabase.from('transactions').select('category, amount, date').eq('family_id', familyId).eq('type', 'expense').gte('date', yearStart).limit(5000),
+    // Only spendable accounts count as "below zero" — a credit card carrying a
+    // negative (owed) balance is expected, not a preparedness problem.
+    supabase.from('financial_accounts').select('id, balance').eq('family_id', familyId).lt('balance', 0).neq('type', 'credit').limit(100),
+    supabase.from('pantry_items').select('id, quantity, low_threshold').eq('family_id', familyId).not('low_threshold', 'is', null).limit(500),
+    supabase.from('family_messages').select('conversation_id, read_by').eq('family_id', familyId).is('deleted_at', null).gte('created_at', since7).limit(1000),
   ]);
 
   const members = membersRes.data ?? [];
@@ -76,21 +89,42 @@ export async function buildSnapshot(supabase: DB, familyId: string, now: Date = 
   // Planning
   const upcomingEvents = events.length;
   const upcomingEventsOwned = events.filter((e) => e.assignee_id).length;
+  // Events that imply a destination but have no location yet (info missing).
+  const eventsMissingInfo = events.filter((e) => NEEDS_LOCATION.has(e.category) && !e.location).length;
 
   // Schedule stability — reuse the shared conflict detector.
   const conflicts = detectConflicts(events as ConflictEvent[]).length;
 
-  // Financial (slice 1: bills only; overspend + negative balances deferred → 0).
+  // Financial — bills due, budget overspend (real budgets vs this-period
+  // expenses), and spendable accounts below zero.
   const billsDueSoon = billsRes.data?.length ?? 0;
   const billsCovered = (billsRes.data ?? []).filter((b) => b.autopay).length;
+  const overspentBudgets = countOverspentBudgets(
+    (budgetsRes.data ?? []) as BudgetRow[],
+    (expensesRes.data ?? []) as ExpenseRow[],
+    now,
+  );
+  const negativeBalances = accountsRes.data?.length ?? 0;
 
   // Household readiness
   const expiringDocs = docsRes.data?.length ?? 0;
   const overdueMaintenance = maintRes.data?.length ?? 0;
+  // Pantry items at/below their low-stock threshold.
+  const lowInventory = (pantryRes.data ?? []).filter(
+    (p) => p.low_threshold != null && Number(p.quantity) <= Number(p.low_threshold),
+  ).length;
 
   // Communication
   const pendingApprovals = approvalsRes.data?.length ?? 0;
   const openVotes = (mealVotesRes.data?.length ?? 0) + (pollsRes.data?.length ?? 0);
+  // Threads the family hasn't collectively caught up on: conversations with a
+  // recent message not yet read by every active member.
+  const memberCount = members.length;
+  const unreadConversations = new Set<string>();
+  for (const m of messagesRes.data ?? []) {
+    if (memberCount > 0 && (m.read_by?.length ?? 0) < memberCount) unreadConversations.add(m.conversation_id);
+  }
+  const unreadThreads = unreadConversations.size;
 
   // Routine
   const choresAssignedRecently = recentChores.length;
@@ -113,13 +147,13 @@ export async function buildSnapshot(supabase: DB, familyId: string, now: Date = 
   for (const c of openChores) if (c.member_id && loadByMember.has(c.member_id)) loadByMember.get(c.member_id)!.openTasks++;
 
   return {
-    memberCount: members.length,
-    upcomingEvents, upcomingEventsOwned, eventsMissingInfo: 0,
+    memberCount,
+    upcomingEvents, upcomingEventsOwned, eventsMissingInfo,
     overdueReminders: remindersRes.data?.length ?? 0,
     conflicts,
-    billsDueSoon, billsCovered, overspentBudgets: 0, negativeBalances: 0,
-    expiringDocs, overdueMaintenance, lowInventory: 0,
-    pendingApprovals, openVotes, unreadThreads: 0,
+    billsDueSoon, billsCovered, overspentBudgets, negativeBalances,
+    expiringDocs, overdueMaintenance, lowInventory,
+    pendingApprovals, openVotes, unreadThreads,
     choresAssignedRecently, choresCompletedRecently, overdueTasks,
     activeGoals: goals.length, goalsOnTrack,
     memberLoads: [...loadByMember.values()],
