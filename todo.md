@@ -70,9 +70,16 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
    judge): planning confidence, schedule stability, financial preparedness, household readiness,
    communication responsiveness, routine completion, goal progress. Surface **practical
    suggestions**, not vanity scores. **← FIRST SLICE, building now.**
-8. **Design for Calm** — the strongest differentiator: fewer notifications, ONE prioritized inbox,
-   AI daily digests, clear explanations for recs, gentle escalation only when necessary. Reduce
-   mental load, do not maximize engagement.
+8. **Design for Calm** ✅ SHIPPED — fewer notifications, ONE prioritized inbox, an AI daily digest,
+   gentle escalation only when necessary. Reduces mental load; does not maximize engagement.
+   - Pure `lib/calm/inbox.ts` (**7 tests**): `buildCalmInbox(items)` folds every signal source
+     (agents · autopilot · Operating Index · approvals · reminders) into ONE de-duplicated, ranked
+     list — `needsYou` (action only, capped), `today` (attention, capped), and a `quieted` count for
+     the rest; `calmDigest` writes the gentle one-liner; `noiseReduced` = notifications spared.
+   - `/dashboard/calm` (`components/modules/calm-module.tsx`): server reads the real sources → the
+     calm inbox; a digest header, "Needs you" + "For today" sections, and everything else
+     deliberately collapsed. **No migration** (pure aggregation of shipped tables). 100% Supabase.
+   - Nav: Suggested → Calm (`Leaf`, free). Verified: tsc · eslint · **1730 vitest** · build.
 9. **Family API** — long term, become the orchestration hub that *connects* external services
    (calendars, email, banking, grocery/delivery, travel, smart home, schools, health) rather than
    replacing them.
