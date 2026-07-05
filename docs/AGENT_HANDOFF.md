@@ -151,6 +151,26 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 > NOTE: the ⌘K command bar + Friction #7 (time-of-day) I shipped earlier this session are already on main;
 > Friction #10 (routines) was shipped by the parallel session — my duplicate attempt was discarded unpushed.
 >
+> ## 📊 2026-07-05 SESSION — Family Operating Index (pillar #7) 100% wired to Supabase (merged to `main` via `claude/foi-full-wire`)
+> The FOI engine already supported every financial/readiness/communication signal; the server
+> (`lib/operating-index/server.ts`) had five inputs hardcoded to 0 as slice-1 follow-ups. **Now every
+> `HouseholdSnapshot` input reads live, family-scoped data** — no stubs:
+> - `overspentBudgets` — `budgets` vs this-period `transactions` (type=expense) via **new pure
+>   `lib/operating-index/inputs.ts`** (`countOverspentBudgets` + `periodWindowStart` for weekly/monthly/
+>   yearly; `tests/operating-index-inputs.test.ts`, 7 tests). Server fetches YTD expenses (bounded 5000).
+> - `negativeBalances` — `financial_accounts` with `balance < 0`, **excluding `type='credit'`** (an owed
+>   credit balance is expected, not a preparedness problem).
+> - `lowInventory` — `pantry_items` at/below `low_threshold`.
+> - `eventsMissingInfo` — upcoming events whose category needs a location (`appointment/sports/school/
+>   medication`) but have none (added `location, category` to the existing events select — no new query).
+> - `unreadThreads` — conversations with a recent (`≤7d`, non-deleted) message not read by every active
+>   member (`read_by.length < memberCount`).
+> Engine + page + schema **unchanged**; honest defaults preserved (absent data → 0 penalty). To see the
+> financial dims light up, seed `supabase/seed_finances_one_family.sql` (budgets/transactions/accounts).
+> Verified: tsc · eslint · full vitest · `next build`. Remaining FOI-adjacent open item: **Slice 4** —
+> surface `summarizeChange` inside `/dashboard/command-center` + `/dashboard/briefing` (pillar #5 UI
+> adoption; separate surface).
+>
 > ## 🎭 2026-07-04 SESSION — Role-tailored surfaces, slice 1 (Friction #8) (merged to `main` via `claude/role-tailored-surfaces`)
 > First slice of "surfaces read differently per `family_members.role`". **Pure `lib/ui/role-surface.ts`**
 > (`tests/role-surface.test.ts`, 10 tests): `roleSurface(role)` → `{ density: comfortable|cozy|playful,

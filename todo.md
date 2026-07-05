@@ -107,8 +107,11 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 - [x] **Server** `lib/operating-index/server.ts` — builds the snapshot from real tables (calendar,
   reminders, chore_assignments, documents, maintenance, bills, approvals, votes/polls, goals + reuses
   `detectConflicts`), computes, **upserts today's snapshot idempotently**, returns current + prior
-  composite for the trend arrow. *(Two financial inputs — budget overspend, negative ledger balances —
-  intentionally 0 in slice 1; need an expenses join / ledger sum. Follow-ups.)*
+  composite for the trend arrow. **✅ FULLY WIRED (2026-07-05):** every input now reads live data —
+  `overspentBudgets` (budgets vs this-period expenses, pure/tested `lib/operating-index/inputs.ts`, 7
+  tests), `negativeBalances` (financial_accounts < 0, excl. credit), `lowInventory` (pantry ≤
+  low_threshold), `eventsMissingInfo` (upcoming events needing a location), `unreadThreads`
+  (conversations not read by all active members). No stubs remain. tsc/eslint/vitest/build green.
 - [x] **Route** `/dashboard/family-operating-index` — composite ring dial + band, trend vs. yesterday,
   "Do these next" ranked suggestions (deep-linked), per-dimension bars w/ honest one-line summaries,
   "who's overloaded" line. 100% Supabase.
