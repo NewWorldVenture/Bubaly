@@ -6,6 +6,37 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ✅ 2026-07-05 SESSION — push cadence fix + backlog reconciled (READ FIRST)
+>
+> The roadmap and friction backlog were already cleared of everything shippable
+> without an external key (see the 2026-07-04 block below). This session:
+>
+> - **Friction #5 (push notifications) closed properly.** The delivery path
+>   already existed — `lib/server/push.ts` (web-push + FCM, prunes stale subs),
+>   `push_devices` (migration `0035`), `public/sw.js`, subscribe/unsubscribe
+>   routes, settings toggle — and `imminentMomentNotices` was already wired into
+>   `generateFamilyNotifications`. The real gap was **timing**: pushes were only
+>   dispatched by the **once-daily** `/api/cron/notifications` (11:00 UTC), which
+>   also runs the email digest. Same-cadence for both means a moment/reminder
+>   added after the daily run for later that day was **missed until tomorrow**.
+>   Fix (platform lane, no engine/ui touch): new **`/api/cron/push-scan`** at
+>   **every 2h** (`0 */2 * * *` in `vercel.json`) that regenerates notifications
+>   + dispatches pending pushes only (NO email — the digest stays daily so it
+>   isn't sent 8×/day). Composes safely: generation dedups by `related_id`, push
+>   gated on `pushed_at`, email on `sent_at` → nothing double-sends. Live
+>   delivery still needs `NEXT_PUBLIC_VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` (web)
+>   or `FCM_SERVER_KEY` (native); absent → sends are honestly skipped, never faked.
+> - **Backlog staleness fixed** (`docs/FRICTION_BACKLOG.md`): #2, #4, #7, #10 read
+>   "Todo" but were shipped — marked ✅ with their landing files. (This is the same
+>   staleness that caused #10 to be built twice earlier — the register is now honest.)
+> - Verified: tsc · eslint · **1649 vitest** · `next build` (route registered as
+>   `ƒ /api/cron/push-scan`). No migration, no schema change.
+>
+> **Backlog now fully cleared of agent-doable items.** Remaining are human-owned
+> (apply prod migrations — `docs/PENDING_PROD_MIGRATIONS.md`; VAPID/FCM keys to
+> light up push; maps/ETA key for #6; GIF provider key; Stripe Issuing) or the
+> contended `ui` lane #8 role-tailoring (parallel session).
+>
 > ## ✅ 2026-07-04 SESSION SUMMARY — roadmap + friction backlog cleared (READ FIRST)
 >
 > This session drove `todo.md` (repo root = the build guide) to completion for everything
