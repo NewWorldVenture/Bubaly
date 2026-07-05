@@ -53,9 +53,19 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
    conflicts, weather impacts, budget alerts, deliveries, health reminders, school updates, AI
    recs) and an evening summary of what changed + tomorrow prepped. *(Scaffolds exist:
    `/dashboard/command-center`, `/dashboard/briefing` — unify + make the briefing generative.)*
-6. **Specialized AI agents behind one interface** — Chief of Staff · Scheduler · Meal Planner ·
-   Budget Coach · Household Manager · School Coordinator · Health Guide · Travel Planner · Memory
-   Keeper · Communications Assistant. User sees one assistant; agents collaborate internally.
+6. **Specialized AI agents behind one interface** ✅ SHIPPED — Chief of Staff · Scheduler · Meal
+   Planner · Budget Coach · Household Manager · School Coordinator · Health Guide · Travel Planner ·
+   Memory Keeper · Communications Assistant. User sees one assistant; agents collaborate internally.
+   - Pure `lib/agents/roster.ts` (**11 tests**): 10-agent roster; `runAgent`/`chiefOfStaff`/
+     `runAllAgents` turn a real `AgentContext` into per-agent briefings (status + deep-linked items);
+     Chief of Staff synthesizes the top items across specialists.
+   - Migration `0127_agent_activity.sql` — durable, family-scoped RLS log of what each agent
+     surfaces/does (kind/severity/status, done/dismissible). PG16-validated (RLS, constraints, trigger).
+   - `/dashboard/agents` (`components/modules/agents-module.tsx`): server reads a real snapshot →
+     live briefings; roster grid w/ status dots; per-agent items + recent activity (Done/Dismiss
+     writes back). Nav: Suggested → Family Assistant (`Bot`, free). 100% Supabase.
+   - Seed `supabase/seed_pillar6_agents.sql` — 500 activity records across all 10 agents (idempotent).
+   - Verified: tsc · eslint · **1723 vitest** · build.
 7. **Family Operating Index (FOI)** — measure how well the household is *functioning* (not to
    judge): planning confidence, schedule stability, financial preparedness, household readiness,
    communication responsiveness, routine completion, goal progress. Surface **practical

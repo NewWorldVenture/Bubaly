@@ -383,6 +383,11 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; journey: string; phase?: string; step?: number; session_id: string; duration_ms?: number | null },
         Partial<{ member_id: string | null; phase: string; step: number; duration_ms: number | null }>
       >;
+      agent_activity: T<
+        { id: string; family_id: string; member_id: string | null; agent: string; kind: string; title: string; detail: string | null; href: string | null; severity: string; status: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; agent: string; kind?: string; title: string; detail?: string | null; href?: string | null; severity?: string; status?: string; created_by?: string | null },
+        Partial<{ member_id: string | null; agent: string; kind: string; title: string; detail: string | null; href: string | null; severity: string; status: string }>
+      >;
       family_operating_index: T<
         { id: string; family_id: string; as_of_date: string; composite: number; band: string; dimensions: Json; suggestions: Json; created_at: string; updated_at: string },
         { id?: string; family_id: string; as_of_date?: string; composite: number; band?: string; dimensions?: Json; suggestions?: Json },
