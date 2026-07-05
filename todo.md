@@ -86,10 +86,21 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 - [x] **Nav** entry (Operating Index, `Gauge`, minLevel 0 → free + auto in Navigation Choices catalog).
 - [x] **Verified** tsc · eslint · **1661 vitest** · `next build`; migration validated on PG16.
 
-**Next slices (build order):** #5 make the **Command Center evening summary** generative off the FOI
-snapshot trend ("what changed since yesterday") · #1 wire the five orchestrator questions off the same
-snapshot · #2 turn the snapshot into the Digital Twin's state vector for simulation · #4 the
-outcomes-not-features launcher ("Run Today / Feed the Family / …").
+### ▶ Slice 2 ✅ SHIPPED: "Since yesterday" evening recap (pillar #5, off the FOI snapshot)
+- [x] **`lib/operating-index/summary.ts`** (pure, **8 tests**) — `summarizeChange(current, prior)`
+  diffs two FOI snapshots → headline + composite delta + improved/declined dimensions (≥5-pt moves)
+  + resolved/emerged suggestions (by id). Calm end-of-day tone; leads with cleared items; silent on
+  a flat day. First-reading path handled.
+- [x] **Server** now reads the prior **full** snapshot (dimensions + suggestions) and returns
+  `change: ChangeSummary` alongside the index.
+- [x] **"Since yesterday" card** on `/dashboard/family-operating-index` (headline + cleared/new/±dim
+  chips). Reuses the state vector — zero contended files touched. tsc/eslint/**1669 tests**/build.
+
+**Next slices (build order):** #1 wire the five orchestrator questions ("what's likely to go wrong
+tomorrow / who's overloaded / what to decide next / what info is missing") off the same snapshot ·
+#2 turn the snapshot into the Digital Twin's state vector for simulation · #4 the
+outcomes-not-features launcher ("Run Today / Feed the Family / …") · adopt `summarizeChange` inside
+the existing Command Center / Daily Briefing surfaces (ui lane — coordinate vs. parallel session).
 
 *(Why FOI first: it's the one pillar with no existing surface, it forces the reasoning core to
 read across the entire household — the seed of pillar #1 — and it makes the north-star metric

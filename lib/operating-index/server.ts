@@ -17,6 +17,7 @@ import {
   computeOperatingIndex, dimensionsToRecord, compositeTrend,
   type HouseholdSnapshot, type MemberLoad, type OperatingIndex,
 } from './score';
+import { summarizeChange, type SnapshotView, type ChangeSummary } from './summary';
 
 type DB = SupabaseClient<Database>;
 
@@ -126,6 +127,16 @@ export interface OperatingIndexResult {
   priorComposite: number | null;
   /** current − prior, or null when there's no prior snapshot. */
   trend: number | null;
+  /** Evening "what changed since yesterday" recap (pillar #5). */
+  change: ChangeSummary;
+}
+
+/** Coerce a persisted snapshot's jsonb suggestions into {id,title} pairs. */
+function suggestionPairs(raw: unknown): { id: string; title: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((s): s is { id: string; title: string } => !!s && typeof s === 'object' && 'id' in s)
+    .map((s) => ({ id: String(s.id), title: String((s as { title?: unknown }).title ?? '') }));
 }
 
 /**
@@ -138,15 +149,28 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, now: Da
   const index = computeOperatingIndex(snapshot, now);
   const today = asOfDate(now);
 
-  // Prior snapshot (most recent day before today) for the trend.
+  // Prior snapshot (most recent day before today) for the trend + evening recap.
   const { data: recent } = await supabase
     .from('family_operating_index')
-    .select('as_of_date, composite')
+    .select('as_of_date, composite, dimensions, suggestions')
     .eq('family_id', familyId)
     .lt('as_of_date', today)
     .order('as_of_date', { ascending: false })
     .limit(1);
-  const priorComposite = recent && recent.length ? recent[0].composite : null;
+  const priorRow = recent && recent.length ? recent[0] : null;
+  const priorComposite = priorRow ? priorRow.composite : null;
+
+  const currentView: SnapshotView = {
+    composite: index.composite,
+    dimensions: dimensionsToRecord(index.dimensions),
+    suggestions: index.suggestions.map((s) => ({ id: s.id, title: s.title })),
+  };
+  const priorView: SnapshotView | null = priorRow ? {
+    composite: priorRow.composite,
+    dimensions: (priorRow.dimensions as Record<string, number>) ?? {},
+    suggestions: suggestionPairs(priorRow.suggestions),
+  } : null;
+  const change = summarizeChange(currentView, priorView);
 
   // Idempotent upsert of today's snapshot.
   try {
@@ -162,5 +186,5 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, now: Da
     // Persisting is best-effort; the live index still renders.
   }
 
-  return { index, asOf: today, priorComposite, trend: compositeTrend(index.composite, priorComposite) };
+  return { index, asOf: today, priorComposite, trend: compositeTrend(index.composite, priorComposite), change };
 }
