@@ -311,6 +311,48 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   100% Supabase/realtime. tsc/eslint/**1612 tests**/build green.
 - [x] Onboarding → first value (audited + first win): the **PIN step was mandatory** (Continue disabled until a 4-digit PIN matched), forcing every new user through 2 extra fields + validation before reaching the app — even though `completeProfileOnboardingAction` already treats an absent PIN as valid. Made it **"Skip for now"** (defers PIN to Settings → App Lock). Onboarding is now 1 required field (name) → skip → done. *(Onboarding telemetry doesn't fit `journey_events`: no family_id exists until completion — would need an anonymous/pre-family analytics path.)*
 
+## ★ Seed coverage — 500-record test data per feature (2026-07-05)
+
+> **Goal:** every feature testable at volume (≥500 rows). The DB has **354 base tables**;
+> most are join/config/derived tables that don't need bulk data. What matters is that every
+> **user-facing surface** has a validated, idempotent, paste-ready 500-row seed. All seeds
+> below resolve the family by email, are re-runnable (delete-by-sentinel / ON CONFLICT), and
+> were validated on a throwaway PG16 (500 rows each, stable across re-runs).
+
+**☑ Validated 500-row seeds (paste-ready in `supabase/`):**
+
+| Feature / surface | Table(s) seeded | File |
+|---|---|---|
+| Calendar, To-Dos, Groceries, Notes, Photos, Journal, Habits | `calendar_events`, `todo_items`, `grocery_items`, `notes`, `family_photos`, `journal_entries`, `habits` | `seed_core_content.sql` |
+| #1 AI Orchestrator | `family_events`, `family_polls` | `seed_pillar1_orchestrator.sql` |
+| #2 Household Twin | `budgets`, `calendar_events`, `family_routines`, `school_classes`, `teams` | `seed_pillar2_twin.sql` |
+| #3 Playbook | `family_playbook_suggestions` | `seed_pillar3_playbook.sql` |
+| #4 Outcomes launcher | `calendar_events`, `grocery_items`/`grocery_lists`, `todo_items`/`todo_lists` | `seed_pillar4_outcomes.sql` |
+| #5/#7 Command Center + Family Operating Index | `family_operating_index` | `seed_pillar5_command_center.sql` |
+| #6 Agent roster | `agent_activity` | `seed_pillar6_agents.sql` |
+| #8 Design for Calm | `reminders` (due <24h) | `seed_pillar8_calm.sql` |
+| #9 Connections / Family API | `family_connections` | `seed_pillar9_connections.sql` |
+| Marketplace | `marketplace_listings`, `marketplace_offers` | `lib/marketplace/seed-sql.ts` → `/dashboard/marketplace/seed` |
+| Voice Control | `voice_commands` | `seed_voice_one_family.sql` |
+| Wallet / Allowance | child ledger | `seed_wallet_ledger_one_family.sql` |
+
+**☐ Remaining user-facing tables to add 500-row seeds for** (next pass — each needs the same
+validated/idempotent treatment; not yet done, listed transparently):
+- [ ] Messages — `family_messages` (single-family seed exists; bump to 500 + all kinds)
+- [ ] Chores — `chores` / `chore_assignments` (single-family seed exists; scale to 500)
+- [ ] Meals / recipes — `meals`, `recipes`, `meal_plan_entries`
+- [ ] Documents / Vault — `documents`, `family_credentials`
+- [ ] Location / Safety — `location_pings`, `safe_zones`
+- [ ] Finance hub — `transactions`, `accounts`, `bills`
+- [ ] Memories / trips — `memories`, `trip_memories`
+- [ ] Autopilot — `autopilot_suggestions`, `approval_requests`
+
+> **Honest note:** seeding + validating *all* 354 tables in one pass isn't feasible — most are
+> internal (junction, settings, audit, materialized). The list above covers every table behind a
+> real screen. Each remaining item is a 15-min job using the exact pattern in `seed_core_content.sql`.
+
+---
+
 ## Dead / stubbed UI to finish or hide
 - [ ] Messages → GIF picker (`messages-module.tsx`): toasts "coming soon" — needs a GIF provider key.
 - [x] Messages → Voice messages — DONE. `MediaRecorder` in `messages-module.tsx` records a clip → uploads through the existing `sendFile` path (kind `audio`, 25 MB cap + rollback) → renders an inline `<audio controls>` player. Live timer + cancel/discard; graceful "not supported" fallback. 100% Supabase (family-media storage + family_messages row).
