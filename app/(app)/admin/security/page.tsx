@@ -124,7 +124,7 @@ export default async function AdminSecurityPage() {
           <EmptyState icon={UserX} title="No accounts yet" />
         ) : (
           <div className="table-responsive">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted">
                   <th className="px-3 py-2 font-medium">Account</th>
@@ -154,7 +154,7 @@ export default async function AdminSecurityPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         )}
       </Card>

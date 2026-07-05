@@ -245,7 +245,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                 )
               ) : (
                 <div className="table-responsive mt-4">
-                  <table className="w-full text-sm">
+                  <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                     <thead>
                       <tr className="border-b border-border text-left text-xs text-muted">
                         <th className="px-3 py-2 font-medium">User</th>
@@ -287,7 +287,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </table></div>
                 </div>
               )}
 
@@ -339,7 +339,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
             <EmptyState icon={UsersRound} title="No families yet" />
           ) : (
             <div className="table-responsive">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted">
                     <th className="px-3 py-2 font-medium">Family</th>
@@ -363,7 +363,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                     );
                   })}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           )}
         </Card>
@@ -376,7 +376,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
             <EmptyState icon={UserPlus} title="No invitations sent yet" />
           ) : (
             <div className="table-responsive">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted">
                     <th className="px-3 py-2 font-medium">Email</th>
@@ -405,7 +405,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           )}
         </Card>
@@ -425,7 +425,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
           </div>
           {permissions && permissions.length > 0 ? (
             <div className="table-responsive">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted">
                     <th className="px-3 py-2 font-medium">Resource</th>
@@ -448,7 +448,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           ) : (
             <EmptyState icon={ShieldCheck} title="Permission matrix not seeded" description="Run supabase/seed.sql against this project to populate roles & permissions." />

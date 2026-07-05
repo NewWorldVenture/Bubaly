@@ -195,7 +195,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
             <EmptyState icon={CreditCard} title="No subscriptions yet" />
           ) : (
             <div className="table-responsive">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted">
                     <th className="px-3 py-2 font-medium">Family</th>
@@ -218,7 +218,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           )}
         </Card>

@@ -142,7 +142,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
                 <EmptyState icon={ImageIcon} title="No content matches these filters" />
               ) : (
                 <div className="table-responsive mt-4">
-                  <table className="w-full text-sm">
+                  <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
                     <thead>
                       <tr className="border-b border-border text-left text-xs text-muted">
                         <th className="px-3 py-2 font-medium">Title</th>
@@ -175,7 +175,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
                         );
                       })}
                     </tbody>
-                  </table>
+                  </table></div>
                   {filtered.length > 50 && (
                     <p className="mt-3 text-center text-xs text-muted">Showing the first 50 of {filtered.length} matching items — narrow your search to see more precisely.</p>
                   )}

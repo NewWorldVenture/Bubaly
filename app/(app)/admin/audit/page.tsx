@@ -90,7 +90,7 @@ export default async function AdminAuditPage({ searchParams }: Params) {
           <EmptyState icon={ScrollText} title={rows.length === 0 ? 'No activity recorded yet' : 'No events match these filters'} />
         ) : (
           <div className="table-responsive mt-4">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted">
                   <th className="px-3 py-2 font-medium">Action</th>
@@ -124,7 +124,7 @@ export default async function AdminAuditPage({ searchParams }: Params) {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           </div>
         )}
 
