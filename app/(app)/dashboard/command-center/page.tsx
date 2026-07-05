@@ -2,13 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
   Gauge, AlertTriangle, CalendarClock, CheckCircle2, UtensilsCrossed,
-  FileWarning, Users, ArrowRight,
+  FileWarning, Users, ArrowRight, Moon, CircleDot, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtTime, fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { loadOperatingIndex } from '@/lib/operating-index/server';
 
 export const metadata: Metadata = { title: 'Command Center' };
 export const dynamic = 'force-dynamic';
@@ -48,6 +49,10 @@ export default async function CommandCenterPage() {
   ]);
 
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
+
+  // Evening "what changed" recap — the same FOI diff shown on the Operating
+  // Index, brought into the Command Center (pillar #5). Degrades to null-safe.
+  const { change } = await loadOperatingIndex(supabase, familyId, now);
 
   // ── Schedule conflict detection (overlapping timed events) ──
   const timed = (events ?? []).filter((e) => !e.all_day);
@@ -98,6 +103,41 @@ export default async function CommandCenterPage() {
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Family Command Center</h1>
         <p className="mt-1 text-sm text-muted">A live readiness view of your week — conflicts, gaps, and what needs attention.</p>
       </div>
+
+      {/* Since yesterday — the evening "what changed" recap, from the Operating Index (pillar #5) */}
+      {!change.isFirst && (
+        <section className="rounded-2xl border border-border bg-surface/40 p-4 sm:p-5">
+          <div className="mb-2 flex items-center gap-2">
+            <Moon className="h-4 w-4 text-brand" />
+            <h2 className="text-sm font-semibold">Since yesterday</h2>
+          </div>
+          <p className="text-sm text-fg">{change.headline}</p>
+          {(change.resolved.length > 0 || change.emerged.length > 0 || change.improved.length > 0 || change.declined.length > 0) && (
+            <div className="mt-3 grid gap-1.5 text-xs sm:grid-cols-2">
+              {change.resolved.map((r) => (
+                <div key={`r-${r.id}`} className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">Cleared: {r.title}</span>
+                </div>
+              ))}
+              {change.emerged.map((e) => (
+                <div key={`e-${e.id}`} className="flex items-center gap-1.5 text-muted">
+                  <CircleDot className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">New: {e.title}</span>
+                </div>
+              ))}
+              {change.improved.map((d) => (
+                <div key={`i-${d.id}`} className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                  <ArrowUpRight className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{d.label} +{d.delta}</span>
+                </div>
+              ))}
+              {change.declined.map((d) => (
+                <div key={`d-${d.id}`} className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                  <ArrowDownRight className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{d.label} {d.delta}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Readiness score */}
