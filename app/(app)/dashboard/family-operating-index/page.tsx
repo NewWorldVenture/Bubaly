@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {
   Gauge, TrendingUp, TrendingDown, Minus, ArrowRight, CalendarClock, ListChecks,
   CalendarX2, Wallet, Home as HomeIcon, MessageSquare, Repeat, Target, Sparkles,
+  Moon, ArrowUpRight, ArrowDownRight, CheckCircle2, CircleDot,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -45,7 +46,7 @@ function barColor(score: number): string {
 export default async function FamilyOperatingIndexPage() {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { index, priorComposite, trend } = await loadOperatingIndex(supabase, ctx.active.familyId);
+  const { index, priorComposite, trend, change } = await loadOperatingIndex(supabase, ctx.active.familyId);
   const band = BAND_COPY[index.band];
 
   // SVG ring geometry.
@@ -99,6 +100,41 @@ export default async function FamilyOperatingIndexPage() {
           </div>
         </div>
       </section>
+
+      {/* Since yesterday — the evening "what changed" recap (pillar #5) */}
+      {!change.isFirst && (
+        <section className="mt-5 rounded-2xl border border-border bg-surface/40 p-4 sm:p-5">
+          <div className="mb-2 flex items-center gap-2">
+            <Moon className="h-4 w-4 text-brand" />
+            <h2 className="text-sm font-semibold">Since yesterday</h2>
+          </div>
+          <p className="text-sm text-fg">{change.headline}</p>
+          {(change.resolved.length > 0 || change.emerged.length > 0 || change.improved.length > 0 || change.declined.length > 0) && (
+            <div className="mt-3 grid gap-1.5 text-xs sm:grid-cols-2">
+              {change.resolved.map((r) => (
+                <div key={`r-${r.id}`} className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">Cleared: {r.title}</span>
+                </div>
+              ))}
+              {change.emerged.map((e) => (
+                <div key={`e-${e.id}`} className="flex items-center gap-1.5 text-muted">
+                  <CircleDot className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">New: {e.title}</span>
+                </div>
+              ))}
+              {change.improved.map((d) => (
+                <div key={`i-${d.id}`} className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                  <ArrowUpRight className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{d.label} +{d.delta}</span>
+                </div>
+              ))}
+              {change.declined.map((d) => (
+                <div key={`d-${d.id}`} className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                  <ArrowDownRight className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{d.label} {d.delta}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Top suggestions — the "system of execution" payoff */}
       <section className="mt-5">

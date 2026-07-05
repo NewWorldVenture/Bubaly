@@ -30,10 +30,16 @@
 >   suggestions, per-dimension bars, "who's overloaded". Nav: Operating Index, `Gauge`, minLevel 0
 >   (free + auto in Navigation Choices). Verified: tsc · eslint · **1661 vitest** · `next build`.
 >
+> **Slice 2 shipped — "Since yesterday" evening recap (pillar #5):** `lib/operating-index/summary.ts`
+> (pure, **8 tests**) `summarizeChange(current, prior)` diffs today's vs. the prior FOI snapshot →
+> headline + composite delta + improved/declined dimensions (≥5-pt) + resolved/emerged suggestions.
+> The server now returns the prior *full* snapshot + a `change: ChangeSummary`; a "Since yesterday"
+> card renders on the FOI page. Calm tone, silent on a flat day. tsc/eslint/**1669 tests**/build.
+> `summarizeChange` is exported so the existing Command Center / Daily Briefing (ui lane) can adopt it.
+>
 > **Reuse note for the next slices:** the FOI snapshot is deliberately the shared *state vector* — the
-> Command Center's evening "what changed" summary (pillar #5), the five orchestrator questions
-> (pillar #1), and the Digital Twin's simulation baseline (pillar #2) should all read it rather than
-> re-query. Don't fork the snapshot builder.
+> five orchestrator questions (pillar #1) and the Digital Twin's simulation baseline (pillar #2)
+> should read it rather than re-query. Don't fork the snapshot builder.
 >
 > ## ✅ 2026-07-05 SESSION — push cadence fix + backlog reconciled (READ FIRST)
 >
