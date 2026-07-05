@@ -6,6 +6,33 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-05 — OPERATING LAYER PROGRESS SNAPSHOT (READ THIS FIRST)
+>
+> Building the nine-pillar **Family Operating Layer** (north star in `todo.md`). Slices shipped so far,
+> each on its own `claude/<slice>` branch (multi-branch now allowed), all 100% Supabase-wired,
+> verified tsc·eslint·vitest·`next build`:
+>
+> | Slice | Pillar | What | PR | In prod? |
+> |---|---|---|---|---|
+> | 1 | #7 FOI | `lib/operating-index/score.ts` + `server.ts` + `/dashboard/family-operating-index` + migration `0125` | #227 | ✅ merged |
+> | 2 | #5 | "Since yesterday" recap `lib/operating-index/summary.ts` | #228 | ✅ merged |
+> | 3 | #1 | Orchestrator 5 questions `lib/operating-index/orchestrator.ts` (chief-of-staff card) | #230 | ✅ merged |
+> | 5 | #2 | Digital Twin **decision simulator** `lib/twin/simulate.ts` + simulator on twin page | #231 | ⏳ CI/merge in flight |
+> | 6 | #3 | Family **Playbook** `lib/playbook/learn.ts` — learns facts from behavior → one-tap into `family_facts` | #232(this) | ⏳ building/CI |
+>
+> **The shared state vector is `loadOperatingIndex()`** (`lib/operating-index/server.ts`) — it returns
+> `{ index, change, orchestrator, trend }`. Future slices (outcomes launcher #4, Design-for-Calm #8)
+> should READ it, not re-query. Don't fork the snapshot builder.
+>
+> **Remaining Operating Layer slices** (see `todo.md` ★ OPEN WORK TRACKER): #4 outcomes launcher ·
+> #5-finish Command Center adopts `summarizeChange` (ui lane) · #6 specialized agents · #8 Design for
+> Calm · #9 Family API. Plus the **FOI financial follow-ups** (real budget-overspend + negative-ledger
+> balance — currently 0 placeholders in `operating-index/server.ts`).
+>
+> **⚠️ Human-owned, blocks prod value:** run **`supabase/APPLY_PENDING_0118-0125.sql`** (one paste in
+> the Supabase SQL editor, or `supabase db push`) — no prod DB creds/CLI in the sandbox, so an agent
+> CANNOT do it. Also VAPID/FCM keys (push), maps/ETA key (#6), GIF key, Stripe Issuing, CI Supabase login.
+>
 > ## ★ 2026-07-05 SESSION — The Family Operating Layer begins (READ FIRST)
 >
 > **New north star** (see `todo.md` ★ section): pivot from systems-of-record to a **system of

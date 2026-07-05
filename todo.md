@@ -132,8 +132,13 @@ state vector and the Command Center's evening "what changed" source.)*
   headroom). Server action `simulateDecisionAction` (family-scoped reads) + client `DecisionSimulator`
   on `/dashboard/family-digital-twin`. tsc/eslint/**1679 tests**/build. *(Full linked state-vector
   reuse of the FOI snapshot = follow-up; this slice ships the category-defining simulation first.)*
-- [ ] **Slice 6 — Family Playbook** (pillar #3): learn durable preferences/traditions into
-  `family_facts` from real usage; surface + edit.
+- [x] **Slice 6 — Family Playbook** (pillar #3) ✅: pure `lib/playbook/learn.ts` (**10 tests**)
+  `learnPlaybook(signals)` — LEARNS durable facts from real behavior (favorite dinners from meal
+  history, usual shopping day from grocery adds, weekly routines) as candidate `family_facts`;
+  `filterAlreadyKnown` hides ones already saved. Server `lib/playbook/server.ts` gathers signals
+  (meal_plans→meals, grocery_items, family_routines) + `savePlaybookFactAction` (one-tap accept →
+  real family_fact). Client `PlaybookInsights` "What we've learned" panel above the Knowledge Base.
+  Family stays in control (accept/dismiss). tsc/eslint/**1689 tests**/build.
 - [ ] **Slice 7 — Outcomes launcher** (pillar #4): "Run Today / Feed the Family / Plan a Trip /
   Prepare for School / Manage Money / Keep Everyone Healthy / Celebrate / Prepare for the
   Unexpected" goal launcher that auto-selects capabilities.
