@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { QuickAdd } from '@/components/family/quick-add';
 import { Avatar } from '@/components/ui/avatar';
+import { DecisionSimulator } from '@/components/twin/decision-simulator';
 
 export const metadata: Metadata = { title: 'Family Digital Twin' };
 export const dynamic = 'force-dynamic';
@@ -17,14 +18,17 @@ export default async function FamilyDigitalTwinPage() {
   const supabase = await createServer();
   const manager = isManager(ctx.active.role);
 
-  const [{ data: members }, { data: profiles }, { data: routines }, { data: classes }, { data: teams }, { data: goals }] = await Promise.all([
+  const [{ data: members }, { data: profiles }, { data: routines }, { data: classes }, { data: teams }, { data: goals }, { data: budgets }] = await Promise.all([
     supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('family_digital_twin_profiles').select('*').eq('family_id', familyId),
     supabase.from('family_routines').select('member_id, title').eq('family_id', familyId).eq('status', 'active'),
     supabase.from('school_classes').select('member_id, subject').eq('family_id', familyId),
     supabase.from('teams').select('member_id, sport').eq('family_id', familyId).eq('is_active', true),
     supabase.from('goals').select('id, title').eq('family_id', familyId).eq('is_complete', false).limit(20),
+    supabase.from('budgets').select('category').eq('family_id', familyId).order('category'),
   ]);
+  const budgetCategories = [...new Set((budgets ?? []).map((b) => b.category).filter(Boolean))];
+  const memberList = (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name }));
 
   const profileByMember = new Map((profiles ?? []).map((p) => [p.member_id, p]));
   const group = <T extends { member_id: string | null }>(rows: T[] | null) => {
@@ -46,6 +50,8 @@ export default async function FamilyDigitalTwinPage() {
         title="Family Digital Twin"
         description="A living model of each family member — preferences, responsibilities and AI insights that power the whole platform."
       />
+
+      {memberList.length > 0 && <DecisionSimulator members={memberList} budgetCategories={budgetCategories} />}
 
       <div className="grid gap-5 lg:grid-cols-2">
         {(members ?? []).map((m) => {

@@ -124,9 +124,14 @@ state vector and the Command Center's evening "what changed" source.)*
 - [ ] **Slice 4 — Command Center adopts the recap** (pillar #5 finish): surface
   `summarizeChange` inside `/dashboard/command-center` + `/dashboard/briefing` (ui lane —
   coordinate vs. parallel session).
-- [ ] **Slice 5 — Household Digital Twin state + simulation** (pillar #2): promote the FOI
-  snapshot into a linked state vector; add safe "if we do X, what moves?" simulation on
-  `/dashboard/family-digital-twin`.
+- [x] **Slice 5 — Household Digital Twin: decision simulation** (pillar #2) ✅: pure
+  `lib/twin/simulate.ts` (**10 tests**) `simulateDecision(decision, ctx)` — safe "what-if" that
+  runs against real data but writes nothing. Two scenarios: **add a commitment** ("if we accept this
+  tournament, what has to move?" → overlaps as blockers, tight turnarounds, heavy-week load) and
+  **a big spend** ("can we add two nights and stay in budget?" → real budget-vs-transactions
+  headroom). Server action `simulateDecisionAction` (family-scoped reads) + client `DecisionSimulator`
+  on `/dashboard/family-digital-twin`. tsc/eslint/**1679 tests**/build. *(Full linked state-vector
+  reuse of the FOI snapshot = follow-up; this slice ships the category-defining simulation first.)*
 - [ ] **Slice 6 — Family Playbook** (pillar #3): learn durable preferences/traditions into
   `family_facts` from real usage; surface + edit.
 - [ ] **Slice 7 — Outcomes launcher** (pillar #4): "Run Today / Feed the Family / Plan a Trip /
