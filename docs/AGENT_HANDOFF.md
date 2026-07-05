@@ -6,6 +6,19 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-05 (later²) — Decision Engine shipped (READ FIRST)
+>
+> **Family Decision Engine** (strategic vision #3): score trade-offs, explain, family decides.
+> - **`0130_family_decisions.sql`** — `family_decisions` (question, budget/travel hard caps, weights,
+>   decided_option_id) + `decision_options` (cost/time/travel/load/benefit metrics + cached score/
+>   rationale), family RLS. **⚠️ apply to prod.** Next free migration: **0131**.
+> - **`lib/decisions/engine.ts`** (pure, **9 tests**) — `evaluateDecision(options, constraints)`:
+>   min-max normalizes each criterion across the choice set, polarity-corrects, weights, flags hard-
+>   cap violations (infeasible sorts last), returns ranked + recommendation + human rationale.
+> - **`/dashboard/decisions`** ("Decision Engine", nav minLevel 0) — create decision + options, live
+>   scoring, ripple/score bars, recommendation banner, "Choose" persists the winner. Realtime, wired.
+> - **`seed_decisions.sql`** — 500 decisions + 1500 options. Verified: **1778 tests**, tsc, eslint green.
+>
 > ## ★ 2026-07-05 (later) — Knowledge Graph + Twin projector shipped (READ FIRST)
 >
 > **The moat build.** Added the reasoning substrate the twin/agents/decision-engine compose on:

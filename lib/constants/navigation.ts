@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, type LucideIcon,
 } from 'lucide-react';
 import { AllServicesIcon } from '@/components/app/icons/all-services-icon';
 
@@ -54,6 +54,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/outcomes', label: 'Outcomes', icon: Wand2, minLevel: 0 },
       { href: '/dashboard/agents', label: 'Family Assistant', icon: Bot, minLevel: 0 },
       { href: '/dashboard/graph', label: 'Reasoning Graph', icon: GitBranch, minLevel: 0 },
+      { href: '/dashboard/decisions', label: 'Decision Engine', icon: Scale, minLevel: 0 },
       { href: '/dashboard/calm', label: 'Calm', icon: Leaf, minLevel: 0 },
       { href: '/dashboard/connections', label: 'Connections', icon: Network, minLevel: 0 },
       { href: '/dashboard/trust', label: 'Trust & Permissions', icon: ShieldCheck, minLevel: 0 },

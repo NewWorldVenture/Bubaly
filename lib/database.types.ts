@@ -403,6 +403,16 @@ export interface Database {
         { id?: string; family_id: string; source_id: string; target_id: string; relation: string; weight?: number; attributes?: Json; created_by?: string | null },
         Partial<{ source_id: string; target_id: string; relation: string; weight: number; attributes: Json }>
       >;
+      family_decisions: T<
+        { id: string; family_id: string; question: string; detail: string | null; status: string; budget_cents: number | null; max_travel_minutes: number | null; weights: Json; decided_option_id: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; question: string; detail?: string | null; status?: string; budget_cents?: number | null; max_travel_minutes?: number | null; weights?: Json; decided_option_id?: string | null; created_by?: string | null },
+        Partial<{ question: string; detail: string | null; status: string; budget_cents: number | null; max_travel_minutes: number | null; weights: Json; decided_option_id: string | null }>
+      >;
+      decision_options: T<
+        { id: string; family_id: string; decision_id: string; label: string; cost_cents: number | null; time_minutes: number | null; travel_minutes: number | null; load_delta: number | null; benefit: number | null; score: number | null; rationale: string | null; feasible: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; decision_id: string; label: string; cost_cents?: number | null; time_minutes?: number | null; travel_minutes?: number | null; load_delta?: number | null; benefit?: number | null; score?: number | null; rationale?: string | null; feasible?: boolean; created_by?: string | null },
+        Partial<{ label: string; cost_cents: number | null; time_minutes: number | null; travel_minutes: number | null; load_delta: number | null; benefit: number | null; score: number | null; rationale: string | null; feasible: boolean }>
+      >;
       family_operating_index: T<
         { id: string; family_id: string; as_of_date: string; composite: number; band: string; dimensions: Json; suggestions: Json; created_at: string; updated_at: string },
         { id?: string; family_id: string; as_of_date?: string; composite: number; band?: string; dimensions?: Json; suggestions?: Json },

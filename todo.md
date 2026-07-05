@@ -357,6 +357,7 @@ idempotent, stable across re-runs):
 | Autopilot | `autopilot_suggestions`, `approval_requests` | `seed_autopilot.sql` |
 | Family Vault | `family_credentials` | `seed_vault.sql` |
 | Knowledge Graph / Twin | `graph_entities`, `graph_edges` | `seed_graph.sql` |
+| Decision Engine | `family_decisions`, `decision_options` | `seed_decisions.sql` |
 | Calendar, To-Dos, Groceries, Notes, Photos, Journal, Habits | `calendar_events`, `todo_items`, `grocery_items`, `notes`, `family_photos`, `journal_entries`, `habits` | `seed_core_content.sql` |
 | #1 AI Orchestrator | `family_events`, `family_polls` | `seed_pillar1_orchestrator.sql` |
 | #2 Household Twin | `budgets`, `calendar_events`, `family_routines`, `school_classes`, `teams` | `seed_pillar2_twin.sql` |
