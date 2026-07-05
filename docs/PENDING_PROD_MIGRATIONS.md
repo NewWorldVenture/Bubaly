@@ -38,6 +38,7 @@ After applying, hard-refresh the app: Marketplace, `/dashboard/voice`,
 | 0122 | `0122_routine_templates.sql` | `routine_templates`, `routine_template_items` | Recurring-routine templates (calendar right rail) |
 | 0123 | `0123_family_facts.sql` | `family_facts` durable-knowledge store | Family Knowledge Base `/dashboard/knowledge` (+ knowledge-graph fact nodes) |
 | 0124 | `0124_journey_events.sql` | `journey_events` append-only telemetry | Experience Scorecard `/dashboard/journeys` |
+| 0125 | `0125_family_operating_index.sql` | `family_operating_index` daily snapshots (composite + dimensions + suggestions) | Family Operating Index `/dashboard/family-operating-index` (the page renders live even before apply; the table only backs the day-over-day **trend**) |
 
 If prod is further behind than 0118, `supabase db push` will also pick up any
 earlier un-applied migrations (0104, 0111, 0113, 0117, …) — all additive, all

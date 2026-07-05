@@ -378,6 +378,11 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; journey: string; phase?: string; step?: number; session_id: string; duration_ms?: number | null },
         Partial<{ member_id: string | null; phase: string; step: number; duration_ms: number | null }>
       >;
+      family_operating_index: T<
+        { id: string; family_id: string; as_of_date: string; composite: number; band: string; dimensions: Json; suggestions: Json; created_at: string; updated_at: string },
+        { id?: string; family_id: string; as_of_date?: string; composite: number; band?: string; dimensions?: Json; suggestions?: Json },
+        Partial<{ as_of_date: string; composite: number; band: string; dimensions: Json; suggestions: Json }>
+      >;
       location_events: T<
         { id: string; family_id: string; member_id: string; place_id: string | null; place_name: string | null; event_type: LocationEventType; latitude: number | null; longitude: number | null; occurred_at: string; created_at: string },
         { id?: string; family_id: string; member_id: string; place_id?: string | null; place_name?: string | null; event_type?: LocationEventType; latitude?: number | null; longitude?: number | null; occurred_at?: string },
