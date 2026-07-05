@@ -5,7 +5,14 @@
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 
 const BUCKET = 'documents';
-const MAX_BYTES = 25 * 1024 * 1024; // matches the bucket's file_size_limit
+
+/** Upload ceiling — matches the bucket's file_size_limit. Exported so UIs can
+ *  pre-check on file select and show the limit, instead of failing post-upload. */
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+export const UPLOAD_LIMIT_LABEL = '25 MB';
+/** Pure guard so the check is identical on the client and inside the uploader. */
+export function isOverUploadLimit(size: number): boolean { return size > MAX_UPLOAD_BYTES; }
+const MAX_BYTES = MAX_UPLOAD_BYTES;
 
 function sanitizeFileName(name: string): string {
   return name.replace(/[^a-zA-Z0-9.\-_]/g, '_').slice(-120);

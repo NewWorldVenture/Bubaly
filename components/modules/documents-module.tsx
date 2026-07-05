@@ -10,7 +10,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
-import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
+import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, isOverUploadLimit, UPLOAD_LIMIT_LABEL } from '@/lib/storage/documents';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -250,11 +250,19 @@ export function DocumentsModule() {
     success('File deleted'); refresh();
   }
 
-  function pickFile(f: File | null) {
+  // Pre-check the size on select so the user hears "too big" instantly instead
+  // of after a doomed upload (the uploader enforces the same limit server-side).
+  // Returns false when rejected so callers don't open/advance.
+  function acceptFile(f: File | null): boolean {
+    if (f && isOverUploadLimit(f.size)) {
+      toastError(`"${f.name}" is too large — the limit is ${UPLOAD_LIMIT_LABEL}.`);
+      return false;
+    }
     setFile(f);
     if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name }));
-    if (f) setOpen(true);
+    return true;
   }
+  function pickFile(f: File | null) { if (acceptFile(f) && f) setOpen(true); }
 
   async function save() {
     if (!form.title || !file) { toastError('Choose a file and name it'); return; }
@@ -605,18 +613,18 @@ export function DocumentsModule() {
       {/* Upload modal */}
       <Modal open={open} title={form.category === '' ? 'New Folder' : 'Upload File'} onClose={() => { setOpen(false); setFile(null); }}>
         <div className="space-y-4">
-          <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }} />
+          <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { acceptFile(e.target.files?.[0] ?? null); }} />
           <div
             onClick={() => fileInputRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }}
+            onDrop={(e) => { e.preventDefault(); acceptFile(e.dataTransfer.files?.[0] ?? null); }}
             className="cursor-pointer rounded-xl border-2 border-dashed border-border p-8 text-center transition hover:border-brand/50"
           >
             <Upload className="mx-auto mb-3 h-8 w-8 text-muted/60" />
             {file ? (
               <><p className="text-sm font-semibold">{file.name}</p><p className="mt-1 text-xs text-muted/60">{fmtSize(file.size)} · click to change</p></>
             ) : (
-              <><p className="text-sm font-semibold text-muted">Drag &amp; drop a file here</p><p className="mt-1 text-xs text-muted/60">PDF, images, docs, video up to 50 MB</p><span className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-xs font-semibold">Browse Files</span></>
+              <><p className="text-sm font-semibold text-muted">Drag &amp; drop a file here</p><p className="mt-1 text-xs text-muted/60">PDF, images, docs, video up to {UPLOAD_LIMIT_LABEL}</p><span className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-xs font-semibold">Browse Files</span></>
             )}
           </div>
           <Field label="File Name">{(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Passport - Emma.pdf" />}</Field>
