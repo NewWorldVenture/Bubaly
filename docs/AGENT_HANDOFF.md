@@ -51,6 +51,16 @@
 > should read `loadOperatingIndex` rather than re-query. Don't fork the snapshot builder. Also: a prod
 > **one-paste migration bundle** now lives at `supabase/APPLY_PENDING_0118-0125.sql` (human runs it).
 >
+> **Slice 5 shipped — Household Digital Twin decision simulation (pillar #2):** `lib/twin/simulate.ts`
+> (pure, **10 tests**) `simulateDecision(decision, ctx)` — a safe "what-if" that reads real data and
+> writes nothing. Two scenarios: **commitment** ("if we accept this tournament, what has to move?" →
+> overlaps=blockers, tight turnarounds, heavy-week load) and **spend** ("add two nights, stay in
+> budget?" → real budget cap vs. summed `transactions`). Server action under
+> `app/(app)/dashboard/family-digital-twin/actions.ts` + client `components/twin/decision-simulator.tsx`
+> added additively to the twin page. Own branch `claude/twin-decision-simulator`. **Multi-branch is now
+> allowed** — slices ship on their own `claude/<slice>` branches. Prod one-paste migration bundle:
+> `supabase/APPLY_PENDING_0118-0125.sql` (human runs it).
+>
 > ## ✅ 2026-07-05 SESSION — push cadence fix + backlog reconciled (READ FIRST)
 >
 > The roadmap and friction backlog were already cleared of everything shippable
