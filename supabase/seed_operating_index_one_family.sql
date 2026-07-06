@@ -14,8 +14,8 @@
 --   schedule stab.   → the 300 events collide across day/hour slots (conflicts)
 --   financial        → 220 expenses over 2 budgets (overspent) + 1 checking < 0
 --   readiness        → 30 pantry (low), 10 documents (expiring), 10 maintenance
---   communication    → covered by seed_messages/seed_chores (unread/approvals);
---                       run those too for the comms/routine dims at volume
+--   communication    → 6 open decisions (3 meal_votes + 3 family_polls); unread
+--                       threads + pending approvals add volume via seed_messages
 --   routine          → covered by seed_chores_one_family.sql (chore_assignments)
 --   goals            → 10 goals off-track (progress < 50, deadline < 30d)
 --   + 15 overdue reminders, 12 bills due (some no autopay)
@@ -48,6 +48,8 @@ begin
   delete from public.maintenance_tasks   where family_id = v_fam and title like 'FOI · %';
   delete from public.goals               where family_id = v_fam and title like 'FOI · %';
   delete from public.bills               where family_id = v_fam and name like 'FOI · %';
+  delete from public.meal_votes          where family_id = v_fam and title like 'FOI · %';
+  delete from public.family_polls        where family_id = v_fam and question like 'FOI · %';
 
   -- ── PLANNING + STABILITY + LOADS + MISSING-INFO: 300 upcoming events ──────
   insert into public.calendar_events
@@ -135,7 +137,14 @@ begin
     (g % 3 = 0), v_uid
   from generate_series(1, 12) g;
 
-  raise notice 'FOI seed complete for family % (≈613 records across 10 tables).', v_fam;
+  -- ── COMMUNICATION: 6 open decisions (votes + polls) → the comms dimension ─
+  insert into public.meal_votes (family_id, title, status, created_by)
+  select v_fam, 'FOI · Dinner vote ' || g, 'open', v_uid from generate_series(1, 3) g;
+
+  insert into public.family_polls (family_id, question, kind, status, created_by)
+  select v_fam, 'FOI · Poll ' || g, 'single', 'open', v_uid from generate_series(1, 3) g;
+
+  raise notice 'FOI seed complete for family % (≈619 records across 12 tables).', v_fam;
 end $$;
 
 -- ── Verify: row counts per FOI input (should total ≈613) ────────────────────
@@ -148,4 +157,6 @@ union all select 'documents',          count(*) from public.documents          w
 union all select 'maintenance_tasks',  count(*) from public.maintenance_tasks  where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and title like 'FOI · %'
 union all select 'family_reminders',   count(*) from public.family_reminders   where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and title like 'FOI · %'
 union all select 'goals',              count(*) from public.goals              where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and title like 'FOI · %'
-union all select 'bills',              count(*) from public.bills              where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and name like 'FOI · %';
+union all select 'bills',              count(*) from public.bills              where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and name like 'FOI · %'
+union all select 'meal_votes',         count(*) from public.meal_votes         where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and title like 'FOI · %'
+union all select 'family_polls',       count(*) from public.family_polls       where family_id='92298eb2-1a9e-4bdc-9361-677b6c01b499' and question like 'FOI · %';
