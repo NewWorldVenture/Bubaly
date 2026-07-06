@@ -378,6 +378,11 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; category?: string; label: string; value: string; evidence?: string | null; confidence?: number; signature: string; status?: string; fact_id?: string | null; created_by?: string | null },
         Partial<{ member_id: string | null; category: string; label: string; value: string; evidence: string | null; confidence: number; status: string; fact_id: string | null }>
       >;
+      onboarding_events: T<
+        { id: string; user_id: string | null; session_id: string; step: string; phase: string; duration_ms: number | null; meta: Json; created_at: string },
+        { id?: string; user_id?: string | null; session_id: string; step: string; phase?: string; duration_ms?: number | null; meta?: Json },
+        Partial<{ user_id: string | null; session_id: string; step: string; phase: string; duration_ms: number | null; meta: Json }>
+      >;
       journey_events: T<
         { id: string; family_id: string; member_id: string | null; journey: string; phase: string; step: number; session_id: string; duration_ms: number | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; journey: string; phase?: string; step?: number; session_id: string; duration_ms?: number | null },

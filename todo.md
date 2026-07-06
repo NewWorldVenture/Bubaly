@@ -54,13 +54,16 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   **GIF provider** (Messages picker) · **Stripe Issuing** (Wallet card balances).
 
 ### C. Genuinely-open product items (agent-doable)
-- [ ] **FOI financial dimension** — real budget-overspend + negative-ledger-balance inputs
-  (currently 0 placeholders in `lib/operating-index/server.ts`).
-- [ ] **Onboarding pre-family telemetry** — anonymous path (`journey_events` needs a family_id).
-- [ ] **AI Concierge write-back** — deeper persistence of accepted recommendations.
+- [x] **FOI financial dimension** ✅ — already wired: `countOverspentBudgets` (real budgets vs
+  this-period expenses) + real accounts-below-zero in `lib/operating-index/server.ts`. (Stale entry — verified done.)
+- [x] **Onboarding pre-family telemetry** ✅ — `0133_onboarding_events.sql` + `lib/analytics/onboarding.ts`
+  (11 tests) + `onboarding-track.ts` wired into the wizard + super-admin `/dashboard/onboarding-funnel`
+  + `seed_onboarding_events.sql` (550 events). Validated on PG16.
+- [x] **AI Concierge write-back** ✅ — already wired: create plans, update status
+  (planning/completed/cancelled), delete, and convert a plan → real `calendar_events`. (Stale entry — verified done.)
 - [ ] **Twin auto-refresh trigger** — today it's the twice-daily cron + one-tap Rebuild; an
-  on-write trigger is the remaining step for truly "continuous."
-- [ ] **Messages GIF picker** — blocked on the provider key above.
+  on-write trigger is the remaining step for truly "continuous." *(still open)*
+- [ ] **Messages GIF picker** — blocked on the provider key above. *(external key)*
 
 ### D. ★ Moat layer shipped this session (all validated: 1838 tests / tsc / eslint / build)
 - [x] **Knowledge Graph** — `0129`, `lib/graph/reason.ts` (16 tests, impact propagation), `/dashboard/graph`, `seed_graph.sql`.
@@ -410,6 +413,7 @@ idempotent, stable across re-runs):
 | Knowledge Graph / Twin | `graph_entities`, `graph_edges` | `seed_graph.sql` |
 | Decision Engine | `family_decisions`, `decision_options` | `seed_decisions.sql` |
 | Prep Plans | `prep_plans`, `prep_plan_steps` | `seed_prep_plans.sql` |
+| Onboarding funnel | `onboarding_events` | `seed_onboarding_events.sql` |
 | Calendar, To-Dos, Groceries, Notes, Photos, Journal, Habits | `calendar_events`, `todo_items`, `grocery_items`, `notes`, `family_photos`, `journal_entries`, `habits` | `seed_core_content.sql` |
 | #1 AI Orchestrator | `family_events`, `family_polls` | `seed_pillar1_orchestrator.sql` |
 | #2 Household Twin | `budgets`, `calendar_events`, `family_routines`, `school_classes`, `teams` | `seed_pillar2_twin.sql` |

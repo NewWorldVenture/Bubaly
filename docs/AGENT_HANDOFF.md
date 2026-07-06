@@ -6,6 +6,24 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-06 — Onboarding funnel telemetry + section-C audit (READ FIRST)
+>
+> Closed the pre-family telemetry gap and audited the rest of todo.md §C:
+> - **`0133_onboarding_events.sql`** — anonymous/pre-family funnel table (no family_id; session_id +
+>   optional user_id, step/phase/duration). RLS: open self-insert, self-only select; admin reads via
+>   service role. **⚠️ apply to prod.** Next free migration: **0134**.
+> - **`lib/analytics/onboarding.ts`** (pure, **11 tests**) — `summarizeOnboardingFunnel` → per-step
+>   reach, drop-off, completion rate, median time, biggest-drop step.
+> - **`lib/analytics/onboarding-track.ts`** — fire-and-forget client emitter (sessionStorage run id).
+>   Wired into `onboarding-wizard.tsx` (started/step/completed). Errors swallowed.
+> - **`/dashboard/onboarding-funnel`** — super-admin page (service client), NOT in global nav.
+> - **`seed_onboarding_events.sql`** — 550 events / 250 sessions with realistic drop-off (250→175→125).
+> - **Audit result:** §C "FOI financial dimension" and "Concierge write-back" were **already wired**
+>   (verified: `countOverspentBudgets` + real negative balances; concierge create/status/convert-to-
+>   calendar). Marked done. Still genuinely open: twin on-write trigger (§C), and the key/decision-
+>   gated items (GIF picker, Intelligence aggregation, prod migrations/CRON_SECRET).
+> - Verified: **1849 tests**, tsc, eslint green.
+>
 > ## ★ 2026-07-05 (later⁹) — Intelligence Network: informed-consent preview (READ FIRST)
 >
 > Added the transparency layer that makes consent meaningful — a family sees EXACTLY what they'd

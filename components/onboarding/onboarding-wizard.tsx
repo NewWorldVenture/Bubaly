@@ -6,7 +6,8 @@
 //   3) You're all set       — summary → straight to the dashboard
 // One atomic write at the end (completeProfileOnboardingAction) provisions the
 // family space too, so there is no separate setup wizard and no redirect loop.
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { trackOnboarding } from '@/lib/analytics/onboarding-track';
 import { useRouter } from 'next/navigation';
 import {
   ShieldCheck, Users, Sparkles, ArrowRight, Eye, EyeOff, Check, Loader2, Lock,
@@ -40,6 +41,9 @@ export function OnboardingWizard({ initialName = '' }: { initialName?: string })
   const firstName = name.trim().split(' ')[0] || 'there';
   const pinMatches = isValidPin(pin) && pin === confirm;
 
+  // Pre-family funnel telemetry (onboarding has no family_id yet).
+  useEffect(() => { trackOnboarding('profile', 'started'); }, []);
+
   // `usePin` lets the user reach first value now and add a PIN later — the
   // server action already treats an absent PIN as valid (defer, don't block).
   async function finish(usePin: boolean) {
@@ -53,6 +57,7 @@ export function OnboardingWizard({ initialName = '' }: { initialName?: string })
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Something went wrong');
+    trackOnboarding('done', 'completed');
     setStep('done');
   }
 
@@ -110,7 +115,7 @@ export function OnboardingWizard({ initialName = '' }: { initialName?: string })
             </div>
           </div>
 
-          <Button className="mt-7 w-full" disabled={!name.trim()} onClick={() => setStep('pin')}>
+          <Button className="mt-7 w-full" disabled={!name.trim()} onClick={() => { trackOnboarding('pin', 'step'); setStep('pin'); }}>
             Continue
           </Button>
         </div>
