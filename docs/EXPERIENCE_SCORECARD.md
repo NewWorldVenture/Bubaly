@@ -27,7 +27,7 @@ next*); this is *how good each journey is now*.
 | **Add a memory** (photo→saved) | 3–5 | 1 | 0–1 | ~20s | ✅ | ✅ per-file upload progress bar ("N of M uploaded") | ✅ **Undo** on the "Memory created" screen (deletes the rows + storage) | In-app camera OR upload; multi-shot. Live per-photo progress + 25 MB pre-check + undo (2026-07-03). |
 | **Plan tonight's dinner** | 4–6 | 0–1 | 1–2 | ~30s | ✅ | ✅ | ✅ | Meals module. Candidate for a one-tap "plan tonight" NL command (backlog #2). |
 | **Check "what needs me now"** | 0–1 | 0 | 0 | ~5s read | ✅ | ✅ | n/a | Home Mission Control + moment banner (now shows leave-by, real weather, birthdays, **double-booking warnings**, one-tap remind). Static across day → backlog #7 (time-of-day). |
-| **Onboarding → first value** | ~8–12 | 3–5 | several | ~2–4 min | ⚠️ | ⚠️ | ⚠️ | Longest journey; biggest opportunity to defer/infer fields. Not yet audited this session. |
+| **Onboarding → first value** | ~3–6 | 1 (name) | 1–4 (steps 3–5 skippable) | ~40–90s | ✅ | ✅ resumable draft + optimistic finish | ✅ nothing written until Finish; PIN skippable | Audited: PIN made skippable (1 required field = name); sessionStorage draft resume; family name auto-suggested. **Done screen now nudges Kid Logins** when no-email kids were added, closing the loop to `/dashboard/family-access`. Remaining: instrument real medians. |
 | **Customize the sidebar** | 2–4/change | 0 | 0 | ~15s | ✅ | ✅ live | ✅ reset | Settings → Navigation Choices. Solid. |
 
 ## Journey targets (what "great" looks like)

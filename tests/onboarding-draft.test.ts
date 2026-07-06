@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MEMBER_COLORS, LOCAL_MEMBER_ROLES, INVITE_ROLES,
   nextMemberColor, hasInviteEmail, makeLocalMember, makeInviteMember,
-  addMember, removeMember, draftMemberLabel, summarizeMembers,
+  addMember, removeMember, draftMemberLabel, summarizeMembers, kidsNeedingLogin,
   type DraftMember,
 } from '@/lib/onboarding/draft';
 
@@ -103,5 +103,23 @@ describe('summarizeMembers', () => {
   });
   it('handles empty', () => {
     expect(summarizeMembers([]).text).toBe('No one added yet');
+  });
+});
+
+describe('kidsNeedingLogin', () => {
+  it('returns only local child/teen members', () => {
+    const members: DraftMember[] = [
+      makeLocalMember({ name: 'Ava', role: 'child' }, []),
+      makeLocalMember({ name: 'Max', role: 'teen' }, []),
+      makeLocalMember({ name: 'Gran', role: 'guest' }, []),   // not a kid
+      makeLocalMember({ name: 'Dad', role: 'adult' }, []),    // not a kid
+      makeInviteMember({ email: 'kid@x.com', role: 'teen' }), // invite → email login, excluded
+    ];
+    const kids = kidsNeedingLogin(members);
+    expect(kids.map((k) => k.name)).toEqual(['Ava', 'Max']);
+  });
+  it('is empty when there are no no-email kids', () => {
+    expect(kidsNeedingLogin([])).toEqual([]);
+    expect(kidsNeedingLogin([makeInviteMember({ email: 'a@b.com', role: 'teen' })])).toEqual([]);
   });
 });

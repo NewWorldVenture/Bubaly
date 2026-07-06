@@ -13,17 +13,18 @@
 // tested lib/onboarding/flow.ts; this file is the renderer.
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ShieldCheck, Users, Sparkles, ArrowRight, ArrowLeft, Eye, EyeOff, Check, Loader2,
-  Lock, Home, Plus, X, Mail, UserPlus, Minus, PartyPopper,
+  Lock, Home, Plus, X, Mail, UserPlus, Minus, PartyPopper, KeyRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AvatarPicker } from '@/components/ui/avatar-picker';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { trackOnboarding } from '@/lib/analytics/onboarding-track';
-import { MEMBER_COLORS, LOCAL_MEMBER_ROLES, INVITE_ROLES, makeLocalMember, makeInviteMember, addMember, removeMember, hasInviteEmail, draftMemberLabel, type DraftMember } from '@/lib/onboarding/draft';
+import { MEMBER_COLORS, LOCAL_MEMBER_ROLES, INVITE_ROLES, makeLocalMember, makeInviteMember, addMember, removeMember, hasInviteEmail, draftMemberLabel, kidsNeedingLogin, type DraftMember } from '@/lib/onboarding/draft';
 import { FAMILY_GOALS, REFERRAL_SOURCES, householdSummary } from '@/lib/onboarding/family';
 import { normalizePin, isValidPin, isWeakPin } from '@/lib/onboarding/pin';
 import { ROLE_LABELS, type MemberRole } from '@/lib/constants/roles';
@@ -441,6 +442,14 @@ function PinPanel({ draft, update, firstName }: { draft: OnboardingDraft; update
 function DonePanel({ draft, firstName, onGo }: { draft: OnboardingDraft; firstName: string; onGo: () => void }) {
   const memberCount = draft.members.length;
   const goalCount = draft.goals.length;
+  // Local (no-email) kids can't sign in with an email — nudge the parent to give
+  // them a username + PIN login (the feature lives at /dashboard/family-access).
+  const kids = kidsNeedingLogin(draft.members);
+  const kidNames = kids.map((k) => k.name.trim().split(' ')[0]).filter(Boolean);
+  const kidLabel = kidNames.length === 0 ? 'the kids'
+    : kidNames.length === 1 ? kidNames[0]
+    : kidNames.length === 2 ? `${kidNames[0]} & ${kidNames[1]}`
+    : 'the kids';
   return (
     <div className="text-center">
       <div className="relative mx-auto h-24 w-24">
@@ -468,6 +477,17 @@ function DonePanel({ draft, firstName, onGo }: { draft: OnboardingDraft; firstNa
       </div>
 
       <Button className="mt-7 w-full" onClick={onGo}>Start exploring <ArrowRight className="ml-1 h-4 w-4" /></Button>
+
+      {kids.length > 0 && (
+        <Link
+          href="/dashboard/family-access"
+          className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-brand/40 bg-brand/10 px-4 py-3 text-sm font-semibold text-brand transition hover:bg-brand/15"
+        >
+          <KeyRound className="h-4 w-4 shrink-0" />
+          Give {kidLabel} a login — username &amp; PIN, no email needed
+        </Link>
+      )}
+
       <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted"><ShieldCheck className="h-3.5 w-3.5" /> Your information is protected with top-level security.</p>
     </div>
   );
