@@ -1,218 +1,447 @@
 'use client';
 
-// Onboarding journey — mirrors the product mockups (post sign-in):
-//   1) Create your profile  — avatar, name, age, colour
-//   2) Create a PIN         — 4-digit, confirm, tips
-//   3) You're all set       — summary → straight to the dashboard
-// One atomic write at the end (completeProfileOnboardingAction) provisions the
-// family space too, so there is no separate setup wizard and no redirect loop.
-import { useState, useEffect } from 'react';
-import { trackOnboarding } from '@/lib/analytics/onboarding-track';
+// Onboarding — a guided, six-step journey that sets up the whole family space in
+// ONE atomic write at the very end (finalizeOnboardingAction). Nothing is written
+// to Supabase until "Finish", so abandoning midway leaves no half-created account.
+//   1) Profile   — avatar, name, age, colour
+//   2) Family    — name your shared space (timezone auto-detected)
+//   3) About     — household makeup, goals, how they found us
+//   4) Members   — add people or invite by email (skippable)
+//   5) PIN       — optional App Lock (skippable)
+//   6) Done      — a celebratory summary → straight to the dashboard
+// All flow logic (steps, progress, validation, draft→payload) lives in the pure,
+// tested lib/onboarding/flow.ts; this file is the renderer.
+
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ShieldCheck, Users, Sparkles, ArrowRight, Eye, EyeOff, Check, Loader2, Lock,
+  ShieldCheck, Users, Sparkles, ArrowRight, ArrowLeft, Eye, EyeOff, Check, Loader2,
+  Lock, Home, Plus, X, Mail, UserPlus, Minus, PartyPopper,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AvatarPicker } from '@/components/ui/avatar-picker';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
-import { MEMBER_COLORS } from '@/lib/onboarding/draft';
+import { trackOnboarding } from '@/lib/analytics/onboarding-track';
+import { MEMBER_COLORS, LOCAL_MEMBER_ROLES, INVITE_ROLES, makeLocalMember, makeInviteMember, addMember, removeMember, hasInviteEmail, draftMemberLabel, type DraftMember } from '@/lib/onboarding/draft';
+import { FAMILY_GOALS, REFERRAL_SOURCES, householdSummary } from '@/lib/onboarding/family';
 import { normalizePin, isValidPin, isWeakPin } from '@/lib/onboarding/pin';
-import { completeProfileOnboardingAction } from '@/app/onboarding/actions';
+import { ROLE_LABELS, type MemberRole } from '@/lib/constants/roles';
+import {
+  STEP_META, progressPct, stepCounter, nextStep, prevStep, isFirstStep,
+  isLastFormStep, canAdvance, suggestFamilyName, emptyDraft, buildFinalizePayload,
+  type OnboardingStep, type OnboardingDraft,
+} from '@/lib/onboarding/flow';
+import { finalizeOnboardingAction } from '@/app/onboarding/actions';
 
-type Step = 'profile' | 'pin' | 'done';
-const STEPS: Step[] = ['profile', 'pin', 'done'];
+const inputCls = 'h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring';
+/** Pragmatic "looks like an email" check for the invite field. */
+const isLikelyEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s ?? '').trim());
 
 export function OnboardingWizard({ initialName = '' }: { initialName?: string }) {
   const router = useRouter();
   const { error: toastError } = useToast();
 
-  const [step, setStep] = useState<Step>('profile');
-  const [name, setName] = useState(initialName);
-  const [age, setAge] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
-  const [color, setColor] = useState(MEMBER_COLORS[0]);
-
-  const [pin, setPin] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [showPin, setShowPin] = useState(false);
+  const [step, setStep] = useState<OnboardingStep>('profile');
+  const [draft, setDraft] = useState<OnboardingDraft>(() =>
+    emptyDraft({ name: initialName, color: MEMBER_COLORS[0], familyName: suggestFamilyName(initialName) }));
+  const [familyNameTouched, setFamilyNameTouched] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const firstName = name.trim().split(' ')[0] || 'there';
-  const pinMatches = isValidPin(pin) && pin === confirm;
+  const update = useCallback((patch: Partial<OnboardingDraft>) => setDraft((d) => ({ ...d, ...patch })), []);
+  const firstName = draft.name.trim().split(' ')[0] || 'there';
 
-  // Pre-family funnel telemetry (onboarding has no family_id yet).
+  // Detect the browser timezone once so the family calendar is right from day one.
+  useEffect(() => {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz) setDraft((d) => ({ ...d, timezone: tz }));
+    } catch { /* keep UTC */ }
+  }, []);
+
+  // Keep the family name synced to the suggestion until the user edits it.
+  useEffect(() => {
+    if (!familyNameTouched) setDraft((d) => ({ ...d, familyName: suggestFamilyName(d.name) }));
+  }, [draft.name, familyNameTouched]);
+
   useEffect(() => { trackOnboarding('profile', 'started'); }, []);
 
-  // `usePin` lets the user reach first value now and add a PIN later — the
-  // server action already treats an absent PIN as valid (defer, don't block).
-  async function finish(usePin: boolean) {
+  const canGo = canAdvance(step, draft);
+  const { current, total } = stepCounter(step);
+
+  async function finish() {
     setSaving(true);
-    const res = await completeProfileOnboardingAction({
-      firstName: name.trim(),
-      age: age || null,
-      avatarUrl: avatarUrl || undefined,
-      color,
-      pin: usePin && isValidPin(pin) ? pin : undefined,
-    });
+    const res = await finalizeOnboardingAction(buildFinalizePayload(draft));
     setSaving(false);
-    if (!res.ok) return toastError(res.error ?? 'Something went wrong');
+    if (!res.ok) { toastError(res.error ?? 'Something went wrong finishing setup'); return; }
     trackOnboarding('done', 'completed');
     setStep('done');
   }
 
+  function advance() {
+    if (!canGo) return;
+    if (isLastFormStep(step)) { void finish(); return; }
+    const next = nextStep(step);
+    trackOnboarding(next, 'step');
+    setStep(next);
+  }
+
   return (
-    <div className="rounded-3xl border border-border bg-surface/40 p-6 sm:p-8">
-      {/* progress dots */}
-      <div className="mb-6 flex items-center justify-center gap-2">
-        {STEPS.map((s, i) => (
-          <span key={s}
-            className={cn('h-1.5 rounded-full transition-all',
-              step === s ? 'w-8 bg-brand' : i < STEPS.indexOf(step) ? 'w-4 bg-brand/50' : 'w-4 bg-border')} />
+    <div className="rounded-3xl border border-border bg-surface/40 p-6 shadow-sm sm:p-8">
+      {step !== 'done' && (
+        <div className="mb-6">
+          <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted">
+            <span>Step {current} of {total}</span>
+            <span>{progressPct(step)}%</span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
+            <div className="h-full rounded-full bg-brand transition-all duration-500 ease-out" style={{ width: `${progressPct(step)}%` }} />
+          </div>
+        </div>
+      )}
+
+      <div key={step} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+        {step !== 'done' && (
+          <div className="mb-6 text-center">
+            <h1 className="text-2xl font-bold tracking-tight">{STEP_META[step].title}</h1>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{STEP_META[step].subtitle}</p>
+          </div>
+        )}
+
+        {step === 'profile' && <ProfilePanel draft={draft} update={update} />}
+        {step === 'family' && (
+          <FamilyPanel draft={draft} firstName={firstName}
+            onChange={(v) => { setFamilyNameTouched(true); update({ familyName: v }); }} />
+        )}
+        {step === 'about' && <AboutPanel draft={draft} update={update} />}
+        {step === 'members' && <MembersPanel draft={draft} update={update} />}
+        {step === 'pin' && <PinPanel draft={draft} update={update} firstName={firstName} />}
+        {step === 'done' && <DonePanel draft={draft} firstName={firstName} onGo={() => { router.push('/dashboard'); router.refresh(); }} />}
+      </div>
+
+      {step !== 'done' && (
+        <div className="mt-8">
+          <div className="flex gap-2">
+            {!isFirstStep(step) && (
+              <Button variant="secondary" onClick={() => setStep(prevStep(step))} disabled={saving}>
+                <ArrowLeft className="h-4 w-4" /> Back
+              </Button>
+            )}
+            <Button className="flex-1" onClick={advance} disabled={!canGo || saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {isLastFormStep(step) ? 'Finish setup' : 'Continue'}
+              {!saving && !isLastFormStep(step) && <ArrowRight className="h-4 w-4" />}
+            </Button>
+          </div>
+          {(step === 'about' || step === 'members' || step === 'pin') && (
+            <button type="button" disabled={saving}
+              onClick={() => {
+                // Skip bypasses the step's advance gate. On PIN, finish directly —
+                // buildFinalizePayload already drops any partial/invalid PIN.
+                if (step === 'pin') { void finish(); return; }
+                const next = nextStep(step); trackOnboarding(next, 'step'); setStep(next);
+              }}
+              className="mt-3 w-full text-center text-sm font-medium text-muted transition hover:text-fg disabled:opacity-50">
+              {step === 'pin' ? 'Skip — I’ll add a PIN later' : 'Skip for now'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Step 1: Profile ──────────────────────────────────────────────────────────
+function ProfilePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void }) {
+  return (
+    <div>
+      <div className="flex justify-center">
+        <AvatarPicker displayName={draft.name || 'You'} defaultValue={draft.avatarUrl} onChange={(v) => update({ avatarUrl: v })} />
+      </div>
+      <div className="mt-6 space-y-4">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Your name <span className="text-brand">*</span></span>
+          <input value={draft.name} onChange={(e) => update({ name: e.target.value })} autoFocus placeholder="Jordan" className={inputCls} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">How old are you? <span className="font-normal text-muted">(optional)</span></span>
+          <select value={draft.age} onChange={(e) => update({ age: e.target.value })} className={inputCls}>
+            <option value="">Prefer not to say</option>
+            {Array.from({ length: 99 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <div>
+          <span className="mb-2 block text-sm font-medium">Choose your colour</span>
+          <div className="flex flex-wrap gap-2.5">
+            {MEMBER_COLORS.map((c) => (
+              <button key={c} type="button" aria-label={`Colour ${c}`} onClick={() => update({ color: c })}
+                className={cn('grid h-9 w-9 place-items-center rounded-full transition', draft.color === c && 'ring-2 ring-white/70')}
+                style={{ backgroundColor: c }}>
+                {draft.color === c && <Check className="h-4 w-4 text-white" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Step 2: Family ───────────────────────────────────────────────────────────
+function FamilyPanel({ draft, firstName, onChange }: { draft: OnboardingDraft; firstName: string; onChange: (v: string) => void }) {
+  const tzLabel = draft.timezone && draft.timezone !== 'UTC' ? draft.timezone.replace(/_/g, ' ') : 'your local time';
+  return (
+    <div>
+      <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl text-white" style={{ backgroundColor: draft.color || MEMBER_COLORS[0] }}>
+        <Home className="h-8 w-8" />
+      </div>
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium">Family name <span className="text-brand">*</span></span>
+        <input value={draft.familyName} onChange={(e) => onChange(e.target.value)} autoFocus placeholder={suggestFamilyName(firstName) || 'The Smith Family'} className={inputCls} />
+      </label>
+      <p className="mt-2 text-xs text-muted">This is your shared space — everyone you add joins it. You can rename it anytime in Settings.</p>
+      <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-bg/40 px-3 py-2.5 text-xs text-muted">
+        <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand" />
+        <span>Calendars &amp; reminders will use <span className="font-medium text-fg">{tzLabel}</span>, detected automatically.</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Step 3: About your family ────────────────────────────────────────────────
+function Stepper({ label, value, onChange, min = 0, max = 20 }: { label: string; value: number; onChange: (n: number) => void; min?: number; max?: number }) {
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-border bg-bg/40 px-3 py-2.5">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="flex items-center gap-3">
+        <button type="button" aria-label={`Fewer ${label}`} onClick={() => onChange(Math.max(min, value - 1))}
+          className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted transition hover:bg-elevated disabled:opacity-40" disabled={value <= min}>
+          <Minus className="h-4 w-4" />
+        </button>
+        <span className="w-5 text-center text-sm font-semibold tabular-nums">{value}</span>
+        <button type="button" aria-label={`More ${label}`} onClick={() => onChange(Math.min(max, value + 1))}
+          className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted transition hover:bg-elevated disabled:opacity-40" disabled={value >= max}>
+          <Plus className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AboutPanel({ draft, update }: { draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void }) {
+  const setChildren = (n: number) => {
+    const childAges = Array.from({ length: n }, (_, i) => draft.childAges[i] ?? 0);
+    update({ children: n, childAges });
+  };
+  const toggleGoal = (v: string) =>
+    update({ goals: draft.goals.includes(v) ? draft.goals.filter((g) => g !== v) : [...draft.goals, v] });
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3">
+        <Stepper label="Adults" value={draft.adults} onChange={(n) => update({ adults: n })} min={1} />
+        <Stepper label="Kids" value={draft.children} onChange={setChildren} />
+      </div>
+      <p className="-mt-2 text-center text-xs text-muted">{householdSummary(draft.adults, draft.children)}</p>
+
+      {draft.children > 0 && (
+        <div>
+          <span className="mb-2 block text-sm font-medium">Kids’ ages <span className="font-normal text-muted">(optional)</span></span>
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: draft.children }, (_, i) => (
+              <input key={i} inputMode="numeric" placeholder="Age" aria-label={`Child ${i + 1} age`}
+                value={draft.childAges[i] ? String(draft.childAges[i]) : ''}
+                onChange={(e) => {
+                  const n = Math.min(21, Math.max(0, parseInt(e.target.value.replace(/\D/g, ''), 10) || 0));
+                  const childAges = [...draft.childAges]; childAges[i] = n; update({ childAges });
+                }}
+                className="h-10 w-14 rounded-xl border border-border bg-bg text-center text-sm focus-ring" />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <span className="mb-2 block text-sm font-medium">What do you want help with? <span className="font-normal text-muted">(pick any)</span></span>
+        <div className="grid grid-cols-2 gap-2">
+          {FAMILY_GOALS.map((g) => {
+            const on = draft.goals.includes(g.value);
+            return (
+              <button key={g.value} type="button" onClick={() => toggleGoal(g.value)}
+                className={cn('flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition',
+                  on ? 'border-brand bg-brand/10 text-fg' : 'border-border bg-bg/40 text-muted hover:border-brand/40')}>
+                <span className="text-base">{g.icon}</span>
+                <span className="flex-1 truncate font-medium">{g.label}</span>
+                {on && <Check className="h-4 w-4 text-brand" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium">How did you hear about us? <span className="font-normal text-muted">(optional)</span></span>
+        <select value={draft.referralSource} onChange={(e) => update({ referralSource: e.target.value })} className={inputCls}>
+          <option value="">Select one…</option>
+          {REFERRAL_SOURCES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+// ─── Step 4: Members ──────────────────────────────────────────────────────────
+function MembersPanel({ draft, update }: { draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void }) {
+  const [mode, setMode] = useState<'person' | 'invite'>('person');
+  const [name, setName] = useState('');
+  const [role, setRole] = useState<MemberRole>('child');
+  const [email, setEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<MemberRole>('adult');
+
+  const addPerson = () => {
+    if (!name.trim()) return;
+    update({ members: addMember(draft.members, makeLocalMember({ name, role }, draft.members)) });
+    setName(''); setRole('child');
+  };
+  const addInvite = () => {
+    const e = email.trim().toLowerCase();
+    if (!isLikelyEmail(e) || hasInviteEmail(draft.members, e)) return;
+    update({ members: addMember(draft.members, makeInviteMember({ email: e, role: inviteRole })) });
+    setEmail(''); setInviteRole('adult');
+  };
+
+  return (
+    <div className="space-y-4">
+      {draft.members.length > 0 && (
+        <ul className="space-y-2">
+          {draft.members.map((m: DraftMember) => (
+            <li key={m.id} className="flex items-center gap-3 rounded-xl border border-border bg-bg/40 px-3 py-2.5">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold text-white" style={{ backgroundColor: m.color ?? '#7c6dff' }}>
+                {m.kind === 'invite' ? <Mail className="h-4 w-4" /> : (m.name.slice(0, 1).toUpperCase() || '?')}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{draftMemberLabel(m)}</p>
+                <p className="text-xs text-muted">{m.kind === 'invite' ? 'Invite' : ROLE_LABELS[m.role]}{m.kind === 'invite' ? ` · ${ROLE_LABELS[m.role]}` : ''}</p>
+              </div>
+              <button type="button" aria-label="Remove" onClick={() => update({ members: removeMember(draft.members, m.id) })}
+                className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-danger">
+                <X className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="rounded-2xl border border-border bg-bg/30 p-3">
+        <div className="mb-3 grid grid-cols-2 gap-1 rounded-lg bg-border/50 p-1 text-sm">
+          <button type="button" onClick={() => setMode('person')} className={cn('flex items-center justify-center gap-1.5 rounded-md py-1.5 font-medium transition', mode === 'person' ? 'bg-surface text-fg shadow-sm' : 'text-muted')}>
+            <UserPlus className="h-4 w-4" /> Add a person
+          </button>
+          <button type="button" onClick={() => setMode('invite')} className={cn('flex items-center justify-center gap-1.5 rounded-md py-1.5 font-medium transition', mode === 'invite' ? 'bg-surface text-fg shadow-sm' : 'text-muted')}>
+            <Mail className="h-4 w-4" /> Invite by email
+          </button>
+        </div>
+
+        {mode === 'person' ? (
+          <div className="space-y-2">
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (e.g. Leo)" className={inputCls}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPerson(); } }} />
+            <div className="flex gap-2">
+              <select value={role} onChange={(e) => setRole(e.target.value as MemberRole)} className={cn(inputCls, 'flex-1')}>
+                {LOCAL_MEMBER_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+              </select>
+              <Button type="button" variant="secondary" onClick={addPerson} disabled={!name.trim()}><Plus className="h-4 w-4" /> Add</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="name@email.com" className={inputCls}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addInvite(); } }} />
+            <div className="flex gap-2">
+              <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as MemberRole)} className={cn(inputCls, 'flex-1')}>
+                {INVITE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+              </select>
+              <Button type="button" variant="secondary" onClick={addInvite} disabled={!isLikelyEmail(email.trim())}><Plus className="h-4 w-4" /> Invite</Button>
+            </div>
+            <p className="text-xs text-muted">They’ll get an email with a link to join {draft.familyName || 'your family'}.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Step 5: PIN ──────────────────────────────────────────────────────────────
+function PinPanel({ draft, update, firstName }: { draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void; firstName: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div>
+      <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand"><Lock className="h-7 w-7" /></div>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Create a 4-digit PIN</span>
+          <div className="relative">
+            <input value={draft.pin} onChange={(e) => update({ pin: normalizePin(e.target.value) })} inputMode="numeric" type={show ? 'text' : 'password'} placeholder="••••"
+              className="h-12 w-full rounded-xl border border-border bg-bg px-3 text-center text-lg tracking-[0.5em] focus-ring" />
+            <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? 'Hide PIN' : 'Show PIN'} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
+              {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Confirm PIN</span>
+          <input value={draft.confirmPin} onChange={(e) => update({ confirmPin: normalizePin(e.target.value) })} inputMode="numeric" type={show ? 'text' : 'password'} placeholder="••••"
+            className="h-12 w-full rounded-xl border border-border bg-bg px-3 text-center text-lg tracking-[0.5em] focus-ring" />
+        </label>
+
+        {draft.confirmPin.length === 4 && draft.pin !== draft.confirmPin && <p className="text-xs text-danger">PINs don’t match.</p>}
+        {isValidPin(draft.pin) && isWeakPin(draft.pin) && <p className="text-xs text-amber-500">That PIN is easy to guess — consider a less obvious one.</p>}
+
+        <div className="rounded-xl border border-border bg-bg/50 p-3">
+          <p className="mb-1.5 text-xs font-semibold text-muted">Why a PIN?</p>
+          <ul className="space-y-1 text-xs text-muted">
+            <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand" /> Keeps {firstName}’s profile private on shared devices</li>
+            <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand" /> Stored securely; App Lock stays off until you turn it on</li>
+            <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand" /> Totally optional — you can add one later in Settings</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Step 6: Done ─────────────────────────────────────────────────────────────
+function DonePanel({ draft, firstName, onGo }: { draft: OnboardingDraft; firstName: string; onGo: () => void }) {
+  const memberCount = draft.members.length;
+  const goalCount = draft.goals.length;
+  return (
+    <div className="text-center">
+      <div className="relative mx-auto h-24 w-24">
+        <span className="grid h-24 w-24 place-items-center rounded-full text-3xl font-bold text-white" style={{ backgroundColor: draft.color || MEMBER_COLORS[0] }}>
+          {firstName.slice(0, 1).toUpperCase()}
+        </span>
+        <span className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full bg-emerald-500 text-white ring-4 ring-surface">
+          <Check className="h-4 w-4" />
+        </span>
+      </div>
+      <h1 className="mt-4 flex items-center justify-center gap-2 text-2xl font-bold">You’re all set, {firstName}! <PartyPopper className="h-6 w-6 text-brand" /></h1>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{draft.familyName || 'Your family'} is ready. Welcome to Bubaly!</p>
+
+      <div className="mt-6 space-y-3 text-left">
+        {[
+          { icon: Home, title: draft.familyName || 'Your family', body: `Your shared space is live${goalCount ? ` — set up for ${goalCount} focus area${goalCount === 1 ? '' : 's'}` : ''}.` },
+          { icon: Users, title: memberCount ? `${memberCount} ${memberCount === 1 ? 'person' : 'people'} added` : 'Invite your family', body: memberCount ? 'They’re in your space (invites are on their way).' : 'Add family members anytime from Settings.' },
+          { icon: Sparkles, title: 'Let’s begin', body: 'Your dashboard is personalized and ready to explore.' },
+        ].map(({ icon: Icon, title, body }) => (
+          <div key={title} className="flex items-start gap-3 rounded-xl border border-border bg-bg/40 p-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand"><Icon className="h-4 w-4" /></div>
+            <div className="min-w-0"><p className="truncate text-sm font-semibold">{title}</p><p className="text-xs text-muted">{body}</p></div>
+          </div>
         ))}
       </div>
 
-      {step === 'profile' && (
-        <div>
-          <h1 className="text-center text-2xl font-bold">Create your profile</h1>
-          <p className="mx-auto mt-1 max-w-sm text-center text-sm text-muted">
-            Tell us a little about yourself so we can personalize your experience.
-          </p>
-
-          <div className="mt-6 flex justify-center">
-            <AvatarPicker displayName={name || 'You'} defaultValue={avatarUrl} onChange={setAvatarUrl} />
-          </div>
-
-          <div className="mt-6 space-y-4">
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium">Your name <span className="text-brand">*</span></span>
-              <input value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="Jordan"
-                className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring" />
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium">How old are you?</span>
-              <select value={age} onChange={(e) => setAge(e.target.value)}
-                className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring">
-                <option value="">Prefer not to say</option>
-                {Array.from({ length: 99 }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </label>
-
-            <div>
-              <span className="mb-2 block text-sm font-medium">Choose a color</span>
-              <div className="flex flex-wrap gap-2.5">
-                {MEMBER_COLORS.map((c) => (
-                  <button key={c} type="button" aria-label={`Color ${c}`} onClick={() => setColor(c)}
-                    className={cn('grid h-9 w-9 place-items-center rounded-full transition', color === c && 'ring-2 ring-white/70')}
-                    style={{ backgroundColor: c }}>
-                    {color === c && <Check className="h-4 w-4 text-white" />}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <Button className="mt-7 w-full" disabled={!name.trim()} onClick={() => { trackOnboarding('pin', 'step'); setStep('pin'); }}>
-            Continue
-          </Button>
-        </div>
-      )}
-
-      {step === 'pin' && (
-        <div>
-          <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand"><Lock className="h-7 w-7" /></div>
-          <h1 className="text-center text-2xl font-bold">Add a PIN for {firstName}?</h1>
-          <p className="mx-auto mt-1 max-w-sm text-center text-sm text-muted">
-            Optional — a PIN keeps {firstName}&rsquo;s profile private. You can skip this and add one
-            anytime in Settings.
-          </p>
-
-          <div className="mt-6 space-y-4">
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium">Create 4-digit PIN <span className="text-brand">*</span></span>
-              <div className="relative">
-                <input value={pin} onChange={(e) => setPin(normalizePin(e.target.value))} inputMode="numeric"
-                  type={showPin ? 'text' : 'password'} placeholder="••••"
-                  className="h-12 w-full rounded-xl border border-border bg-bg px-3 text-center text-lg tracking-[0.5em] focus-ring" />
-                <button type="button" onClick={() => setShowPin((v) => !v)} aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
-                  {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium">Confirm PIN <span className="text-brand">*</span></span>
-              <input value={confirm} onChange={(e) => setConfirm(normalizePin(e.target.value))} inputMode="numeric"
-                type={showPin ? 'text' : 'password'} placeholder="••••"
-                className="h-12 w-full rounded-xl border border-border bg-bg px-3 text-center text-lg tracking-[0.5em] focus-ring" />
-            </label>
-
-            {confirm.length === 4 && pin !== confirm && (
-              <p className="text-xs text-danger">PINs don&rsquo;t match.</p>
-            )}
-            {isValidPin(pin) && isWeakPin(pin) && (
-              <p className="text-xs text-amber-500">That PIN is easy to guess — consider a less obvious one.</p>
-            )}
-
-            <div className="rounded-xl border border-border bg-bg/50 p-3">
-              <p className="mb-1.5 text-xs font-semibold text-muted">PIN tips</p>
-              <ul className="space-y-1 text-xs text-muted">
-                <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand" /> Use 4 different numbers</li>
-                <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand" /> Avoid birthdays or repeating numbers</li>
-                <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand" /> Easy for you, hard for others to guess</li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="mt-6 flex gap-2">
-            <Button variant="secondary" onClick={() => setStep('profile')}>Back</Button>
-            <Button className="flex-1" disabled={!pinMatches || saving} onClick={() => finish(true)}>
-              {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null} Continue
-            </Button>
-          </div>
-          <button type="button" onClick={() => finish(false)} disabled={saving}
-            className="mt-3 w-full text-center text-sm font-medium text-muted transition hover:text-fg disabled:opacity-50">
-            Skip for now
-          </button>
-        </div>
-      )}
-
-      {step === 'done' && (
-        <div className="text-center">
-          <div className="relative mx-auto h-24 w-24">
-            <span className="grid h-24 w-24 place-items-center rounded-full text-3xl font-bold text-white" style={{ backgroundColor: color }}>
-              {firstName.slice(0, 1).toUpperCase()}
-            </span>
-            <span className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full bg-emerald-500 text-white ring-4 ring-surface">
-              <Check className="h-4 w-4" />
-            </span>
-          </div>
-          <h1 className="mt-4 text-2xl font-bold">You&rsquo;re all set, {firstName}!</h1>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-            Your profile has been created successfully. Welcome to the Bubaly family!
-          </p>
-
-          <div className="mt-6 space-y-3 text-left">
-            {[
-              { icon: ShieldCheck, title: 'Safe & secure', body: 'Your information is protected with top-level security.' },
-              { icon: Users, title: 'Family connected', body: 'You can now connect, share and explore together.' },
-              { icon: Sparkles, title: 'Let the fun begin!', body: 'Explore Bubaly and create amazing memories.' },
-            ].map(({ icon: Icon, title, body }) => (
-              <div key={title} className="flex items-start gap-3 rounded-xl border border-border bg-bg/40 p-3">
-                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand"><Icon className="h-4 w-4" /></div>
-                <div><p className="text-sm font-semibold">{title}</p><p className="text-xs text-muted">{body}</p></div>
-              </div>
-            ))}
-          </div>
-
-          <Button className="mt-7 w-full" onClick={() => { router.push('/dashboard'); router.refresh(); }}>
-            Start exploring <ArrowRight className="ml-1 h-4 w-4" />
-          </Button>
-        </div>
-      )}
+      <Button className="mt-7 w-full" onClick={onGo}>Start exploring <ArrowRight className="ml-1 h-4 w-4" /></Button>
+      <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted"><ShieldCheck className="h-3.5 w-3.5" /> Your information is protected with top-level security.</p>
     </div>
   );
 }
