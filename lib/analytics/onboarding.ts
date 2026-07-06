@@ -9,6 +9,9 @@ export type OnboardingPhase = 'started' | 'step' | 'completed' | 'abandoned';
 /** The canonical onboarding steps, in order (extend as the wizard changes). */
 export const ONBOARDING_STEPS: { key: string; label: string }[] = [
   { key: 'profile', label: 'Profile' },
+  { key: 'family', label: 'Family name' },
+  { key: 'about', label: 'About your family' },
+  { key: 'members', label: 'Add members' },
   { key: 'pin', label: 'App lock (PIN)' },
   { key: 'done', label: 'Done' },
 ];

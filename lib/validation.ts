@@ -93,14 +93,38 @@ export const draftMemberSchema = z.discriminatedUnion('kind', [
 ]);
 export type DraftMemberInput = z.infer<typeof draftMemberSchema>;
 
+// The account holder's personal touches captured during onboarding: avatar,
+// age, member colour, and an optional 4-digit App Lock PIN. All optional — the
+// journey must never block on them.
+export const onboardingAppearanceSchema = z.object({
+  color: z.string().trim().max(9).optional(),
+  age: z.coerce.number().int().min(1).max(120).nullable().optional(),
+  avatarUrl: z.string().max(5000).optional().default(''),
+  pin: z.string().regex(/^\d{4}$/, 'PIN must be 4 digits').optional(),
+});
+export type OnboardingAppearanceInput = z.infer<typeof onboardingAppearanceSchema>;
+
+// The relaxed profile the finalize action accepts: only a first name is truly
+// required. Last name + email default to '' (the action falls back to the
+// signed-in email), so the world-class wizard can reach first value fast without
+// forcing a last name or a second email entry.
+export const onboardingFinalizeProfileSchema = z.object({
+  firstName: z.string().trim().min(1, 'Enter your name').max(60),
+  lastName: z.string().trim().max(60).optional().default(''),
+  phone: z.string().max(20).optional().default(''),
+  email: z.union([emailSchema, z.literal('')]).optional().default(''),
+  avatarUrl: z.string().max(5000).optional().default(''),
+});
+
 // The ENTIRE onboarding journey, committed in one atomic server action only when
 // the user reaches the end. Abandoning before this writes nothing — so a bailed
 // journey never leaves a half-created account/family behind.
 export const finalizeOnboardingSchema = z.object({
-  profile: onboardingProfileSchema,
+  profile: onboardingFinalizeProfileSchema,
   family: createFamilySchema,
   details: familyDetailsBaseSchema,
   members: z.array(draftMemberSchema).max(30).default([]),
+  appearance: onboardingAppearanceSchema.optional().default({}),
 });
 export type FinalizeOnboardingInput = z.infer<typeof finalizeOnboardingSchema>;
 

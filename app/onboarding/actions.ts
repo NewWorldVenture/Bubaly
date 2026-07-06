@@ -318,6 +318,7 @@ export async function finalizeOnboardingAction(input: {
     | { kind: 'local'; name: string; role: MemberRole; birthday?: string; color?: string }
     | { kind: 'invite'; email: string; role: MemberRole }
   >;
+  appearance?: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
 }): Promise<Result<{ familyId: string }>> {
   const parsed = finalizeOnboardingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid onboarding data' };
@@ -326,7 +327,7 @@ export async function finalizeOnboardingAction(input: {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return { ok: false, error: 'Not signed in' };
 
-  const { profile, family, details, members } = parsed.data;
+  const { profile, family, details, members, appearance } = parsed.data;
 
   // 1. Save profile (name, phone, email, optional avatar)
   const profileRes = await saveUserProfile(auth.user.id, {
@@ -359,6 +360,15 @@ export async function finalizeOnboardingAction(input: {
     { user_id: auth.user.id, active_family_id: familyId },
     { onConflict: 'user_id' },
   );
+
+  // 3b. Apply the account holder's chosen colour to the parent member the
+  //     handle_new_family trigger just created (service-role: RLS writes are
+  //     flaky in this env — see ensure-family.ts).
+  if (appearance.color) {
+    const { error: colorErr } = await admin.from('family_members')
+      .update({ color: appearance.color }).eq('family_id', familyId).eq('user_id', auth.user.id);
+    if (colorErr) console.error('[onboarding] member colour update failed', colorErr);
+  }
 
   // 4. Save family details / onboarding questionnaire
   const goals = cleanGoals(details.goals);
@@ -411,6 +421,27 @@ export async function finalizeOnboardingAction(input: {
       });
     }
   }
+
+  // 6b. Persist the account holder's age + optional App Lock PIN + the
+  //     onboardingComplete flag into the core user_preferences.notification_prefs
+  //     jsonb (merge — never clobber). The PIN seeds App Lock DISABLED (same
+  //     salted-SHA-256 scheme as Settings); it stays off until the user enables
+  //     it, at which point they don't have to re-enter the PIN. Service-role so it
+  //     persists reliably under this env's flaky RLS writes.
+  const { data: prefRow } = await admin
+    .from('user_preferences').select('notification_prefs').eq('user_id', auth.user.id).maybeSingle();
+  const prefs = (prefRow?.notification_prefs as Record<string, unknown> | null) ?? {};
+  const mergedPrefs: Record<string, unknown> = { ...prefs, onboardingComplete: true };
+  const age = normalizeAge(appearance.age);
+  if (age !== null) mergedPrefs.age = age;
+  if (appearance.pin && isValidPin(appearance.pin)) {
+    mergedPrefs.appLock = { ...(await buildAppLockConfig(appearance.pin)), enabled: false };
+  }
+  const { error: prefErr } = await admin.from('user_preferences').upsert(
+    { user_id: auth.user.id, notification_prefs: mergedPrefs as never },
+    { onConflict: 'user_id' },
+  );
+  if (prefErr) console.error('[onboarding] preferences (PIN/age/flag) save failed', prefErr);
 
   // 7. Audit
   await logAudit(supabase, {

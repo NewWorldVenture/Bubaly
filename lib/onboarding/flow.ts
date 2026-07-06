@@ -1,0 +1,175 @@
+// lib/onboarding/flow.ts — pure, unit-tested logic for the world-class onboarding
+// wizard. Owns the step model (order, metadata, navigation, progress), the
+// per-step "can advance" gate, the family-name suggestion, and the mapping from
+// the in-memory draft to the single atomic finalize payload. DB-free and
+// deterministic so the whole flow is tested without React or Supabase; the wizard
+// is a thin renderer over this, and the server action does the one write.
+
+import type { MemberRole } from '@/lib/constants/roles';
+import type { DraftMember } from './draft';
+import { normalizeAge } from './pin';
+import { parseChildAges } from './family';
+
+export type OnboardingStep = 'profile' | 'family' | 'about' | 'members' | 'pin' | 'done';
+
+/** Every step, in order. `done` is the terminal celebration (not a form). */
+export const ONBOARDING_FLOW: OnboardingStep[] = ['profile', 'family', 'about', 'members', 'pin', 'done'];
+
+/** Steps that count toward the progress bar (everything before the celebration). */
+export const PROGRESS_STEPS: OnboardingStep[] = ONBOARDING_FLOW.filter((s) => s !== 'done');
+
+export const STEP_META: Record<OnboardingStep, { title: string; subtitle: string }> = {
+  profile: { title: 'Create your profile', subtitle: 'A name and a look — this is you inside Bubaly.' },
+  family: { title: 'Name your family', subtitle: 'Your shared space where everything comes together.' },
+  about: { title: 'About your family', subtitle: 'A few details so Bubaly fits how your family runs.' },
+  members: { title: 'Add your family', subtitle: 'Add people now or invite them by email — you can always do this later.' },
+  pin: { title: 'Protect your profile', subtitle: 'An optional PIN keeps your profile private on shared devices.' },
+  done: { title: "You're all set", subtitle: 'Welcome to Bubaly.' },
+};
+
+export function stepIndex(step: OnboardingStep): number {
+  const i = ONBOARDING_FLOW.indexOf(step);
+  return i < 0 ? 0 : i;
+}
+
+export function isFirstStep(step: OnboardingStep): boolean {
+  return step === ONBOARDING_FLOW[0];
+}
+
+export function isLastFormStep(step: OnboardingStep): boolean {
+  return step === 'pin';
+}
+
+/** Advance one step, clamping at the terminal `done`. */
+export function nextStep(step: OnboardingStep): OnboardingStep {
+  return ONBOARDING_FLOW[Math.min(stepIndex(step) + 1, ONBOARDING_FLOW.length - 1)];
+}
+
+/** Go back one step, clamping at the first step. */
+export function prevStep(step: OnboardingStep): OnboardingStep {
+  return ONBOARDING_FLOW[Math.max(stepIndex(step) - 1, 0)];
+}
+
+/** Progress across the form steps as a 1..100 percentage (for the top bar). */
+export function progressPct(step: OnboardingStep): number {
+  const i = PROGRESS_STEPS.indexOf(step);
+  if (i < 0) return 100; // done
+  return Math.round(((i + 1) / PROGRESS_STEPS.length) * 100);
+}
+
+/** "Step 2 of 5" label for the current form step (done → the last index). */
+export function stepCounter(step: OnboardingStep): { current: number; total: number } {
+  const total = PROGRESS_STEPS.length;
+  const i = PROGRESS_STEPS.indexOf(step);
+  return { current: i < 0 ? total : i + 1, total };
+}
+
+/** Suggest a family name from the account holder's first name ("Jordan" → "The Jordan Family"). */
+export function suggestFamilyName(firstName: string): string {
+  const name = (firstName ?? '').trim().split(/\s+/)[0] ?? '';
+  if (!name) return '';
+  return `The ${name} Family`;
+}
+
+/** The full in-memory draft the wizard collects before the single atomic write. */
+export interface OnboardingDraft {
+  name: string;
+  age: string;
+  avatarUrl: string;
+  color: string;
+  familyName: string;
+  timezone: string;
+  adults: number;
+  children: number;
+  childAges: number[];
+  goals: string[];
+  referralSource: string;
+  referralDetail: string;
+  members: DraftMember[];
+  pin: string;
+  confirmPin: string;
+}
+
+/** A blank draft (the wizard seeds `name`/`color` on top of this). */
+export function emptyDraft(overrides: Partial<OnboardingDraft> = {}): OnboardingDraft {
+  return {
+    name: '', age: '', avatarUrl: '', color: '',
+    familyName: '', timezone: 'UTC',
+    adults: 1, children: 0, childAges: [],
+    goals: [], referralSource: '', referralDetail: '',
+    members: [], pin: '', confirmPin: '',
+    ...overrides,
+  };
+}
+
+/**
+ * Whether the user may leave `step` given the current draft. Only the two steps
+ * with a hard requirement gate: `profile` needs a name, `family` needs a family
+ * name (≥2 chars). `about`/`members` are always skippable, and `pin` is optional
+ * (an empty PIN is fine; a partial/mismatched one is not).
+ */
+export function canAdvance(step: OnboardingStep, draft: OnboardingDraft): boolean {
+  switch (step) {
+    case 'profile': return draft.name.trim().length >= 1;
+    case 'family': return draft.familyName.trim().length >= 2;
+    case 'about': return true;
+    case 'members': return true;
+    case 'pin': {
+      const pin = draft.pin.trim();
+      if (pin.length === 0) return true;                    // skipping is fine
+      return /^\d{4}$/.test(pin) && pin === draft.confirmPin.trim();
+    }
+    case 'done': return true;
+  }
+}
+
+/** The payload for `finalizeOnboardingAction`, built purely from the draft. */
+export interface FinalizePayload {
+  profile: { firstName: string; lastName: string; phone: string; email: string; avatarUrl?: string };
+  family: { name: string; timezone: string };
+  details: {
+    householdAdults: number; householdChildren: number; childAges: number[];
+    region?: string; postalCode?: string; country?: string;
+    goals: string[]; referralSource?: string; referralDetail?: string;
+  };
+  members: Array<
+    | { kind: 'local'; name: string; role: MemberRole; birthday?: string; color?: string }
+    | { kind: 'invite'; email: string; role: MemberRole }
+  >;
+  appearance: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
+}
+
+/**
+ * Map the collected draft to the single finalize action's input. Child ages are
+ * normalized/clamped; the PIN is only included when valid; empty optionals are
+ * passed through as '' so the schema's fallbacks kick in.
+ */
+export function buildFinalizePayload(draft: OnboardingDraft): FinalizePayload {
+  const firstName = draft.name.trim();
+  const validPin = /^\d{4}$/.test(draft.pin.trim()) && draft.pin.trim() === draft.confirmPin.trim();
+  const childAges = draft.childAges.length
+    ? draft.childAges.slice(0, 20)
+    : parseChildAges(String(draft.children));
+  return {
+    profile: { firstName, lastName: '', phone: '', email: '', avatarUrl: draft.avatarUrl || undefined },
+    family: { name: draft.familyName.trim() || suggestFamilyName(firstName), timezone: draft.timezone || 'UTC' },
+    details: {
+      householdAdults: Math.max(0, draft.adults),
+      householdChildren: Math.max(0, draft.children),
+      childAges: childAges.filter((n) => Number.isFinite(n)),
+      goals: draft.goals,
+      referralSource: draft.referralSource || undefined,
+      referralDetail: draft.referralDetail || undefined,
+    },
+    members: draft.members.map((m) =>
+      m.kind === 'invite'
+        ? { kind: 'invite' as const, email: m.email, role: m.role }
+        : { kind: 'local' as const, name: m.name, role: m.role, birthday: m.birthday, color: m.color }),
+    appearance: {
+      color: draft.color || undefined,
+      age: normalizeAge(draft.age),
+      avatarUrl: draft.avatarUrl || undefined,
+      pin: validPin ? draft.pin.trim() : undefined,
+    },
+  };
+}
