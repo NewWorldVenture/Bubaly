@@ -6,6 +6,23 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-05 (later⁸) — Intelligence Network: consent foundation only (READ FIRST)
+>
+> **Privacy-first opt-in foundation** for anonymized cross-family insights. ⚠️ Deliberately NOT the
+> aggregation pipeline — that's deferred pending a sharing-model sign-off. What shipped is the SAFETY
+> layer that must sit in front of any such feature; nothing cross-family is read/aggregated anywhere.
+> - **`0132_network_consent.sql`** — `network_consent` (family_id PK, `enabled` default FALSE, granular
+>   `scopes` jsonb, consented_by/at), family RLS. **⚠️ apply to prod.** Next free migration: **0133**.
+> - **`lib/network/insights.ts`** (pure, **9 tests**) — `visibleInsights` returns [] unless opted in,
+>   filters to opted-in scopes, and enforces **k-anonymity** (`K_ANONYMITY_FLOOR = 20`: suppress any
+>   insight backed by <20 families). `isContributing`, `isSuppressed`.
+> - **`/dashboard/intelligence`** ("Intelligence Network", nav minLevel 0) — privacy promise, master
+>   opt-in (default off), granular scope toggles, all wired to `network_consent`. Insight list is
+>   **empty by design** (no aggregation pipeline yet) with an honest empty state — NOT fabricated data.
+> - No seed (per-family singleton, default off). Verified: **1832 tests**, tsc, eslint green.
+> - **NEXT for whoever builds aggregation:** it MUST pass through `visibleInsights` (k-floor) and only
+>   read from families where `network_consent.enabled` + the relevant scope is true. Coarse/non-PII only.
+>
 > ## ★ 2026-07-05 (later⁷) — Auto-refresh: twin + prep plans now continuous (READ FIRST)
 >
 > The twin graph + prep plans no longer need a button — a cron keeps them updated for every family.

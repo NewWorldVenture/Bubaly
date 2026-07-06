@@ -403,6 +403,11 @@ export interface Database {
         { id?: string; family_id: string; source_id: string; target_id: string; relation: string; weight?: number; attributes?: Json; created_by?: string | null },
         Partial<{ source_id: string; target_id: string; relation: string; weight: number; attributes: Json }>
       >;
+      network_consent: T<
+        { family_id: string; enabled: boolean; scopes: Json; consented_by: string | null; consented_at: string | null } & Stamps,
+        { family_id: string; enabled?: boolean; scopes?: Json; consented_by?: string | null; consented_at?: string | null },
+        Partial<{ enabled: boolean; scopes: Json; consented_by: string | null; consented_at: string | null }>
+      >;
       prep_plans: T<
         { id: string; family_id: string; signal_kind: string; signal_id: string; title: string; target_date: string; urgency: string; status: string; created_by: string | null } & Stamps,
         { id?: string; family_id: string; signal_kind: string; signal_id: string; title: string; target_date: string; urgency?: string; status?: string; created_by?: string | null },
