@@ -122,7 +122,14 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
             <span>Step {current} of {total}</span>
             <span>{progressPct(step)}%</span>
           </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
+          <div
+            className="h-1.5 w-full overflow-hidden rounded-full bg-border"
+            role="progressbar"
+            aria-valuenow={progressPct(step)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`Setup progress: step ${current} of ${total}`}
+          >
             <div className="h-full rounded-full bg-brand transition-all duration-500 ease-out" style={{ width: `${progressPct(step)}%` }} />
           </div>
         </div>
