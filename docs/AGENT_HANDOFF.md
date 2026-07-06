@@ -35,9 +35,14 @@
 > already shipped `/dashboard/outcomes` + `lib/outcomes/launcher.ts` to main, so reconcile/discard the
 > parked copy rather than resuming it blindly.
 >
-> **Suggested next avenues (untested):** accessibility/keyboard-nav pass on the wizard; the phone-auth
-> and "Continue without email" signup paths; OAuth button behavior; the email-confirmation
-> (`/auth/callback`) path when `data.session` is null.
+> **Onboarding a11y/keyboard pass — DONE** (browser-verified): step changes announced via an
+> `sr-only` `role="status"` live region; focus moves to the step `<h1>` (`tabIndex=-1`) on
+> about/members/pin (profile/family keep input autofocus); Enter advances from the name + family-name
+> fields; step content is a labelled `role="group"`; colour swatches got `aria-pressed`. (Complements
+> the parallel session's progress-bar a11y, which was bars only.)
+>
+> **Suggested next avenues (untested):** the phone-auth and "Continue without email" signup paths;
+> OAuth button behavior; the email-confirmation (`/auth/callback`) path when `data.session` is null.
 >
 > ## ★ 2026-07-06 (onboarding + North-Star slices) — READ FIRST
 >

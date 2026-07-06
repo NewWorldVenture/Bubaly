@@ -12,7 +12,7 @@
 // All flow logic (steps, progress, validation, draft→payload) lives in the pure,
 // tested lib/onboarding/flow.ts; this file is the renderer.
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -96,6 +96,22 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
   const canGo = canAdvance(step, draft);
   const { current, total } = stepCounter(step);
 
+  // Accessibility: announce each step change to screen readers, and move focus
+  // into the new step's heading for steps that have no auto-focused input (about
+  // /members/pin) so keyboard + SR users land in the content instead of being
+  // stranded on the "Continue" button. Profile/Family keep their input autofocus.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const [liveMsg, setLiveMsg] = useState('');
+  const firstStepRun = useRef(true);
+  useEffect(() => {
+    if (step === 'done') return;
+    setLiveMsg(`Step ${current} of ${total}: ${STEP_META[step].title}`);
+    if (!firstStepRun.current && (step === 'about' || step === 'members' || step === 'pin')) {
+      headingRef.current?.focus();
+    }
+    firstStepRun.current = false;
+  }, [step, current, total]);
+
   async function finish() {
     setSaving(true);
     const res = await finalizeOnboardingAction(buildFinalizePayload(draft));
@@ -116,6 +132,8 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
 
   return (
     <div className="rounded-3xl border border-border bg-surface/40 p-6 shadow-sm sm:p-8">
+      {/* Screen-reader-only live region: announces navigation between steps. */}
+      <p className="sr-only" role="status" aria-live="polite">{liveMsg}</p>
       {step !== 'done' && (
         <div className="mb-6">
           <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted">
@@ -135,17 +153,19 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
         </div>
       )}
 
-      <div key={step} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div key={step} className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+        role="group" aria-labelledby={step !== 'done' ? 'onboarding-step-title' : undefined}>
         {step !== 'done' && (
           <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold tracking-tight">{STEP_META[step].title}</h1>
+            <h1 id="onboarding-step-title" ref={headingRef} tabIndex={-1}
+              className="text-2xl font-bold tracking-tight outline-none">{STEP_META[step].title}</h1>
             <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{STEP_META[step].subtitle}</p>
           </div>
         )}
 
-        {step === 'profile' && <ProfilePanel draft={draft} update={update} />}
+        {step === 'profile' && <ProfilePanel draft={draft} update={update} onEnter={advance} />}
         {step === 'family' && (
-          <FamilyPanel draft={draft} firstName={firstName}
+          <FamilyPanel draft={draft} firstName={firstName} onEnter={advance}
             onChange={(v) => { setFamilyNameTouched(true); update({ familyName: v }); }} />
         )}
         {step === 'about' && <AboutPanel draft={draft} update={update} />}
@@ -187,7 +207,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
 }
 
 // ─── Step 1: Profile ──────────────────────────────────────────────────────────
-function ProfilePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void }) {
+function ProfilePanel({ draft, update, onEnter }: { draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void; onEnter: () => void }) {
   return (
     <div>
       <div className="flex justify-center">
@@ -196,7 +216,8 @@ function ProfilePanel({ draft, update }: { draft: OnboardingDraft; update: (p: P
       <div className="mt-6 space-y-4">
         <label className="block">
           <span className="mb-1 block text-sm font-medium">Your name <span className="text-brand">*</span></span>
-          <input value={draft.name} onChange={(e) => update({ name: e.target.value })} autoFocus placeholder="Jordan" className={inputCls} />
+          <input value={draft.name} onChange={(e) => update({ name: e.target.value })} autoFocus placeholder="Jordan"
+            aria-required="true" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter(); } }} className={inputCls} />
         </label>
         <label className="block">
           <span className="mb-1 block text-sm font-medium">How old are you? <span className="font-normal text-muted">(optional)</span></span>
@@ -209,7 +230,7 @@ function ProfilePanel({ draft, update }: { draft: OnboardingDraft; update: (p: P
           <span className="mb-2 block text-sm font-medium">Choose your colour</span>
           <div className="flex flex-wrap gap-2.5">
             {MEMBER_COLORS.map((c) => (
-              <button key={c} type="button" aria-label={`Colour ${c}`} onClick={() => update({ color: c })}
+              <button key={c} type="button" aria-label={`Colour ${c}`} aria-pressed={draft.color === c} onClick={() => update({ color: c })}
                 className={cn('grid h-9 w-9 place-items-center rounded-full transition', draft.color === c && 'ring-2 ring-white/70')}
                 style={{ backgroundColor: c }}>
                 {draft.color === c && <Check className="h-4 w-4 text-white" />}
@@ -223,16 +244,17 @@ function ProfilePanel({ draft, update }: { draft: OnboardingDraft; update: (p: P
 }
 
 // ─── Step 2: Family ───────────────────────────────────────────────────────────
-function FamilyPanel({ draft, firstName, onChange }: { draft: OnboardingDraft; firstName: string; onChange: (v: string) => void }) {
+function FamilyPanel({ draft, firstName, onChange, onEnter }: { draft: OnboardingDraft; firstName: string; onChange: (v: string) => void; onEnter: () => void }) {
   const tzLabel = draft.timezone && draft.timezone !== 'UTC' ? draft.timezone.replace(/_/g, ' ') : 'your local time';
   return (
     <div>
-      <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl text-white" style={{ backgroundColor: draft.color || MEMBER_COLORS[0] }}>
+      <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl text-white" aria-hidden="true" style={{ backgroundColor: draft.color || MEMBER_COLORS[0] }}>
         <Home className="h-8 w-8" />
       </div>
       <label className="block">
         <span className="mb-1 block text-sm font-medium">Family name <span className="text-brand">*</span></span>
-        <input value={draft.familyName} onChange={(e) => onChange(e.target.value)} autoFocus placeholder={suggestFamilyName(firstName) || 'The Smith Family'} className={inputCls} />
+        <input value={draft.familyName} onChange={(e) => onChange(e.target.value)} autoFocus placeholder={suggestFamilyName(firstName) || 'The Smith Family'}
+          aria-required="true" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter(); } }} className={inputCls} />
       </label>
       <p className="mt-2 text-xs text-muted">This is your shared space — everyone you add joins it. You can rename it anytime in Settings.</p>
       <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-bg/40 px-3 py-2.5 text-xs text-muted">
