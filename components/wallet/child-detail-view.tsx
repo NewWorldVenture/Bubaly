@@ -22,6 +22,7 @@ import { useToast } from '@/components/ui/toast';
 import { EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
+import { progressBarA11y } from '@/lib/ui/a11y';
 import { fmtRelative } from '@/lib/utils/format';
 import { formatCents, goalProgress, type BucketKind, type Split } from '@/lib/wallet/ledger';
 import { txnTypeLabel, signedAmountCents, groupByDay, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
@@ -282,7 +283,7 @@ function GoalCard({ goal }: { goal: Goal }) {
           {pct}%
         </span>
       </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-border/40">
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-border/40" {...progressBarA11y(pct, `${goal.title}: ${pct}% of goal`)}>
         <div
           className={cn('h-full rounded-full transition-all duration-500', reached ? 'bg-success' : 'bg-brand')}
           style={{ width: `${Math.min(100, pct)}%` }}
@@ -735,7 +736,10 @@ export function ChildDetailView({
               </div>
               <p className="mt-1.5 text-lg font-bold">{formatCents(bal)}</p>
               <p className="mt-0.5 text-[10px] text-muted">Target {targetPct}%</p>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border/40">
+              <div
+                className="mt-2 h-1.5 overflow-hidden rounded-full bg-border/40"
+                {...progressBarA11y(child.total > 0 ? (bal / child.total) * 100 : 0, `${m.label} bucket share of balance`)}
+              >
                 <div
                   className="h-full rounded-full opacity-80 transition-all duration-500"
                   style={{

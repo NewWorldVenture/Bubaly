@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Image as ImageIcon, Plus, X, Check, Sparkles, Loader2, ArrowLeft, Camera } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { progressBarA11y } from '@/lib/ui/a11y';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input, Field, Textarea } from '@/components/ui/input';
@@ -263,7 +264,10 @@ export function CreateMemory() {
       {/* Upload progress — honest per-file bar so multi-photo saves aren't a blind wait. */}
       {saving && progress && (
         <div className="mt-3" aria-live="polite">
-          <div className="h-1.5 overflow-hidden rounded-full bg-border">
+          <div
+            className="h-1.5 overflow-hidden rounded-full bg-border"
+            {...progressBarA11y((progress.done / Math.max(progress.total, 1)) * 100, `Uploading: ${progress.done} of ${progress.total}`)}
+          >
             <div
               className="h-full rounded-full bg-brand transition-[width] duration-300"
               style={{ width: `${Math.round((progress.done / Math.max(progress.total, 1)) * 100)}%` }}

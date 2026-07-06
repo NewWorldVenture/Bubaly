@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { progressBarA11y } from '@/lib/ui/a11y';
 import type { Tables } from '@/lib/database.types';
 
 type Album = Tables<'family_albums'>;
@@ -560,7 +561,8 @@ function UploadModal({ onClose, onUpload, progress }: {
         {/* Live upload progress — honest per-file bar so multi-file uploads aren't a blind wait. */}
         {busy && progress && (
           <div aria-live="polite">
-            <div className="h-1.5 overflow-hidden rounded-full bg-border">
+            <div className="h-1.5 overflow-hidden rounded-full bg-border"
+              {...progressBarA11y((progress.done / Math.max(progress.total, 1)) * 100, `Uploading: ${progress.done} of ${progress.total}`)}>
               <div className="h-full rounded-full bg-brand transition-[width] duration-300"
                 style={{ width: `${Math.round((progress.done / Math.max(progress.total, 1)) * 100)}%` }} />
             </div>

@@ -13,6 +13,7 @@ import { Field, Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { progressBarA11y } from '@/lib/ui/a11y';
 import { formatCents, goalProgress } from '@/lib/wallet/ledger';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { createGoalAction, fundGoalAction } from '@/app/(app)/wallet/actions';
@@ -156,7 +157,7 @@ function GoalCard({ goal, canManage, onFund }: { goal: GoalView; canManage: bool
           <span className="text-sm font-bold">{formatCents(goal.savedCents)}</span>
           <span className="text-xs text-muted">of {formatCents(goal.targetCents)}</span>
         </div>
-        <div className="h-2.5 overflow-hidden rounded-full bg-border/40">
+        <div className="h-2.5 overflow-hidden rounded-full bg-border/40" {...progressBarA11y(pct, `${goal.title}: ${pct}% of goal`)}>
           <div
             className={cn('h-full rounded-full transition-all duration-700', reached ? 'bg-emerald-500' : 'bg-brand')}
             style={{ width: `${Math.min(100, pct)}%` }}
@@ -281,7 +282,7 @@ function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void 
               <p className="text-xs text-muted">{pct}% · {formatCents(remaining)} to go</p>
             </div>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-border/40">
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-border/40" {...progressBarA11y(pct, `${goal.title}: ${pct}% of goal`)}>
             <div className="h-full rounded-full bg-brand" style={{ width: `${pct}%` }} />
           </div>
         </div>

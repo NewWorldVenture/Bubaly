@@ -18,6 +18,7 @@ import { Modal } from '@/components/ui/modal';
 import { Field, Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { progressBarA11y } from '@/lib/ui/a11y';
 import { expiryStatus } from '@/lib/pantry/logic';
 import { leftoverUrgency } from '@/lib/food/leftovers';
 import type { FoodScore } from '@/lib/food/score';
@@ -210,7 +211,7 @@ function FoodScoreCard({ score }: { score: FoodScore }) {
                 <span className="text-muted">{s.label}</span>
                 <span className={cn('font-bold', scoreColor(s.score))}>{s.score}</span>
               </div>
-              <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-border/50">
+              <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-border/50" {...progressBarA11y(s.score, `${s.label}: ${s.score} of 100`)}>
                 <div className="h-full rounded-full transition-all" style={{ width: `${s.score}%`, background: scoreRing(s.score) }} />
               </div>
             </div>

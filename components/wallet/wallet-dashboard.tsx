@@ -18,6 +18,7 @@ import { EmptyState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
+import { progressBarA11y } from '@/lib/ui/a11y';
 import { fmtRelative } from '@/lib/utils/format';
 import { formatCents, type BucketKind } from '@/lib/wallet/ledger';
 import { computeFunding, serviceFeeLabel, type WalletTier } from '@/lib/wallet/fees';
@@ -329,7 +330,7 @@ function SpendingAnalytics({ analytics }: { analytics: WalletAnalytics }) {
               return (
                 <div key={type} className="flex items-center gap-2">
                   <span className="w-24 flex-shrink-0 truncate text-xs text-muted">{meta?.label ?? type.replace(/_/g, ' ')}</span>
-                  <div className="flex-1 overflow-hidden rounded-full bg-border/30 h-2">
+                  <div className="flex-1 overflow-hidden rounded-full bg-border/30 h-2" {...progressBarA11y(pct, `${meta?.label ?? type.replace(/_/g, ' ')}: ${pct}% of incoming`)}>
                     <div className={cn('h-full rounded-full transition-all duration-500', meta?.color ?? 'bg-brand')} style={{ width: `${pct}%` }} />
                   </div>
                   <span className="w-14 flex-shrink-0 text-right text-xs font-semibold">{formatCents(amount)}</span>
