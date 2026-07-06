@@ -6,6 +6,39 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ⏱️ SESSION END STATE — 2026-07-06 (branch `claude/festive-bohr-m4cbeg`) — READ THIS FIRST
+>
+> Everything below is **shipped to `main`** (fast-forward, each commit tsc/eslint/vitest/`next build`
+> green). Latest onboarding commit: `09b754e`. Newest migration on main: **`0136`**.
+>
+> **What shipped this session:** North-Star Slice 6 (Family Playbook, `0126`), Slice 4 (Command Center
+> "since yesterday" recap), across-all-families seeds (voice `0121`, playbook, operating-index), and a
+> **full onboarding rebuild** — a world-class 6-step wizard (`components/onboarding/onboarding-wizard.tsx`)
+> on the atomic `finalizeOnboardingAction`, plus `sessionStorage` resume. It was **browser-driven E2E**
+> against a locally-stood-up Supabase-compatible stack (real PG16 + all migrations + an auth/REST shim
+> enforcing real RLS). Every avenue exercised; 5 real bugs found + fixed (signup last-name dropped;
+> signup ignored `?redirect=` so invitees couldn't join; `accept_invite` not idempotent → migration
+> `0136`; resume/auto-suggest race). See the three "stone-lift" blocks below for the full record.
+>
+> **⚠️ THE ONE HUMAN-OWNED BLOCKER:** apply pending prod migrations **0118→0136** (was 0118→0135; add
+> `0136_accept_invite_idempotent.sql`) via the Supabase SQL editor or `supabase db push`. Until then,
+> the shipped features (Marketplace/Voice/Playbook/FOI/onboarding-invite idempotency) don't fully light
+> up in prod. Agent cannot execute — no prod DB creds/CLI in sandbox.
+>
+> **Local test stack (this session's sandbox only, NOT committed):** `scratchpad/sbstack/` holds the
+> Supabase shim (`shim.js`), the bootstrap SQL, and the Playwright journey scripts. It may already be
+> reaped between turns — restart Postgres (`/var/lib/postgresql/smoke/data` on :54322), then
+> `node shim.js` (:54321), then `next dev` with the `.env.local` pointing at them. Do NOT run
+> `next build` while `next dev` is live — it clobbers `.next` and the running server 500s.
+>
+> **PARKED:** Slice 7 Outcomes launcher WIP is in `scratchpad/parked-outcomes/` — but a parallel session
+> already shipped `/dashboard/outcomes` + `lib/outcomes/launcher.ts` to main, so reconcile/discard the
+> parked copy rather than resuming it blindly.
+>
+> **Suggested next avenues (untested):** accessibility/keyboard-nav pass on the wizard; the phone-auth
+> and "Continue without email" signup paths; OAuth button behavior; the email-confirmation
+> (`/auth/callback`) path when `data.session` is null.
+>
 > ## ★ 2026-07-06 (onboarding + North-Star slices) — READ FIRST
 >
 > Session shipped to `main` (each commit tsc/eslint/vitest/`next build` green; migrations + seeds
