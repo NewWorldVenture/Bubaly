@@ -55,6 +55,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/agents', label: 'Family Assistant', icon: Bot, minLevel: 0 },
       { href: '/dashboard/graph', label: 'Reasoning Graph', icon: GitBranch, minLevel: 0 },
       { href: '/dashboard/decisions', label: 'Decision Engine', icon: Scale, minLevel: 0 },
+      { href: '/dashboard/prep-plans', label: 'Prep Plans', icon: CalendarClock, minLevel: 0 },
       { href: '/dashboard/calm', label: 'Calm', icon: Leaf, minLevel: 0 },
       { href: '/dashboard/connections', label: 'Connections', icon: Network, minLevel: 0 },
       { href: '/dashboard/trust', label: 'Trust & Permissions', icon: ShieldCheck, minLevel: 0 },

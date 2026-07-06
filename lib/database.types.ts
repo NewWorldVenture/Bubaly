@@ -403,6 +403,16 @@ export interface Database {
         { id?: string; family_id: string; source_id: string; target_id: string; relation: string; weight?: number; attributes?: Json; created_by?: string | null },
         Partial<{ source_id: string; target_id: string; relation: string; weight: number; attributes: Json }>
       >;
+      prep_plans: T<
+        { id: string; family_id: string; signal_kind: string; signal_id: string; title: string; target_date: string; urgency: string; status: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; signal_kind: string; signal_id: string; title: string; target_date: string; urgency?: string; status?: string; created_by?: string | null },
+        Partial<{ signal_kind: string; signal_id: string; title: string; target_date: string; urgency: string; status: string }>
+      >;
+      prep_plan_steps: T<
+        { id: string; family_id: string; plan_id: string; label: string; href: string | null; due_date: string | null; lead_days: number; is_done: boolean; sort_order: number } & Stamps,
+        { id?: string; family_id: string; plan_id: string; label: string; href?: string | null; due_date?: string | null; lead_days?: number; is_done?: boolean; sort_order?: number },
+        Partial<{ label: string; href: string | null; due_date: string | null; lead_days: number; is_done: boolean; sort_order: number }>
+      >;
       family_decisions: T<
         { id: string; family_id: string; question: string; detail: string | null; status: string; budget_cents: number | null; max_travel_minutes: number | null; weights: Json; decided_option_id: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; question: string; detail?: string | null; status?: string; budget_cents?: number | null; max_travel_minutes?: number | null; weights?: Json; decided_option_id?: string | null; created_by?: string | null },

@@ -6,6 +6,24 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-05 (later⁴) — Autonomous Prep Plans shipped (READ FIRST)
+>
+> **"Prepare, don't notify"** (strategic vision #2 / Autonomous Planning): look ahead and produce
+> coordinated, timed plans instead of last-minute reminders.
+> - **`0131_prep_plans.sql`** — `prep_plans` (signal_kind/signal_id, target_date, urgency, status,
+>   `unique(family_id,signal_kind,signal_id)`) + `prep_plan_steps` (label, due_date, lead_days,
+>   is_done, `unique(family_id,plan_id,label)`), family RLS. **⚠️ apply to prod.** Next free: **0132**.
+> - **`lib/planning/prep.ts`** (pure, **10 tests**) — `generatePrepPlans(signals, now)`: per-kind step
+>   templates with lead times, works backward from each date, marks overdue steps, sets urgency
+>   (now/soon/later), sorts by target date. `actionablePlans()` counts the urgent ones.
+> - **`generatePrepPlansAction`** (`app/(app)/dashboard/prep-plans/prep-actions.ts`) — reads real
+>   upcoming vacations + member birthdays + expiring documents → plans, upserts idempotently (steps
+>   use ignoreDuplicates so is_done is preserved on regen).
+> - **`/dashboard/prep-plans`** ("Prep Plans", nav minLevel 0) — Generate, per-step checkboxes,
+>   dismiss, urgency badges. NOTE: route is `prep-plans` because `/dashboard/planning` already exists
+>   (the Planning & Organization hub — untouched). `seed_prep_plans.sql` (500 plans + 2000 steps).
+> - Verified: **1794 tests**, tsc, eslint green.
+>
 > ## ★ 2026-07-05 (later³) — Agents now reason over the graph (READ FIRST)
 >
 > The Chief of Staff no longer reasons only over counts — it reasons over **relationships**.
