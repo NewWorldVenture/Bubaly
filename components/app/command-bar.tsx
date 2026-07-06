@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Search, CornerDownLeft, Compass, Sparkles, ListPlus } from 'lucide-react';
+import { Search, CornerDownLeft, Compass, Sparkles, ListPlus, Wand2 } from 'lucide-react';
 import { useApp } from './app-context';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
@@ -54,7 +54,7 @@ export function CommandBar() {
 
   const run = useCallback(async (r: CommandResult | undefined) => {
     if (!r || busy) return;
-    if (r.kind === 'navigate') { setOpen(false); router.push(r.href); return; }
+    if (r.kind === 'navigate' || r.kind === 'intent') { setOpen(false); router.push(r.href); return; }
     if (r.kind === 'assistant') { setOpen(false); router.push(`/dashboard/assistant?q=${encodeURIComponent(r.query)}`); return; }
     // capture → write a real row, with Undo (saveCapture returns the result or throws)
     setBusy(true);
@@ -111,7 +111,7 @@ export function CommandBar() {
         ) : (
           <ul className="max-h-[52vh] overflow-y-auto py-1">
             {results.map((r, i) => {
-              const Icon = r.kind === 'navigate' ? Compass : r.kind === 'assistant' ? Sparkles : ListPlus;
+              const Icon = r.kind === 'navigate' ? Compass : r.kind === 'assistant' ? Sparkles : r.kind === 'intent' ? Wand2 : ListPlus;
               return (
                 <li key={`${r.kind}-${i}`}>
                   <button
@@ -121,7 +121,7 @@ export function CommandBar() {
                     disabled={busy}
                     className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm ${i === active ? 'bg-elevated' : ''}`}
                   >
-                    <Icon className={`h-4 w-4 shrink-0 ${r.kind === 'assistant' ? 'text-brand' : 'text-muted'}`} />
+                    <Icon className={`h-4 w-4 shrink-0 ${r.kind === 'assistant' || r.kind === 'intent' ? 'text-brand' : 'text-muted'}`} />
                     <span className="min-w-0 flex-1 truncate">{r.label}</span>
                     {i === active && <CornerDownLeft className="h-3.5 w-3.5 shrink-0 text-muted" />}
                   </button>

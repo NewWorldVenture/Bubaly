@@ -11,12 +11,14 @@
 // (router.push / saveCapture / assistant deep-link). Deterministic → unit-tested.
 
 import { classifyVoiceCommand, describeRoute } from '@/lib/voice/command-router';
+import { detectIntent, type FamilyIntent } from '@/lib/intent/detect';
 import type { CaptureKind } from '@/lib/capture/parse';
 
 export type CommandNavItem = { href: string; label: string };
 
 export type CommandResult =
   | { kind: 'navigate'; href: string; label: string; score: number }
+  | { kind: 'intent'; intent: FamilyIntent; href: string; label: string }
   | { kind: 'capture'; captureKind: CaptureKind; text: string; label: string; explicit: boolean }
   | { kind: 'assistant'; query: string; label: string };
 
@@ -70,9 +72,18 @@ export function routeCommand(query: string, nav: CommandNavItem[], now: Date = n
   };
   const assistant: CommandResult = { kind: 'assistant', query: q, label: `Ask the assistant: “${q}”` };
 
+  // A recognized goal ("should we…", "get ready for…") routes to the matching
+  // reasoning engine. It outranks weak nav + the assistant fallback, but not an
+  // exact nav hit or an explicit capture command.
+  const intent = detectIntent(q);
+  const intentResult: CommandResult | null = intent
+    ? { kind: 'intent', intent: intent.intent, href: intent.href, label: intent.label }
+    : null;
+
   const out: CommandResult[] = [];
   out.push(...strongNav.map(toNav));
   if (route.explicit) out.push(capture);
+  if (intentResult) out.push(intentResult);
   out.push(...weakNav.map(toNav));
   if (!route.explicit && isMultiWord(q)) out.push(capture);
   out.push(assistant);

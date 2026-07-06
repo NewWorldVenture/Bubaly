@@ -6,6 +6,19 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-05 (later⁶) — Intent-Based UX in the command bar (READ FIRST)
+>
+> **Natural-language goals → the reasoning engines** (strategic vision: Intent-Based UX).
+> - **`lib/intent/detect.ts`** (pure, part of 18 intent+command-bar tests) — `detectIntent(text)`
+>   recognizes goal phrases and routes them: "should we X or Y?" → Decision Engine, "are we ready
+>   for Monday?" → Life Readiness, "plan a trip" / "get ready for…" → Prep Plans, "what's for dinner"
+>   → Meals. Narrow patterns so ordinary nav/capture text doesn't trip them.
+> - **`lib/command-bar/route.ts`** — new `intent` CommandResult kind; ranks below an exact nav hit /
+>   explicit capture but above weak nav + the assistant fallback. **No new route or nav entry** — it's
+>   the existing ⌘K bar getting smarter.
+> - **`components/app/command-bar.tsx`** — handles the `intent` kind (router.push), Wand2 icon, brand color.
+> - Verified: **1815 tests**, tsc, eslint green.
+>
 > ## ★ 2026-07-05 (later⁵) — Life Readiness (horizon rollup) shipped (READ FIRST)
 >
 > **"Are we ready?"** (strategic vision #4): a forward-looking rollup answering readiness for
