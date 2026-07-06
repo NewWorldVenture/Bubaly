@@ -125,6 +125,52 @@ export function canAdvance(step: OnboardingStep, draft: OnboardingDraft): boolea
   }
 }
 
+/** sessionStorage key for the resumable wizard draft (versioned). */
+export const DRAFT_STORAGE_KEY = 'bubaly.onboarding.draft.v1';
+
+export interface PersistedDraftState {
+  step: OnboardingStep;
+  draft: OnboardingDraft;
+  familyNameTouched: boolean;
+}
+
+/**
+ * Serialize the resumable wizard state for sessionStorage. The PIN is
+ * deliberately NOT persisted — a refresh keeps your family details but never
+ * stashes the (soon-to-be-hashed) App Lock PIN in web storage.
+ */
+export function serializeDraftState(step: OnboardingStep, draft: OnboardingDraft, familyNameTouched: boolean): string {
+  const safeDraft: OnboardingDraft = { ...draft, pin: '', confirmPin: '' };
+  return JSON.stringify({ v: 1, step, familyNameTouched, draft: safeDraft });
+}
+
+/**
+ * Parse persisted wizard state. Returns null for anything unexpected (bad JSON,
+ * old version, unknown/terminal step) so a corrupt value never breaks the wizard
+ * — it just starts fresh. Missing fields fall back to an empty draft's defaults.
+ */
+export function parseDraftState(raw: string | null | undefined): PersistedDraftState | null {
+  if (!raw) return null;
+  try {
+    const o = JSON.parse(raw) as Record<string, unknown>;
+    if (!o || o.v !== 1 || typeof o.draft !== 'object' || o.draft === null) return null;
+    const step = o.step as OnboardingStep;
+    if (!ONBOARDING_FLOW.includes(step) || step === 'done') return null; // never resume onto the celebration
+    const d = o.draft as Partial<OnboardingDraft>;
+    const draft: OnboardingDraft = {
+      ...emptyDraft(),
+      ...d,
+      members: Array.isArray(d.members) ? d.members : [],
+      childAges: Array.isArray(d.childAges) ? d.childAges : [],
+      goals: Array.isArray(d.goals) ? d.goals : [],
+      pin: '', confirmPin: '',
+    };
+    return { step, draft, familyNameTouched: !!o.familyNameTouched };
+  } catch {
+    return null;
+  }
+}
+
 /** The payload for `finalizeOnboardingAction`, built purely from the draft. */
 export interface FinalizePayload {
   profile: { firstName: string; lastName: string; phone: string; email: string; avatarUrl?: string };

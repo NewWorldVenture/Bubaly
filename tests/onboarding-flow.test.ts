@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ONBOARDING_FLOW, PROGRESS_STEPS, nextStep, prevStep, stepIndex, progressPct,
   stepCounter, suggestFamilyName, canAdvance, emptyDraft, buildFinalizePayload,
-  isFirstStep, isLastFormStep,
+  isFirstStep, isLastFormStep, serializeDraftState, parseDraftState,
 } from '@/lib/onboarding/flow';
 
 describe('step navigation', () => {
@@ -104,5 +104,39 @@ describe('buildFinalizePayload', () => {
     const p = buildFinalizePayload(emptyDraft({ name: 'Jordan', lastName: 'Smoke' }));
     expect(p.profile.firstName).toBe('Jordan');
     expect(p.profile.lastName).toBe('Smoke');
+  });
+});
+
+describe('draft persistence (sessionStorage resume)', () => {
+  it('round-trips a draft but never persists the PIN', () => {
+    const draft = emptyDraft({
+      name: 'Jordan', familyName: 'The Jordan Family', adults: 2, children: 1, childAges: [7],
+      goals: ['chores'], pin: '1357', confirmPin: '1357',
+    });
+    const raw = serializeDraftState('about', draft, true);
+    expect(raw).not.toContain('1357');
+    const restored = parseDraftState(raw)!;
+    expect(restored.step).toBe('about');
+    expect(restored.familyNameTouched).toBe(true);
+    expect(restored.draft.name).toBe('Jordan');
+    expect(restored.draft.childAges).toEqual([7]);
+    expect(restored.draft.goals).toEqual(['chores']);
+    expect(restored.draft.pin).toBe('');       // never restored
+    expect(restored.draft.confirmPin).toBe('');
+  });
+
+  it('returns null for junk, wrong version, or the terminal step', () => {
+    expect(parseDraftState(null)).toBeNull();
+    expect(parseDraftState('not json')).toBeNull();
+    expect(parseDraftState(JSON.stringify({ v: 99, step: 'about', draft: {} }))).toBeNull();
+    expect(parseDraftState(JSON.stringify({ v: 1, step: 'done', draft: {} }))).toBeNull();
+    expect(parseDraftState(JSON.stringify({ v: 1, step: 'bogus', draft: {} }))).toBeNull();
+  });
+
+  it('fills missing fields from an empty draft (forward-compatible)', () => {
+    const restored = parseDraftState(JSON.stringify({ v: 1, step: 'profile', draft: { name: 'Kim' } }))!;
+    expect(restored.draft.name).toBe('Kim');
+    expect(restored.draft.members).toEqual([]);
+    expect(restored.draft.timezone).toBe('UTC');
   });
 });

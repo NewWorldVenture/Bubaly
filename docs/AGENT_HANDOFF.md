@@ -58,6 +58,21 @@
 >   signup (friendly error), bogus token (renders gate, no crash), wizard Back preserves the whole
 >   draft (name/age/family name), members step on a phone viewport renders correctly.
 >
+> **Onboarding stone-lift round 3 (resume + avatar + mismatch), browser-driven:**
+> - **NEW — the wizard now resumes after a refresh.** Nothing is written until Finish, so the draft
+>   is persisted to `sessionStorage` (`DRAFT_STORAGE_KEY`, PIN excluded), restored on mount, and
+>   cleared on completion. Pure helpers `serializeDraftState`/`parseDraftState` in `lib/onboarding/flow.ts`
+>   (+3 tests: PIN never persisted, junk/version/terminal-step rejected, forward-compatible field
+>   fill). Proven E2E: fill Profile→Family(custom name)→About(goal+kid), refresh → resumes on About
+>   with kid count + custom family name intact. **Self-inflicted bug caught in the same test + fixed**:
+>   the family-name auto-suggest effect ran during the restore commit and clobbered the custom name;
+>   now gated on a `hydrated` flag.
+> - Preset avatar selection persists to `profiles.avatar_url` (data-URI SVG) — verified in DB. Avatar
+>   upload uses the public `avatars` bucket (migration 0089, own-folder RLS) and degrades gracefully
+>   (error shown, never blocks) when Storage is unavailable.
+> - **Security path verified**: accepting an invite while logged in as a DIFFERENT email than the
+>   invite shows "This invite was issued to a different email" and creates NO member row.
+>
 > **2. North-Star slices shipped** (todo.md OPEN WORK TRACKER §A): **Slice 6 Family Playbook** (pillar
 > #3) — `0126_family_playbook.sql` (`family_playbook_suggestions`, RLS) + pure `lib/playbook/learn.ts`
 > (learns go-to meals / grocery staples / favourites / traditions from real tables) + `/dashboard/playbook`

@@ -30,6 +30,7 @@ import { ROLE_LABELS, type MemberRole } from '@/lib/constants/roles';
 import {
   STEP_META, progressPct, stepCounter, nextStep, prevStep, isFirstStep,
   isLastFormStep, canAdvance, suggestFamilyName, emptyDraft, buildFinalizePayload,
+  serializeDraftState, parseDraftState, DRAFT_STORAGE_KEY,
   type OnboardingStep, type OnboardingDraft,
 } from '@/lib/onboarding/flow';
 import { finalizeOnboardingAction } from '@/app/onboarding/actions';
@@ -50,6 +51,28 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
 
   const update = useCallback((patch: Partial<OnboardingDraft>) => setDraft((d) => ({ ...d, ...patch })), []);
   const firstName = draft.name.trim().split(' ')[0] || 'there';
+  // Becomes true once we've attempted a sessionStorage restore, so we never
+  // persist over (or race with) the restore on first paint.
+  const [hydrated, setHydrated] = useState(false);
+
+  // Resume an in-progress wizard after a refresh/navigation (nothing is written
+  // to the DB until Finish, so the draft lives only in sessionStorage — minus
+  // the PIN). Runs once, before the sync effects below matter.
+  useEffect(() => {
+    const restored = parseDraftState(typeof window !== 'undefined' ? sessionStorage.getItem(DRAFT_STORAGE_KEY) : null);
+    if (restored) {
+      setStep(restored.step);
+      setDraft(restored.draft);
+      setFamilyNameTouched(restored.familyNameTouched);
+    }
+    setHydrated(true);
+  }, []);
+
+  // Persist the resumable state whenever it changes (after the restore attempt).
+  useEffect(() => {
+    if (!hydrated || step === 'done') return;
+    try { sessionStorage.setItem(DRAFT_STORAGE_KEY, serializeDraftState(step, draft, familyNameTouched)); } catch { /* ignore quota */ }
+  }, [hydrated, step, draft, familyNameTouched]);
 
   // Detect the browser timezone once so the family calendar is right from day one.
   useEffect(() => {
@@ -59,10 +82,13 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
     } catch { /* keep UTC */ }
   }, []);
 
-  // Keep the family name synced to the suggestion until the user edits it.
+  // Keep the family name synced to the suggestion until the user edits it. Gated
+  // on `hydrated` so a sessionStorage restore isn't overwritten by the suggestion
+  // during the same commit (the restore sets familyNameTouched a beat later).
   useEffect(() => {
+    if (!hydrated) return;
     if (!familyNameTouched) setDraft((d) => ({ ...d, familyName: suggestFamilyName(d.name) }));
-  }, [draft.name, familyNameTouched]);
+  }, [hydrated, draft.name, familyNameTouched]);
 
   useEffect(() => { trackOnboarding('profile', 'started'); }, []);
 
@@ -75,6 +101,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
     setSaving(false);
     if (!res.ok) { toastError(res.error ?? 'Something went wrong finishing setup'); return; }
     trackOnboarding('done', 'completed');
+    try { sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* ignore */ }
     setStep('done');
   }
 
