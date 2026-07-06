@@ -307,7 +307,7 @@ export async function inviteMemberAction(input: {
  * inserting the parent member ourselves.
  */
 export async function finalizeOnboardingAction(input: {
-  profile: { firstName: string; lastName: string; phone: string; email: string; avatarUrl?: string };
+  profile: { firstName: string; lastName?: string; phone?: string; email?: string; avatarUrl?: string };
   family: { name: string; timezone: string };
   details: {
     householdAdults: number; householdChildren: number; childAges: number[];
@@ -318,6 +318,7 @@ export async function finalizeOnboardingAction(input: {
     | { kind: 'local'; name: string; role: MemberRole; birthday?: string; color?: string }
     | { kind: 'invite'; email: string; role: MemberRole }
   >;
+  appearance?: { color?: string; age?: number | string; pin?: string };
 }): Promise<Result<{ familyId: string }>> {
   const parsed = finalizeOnboardingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid onboarding data' };
@@ -326,14 +327,15 @@ export async function finalizeOnboardingAction(input: {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return { ok: false, error: 'Not signed in' };
 
-  const { profile, family, details, members } = parsed.data;
+  const { profile, family, details, members, appearance } = parsed.data;
 
-  // 1. Save profile (name, phone, email, optional avatar)
+  // 1. Save profile (name, phone, optional avatar). Email falls back to the
+  //    signed-in address — the journey never re-asks what auth already knows.
   const profileRes = await saveUserProfile(auth.user.id, {
     firstName: profile.firstName,
     lastName: profile.lastName,
     phone: profile.phone,
-    email: profile.email,
+    email: profile.email || auth.user.email || null,
     avatarUrl: profile.avatarUrl || null,
   });
   if (!profileRes.ok) return profileRes;
@@ -412,14 +414,43 @@ export async function finalizeOnboardingAction(input: {
     }
   }
 
-  // 7. Audit
+  // 7. Personal touches — the owner's member colour, age, and (optionally) a
+  //    PIN that seeds App Lock (same salted-SHA-256 scheme Settings uses, stored
+  //    DISABLED so nothing locks until the user opts in — but they won't have to
+  //    re-enter it). Service-role client: RLS writes are unreliable in this env
+  //    (see completeProfileOnboardingAction), and these are scoped strictly to
+  //    the already-authenticated user. Best-effort — never blocks completion.
+  if (appearance?.color) {
+    const { error: colorErr } = await admin.from('family_members')
+      .update({ color: appearance.color })
+      .eq('family_id', familyId).eq('user_id', auth.user.id);
+    if (colorErr) console.error('[onboarding] member colour update failed', colorErr);
+  }
+  {
+    const { data: prefRow } = await admin
+      .from('user_preferences').select('notification_prefs').eq('user_id', auth.user.id).maybeSingle();
+    const prefs = (prefRow?.notification_prefs as Record<string, unknown> | null) ?? {};
+    const merged: Record<string, unknown> = { ...prefs, onboardingComplete: true };
+    const age = normalizeAge(appearance?.age);
+    if (age !== null) merged.age = age;
+    if (appearance?.pin && isValidPin(appearance.pin)) {
+      merged.appLock = { ...(await buildAppLockConfig(appearance.pin)), enabled: false };
+    }
+    const { error: prefErr } = await admin.from('user_preferences').upsert(
+      { user_id: auth.user.id, active_family_id: familyId, notification_prefs: merged as never },
+      { onConflict: 'user_id' },
+    );
+    if (prefErr) console.error('[onboarding] preferences (PIN/age/flag) save failed', prefErr);
+  }
+
+  // 8. Audit
   await logAudit(supabase, {
     familyId, actorId: auth.user.id,
     action: 'create', resource: 'families', resourceId: familyId,
     metadata: { name: family.name, members: members.length },
   });
 
-  // 8. Fire onboarding_completed automation (best-effort)
+  // 9. Fire onboarding_completed automation (best-effort)
   try {
     const { data: prof } = await supabase
       .from('profiles').select('display_name, full_name, email').eq('id', auth.user.id).maybeSingle();

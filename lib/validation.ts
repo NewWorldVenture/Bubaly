@@ -30,10 +30,12 @@ export const createFamilySchema = z.object({
 
 export const onboardingProfileSchema = z.object({
   firstName: z.string().trim().min(1, 'Enter your first name').max(60),
-  lastName: z.string().trim().min(1, 'Enter your last name').max(60),
+  // Optional — mononyms are real, and onboarding never blocks on a surname.
+  lastName: z.string().trim().max(60).optional().default(''),
   // Phone is optional — international E.164 format (+{dialCode}{localDigits}), or empty.
   phone: z.string().max(20).optional().default(''),
-  email: emailSchema,
+  // Optional here: the finalize action falls back to the signed-in auth email.
+  email: emailSchema.optional().or(z.literal('')).default(''),
   // data: URI (preset) or Supabase Storage public URL, or empty.
   avatarUrl: z.string().max(5000).optional().default(''),
 });
@@ -101,6 +103,14 @@ export const finalizeOnboardingSchema = z.object({
   family: createFamilySchema,
   details: familyDetailsBaseSchema,
   members: z.array(draftMemberSchema).max(30).default([]),
+  // Personal touches from the journey: member colour, optional age, optional
+  // 4-digit PIN (seeds App Lock, stored hashed + disabled until enabled in
+  // Settings). All optional — never blocks completion.
+  appearance: z.object({
+    color: z.string().trim().max(9).optional().default(''),
+    age: z.union([z.coerce.number().int().min(1).max(120), z.literal('')]).optional().default(''),
+    pin: z.string().regex(/^\d{4}$/, 'PIN must be 4 digits').optional(),
+  }).optional().default({ color: '', age: '' }),
 });
 export type FinalizeOnboardingInput = z.infer<typeof finalizeOnboardingSchema>;
 

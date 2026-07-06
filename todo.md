@@ -62,11 +62,24 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 - [x] **Twin auto-refresh trigger** ✅ — `0134_model_dirty.sql`: `family_model_dirty` flag +
   SECURITY DEFINER trigger on every cross-domain source table; `needsRefresh()` (dirty wins, else TTL,
   3 tests); the `model-refresh` cron prioritizes dirty families + clears the flag. Now event-driven.
+- [x] **World-class onboarding rebuild** ✅ (2026-07-06) — the old 3-thin-step wizard (name → PIN →
+  generic done) is now a six-moment journey: **You** (avatar/name/colour) → **Your family** (smart
+  name suggestion "The Lee Family", household steppers + kids'-ages chips) → **Your people** (no-login
+  profiles for kids/grandparents + email invites w/ roles, reusing the DraftMember machinery) →
+  **What matters** (goal chips + referral) → **App lock** (optional PIN, always skippable) →
+  **Personalized launchpad** (their family name, member-avatar cluster, invites-sent note, and
+  first-action deep links derived from *their* goals). Engineering: pure `lib/onboarding/flow.ts`
+  (**15 tests**: step machine, sessionStorage draft round-trip — PIN never persisted, hostile-input
+  sanitization, family-name suggestion, goal→quick-start mapping, tz fallback); ONE atomic commit via
+  the previously-unused `finalizeOnboardingAction` (extended: email falls back to auth, `appearance`
+  {colour/age/PIN→App-Lock seed, disabled} — abandoning writes NOTHING); schemas relaxed (mononyms OK);
+  draft autosave/resume; per-step telemetry into `onboarding_events` with the funnel catalog updated
+  (legacy `profile` rows alias to `you`, funnel tests rewritten — 12 tests). tsc/eslint/**1877 vitest**/build.
 - [ ] **Messages GIF picker** — blocked on the provider key. *(external key — not agent-doable)*
 
-> **Section C status: closed except the GIF picker (needs an external provider key).** All four
-> agent-doable items are done — 2 built this session (onboarding telemetry, twin trigger), 2 were
-> already wired (FOI financial, Concierge write-back).
+> **Section C status: closed except the GIF picker (needs an external provider key).** All
+> agent-doable items are done — onboarding rebuilt world-class (2026-07-06), telemetry + twin trigger
+> built earlier, FOI financial + Concierge write-back verified already wired.
 
 ### D. ★ Moat layer shipped this session (all validated: 1838 tests / tsc / eslint / build)
 - [x] **Knowledge Graph** — `0129`, `lib/graph/reason.ts` (16 tests, impact propagation), `/dashboard/graph`, `seed_graph.sql`.

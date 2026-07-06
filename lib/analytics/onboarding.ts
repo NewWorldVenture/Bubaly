@@ -6,9 +6,14 @@
 
 export type OnboardingPhase = 'started' | 'step' | 'completed' | 'abandoned';
 
-/** The canonical onboarding steps, in order (extend as the wizard changes). */
+/** The canonical onboarding steps, in order (extend as the wizard changes).
+ *  `profile` is kept as a legacy alias of `you` so pre-rebuild funnel rows
+ *  still bucket correctly on the dashboard. */
 export const ONBOARDING_STEPS: { key: string; label: string }[] = [
-  { key: 'profile', label: 'Profile' },
+  { key: 'you', label: 'You' },
+  { key: 'family', label: 'Your family' },
+  { key: 'people', label: 'Your people' },
+  { key: 'goals', label: 'What matters' },
   { key: 'pin', label: 'App lock (PIN)' },
   { key: 'done', label: 'Done' },
 ];
@@ -65,8 +70,11 @@ export function summarizeOnboardingFunnel(
   const completionMsBySession = new Map<string, number>();
 
   for (const e of events) {
-    if (!sessionsByStep.has(e.step)) sessionsByStep.set(e.step, new Set());
-    sessionsByStep.get(e.step)!.add(e.session_id);
+    // Legacy alias: the pre-rebuild wizard logged its first step as 'profile';
+    // bucket those rows under the new 'you' step so history stays comparable.
+    const step = e.step === 'profile' ? 'you' : e.step;
+    if (!sessionsByStep.has(step)) sessionsByStep.set(step, new Set());
+    sessionsByStep.get(step)!.add(e.session_id);
     if (e.phase === 'started') startedSessions.add(e.session_id);
     if (e.phase === 'completed') {
       completedSessions.add(e.session_id);

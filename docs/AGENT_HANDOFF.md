@@ -6,6 +6,28 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-06 — WORLD-CLASS ONBOARDING SHIPPED (branch `claude/onboarding-worldclass`)
+>
+> The old 3-thin-step wizard (name → PIN → generic done) is replaced by a six-moment journey:
+> **You → Your family → Your people → What matters → App lock → Personalized launchpad.**
+> - Pure engine `lib/onboarding/flow.ts` (**15 tests**): step machine + gating, sessionStorage draft
+>   (autosave/resume; **the PIN is never persisted**; hostile input sanitized), `suggestFamilyName`
+>   ("Jordan Lee" → "The Lee Family"), `goalQuickstart` (chosen goals → real feature deep links for
+>   the finish screen), `detectTimezone`.
+> - **One atomic commit**: the previously-UNUSED `finalizeOnboardingAction` now powers the wizard —
+>   profile + family (user-chosen name + tz) + household details/goals/referral + no-login member
+>   profiles + email invites + `appearance` (member colour, age, PIN → App Lock seed stored disabled)
+>   in a single action. Abandoning mid-journey writes NOTHING. Email falls back to the auth address;
+>   `lastName` is optional (mononyms). Legacy actions kept for compat.
+> - Funnel catalog updated to the 6 new steps (`lib/analytics/onboarding.ts`); legacy `profile`
+>   events alias to `you` so `/dashboard/onboarding-funnel` history stays comparable. Funnel tests
+>   rewritten (12), flow tests added (15). tsc · eslint · **1877 vitest** · build all green.
+> - Files: `components/onboarding/onboarding-wizard.tsx` (rebuilt), `app/onboarding/page.tsx`
+>   (passes FULL name), `app/onboarding/actions.ts` (finalize extended), `lib/validation.ts`
+>   (schema relax + `appearance`), `lib/onboarding/flow.ts` (new).
+> - **No migration needed** — writes go to existing tables (`families`, `family_members`, `invites`,
+>   `family_onboarding`, `user_preferences`, `onboarding_events`).
+
 > ## ★ 2026-07-06 (later) — Intelligence Network aggregation BUILT (READ FIRST)
 >
 > Owner signed off the 5 §7 decisions; the cross-family aggregation pipeline is now built with the
