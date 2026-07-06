@@ -7,7 +7,7 @@
 // pure, tested engine at lib/graph/reason.ts.
 import { useMemo, useState } from 'react';
 import {
-  Network, GitBranch, Zap, Users, Plus, X, ArrowRight, Sparkles, Trash2, Route,
+  Network, GitBranch, Zap, Users, Plus, ArrowRight, Sparkles, Route,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -170,12 +170,12 @@ export function GraphModule() {
                 <Route className="size-4" /> How are these related?
               </h3>
               <div className="flex flex-wrap items-center gap-2">
-                <Select value={fromId} onChange={(e) => setFromId(e.target.value)} className="min-w-40 flex-1">
+                <Select aria-label="Relationship from entity" value={fromId} onChange={(e) => setFromId(e.target.value)} className="min-w-40 flex-1">
                   <option value="">From…</option>
                   {graph.entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </Select>
                 <ArrowRight className="size-4 text-muted" />
-                <Select value={toId} onChange={(e) => setToId(e.target.value)} className="min-w-40 flex-1">
+                <Select aria-label="Relationship to entity" value={toId} onChange={(e) => setToId(e.target.value)} className="min-w-40 flex-1">
                   <option value="">To…</option>
                   {graph.entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </Select>
