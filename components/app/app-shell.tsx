@@ -7,7 +7,7 @@ import { ChevronDown, Check, Gift, Home, Lock, LogOut, Menu, Plus, Search, Setti
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
 import { APP_NAV_GROUPS, MOBILE_TABS, CAPTURE_TAB_INDEX, type NavItem } from '@/lib/constants/navigation';
-import { ROLE_LABELS } from '@/lib/constants/roles';
+import { ROLE_LABELS, isManager } from '@/lib/constants/roles';
 import { tierLabelForLevel } from '@/lib/constants/plans';
 import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { cn } from '@/lib/utils/cn';
@@ -267,13 +267,14 @@ function SidebarDashboardLinks() {
 
 /** Grouped, plan-gated sidebar navigation. */
 function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
-  const { planLevel, isSuperAdmin, featureTiers } = useApp();
+  const { planLevel, isSuperAdmin, featureTiers, role } = useApp();
+  const manager = isManager(role);
   return (
     <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4 xl:px-4">
       {/* AI Assistant — pinned at the very top */}
       <AiAssistantNavButton />
       {APP_NAV_GROUPS.map((group) => {
-        const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin);
+        const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager);
         const isSuggested = group.title === 'Suggested';
         // Drop a group whose every feature is Off (the Suggested group always
         // keeps the two dashboard links, so it never disappears).
@@ -314,10 +315,10 @@ function SidebarBody({ onLocked }: { onLocked: (item: NavItem) => void }) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { planLevel, isSuperAdmin, featureTiers } = useApp();
+  const { planLevel, isSuperAdmin, featureTiers, role } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const mobileTabs = resolveItems(MOBILE_TABS, featureTiers, planLevel, isSuperAdmin);
+  const mobileTabs = resolveItems(MOBILE_TABS, featureTiers, planLevel, isSuperAdmin, isManager(role));
   const upgradeLevel: 1 | 2 = upgradeFor
     ? (featureTiers[upgradeFor.href] === 'plus' ? 2 : 1)
     : 1;
