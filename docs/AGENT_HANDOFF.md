@@ -6,6 +6,22 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-05 (later⁷) — Auto-refresh: twin + prep plans now continuous (READ FIRST)
+>
+> The twin graph + prep plans no longer need a button — a cron keeps them updated for every family.
+> - **Refactor**: extracted the on-demand actions' logic into service-callable cores —
+>   **`lib/twin/project-server.ts`** (`runTwinProjection(sb, familyId, createdBy)`) and
+>   **`lib/planning/prep-server.ts`** (`runPrepGeneration(...)`). The `projectTwinAction` /
+>   `generatePrepPlansAction` are now thin RLS-client wrappers, so on-demand + scheduled share ONE
+>   implementation (works with either the user client or the service client).
+> - **`lib/planning/refresh.ts`** (pure, **8 tests**) — `shouldRefresh(lastRefreshedAt, now, ttl=6h)`
+>   fail-open staleness gate + `summarizeSweep`.
+> - **`app/api/cron/model-refresh/route.ts`** — CRON_SECRET-guarded, service client, sweeps families,
+>   skips ones refreshed within the TTL (via latest `graph_entities.updated_at`), else runs both cores.
+>   **Added to `vercel.json`** at `0 4,16 * * *` (twice daily, offset from other crons).
+> - Verified: **1823 tests**, tsc, eslint green. Note: cron only does real work once migrations
+>   0129/0131 are applied in prod (best-effort until then).
+>
 > ## ★ 2026-07-05 (later⁶) — Intent-Based UX in the command bar (READ FIRST)
 >
 > **Natural-language goals → the reasoning engines** (strategic vision: Intent-Based UX).

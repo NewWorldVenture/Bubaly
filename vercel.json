@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/wallet-allowance",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/model-refresh",
+      "schedule": "0 4,16 * * *"
     }
   ]
 }
