@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  cohortKey, aggregateContributions, aggregatesToInsights, laplaceNoise, AGG_DEFAULTS,
-  type Contribution,
+  cohortKey, aggregateContributions, aggregatesToInsights, laplaceNoise, filterMetricsByScopes,
+  AGG_DEFAULTS, type Contribution,
 } from '@/lib/network/aggregate';
 import type { ContributionFeatures } from '@/lib/network/contribution';
 
@@ -77,6 +77,35 @@ describe('aggregatesToInsights', () => {
     expect(insights[0].cohortSize).toBe(120);
     // a different cohort sees nothing
     expect(aggregatesToInsights(agg, 'kids:none|size:1–2')).toEqual([]);
+  });
+});
+
+describe('filterMetricsByScopes — write-side granular consent', () => {
+  const metrics = { dinner_habit: 'often (4–5)', activities: '3–4' };
+
+  it('drops all metrics when their scope is not opted in', () => {
+    // dinner_habit + activities are 'benchmarks'; family opted into timing only.
+    expect(filterMetricsByScopes(metrics, { timing: true })).toEqual({});
+  });
+
+  it('keeps metrics whose scope is explicitly true', () => {
+    expect(filterMetricsByScopes(metrics, { benchmarks: true })).toEqual(metrics);
+  });
+
+  it('treats missing/false scope values as not consented', () => {
+    expect(filterMetricsByScopes(metrics, {})).toEqual({});
+    expect(filterMetricsByScopes(metrics, { benchmarks: false })).toEqual({});
+  });
+
+  it('a scope-stripped contribution adds nothing to aggregation', () => {
+    // 120 families opted into benchmarks + 120 who only opted into timing:
+    // only the benchmark-consenting families should back the aggregate.
+    const consenting = cohortOf(120, 'yes');
+    const timingOnly = cohortOf(120, 'no').map((c) => ({
+      ...c, metrics: filterMetricsByScopes(c.metrics, { timing: true }),
+    }));
+    const agg = aggregateContributions([...consenting, ...timingOnly]);
+    expect(agg[0].cohortSize).toBe(120); // not 240
   });
 });
 

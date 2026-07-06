@@ -12,8 +12,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { contributionFeatures, type ContributionInput } from './contribution';
 import {
-  aggregateContributions, cohortKey, laplaceNoise, AGG_DEFAULTS, type Contribution,
+  aggregateContributions, cohortKey, laplaceNoise, filterMetricsByScopes,
+  AGG_DEFAULTS, type Contribution,
 } from './aggregate';
+import type { ConsentScope } from './insights';
 
 type DB = SupabaseClient<Database>;
 
@@ -59,18 +61,24 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   const optedIn = consents ?? [];
 
   // 2. CONTRIBUTE — refresh each opted-in family's coarse row; drop everyone else's.
+  // Granular consent is enforced HERE: only metrics whose scope the family
+  // toggled on are kept, so an opt-in to (say) 'timing' alone never feeds the
+  // 'benchmarks' aggregates.
   const contributions: Contribution[] = [];
   for (const c of optedIn) {
     const contrib = await buildContribution(sb, c.family_id, now);
     if (!contrib) continue;
+    const scopes = (c.scopes ?? {}) as Partial<Record<ConsentScope, boolean>>;
+    contrib.metrics = filterMetricsByScopes(contrib.metrics, scopes);
     contributions.push(contrib);
-    await sb.from('network_contributions').upsert({
+    const { error: upErr } = await sb.from('network_contributions').upsert({
       family_id: c.family_id,
       cohort_key: cohortKey(contrib.features),
       features: contrib.features as unknown as Database['public']['Tables']['network_contributions']['Insert']['features'],
       metrics: contrib.metrics,
       scopes: c.scopes,
     }, { onConflict: 'family_id' });
+    if (upErr) console.error(`network_contributions upsert failed for ${c.family_id}:`, upErr.message);
   }
   // Right-to-be-forgotten: remove contributions for families no longer opted in.
   const keepIds = new Set(optedIn.map((c) => c.family_id));
@@ -86,14 +94,21 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
     noise: (scale) => laplaceNoise(scale),
   });
 
-  // 4. Replace the published set (delete-all then insert; only >= K rows exist here).
-  await sb.from('network_aggregates').delete().gte('cohort_size', 0);
+  // 4. Republish: upsert the new set on the natural key, THEN prune rows this run
+  //    didn't touch (stale computed_at). Avoids the delete-all-then-insert window
+  //    where a failed insert would leave the table silently empty.
   if (aggregates.length) {
-    await sb.from('network_aggregates').insert(aggregates.map((a) => ({
-      scope: a.scope, cohort_key: a.cohortKey, metric: a.metric, value: a.value,
-      count: a.count, cohort_size: a.cohortSize, computed_at: now.toISOString(),
-    })));
+    const { error: upsertErr } = await sb.from('network_aggregates').upsert(
+      aggregates.map((a) => ({
+        scope: a.scope, cohort_key: a.cohortKey, metric: a.metric, value: a.value,
+        count: a.count, cohort_size: a.cohortSize, computed_at: now.toISOString(),
+      })),
+      { onConflict: 'scope,cohort_key,metric,value' },
+    );
+    if (upsertErr) return { ok: false, error: upsertErr.message, contributors: contributions.length, aggregates: 0 };
   }
+  const { error: pruneErr } = await sb.from('network_aggregates').delete().lt('computed_at', now.toISOString());
+  if (pruneErr) return { ok: false, error: pruneErr.message, contributors: contributions.length, aggregates: aggregates.length };
 
   return { ok: true, contributors: contributions.length, aggregates: aggregates.length };
 }

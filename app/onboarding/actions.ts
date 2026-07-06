@@ -355,25 +355,56 @@ export async function finalizeOnboardingAction(input: {
 
   const familyId = familyRow.id;
 
-  // 3. Set this as the active family
-  await supabase.from('user_preferences').upsert(
+  // 2b. Explicitly create (or reconcile) the owner's parent membership — do NOT
+  //     rely on the `handle_new_family` trigger, which isn't guaranteed to be
+  //     installed/active in every environment (see ensure-family.ts: trusting it
+  //     is exactly what caused the original onboarding loop). The upsert is
+  //     idempotent: if the trigger DID fire we just reconcile name/colour/role.
+  //     This is FATAL on failure — a family without its owner as a member would
+  //     bounce the user straight back into onboarding.
+  const { error: ownerErr } = await admin.from('family_members').upsert(
+    {
+      family_id: familyId,
+      user_id: auth.user.id,
+      role: 'parent',
+      display_name: profile.firstName.trim(),
+      color: appearance.color ?? null,
+      is_active: true,
+    },
+    { onConflict: 'family_id,user_id' },
+  );
+  if (ownerErr) {
+    console.error('[onboarding] parent member upsert failed', ownerErr);
+    return { ok: false, error: 'Could not finish setting up your space. Please try again.' };
+  }
+
+  // 2c. Ensure a trial subscription exists (the trigger may have created one;
+  //     only insert when missing so we never duplicate). Non-fatal.
+  const { data: existingSub } = await admin
+    .from('subscriptions').select('id').eq('family_id', familyId).limit(1);
+  if (!existingSub || existingSub.length === 0) {
+    const { error: subErr } = await admin.from('subscriptions').insert({
+      family_id: familyId, plan: 'free', status: 'trialing',
+      current_period_end: new Date(Date.now() + 14 * 86400000).toISOString(),
+    });
+    if (subErr) console.error('[onboarding] trial subscription insert failed', subErr);
+  }
+
+  // 3. Set this as the active family (service-role + logged: if this silently
+  //    failed under RLS the user could land on an auto-provisioned space instead
+  //    of the family they just named).
+  const { error: activeErr } = await admin.from('user_preferences').upsert(
     { user_id: auth.user.id, active_family_id: familyId },
     { onConflict: 'user_id' },
   );
+  if (activeErr) console.error('[onboarding] active-family save failed', activeErr);
 
-  // 3b. Apply the account holder's chosen colour to the parent member the
-  //     handle_new_family trigger just created (service-role: RLS writes are
-  //     flaky in this env — see ensure-family.ts).
-  if (appearance.color) {
-    const { error: colorErr } = await admin.from('family_members')
-      .update({ color: appearance.color }).eq('family_id', familyId).eq('user_id', auth.user.id);
-    if (colorErr) console.error('[onboarding] member colour update failed', colorErr);
-  }
-
-  // 4. Save family details / onboarding questionnaire
+  // 4. Save family details / onboarding questionnaire (service-role + logged —
+  //    same flaky-RLS rationale as steps 2/3b: a silent failure here loses the
+  //    household details the user just typed).
   const goals = cleanGoals(details.goals);
   const referralSource = cleanReferralSource(details.referralSource);
-  await supabase.from('family_onboarding').upsert(
+  const { error: detailsErr } = await admin.from('family_onboarding').upsert(
     {
       family_id: familyId,
       household_adults: details.householdAdults,
@@ -390,36 +421,42 @@ export async function finalizeOnboardingAction(input: {
     },
     { onConflict: 'family_id' },
   );
+  if (detailsErr) console.error('[onboarding] family details save failed', detailsErr);
 
-  // 5. Insert local (managed) members — no user_id, no login
+  // 5. Insert local (managed) members — no user_id, no login (service-role +
+  //    logged so a member the user added never silently vanishes).
   for (const m of members) {
     if (m.kind !== 'local') continue;
-    await supabase.from('family_members').insert({
+    const { error: memberErr } = await admin.from('family_members').insert({
       family_id: familyId,
       role: m.role,
       display_name: m.name,
       color: m.color ?? null,
       birthday: m.birthday || null,
     });
+    if (memberErr) console.error(`[onboarding] member "${m.name}" insert failed`, memberErr);
   }
 
-  // 6. Create invites and send email join links
+  // 6. Create invites and send email join links (invite row via service role +
+  //    logged; the email itself is best-effort and never throws).
   const origin = process.env.NEXT_PUBLIC_SITE_URL ?? APP_URL;
   for (const m of members) {
     if (m.kind !== 'invite') continue;
-    const { data: invite } = await supabase
+    const { data: invite, error: inviteErr } = await admin
       .from('invites')
       .insert({ family_id: familyId, email: m.email, role: m.role, invited_by: auth.user.id })
       .select('token')
       .single();
-    if (invite) {
-      const link = `${origin}/join?token=${invite.token}`;
-      await sendEmail({
-        to: m.email,
-        subject: 'You’re invited to a family on Bubaly',
-        html: `<p>You’ve been invited to join a family on Bubaly.</p><p><a href="${link}">Accept your invite</a></p>`,
-      });
+    if (inviteErr || !invite) {
+      console.error(`[onboarding] invite for ${m.email} failed`, inviteErr);
+      continue;
     }
+    const link = `${origin}/join?token=${invite.token}`;
+    await sendEmail({
+      to: m.email,
+      subject: 'You’re invited to a family on Bubaly',
+      html: `<p>You’ve been invited to join a family on Bubaly.</p><p><a href="${link}">Accept your invite</a></p>`,
+    });
   }
 
   // 6b. Persist the account holder's age + optional App Lock PIN + the

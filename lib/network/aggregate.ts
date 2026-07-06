@@ -54,6 +54,23 @@ function metricScope(metric: string): ConsentScope {
   return METRIC_SCOPE[metric] ?? 'benchmarks';
 }
 
+/**
+ * Granular-consent gate at CONTRIBUTION time: keep only the metrics whose scope
+ * the family explicitly toggled on. This is the write-side half of the scopes
+ * guarantee — the read side (visibleInsights) already filters what a family
+ * SEES; this ensures a family never CONTRIBUTES to a scope it didn't opt into.
+ */
+export function filterMetricsByScopes(
+  metrics: Record<string, string>,
+  scopes: Partial<Record<ConsentScope, boolean>>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [metric, value] of Object.entries(metrics)) {
+    if (scopes[metricScope(metric)] === true) out[metric] = value;
+  }
+  return out;
+}
+
 /** Deterministic-by-default noise; the cron injects a real Laplace sampler. */
 export type NoiseFn = (scale: number) => number;
 const NO_NOISE: NoiseFn = () => 0;

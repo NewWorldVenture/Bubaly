@@ -8,7 +8,6 @@
 import type { MemberRole } from '@/lib/constants/roles';
 import type { DraftMember } from './draft';
 import { normalizeAge } from './pin';
-import { parseChildAges } from './family';
 
 export type OnboardingStep = 'profile' | 'family' | 'about' | 'members' | 'pin' | 'done';
 
@@ -191,20 +190,25 @@ export interface FinalizePayload {
  * Map the collected draft to the single finalize action's input. Child ages are
  * normalized/clamped; the PIN is only included when valid; empty optionals are
  * passed through as '' so the schema's fallbacks kick in.
+ *
+ * Ages of 0 are treated as "not provided" and dropped: the wizard's age inputs
+ * render 0 as an empty field (a real 0 can't be expressed), and the Kids stepper
+ * pre-fills unanswered slots with 0 — persisting those would record phantom
+ * infants in family_onboarding.
  */
 export function buildFinalizePayload(draft: OnboardingDraft): FinalizePayload {
   const firstName = draft.name.trim();
   const validPin = /^\d{4}$/.test(draft.pin.trim()) && draft.pin.trim() === draft.confirmPin.trim();
-  const childAges = draft.childAges.length
-    ? draft.childAges.slice(0, 20)
-    : parseChildAges(String(draft.children));
+  const childAges = draft.childAges
+    .slice(0, 20)
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 21);
   return {
     profile: { firstName, lastName: draft.lastName.trim(), phone: '', email: '', avatarUrl: draft.avatarUrl || undefined },
     family: { name: draft.familyName.trim() || suggestFamilyName(firstName), timezone: draft.timezone || 'UTC' },
     details: {
       householdAdults: Math.max(0, draft.adults),
       householdChildren: Math.max(0, draft.children),
-      childAges: childAges.filter((n) => Number.isFinite(n)),
+      childAges,
       goals: draft.goals,
       referralSource: draft.referralSource || undefined,
       referralDetail: draft.referralDetail || undefined,

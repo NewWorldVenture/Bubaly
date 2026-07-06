@@ -105,6 +105,27 @@ describe('buildFinalizePayload', () => {
     expect(p.profile.firstName).toBe('Jordan');
     expect(p.profile.lastName).toBe('Smoke');
   });
+
+  it('never records a phantom child age for a no-kids family', () => {
+    // Regression: the old fallback parsed the kid COUNT as an age, so a
+    // children:0 draft recorded child_ages [0] — one phantom infant.
+    const p = buildFinalizePayload(emptyDraft({ name: 'Kim', children: 0, childAges: [] }));
+    expect(p.details.childAges).toEqual([]);
+    expect(p.details.householdChildren).toBe(0);
+  });
+
+  it('drops 0 placeholder ages from the Kids stepper (0 = "not provided" in this UI)', () => {
+    // Stepper pre-fills unanswered age slots with 0; the age input renders 0 as
+    // an empty field, so a real 0 can't be expressed and must not persist.
+    const p = buildFinalizePayload(emptyDraft({ name: 'Kim', children: 3, childAges: [0, 7, 0] }));
+    expect(p.details.childAges).toEqual([7]);
+    expect(p.details.householdChildren).toBe(3); // the count is still truthful
+  });
+
+  it('clamps and drops out-of-range ages', () => {
+    const p = buildFinalizePayload(emptyDraft({ name: 'Kim', children: 2, childAges: [22, 5] }));
+    expect(p.details.childAges).toEqual([5]); // 22 exceeds the 21 schema max
+  });
 });
 
 describe('draft persistence (sessionStorage resume)', () => {
