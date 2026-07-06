@@ -45,9 +45,9 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   (+ earlier pillar entries). Pages stay URL-reachable if removed from the sidebar.
 
 ### B. Operational — prod go-live (owner action, not code)
-- [ ] **Apply migrations 0125→0132 to prod** (`supabase db push`). THE blocker — everything
-  reads these; silently no-ops until applied.
-- [ ] **Set `CRON_SECRET` in prod** → activates the `model-refresh` cron (twin + prep auto-refresh).
+- [ ] **Apply migrations 0125→0135 to prod** (`supabase db push`, or paste `supabase/APPLY_PENDING_0118-0135.sql`).
+  THE blocker — everything reads these; silently no-ops until applied.
+- [ ] **Set `CRON_SECRET` in prod** → activates the `model-refresh` + `network-aggregate` crons.
 - [ ] Keys that light up already-built paths: **VAPID/FCM** (push) · **Maps/ETA** (travel buffer) ·
   **GIF provider** (Messages picker) · **Stripe Issuing** (Wallet card balances).
 
@@ -77,8 +77,9 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 - [x] **Life Readiness (horizon rollup)** — `lib/readiness/assess.ts` (11 tests), embedded on `/dashboard/readiness`.
 - [x] **Intent-Based UX** — `lib/intent/detect.ts` + command-bar integration (18 tests).
 - [x] **Auto-refresh cron** — `lib/planning/refresh.ts` (8 tests) + `app/api/cron/model-refresh` + `vercel.json`.
-- [x] **Intelligence Network foundation** — `0132`, `lib/network/insights.ts` (k-anonymity, 9 tests) +
-  `lib/network/contribution.ts` (informed-consent preview, 6 tests), `/dashboard/intelligence`. Aggregation deferred (§A).
+- [x] **Intelligence Network (full)** — `0132` consent + k-anonymity (`lib/network/insights.ts`, 9 tests)
+  + informed-consent preview (`lib/network/contribution.ts`, 6 tests) + `0135` **aggregation pipeline**
+  (`lib/network/aggregate.ts`, 9 tests; `network-aggregate` cron; real insights on `/dashboard/intelligence`).
 
 ### E. Full 500-record seed coverage
 - [x] Every user-facing surface has a validated, idempotent 500-row seed (see the Seed-coverage tracker below).
