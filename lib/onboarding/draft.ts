@@ -107,6 +107,16 @@ export function draftMemberLabel(m: DraftMember): string {
   return m.kind === 'invite' ? m.email : m.name;
 }
 
+/**
+ * Local (no-email) members who are kids — the ones a parent can give a
+ * username + PIN login via /dashboard/family-access once onboarding finishes.
+ * Invite members get their own email-based login, so they're excluded. Used to
+ * surface the "set up Kid Logins" nudge on the Done screen when it's relevant.
+ */
+export function kidsNeedingLogin(members: readonly DraftMember[]): DraftMember[] {
+  return members.filter((m) => m.kind === 'local' && (m.role === 'child' || m.role === 'teen'));
+}
+
 export interface MemberSummary { local: number; invites: number; text: string }
 
 /** A short human summary, e.g. "3 profiles · 1 invite". */
