@@ -159,25 +159,29 @@ export function runAgent(id: Exclude<AgentId, 'chief_of_staff'>, c: AgentContext
  * The Chief of Staff synthesizes every specialist's briefing: it surfaces the
  * highest-severity items across all agents and a one-line state of the household.
  */
-export function chiefOfStaff(specialists: AgentBriefing[]): AgentBriefing {
+export function chiefOfStaff(specialists: AgentBriefing[], extraItems: AgentItem[] = []): AgentBriefing {
   const rank: Record<AgentSeverity, number> = { action: 0, attention: 1, info: 2 };
-  const allItems = specialists.flatMap((b) => b.items);
-  const top = [...allItems].sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, 5);
+  // Specialist items drive the status; extra items (e.g. graph-reasoning insights
+  // about relationships/ripple effects) join the candidate pool so they can surface
+  // when the household is otherwise calm.
+  const specialistItems = specialists.flatMap((b) => b.items);
+  const top = [...specialistItems, ...extraItems].sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, 5);
   const actionAreas = specialists.filter((b) => b.status === 'action').length;
   const attnAreas = specialists.filter((b) => b.status !== 'clear').length;
-  const status = statusFor(allItems);
+  const status = statusFor(specialistItems);
   const headline = status === 'clear'
     ? CLEAR_HEADLINE.chief_of_staff
-    : `${plural(allItems.filter((i) => i.severity !== 'info').length, 'thing')} across ${plural(attnAreas, 'area')} — ${actionAreas > 0 ? `${actionAreas} need${actionAreas === 1 ? 's' : ''} action first.` : 'nothing urgent.'}`;
+    : `${plural(specialistItems.filter((i) => i.severity !== 'info').length, 'thing')} across ${plural(attnAreas, 'area')} — ${actionAreas > 0 ? `${actionAreas} need${actionAreas === 1 ? 's' : ''} action first.` : 'nothing urgent.'}`;
   return { agentId: 'chief_of_staff', status, headline, items: top };
 }
 
-/** Run the whole roster (Chief of Staff synthesizes the rest). */
-export function runAllAgents(c: AgentContext): AgentBriefing[] {
+/** Run the whole roster (Chief of Staff synthesizes the rest). `extraItems` lets the
+ *  caller inject graph-reasoning insights into the Chief of Staff's synthesis. */
+export function runAllAgents(c: AgentContext, extraItems: AgentItem[] = []): AgentBriefing[] {
   const specialists = AGENTS
     .filter((a): a is Agent & { id: Exclude<AgentId, 'chief_of_staff'> } => a.id !== 'chief_of_staff')
     .map((a) => runAgent(a.id, c));
-  return [chiefOfStaff(specialists), ...specialists];
+  return [chiefOfStaff(specialists, extraItems), ...specialists];
 }
 
 /** Count of agents that need attention (status !== clear), Chief of Staff excluded. */

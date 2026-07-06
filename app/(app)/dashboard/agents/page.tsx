@@ -3,6 +3,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { AgentsModule } from '@/components/modules/agents-module';
 import { runAllAgents, type AgentContext } from '@/lib/agents/roster';
+import { graphInsights } from '@/lib/agents/graph-insight';
+import type { EntityKind, Graph } from '@/lib/graph/reason';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import type { Tables } from '@/lib/database.types';
 
@@ -52,6 +54,20 @@ export default async function AgentsPage() {
     count(supabase.from('family_photos').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('created_at', new Date(now.getTime() - 14 * 86_400_000).toISOString())),
   ]);
 
+  // Knowledge graph → relationship-level reasoning for the Chief of Staff. Reads are
+  // best-effort: a missing table (migration not yet applied) yields no insights, never
+  // an error.
+  const [graphEntities, graphEdges] = await Promise.all([
+    supabase.from('graph_entities').select('id, kind, name').eq('family_id', familyId).limit(2000),
+    supabase.from('graph_edges').select('id, source_id, target_id, relation, weight').eq('family_id', familyId).limit(4000),
+  ]);
+  const graph: Graph = {
+    entities: (graphEntities.data ?? []).map((e) => ({ id: e.id, kind: e.kind as EntityKind, name: e.name })),
+    edges: (graphEdges.data ?? []).map((e) => ({
+      id: e.id, sourceId: e.source_id, targetId: e.target_id, relation: e.relation, weight: Number(e.weight),
+    })),
+  };
+
   const events = weekEvents.data ?? [];
   const eventsToday = events.filter((e) => e.starts_at.slice(0, 10) === todayKey).length;
   const unassignedEvents = events.filter((e) => !e.assignee_id).length;
@@ -88,6 +104,6 @@ export default async function AgentsPage() {
     newMemories, unreadMessages: 0, pendingApprovals,
   };
 
-  const briefings = runAllAgents(context);
+  const briefings = runAllAgents(context, graphInsights(graph));
   return <AgentsModule briefings={briefings} activity={(activityRows.data ?? []) as Tables<'agent_activity'>[]} />;
 }

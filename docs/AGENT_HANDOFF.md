@@ -6,6 +6,17 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-05 (later³) — Agents now reason over the graph (READ FIRST)
+>
+> The Chief of Staff no longer reasons only over counts — it reasons over **relationships**.
+> - **`lib/agents/graph-insight.ts`** (pure, **6 tests**) — `graphInsights(graph)`: surfaces the
+>   coordination **hub** + its impact ripple count, and flags **unlinked** entities (coverage gaps).
+> - **`roster.ts`** — `chiefOfStaff(specialists, extraItems?)` + `runAllAgents(ctx, extraItems?)` now
+>   accept injected items (back-compatible defaults; existing 11 roster tests untouched). Insights are
+>   info-level so they never change status, but rise into the Chief of Staff's top items when calm.
+> - **`/dashboard/agents` page** — loads `graph_entities`/`graph_edges` (best-effort; missing table =
+>   no insights, never an error) and passes `graphInsights(graph)` into `runAllAgents`. 1784 tests green.
+>
 > ## ★ 2026-07-05 (later²) — Decision Engine shipped (READ FIRST)
 >
 > **Family Decision Engine** (strategic vision #3): score trade-offs, explain, family decides.
