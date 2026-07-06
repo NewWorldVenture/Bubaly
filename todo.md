@@ -439,7 +439,17 @@ idempotent, stable across re-runs):
 ---
 
 ## Dead / stubbed UI to finish or hide
-- [ ] Messages → GIF picker (`messages-module.tsx`): toasts "coming soon" — needs a GIF provider key.
+- [ ] **Messages → GIF picker** (FUTURE FOLLOW-UP — needs an external provider key). Stub:
+  `components/modules/messages-module.tsx` (~line 876) — the "GIF" button toasts "coming soon".
+  **Implementation plan** (code-complete + key-gated, mirror the Family-API pattern):
+  1. Pick a provider — **Giphy** or **Tenor** (both have free tiers + search endpoints).
+  2. Add the key to env: `GIPHY_API_KEY` (server) — proxy GIF search through a route
+     (`app/api/gif/search/route.ts`) so the key never ships to the client.
+  3. Build a `GifPicker` popover (query input → grid of results → pick → send as a `family_messages`
+     row with `kind: 'image'` + the GIF url, reusing the existing image-message render path).
+  4. Graceful fallback: if the key is absent, keep the button disabled with a "not configured" tooltip
+     (don't toast "coming soon"). Same honest gating as Connections/OAuth.
+  *Blocked only on the key; everything else is agent-buildable when you're ready to green-light a provider.*
 - [x] Messages → Voice messages — DONE. `MediaRecorder` in `messages-module.tsx` records a clip → uploads through the existing `sendFile` path (kind `audio`, 25 MB cap + rollback) → renders an inline `<audio controls>` player. Live timer + cancel/discard; graceful "not supported" fallback. 100% Supabase (family-media storage + family_messages row).
 - [x] Family page → "Wi-Fi & Passwords" — shipped as the Family Vault: `family_credentials` table + `/dashboard/passwords` (CRUD, mask/reveal/copy, RLS). *(parallel session)*
 

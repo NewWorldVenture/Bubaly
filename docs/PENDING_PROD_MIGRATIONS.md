@@ -20,13 +20,13 @@ authoritative list.
   (guarded with `IF NOT EXISTS` / `EXCEPTION WHEN duplicate_object` / drift-safe
   policy re-creates), so re-running an already-applied one is a no-op.
 - **Supabase SQL editor — ONE paste (easiest):** open
-  **`supabase/APPLY_PENDING_0118-0125.sql`**, copy the whole file, paste into the
-  SQL editor, and Run. It's all 8 migrations concatenated in order inside a single
+  **`supabase/APPLY_PENDING_0118-0134.sql`**, copy the whole file, paste into the
+  SQL editor, and Run. It's all 17 migrations concatenated in order inside a single
   `BEGIN/COMMIT` (verified free of transaction-hostile statements), so it either
   fully applies or rolls back cleanly with nothing half-done. Re-running is a no-op.
 - **Supabase SQL editor (per file):** paste each file below **in numeric order**
   and Run. Order matters only in that later migrations may reference earlier
-  tables; applying 0118 → 0125 in sequence is always safe.
+  tables; applying 0118 → 0134 in sequence is always safe.
 
 > **Agents cannot execute this** — there are no prod DB credentials or Supabase
 > CLI in the build sandbox (verified). Applying to prod is human-owned; the
@@ -48,6 +48,15 @@ After applying, hard-refresh the app: Marketplace, `/dashboard/voice`,
 | 0123 | `0123_family_facts.sql` | `family_facts` durable-knowledge store | Family Knowledge Base `/dashboard/knowledge` (+ knowledge-graph fact nodes) |
 | 0124 | `0124_journey_events.sql` | `journey_events` append-only telemetry | Experience Scorecard `/dashboard/journeys` |
 | 0125 | `0125_family_operating_index.sql` | `family_operating_index` daily snapshots (composite + dimensions + suggestions) | Family Operating Index `/dashboard/family-operating-index` (the page renders live even before apply; the table only backs the day-over-day **trend**) |
+| 0126 | `0126_family_playbook.sql` | `family_playbook_suggestions` | Family Playbook `/dashboard/playbook` |
+| 0127 | `0127_agent_activity.sql` | `agent_activity` | Family Assistant / agents `/dashboard/agents` + Calm inbox |
+| 0128 | `0128_family_connections.sql` | `family_connections` | Connections hub `/dashboard/connections` |
+| 0129 | `0129_family_graph.sql` | `graph_entities`, `graph_edges` | Knowledge/Reasoning Graph `/dashboard/graph` + twin projector + graph-aware Chief of Staff |
+| 0130 | `0130_family_decisions.sql` | `family_decisions`, `decision_options` | Decision Engine `/dashboard/decisions` |
+| 0131 | `0131_prep_plans.sql` | `prep_plans`, `prep_plan_steps` | Prep Plans `/dashboard/prep-plans` + Life Readiness horizon rollup |
+| 0132 | `0132_network_consent.sql` | `network_consent` | Intelligence Network consent `/dashboard/intelligence` |
+| 0133 | `0133_onboarding_events.sql` | `onboarding_events` | Onboarding funnel `/dashboard/onboarding-funnel` (super-admin) |
+| 0134 | `0134_model_dirty.sql` | `family_model_dirty` + `mark_model_dirty()` triggers | Event-driven twin/prep refresh (the `model-refresh` cron; also needs `CRON_SECRET`) |
 
 If prod is further behind than 0118, `supabase db push` will also pick up any
 earlier un-applied migrations (0104, 0111, 0113, 0117, …) — all additive, all
@@ -61,11 +70,23 @@ Several version prefixes are **duplicated** by parallel work streams:
 (`documents_favorite`, `finance_rls_repair`, `user_preferences_rls_repair`), and
 `0110` (`family_profile`, `transactions_member`). Supabase orders by full
 filename so this still applies deterministically, but a future migration should
-**not** reuse a taken prefix. Next free number: **0125**.
+**not** reuse a taken prefix. Next free number: **0135**.
+
+## Environment variables (set alongside the migrations)
+
+- **`CRON_SECRET`** — required to activate the Vercel crons, including the new
+  `model-refresh` cron (event-driven twin + prep-plan refresh). Without it the
+  cron endpoints return 401 and the model only updates on the one-tap "Rebuild".
+- Optional keys that light up already-built, key-gated paths: **VAPID/FCM** (push),
+  **Maps/ETA** (leave-by travel buffer), **Giphy/Tenor** (Messages GIF picker),
+  **Stripe Issuing** (real-time Wallet card balances).
 
 ## Test data (optional, after migrations)
 
-Per-feature 500-row seeds target the demo family
-`92298eb2-1a9e-4bdc-9361-677b6c01b499` (newworldventurellc@gmail.com):
-`db:seed:wallet-ledger`, `db:seed:voice`, plus the in-app **Copy SQL** seed
-screens (Marketplace, Knowledge Base). All are idempotent.
+Per-feature **500-row seeds** live in `supabase/seed_*.sql` — paste-ready,
+idempotent, resolve the family by email. Coverage now spans every user-facing
+surface (see the Seed-coverage tracker in `todo.md`): core content, all 9 North
+Star pillars, Messages/Chores/Meals/Documents/Location/Finance/Memories/Autopilot/
+Vault, the Knowledge Graph, Decisions, Prep Plans, and the Onboarding funnel
+(`seed_onboarding_events.sql`). Older paths also expose `db:seed:wallet-ledger`,
+`db:seed:voice`, and the in-app **Copy SQL** screens (Marketplace, Knowledge Base).
