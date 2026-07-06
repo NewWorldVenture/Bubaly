@@ -41,8 +41,17 @@
 > fields; step content is a labelled `role="group"`; colour swatches got `aria-pressed`. (Complements
 > the parallel session's progress-bar a11y, which was bars only.)
 >
-> **Suggested next avenues (untested):** the phone-auth and "Continue without email" signup paths;
-> OAuth button behavior; the email-confirmation (`/auth/callback`) path when `data.session` is null.
+> **Signup avenues (phone / OAuth / callback) — DONE** (browser-verified via a phone-OTP shim):
+> Found + fixed TWO real bugs. (1) **Invited users on phone/OAuth ignored `?redirect=`** — signup +
+> login hardcoded `next="/onboarding"`/`/dashboard` for `OAuthButtons`+`PhoneAuth`, so an invitee who
+> chose Google/Apple/phone created their own family instead of joining. Now every avenue (email, phone,
+> OAuth) threads the same same-origin `?redirect=`. (2) **Phone OTP auto-submit was broken** — on the
+> 6th digit, `OtpInput.onComplete(fullCode)` fired but `PhoneAuth` ignored the arg and read stale
+> `code` state, so `verifyOtp` silently bailed (only the manual "Verify" button worked). `verify(otp?)`
+> now uses the passed code. Also: `/auth/callback` failures now surface a visible message on `/login`
+> (`?error=auth`). Proven E2E: full phone signup→onboarding, invite→phone→/join, OAuth `redirect_to`
+> carries the right `next` (plain + invite), callback error path. tsc/eslint/vitest/build green. (Shim
+> gained `/auth/v1/otp`+`/verify`; scripts in `sbstack/`.)
 >
 > ## ★ 2026-07-06 (onboarding + North-Star slices) — READ FIRST
 >

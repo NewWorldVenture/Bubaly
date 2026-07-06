@@ -51,10 +51,15 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
     startCountdown();
   }
 
-  async function verify() {
-    if (!isValidOtp(code)) return;
+  // `otp` is passed by OtpInput's onComplete (the full code); the manual button
+  // falls back to state. Using the argument avoids a stale-closure race where
+  // auto-submit on the 6th digit read the pre-update `code` and silently bailed —
+  // so the code never verified until the user also clicked "Verify & continue".
+  async function verify(otp?: string) {
+    const token = otp ?? code;
+    if (!isValidOtp(token)) return;
     setVerifying(true);
-    const { error } = await createClient().auth.verifyOtp({ phone, token: code, type: 'sms' });
+    const { error } = await createClient().auth.verifyOtp({ phone, token, type: 'sms' });
     setVerifying(false);
     if (error) { toastError(error.message); return; }
     router.push(next);
@@ -91,9 +96,9 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
         value={code}
         onChange={(next) => setCode(normalizeOtp(next))}
         autoFocus
-        onComplete={() => void verify()}
+        onComplete={(full) => void verify(full)}
       />
-      <Button className="w-full" loading={verifying} disabled={!isValidOtp(code)} onClick={verify}>
+      <Button className="w-full" loading={verifying} disabled={!isValidOtp(code)} onClick={() => verify()}>
         Verify &amp; continue
       </Button>
       <div className="text-center text-sm text-muted">

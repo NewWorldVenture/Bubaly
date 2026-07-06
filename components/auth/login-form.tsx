@@ -22,6 +22,12 @@ export function LoginForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
+  // A same-origin ?redirect= (e.g. an invite's /join?token=…) that OAuth + phone
+  // sign-in must also honor — not just the password path below.
+  const redirectParam = params.get('redirect');
+  const redirectDest = redirectParam && redirectParam.startsWith('/') ? redirectParam : undefined;
+  // The /auth/callback route bounces failed OAuth / email-confirmation here.
+  const authError = params.get('error') === 'auth';
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -56,9 +62,15 @@ export function LoginForm() {
       <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
       <p className="mt-1 text-sm text-muted">Sign in to your family.</p>
 
+      {authError && (
+        <p role="alert" className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2.5 text-sm text-danger">
+          We couldn’t finish signing you in. Please try again.
+        </p>
+      )}
+
       {showPhone ? (
         <div className="mt-6">
-          <PhoneAuth next="/dashboard" onBack={() => setShowPhone(false)} />
+          <PhoneAuth next={redirectDest ?? '/dashboard'} onBack={() => setShowPhone(false)} />
         </div>
       ) : (
       <>
@@ -72,7 +84,7 @@ export function LoginForm() {
       </button>
 
       <div className="mt-3">
-        <OAuthButtons />
+        <OAuthButtons next={redirectDest} />
       </div>
 
       <div className="relative my-5 flex items-center gap-3">

@@ -42,11 +42,7 @@ export function SignupForm() {
     try {
       const supabase = createClient();
       const origin = window.location.origin;
-      // Honor ?redirect= (e.g. an invite's /join?token=…) so invited members
-      // return to accept the invite instead of being routed into the wizard to
-      // create a family of their own. Same-origin paths only.
-      const redirectParam = params.get('redirect');
-      const next = redirectParam && redirectParam.startsWith('/') ? redirectParam : '/onboarding';
+      const next = nextDest;
       const { data, error } = await supabase.auth.signUp({
         email: parsed.data.email,
         password: parsed.data.password,
@@ -85,6 +81,12 @@ export function SignupForm() {
   }
 
   const plan = params.get('plan');
+  // Honor ?redirect= (e.g. an invite's /join?token=…) across EVERY signup avenue —
+  // email, phone, and OAuth — so an invited member returns to accept the invite
+  // instead of being routed into the wizard to create a family of their own.
+  // Same-origin paths only; defaults to the onboarding wizard.
+  const redirectParam = params.get('redirect');
+  const nextDest = redirectParam && redirectParam.startsWith('/') ? redirectParam : '/onboarding';
 
   return (
     <div className="glass-card p-7 animate-fade-in sm:p-8">
@@ -102,13 +104,13 @@ export function SignupForm() {
 
       {showPhone ? (
         <div className="mt-7">
-          <PhoneAuth next="/onboarding" onBack={() => setShowPhone(false)} />
+          <PhoneAuth next={nextDest} onBack={() => setShowPhone(false)} />
         </div>
       ) : (
       <>
       {/* Primary options */}
       <div className="mt-7">
-        <OAuthButtons next="/onboarding" />
+        <OAuthButtons next={nextDest} />
       </div>
 
       <div className="relative my-5 flex items-center gap-3">
