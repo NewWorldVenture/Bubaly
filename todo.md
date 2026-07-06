@@ -34,6 +34,38 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 
 ## ⚑ OPEN ITEMS & DECISIONS — single source of truth (2026-07-06)
 
+> ### ▣ EVERYTHING STILL OPEN — consolidated (as of 2026-07-06, evening)
+>
+> The agent-doable **code** backlog is essentially drained; what genuinely
+> remains is **owner / external** action. Shipped this session on top of the
+> merged reasoning + moat layer: onboarding→marketing wiring + **child logins
+> without email** (#235), role-tailored **nav gating** (#236), marketing header
+> text size (#237), role-based **Focus-strip density** (#238), **Kid-Logins nudge**
+> on the onboarding Done screen (#239), and screen-reader **progress bars** —
+> onboarding (#240) + **app-wide** (#241).
+>
+> **OPEN — owner / external (NOT code; the agent cannot execute these):**
+> 1. **Apply pending prod migrations** — `supabase db push` (incl. `0105_child_logins`
+>    + `0118`→`0135`, or paste `supabase/APPLY_PENDING_0118-0135.sql`). **THE blocker:**
+>    child logins, the whole reasoning layer (FOI, playbook, agents, graph, decisions,
+>    prep plans), and network consent silently no-op in prod until applied.
+> 2. **Set prod env vars** — `CHILD_LOGIN_SECRET` (child username+PIN sign-in) and
+>    `CRON_SECRET` (`model-refresh` + `network-aggregate` crons).
+> 3. **Provider keys** — each lights up an already-built path: **VAPID/FCM** (push) ·
+>    **Maps/ETA** (Friction #6 travel buffer) · **GIF provider** (Messages/photos picker) ·
+>    **Stripe Issuing** (real Wallet card balances) · **CI Supabase login** (authed e2e).
+> 4. **Activate the `onboarding_completed` marketing workflow** so onboarding fires it.
+> 5. **Intelligence Network launch gate** — insights only surface at **≥100** consenting families.
+>
+> **OPEN — agent-doable follow-ups (small, no blocker; do when directed):**
+> - **Role density, broader rollout** — slices 1–3 shipped (trimmed focus set → nav
+>   management-gating → Focus-strip chip density). Extend density/tone to more dashboards.
+> - **Instrument real journey medians** — Playwright "taps to complete" harness +
+>   `journey_events` step counter, to replace the Experience Scorecard's design-time estimates.
+> - **Friction #6 travel buffer** — code-ready; needs the Maps/ETA key (owner item 3 above).
+> - **Twin projector** — add doctors / smart-home entities once those domains land.
+> - **GIF picker** (Messages/photos) — code path exists; needs the provider key (owner item 3).
+
 ### A. Decisions only the owner can make
 - [x] **Intelligence Network aggregation** ✅ — decisions signed off + pipeline **built**
   (`0135_network_aggregates.sql`, `lib/network/aggregate.ts` +9 tests, `network-aggregate` cron,
@@ -389,7 +421,7 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   phaseGreeting / phaseBlurb / focusForPhase) + `components/home/time-of-day-focus.tsx` "Focus now" strip
   at the top of `/home` (morning: schedule/weather/school · night: tomorrow/get-ready/reflect). Additive —
   did not refactor the contended grid. Server-time based (no per-user tz yet).
-- [◐] #8 Role-tailored surfaces — **slices 1–2 shipped**: (1) pure `lib/ui/role-surface.ts` (10 tests) —
+- [◐] #8 Role-tailored surfaces — **slices 1–3 shipped**: (1) pure `lib/ui/role-surface.ts` (10 tests) —
   `roleSurface(role)` → { density, tone, canManage, focusMax } + `roleGreeting`/`focusHeadline` — applied
   to the Home "Focus now" strip (role-tailored heading + trimmed focus set for kids/guests). (2) **Nav
   management-affordance gating**: `NavItem.manage` + pure `isNavItemVisibleToRole` (4 tests) hide
@@ -493,6 +525,13 @@ idempotent, stable across re-runs):
 ---
 
 ## Build log (append as features land)
+- **2026-07-06 (eve) — onboarding + role-tailoring + a11y run (7 PRs).** #235 onboarding→marketing
+  wiring (`crm_contacts` upsert + `onboarding_completed`) & **child logins without email**
+  (`0105_child_logins`, synthetic auth user, username+PIN, `/kid-login` + `/dashboard/family-access`).
+  #236 role **nav gating** (`NavItem.manage` + `isNavItemVisibleToRole`). #237 marketing header text size.
+  #238 role **Focus-strip density** (`focusChipClasses`). #239 **Kid-Logins nudge** on onboarding Done
+  (`kidsNeedingLogin`). #240 onboarding progress-bar a11y. #241 **app-wide progress-bar a11y**
+  (`lib/ui/a11y.ts::progressBarA11y`, 10 bars). All: tsc/eslint/**1905 tests**/build green.
 - **Marketplace** shipped (migration 0120, lib+tests, module, route, nav). Commit `213718d`.
 - **Marketplace test seed**: `lib/marketplace/seed-sql.ts` (500 listings + ~290 offers,
   all kinds/statuses, idempotent full-reseed per family) + admin-only screen at
