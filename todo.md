@@ -40,9 +40,9 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   real insights on `/dashboard/intelligence`). Approved defaults: K=20, low DP noise (Laplace 1.5),
   cohort = kids-band × household-size, **no** geography, launch gate **≥100 families**.
   Seed `seed_network_aggregates.sql`. (`docs/INTELLIGENCE_NETWORK_DESIGN.md` now marked SIGNED OFF + BUILT.)
-- [ ] **Global nav entries added this session** — confirm keep vs. remove (standing rule = confirm
-  global-nav changes): Reasoning Graph, Decision Engine, Prep Plans, Intelligence Network
-  (+ earlier pillar entries). Pages stay URL-reachable if removed from the sidebar.
+- [x] **Global nav entries added this session** ✅ CONFIRMED (owner 2026-07-06): keep the left
+  navigation as-is and keep all four — Reasoning Graph, Decision Engine, Prep Plans, Intelligence
+  Network (all `minLevel: 0`, so also auto-included in the Navigation Choices catalog). No further change.
 
 ### B. Operational — prod go-live (owner action, not code)
 - [ ] **Apply migrations 0125→0135 to prod** (`supabase db push`, or paste `supabase/APPLY_PENDING_0118-0135.sql`).
