@@ -23,12 +23,7 @@ import type { Tables } from '@/lib/database.types';
 
 type Consent = Tables<'network_consent'>;
 
-// No cross-family aggregation pipeline exists yet (deferred pending sign-off), so
-// there are no real candidates. The k-floor gate below would suppress anything
-// under-supported regardless.
-const CANDIDATES: InsightCandidate[] = [];
-
-export function IntelligenceModule({ contribution = [] }: { contribution?: ContributionBucket[] }) {
+export function IntelligenceModule({ contribution = [], candidates = [] }: { contribution?: ContributionBucket[]; candidates?: InsightCandidate[] }) {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
@@ -44,7 +39,9 @@ export function IntelligenceModule({ contribution = [] }: { contribution?: Contr
     scopes: (row?.scopes as ConsentState['scopes']) ?? {},
   }), [row]);
 
-  const insights = useMemo(() => visibleInsights(CANDIDATES, consent), [consent]);
+  // Candidates come from the aggregation cron (server-fetched for this family's
+  // cohort); visibleInsights re-checks consent + the k-floor as defense in depth.
+  const insights = useMemo(() => visibleInsights(candidates, consent), [candidates, consent]);
   const contributing = isContributing(consent);
 
   async function persist(next: ConsentState) {
@@ -135,9 +132,9 @@ export function IntelligenceModule({ contribution = [] }: { contribution?: Contr
           <div className="mb-3 flex items-center gap-2"><Radar className="size-5 text-brand" /><h3 className="font-semibold">Network insights</h3></div>
           {insights.length === 0 ? (
             <p className="text-sm text-muted">
-              The network is still gathering enough families to share anything safely. Insights appear
-              here only once a pattern is backed by at least {K_ANONYMITY_FLOOR} families — so nothing
-              can ever be traced back to one household.
+              No insights for families like yours yet. A pattern appears here only once it&apos;s backed
+              by at least {K_ANONYMITY_FLOOR} similar families (and the network as a whole is large
+              enough) — so nothing can ever be traced back to one household. Check back as more families join.
             </p>
           ) : (
             <ul className="space-y-2">

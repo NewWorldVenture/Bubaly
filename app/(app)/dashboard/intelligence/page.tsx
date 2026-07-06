@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { IntelligenceModule } from '@/components/modules/intelligence-module';
-import { computeContribution, type ContributionInput } from '@/lib/network/contribution';
+import { computeContribution, contributionFeatures, type ContributionInput } from '@/lib/network/contribution';
+import { cohortKey, aggregatesToInsights, type NetworkAggregate } from '@/lib/network/aggregate';
+import type { ConsentScope } from '@/lib/network/insights';
 
 export const metadata: Metadata = { title: 'Intelligence Network | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -37,5 +39,19 @@ export default async function IntelligencePage() {
     activeActivities: teams + classes,
   };
 
-  return <IntelligenceModule contribution={computeContribution(input, now)} />;
+  // Published aggregates for THIS family's cohort (RLS already restricts rows to
+  // opted-in scopes). Mapped to candidates; the module re-gates via visibleInsights.
+  const myCohort = cohortKey(contributionFeatures(input, now));
+  const { data: aggRows } = await supabase
+    .from('network_aggregates')
+    .select('scope, cohort_key, metric, value, count, cohort_size')
+    .eq('cohort_key', myCohort)
+    .limit(500);
+  const aggregates: NetworkAggregate[] = (aggRows ?? []).map((a) => ({
+    scope: a.scope as ConsentScope, cohortKey: a.cohort_key, metric: a.metric,
+    value: a.value, count: a.count, cohortSize: a.cohort_size,
+  }));
+  const candidates = aggregatesToInsights(aggregates, myCohort);
+
+  return <IntelligenceModule contribution={computeContribution(input, now)} candidates={candidates} />;
 }

@@ -413,6 +413,16 @@ export interface Database {
         { id?: string; family_id: string; source_id: string; target_id: string; relation: string; weight?: number; attributes?: Json; created_by?: string | null },
         Partial<{ source_id: string; target_id: string; relation: string; weight: number; attributes: Json }>
       >;
+      network_contributions: T<
+        { family_id: string; cohort_key: string; features: Json; metrics: Json; scopes: Json; updated_at: string },
+        { family_id: string; cohort_key: string; features?: Json; metrics?: Json; scopes?: Json },
+        Partial<{ cohort_key: string; features: Json; metrics: Json; scopes: Json }>
+      >;
+      network_aggregates: T<
+        { id: string; scope: string; cohort_key: string; metric: string; value: string; count: number; cohort_size: number; computed_at: string },
+        { id?: string; scope: string; cohort_key: string; metric: string; value: string; count: number; cohort_size: number; computed_at?: string },
+        Partial<{ scope: string; cohort_key: string; metric: string; value: string; count: number; cohort_size: number }>
+      >;
       network_consent: T<
         { family_id: string; enabled: boolean; scopes: Json; consented_by: string | null; consented_at: string | null } & Stamps,
         { family_id: string; enabled?: boolean; scopes?: Json; consented_by?: string | null; consented_at?: string | null },

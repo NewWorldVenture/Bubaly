@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/model-refresh",
       "schedule": "0 4,16 * * *"
+    },
+    {
+      "path": "/api/cron/network-aggregate",
+      "schedule": "0 3 * * *"
     }
   ]
 }

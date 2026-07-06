@@ -54,28 +54,43 @@ function dinnerBand(n: number): string {
   return 'most nights (6–7)';
 }
 
+const CHILD_BAND_ORDER = ['0–2', '3–5', '6–9', '10–13', '14–17'];
+
+/** Structured coarse features — the single source of truth for both the consent
+ *  preview and the aggregation cohort key. All fields are bands, never raw values. */
+export type ContributionFeatures = {
+  childBands: string[];   // present child age bands, ordered (never counts)
+  sizeBand: string;
+  dinnerBand: string;
+  activityBand: string;
+};
+
+export function contributionFeatures(input: ContributionInput, now: Date = new Date()): ContributionFeatures {
+  const childBands = Array.from(new Set(
+    input.memberBirthdays
+      .filter((b): b is string => !!b)
+      .map((b) => ageBand(b, now))
+      .filter((band): band is string => band !== null && band !== 'adult'),
+  )).sort((a, b) => CHILD_BAND_ORDER.indexOf(a) - CHILD_BAND_ORDER.indexOf(b));
+  return {
+    childBands,
+    sizeBand: sizeBand(input.householdSize),
+    dinnerBand: dinnerBand(input.plannedDinnersPerWeek),
+    activityBand: countBand(input.activeActivities),
+  };
+}
+
 /**
  * The coarse, anonymized buckets a family would contribute. Only child age bands
  * that are present are listed (never counts of individuals), and every numeric
  * signal is banded — nothing here can single out a household.
  */
 export function computeContribution(input: ContributionInput, now: Date = new Date()): ContributionBucket[] {
+  const f = contributionFeatures(input, now);
   const buckets: ContributionBucket[] = [];
-
-  const childBands = Array.from(new Set(
-    input.memberBirthdays
-      .filter((b): b is string => !!b)
-      .map((b) => ageBand(b, now))
-      .filter((band): band is string => band !== null && band !== 'adult'),
-  ));
-  if (childBands.length) {
-    const order = ['0–2', '3–5', '6–9', '10–13', '14–17'];
-    buckets.push({ label: 'Children in age bands', value: childBands.sort((a, b) => order.indexOf(a) - order.indexOf(b)).join(', ') });
-  }
-
-  buckets.push({ label: 'Household size', value: sizeBand(input.householdSize) });
-  buckets.push({ label: 'Dinner planning habit', value: dinnerBand(input.plannedDinnersPerWeek) });
-  buckets.push({ label: 'Activities', value: countBand(input.activeActivities) });
-
+  if (f.childBands.length) buckets.push({ label: 'Children in age bands', value: f.childBands.join(', ') });
+  buckets.push({ label: 'Household size', value: f.sizeBand });
+  buckets.push({ label: 'Dinner planning habit', value: f.dinnerBand });
+  buckets.push({ label: 'Activities', value: f.activityBand });
   return buckets;
 }
