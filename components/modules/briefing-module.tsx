@@ -385,9 +385,10 @@ function MorningContent({ data }: { data: BriefingData }) {
 
 // ─── Evening Content ──────────────────────────────────────────────────────────
 
-function EveningContent({ data }: { data: BriefingData }) {
+function EveningContent({ data, recap }: { data: BriefingData; recap?: React.ReactNode }) {
   return (
     <div className="space-y-6">
+      {recap}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="rounded-2xl bg-emerald-500/5 border border-emerald-500/20 p-5">
           <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-4 flex items-center gap-2">
@@ -609,7 +610,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
-export function BriefingModule() {
+export function BriefingModule({ recap }: { recap?: React.ReactNode } = {}) {
   const { familyId, members } = useApp();
   const [tab, setTab] = useState<TabType>('morning');
   const [briefings, setBriefings] = useState<Partial<Record<TabType, BriefingData>>>({});
@@ -789,7 +790,7 @@ export function BriefingModule() {
           {digests[tab] && <div className="mb-6"><NeedsAttention digest={digests[tab]!} /></div>}
 
           {tab === 'morning' && <MorningContent data={currentBriefing} />}
-          {tab === 'evening' && <EveningContent data={currentBriefing} />}
+          {tab === 'evening' && <EveningContent data={currentBriefing} recap={recap} />}
           {tab === 'weekly'  && <WeeklyContent  data={currentBriefing} />}
         </div>
       )}

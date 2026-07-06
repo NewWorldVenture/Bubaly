@@ -234,8 +234,13 @@ state vector and the Command Center's evening "what changed" source.)*
   FOI snapshot + a tomorrow slice; reads open ≥90-confidence `autopilot_suggestions`
   for Q2 (read-only reuse, no engine edit); "Your family chief of staff" section on the
   FOI page. tsc/eslint/**1679 tests**/build.
-- [x] **Slice 4 — Command Center adopts the recap** (pillar #5 finish) ✅: `summarizeChange`
-  wired into `/dashboard/command-center` ("Since yesterday" recap).
+- [x] **Slice 4 — Command Center adopts the recap** (pillar #5) ✅: shared server-safe
+  `components/operating-index/change-recap.tsx` renders the "since yesterday" narrative from a
+  `ChangeSummary`; the FOI page and `/dashboard/command-center` both reuse it (DRY), and it's also
+  surfaced in the `/dashboard/briefing` **Evening** tab (via an optional `recap` prop). Seed
+  `seed_operating_index_all_families.sql` writes yesterday+today snapshots across ALL families so
+  the recap renders a real narrative everywhere (composite move + cleared/new + dimension shifts).
+  tsc/eslint/1699 tests/build; migration 0125 + seed validated on PG16 (idempotent).
 - [x] **Slice 5 — Household Digital Twin: decision simulation** (pillar #2) ✅: pure
   `lib/twin/simulate.ts` (**10 tests**) `simulateDecision(decision, ctx)` — safe "what-if" that
   runs against real data but writes nothing. Two scenarios: **add a commitment** ("if we accept this
