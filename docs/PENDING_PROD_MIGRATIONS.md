@@ -83,6 +83,11 @@ filename so this still applies deterministically, but a future migration should
 
 ## Test data (optional, after migrations)
 
+**One-paste option:** `supabase/SEED_ALL.sql` runs all 22 paste-ready seeds in
+dependency order — one paste fills every user-facing surface with ≥500 rows for
+the resolved family. Idempotent (re-run safe); validated on PG16. Requires the
+migrations above to be applied first.
+
 Per-feature **500-row seeds** live in `supabase/seed_*.sql` — paste-ready,
 idempotent, resolve the family by email. Coverage now spans every user-facing
 surface (see the Seed-coverage tracker in `todo.md`): core content, all 9 North

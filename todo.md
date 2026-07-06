@@ -402,6 +402,9 @@ idempotent, stable across re-runs):
 - [x] Autopilot — `autopilot_suggestions` + `approval_requests` → `seed_autopilot.sql`
 - [x] Family Vault — `family_credentials` (all 9 categories, migration 0119 applied + validated) → `seed_vault.sql`
 
+**☑ One-paste master runner:** `supabase/SEED_ALL.sql` runs all 22 seeds in dependency order
+(one paste → every surface at ≥500 rows). Idempotent; validated on PG16.
+
 **☑ Validated 500-row seeds (paste-ready in `supabase/`):**
 
 | Feature / surface | Table(s) seeded | File |
