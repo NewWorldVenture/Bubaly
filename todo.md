@@ -42,7 +42,9 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   Seed `seed_network_aggregates.sql`. (`docs/INTELLIGENCE_NETWORK_DESIGN.md` now marked SIGNED OFF + BUILT.)
 - [x] **Global nav entries added this session** ✅ CONFIRMED (owner 2026-07-06): keep the left
   navigation as-is and keep all four — Reasoning Graph, Decision Engine, Prep Plans, Intelligence
-  Network (all `minLevel: 0`, so also auto-included in the Navigation Choices catalog). No further change.
+  Network (all `minLevel: 0`). They live in **All Services + the Navigation Choices catalog** (users
+  pin/add them); **deliberately NOT promoted into the default `PRIMARY_NAV` rail** — the default rail
+  stays curated. No further change.
 
 ### B. Operational — prod go-live (owner action, not code)
 - [ ] **Apply migrations 0125→0135 to prod** (`supabase db push`, or paste `supabase/APPLY_PENDING_0118-0135.sql`).
