@@ -18,6 +18,7 @@ import {
   CONSENT_SCOPES, K_ANONYMITY_FLOOR, visibleInsights, isContributing,
   type ConsentScope, type ConsentState, type InsightCandidate,
 } from '@/lib/network/insights';
+import type { ContributionBucket } from '@/lib/network/contribution';
 import type { Tables } from '@/lib/database.types';
 
 type Consent = Tables<'network_consent'>;
@@ -27,7 +28,7 @@ type Consent = Tables<'network_consent'>;
 // under-supported regardless.
 const CANDIDATES: InsightCandidate[] = [];
 
-export function IntelligenceModule() {
+export function IntelligenceModule({ contribution = [] }: { contribution?: ContributionBucket[] }) {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
@@ -82,6 +83,27 @@ export function IntelligenceModule() {
           <li className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0" /> Reversible anytime — leaving stops all sharing immediately.</li>
         </ul>
       </div>
+
+      {/* Informed consent: exactly what you'd contribute (coarse, own data, never shared here) */}
+      {contribution.length > 0 && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="mb-1 flex items-center gap-2">
+            <Info className="size-5 text-brand" />
+            <h3 className="font-semibold">What you’d contribute</h3>
+          </div>
+          <p className="mb-3 text-sm text-muted">
+            Only these coarse, anonymized bands — never names, exact ages, or precise counts. Shown
+            here from your own data so you can decide with your eyes open. Nothing is shared unless you join.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {contribution.map((b) => (
+              <span key={b.label} className="rounded-full border border-border px-3 py-1 text-xs">
+                <span className="text-muted">{b.label}:</span> {b.value}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Master toggle */}
       <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">

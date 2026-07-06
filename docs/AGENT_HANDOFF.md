@@ -6,6 +6,17 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-05 (later⁹) — Intelligence Network: informed-consent preview (READ FIRST)
+>
+> Added the transparency layer that makes consent meaningful — a family sees EXACTLY what they'd
+> contribute before opting in. Still no cross-family flow.
+> - **`lib/network/contribution.ts`** (pure, **6 tests**) — `computeContribution(input)` turns the
+>   family's OWN signals into coarse anonymized bands (age BANDS not birthdays, count BANDS not exact
+>   counts: household size, dinner-planning habit, activities). Shown only to them, shared/stored nowhere.
+> - **`/dashboard/intelligence` page** now computes this server-side from the family's own members/
+>   meal_plans/teams/classes and renders a "What you'd contribute" chip row above the opt-in.
+> - Verified: **1838 tests**, tsc, eslint green.
+>
 > ## ★ 2026-07-05 (later⁸) — Intelligence Network: consent foundation only (READ FIRST)
 >
 > **Privacy-first opt-in foundation** for anonymized cross-family insights. ⚠️ Deliberately NOT the
