@@ -4,6 +4,8 @@ import { Gauge, TrendingUp, TrendingDown, Sparkles, ArrowRight } from 'lucide-re
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { computeReadiness, BAND_LABEL, type ReadinessInput } from '@/lib/readiness/score';
+import { assessReadiness, overallReadiness, type ReadinessSignals } from '@/lib/readiness/assess';
+import { ReadinessHorizons } from '@/components/modules/readiness-module';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 
 export const metadata: Metadata = { title: 'Family Readiness' };
@@ -52,6 +54,51 @@ export default async function ReadinessPage() {
   const { score, band, factors } = computeReadiness(input);
   const isPlus = (await effectivePlanLevel(famPlanLevel)) >= 2;
 
+  // Forward-looking horizon readiness (tomorrow / week / month). Counts are
+  // best-effort: a table from an unapplied migration yields 0, never an error.
+  const tomorrowKey = new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10);
+  const monthEndKey = new Date(now.getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
+  const cnt = async (q: PromiseLike<{ count: number | null; error: unknown }>) => {
+    const { count: n, error } = await q; return error ? 0 : (n ?? 0);
+  };
+  const [
+    tomorrowEventsRes, dinnerTomorrowRes, overduePrepSteps, billsDueWeek,
+    expiringDocsMonth, upcomingTripsMonth, openPrepPlans,
+  ] = await Promise.all([
+    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id')
+      .eq('family_id', familyId).gte('starts_at', `${tomorrowKey}T00:00:00Z`).lt('starts_at', `${tomorrowKey}T23:59:59Z`),
+    cnt(supabase.from('meal_plans').select('plan_date', { count: 'exact', head: true }).eq('family_id', familyId).eq('plan_date', tomorrowKey).eq('meal_type', 'dinner')),
+    cnt(supabase.from('prep_plan_steps').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_done', false).lt('due_date', todayStr)),
+    cnt(supabase.from('bills').select('id', { count: 'exact', head: true }).eq('family_id', familyId).neq('status', 'paid').lte('due_date', weekEndStr)),
+    cnt(supabase.from('documents').select('id', { count: 'exact', head: true }).eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', todayStr).lte('expires_at', monthEndKey)),
+    cnt(supabase.from('vacations').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('start_date', todayStr).lte('start_date', monthEndKey)),
+    cnt(supabase.from('prep_plans').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'active')),
+  ]);
+  const tEvents = tomorrowEventsRes.data ?? [];
+  const HOUR = 3_600_000;
+  const timed = tEvents.filter((e) => !e.all_day).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  let tomorrowConflicts = 0;
+  for (let i = 0; i < timed.length; i++) {
+    const aS = new Date(timed[i].starts_at).getTime();
+    const aE = timed[i].ends_at ? new Date(timed[i].ends_at!).getTime() : aS + HOUR;
+    for (let j = i + 1; j < timed.length; j++) {
+      const bS = new Date(timed[j].starts_at).getTime();
+      if (bS >= aE) break;
+      const bE = timed[j].ends_at ? new Date(timed[j].ends_at!).getTime() : bS + HOUR;
+      if (bS < aE && aS < bE) tomorrowConflicts++;
+    }
+  }
+  const plannedThisWeek = new Set((meals ?? []).map((m) => m.plan_date));
+  const unplannedDinnersWeek = Array.from({ length: 7 }, (_, i) => new Date(now.getTime() + i * 86_400_000).toISOString().slice(0, 10))
+    .filter((d) => !plannedThisWeek.has(d)).length;
+  const signals: ReadinessSignals = {
+    tomorrowConflicts, tomorrowUnassigned: tEvents.filter((e) => !e.assignee_id).length,
+    dinnerPlannedTomorrow: dinnerTomorrowRes > 0,
+    conflictsWeek: 0, unplannedDinnersWeek, overduePrepSteps, billsDueWeek,
+    expiringDocsMonth, overloadedMembers: 0, upcomingTripsMonth, openPrepPlans,
+  };
+  const horizonCards = assessReadiness(signals);
+
   // SVG ring math.
   const r = 54, c = 2 * Math.PI * r, dash = (score / 100) * c;
 
@@ -89,6 +136,11 @@ export default async function ReadinessPage() {
             </ul>
           )}
         </div>
+      </div>
+
+      <div className="pt-1">
+        <h2 className="mb-3 text-base font-semibold">Are we ready?</h2>
+        <ReadinessHorizons cards={horizonCards} overall={overallReadiness(horizonCards)} />
       </div>
 
       {!isPlus && (

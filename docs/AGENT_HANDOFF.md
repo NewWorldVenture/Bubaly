@@ -6,6 +6,20 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-05 (later⁵) — Life Readiness (horizon rollup) shipped (READ FIRST)
+>
+> **"Are we ready?"** (strategic vision #4): a forward-looking rollup answering readiness for
+> tomorrow / this week / this month, with the specific gaps to close.
+> - **`lib/readiness/assess.ts`** (pure, **11 tests**) — `assessReadiness(signals)` → 3 horizon cards
+>   (status ready/at_risk/not_ready, 0–100 score, ordered gaps) + `overallReadiness` (weakest-link).
+>   Distinct from the existing `lib/readiness/score.ts` (current-state gauge) — this is forward-looking.
+> - **No migration/table** — it's a live rollup over existing tables (calendar, meal_plans, prep_plans,
+>   bills, documents, vacations). No seed needed.
+> - **Enhanced the existing `/dashboard/readiness` page in place** (did NOT add a route or nav entry):
+>   appended an "Are we ready?" section under the current-state gauge, rendering `ReadinessHorizons`
+>   (`components/modules/readiness-module.tsx`). Best-effort counts (missing table → 0, never errors).
+> - Verified: **1805 tests**, tsc, eslint green.
+>
 > ## ★ 2026-07-05 (later⁴) — Autonomous Prep Plans shipped (READ FIRST)
 >
 > **"Prepare, don't notify"** (strategic vision #2 / Autonomous Planning): look ahead and produce
