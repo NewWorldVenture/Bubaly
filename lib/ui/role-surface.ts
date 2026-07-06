@@ -62,3 +62,16 @@ export function focusHeadline(role: MemberRole | null | undefined): string {
     default:       return 'Your focus';
   }
 }
+
+/** Tailwind sizing for a "focus"/action chip at the reader's role density
+ *  (Friction #8, density rollout). Kids ('playful') get larger, rounder, more
+ *  tappable chips (easier for small fingers); adults ('comfortable') keep the
+ *  compact chip; teens/guests ('cozy') sit between. Pure class-token map so it's
+ *  unit-testable and drives the same treatment anywhere action chips render. */
+export function focusChipClasses(role: MemberRole | null | undefined): { chip: string; icon: string } {
+  switch (roleSurface(role).density) {
+    case 'playful': return { chip: 'gap-2 rounded-2xl px-4 py-3 text-base', icon: 'h-5 w-5' };
+    case 'cozy':    return { chip: 'gap-2 rounded-xl px-3.5 py-2.5 text-sm', icon: 'h-4 w-4' };
+    default:        return { chip: 'gap-1.5 rounded-xl px-3 py-2 text-sm', icon: 'h-4 w-4' }; // comfortable
+  }
+}

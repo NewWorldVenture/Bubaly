@@ -395,7 +395,10 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   management-affordance gating**: `NavItem.manage` + pure `isNavItemVisibleToRole` (4 tests) hide
   manager-only destinations (e.g. Kid Logins) from kids/teens/guests across the primary rail, All
   Services, and mobile tabs (super-admins still see them) — the page guards already redirect those roles,
-  so the links were dead-ends. Density rollout to dashboards = remaining follow-up.
+  so the links were dead-ends. (3) **Density rollout**: pure `focusChipClasses(role)` (3 tests) maps
+  `roleSurface().density` → chip sizing, wired into the Home "Focus now" strip — kids ('playful') get
+  bigger, rounder, more-tappable chips; adults ('comfortable') keep compact ones; teens/guests ('cozy')
+  sit between. Finally consumes the `density` field. Broader dashboard density = further follow-up.
 - [x] #10 Recurring-routine templates — **DONE**. Migration `0122_routine_templates.sql`
   (`routine_templates` + `routine_template_items`, weekday bitmask, family-scoped RLS) +
   pure `lib/routines/detect.ts` (13 tests: `detectRoutines` finds title+weekday+time repeating
