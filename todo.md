@@ -61,9 +61,14 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   + `seed_onboarding_events.sql` (550 events). Validated on PG16.
 - [x] **AI Concierge write-back** ✅ — already wired: create plans, update status
   (planning/completed/cancelled), delete, and convert a plan → real `calendar_events`. (Stale entry — verified done.)
-- [ ] **Twin auto-refresh trigger** — today it's the twice-daily cron + one-tap Rebuild; an
-  on-write trigger is the remaining step for truly "continuous." *(still open)*
-- [ ] **Messages GIF picker** — blocked on the provider key above. *(external key)*
+- [x] **Twin auto-refresh trigger** ✅ — `0134_model_dirty.sql`: `family_model_dirty` flag +
+  SECURITY DEFINER trigger on every cross-domain source table; `needsRefresh()` (dirty wins, else TTL,
+  3 tests); the `model-refresh` cron prioritizes dirty families + clears the flag. Now event-driven.
+- [ ] **Messages GIF picker** — blocked on the provider key. *(external key — not agent-doable)*
+
+> **Section C status: closed except the GIF picker (needs an external provider key).** All four
+> agent-doable items are done — 2 built this session (onboarding telemetry, twin trigger), 2 were
+> already wired (FOI financial, Concierge write-back).
 
 ### D. ★ Moat layer shipped this session (all validated: 1838 tests / tsc / eslint / build)
 - [x] **Knowledge Graph** — `0129`, `lib/graph/reason.ts` (16 tests, impact propagation), `/dashboard/graph`, `seed_graph.sql`.
