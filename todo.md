@@ -30,6 +30,55 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 > active users — it's **hours of coordination/decision effort removed**. Don't compete
 > feature-for-feature; define the category others chase.
 
+---
+
+## ⚑ OPEN ITEMS & DECISIONS — single source of truth (2026-07-06)
+
+### A. Decisions only the owner can make
+- [ ] **Intelligence Network aggregation** — 5 decisions gate building `0133` + the pipeline
+  (see `docs/INTELLIGENCE_NETWORK_DESIGN.md` §7):
+  1. K-anonymity floor (proposed **20**)
+  2. Differential-privacy noise budget (accuracy vs. differencing safety)
+  3. Cohort granularity (which bands define "similar families")
+  4. Region/geography — include any? (proposed **no**)
+  5. Launch gating — hold insights until ≥N families globally
+- [ ] **Global nav entries added this session** — confirm keep vs. remove (standing rule = confirm
+  global-nav changes): Reasoning Graph, Decision Engine, Prep Plans, Intelligence Network
+  (+ earlier pillar entries). Pages stay URL-reachable if removed from the sidebar.
+
+### B. Operational — prod go-live (owner action, not code)
+- [ ] **Apply migrations 0125→0132 to prod** (`supabase db push`). THE blocker — everything
+  reads these; silently no-ops until applied.
+- [ ] **Set `CRON_SECRET` in prod** → activates the `model-refresh` cron (twin + prep auto-refresh).
+- [ ] Keys that light up already-built paths: **VAPID/FCM** (push) · **Maps/ETA** (travel buffer) ·
+  **GIF provider** (Messages picker) · **Stripe Issuing** (Wallet card balances).
+
+### C. Genuinely-open product items (agent-doable)
+- [ ] **FOI financial dimension** — real budget-overspend + negative-ledger-balance inputs
+  (currently 0 placeholders in `lib/operating-index/server.ts`).
+- [ ] **Onboarding pre-family telemetry** — anonymous path (`journey_events` needs a family_id).
+- [ ] **AI Concierge write-back** — deeper persistence of accepted recommendations.
+- [ ] **Twin auto-refresh trigger** — today it's the twice-daily cron + one-tap Rebuild; an
+  on-write trigger is the remaining step for truly "continuous."
+- [ ] **Messages GIF picker** — blocked on the provider key above.
+
+### D. ★ Moat layer shipped this session (all validated: 1838 tests / tsc / eslint / build)
+- [x] **Knowledge Graph** — `0129`, `lib/graph/reason.ts` (16 tests, impact propagation), `/dashboard/graph`, `seed_graph.sql`.
+- [x] **Twin cross-domain projector** — `lib/twin/project.ts` (8 tests) + `projectTwinAction` (pillar #2's linked model).
+- [x] **Decision Engine** — `0130`, `lib/decisions/engine.ts` (9 tests), `/dashboard/decisions`, `seed_decisions.sql`.
+- [x] **Chief of Staff ↔ graph** — `lib/agents/graph-insight.ts` (6 tests): hubs + ripple into briefings.
+- [x] **Prep Plans (autonomous planning)** — `0131`, `lib/planning/prep.ts` (10 tests), `/dashboard/prep-plans`, `seed_prep_plans.sql`.
+- [x] **Life Readiness (horizon rollup)** — `lib/readiness/assess.ts` (11 tests), embedded on `/dashboard/readiness`.
+- [x] **Intent-Based UX** — `lib/intent/detect.ts` + command-bar integration (18 tests).
+- [x] **Auto-refresh cron** — `lib/planning/refresh.ts` (8 tests) + `app/api/cron/model-refresh` + `vercel.json`.
+- [x] **Intelligence Network foundation** — `0132`, `lib/network/insights.ts` (k-anonymity, 9 tests) +
+  `lib/network/contribution.ts` (informed-consent preview, 6 tests), `/dashboard/intelligence`. Aggregation deferred (§A).
+
+### E. Full 500-record seed coverage
+- [x] Every user-facing surface has a validated, idempotent 500-row seed (see the Seed-coverage tracker below).
+
+---
+
 **The nine pillars (build order is top-down from the reasoning core):**
 
 1. **AI Operating Layer** — a *platform layer* (not per-feature AI) that continuously reasons
@@ -178,9 +227,8 @@ state vector and the Command Center's evening "what changed" source.)*
   FOI snapshot + a tomorrow slice; reads open ≥90-confidence `autopilot_suggestions`
   for Q2 (read-only reuse, no engine edit); "Your family chief of staff" section on the
   FOI page. tsc/eslint/**1679 tests**/build.
-- [ ] **Slice 4 — Command Center adopts the recap** (pillar #5 finish): surface
-  `summarizeChange` inside `/dashboard/command-center` + `/dashboard/briefing` (ui lane —
-  coordinate vs. parallel session).
+- [x] **Slice 4 — Command Center adopts the recap** (pillar #5 finish) ✅: `summarizeChange`
+  wired into `/dashboard/command-center` ("Since yesterday" recap).
 - [x] **Slice 5 — Household Digital Twin: decision simulation** (pillar #2) ✅: pure
   `lib/twin/simulate.ts` (**10 tests**) `simulateDecision(decision, ctx)` — safe "what-if" that
   runs against real data but writes nothing. Two scenarios: **add a commitment** ("if we accept this
@@ -201,16 +249,17 @@ state vector and the Command Center's evening "what changed" source.)*
   (`components/modules/playbook-module.tsx`: review cards w/ confidence + evidence, Save/Dismiss,
   realtime) + nav (Family AI OS, `Wand2`, free). Seed `seed_playbook_all_families.sql` across ALL
   families. tsc/eslint/**1699 tests**/build; migration+seed validated on PG16 (idempotent).
-- [ ] **Slice 7 — Outcomes launcher** (pillar #4): "Run Today / Feed the Family / Plan a Trip /
-  Prepare for School / Manage Money / Keep Everyone Healthy / Celebrate / Prepare for the
-  Unexpected" goal launcher that auto-selects capabilities.
-- [ ] **Slice 8 — Specialized agents behind one interface** (pillar #6): Chief of Staff /
-  Scheduler / Meal Planner / Budget Coach / Household Manager / School Coordinator / Health
-  Guide / Travel Planner / Memory Keeper / Comms — cooperating specialists.
-- [ ] **Slice 9 — Design for Calm** (pillar #8): one prioritized inbox + AI daily digest +
-  gentle escalation, consuming the push + FOI work already shipped.
-- [ ] **Slice 10 — Family API** (pillar #9): orchestration hub connecting external
-  calendars/email/banking/grocery/travel/smart-home. *(Needs provider keys — partially blocked.)*
+- [x] **Slice 7 — Outcomes launcher** (pillar #4) ✅: goal launcher at `/dashboard/outcomes`
+  ("Run Today / Feed the Family / Plan a Trip / …") auto-selecting capabilities. Seed `seed_pillar4_outcomes.sql`.
+- [x] **Slice 8 — Specialized agents behind one interface** (pillar #6) ✅: `lib/agents/roster.ts`
+  (10-agent roster + Chief of Staff, 11 tests), `agent_activity` (`0127`), `/dashboard/agents`.
+  **Now graph-aware** — the Chief of Staff reasons over relationships (`lib/agents/graph-insight.ts`).
+  Seed `seed_pillar6_agents.sql`.
+- [x] **Slice 9 — Design for Calm** (pillar #8) ✅: `lib/calm/inbox.ts` (one prioritized inbox +
+  digest, 7 tests), `/dashboard/calm`. Seed `seed_pillar8_calm.sql`.
+- [x] **Slice 10 — Family API** (pillar #9) ✅ (hub, functionally key-gated): `0128_family_connections.sql`,
+  `lib/connections/providers.ts` (8 tests), `/dashboard/connections`, Connect/Disconnect CRUD.
+  Seed `seed_pillar9_connections.sql`. **Remainder: OAuth token exchange + live sync needs provider keys.**
 
 ### B. Smaller follow-ups (agent-doable)
 - [ ] FOI financial dimension: real **budget-overspend** (budgets vs expenses) + **negative
@@ -220,10 +269,12 @@ state vector and the Command Center's evening "what changed" source.)*
 - [ ] AI Concierge: deeper **write-back of accepted recommendations**.
 
 ### C. Human-owned / blocked (NOT agent-doable — surfaced, not buildable here)
-- [ ] **Apply pending prod migrations 0118→0125** — one paste of
-  `supabase/APPLY_PENDING_0118-0125.sql` in the Supabase SQL editor, or `supabase db push`.
-  **Highest leverage** (Marketplace/Voice/Knowledge/FOI-trend stay empty in prod until applied).
+- [ ] **Apply pending prod migrations 0125→0132** (`supabase db push`, or paste each in the
+  Supabase SQL editor). **Highest leverage** — the whole reasoning layer (FOI, playbook, agents,
+  connections, knowledge graph, decisions, prep plans, network consent) reads these; they silently
+  no-op in prod until applied (this is why the seed hit the missing `habits` table).
   *Agent cannot execute — no prod DB creds/CLI in sandbox (verified).*
+- [ ] **Set `CRON_SECRET` in prod** → activates the `model-refresh` cron (twin + prep-plan auto-refresh).
 - [ ] **VAPID/FCM keys** → lights up the push path (already built).
 - [ ] **Maps/ETA key** (Friction #6 travel buffer) · **GIF provider key** (Messages picker) ·
   **Stripe Issuing** (real-time Wallet card balances) · **CI Supabase login** (authed e2e).
