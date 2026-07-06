@@ -1,7 +1,7 @@
 -- ============================================================================
 -- FamilyOS :: SEED_ALL — one paste populates EVERY surface with 500-row test data.
 -- ============================================================================
--- Runs all 22 paste-ready, idempotent seeds in dependency order (core content
+-- Runs all 23 paste-ready, idempotent seeds in dependency order (core content
 -- first — it creates the to-do/grocery lists later seeds reuse). Each resolves
 -- the family by email (newworldventurellc@gmail.com, falls back to the oldest
 -- family) and clears its own sentinel rows first, so re-running never dupes.
@@ -1279,5 +1279,59 @@ end $$;
 -- Verify:
 --   select step, count(*) from onboarding_events where meta->>'seed'='onboarding' group by step;
 --   select count(distinct session_id) from onboarding_events where meta->>'seed'='onboarding';
+
+
+-- ==================== seed_network_aggregates.sql ====================
+-- ============================================================================
+-- FamilyOS · SEED — Intelligence Network aggregates (network_aggregates).
+-- Synthetic PUBLISH-SAFE aggregates so /dashboard/intelligence can be tested when
+-- a family opts in. Every row has cohort_size >= 20 (the k-anonymity floor), so it
+-- mirrors exactly what the real cron would publish. The set is the FULL deterministic
+-- cohort × metric × value product (aggregates are naturally bounded — one row per
+-- combo — not a 500-row volume table). Idempotent (clears all rows). Also opts the
+-- seed family in so insights render. Where: Supabase → SQL Editor → Run.
+-- (Needs migration 0135 applied.)
+-- ============================================================================
+do $$
+declare
+  v_email  text := 'newworldventurellc@gmail.com';
+  v_family uuid;
+  kid_bands text[] := array['none','3–5','6–9','10–13','14–17','6–9.10–13'];
+  size_bands text[] := array['1–2','3–4','5+'];
+begin
+  select f.id into v_family
+  from public.families f
+  join public.family_members fm on fm.family_id = f.id
+  join auth.users u on u.id = fm.user_id
+  where lower(u.email) = lower(v_email) limit 1;
+  if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
+
+  delete from public.network_aggregates;
+  -- Full product: each cohort (kids × size) × each metric value → exactly one row.
+  insert into public.network_aggregates (scope, cohort_key, metric, value, count, cohort_size)
+  select 'benchmarks', 'kids:' || k || '|size:' || s, mv.metric, mv.value,
+    (20 + floor(random()*480))::int, (20 + floor(random()*480))::int
+  from unnest(kid_bands) k
+  cross join unnest(size_bands) s
+  cross join (values
+    ('dinner_habit','rarely (0–1)'), ('dinner_habit','sometimes (2–3)'),
+    ('dinner_habit','often (4–5)'),  ('dinner_habit','most nights (6–7)'),
+    ('activities','none'), ('activities','1–2'), ('activities','3–4'), ('activities','5+')
+  ) as mv(metric, value)
+  on conflict (scope, cohort_key, metric, value) do update
+    set count = excluded.count, cohort_size = excluded.cohort_size, computed_at = now();
+
+  -- Opt the seed family in so the insights actually render on screen.
+  insert into public.network_consent (family_id, enabled, scopes, consented_at)
+  values (v_family, true, '{"timing":true,"benchmarks":true,"recommendations":true}'::jsonb, now())
+  on conflict (family_id) do update set enabled = true,
+    scopes = '{"timing":true,"benchmarks":true,"recommendations":true}'::jsonb;
+
+  raise notice 'Network aggregates seeded (>=20 cohort size) + family % opted in', v_family;
+end $$;
+
+-- Verify:
+--   select count(*) from network_aggregates;                       -- ~ up to 500 (unique key may dedupe)
+--   select min(cohort_size) from network_aggregates;               -- >= 20
 
 -- Done. Every user-facing surface now holds >=500 rows for the resolved family.

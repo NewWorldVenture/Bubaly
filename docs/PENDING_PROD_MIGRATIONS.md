@@ -20,13 +20,13 @@ authoritative list.
   (guarded with `IF NOT EXISTS` / `EXCEPTION WHEN duplicate_object` / drift-safe
   policy re-creates), so re-running an already-applied one is a no-op.
 - **Supabase SQL editor — ONE paste (easiest):** open
-  **`supabase/APPLY_PENDING_0118-0134.sql`**, copy the whole file, paste into the
-  SQL editor, and Run. It's all 17 migrations concatenated in order inside a single
+  **`supabase/APPLY_PENDING_0118-0135.sql`**, copy the whole file, paste into the
+  SQL editor, and Run. It's all 18 migrations concatenated in order inside a single
   `BEGIN/COMMIT` (verified free of transaction-hostile statements), so it either
   fully applies or rolls back cleanly with nothing half-done. Re-running is a no-op.
 - **Supabase SQL editor (per file):** paste each file below **in numeric order**
   and Run. Order matters only in that later migrations may reference earlier
-  tables; applying 0118 → 0134 in sequence is always safe.
+  tables; applying 0118 → 0135 in sequence is always safe.
 
 > **Agents cannot execute this** — there are no prod DB credentials or Supabase
 > CLI in the build sandbox (verified). Applying to prod is human-owned; the
@@ -57,6 +57,7 @@ After applying, hard-refresh the app: Marketplace, `/dashboard/voice`,
 | 0132 | `0132_network_consent.sql` | `network_consent` | Intelligence Network consent `/dashboard/intelligence` |
 | 0133 | `0133_onboarding_events.sql` | `onboarding_events` | Onboarding funnel `/dashboard/onboarding-funnel` (super-admin) |
 | 0134 | `0134_model_dirty.sql` | `family_model_dirty` + `mark_model_dirty()` triggers | Event-driven twin/prep refresh (the `model-refresh` cron; also needs `CRON_SECRET`) |
+| 0135 | `0135_network_aggregates.sql` | `network_contributions`, `network_aggregates` | Intelligence Network insights `/dashboard/intelligence` (the `network-aggregate` cron; also needs `CRON_SECRET`) |
 
 If prod is further behind than 0118, `supabase db push` will also pick up any
 earlier un-applied migrations (0104, 0111, 0113, 0117, …) — all additive, all
@@ -70,20 +71,21 @@ Several version prefixes are **duplicated** by parallel work streams:
 (`documents_favorite`, `finance_rls_repair`, `user_preferences_rls_repair`), and
 `0110` (`family_profile`, `transactions_member`). Supabase orders by full
 filename so this still applies deterministically, but a future migration should
-**not** reuse a taken prefix. Next free number: **0135**.
+**not** reuse a taken prefix. Next free number: **0136**.
 
 ## Environment variables (set alongside the migrations)
 
-- **`CRON_SECRET`** — required to activate the Vercel crons, including the new
-  `model-refresh` cron (event-driven twin + prep-plan refresh). Without it the
-  cron endpoints return 401 and the model only updates on the one-tap "Rebuild".
+- **`CRON_SECRET`** — required to activate the Vercel crons, including
+  `model-refresh` (event-driven twin + prep-plan refresh) and `network-aggregate`
+  (daily Intelligence Network aggregation — nothing publishes until ≥100 families
+  opt in). Without it those endpoints return 401.
 - Optional keys that light up already-built, key-gated paths: **VAPID/FCM** (push),
   **Maps/ETA** (leave-by travel buffer), **Giphy/Tenor** (Messages GIF picker),
   **Stripe Issuing** (real-time Wallet card balances).
 
 ## Test data (optional, after migrations)
 
-**One-paste option:** `supabase/SEED_ALL.sql` runs all 22 paste-ready seeds in
+**One-paste option:** `supabase/SEED_ALL.sql` runs all 23 paste-ready seeds in
 dependency order — one paste fills every user-facing surface with ≥500 rows for
 the resolved family. Idempotent (re-run safe); validated on PG16. Requires the
 migrations above to be applied first.

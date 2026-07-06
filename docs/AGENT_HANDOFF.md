@@ -6,6 +6,28 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-06 (later) — Intelligence Network aggregation BUILT (READ FIRST)
+>
+> Owner signed off the 5 §7 decisions; the cross-family aggregation pipeline is now built with the
+> approved defaults (K=20, low DP noise, cohort = kids-band × household-size, **no geography**, launch
+> gate ≥100 families).
+> - **`0135_network_aggregates.sql`** — `network_contributions` (family-owned coarse egress surface,
+>   self read/delete) + `network_aggregates` (service-written, only ≥K rows, readable by consenting
+>   families with the scope opted in). **⚠️ apply to prod.** Next free migration: **0136**.
+> - **`lib/network/aggregate.ts`** (pure, **9 tests**) — `cohortKey` (kids × size only),
+>   `aggregateContributions` (launch gate + k-anonymity suppression + injected DP noise, distinct-family
+>   counting), `aggregatesToInsights`, `laplaceNoise`. `contributionFeatures()` extracted as the shared
+>   source of truth (preview + cohort key).
+> - **`lib/network/aggregate-server.ts` + `app/api/cron/network-aggregate`** (daily, in `vercel.json`) —
+>   recompute each consenting family's coarse row → aggregate → republish; opt-out deletes the
+>   contribution (right to be forgotten). Guarantees can't be bypassed downstream.
+> - **`/dashboard/intelligence`** now flows real candidates from `network_aggregates` (this family's
+>   cohort) through `visibleInsights` (consent + k-floor re-checked). `seed_network_aggregates.sql`
+>   (144 publish-safe rows, all cohort_size ≥ 20, opts the seed family in).
+> - Verified: **1861 tests**, tsc, eslint, next build green. **This closes the last open code item** —
+>   everything agent-buildable across todo.md is now done; remaining work is operational (apply
+>   migrations 0125–0135 + `CRON_SECRET` + optional keys) or the key-gated GIF picker.
+>
 > ## ★ 2026-07-06 — Onboarding funnel telemetry + section-C audit (READ FIRST)
 >
 > Closed the pre-family telemetry gap and audited the rest of todo.md §C:

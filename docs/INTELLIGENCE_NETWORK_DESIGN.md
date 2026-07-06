@@ -1,10 +1,12 @@
-# Family Intelligence Network — Aggregation Design (DRAFT for sign-off)
+# Family Intelligence Network — Aggregation Design (SIGNED OFF + BUILT)
 
-> Status: **proposal, not built.** The consent model, k-anonymity gate, and
-> contribution preview are shipped (migrations `0132`, `lib/network/*`). The
-> cross-family **aggregation pipeline** described here is deliberately unbuilt —
-> it decides what data leaves a household, so it needs an explicit yes on the
-> guarantees below before any code lands.
+> Status: **built (2026-07-06)** with the owner-approved defaults — K=20, low DP
+> noise (Laplace scale 1.5), cohort = kids age-bands × household-size band, **no
+> geography**, launch gate at **≥100 families**. Shipped: `0135_network_aggregates.sql`,
+> `lib/network/aggregate.ts` (+9 tests), `lib/network/aggregate-server.ts`, the
+> daily `network-aggregate` cron, and real insights wired into `/dashboard/intelligence`.
+> The §2 guarantees are enforced in code; the §7 decisions below are resolved
+> (recorded for the record + any future revisit).
 
 ## 1. Goal
 

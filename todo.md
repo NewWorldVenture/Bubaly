@@ -35,13 +35,11 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 ## ⚑ OPEN ITEMS & DECISIONS — single source of truth (2026-07-06)
 
 ### A. Decisions only the owner can make
-- [ ] **Intelligence Network aggregation** — 5 decisions gate building `0133` + the pipeline
-  (see `docs/INTELLIGENCE_NETWORK_DESIGN.md` §7):
-  1. K-anonymity floor (proposed **20**)
-  2. Differential-privacy noise budget (accuracy vs. differencing safety)
-  3. Cohort granularity (which bands define "similar families")
-  4. Region/geography — include any? (proposed **no**)
-  5. Launch gating — hold insights until ≥N families globally
+- [x] **Intelligence Network aggregation** ✅ — decisions signed off + pipeline **built**
+  (`0135_network_aggregates.sql`, `lib/network/aggregate.ts` +9 tests, `network-aggregate` cron,
+  real insights on `/dashboard/intelligence`). Approved defaults: K=20, low DP noise (Laplace 1.5),
+  cohort = kids-band × household-size, **no** geography, launch gate **≥100 families**.
+  Seed `seed_network_aggregates.sql`. (`docs/INTELLIGENCE_NETWORK_DESIGN.md` now marked SIGNED OFF + BUILT.)
 - [ ] **Global nav entries added this session** — confirm keep vs. remove (standing rule = confirm
   global-nav changes): Reasoning Graph, Decision Engine, Prep Plans, Intelligence Network
   (+ earlier pillar entries). Pages stay URL-reachable if removed from the sidebar.
@@ -402,7 +400,7 @@ idempotent, stable across re-runs):
 - [x] Autopilot — `autopilot_suggestions` + `approval_requests` → `seed_autopilot.sql`
 - [x] Family Vault — `family_credentials` (all 9 categories, migration 0119 applied + validated) → `seed_vault.sql`
 
-**☑ One-paste master runner:** `supabase/SEED_ALL.sql` runs all 22 seeds in dependency order
+**☑ One-paste master runner:** `supabase/SEED_ALL.sql` runs all 23 seeds in dependency order
 (one paste → every surface at ≥500 rows). Idempotent; validated on PG16.
 
 **☑ Validated 500-row seeds (paste-ready in `supabase/`):**
@@ -422,6 +420,7 @@ idempotent, stable across re-runs):
 | Decision Engine | `family_decisions`, `decision_options` | `seed_decisions.sql` |
 | Prep Plans | `prep_plans`, `prep_plan_steps` | `seed_prep_plans.sql` |
 | Onboarding funnel | `onboarding_events` | `seed_onboarding_events.sql` |
+| Intelligence Network aggregates | `network_aggregates` (+opts family in) | `seed_network_aggregates.sql` |
 | Calendar, To-Dos, Groceries, Notes, Photos, Journal, Habits | `calendar_events`, `todo_items`, `grocery_items`, `notes`, `family_photos`, `journal_entries`, `habits` | `seed_core_content.sql` |
 | #1 AI Orchestrator | `family_events`, `family_polls` | `seed_pillar1_orchestrator.sql` |
 | #2 Household Twin | `budgets`, `calendar_events`, `family_routines`, `school_classes`, `teams` | `seed_pillar2_twin.sql` |
