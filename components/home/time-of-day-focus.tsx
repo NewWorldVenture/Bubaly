@@ -9,8 +9,9 @@ import {
   ShoppingCart, UtensilsCrossed, Sparkles, BookOpen, Sunrise, Sun, Sunset, Moon,
 } from 'lucide-react';
 import { dayPhase, phaseBlurb, focusForPhase, type DayPhase } from '@/lib/home/time-of-day';
-import { roleSurface, focusHeadline } from '@/lib/ui/role-surface';
+import { roleSurface, focusHeadline, focusChipClasses } from '@/lib/ui/role-surface';
 import type { MemberRole } from '@/lib/constants/roles';
+import { cn } from '@/lib/utils/cn';
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   CalendarClock, CalendarDays, CloudSun, GraduationCap, ListChecks, MessageCircle,
@@ -24,8 +25,10 @@ const PHASE_ICON: Record<DayPhase, React.ComponentType<{ className?: string }>> 
 export function TimeOfDayFocus({ now = new Date(), role = null }: { now?: Date; role?: MemberRole | null }) {
   const phase = dayPhase(now);
   // Role-tailored (Friction #8): kids/guests get a shorter, simpler focus set,
-  // and the heading language matches who's reading.
+  // the heading language matches who's reading, and the chips scale to the
+  // reader's density (bigger, more tappable for kids).
   const items = focusForPhase(phase, roleSurface(role).focusMax);
+  const sizing = focusChipClasses(role);
   const PhaseIcon = PHASE_ICON[phase];
 
   return (
@@ -43,9 +46,12 @@ export function TimeOfDayFocus({ now = new Date(), role = null }: { now?: Date; 
             <Link
               key={it.key}
               href={it.href}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-medium transition hover:bg-elevated hover:text-brand"
+              className={cn(
+                'inline-flex items-center border border-border bg-surface/60 font-medium transition hover:bg-elevated hover:text-brand',
+                sizing.chip,
+              )}
             >
-              <Icon className="h-4 w-4 text-brand" /> {it.label}
+              <Icon className={cn('text-brand', sizing.icon)} /> {it.label}
             </Link>
           );
         })}

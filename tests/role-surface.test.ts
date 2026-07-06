@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { roleSurface, roleGreeting, focusHeadline } from '@/lib/ui/role-surface';
+import { roleSurface, roleGreeting, focusHeadline, focusChipClasses } from '@/lib/ui/role-surface';
 
 describe('roleSurface', () => {
   it('gives parents/adults the full, manageable surface', () => {
@@ -46,5 +46,27 @@ describe('focusHeadline', () => {
     expect(focusHeadline('parent')).toBe('Focus now');
     expect(focusHeadline('teen')).toBe('Your focus');
     expect(focusHeadline('child')).toBe("Let's go");
+  });
+});
+
+describe('focusChipClasses', () => {
+  it('gives kids bigger, more tappable chips than adults', () => {
+    const kid = focusChipClasses('child');
+    const adult = focusChipClasses('parent');
+    expect(kid.chip).toContain('py-3');
+    expect(kid.chip).toContain('text-base');
+    expect(kid.icon).toBe('h-5 w-5');
+    expect(adult.chip).toContain('py-2');
+    expect(adult.chip).toContain('text-sm');
+    expect(adult.icon).toBe('h-4 w-4');
+  });
+  it('sizes each density distinctly (playful > cozy > comfortable)', () => {
+    const playful = focusChipClasses('child').chip;   // playful
+    const cozy = focusChipClasses('teen').chip;        // cozy
+    const comfortable = focusChipClasses('parent').chip; // comfortable
+    expect(new Set([playful, cozy, comfortable]).size).toBe(3);
+  });
+  it('falls back to the comfortable chip for null/unknown roles', () => {
+    expect(focusChipClasses(null)).toEqual(focusChipClasses('adult'));
   });
 });
