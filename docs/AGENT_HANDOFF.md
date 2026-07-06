@@ -6,6 +6,44 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ★ 2026-07-06 (onboarding + North-Star slices) — READ FIRST
+>
+> Session shipped to `main` (each commit tsc/eslint/vitest/`next build` green; migrations + seeds
+> PG16-validated; all fast-forwarded onto `main`). Branch `claude/festive-bohr-m4cbeg`.
+>
+> **1. Onboarding rebuilt into a world-class 6-step wizard** (`components/onboarding/onboarding-wizard.tsx`,
+> commit `18d5f48`). The live screen was a clunky 2-step profile+PIN. Now: **Profile** (avatar, name,
+> age, colour) → **Family** (name your space; timezone auto-detected via `Intl`) → **About** (household
+> steppers, kids' ages, goal chips, referral) → **Members** (add people / invite by email, skippable) →
+> **PIN** (optional App Lock, skippable) → celebratory summary. Progress bar + "Step X of Y", animated
+> transitions, Back everywhere, gate-bypassing Skip. **100% Supabase via the existing atomic
+> `finalizeOnboardingAction`** — nothing writes until "Finish setup", so abandoning leaves no
+> half-created account. Foundation commit `164e662`: relaxed the finalize profile schema (only first
+> name required; last name/email fall back to signed-in email), added `onboardingAppearanceSchema`
+> (colour/age/avatar/optional PIN) to `finalizeOnboardingSchema`, and extended `finalizeOnboardingAction`
+> to persist the member colour + age + seeded (disabled) App-Lock PIN + `onboardingComplete` into
+> `user_preferences.notification_prefs` (service-role, same scheme as the simple path). **NEW pure
+> `lib/onboarding/flow.ts`** (13 tests) owns the step model / `canAdvance` / `suggestFamilyName` /
+> `buildFinalizePayload(draft)`; analytics `ONBOARDING_STEPS` expanded to the 6 real steps (funnel test
+> updated). *Predecessor bot hit its session limit mid-rebuild — its `flow.ts`/wizard were never
+> committed; this is the completed pickup.* Verified statically (tsc/eslint/1874 tests/build); NOT
+> browser-driven (needs an authed needs-family session — set that up to smoke-test the live flow).
+>
+> **2. North-Star slices shipped** (todo.md OPEN WORK TRACKER §A): **Slice 6 Family Playbook** (pillar
+> #3) — `0126_family_playbook.sql` (`family_playbook_suggestions`, RLS) + pure `lib/playbook/learn.ts`
+> (learns go-to meals / grocery staples / favourites / traditions from real tables) + `/dashboard/playbook`
+> (confirm→writes a real `family_facts` row) + nav; seeded across all families. **Slice 4 Command Center
+> recap** (pillar #5) — shared `components/operating-index/change-recap.tsx` reused by the FOI page,
+> `/dashboard/command-center`, and the `/dashboard/briefing` Evening tab; `seed_operating_index_all_families.sql`
+> writes yesterday+today snapshots so the "Since yesterday" recap renders everywhere. **Voice Control**
+> across-all-families seed `seed_voice_commands_all_families.sql` (the shipped feature only had a
+> one-family seed). *(A parallel session independently added a command-center recap; reconciled at
+> rebase — kept their `loadOperatingIndex` data path, swapped their inline JSX for the shared component.)*
+>
+> **PARKED:** Slice 7 Outcomes launcher was started then set aside on a user pivot — WIP lives in the
+> session scratchpad (`parked-outcomes/`: `0127_outcome_activity.sql` + `lib/outcomes/launcher.ts`), NOT
+> committed. A parallel session has since shipped `/dashboard/outcomes`, so reconcile before resuming.
+>
 > ## ★ 2026-07-06 (later) — Intelligence Network aggregation BUILT (READ FIRST)
 >
 > Owner signed off the 5 §7 decisions; the cross-family aggregation pipeline is now built with the
