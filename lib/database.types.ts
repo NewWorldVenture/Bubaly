@@ -128,6 +128,11 @@ type T<Row, Insert, Update> = { Row: Row; Insert: Insert; Update: Update; Relati
 export interface Database {
   public: {
     Tables: {
+      child_logins: T<
+        { id: string; family_id: string; member_id: string; user_id: string; username: string; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; member_id: string; user_id: string; username: string; created_by?: string | null },
+        Partial<{ username: string; user_id: string; member_id: string }>
+      >;
       dining_out: T<
         { id: string; family_id: string; name: string; kind: string; cuisine: string | null; category: string | null; price_level: number | null; rating: number | null; address: string | null; distance_km: number | null; amount_cents: number | null; item_count: number | null; notes: string | null; is_favorite: boolean; visited_at: string | null; metadata: Json; created_by: string | null; created_at: string; updated_at: string },
         { id?: string; family_id: string; name: string; kind?: string; cuisine?: string | null; category?: string | null; price_level?: number | null; rating?: number | null; address?: string | null; distance_km?: number | null; amount_cents?: number | null; item_count?: number | null; notes?: string | null; is_favorite?: boolean; visited_at?: string | null; metadata?: Json; created_by?: string | null },
@@ -146,7 +151,7 @@ export interface Database {
       family_members: T<
         { id: string; family_id: string; user_id: string | null; role: MemberRole; display_name: string; color: string | null; birthday: string | null; email: string | null; phone: string | null; avatar_url: string | null; is_active: boolean } & Stamps,
         { id?: string; family_id: string; user_id?: string | null; role?: MemberRole; display_name: string; color?: string | null; birthday?: string | null; email?: string | null; phone?: string | null; avatar_url?: string | null; is_active?: boolean },
-        Partial<{ role: MemberRole; display_name: string; color: string | null; birthday: string | null; email: string | null; phone: string | null; avatar_url: string | null; is_active: boolean }>
+        Partial<{ user_id: string | null; role: MemberRole; display_name: string; color: string | null; birthday: string | null; email: string | null; phone: string | null; avatar_url: string | null; is_active: boolean }>
       >;
       roles: T<
         { role: MemberRole; label: string; description: string | null },

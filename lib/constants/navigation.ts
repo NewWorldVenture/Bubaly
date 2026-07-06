@@ -139,6 +139,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/care', label: 'Care Log', icon: HeartHandshake, minLevel: 1 },
       { href: '/dashboard/inbox', label: 'Communications Hub', icon: Inbox, minLevel: 1 },
       { href: '/dashboard/dental', label: 'Dental', icon: Smile, minLevel: 1 },
+      { href: '/dashboard/family-access', label: 'Kid Logins', icon: UserCog, minLevel: 0 },
       { href: '/dashboard/settings', label: 'Settings', icon: Settings, minLevel: 0 },
     ],
   },
