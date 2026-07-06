@@ -12,6 +12,7 @@ import { buildAppLockConfig } from '@/lib/security/app-lock';
 import { cleanGoals, cleanReferralSource } from '@/lib/onboarding/family';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
+import { upsertOnboardingContact } from '@/lib/marketing/onboarding-contact';
 import type { MemberRole } from '@/lib/constants/roles';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
@@ -138,11 +139,31 @@ export async function saveFamilyDetailsAction(input: {
     resourceId: d.familyId, metadata: { goals: cleanGoals(d.goals), referral_source: cleanReferralSource(d.referralSource) },
   });
 
-  // Fire the welcome/onboarding automation in real time (never blocks the user).
+  // Feed the marketing engine: enrich the CRM contact with the household + goals
+  // + referral source, then fire the welcome automation. Best-effort.
   try {
+    const admin = createServiceClient();
     const { data: profile } = await supabase
-      .from('profiles').select('display_name, full_name, email').eq('id', auth.user.id).maybeSingle();
-    await fireAutomationEvent(createServiceClient(), {
+      .from('profiles').select('display_name, full_name, email, phone').eq('id', auth.user.id).maybeSingle();
+    await upsertOnboardingContact(admin, {
+      userId: auth.user.id,
+      email: profile?.email ?? auth.user.email ?? null,
+      firstName: profile?.display_name ?? profile?.full_name ?? null,
+      phone: profile?.phone ?? null,
+      familyId: d.familyId,
+      source: 'onboarding',
+      attributes: {
+        role: 'parent',
+        goals: cleanGoals(d.goals),
+        referral_source: cleanReferralSource(d.referralSource),
+        household_adults: d.householdAdults,
+        household_children: d.householdChildren,
+        child_ages: d.childAges,
+        region: d.region || null,
+        country: d.country || null,
+      },
+    });
+    await fireAutomationEvent(admin, {
       trigger: 'onboarding_completed',
       email: profile?.email ?? auth.user.email ?? null,
       name: profile?.display_name ?? profile?.full_name ?? null,
@@ -234,6 +255,28 @@ export async function completeProfileOnboardingAction(input: {
     action: 'update', resource: 'profiles', resourceId: auth.user.id,
     metadata: { onboarding: 'profile_complete' },
   });
+
+  // 5. Feed the marketing engine: create/enrich the account holder's CRM contact
+  //    and fire the welcome ("onboarding_completed") automation. The signed-in
+  //    user is the family's parent/admin (ensureActiveFamily provisions the
+  //    `parent` member), so the contact is stamped as such. Best-effort — never
+  //    blocks the user finishing onboarding.
+  try {
+    const email = auth.user.email ?? null;
+    await upsertOnboardingContact(admin, {
+      userId: auth.user.id, email, firstName, familyId: familyId || null,
+      source: 'profile_onboarding',
+      attributes: { role: 'parent', ...(age !== null ? { age } : {}) },
+    });
+    await fireAutomationEvent(admin, {
+      trigger: 'onboarding_completed',
+      email, name: firstName,
+      subjectKey: eventSubjectKey('onboarding_completed', [familyId || auth.user.id]),
+      context: { familyId: familyId || null, source: 'profile_onboarding' },
+    });
+  } catch (e) {
+    console.error('[onboarding] marketing wiring failed', e);
+  }
 
   return { ok: true, data: { familyId } };
 }
@@ -487,14 +530,33 @@ export async function finalizeOnboardingAction(input: {
     metadata: { name: family.name, members: members.length },
   });
 
-  // 8. Fire onboarding_completed automation (best-effort)
+  // 8. Feed the marketing engine (CRM contact + welcome automation) — best-effort.
   try {
     const { data: prof } = await supabase
-      .from('profiles').select('display_name, full_name, email').eq('id', auth.user.id).maybeSingle();
-    await fireAutomationEvent(createServiceClient(), {
+      .from('profiles').select('display_name, full_name, email, phone').eq('id', auth.user.id).maybeSingle();
+    await upsertOnboardingContact(admin, {
+      userId: auth.user.id,
+      email: prof?.email ?? profile.email ?? auth.user.email ?? null,
+      firstName: prof?.display_name ?? profile.firstName ?? null,
+      lastName: profile.lastName ?? null,
+      phone: prof?.phone ?? profile.phone ?? null,
+      familyId,
+      source: 'onboarding',
+      attributes: {
+        role: 'parent',
+        goals,
+        referral_source: referralSource,
+        household_adults: details.householdAdults,
+        household_children: details.householdChildren,
+        child_ages: details.childAges,
+        members_invited: members.filter((m) => m.kind === 'invite').length,
+        members_added: members.filter((m) => m.kind === 'local').length,
+      },
+    });
+    await fireAutomationEvent(admin, {
       trigger: 'onboarding_completed',
-      email: prof?.email ?? auth.user.email ?? null,
-      name: prof?.display_name ?? prof?.full_name ?? null,
+      email: prof?.email ?? profile.email ?? auth.user.email ?? null,
+      name: prof?.display_name ?? prof?.full_name ?? profile.firstName ?? null,
       subjectKey: eventSubjectKey('onboarding_completed', [familyId]),
       context: { familyId, goals, referral_source: referralSource },
     });

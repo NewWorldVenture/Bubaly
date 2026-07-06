@@ -1246,6 +1246,25 @@ Last updated: 2026-06-30 — Session shipped: tabbed Settings, mobile house-logo
 > "Dashboard" entry was removed from the top of `PRIMARY_NAV` (Home now leads straight into the everyday list).
 > `isActive` is pathname-only so both links navigate correctly (query-string highlight is a known minor cosmetic).
 >
+> ## 🚪 ONBOARDING — MARKETING WIRING + CHILD LOGINS (no email) (on `main`)
+> Deep-dived the end-to-end onboarding. Two workstreams shipped (see **`docs/onboarding-supabase.md`**):
+> - **Feeds the marketing engine now.** The ACTIVE flow (`completeProfileOnboardingAction`) previously did
+>   NOT create a marketing contact or fire any automation. New **`lib/marketing/onboarding-contact.ts`
+>   → upsertOnboardingContact** creates/enriches a **`crm_contacts`** row (dedupe by email→family;
+>   lead_status/lifecycle='customer'; attributes: role=parent, goals, referral, household in `notes` JSON),
+>   and **`fireAutomationEvent('onboarding_completed')`** now fires from the active flow (plus the fuller
+>   `finalizeOnboardingAction`/`saveFamilyDetailsAction`). Best-effort, service-role, idempotent. No migration.
+> - **Role at start** confirmed correct: `ensureActiveFamily` makes the signup user the `parent` member + trial.
+> - **CHILD LOGINS without email.** A parent gives a child a **username + 4-digit PIN**; the child gets a real
+>   Supabase Auth user under a synthetic never-emailed address, and `family_members.user_id` links to it so
+>   they ARE their member on sign-in. Migration **`0105_child_logins.sql`** (map + RLS). Server-only PIN→password
+>   `lib/onboarding/child-password.ts` (sha256(secret::username::pin) — needs **`CHILD_LOGIN_SECRET`** env; the
+>   pure string helpers live in client-safe `lib/onboarding/child-login.ts` — DON'T re-merge them, node:crypto
+>   breaks the browser bundle). Actions: `app/(app)/family/child-login-actions.ts` (create/reset, manager-guarded,
+>   service role) + `childSignInAction` in `app/(auth)/actions.ts`. UI: `/kid-login` page (+ link from /login) and
+>   parent management at `/dashboard/family-access` (All Services → "Kid Logins"). `family_members` Update type
+>   extended to allow `user_id`. ⚠️ Apply `0105` + set `CHILD_LOGIN_SECRET` in prod. tsc·eslint·1411 tests·build ✓.
+>
 > ## 🍽️ `/dashboard/food` — FOOD & NUTRITION HUB + DINING OUT (on `main`)
 > Category hub matching the "Food & Nutrition" showcase: header + intro + a responsive **7-card grid** +
 > features panel, each card live-wired to Supabase and linking to the real page.
