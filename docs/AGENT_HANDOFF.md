@@ -41,6 +41,23 @@
 > (`OnboardingDraft.lastName`, page passes `initialLastName`). Shim + journey scripts live in the
 > session scratchpad (`sbstack/`), not committed.
 >
+> **Onboarding stone-lift round 2 (invited-member avenue + error paths), all browser-driven:**
+> - **BUG FIXED — invited members were routed into the wizard instead of their invite.** The signup
+>   form ignored `?redirect=` (login honored it): "Create account" from `/join?token=…` dumped the
+>   invitee into `/onboarding` to create their OWN family and the invite was never accepted. Signup
+>   now honors same-origin `?redirect=` (both the immediate-session path and `emailRedirectTo`'s
+>   `next=`). Proven E2E: invite gate → Create account → back to /join → auto-accept → /home.
+> - **BUG FIXED — `accept_invite` was not idempotent** (migration `0136_accept_invite_idempotent.sql`):
+>   a double-fire (React strict-mode) or revisiting the used link raised "Invite is invalid or
+>   expired" AFTER a successful join, so the UI showed an error while the member was in the family.
+>   Re-accepting your own accepted invite now returns the family id; other-user/expired guards
+>   unchanged (incl. `active_family_id is null` behavior). Also a `useRef` once-guard in
+>   `join-invite.tsx`. Proven: fresh-invite journey clean + used-link revisit shows the success card.
+>   **0136 must be applied to prod along with 0118→0135.**
+> - Error paths verified in-browser: wrong password (friendly error, stays on /login), duplicate
+>   signup (friendly error), bogus token (renders gate, no crash), wizard Back preserves the whole
+>   draft (name/age/family name), members step on a phone viewport renders correctly.
+>
 > **2. North-Star slices shipped** (todo.md OPEN WORK TRACKER §A): **Slice 6 Family Playbook** (pillar
 > #3) — `0126_family_playbook.sql` (`family_playbook_suggestions`, RLS) + pure `lib/playbook/learn.ts`
 > (learns go-to meals / grocery staples / favourites / traditions from real tables) + `/dashboard/playbook`

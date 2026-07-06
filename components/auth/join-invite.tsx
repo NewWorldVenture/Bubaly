@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PartyPopper, AlertTriangle, LogIn } from 'lucide-react';
@@ -20,8 +20,13 @@ export function JoinInvite() {
   const params = useSearchParams();
   const token = params.get('token') ?? '';
   const [state, setState] = useState<State>({ phase: 'loading' });
+  // Accept exactly once per mount — guards the React strict-mode double effect
+  // and any re-render race from clobbering a successful accept with an error.
+  const fired = useRef(false);
 
   useEffect(() => {
+    if (fired.current) return;
+    fired.current = true;
     if (!token) {
       setState({ phase: 'error', message: 'This invite link is missing its token.' });
       return;

@@ -42,12 +42,17 @@ export function SignupForm() {
     try {
       const supabase = createClient();
       const origin = window.location.origin;
+      // Honor ?redirect= (e.g. an invite's /join?token=…) so invited members
+      // return to accept the invite instead of being routed into the wizard to
+      // create a family of their own. Same-origin paths only.
+      const redirectParam = params.get('redirect');
+      const next = redirectParam && redirectParam.startsWith('/') ? redirectParam : '/onboarding';
       const { data, error } = await supabase.auth.signUp({
         email: parsed.data.email,
         password: parsed.data.password,
         options: {
           data: { full_name: parsed.data.fullName },
-          emailRedirectTo: `${origin}/auth/callback?next=/onboarding`,
+          emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
         },
       });
       if (error) throw error;
@@ -55,7 +60,7 @@ export function SignupForm() {
         setCheckEmail(true);
         return;
       }
-      router.push('/onboarding');
+      router.push(next);
       router.refresh();
     } catch (err) {
       toastError(describeDbError(err, 'Could not create account'));
