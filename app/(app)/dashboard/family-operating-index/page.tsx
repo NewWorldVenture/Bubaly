@@ -12,6 +12,7 @@ import { loadOperatingIndex } from '@/lib/operating-index/server';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
 import { DIMENSION_LABELS, type Band, type DimensionId } from '@/lib/operating-index/score';
 import { cn } from '@/lib/utils/cn';
+import { progressBarA11y } from '@/lib/ui/a11y';
 
 export const metadata: Metadata = { title: 'Family Operating Index' };
 export const dynamic = 'force-dynamic';
@@ -205,7 +206,7 @@ export default async function FamilyOperatingIndexPage() {
                   <span className="flex-1 text-sm font-medium">{DIMENSION_LABELS[d.id]}</span>
                   <span className="text-sm font-semibold tabular-nums">{d.score}</span>
                 </div>
-                <div className="mb-1.5 h-1.5 w-full overflow-hidden rounded-full bg-border/50">
+                <div className="mb-1.5 h-1.5 w-full overflow-hidden rounded-full bg-border/50" {...progressBarA11y(d.score, `${DIMENSION_LABELS[d.id]}: ${d.score} of 100`)}>
                   <div className={cn('h-full rounded-full transition-all', barColor(d.score))} style={{ width: `${d.score}%` }} />
                 </div>
                 <p className="text-xs text-muted">{d.summary}</p>

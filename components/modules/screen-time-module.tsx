@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { MonitorSmartphone, Plus, Trash2, Flame, Gauge, Settings2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { progressBarA11y } from '@/lib/ui/a11y';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -136,7 +137,7 @@ export function ScreenTimeModule() {
               </div>
               {limit > 0 && (
                 <div className="mt-3">
-                  <div className="h-2 overflow-hidden rounded-full bg-border/50">
+                  <div className="h-2 overflow-hidden rounded-full bg-border/50" {...progressBarA11y(prog.pct, `Screen time used today: ${prog.pct}% of limit`)}>
                     <div className={`h-full rounded-full ${prog.over ? 'bg-danger' : 'bg-success'}`} style={{ width: `${prog.pct}%` }} />
                   </div>
                   <p className="mt-1 flex items-center justify-between text-[11px] text-muted">
