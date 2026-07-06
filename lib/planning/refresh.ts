@@ -20,6 +20,17 @@ export function shouldRefresh(
   return ageMinutes >= ttlMinutes;
 }
 
+/**
+ * Event-driven gate: refresh if the family was marked dirty by a source-data
+ * change, OR its last refresh is stale past the TTL. Dirty always wins.
+ */
+export function needsRefresh(
+  opts: { dirty?: boolean; lastRefreshedAt?: string | Date | null; now?: Date; ttlMinutes?: number },
+): boolean {
+  if (opts.dirty) return true;
+  return shouldRefresh(opts.lastRefreshedAt ?? null, opts.now ?? new Date(), opts.ttlMinutes ?? DEFAULT_TTL_MINUTES);
+}
+
 export type RefreshOutcome = { familyId: string; ok: boolean; entities?: number; edges?: number; plans?: number; skipped?: boolean; error?: string };
 
 export type SweepSummary = { families: number; refreshed: number; skipped: number; failures: number };

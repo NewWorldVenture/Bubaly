@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runTwinProjection } from '@/lib/twin/project-server';
 import { runPrepGeneration } from '@/lib/planning/prep-server';
-import { shouldRefresh, summarizeSweep, type RefreshOutcome } from '@/lib/planning/refresh';
+import { needsRefresh, summarizeSweep, type RefreshOutcome } from '@/lib/planning/refresh';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -24,18 +24,26 @@ export async function GET(req: NextRequest) {
     const outcomes: RefreshOutcome[] = [];
     for (const fam of families ?? []) {
       try {
-        // Skip families refreshed within the TTL (e.g. someone just hit "Rebuild").
+        // Event-driven: refresh if a source change marked the family dirty, or if
+        // the last refresh is stale past the TTL. Otherwise skip.
+        const { data: dirtyRow } = await supabase.from('family_model_dirty')
+          .select('dirty').eq('family_id', fam.id).maybeSingle();
         const { data: latest } = await supabase.from('graph_entities')
           .select('updated_at').eq('family_id', fam.id).order('updated_at', { ascending: false }).limit(1).maybeSingle();
-        if (!shouldRefresh(latest?.updated_at ?? null, now)) {
+        if (!needsRefresh({ dirty: dirtyRow?.dirty ?? false, lastRefreshedAt: latest?.updated_at ?? null, now })) {
           outcomes.push({ familyId: fam.id, ok: true, skipped: true });
           continue;
         }
         const twin = await runTwinProjection(supabase, fam.id, null);
         const prep = await runPrepGeneration(supabase, fam.id, null, now);
+        const ok = twin.ok && prep.ok;
+        // Clear the dirty flag once a refresh succeeds.
+        if (ok) {
+          await supabase.from('family_model_dirty')
+            .upsert({ family_id: fam.id, dirty: false, refreshed_at: now.toISOString() }, { onConflict: 'family_id' });
+        }
         outcomes.push({
-          familyId: fam.id,
-          ok: twin.ok && prep.ok,
+          familyId: fam.id, ok,
           entities: twin.entities, edges: twin.edges, plans: prep.plans,
           error: twin.error ?? prep.error,
         });

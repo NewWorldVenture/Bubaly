@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shouldRefresh, summarizeSweep, DEFAULT_TTL_MINUTES, type RefreshOutcome } from '@/lib/planning/refresh';
+import { shouldRefresh, needsRefresh, summarizeSweep, DEFAULT_TTL_MINUTES, type RefreshOutcome } from '@/lib/planning/refresh';
 
 const NOW = new Date('2026-07-06T12:00:00Z');
 
@@ -31,6 +31,22 @@ describe('shouldRefresh', () => {
     const t = new Date(NOW.getTime() - 30 * 60_000).toISOString();
     expect(shouldRefresh(t, NOW, 15)).toBe(true);  // 30m old, 15m TTL
     expect(shouldRefresh(t, NOW, 60)).toBe(false); // 30m old, 60m TTL
+  });
+});
+
+describe('needsRefresh (event-driven gate)', () => {
+  it('always refreshes a dirty family, even if just refreshed', () => {
+    const recent = new Date(NOW.getTime() - 60 * 60_000).toISOString();
+    expect(needsRefresh({ dirty: true, lastRefreshedAt: recent, now: NOW })).toBe(true);
+  });
+  it('falls back to TTL staleness when not dirty', () => {
+    const recent = new Date(NOW.getTime() - 60 * 60_000).toISOString(); // 1h, TTL 6h
+    expect(needsRefresh({ dirty: false, lastRefreshedAt: recent, now: NOW })).toBe(false);
+    const old = new Date(NOW.getTime() - (DEFAULT_TTL_MINUTES + 1) * 60_000).toISOString();
+    expect(needsRefresh({ dirty: false, lastRefreshedAt: old, now: NOW })).toBe(true);
+  });
+  it('refreshes a never-refreshed family', () => {
+    expect(needsRefresh({ dirty: false, lastRefreshedAt: null, now: NOW })).toBe(true);
   });
 });
 
