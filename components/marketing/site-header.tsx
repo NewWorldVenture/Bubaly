@@ -25,7 +25,7 @@ export function SiteHeader() {
               key={item.href}
               href={item.href}
               className={cn(
-                'relative inline-flex h-full items-center text-[10px] font-medium text-muted transition hover:text-fg',
+                'relative inline-flex h-full items-center text-sm font-medium text-muted transition hover:text-fg xl:text-base',
                 pathname === item.href && 'text-violet-400',
               )}
             >
