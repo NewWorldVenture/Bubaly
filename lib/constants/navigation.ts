@@ -12,8 +12,23 @@ import { AllServicesIcon } from '@/components/app/icons/all-services-icon';
 
 /** A single nav destination. `minLevel` is the lowest plan that can use it:
  *  0 = Free (everyone), 1 = Family Basic+, 2 = Family+. Omitted = 0 (free).
+ *  `manage: true` marks a manager-only destination (parent/adult) — hidden from
+ *  kids/teens/guests, who a `isManager` page guard would redirect away anyway.
  *  `children` makes the item an expandable group whose sub-items navigate. */
-export type NavItem = { href: string; label: string; icon: LucideIcon; minLevel?: number; children?: NavItem[] };
+export type NavItem = { href: string; label: string; icon: LucideIcon; minLevel?: number; manage?: boolean; children?: NavItem[] };
+
+/** Role visibility for a nav destination (Friction #8, role-tailored surfaces):
+ *  `manage`-only items are hidden from non-managers (kids/teens/guests) since the
+ *  page's `isManager` guard redirects them away anyway — so showing the link is a
+ *  dead-end. Super-admins always see everything. Plan/tier gating is separate
+ *  (see `resolveItems`). Pure + deterministic so it's unit-testable. */
+export function isNavItemVisibleToRole(
+  item: NavItem,
+  opts: { isManager: boolean; isSuperAdmin?: boolean },
+): boolean {
+  if (item.manage && !opts.isManager && !opts.isSuperAdmin) return false;
+  return true;
+}
 
 /** A titled section of the app sidebar. */
 export type NavGroup = { title: string; layout: 'list' | 'grid'; items: NavItem[] };
@@ -139,7 +154,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/care', label: 'Care Log', icon: HeartHandshake, minLevel: 1 },
       { href: '/dashboard/inbox', label: 'Communications Hub', icon: Inbox, minLevel: 1 },
       { href: '/dashboard/dental', label: 'Dental', icon: Smile, minLevel: 1 },
-      { href: '/dashboard/family-access', label: 'Kid Logins', icon: UserCog, minLevel: 0 },
+      { href: '/dashboard/family-access', label: 'Kid Logins', icon: UserCog, minLevel: 0, manage: true },
       { href: '/dashboard/settings', label: 'Settings', icon: Settings, minLevel: 0 },
     ],
   },
@@ -318,7 +333,7 @@ export const NAV_CATALOG: NavItem[] = (() => {
   for (const item of PRIMARY_NAV) push(item);
   for (const group of APP_NAV_GROUPS) {
     for (const item of group.items) {
-      if ((item.minLevel ?? 0) === 0) push({ href: item.href, label: item.label, icon: item.icon });
+      if ((item.minLevel ?? 0) === 0) push({ href: item.href, label: item.label, icon: item.icon, manage: item.manage });
     }
   }
   return out;

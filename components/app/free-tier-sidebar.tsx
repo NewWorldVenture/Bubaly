@@ -12,8 +12,9 @@ import { createClient } from '@/lib/supabase/client';
 import {
   SIDEBAR_FOOTER_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS,
   NAV_CATALOG_BY_HREF, NAV_CATALOG_KEYS, DEFAULT_SIDEBAR_NAV_KEYS,
-  NAV_CHILD_KEYS_BY_PARENT, type NavItem,
+  NAV_CHILD_KEYS_BY_PARENT, isNavItemVisibleToRole, type NavItem,
 } from '@/lib/constants/navigation';
+import { isManager } from '@/lib/constants/roles';
 import {
   resolveNavKeys, sanitizeNavKeys, resolveChildKeys, sanitizeChildMap,
   SIDEBAR_NAV_STORAGE_KEY, SIDEBAR_NAV_CHILDREN_STORAGE_KEY, SIDEBAR_NAV_EVENT,
@@ -159,13 +160,14 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin }: {
   open: boolean; onClose: () => void; onLocked: (item: NavItem) => void;
   pinned: Set<string>; onTogglePin: (key: string) => void;
 }) {
-  const { planLevel, isSuperAdmin, featureTiers } = useApp();
+  const { planLevel, isSuperAdmin, featureTiers, role } = useApp();
   if (!open) return null;
+  const manager = isManager(role);
   return (
     <Modal open onClose={onClose} title="All Services">
       <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
         {APP_NAV_GROUPS.map((group) => {
-          const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin);
+          const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager);
           if (resolved.length === 0) return null;
           return (
             <div key={group.title} className="space-y-1">
@@ -203,12 +205,23 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin }: {
 }
 
 export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => void }) {
-  const { familyId, userId, unreadMessages } = useApp();
+  const { familyId, userId, unreadMessages, role, isSuperAdmin } = useApp();
   const { error: toastError } = useToast();
   const [allOpen, setAllOpen] = useState(false);
   const [keys, setKeys] = useState<string[] | null>(null);
   const liveUnread = useLiveUnread(unreadMessages, familyId, userId);
-  const primaryNav = useSidebarNav();
+  const sidebarNav = useSidebarNav();
+  // Hide manager-only destinations (e.g. Kid Logins) from kids/teens/guests —
+  // their page guard would redirect them away anyway.
+  const manager = isManager(role);
+  const primaryNav = useMemo(
+    () => sidebarNav
+      .filter((item) => isNavItemVisibleToRole(item, { isManager: manager, isSuperAdmin }))
+      .map((item) => (item.children
+        ? { ...item, children: item.children.filter((c) => isNavItemVisibleToRole(c, { isManager: manager, isSuperAdmin })) }
+        : item)),
+    [sidebarNav, manager, isSuperAdmin],
+  );
 
   // Initial pinned set: the user's saved layout, else the family default.
   useEffect(() => {

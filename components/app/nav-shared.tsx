@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Lock, Sparkles, ChevronDown } from 'lucide-react';
-import type { NavItem } from '@/lib/constants/navigation';
+import { type NavItem, isNavItemVisibleToRole } from '@/lib/constants/navigation';
 import { featureAccessByTier } from '@/lib/features/tiers';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
 import { cn } from '@/lib/utils/cn';
@@ -46,15 +46,18 @@ export function AiAssistantNavButton({ onNavigate }: { onNavigate?: () => void }
 
 /** Visible nav items for a group given the family's plan + admin tier settings.
  *  Items whose feature is Off are dropped; the rest carry a `locked` flag (tier
- *  above the family's plan) + the level required to unlock. */
+ *  above the family's plan) + the level required to unlock. `isManager` gates
+ *  manager-only (`manage`) destinations out for kids/teens/guests. */
 export function resolveItems(
   items: readonly NavItem[],
   featureTiers: Record<string, FeatureTier>,
   planLevel: number,
   isSuperAdmin: boolean,
+  isManager = true,
 ): { item: NavItem; locked: boolean; requiredLevel: 1 | 2 }[] {
   const out: { item: NavItem; locked: boolean; requiredLevel: 1 | 2 }[] = [];
   for (const item of items) {
+    if (!isNavItemVisibleToRole(item, { isManager, isSuperAdmin })) continue; // manager-only
     const tier = featureTiers[item.href];
     const access = featureAccessByTier(tier, planLevel, isSuperAdmin);
     if (access === 'hidden') continue; // Off → not shown at all
