@@ -74,6 +74,8 @@ export function suggestFamilyName(firstName: string): string {
 /** The full in-memory draft the wizard collects before the single atomic write. */
 export interface OnboardingDraft {
   name: string;
+  /** Last name carried from signup metadata (no UI field; preserved, not asked again). */
+  lastName: string;
   age: string;
   avatarUrl: string;
   color: string;
@@ -93,7 +95,7 @@ export interface OnboardingDraft {
 /** A blank draft (the wizard seeds `name`/`color` on top of this). */
 export function emptyDraft(overrides: Partial<OnboardingDraft> = {}): OnboardingDraft {
   return {
-    name: '', age: '', avatarUrl: '', color: '',
+    name: '', lastName: '', age: '', avatarUrl: '', color: '',
     familyName: '', timezone: 'UTC',
     adults: 1, children: 0, childAges: [],
     goals: [], referralSource: '', referralDetail: '',
@@ -151,7 +153,7 @@ export function buildFinalizePayload(draft: OnboardingDraft): FinalizePayload {
     ? draft.childAges.slice(0, 20)
     : parseChildAges(String(draft.children));
   return {
-    profile: { firstName, lastName: '', phone: '', email: '', avatarUrl: draft.avatarUrl || undefined },
+    profile: { firstName, lastName: draft.lastName.trim(), phone: '', email: '', avatarUrl: draft.avatarUrl || undefined },
     family: { name: draft.familyName.trim() || suggestFamilyName(firstName), timezone: draft.timezone || 'UTC' },
     details: {
       householdAdults: Math.max(0, draft.adults),

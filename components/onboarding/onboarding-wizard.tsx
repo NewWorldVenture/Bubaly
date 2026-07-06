@@ -38,13 +38,13 @@ const inputCls = 'h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm
 /** Pragmatic "looks like an email" check for the invite field. */
 const isLikelyEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s ?? '').trim());
 
-export function OnboardingWizard({ initialName = '' }: { initialName?: string }) {
+export function OnboardingWizard({ initialName = '', initialLastName = '' }: { initialName?: string; initialLastName?: string }) {
   const router = useRouter();
   const { error: toastError } = useToast();
 
   const [step, setStep] = useState<OnboardingStep>('profile');
   const [draft, setDraft] = useState<OnboardingDraft>(() =>
-    emptyDraft({ name: initialName, color: MEMBER_COLORS[0], familyName: suggestFamilyName(initialName) }));
+    emptyDraft({ name: initialName, lastName: initialLastName, color: MEMBER_COLORS[0], familyName: suggestFamilyName(initialName) }));
   const [familyNameTouched, setFamilyNameTouched] = useState(false);
   const [saving, setSaving] = useState(false);
 

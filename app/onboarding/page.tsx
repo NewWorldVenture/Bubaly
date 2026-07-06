@@ -10,15 +10,18 @@ export default async function OnboardingPage() {
   const { data: auth } = await supabase.auth.getUser();
 
   // Pre-fill the name from the profile row or the sign-up metadata so the user
-  // usually just taps Continue.
+  // usually just taps Continue. The last name is carried through silently (the
+  // wizard never asks again) so "Jordan Smoke" at signup stays "Jordan Smoke".
   let initialName = '';
+  let initialLastName = '';
   if (auth.user) {
     const { data: profile } = await supabase
       .from('profiles').select('display_name, full_name').eq('id', auth.user.id).maybeSingle();
     const metaName = (auth.user.user_metadata?.full_name as string | undefined) ?? null;
-    const { firstName } = splitFullName(profile?.display_name ?? profile?.full_name ?? metaName);
+    const { firstName, lastName } = splitFullName(profile?.full_name ?? profile?.display_name ?? metaName);
     initialName = firstName;
+    initialLastName = lastName;
   }
 
-  return <OnboardingWizard initialName={initialName} />;
+  return <OnboardingWizard initialName={initialName} initialLastName={initialLastName} />;
 }

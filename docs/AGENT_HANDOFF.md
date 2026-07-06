@@ -26,8 +26,20 @@
 > `lib/onboarding/flow.ts`** (13 tests) owns the step model / `canAdvance` / `suggestFamilyName` /
 > `buildFinalizePayload(draft)`; analytics `ONBOARDING_STEPS` expanded to the 6 real steps (funnel test
 > updated). *Predecessor bot hit its session limit mid-rebuild — its `flow.ts`/wizard were never
-> committed; this is the completed pickup.* Verified statically (tsc/eslint/1874 tests/build); NOT
-> browser-driven (needs an authed needs-family session — set that up to smoke-test the live flow).
+> committed; this is the completed pickup.* Verified statically (tsc/eslint/1874 tests/build) **and
+> then browser-driven end-to-end**: with no prod creds/Docker in the sandbox, a session stood up a
+> local Supabase-compatible stack (real PG16 + all 135 migrations + a Node shim for /auth/v1 +
+> /rest/v1 with real RLS via SET ROLE + request.jwt.claims) and drove THREE Chromium journeys —
+> (1) full path: brand-new signup → all 6 steps (goals/kids' ages/member add + email invite/PIN) →
+> dashboard; (2) minimal path: skip-everything + partial-PIN-then-Skip edge case, iPhone viewport,
+> America/New_York tz (auto-detected into families.timezone); (3) returning login → straight to /home
+> (no onboarding loop), family card shows the onboarding-created members. Every row verified in PG:
+> profiles (full name preserved), families, family_members (colors), family_onboarding
+> (adults/kids/ages/goals/referral), invites (token), user_preferences (onboardingComplete/age/
+> seeded-disabled appLock), onboarding_events funnel, audit_logs. One real bug found+fixed in the
+> sweep: the signup last name was being dropped at finalize — now carried through the draft
+> (`OnboardingDraft.lastName`, page passes `initialLastName`). Shim + journey scripts live in the
+> session scratchpad (`sbstack/`), not committed.
 >
 > **2. North-Star slices shipped** (todo.md OPEN WORK TRACKER §A): **Slice 6 Family Playbook** (pillar
 > #3) — `0126_family_playbook.sql` (`family_playbook_suggestions`, RLS) + pure `lib/playbook/learn.ts`

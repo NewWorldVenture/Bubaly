@@ -99,4 +99,10 @@ describe('buildFinalizePayload', () => {
     expect(p.family.name).toBe('The Kim Family');
     expect(p.appearance.age).toBeNull();
   });
+
+  it('carries the signup last name through without asking again', () => {
+    const p = buildFinalizePayload(emptyDraft({ name: 'Jordan', lastName: 'Smoke' }));
+    expect(p.profile.firstName).toBe('Jordan');
+    expect(p.profile.lastName).toBe('Smoke');
+  });
 });
