@@ -224,6 +224,20 @@ state vector and the Command Center's evening "what changed" source.)*
 
 ## ☐ OPEN WORK TRACKER (single source of truth for what's left — keep in sync)
 
+### 🌱 Test-data / seed coverage (as of 2026-07-05)
+**37 seed files** exist under `supabase/` — most domains have a 500+-record `*_one_family.sql`
+(scoped to The Kramer Family `92298eb2…`, idempotent): calendar · tasks · chores · meals(+extras) ·
+finances · finance-hub · memories · messages · wallet(+ledger) · voice · location · family · family-safety ·
+files · planning · food · home · roles(#8) · pillars 1–6 & 9. **NEW `seed_operating_index_one_family.sql`**
+(≈613 records) lights up the FOI (#7) end-to-end — every wired input fires (overspent budgets, a
+spendable account < 0, low pantry, expiring docs, overdue maintenance/reminders, off-track goals,
+missing-location events, colliding events for conflicts). Run it, then open
+`/dashboard/family-operating-index`.
+- ☐ Remaining seed gaps to close for "every feature at full capacity": **pillars 7/8 detail tables**
+  (FOI snapshot history over N days for real trend lines; role permission surfaces), **approval_requests /
+  meal_votes / family_polls** volume (comms dimension — FK-chained, needs parent rows), **autopilot_suggestions**
+  (orchestrator Q2). The FOI comms/routine dims are covered today by running `seed_messages` + `seed_chores`.
+
 ### A. Operating Layer slices still to build (agent-doable, build top-down)
 - [x] **Slice 1 — Family Operating Index** (engine + page + 0125). PR #227. ✅
 - [x] **Slice 2 — "Since yesterday" evening recap** (pillar #5, off the FOI snapshot). PR #228. ✅
