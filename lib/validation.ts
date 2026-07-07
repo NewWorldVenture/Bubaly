@@ -119,12 +119,33 @@ export const onboardingFinalizeProfileSchema = z.object({
 // The ENTIRE onboarding journey, committed in one atomic server action only when
 // the user reaches the end. Abandoning before this writes nothing — so a bailed
 // journey never leaves a half-created account/family behind.
+// One imported calendar event from the value step (paste .ics or the sample
+// week). Deliberately minimal + bounded — only what the timeline/first-brief
+// needs — so a giant paste can't smuggle arbitrary data into finalize.
+export const importedEventSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  start: z.string().min(1).max(40),
+  end: z.string().max(40).nullable().optional(),
+  allDay: z.boolean().optional(),
+  location: z.string().max(200).nullable().optional(),
+  recurring: z.boolean().optional(),
+});
+
+export const onboardingCalendarImportSchema = z.object({
+  source: z.enum(['ics', 'paste', 'url', 'demo', '']).optional().default(''),
+  events: z.array(importedEventSchema).max(1000).optional().default([]),
+});
+
+// The ENTIRE onboarding journey, committed in one atomic server action only when
+// the user reaches the end. Abandoning before this writes nothing — so a bailed
+// journey never leaves a half-created account/family behind.
 export const finalizeOnboardingSchema = z.object({
   profile: onboardingFinalizeProfileSchema,
   family: createFamilySchema,
   details: familyDetailsBaseSchema,
   members: z.array(draftMemberSchema).max(30).default([]),
   appearance: onboardingAppearanceSchema.optional().default({}),
+  calendarImport: onboardingCalendarImportSchema.optional().default({ source: '', events: [] }),
 });
 export type FinalizeOnboardingInput = z.infer<typeof finalizeOnboardingSchema>;
 

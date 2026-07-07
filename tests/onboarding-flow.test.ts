@@ -17,6 +17,15 @@ describe('step navigation', () => {
     expect(prevStep('profile')).toBe('profile'); // clamp
   });
 
+  it('puts the value step right after family (value-first sequencing)', () => {
+    expect(nextStep('family')).toBe('value');
+    expect(nextStep('value')).toBe('about');
+    expect(prevStep('value')).toBe('family');
+    // The value payoff comes BEFORE the deferrable configure steps.
+    expect(ONBOARDING_FLOW.indexOf('value')).toBeLessThan(ONBOARDING_FLOW.indexOf('members'));
+    expect(ONBOARDING_FLOW.indexOf('value')).toBeLessThan(ONBOARDING_FLOW.indexOf('pin'));
+  });
+
   it('knows the first and last form steps', () => {
     expect(isFirstStep('profile')).toBe(true);
     expect(isFirstStep('family')).toBe(false);
@@ -57,7 +66,8 @@ describe('canAdvance', () => {
     expect(canAdvance('family', emptyDraft({ familyName: 'A' }))).toBe(false);
     expect(canAdvance('family', emptyDraft({ familyName: 'The Kim Family' }))).toBe(true);
   });
-  it('never blocks the optional about/members steps', () => {
+  it('never blocks the optional value/about/members steps', () => {
+    expect(canAdvance('value', emptyDraft())).toBe(true); // importing is optional
     expect(canAdvance('about', emptyDraft())).toBe(true);
     expect(canAdvance('members', emptyDraft())).toBe(true);
   });
@@ -125,6 +135,30 @@ describe('buildFinalizePayload', () => {
   it('clamps and drops out-of-range ages', () => {
     const p = buildFinalizePayload(emptyDraft({ name: 'Kim', children: 2, childAges: [22, 5] }));
     expect(p.details.childAges).toEqual([5]); // 22 exceeds the 21 schema max
+  });
+
+  it('carries the imported calendar (source + capped events) into the payload', () => {
+    const events = Array.from({ length: 5 }, (_, i) => ({ title: `E${i}`, start: `2026-07-07T0${i}:00:00.000Z` }));
+    const p = buildFinalizePayload(emptyDraft({ name: 'Kim', importSource: 'demo', importedEvents: events }));
+    expect(p.calendarImport.source).toBe('demo');
+    expect(p.calendarImport.events).toHaveLength(5);
+  });
+
+  it('defaults to no calendar import when the value step is skipped', () => {
+    const p = buildFinalizePayload(emptyDraft({ name: 'Kim' }));
+    expect(p.calendarImport).toEqual({ source: '', events: [] });
+  });
+});
+
+describe('draft persistence never stashes imported events (quota safety)', () => {
+  it('strips importedEvents from sessionStorage and restores them empty', () => {
+    const events = Array.from({ length: 300 }, (_, i) => ({ title: `E${i}`, start: '2026-07-07T09:00:00.000Z' }));
+    const draft = emptyDraft({ name: 'Kim', familyName: 'The Kim Family', importSource: 'demo', importedEvents: events });
+    const raw = serializeDraftState('value', draft, true);
+    expect(raw).not.toContain('E299');
+    const restored = parseDraftState(raw);
+    expect(restored?.draft.importedEvents).toEqual([]);
+    expect(restored?.draft.importSource).toBe('');
   });
 });
 

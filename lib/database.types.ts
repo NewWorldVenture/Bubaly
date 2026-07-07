@@ -398,6 +398,11 @@ export interface Database {
         { id?: string; user_id?: string | null; session_id: string; step: string; phase?: string; duration_ms?: number | null; meta?: Json },
         Partial<{ user_id: string | null; session_id: string; step: string; phase: string; duration_ms: number | null; meta: Json }>
       >;
+      onboarding_imports: T<
+        { id: string; family_id: string; source: string; event_count: number; today_count: number; conflict_count: number; action_count: number; time_saved_minutes: number; brief: Json; created_by: string | null; created_at: string },
+        { id?: string; family_id: string; source?: string; event_count?: number; today_count?: number; conflict_count?: number; action_count?: number; time_saved_minutes?: number; brief?: Json; created_by?: string | null },
+        Partial<{ source: string; event_count: number; today_count: number; conflict_count: number; action_count: number; time_saved_minutes: number; brief: Json }>
+      >;
       journey_events: T<
         { id: string; family_id: string; member_id: string | null; journey: string; phase: string; step: number; session_id: string; duration_ms: number | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; journey: string; phase?: string; step?: number; session_id: string; duration_ms?: number | null },

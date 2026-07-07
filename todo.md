@@ -160,16 +160,24 @@ before asking the user to build anything.**
 ### ▶ THE TTFV BACKLOG (priority order — most is *wiring existing engines into the first run*)
 
 **P0 — The "magic first session" (the single biggest conversion/retention bet).**
-- [ ] **T1. Value-first onboarding re-sequence.** Restructure `lib/onboarding/flow.ts` so the flow is
-  *import → show value → (defer) configure*: after profile+family, offer **"Connect your calendar"**
-  (reuse `api/calendar/sync` ICS + the connections hub) and, on import, immediately compute and show a
-  **"Here's your day/week"** payoff. Members/PIN become **optional, post-value** steps. Keep the pure
-  flow engine + tests; add a `value` step.
-- [ ] **T2. First-run "instant briefing" builder.** New pure engine `lib/onboarding/first-brief.ts`
-  that, from imported events (or a 60-second guided quick-add if the user skips import), produces:
-  today's timeline · likely conflicts (reuse conflicts engine) · 3 dinner ideas (meals engine) ·
-  a prioritized action list · **3 "time-saved" opportunities**. Rendered as the `done`/first-home
-  screen instead of "Welcome". Tested against fixture calendars.
+- [x] **T1. Value-first onboarding re-sequence.** ✅ SHIPPED (2026-07-07). New flow order
+  `profile → family → value → about → members → pin → done` — the `value` step comes right after the
+  two required inputs, and everything after it is optional/deferrable. In the value step the user
+  **pastes their calendar (.ics)** or **tries a sample family week**; we parse it purely
+  (`lib/onboarding/ics.ts`, 7 tests) and compute an instant **first brief** — today's timeline ·
+  clashes · action list · time-saved (`lib/onboarding/first-brief.ts`, 9 tests) — shown BEFORE any
+  configuration. Server: `previewCalendarImportAction` (parse+brief, **no DB write**);
+  `finalizeOnboardingAction` persists the imported events into `calendar_events` and records the
+  first-value moment in **`onboarding_imports`** (`0138`, family-scoped RLS, PG16-validated) — the
+  seed of the TTFV metric (T10). Flow engine extended + retested (imported events kept OUT of
+  sessionStorage for quota safety). Seed `seed_onboarding_imports.sql` (500 rows, all 4 sources,
+  idempotent; wired into `SEED_ALL.sql`). Verified: tsc · eslint · **vitest (73 onboarding)** ·
+  `next build`. *(OAuth "Connect your calendar" stays owner-gated per R9/B3 — paste + sample deliver
+  the value moment with zero external keys.)*
+- [◐] **T2. First-run "instant briefing" builder.** Engine SHIPPED as `lib/onboarding/first-brief.ts`
+  (built with T1): today's timeline · likely conflicts · prioritized action list · **time-saved
+  opportunities**, tested against fixture calendars. Remaining for T2: also render it as the
+  `done`/first-home screen (replace "Welcome"), and fold in **3 dinner ideas** (meals engine).
 - [ ] **T3. New-family home = outcome, never empty.** `AiHomeDashboard` for a family with little data
   must render the first-brief outcome (T2) + one hero insight (T4), not empty widgets. Add
   seeded-empty-state outcomes.

@@ -34,7 +34,9 @@ import {
   serializeDraftState, parseDraftState, DRAFT_STORAGE_KEY,
   type OnboardingStep, type OnboardingDraft,
 } from '@/lib/onboarding/flow';
-import { finalizeOnboardingAction } from '@/app/onboarding/actions';
+import { finalizeOnboardingAction, previewCalendarImportAction } from '@/app/onboarding/actions';
+import { buildFirstBrief, type FirstBrief } from '@/lib/onboarding/first-brief';
+import { CalendarDays, Clipboard, AlertTriangle, ListChecks, Clock, Wand2 } from 'lucide-react';
 
 const inputCls = 'h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring';
 /** Pragmatic "looks like an email" check for the invite field. */
@@ -106,7 +108,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
   useEffect(() => {
     if (step === 'done') return;
     setLiveMsg(`Step ${current} of ${total}: ${STEP_META[step].title}`);
-    if (!firstStepRun.current && (step === 'about' || step === 'members' || step === 'pin')) {
+    if (!firstStepRun.current && (step === 'value' || step === 'about' || step === 'members' || step === 'pin')) {
       headingRef.current?.focus();
     }
     firstStepRun.current = false;
@@ -168,6 +170,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
           <FamilyPanel draft={draft} firstName={firstName} onEnter={advance}
             onChange={(v) => { setFamilyNameTouched(true); update({ familyName: v }); }} />
         )}
+        {step === 'value' && <ValuePanel draft={draft} update={update} />}
         {step === 'about' && <AboutPanel draft={draft} update={update} />}
         {step === 'members' && <MembersPanel draft={draft} update={update} />}
         {step === 'pin' && <PinPanel draft={draft} update={update} firstName={firstName} />}
@@ -188,7 +191,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
               {!saving && !isLastFormStep(step) && <ArrowRight className="h-4 w-4" />}
             </Button>
           </div>
-          {(step === 'about' || step === 'members' || step === 'pin') && (
+          {(step === 'value' || step === 'about' || step === 'members' || step === 'pin') && (
             <button type="button" disabled={saving}
               onClick={() => {
                 // Skip bypasses the step's advance gate. On PIN, finish directly —
@@ -197,7 +200,9 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
                 const next = nextStep(step); trackOnboarding(next, 'step'); setStep(next);
               }}
               className="mt-3 w-full text-center text-sm font-medium text-muted transition hover:text-fg disabled:opacity-50">
-              {step === 'pin' ? 'Skip — I’ll add a PIN later' : 'Skip for now'}
+              {step === 'pin' ? 'Skip — I’ll add a PIN later'
+                : step === 'value' ? 'Skip — I’ll connect my calendar later'
+                : 'Skip for now'}
             </button>
           )}
         </div>
@@ -281,6 +286,135 @@ function Stepper({ label, value, onChange, min = 0, max = 20 }: { label: string;
           <Plus className="h-4 w-4" />
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Step 3: Value — import a calendar, see the instant payoff ─────────────────
+function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Partial<OnboardingDraft>) => void }) {
+  const { error: toastError } = useToast();
+  const [ics, setIcs] = useState('');
+  const [loading, setLoading] = useState<null | 'paste' | 'demo'>(null);
+  // Recompute the brief locally when returning to the step (events live in the draft).
+  const [brief, setBrief] = useState<FirstBrief | null>(() =>
+    draft.importedEvents.length ? buildFirstBrief(draft.importedEvents, new Date()) : null);
+
+  async function run(source: 'paste' | 'demo') {
+    setLoading(source);
+    const res = await previewCalendarImportAction({ source, icsText: source === 'paste' ? ics : undefined });
+    setLoading(null);
+    if (!res.ok) { toastError(res.error); return; }
+    if (!res.data) { toastError('Could not read that calendar'); return; }
+    setBrief(res.data.brief);
+    update({ importedEvents: res.data.events, importSource: res.data.source });
+    trackOnboarding('value', 'step');
+  }
+
+  function reset() {
+    setBrief(null); setIcs('');
+    update({ importedEvents: [], importSource: '' });
+  }
+
+  if (brief) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4 text-center">
+          <div className="mx-auto mb-1 flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-brand">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <p className="text-base font-semibold">{brief.headline}</p>
+          {brief.timeSavedMinutes > 0 && (
+            <p className="mt-1 text-sm text-muted">
+              Bubaly just saved you about <span className="font-semibold text-fg">{brief.timeSavedMinutes} minutes</span> of planning.
+            </p>
+          )}
+        </div>
+
+        {brief.timeline.length > 0 && (
+          <section className="rounded-2xl border border-border p-4">
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><CalendarDays className="h-4 w-4 text-brand" /> Today</h2>
+            <ul className="space-y-1.5">
+              {brief.timeline.slice(0, 6).map((t, i) => (
+                <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="truncate"><span className="font-medium">{t.title}</span>{t.location ? <span className="text-muted"> · {t.location}</span> : null}</span>
+                  <span className="shrink-0 tabular-nums text-muted">{t.timeLabel}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {brief.conflicts.length > 0 && (
+          <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-amber-500" /> {brief.conflicts.length} clash{brief.conflicts.length === 1 ? '' : 'es'} to resolve</h2>
+            <ul className="space-y-1 text-sm text-muted">
+              {brief.conflicts.slice(0, 3).map((c, i) => (
+                <li key={i}><span className="font-medium text-fg">{c.aTitle}</span> overlaps <span className="font-medium text-fg">{c.bTitle}</span> · {c.dayLabel} {c.overlapLabel}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {brief.actions.length > 0 && (
+          <section className="rounded-2xl border border-border p-4">
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand" /> First things to handle</h2>
+            <ul className="space-y-1.5 text-sm">
+              {brief.actions.slice(0, 4).map((a) => (
+                <li key={a.id} className="flex items-start gap-2">
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
+                  <span><span className="font-medium">{a.label}</span> — <span className="text-muted">{a.detail}</span></span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {brief.opportunities.length > 0 && (
+          <section className="rounded-2xl border border-border p-4">
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-brand" /> Working for you already</h2>
+            <ul className="space-y-1.5 text-sm">
+              {brief.opportunities.map((o) => (
+                <li key={o.id}><span className="font-medium">{o.label}</span> <span className="text-muted">· {o.detail}</span></li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <button type="button" onClick={reset} className="w-full text-center text-xs font-medium text-muted underline-offset-2 hover:text-fg hover:underline">
+          Import a different calendar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-border p-4">
+        <label htmlFor="ics-paste" className="mb-2 flex items-center gap-2 text-sm font-semibold">
+          <Clipboard className="h-4 w-4 text-brand" /> Paste your calendar export (.ics)
+        </label>
+        <p className="mb-2 text-xs text-muted">
+          In Google/Apple/Outlook Calendar, export or open your <code className="rounded bg-surface px-1">.ics</code> file and paste its contents here. Nothing is saved until you finish setup.
+        </p>
+        <textarea
+          id="ics-paste" value={ics} onChange={(e) => setIcs(e.target.value)}
+          placeholder="BEGIN:VCALENDAR …" rows={4}
+          className="w-full resize-y rounded-xl border border-border bg-bg px-3 py-2 font-mono text-xs focus-ring" />
+        <Button className="mt-3 w-full" onClick={() => run('paste')} disabled={loading !== null || ics.trim().length === 0}>
+          {loading === 'paste' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarDays className="h-4 w-4" />}
+          Build my day
+        </Button>
+      </div>
+
+      <div className="flex items-center gap-3 text-xs text-muted">
+        <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
+      </div>
+
+      <button type="button" onClick={() => run('demo')} disabled={loading !== null}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border p-4 text-sm font-medium transition hover:border-brand/50 hover:bg-brand/5 disabled:opacity-50">
+        {loading === 'demo' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4 text-brand" />}
+        See it with a sample family week
+      </button>
     </div>
   );
 }

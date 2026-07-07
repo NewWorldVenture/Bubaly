@@ -7,12 +7,21 @@
 
 import type { MemberRole } from '@/lib/constants/roles';
 import type { DraftMember } from './draft';
+import type { BriefEvent } from './first-brief';
 import { normalizeAge } from './pin';
 
-export type OnboardingStep = 'profile' | 'family' | 'about' | 'members' | 'pin' | 'done';
+export type OnboardingStep = 'profile' | 'family' | 'value' | 'about' | 'members' | 'pin' | 'done';
 
-/** Every step, in order. `done` is the terminal celebration (not a form). */
-export const ONBOARDING_FLOW: OnboardingStep[] = ['profile', 'family', 'about', 'members', 'pin', 'done'];
+/**
+ * Every step, in order. `done` is the terminal celebration (not a form).
+ *
+ * VALUE-FIRST (T1): after the two things we truly need (your name + a family
+ * name), the `value` step imports the family's existing calendar and shows an
+ * instant "here's your day/week" payoff — BEFORE we ask them to configure
+ * household details, add members, or set a PIN. Everything after `value` is
+ * optional/deferrable, so a new family feels the product working on day one.
+ */
+export const ONBOARDING_FLOW: OnboardingStep[] = ['profile', 'family', 'value', 'about', 'members', 'pin', 'done'];
 
 /** Steps that count toward the progress bar (everything before the celebration). */
 export const PROGRESS_STEPS: OnboardingStep[] = ONBOARDING_FLOW.filter((s) => s !== 'done');
@@ -20,6 +29,7 @@ export const PROGRESS_STEPS: OnboardingStep[] = ONBOARDING_FLOW.filter((s) => s 
 export const STEP_META: Record<OnboardingStep, { title: string; subtitle: string }> = {
   profile: { title: 'Create your profile', subtitle: 'A name and a look — this is you inside Bubaly.' },
   family: { title: 'Name your family', subtitle: 'Your shared space where everything comes together.' },
+  value: { title: 'See your week come together', subtitle: 'Bring in your calendar and Bubaly builds your first day instantly.' },
   about: { title: 'About your family', subtitle: 'A few details so Bubaly fits how your family runs.' },
   members: { title: 'Add your family', subtitle: 'Add people now or invite them by email — you can always do this later.' },
   pin: { title: 'Protect your profile', subtitle: 'An optional PIN keeps your profile private on shared devices.' },
@@ -89,6 +99,10 @@ export interface OnboardingDraft {
   members: DraftMember[];
   pin: string;
   confirmPin: string;
+  /** Events imported in the `value` step (paste .ics or the sample week). */
+  importedEvents: BriefEvent[];
+  /** How the events were brought in: 'ics' | 'paste' | 'url' | 'demo' | '' (skipped). */
+  importSource: string;
 }
 
 /** A blank draft (the wizard seeds `name`/`color` on top of this). */
@@ -99,6 +113,7 @@ export function emptyDraft(overrides: Partial<OnboardingDraft> = {}): Onboarding
     adults: 1, children: 0, childAges: [],
     goals: [], referralSource: '', referralDetail: '',
     members: [], pin: '', confirmPin: '',
+    importedEvents: [], importSource: '',
     ...overrides,
   };
 }
@@ -113,6 +128,7 @@ export function canAdvance(step: OnboardingStep, draft: OnboardingDraft): boolea
   switch (step) {
     case 'profile': return draft.name.trim().length >= 1;
     case 'family': return draft.familyName.trim().length >= 2;
+    case 'value': return true;   // importing is optional — you can always skip
     case 'about': return true;
     case 'members': return true;
     case 'pin': {
@@ -139,7 +155,10 @@ export interface PersistedDraftState {
  * stashes the (soon-to-be-hashed) App Lock PIN in web storage.
  */
 export function serializeDraftState(step: OnboardingStep, draft: OnboardingDraft, familyNameTouched: boolean): string {
-  const safeDraft: OnboardingDraft = { ...draft, pin: '', confirmPin: '' };
+  // Never stash the PIN in web storage; and drop imported events (they can be
+  // large — a full calendar — and are trivially re-imported, so persisting them
+  // would risk the sessionStorage quota for no real benefit).
+  const safeDraft: OnboardingDraft = { ...draft, pin: '', confirmPin: '', importedEvents: [], importSource: '' };
   return JSON.stringify({ v: 1, step, familyNameTouched, draft: safeDraft });
 }
 
@@ -162,6 +181,7 @@ export function parseDraftState(raw: string | null | undefined): PersistedDraftS
       members: Array.isArray(d.members) ? d.members : [],
       childAges: Array.isArray(d.childAges) ? d.childAges : [],
       goals: Array.isArray(d.goals) ? d.goals : [],
+      importedEvents: [], importSource: '',
       pin: '', confirmPin: '',
     };
     return { step, draft, familyNameTouched: !!o.familyNameTouched };
@@ -184,6 +204,8 @@ export interface FinalizePayload {
     | { kind: 'invite'; email: string; role: MemberRole }
   >;
   appearance: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
+  /** Calendar imported in the value step — persisted to calendar_events at finalize. */
+  calendarImport: { source: string; events: BriefEvent[] };
 }
 
 /**
@@ -222,6 +244,11 @@ export function buildFinalizePayload(draft: OnboardingDraft): FinalizePayload {
       age: normalizeAge(draft.age),
       avatarUrl: draft.avatarUrl || undefined,
       pin: validPin ? draft.pin.trim() : undefined,
+    },
+    calendarImport: {
+      source: draft.importSource || '',
+      // Cap what we ship to finalize so a giant paste can't bloat the request.
+      events: (draft.importedEvents ?? []).slice(0, 1000),
     },
   };
 }

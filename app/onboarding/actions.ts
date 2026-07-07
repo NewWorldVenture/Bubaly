@@ -13,9 +13,48 @@ import { cleanGoals, cleanReferralSource } from '@/lib/onboarding/family';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { upsertOnboardingContact } from '@/lib/marketing/onboarding-contact';
+import { parseIcs, toBriefEvents, demoBriefEvents } from '@/lib/onboarding/ics';
+import { buildFirstBrief, briefSummary, type BriefEvent, type FirstBrief } from '@/lib/onboarding/first-brief';
 import type { MemberRole } from '@/lib/constants/roles';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
+
+/**
+ * VALUE-FIRST (T1): parse the family's existing calendar (pasted .ics or a
+ * generated sample week) and compute the instant "first brief" payoff — with NO
+ * database write. This is the engine behind the onboarding value step: the user
+ * sees their day/week come together before we ask them to configure anything.
+ * The parsed events are handed back so the wizard can carry them to finalize,
+ * which persists them into the real family's calendar.
+ */
+export async function previewCalendarImportAction(input: {
+  source: 'paste' | 'demo'; icsText?: string;
+}): Promise<Result<{ brief: FirstBrief; events: BriefEvent[]; source: string }>> {
+  const supabase = await createServer();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { ok: false, error: 'Not signed in' };
+
+  const now = new Date();
+  let events: BriefEvent[] = [];
+  let source = input.source;
+
+  if (input.source === 'demo') {
+    events = demoBriefEvents(now);
+    source = 'demo';
+  } else {
+    const text = (input.icsText ?? '').trim();
+    if (!text) return { ok: false, error: 'Paste your calendar’s .ics text, or try the sample week.' };
+    if (!text.includes('BEGIN:VEVENT')) {
+      return { ok: false, error: 'That doesn’t look like a calendar (.ics) export. Try again or use the sample week.' };
+    }
+    events = toBriefEvents(parseIcs(text)).slice(0, 1000);
+    if (events.length === 0) return { ok: false, error: 'No events found in that calendar.' };
+    source = 'paste';
+  }
+
+  const brief = buildFirstBrief(events, now);
+  return { ok: true, data: { brief, events, source } };
+}
 
 /**
  * Step 1 of onboarding: capture the account holder's contact details
@@ -362,6 +401,7 @@ export async function finalizeOnboardingAction(input: {
     | { kind: 'invite'; email: string; role: MemberRole }
   >;
   appearance?: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
+  calendarImport?: { source: string; events: BriefEvent[] };
 }): Promise<Result<{ familyId: string }>> {
   const parsed = finalizeOnboardingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid onboarding data' };
@@ -370,7 +410,7 @@ export async function finalizeOnboardingAction(input: {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return { ok: false, error: 'Not signed in' };
 
-  const { profile, family, details, members, appearance } = parsed.data;
+  const { profile, family, details, members, appearance, calendarImport } = parsed.data;
 
   // 1. Save profile (name, phone, email, optional avatar)
   const profileRes = await saveUserProfile(auth.user.id, {
@@ -500,6 +540,52 @@ export async function finalizeOnboardingAction(input: {
       subject: 'You’re invited to a family on Bubaly',
       html: `<p>You’ve been invited to join a family on Bubaly.</p><p><a href="${link}">Accept your invite</a></p>`,
     });
+  }
+
+  // 6a. VALUE-FIRST (T1): persist the calendar the user imported in the value step
+  //     into the real family's calendar_events, then record the first-value moment
+  //     in onboarding_imports (the seed of the TTFV metric). Both are best-effort —
+  //     a hiccup here must never block the user finishing onboarding. The brief is
+  //     recomputed server-side (never trust the client) for the durable summary.
+  const importEvents = (calendarImport?.events ?? []).slice(0, 1000);
+  if (importEvents.length > 0) {
+    const eventRows = importEvents.map((e) => ({
+      family_id: familyId,
+      title: (e.title || 'Untitled').slice(0, 200),
+      description: '[Imported during onboarding]',
+      location: e.location ?? null,
+      starts_at: e.start,
+      ends_at: e.end ?? null,
+      all_day: !!e.allDay,
+      recurrence: 'none' as const,
+      category: 'general' as const,
+      created_by: auth.user.id,
+    }));
+    let importedCount = 0;
+    for (let i = 0; i < eventRows.length; i += 200) {
+      const chunk = eventRows.slice(i, i + 200);
+      const { error: evErr } = await admin.from('calendar_events').insert(chunk);
+      if (evErr) console.error('[onboarding] calendar import insert failed', evErr.message);
+      else importedCount += chunk.length;
+    }
+
+    try {
+      const brief = buildFirstBrief(importEvents, new Date());
+      const { error: impErr } = await admin.from('onboarding_imports').insert({
+        family_id: familyId,
+        source: (calendarImport?.source as 'ics' | 'paste' | 'url' | 'demo') || 'paste',
+        event_count: importedCount,
+        today_count: brief.todayCount,
+        conflict_count: brief.conflicts.length,
+        action_count: brief.actions.length,
+        time_saved_minutes: brief.timeSavedMinutes,
+        brief: briefSummary(brief) as never,
+        created_by: auth.user.id,
+      });
+      if (impErr) console.error('[onboarding] import record failed', impErr.message);
+    } catch (e) {
+      console.error('[onboarding] first-brief record failed', e);
+    }
   }
 
   // 6b. Persist the account holder's age + optional App Lock PIN + the
