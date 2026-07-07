@@ -122,6 +122,29 @@
 > carries the right `next` (plain + invite), callback error path. tsc/eslint/vitest/build green. (Shim
 > gained `/auth/v1/otp`+`/verify`; scripts in `sbstack/`.)
 >
+> ## ⏱️ 2026-07-07 (T10 — TTFV / time-to-first-value, shipped)
+>
+> The onboarding funnel measured getting THROUGH sign-up; T10 adds the value half — **time to first
+> value** and session-1 activation — right next to the step funnel. All on `main`;
+> tsc/eslint/**2030 tests**/`next build` green; migration + seed PG16-validated & idempotent.
+>
+> - **Pure core:** `lib/analytics/activation.ts` — `summarizeActivation` (cohorts keyed by session_id =
+>   one new family; TTFV = earliest sign-up→first_outcome_viewed per cohort → median + p90; session-1
+>   rates for calendar/brief/outcome; per-milestone reach), `sessionIndexFromMs` (a day = session 1, a
+>   week = 2, later = 3 — derived identically client + server), `percentile`. **8 tests**.
+> - **Storage:** `0146_activation_events.sql` — milestones signup / calendar_imported / first_brief_viewed
+>   / first_outcome_viewed / first_capture. RLS mirrors `onboarding_events` (0133): insert-own-or-anon,
+>   select-own, **cross-family aggregation is service-role only**. Types added.
+> - **Wired live (deduped to first value):** `<ActivationBeacon>` (`components/analytics/activation-beacon.tsx`
+>   + `lib/analytics/activation-track.ts`, localStorage-deduped) on **Outcomes** → `first_outcome_viewed`
+>   and **Briefing** → `first_brief_viewed`; server-side `recordActivationServer` (`lib/analytics/
+>   activation-server.ts`, existence-check dedup) in **`addCalendarFeed`** → `calendar_imported`. Sign-up
+>   time = the family's `created_at` (TTFV clock); onboarding wizard untouched (avoids the parallel rewrite).
+> - **Dashboard:** `/dashboard/onboarding-funnel` gained a "Time to First Value" panel below the step
+>   funnel — TTFV median/p90, activation rate, new-families count, session-1 tiles, per-milestone reach bars.
+> - **Seed:** `seed_activation_events.sql` — ~820 rows / 220 cohorts, ~68% activation, median TTFV ~21 min,
+>   a multi-day slow tail. Cross-family telemetry (family_id null, cohort = `seed-t10-*`); idempotent.
+>
 > ## 🎈 2026-07-07 (T9 — "What Bubaly has learned" + life-event playbooks, shipped)
 >
 > New `/dashboard/life-events` ("Life & Milestones") deepens the felt moat with two halves. All on

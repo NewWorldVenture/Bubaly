@@ -418,6 +418,11 @@ export interface Database {
         { id?: string; family_id: string; as_of_date?: string; kind: string; title: string; detail?: string | null; href?: string | null; impact?: number; status?: string; member_id?: string | null; created_by?: string | null },
         Partial<{ kind: string; title: string; detail: string | null; href: string | null; impact: number; status: string; member_id: string | null }>
       >;
+      activation_events: T<
+        { id: string; user_id: string | null; family_id: string | null; session_id: string; milestone: string; session_index: number; ms_since_signup: number | null; meta: Record<string, unknown>; created_at: string },
+        { id?: string; user_id?: string | null; family_id?: string | null; session_id: string; milestone: string; session_index?: number; ms_since_signup?: number | null; meta?: Record<string, unknown> },
+        Partial<{ user_id: string | null; family_id: string | null; session_id: string; milestone: string; session_index: number; ms_since_signup: number | null; meta: Record<string, unknown> }>
+      >;
       life_event_plans: T<
         { id: string; family_id: string; template_key: string; title: string; event_date: string | null; status: string; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; template_key: string; title: string; event_date?: string | null; status?: string; notes?: string | null; created_by?: string | null },

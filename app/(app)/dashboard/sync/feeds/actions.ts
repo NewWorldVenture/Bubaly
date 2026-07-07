@@ -5,6 +5,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { syncFeed } from '@/lib/server/calendar-feeds';
 import { normalizeFeedUrl, FEED_COLORS, type FeedColor } from '@/lib/calendar/feeds';
+import { recordActivationServer } from '@/lib/analytics/activation-server';
 
 type ActionResult = { ok: true; imported?: number } | { ok: false; error: string };
 
@@ -27,6 +28,8 @@ export async function addCalendarFeed(input: { name: string; url: string; color?
   if (error || !feed) return { ok: false, error: error?.message ?? 'Could not save the feed' };
 
   const result = await syncFeed(supabase, feed);
+  // TTFV: importing a calendar is a first-value milestone (recorded once).
+  await recordActivationServer({ userId: ctx.user.id, familyId, milestone: 'calendar_imported', signupAtIso: ctx.active.family.created_at });
   revalidatePath('/dashboard/settings');
   revalidatePath('/dashboard/calendar');
   if (!result.ok) return { ok: false, error: result.error };

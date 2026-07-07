@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { OutcomesLauncher, type OutcomePlan } from '@/components/modules/outcomes-launcher';
+import { ActivationBeacon } from '@/components/analytics/activation-beacon';
 import {
   OUTCOMES, buildOutcomePlan, outcomeUrgencyCount, type OutcomeContext,
 } from '@/lib/outcomes/launcher';
@@ -52,5 +53,10 @@ export default async function OutcomesPage() {
     urgency: outcomeUrgencyCount(outcome.id, context),
   }));
 
-  return <OutcomesLauncher plans={plans} />;
+  return (
+    <>
+      <ActivationBeacon milestone="first_outcome_viewed" familyId={familyId} userId={ctx.user.id} signupAtIso={ctx.active.family.created_at} />
+      <OutcomesLauncher plans={plans} />
+    </>
+  );
 }

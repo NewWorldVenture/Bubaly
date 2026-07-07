@@ -269,10 +269,15 @@ before asking the user to build anything.**
   *(Route not in global nav per the standing rule — reachable at `/dashboard/life-events`.)* (Areas 5 + 6.)
 
 **Instrumentation (proves the bet):**
-- [ ] **T10. TTFV metric.** Instrument **time-from-signup-to-first-outcome-viewed** and
-  **% of new families who import a calendar / see a first-brief in session 1** in the onboarding
-  telemetry (`lib/analytics/onboarding*`). This is the number every T-item above is optimizing; put it
-  on the onboarding-funnel dashboard next to the existing step funnel.
+- [x] **T10. TTFV metric.** ✅ Instrumented **time-from-signup-to-first-outcome-viewed** (median + p90)
+  and **session-1 activation rates** (calendar imported / first briefing / first outcome). New
+  `activation_events` table (`0146`, mirrors onboarding-telemetry RLS: insert-own, select-own,
+  service-role aggregates) + pure `lib/analytics/activation.ts` (`summarizeActivation`, `sessionIndexFromMs`,
+  `percentile`, **8 tests**). Wired live: `<ActivationBeacon>` on **Outcomes** (first_outcome_viewed) and
+  **Briefing** (first_brief_viewed), and a server record on **calendar-feed add** (calendar_imported),
+  all deduped to "first value". Surfaced on `/dashboard/onboarding-funnel` **next to the step funnel**
+  (TTFV median/p90, activation rate, session-1 tiles, per-milestone reach). Seed `seed_activation_events.sql`
+  (~820 rows / 220 cohorts). tsc/eslint/**2030 tests**/build.
 
 **Alignment note:** T1–T3 + T8 are pure UX/wiring of existing capabilities (no new modules — consistent
 with the freeze). T4/T6/T9 route *through* the reasoning engine/graph (advance R2/R4/R5/R10/R12), not
@@ -565,6 +570,8 @@ missing-location events, colliding events for conflicts). Run it, then open
   30 surfaces × 18 dates over ~68 days, upward trend, accessibility weakest, 4 surfaces below the bar.
 - ☑ **NEW `seed_life_events_one_family.sql`** (567 rows) exercises T9 Life & Milestones — 44 plans
   (active/completed/archived) × ~493 dated checklist items + 30 learned facts. Run it, open `/dashboard/life-events`.
+- ☑ **NEW `seed_activation_events.sql`** (~820 rows / 220 cohorts) exercises T10 TTFV — signup→first-value
+  funnel with a realistic TTFV distribution + session-1 spread. Cross-family telemetry; open `/dashboard/onboarding-funnel`.
 
 ### A. Operating Layer slices still to build (agent-doable, build top-down)
 - [x] **Slice 1 — Family Operating Index** (engine + page + 0125). PR #227. ✅

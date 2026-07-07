@@ -4,6 +4,7 @@ import { createServer } from '@/lib/supabase/server';
 import { BriefingModule } from '@/components/modules/briefing-module';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
 import { summarizeChange, type SnapshotView } from '@/lib/operating-index/summary';
+import { ActivationBeacon } from '@/components/analytics/activation-beacon';
 
 export const metadata: Metadata = { title: 'Daily Briefing | Bubaly' };
 
@@ -28,5 +29,10 @@ export default async function BriefingPage() {
     ? summarizeChange(toView(foiSnaps[0]), foiSnaps[1] ? toView(foiSnaps[1]) : null)
     : null;
 
-  return <BriefingModule recap={change ? <ChangeRecap change={change} /> : null} />;
+  return (
+    <>
+      <ActivationBeacon milestone="first_brief_viewed" familyId={ctx.active.familyId} userId={ctx.user.id} signupAtIso={ctx.active.family.created_at} />
+      <BriefingModule recap={change ? <ChangeRecap change={change} /> : null} />
+    </>
+  );
 }
