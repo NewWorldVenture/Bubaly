@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtRelative } from '@/lib/utils/format';
+import { notificationsLine } from '@/lib/tone/partner-phrasing';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -84,7 +85,7 @@ export function NotificationsModule() {
     <div className="module-page">
       <PageHeader
         title="Notifications"
-        description="Who needs to know what — surfaced from your family's upcoming schedule, chores, and reminders."
+        description={notificationsLine(unread.length)}
         action={(
           <div className="flex items-center gap-2">
             <AiInsight kind="notifications" />
