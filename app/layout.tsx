@@ -37,6 +37,11 @@ export const metadata: Metadata = {
     url: SITE_URL,
   },
   twitter: { card: 'summary_large_image', title: 'Bubaly — Less Life Admin. More Living Life.', description: 'The AI operating system for family life — so you spend less time managing life and more time living it.' },
+  // Relative canonical resolves per-route against metadataBase, so every page
+  // gets a self-referential canonical (https://www.bubaly.com<path>). This stops
+  // duplicate URL variants — non-www, trailing slash, query strings, and the
+  // *.vercel.app preview domains — from being indexed as separate pages.
+  alternates: { canonical: './' },
   robots: { index: true, follow: true },
 };
 

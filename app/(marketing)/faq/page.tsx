@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Section, SectionHeading } from '@/components/marketing/sections';
 import { FAQAccordion, type FAQ } from '@/components/marketing/faq-accordion';
 import { CTASection } from '@/components/marketing/cta';
+import { FaqStructuredData } from '@/components/marketing/structured-data';
 
 export const metadata: Metadata = {
   title: 'FAQ',
@@ -22,6 +23,7 @@ const FAQS: FAQ[] = [
 export default function FAQPage() {
   return (
     <>
+      <FaqStructuredData items={FAQS} />
       <Section className="pt-20 text-center">
         <SectionHeading eyebrow="FAQ" title="Questions, answered" description="Everything you need to know to get your family started." />
       </Section>
