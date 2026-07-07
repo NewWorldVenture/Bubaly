@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Bell } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { bellLabel, badgeCount } from '@/lib/tone/partner-phrasing';
 import { useApp } from './app-context';
 
 export function NotificationBell() {
@@ -37,12 +38,13 @@ export function NotificationBell() {
     <Link
       href="/dashboard/notifications"
       className="relative inline-flex h-10 w-10 items-center justify-center rounded-full glass hover:bg-elevated focus-ring"
-      aria-label={`Notifications${count ? `, ${count} unread` : ''}`}
+      aria-label={bellLabel(count)}
+      title={bellLabel(count)}
     >
       <Bell className="h-5 w-5" />
       {count > 0 && (
         <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white">
-          {count > 9 ? '9+' : count}
+          {badgeCount(count)}
         </span>
       )}
     </Link>

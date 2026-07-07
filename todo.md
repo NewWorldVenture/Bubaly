@@ -213,9 +213,15 @@ before asking the user to build anything.**
   **vitest (insight + home + onboarding)** · `next build`. *(The traffic+weather source for the
   leave-earlier insight is owner-gated on a Maps/weather key per B3 — the ranker + seed exercise the
   kind; it goes live when the key lands.)*
-- [ ] **T5. Partner-tone pass.** Replace count-based badges/notifications copy with partner framing
-  ("You're in good shape — 3 quick approvals finish tomorrow"). Centralize the phrasing helper; sweep
-  surfaced counts. (Area 10.)
+- [x] **T5. Partner-tone pass.** ✅ SHIPPED (2026-07-07). Centralized phrasing helper
+  `lib/tone/partner-phrasing.ts` (18 tests) turns raw counts into partner voice: `notificationsLine`
+  ("You're all caught up" → "3 quick things to glance at" → a full-inbox triage offer), `bellLabel`
+  (spoken-friendly aria), `partnerStatus` (one "where you stand" line — "You're in good shape — 3 quick
+  approvals and tomorrow's set"; surfaces the single most pressing signal), `badgeCount` (capped). Wired
+  into the **notification bell** (aria + title + badge) and the **Notifications page** header (live
+  partner line from the unread count) — deliberately left `ai-home-dashboard` to the in-flight T-work to
+  avoid a collision. Seed `seed_notifications.sql` (500 rows, all 10 types, ~40 unread; in `SEED_ALL.sql`,
+  PG16-validated + idempotent). Verified: tsc · eslint · vitest · `next build`. (Area 10.)
 
 **P2 — Collaboration, transparency, premium consistency.**
 - [ ] **T6. AI-facilitated group decisions.** Turn `/voting` + `/decisions` into AI-driven consensus:
