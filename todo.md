@@ -74,9 +74,16 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   (`loadFamilyGraph` + `loadFamilyContext`, degrades to empty on read error), `tests/reasoning-context.test.ts`
   (10 tests, green). First consumer wired: agents page now loads the graph via `loadFamilyGraph` (DRY'd off
   its inline mapping) — R1 is used, not dormant.
-- [ ] **R2. Re-point existing engines at the graph** — FOI, Concierge, Briefing, Playbook, Calm,
+- [~] **R2. Re-point existing engines at the graph** — FOI, Concierge, Briefing, Playbook, Calm,
   Decisions, Prep-Plans, Outcomes read graph relationships (Emma→Soccer→Field→Weather→Dinner) instead
   of isolated `.from()` calls. No new tables; rewire reads. Ship one engine at a time behind tests.
+  - [x] Shared reasoning core `lib/reasoning/insights.ts` — `familyInsights(ctx)` (coordination hubs +
+    blast radius + unlinked coverage gaps) over a `FamilyContext`; `insightsToPromptLines` for LLM
+    grounding. Pure, 5 tests. `lib/agents/graph-insight.ts` now DELEGATES to it (one engine, not two).
+  - [x] **Briefing** (flagship "what does my family need today"): `app/api/ai/briefing/route.ts` now
+    loads `loadFamilyContext`, adds a FAMILY CONNECTIONS section to the LLM grounding + a system-prompt
+    rule to reason about knock-on effects, and folds hub insights into the deterministic (AI-off) fallback.
+  - [ ] Next engines: Concierge digest, Calm inbox, Decisions, Playbook, Prep-Plans, Outcomes, FOI.
 - [ ] **R3. Auto-maintain the graph** — the `family_model_dirty` trigger (`0134`) already flags
   changes; make the projector run on-dirty so the graph is always current (not a manual "Rebuild").
 

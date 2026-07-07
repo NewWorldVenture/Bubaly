@@ -3,6 +3,8 @@ import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
+import { loadFamilyContext } from '@/lib/reasoning/server';
+import { familyInsights, insightsToPromptLines } from '@/lib/reasoning/insights';
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,6 +24,11 @@ export async function POST(req: NextRequest) {
     // pantry, warranties) — look a little further ahead so nothing is missed.
     const horizon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const todayDow = now.getUTCDay(); // 0=Sun, matches medication_schedules.days_of_week
+
+    // Knowledge-graph relationship reasoning (moat R2): load the family's linked
+    // model in parallel with the row reads so the briefing can reason across
+    // relationships (coordination hubs, blast radius), not just flat lists.
+    const familyCtxPromise = loadFamilyContext(supabase, familyId);
 
     const [
       { data: members },
@@ -103,6 +110,10 @@ export async function POST(req: NextRequest) {
     };
     const digest = buildConciergeDigest(conciergeSnapshot);
 
+    // ── Graph relationship insights (coordination hubs, blast radius) ─────────
+    const familyCtx = await familyCtxPromise;
+    const graphInsights = familyInsights(familyCtx);
+
     const context = `
 TODAY: ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} at ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
 FAMILY NAME: ${ctx.active.family.name}
@@ -156,6 +167,9 @@ ${(appointments ?? []).map(a => {
 
 CROSS-DOMAIN ACTION ITEMS (bills, medications, home maintenance, warranties, trips, pantry — ${digest.headline}):
 ${digestToPromptLines(digest)}
+
+FAMILY CONNECTIONS (knowledge-graph reasoning — how things relate, not just what exists):
+${insightsToPromptLines(graphInsights)}
     `.trim();
 
     const systemPrompt = `You are the Bubaly AI Chief of Staff. Generate a ${type} family briefing as structured JSON.
@@ -202,6 +216,7 @@ Rules:
 - For evening briefing, populate completed/outstanding/tomorrowPreview
 - For weekly briefing, populate weeklyHighlights and weeklyConflicts
 - ALWAYS fold the CROSS-DOMAIN ACTION ITEMS (bills due, medications, home maintenance, expiring warranties, upcoming trips, expiring pantry food) into "reminders" and "outstanding" with honest urgency — overdue→high, today→high, coming up→medium. Never invent amounts or dates; only use what is given.
+- Use the FAMILY CONNECTIONS section to reason about knock-on effects: when a coordination hub is under pressure, call out what a change to it would ripple into, and prefer recommendations that protect the hub. Only reference connections that are given.
 - If data is sparse, be honest but still encouraging`;
 
     // The concierge digest is the deterministic backbone: reminders and
@@ -210,6 +225,12 @@ Rules:
     const digestReminders = digest.items.map(i => ({
       text: `${i.title} — ${i.detail}`,
       urgency: (i.urgency === 'soon' ? 'medium' : 'high') as 'high' | 'medium' | 'low',
+    }));
+    // Relationship insights surface as low-urgency reminders so the deterministic
+    // briefing still reasons over connections when AI is unconfigured.
+    const graphReminders = graphInsights.map(i => ({
+      text: `${i.title} — ${i.detail}`,
+      urgency: 'low' as 'high' | 'medium' | 'low',
     }));
     const subtitle = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
@@ -252,7 +273,7 @@ Rules:
         conflicts: [],
         kidsNeeds: [],
         meals: [],
-        reminders: digestReminders,
+        reminders: [...digestReminders, ...graphReminders],
         operationsScore: {
           overall: digest.counts.overdue > 0 ? 60 : digest.counts.today > 3 ? 75 : 90,
           categories: [],
