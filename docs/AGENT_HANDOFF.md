@@ -122,6 +122,42 @@
 > carries the right `next` (plain + invite), callback error path. tsc/eslint/vitest/build green. (Shim
 > gained `/auth/v1/otp`+`/verify`; scripts in `sbstack/`.)
 >
+> ## 📊 2026-07-07 (FOI #7 fully wired + full-capacity test seeds)
+>
+> Session shipped to `main` (`642d47f`; tsc/eslint/vitest/`next build` green, seeds PG16-validated).
+>
+> **1. Family Operating Index (#7) is now 100% Supabase-wired.** The engine already
+> derived planning/schedule/readiness/goals from real tables, but 5 inputs were hardcoded
+> to `0` in `lib/operating-index/server.ts`. All now read live data:
+> - `overspentBudgets` — new pure helper `countOverspentBudgets()` in **`lib/operating-index/inputs.ts`**
+>   (period window math weekly=Mon/monthly=1st/yearly=Jan1 UTC; case-insensitive category match;
+>   sums expenses on/after the period start; counts caps exceeded). Fed by `budgets` + `transactions`
+>   (type=`expense` since year start).
+> - `negativeBalances` — `financial_accounts` `.lt('balance',0).neq('type','credit')` (credit cards
+>   are expected-negative and excluded).
+> - `lowInventory` — `pantry_items` where `quantity ≤ low_threshold` (threshold not null).
+> - `eventsMissingInfo` — events in NEEDS_LOCATION categories with no `location`.
+> - `unreadThreads` — distinct `conversation_id` where `read_by.length < memberCount`.
+> Pure logic is unit-tested: **`tests/operating-index-inputs.test.ts`** (7 tests). No schema/page/engine
+> shape changes — the FOI page and composite scoring were already correct; this just stops feeding it zeros.
+>
+> **2. Two full-capacity test seeds (idempotent, Kramer family only).**
+> - **`supabase/seed_operating_index_one_family.sql`** (~619 rows across 12 tables) lights up **every**
+>   FOI dimension with real signal so the composite lands in a realistic "stretched/steady" band instead
+>   of calm-by-omission: 300 calendar_events (colliding slots + ~⅓ missing location), 220 expenses over
+>   Groceries($300)+Dining($100) budgets (both overspent), 4 financial_accounts (checking −142 flags,
+>   credit −820 correctly ignored), 30 pantry (~10 low), 10 documents expiring <30d, 10 overdue
+>   maintenance, 15 overdue reminders, 10 off-track goals, 12 bills, plus 3 meal_votes + 3 family_polls
+>   (status `open`) for the communication dimension. Tagged (`[seed:foi]` in description/notes, `FOI · `
+>   name/title prefix, budgets by category+period), deleted-then-inserted, ends with a per-table verify
+>   SELECT. **`approval_requests` deliberately excluded** — its CHECK constraints on domain/capability/
+>   requested_by_kind are uncertain and could abort the DO block; comms is covered by votes+polls instead.
+> - **`supabase/seed_roles_one_family.sql`** — 500 `family_members` across all 6 roles (parent/adult/
+>   caregiver/teen/child/guest) to exercise the role-tailored surfaces (#8) at volume; ages by role;
+>   email-tagged `seed-role8-%@example.invalid`; preview + cleanup snippets included.
+> - `todo.md` gained a **seed-coverage tracker** (37 domain seeds enumerated) + the FOI-seed note.
+>   Both seeds are owner-run in the Supabase SQL editor (no service-role creds in the sandbox).
+>
 > ## ★ 2026-07-06 (onboarding + North-Star slices) — READ FIRST
 >
 > Session shipped to `main` (each commit tsc/eslint/vitest/`next build` green; migrations + seeds
