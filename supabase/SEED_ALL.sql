@@ -1915,3 +1915,304 @@ begin
 
   raise notice 'Notifications seeded % rows (~40 unread) for family %', n, v_family;
 end $$;
+
+-- ==================== seed_economy.sql ====================
+-- ============================================================================
+-- FamilyOS · SEED — Family Economy / Allowance (currency_transactions 500+).
+-- Custom non-cash currencies (Stars ⭐, Screen-time ⏰, Chore Coins 🪙), a reward
+-- catalog, an immutable 500-row token ledger, and ~120 redemptions — enough to
+-- exercise /economy (Allowance) at real volume.
+-- Idempotent: seed currencies carry a '[seed]' name prefix; deleting them
+-- cascades their transactions / rewards / redemptions (FK ON DELETE CASCADE).
+-- Where: Supabase → SQL Editor → paste → Run.
+-- ============================================================================
+do $$
+declare
+  v_email   text := 'newworldventurellc@gmail.com';
+  v_family  uuid;
+  v_members uuid[];
+  v_cur     uuid[];
+  n int := 500;
+  r_titles text[] := array['Movie night pick','30 min extra screen time','Choose dinner','Stay up 30 min late',
+                           'Friend sleepover','Ice cream trip','Skip one chore','Pick the weekend outing',
+                           'Control the playlist','Breakfast in bed','$5 toward a toy','Family game pick'];
+  reasons  text[] := array['Chore completed','Bonus for kindness','Weekly allowance','Homework streak',
+                           'Helped a sibling','Reward redemption','Manual award','Correction'];
+begin
+  select f.id into v_family
+  from public.families f
+  join public.family_members fm on fm.family_id = f.id
+  join auth.users u on u.id = fm.user_id
+  where lower(u.email) = lower(v_email) limit 1;
+  if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
+  if v_family is null then raise exception 'No families found.'; end if;
+  select array_agg(id) into v_members from public.family_members where family_id = v_family;
+  if v_members is null then raise exception 'Family % has no members.', v_family; end if;
+
+  -- Idempotent reset: dropping the seed currencies cascades everything below them.
+  delete from public.family_currencies where family_id = v_family and name like '[seed]%';
+
+  insert into public.family_currencies (family_id, name, emoji, unit_label, is_active, sort_order)
+  values
+    (v_family, '[seed] Stars', '⭐', 'star', true, 90),
+    (v_family, '[seed] Screen Time', '⏰', 'minute', true, 91),
+    (v_family, '[seed] Chore Coins', '🪙', 'coin', true, 92);
+  select array_agg(id order by sort_order) into v_cur
+  from public.family_currencies where family_id = v_family and name like '[seed]%';
+
+  -- Reward catalog (~24 across the three currencies).
+  insert into public.economy_rewards (family_id, currency_id, title, emoji, cost, stock, is_active, sort_order)
+  select v_family,
+    v_cur[1 + (g.i % 3)],
+    r_titles[1 + (g.i % array_length(r_titles,1))],
+    (array['🎬','📺','🍽️','🌙','🛌','🍦','🧹','🗺️','🎧','🥞','🧸','🎮'])[1 + (g.i % 12)],
+    (5 + (g.i % 10) * 5)::bigint,
+    case when g.i % 4 = 0 then null else 3 + (g.i % 8) end,
+    true,
+    g.i
+  from generate_series(1, 24) as g(i);
+
+  -- The immutable token ledger — 500 credits/debits across members + currencies.
+  insert into public.currency_transactions (family_id, currency_id, member_id, direction, amount, reason, related_type, created_at)
+  select v_family,
+    v_cur[1 + (g.i % 3)],
+    v_members[1 + (g.i % array_length(v_members,1))],
+    (case when g.i % 3 = 0 then 'debit' else 'credit' end)::economy_direction,
+    (1 + (g.i % 40))::bigint,
+    reasons[1 + (g.i % array_length(reasons,1))],
+    (array['chore_assignment','manual','redemption','reversal'])[1 + (g.i % 4)],
+    now() - ((g.i % 180) || ' days')::interval
+  from generate_series(1, n) as g(i);
+
+  -- ~120 redemptions spanning statuses.
+  insert into public.economy_redemptions (family_id, currency_id, member_id, title, cost, status, note, created_at)
+  select v_family,
+    v_cur[1 + (g.i % 3)],
+    v_members[1 + (g.i % array_length(v_members,1))],
+    r_titles[1 + (g.i % array_length(r_titles,1))],
+    (5 + (g.i % 10) * 5)::bigint,
+    (array['pending','approved','fulfilled','rejected','cancelled'])[1 + (g.i % 5)]::redemption_status,
+    '[seed] redemption',
+    now() - ((g.i % 120) || ' days')::interval
+  from generate_series(1, 120) as g(i);
+
+  raise notice 'Economy seeded: 3 currencies, 24 rewards, % transactions, 120 redemptions for family %', n, v_family;
+end $$;
+
+-- ==================== seed_concierge.sql ====================
+-- ============================================================================
+-- FamilyOS · SEED — AI Concierge (concierge_plans 500).
+-- Getaways, restaurants, date nights, parties, travel, services — across every
+-- kind + status — so /dashboard/concierge renders at real volume.
+-- Idempotent: seed rows carry a '[seed]' title prefix; deleted before re-insert.
+-- Where: Supabase → SQL Editor → paste → Run.
+-- ============================================================================
+do $$
+declare
+  v_email  text := 'newworldventurellc@gmail.com';
+  v_family uuid;
+  n int := 500;
+  kinds  text[] := array['getaway','restaurant','date_night','activity','party','travel','shopping','service','general'];
+  stats  text[] := array['idea','idea','planning','booked','confirmed','completed','cancelled'];
+  names  text[] := array['Weekend in the mountains','Anniversary dinner','Kids'' birthday bash','Beach day trip',
+                         'Museum afternoon','Farmers market run','Spa evening','Camping getaway','Pizza night out',
+                         'Ski trip planning','Zoo outing','Concert night','Brunch with grandparents','Escape room'];
+  locs   text[] := array['Lake Tahoe','Downtown','The Grand Bistro','Ocean Beach','City Museum','Central Park',
+                         'Serenity Spa','Redwood Campground','Tony''s Pizzeria','Aspen'];
+begin
+  select f.id into v_family
+  from public.families f
+  join public.family_members fm on fm.family_id = f.id
+  join auth.users u on u.id = fm.user_id
+  where lower(u.email) = lower(v_email) limit 1;
+  if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
+  if v_family is null then raise exception 'No families found.'; end if;
+
+  delete from public.concierge_plans where family_id = v_family and title like '[seed]%';
+
+  insert into public.concierge_plans
+    (family_id, title, kind, description, ai_suggestion, status, planned_for, budget_cents, location, created_at)
+  select v_family,
+    '[seed] ' || names[1 + (g.i % array_length(names,1))] || ' #' || g.i,
+    kinds[1 + (g.i % array_length(kinds,1))],
+    'A concierge-planned outing the family can book in one tap.',
+    'Best window is a weekend afternoon; book 2 weeks out for the best price.',
+    stats[1 + (g.i % array_length(stats,1))],
+    (current_date + ((g.i % 90) || ' days')::interval)::date,
+    (2000 + (g.i * 53) % 40000),
+    locs[1 + (g.i % array_length(locs,1))],
+    now() - ((g.i % 160) || ' days')::interval
+  from generate_series(1, n) as g(i);
+
+  raise notice 'Concierge seeded % plans for family %', n, v_family;
+end $$;
+
+-- ==================== seed_front_desk.sql ====================
+-- ============================================================================
+-- FamilyOS · SEED — AI Front Desk / Phone Concierge (call_logs 500).
+-- Enables Front Desk for the family and fills the screened-call log with 500
+-- calls spanning every status + classification, so /dashboard/front-desk renders
+-- at real volume.
+-- Idempotent: settings upserted; call_logs seed rows carry a '[seed]' ai_summary
+-- prefix and are cleared before re-insert.
+-- Where: Supabase → SQL Editor → paste → Run.
+-- ============================================================================
+do $$
+declare
+  v_email  text := 'newworldventurellc@gmail.com';
+  v_family uuid;
+  n int := 500;
+  names  text[] := array['Dr. Patel''s office','Lincoln Elementary','Coach Rivera','Unknown Caller',
+                         'City Plumbing','Grandma','Amazon Delivery','Auto Warranty','Pharmacy','Soccer League',
+                         'Neighbor','Insurance Agent'];
+  dirs   text[] := array['inbound','inbound','inbound','outbound'];
+  stats  text[] := array['screened','answered','voicemail','blocked','missed','forwarded'];
+  clss   text[] := array['important','known','unknown','spam','robocall','telemarketer'];
+  prio   text[] := array['low','normal','normal','high','urgent'];
+begin
+  select f.id into v_family
+  from public.families f
+  join public.family_members fm on fm.family_id = f.id
+  join auth.users u on u.id = fm.user_id
+  where lower(u.email) = lower(v_email) limit 1;
+  if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
+  if v_family is null then raise exception 'No families found.'; end if;
+
+  insert into public.front_desk_settings (family_id, enabled, screening_mode, voicemail_enabled, block_spam)
+  values (v_family, true, 'smart', true, true)
+  on conflict (family_id) do update set enabled = excluded.enabled, updated_at = now();
+
+  delete from public.call_logs where family_id = v_family and ai_summary like '[seed]%';
+
+  insert into public.call_logs
+    (family_id, caller_name, caller_number, direction, status, classification, priority,
+     ai_summary, duration_secs, is_read, received_at)
+  select v_family,
+    names[1 + (g.i % array_length(names,1))],
+    '+1555' || lpad(((g.i * 7919) % 10000000)::text, 7, '0'),
+    dirs[1 + (g.i % array_length(dirs,1))],
+    stats[1 + (g.i % array_length(stats,1))],
+    clss[1 + (g.i % array_length(clss,1))],
+    prio[1 + (g.i % array_length(prio,1))],
+    '[seed] Caller asked about scheduling; AI screened and logged the details.',
+    (g.i % 600),
+    (g.i % 3 = 0),
+    now() - ((g.i * 41) || ' minutes')::interval
+  from generate_series(1, n) as g(i);
+
+  raise notice 'Front Desk seeded % call logs for family %', n, v_family;
+end $$;
+
+-- ==================== seed_communications.sql ====================
+-- ============================================================================
+-- FamilyOS · SEED — Email/Comms Concierge (family_communications 500).
+-- The unified family inbox at real volume: calls, SMS, email, WhatsApp, school &
+-- sports messages across every category, status and priority — so
+-- /dashboard/inbox renders full.
+-- Idempotent: seed rows carry a '[seed]' summary prefix; cleared before re-insert.
+-- Where: Supabase → SQL Editor → paste → Run.
+-- ============================================================================
+do $$
+declare
+  v_email  text := 'newworldventurellc@gmail.com';
+  v_family uuid;
+  n int := 500;
+  chans  text[] := array['call','sms','email','whatsapp','instagram','school','sports','note','other'];
+  cats   text[] := array['general','school','medical','sports','social','emergency','financial','legal','other'];
+  stats  text[] := array['unread','unread','read','replied','archived','snoozed'];
+  prio   text[] := array['low','normal','normal','high','urgent'];
+  dirs   text[] := array['inbound','inbound','inbound','outbound'];
+  subs   text[] := array['Field trip permission slip','Practice moved to 5pm','Invoice for after-school care',
+                         'Playdate this Saturday?','Reminder: dentist Tuesday','Report card is ready',
+                         'Carpool change this week','Fundraiser volunteers needed','Prescription ready for pickup',
+                         'Photo day is Friday','Overdue library book','Season schedule attached'];
+begin
+  select f.id into v_family
+  from public.families f
+  join public.family_members fm on fm.family_id = f.id
+  join auth.users u on u.id = fm.user_id
+  where lower(u.email) = lower(v_email) limit 1;
+  if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
+  if v_family is null then raise exception 'No families found.'; end if;
+
+  delete from public.family_communications where family_id = v_family and summary like '[seed]%';
+
+  insert into public.family_communications
+    (family_id, channel, direction, subject, body, summary, category, status, priority, received_at)
+  select v_family,
+    chans[1 + (g.i % array_length(chans,1))],
+    dirs[1 + (g.i % array_length(dirs,1))],
+    subs[1 + (g.i % array_length(subs,1))] || ' #' || g.i,
+    'Full message body captured by the family inbox for triage and one-tap reply.',
+    '[seed] AI summary: needs a quick yes/no reply.',
+    cats[1 + (g.i % array_length(cats,1))],
+    stats[1 + (g.i % array_length(stats,1))],
+    prio[1 + (g.i % array_length(prio,1))],
+    now() - ((g.i * 53) || ' minutes')::interval
+  from generate_series(1, n) as g(i);
+
+  raise notice 'Communications seeded % messages for family %', n, v_family;
+end $$;
+
+-- ==================== seed_marketplace.sql ====================
+-- ============================================================================
+-- FamilyOS · SEED — Marketplace (marketplace_listings 500 + offers 500).
+-- Buy / sell / rent / borrow / free / wanted listings across every category and
+-- status, each with an offer, so /dashboard/marketplace renders at real volume.
+-- Idempotent: seed rows carry description='[seed]'; deleting the listings
+-- cascades their offers (FK ON DELETE CASCADE).
+-- Where: Supabase → SQL Editor → paste → Run.
+-- ============================================================================
+do $$
+declare
+  v_email  text := 'newworldventurellc@gmail.com';
+  v_family uuid;
+  v_members uuid[];
+  n int := 500;
+  titles text[] := array['Kids'' bike','Winter coat (age 8)','Board game bundle','Bluetooth speaker','Toddler crib',
+                         'Soccer cleats','Drill + bits','Baby monitor','Nintendo Switch','Dining chairs',
+                         'Lego city set','Rain boots','Textbook set','Camping tent','Stroller'];
+  kinds  text[] := array['sell','rent','borrow','free','wanted'];
+  cats   text[] := array['toys','clothing','books','electronics','furniture','sports','tools','baby','games','other'];
+  conds  text[] := array['new','like_new','good','fair','worn'];
+  stats  text[] := array['available','available','pending','claimed','completed','withdrawn'];
+begin
+  select f.id into v_family
+  from public.families f
+  join public.family_members fm on fm.family_id = f.id
+  join auth.users u on u.id = fm.user_id
+  where lower(u.email) = lower(v_email) limit 1;
+  if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
+  if v_family is null then raise exception 'No families found.'; end if;
+  select array_agg(id) into v_members from public.family_members where family_id = v_family;
+
+  delete from public.marketplace_listings where family_id = v_family and description = '[seed]';
+
+  insert into public.marketplace_listings
+    (family_id, member_id, title, description, kind, category, condition, price_cents, status, location, created_at)
+  select v_family,
+    case when v_members is null then null else v_members[1 + (g.i % array_length(v_members,1))] end,
+    titles[1 + (g.i % array_length(titles,1))] || ' #' || g.i,
+    '[seed]',
+    kinds[1 + (g.i % array_length(kinds,1))],
+    cats[1 + (g.i % array_length(cats,1))],
+    conds[1 + (g.i % array_length(conds,1))],
+    (g.i % 6) * 500,
+    stats[1 + (g.i % array_length(stats,1))],
+    (array['Home','Garage','Attic','Neighborhood','Storage'])[1 + (g.i % 5)],
+    now() - ((g.i % 200) || ' days')::interval
+  from generate_series(1, n) as g(i);
+
+  -- One offer per seed listing (interest / claim / offer).
+  insert into public.marketplace_offers (family_id, listing_id, member_id, kind, amount_cents, message, status)
+  select v_family, l.id,
+    case when v_members is null then null else v_members[1 + ((row_number() over (order by l.created_at))::int % array_length(v_members,1))] end,
+    (array['interest','claim','offer'])[1 + ((row_number() over (order by l.created_at))::int % 3)],
+    ((row_number() over (order by l.created_at))::int % 6) * 400,
+    '[seed] Interested — is this still available?',
+    (array['open','open','accepted','declined','withdrawn'])[1 + ((row_number() over (order by l.created_at))::int % 5)]
+  from public.marketplace_listings l
+  where l.family_id = v_family and l.description = '[seed]';
+
+  raise notice 'Marketplace seeded % listings + offers for family %', n, v_family;
+end $$;
