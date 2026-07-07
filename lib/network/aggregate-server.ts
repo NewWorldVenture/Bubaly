@@ -23,33 +23,64 @@ export type AggregateResult = { ok: boolean; error?: string; contributors: numbe
 
 function dinnerBandToMetric(band: string): string { return band; } // already banded
 
-/** Build one family's coarse contribution from its own real data. */
-async function buildContribution(sb: DB, familyId: string, now: Date): Promise<Contribution | null> {
-  const todayKey = now.toISOString().slice(0, 10);
-  const weekEndKey = new Date(now.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
-  const [members, dinners, teams, classes] = await Promise.all([
-    sb.from('family_members').select('birthday').eq('family_id', familyId).eq('is_active', true),
-    sb.from('meal_plans').select('plan_date').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', todayKey).lte('plan_date', weekEndKey),
-    sb.from('teams').select('id').eq('family_id', familyId).eq('is_active', true),
-    sb.from('school_classes').select('id').eq('family_id', familyId),
-  ]);
-  if (members.error) return null;
-  const birthdays = (members.data ?? []).map((m) => m.birthday);
-  const input: ContributionInput = {
-    memberBirthdays: birthdays,
-    householdSize: birthdays.length,
-    plannedDinnersPerWeek: new Set((dinners.data ?? []).map((d) => d.plan_date)).size,
-    activeActivities: (teams.data?.length ?? 0) + (classes.data?.length ?? 0),
-  };
+const featuresToContribution = (familyId: string, input: ContributionInput, now: Date): Contribution => {
   const features = contributionFeatures(input, now);
   return {
     familyId,
     features,
-    metrics: {
-      dinner_habit: dinnerBandToMetric(features.dinnerBand),
-      activities: features.activityBand,
-    },
+    metrics: { dinner_habit: dinnerBandToMetric(features.dinnerBand), activities: features.activityBand },
   };
+};
+
+/**
+ * Build every opted-in family's coarse contribution in FOUR queries total (one
+ * per source table, `.in(family_ids)`) rather than four-per-family — so the
+ * nightly cron scales past the ≥100-family launch gate without N+1 round-trips.
+ * Returns a map keyed by family_id; a family with no rows still gets a valid
+ * (empty-household) contribution. Returns null only on a hard read error.
+ */
+async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): Promise<Map<string, Contribution> | null> {
+  if (familyIds.length === 0) return new Map();
+  const todayKey = now.toISOString().slice(0, 10);
+  const weekEndKey = new Date(now.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
+  const [members, dinners, teams, classes] = await Promise.all([
+    sb.from('family_members').select('family_id, birthday').in('family_id', familyIds).eq('is_active', true),
+    sb.from('meal_plans').select('family_id, plan_date').in('family_id', familyIds).eq('meal_type', 'dinner').gte('plan_date', todayKey).lte('plan_date', weekEndKey),
+    sb.from('teams').select('family_id').in('family_id', familyIds).eq('is_active', true),
+    sb.from('school_classes').select('family_id').in('family_id', familyIds),
+  ]);
+  if (members.error) return null;
+
+  const birthdaysByFam = new Map<string, (string | null)[]>();
+  for (const m of members.data ?? []) {
+    const arr = birthdaysByFam.get(m.family_id) ?? [];
+    arr.push(m.birthday); birthdaysByFam.set(m.family_id, arr);
+  }
+  const dinnerDatesByFam = new Map<string, Set<string>>();
+  for (const d of dinners.data ?? []) {
+    const set = dinnerDatesByFam.get(d.family_id) ?? new Set<string>();
+    if (d.plan_date) set.add(d.plan_date); dinnerDatesByFam.set(d.family_id, set);
+  }
+  const countBy = (rows: { family_id: string }[] | null): Map<string, number> => {
+    const m = new Map<string, number>();
+    for (const r of rows ?? []) m.set(r.family_id, (m.get(r.family_id) ?? 0) + 1);
+    return m;
+  };
+  const teamsByFam = countBy(teams.data);
+  const classesByFam = countBy(classes.data);
+
+  const out = new Map<string, Contribution>();
+  for (const familyId of familyIds) {
+    const birthdays = birthdaysByFam.get(familyId) ?? [];
+    const input: ContributionInput = {
+      memberBirthdays: birthdays,
+      householdSize: birthdays.length,
+      plannedDinnersPerWeek: dinnerDatesByFam.get(familyId)?.size ?? 0,
+      activeActivities: (teamsByFam.get(familyId) ?? 0) + (classesByFam.get(familyId) ?? 0),
+    };
+    out.set(familyId, featuresToContribution(familyId, input, now));
+  }
+  return out;
 }
 
 export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Promise<AggregateResult> {
@@ -64,12 +95,15 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   // Granular consent is enforced HERE: only metrics whose scope the family
   // toggled on are kept, so an opt-in to (say) 'timing' alone never feeds the
   // 'benchmarks' aggregates.
+  const built = await buildContributionsBatch(sb, optedIn.map((c) => c.family_id), now);
+  if (built === null) return { ok: false, error: 'failed to read family data', contributors: 0, aggregates: 0 };
+
   const contributions: Contribution[] = [];
   for (const c of optedIn) {
-    // Per-family isolation: one family's bad data or a transient read error must
+    // Per-family isolation: one family's bad data or a transient write error must
     // never abort the whole nightly aggregation for everyone else.
     try {
-      const contrib = await buildContribution(sb, c.family_id, now);
+      const contrib = built.get(c.family_id);
       if (!contrib) continue;
       const scopes = (c.scopes ?? {}) as Partial<Record<ConsentScope, boolean>>;
       contrib.metrics = filterMetricsByScopes(contrib.metrics, scopes);
