@@ -21,6 +21,8 @@ import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { successProbability, confidenceTier } from '@/lib/autopilot/engine';
+import { WhyThis } from '@/components/ai/why-this';
+import { explainAutopilot } from '@/lib/ai/explanation';
 
 type Suggestion = Tables<'autopilot_suggestions'>;
 
@@ -225,23 +227,35 @@ function SuggestionRow({ s, onApprove, onDismiss }: {
   const Icon = iconFor(s.kind);
   const urgent = s.urgency === 3;
   return (
-    <div className={cn('flex items-center gap-3 rounded-xl border px-4 py-3',
+    <div className={cn('rounded-xl border px-4 py-3',
       urgent ? 'border-danger/30 bg-danger/5' : 'border-border bg-surface/40')}>
-      <Icon className={cn('h-4 w-4 flex-shrink-0', urgent ? 'text-danger' : 'text-brand')} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold">{s.title}</p>
-        {s.detail && <p className="truncate text-xs text-muted">{s.detail}</p>}
+      <div className="flex items-center gap-3">
+        <Icon className={cn('h-4 w-4 flex-shrink-0', urgent ? 'text-danger' : 'text-brand')} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{s.title}</p>
+          {s.detail && <p className="truncate text-xs text-muted">{s.detail}</p>}
+        </div>
+        <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted sm:block">{s.confidence}%</span>
+        <div className="flex flex-shrink-0 items-center gap-1">
+          <button onClick={onApprove}
+            className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
+            <Check className="h-3.5 w-3.5" /> {s.action_label ?? 'Do it'}
+          </button>
+          <button onClick={onDismiss} aria-label="Dismiss"
+            className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
-      <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted sm:block">{s.confidence}%</span>
-      <div className="flex flex-shrink-0 items-center gap-1">
-        <button onClick={onApprove}
-          className="flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90 transition">
-          <Check className="h-3.5 w-3.5" /> {s.action_label ?? 'Do it'}
-        </button>
-        <button onClick={onDismiss} aria-label="Dismiss"
-          className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition">
-          <X className="h-3.5 w-3.5" />
-        </button>
+      <div className="mt-1.5 pl-7">
+        <WhyThis
+          surface="autopilot" refId={s.id} refKind={s.kind}
+          explanation={explainAutopilot({
+            kind: s.kind, title: s.title, detail: s.detail,
+            confidence: s.confidence, urgency: s.urgency,
+            source_kind: s.source_kind, action_label: s.action_label,
+          })}
+        />
       </div>
     </div>
   );

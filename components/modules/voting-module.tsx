@@ -15,6 +15,8 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { tallyPoll, voterCount, memberSelections, isPollClosed, type VoteLike, type OptionLike } from '@/lib/voting/polls';
 import { facilitateConsensus, budgetCapForCategory, type ConsensusOption } from '@/lib/voting/consensus';
+import { WhyThis } from '@/components/ai/why-this';
+import { explainConsensus } from '@/lib/ai/explanation';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 
@@ -227,6 +229,21 @@ export function VotingModule() {
                     {consensus.consensusLevel >= 0.6 ? 'Strong agreement' : consensus.consensusLevel >= 0.4 ? 'Leaning one way' : 'Split vote'} · {consensus.totalVotes} vote{consensus.totalVotes === 1 ? '' : 's'} cast
                   </p>
                 )}
+                <div className="mt-2 pl-6">
+                  <WhyThis
+                    surface="voting" refId={p.id} refKind={p.decision_category}
+                    explanation={explainConsensus({
+                      label: consensus.recommendation.label,
+                      rationale: consensus.recommendation.rationale,
+                      votes: consensus.recommendation.votes,
+                      votePct: consensus.recommendation.votePct,
+                      blendedScore: consensus.recommendation.blendedScore,
+                      totalVotes: consensus.totalVotes,
+                      consensusLevel: consensus.consensusLevel,
+                      budgetCents: budgetCents ?? null,
+                    })}
+                  />
+                </div>
               </div>
             )}
             {facilitated && consensus.conflicts.map((c, i) => (

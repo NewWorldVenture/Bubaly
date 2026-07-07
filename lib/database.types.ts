@@ -418,6 +418,11 @@ export interface Database {
         { id?: string; family_id: string; as_of_date?: string; kind: string; title: string; detail?: string | null; href?: string | null; impact?: number; status?: string; member_id?: string | null; created_by?: string | null },
         Partial<{ kind: string; title: string; detail: string | null; href: string | null; impact: number; status: string; member_id: string | null }>
       >;
+      ai_feedback: T<
+        { id: string; family_id: string; member_id: string | null; surface: string; ref_kind: string | null; ref_id: string | null; signal: string; reason: string | null; note: string | null; created_by: string | null; created_at: string },
+        { id?: string; family_id: string; member_id?: string | null; surface: string; ref_kind?: string | null; ref_id?: string | null; signal: string; reason?: string | null; note?: string | null; created_by?: string | null },
+        Partial<{ member_id: string | null; surface: string; ref_kind: string | null; ref_id: string | null; signal: string; reason: string | null; note: string | null }>
+      >;
       journey_events: T<
         { id: string; family_id: string; member_id: string | null; journey: string; phase: string; step: number; session_id: string; duration_ms: number | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; journey: string; phase?: string; step?: number; session_id: string; duration_ms?: number | null },

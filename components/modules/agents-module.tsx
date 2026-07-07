@@ -16,6 +16,8 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { AGENTS, AGENTS_BY_ID, type AgentId, type AgentBriefing, type AgentStatus } from '@/lib/agents/roster';
+import { WhyThis } from '@/components/ai/why-this';
+import { explainAgentActivity } from '@/lib/ai/explanation';
 import type { Tables } from '@/lib/database.types';
 
 type Activity = Tables<'agent_activity'>;
@@ -162,14 +164,22 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Recent activity</h3>
                   <ul className="space-y-2">
                     {acts.slice(0, 8).map((a) => (
-                      <li key={a.id} className="flex items-center gap-3 rounded-xl border border-border bg-bg/30 p-2.5">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm text-fg">{a.title}</p>
-                          {a.detail && <p className="truncate text-xs text-muted">{a.detail}</p>}
+                      <li key={a.id} className="rounded-xl border border-border bg-bg/30 p-2.5">
+                        <div className="flex items-center gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm text-fg">{a.title}</p>
+                            {a.detail && <p className="truncate text-xs text-muted">{a.detail}</p>}
+                          </div>
+                          {a.href && <Link href={a.href} className="rounded-lg p-1.5 text-muted hover:text-brand" aria-label="Open"><ArrowRight className="h-4 w-4" /></Link>}
+                          <button onClick={() => resolve(a, 'done')} aria-label="Mark done" className="rounded-lg p-1.5 text-muted hover:text-emerald-300"><Check className="h-4 w-4" /></button>
+                          <button onClick={() => resolve(a, 'dismissed')} aria-label="Dismiss" className="rounded-lg p-1.5 text-muted hover:text-rose-400"><X className="h-4 w-4" /></button>
                         </div>
-                        {a.href && <Link href={a.href} className="rounded-lg p-1.5 text-muted hover:text-brand" aria-label="Open"><ArrowRight className="h-4 w-4" /></Link>}
-                        <button onClick={() => resolve(a, 'done')} aria-label="Mark done" className="rounded-lg p-1.5 text-muted hover:text-emerald-300"><Check className="h-4 w-4" /></button>
-                        <button onClick={() => resolve(a, 'dismissed')} aria-label="Dismiss" className="rounded-lg p-1.5 text-muted hover:text-rose-400"><X className="h-4 w-4" /></button>
+                        <div className="mt-1.5">
+                          <WhyThis
+                            surface="agent" refId={a.id} refKind={a.agent}
+                            explanation={explainAgentActivity({ agent: a.agent, kind: a.kind, title: a.title, detail: a.detail, severity: a.severity })}
+                          />
+                        </div>
                       </li>
                     ))}
                   </ul>

@@ -309,7 +309,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   // the family's live signals, rank by impact, and surface exactly ONE above the
   // fold. Candidates are persisted to daily_insights so a dismissal sticks and the
   // next-best insight takes its place. All best-effort — never blocks the render.
-  let insightRow: { id: string; kind: string; title: string; detail: string; href: string } | null = null;
+  let insightRow: { id: string; kind: string; title: string; detail: string; href: string; impact: number; alternatives: number } | null = null;
   try {
     const dayIso = new Date(todayStart.getTime() + 86400000).toISOString().slice(0, 10);
     const daysUntil = (iso: string) => Math.ceil((new Date(iso).getTime() - now.getTime()) / 86400000);
@@ -356,7 +356,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       const ranked = rankInsights(((activeRows ?? []) as { id: string; kind: string; title: string; detail: string | null; href: string | null; impact: number }[])
         .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: r.href ?? '/dashboard', impact: r.impact })));
       const top = ranked[0];
-      if (top) insightRow = { id: top.id, kind: top.kind, title: top.title, detail: top.detail, href: top.href };
+      if (top) insightRow = { id: top.id, kind: top.kind, title: top.title, detail: top.detail, href: top.href, impact: top.impact, alternatives: Math.max(0, ranked.length - 1) };
     }
   } catch { /* daily_insights not migrated yet — skip the hero */ }
 

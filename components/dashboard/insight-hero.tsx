@@ -12,6 +12,8 @@ import {
   ShieldCheck, AlarmClock, RefreshCw, FileClock, Utensils, ShoppingCart, Rocket,
 } from 'lucide-react';
 import { dismissInsightAction } from '@/app/(app)/dashboard/insight-actions';
+import { WhyThis } from '@/components/ai/why-this';
+import { explainInsight } from '@/lib/ai/explanation';
 import { cn } from '@/lib/utils/cn';
 
 type Kind = 'departure' | 'conflict' | 'homework' | 'approval' | 'reminder_overdue'
@@ -30,7 +32,7 @@ const META: Record<Kind, { icon: React.ComponentType<{ className?: string }>; ct
   autopilot: { icon: Rocket, cta: 'Let Bubaly' },
 };
 
-export function InsightHero({ insight }: { insight: { id: string; kind: string; title: string; detail: string; href: string } }) {
+export function InsightHero({ insight }: { insight: { id: string; kind: string; title: string; detail: string; href: string; impact?: number; alternatives?: number } }) {
   const router = useRouter();
   const [dismissed, setDismissed] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -60,10 +62,22 @@ export function InsightHero({ insight }: { insight: { id: string; kind: string; 
           </p>
           <p className="mt-1 text-sm font-bold leading-snug">{insight.title}</p>
           <p className="mt-0.5 text-xs text-muted">{insight.detail}</p>
-          <Link href={insight.href}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-brand px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-brand/90">
-            {meta.cta} <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Link href={insight.href}
+              className="inline-flex items-center gap-1.5 rounded-full bg-brand px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-brand/90">
+              {meta.cta} <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <WhyThis
+            className="mt-2"
+            surface="insight"
+            refId={insight.id}
+            refKind={insight.kind}
+            explanation={explainInsight({
+              kind: insight.kind, title: insight.title, detail: insight.detail,
+              impact: insight.impact ?? 50, alternatives: insight.alternatives ?? 0,
+            })}
+          />
         </div>
       </div>
       <button type="button" onClick={dismiss} disabled={pending} aria-label="Dismiss insight"

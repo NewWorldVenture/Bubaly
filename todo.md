@@ -235,9 +235,14 @@ before asking the user to build anything.**
   Migration `0142_poll_facilitation.sql` (additive, idempotent, PG16-validated — no new tables so 0078
   RLS already governs it) + types. Seed `seed_group_decisions_one_family.sql` (100 polls / 400 options /
   ~800 votes = ~1,300 rows) biases favorites over budget so conflicts fire. tsc/eslint/**1990 tests**/build. (Area 4.)
-- [ ] **T7. "Why this?" everywhere.** Standard inline affordance on every AI recommendation/automation:
-  reason + inputs used + adjust/undo. Reusable component consumed by autopilot/agents/insight-of-day.
-  (Area 7.)
+- [x] **T7. "Why this?" everywhere.** ✅ Reusable `components/ai/why-this.tsx` — one consistent inline
+  disclosure showing **reason + inputs used** (factors) + confidence + **Helpful/Not-helpful** feedback.
+  Pure `lib/ai/explanation.ts` (`explainAutopilot`/`explainInsight`/`explainAgentActivity`/`explainConsensus`,
+  **9 tests**) shapes each engine's output into a consistent `Explanation`. Consumed by **insight-of-day**
+  (InsightHero), **autopilot** (SuggestionRow), **agents** (recent activity) and **voting** (T6 consensus).
+  Feedback persists via `recordAiFeedbackAction` → **`ai_feedback`** (`0143`, append-only, family-scoped
+  RLS, PG16-validated) — the learning loop a future model-refresh can weigh. Seed
+  `seed_ai_feedback_one_family.sql` (600 rows across all 6 surfaces × 5 signals). tsc/eslint/**1999 tests**/build. (Area 7.)
 - [ ] **T8. Premium-consistency sweep.** Every module: helpful empty state, clear error recovery,
   predictable transitions, perf budget. Track in `docs/EXPERIENCE_SCORECARD.md`; make it measurable.
   (Area 8.)
@@ -539,6 +544,8 @@ missing-location events, colliding events for conflicts). Run it, then open
   fully exercises T6 AI-facilitated group decisions — categories, budgets, dietary tags, and biased
   votes so the consensus engine's recommendations AND vote-vs-fit conflicts render (also gives
   `family_polls`/options/votes real volume). Run it, open `/dashboard/voting`.
+- ☑ **NEW `seed_ai_feedback_one_family.sql`** (600 rows) exercises T7 "Why this?" feedback log —
+  all 6 surfaces (insight/autopilot/agent/voting/decision/briefing) × 5 signals, over the last ~60 days.
 
 ### A. Operating Layer slices still to build (agent-doable, build top-down)
 - [x] **Slice 1 — Family Operating Index** (engine + page + 0125). PR #227. ✅

@@ -122,6 +122,27 @@
 > carries the right `next` (plain + invite), callback error path. tsc/eslint/vitest/build green. (Shim
 > gained `/auth/v1/otp`+`/verify`; scripts in `sbstack/`.)
 >
+> ## 💡 2026-07-07 (T7 — "Why this?" everywhere, shipped)
+>
+> Every AI recommendation/automation now carries a consistent inline **"Why this?"** disclosure —
+> reason + the inputs that drove it + confidence + a Helpful/Not-helpful response. All on `main`;
+> tsc/eslint/**1999 tests**/`next build` green; migration + seed PG16-validated & idempotent.
+>
+> - **Reusable component:** `components/ai/why-this.tsx` — a self-contained inline disclosure (no new UI
+>   primitive) taking an `Explanation` + a feedback context (`surface`, `refId`, `refKind`). Renders the
+>   reason, a labelled factor list ("inputs used"), an optional tip, and Helpful/Not-helpful buttons.
+> - **Pure shaping:** `lib/ai/explanation.ts` — `explainAutopilot` / `explainInsight` / `explainAgentActivity`
+>   / `explainConsensus` turn each engine's row into a uniform `{ reason, factors[], confidence?, tip? }`.
+>   Humanizes kinds/sources/agents with fallbacks. **9 tests** (`tests/ai-explanation.test.ts`).
+> - **Wired into 4 surfaces:** insight-of-day (`InsightHero` — now threads `impact` + `alternatives`
+>   from the ranker so "chosen over N signals" is real), Autopilot (`SuggestionRow`), Agents (recent
+>   activity), and the T6 Voting consensus recommendation.
+> - **Learning loop:** `recordAiFeedbackAction` (`app/(app)/dashboard/ai-feedback-actions.ts`, validates
+>   the enums, truncates snapshots) → **`ai_feedback`** table (`0143_ai_feedback.sql` — append-only,
+>   family-scoped RLS, CHECK-constrained surface/signal). A future model-refresh can weigh these signals.
+> - **Seed:** `seed_ai_feedback_one_family.sql` — **600 rows** across all 6 surfaces (100 each) × 5 signals
+>   (weighted to `helpful`), attributed to real members over ~60 days. Idempotent via `seed-t7-` ref_id.
+>
 > ## 🗳️ 2026-07-07 (T6 — AI-facilitated group decisions, shipped)
 >
 > Group Voting (`/voting`) went from a plain democratic tally to **AI-facilitated consensus**. It now
