@@ -23,10 +23,12 @@ import {
   TestimonialBand,
   WatchDemoLink,
 } from '@/components/marketing/visual-mocks';
+import { SiteStructuredData } from '@/components/marketing/structured-data';
 
 export default async function HomePage() {
   return (
     <PageWrap>
+      <SiteStructuredData />
       {/* ── Hero ── */}
       <Container className="max-w-[1440px] px-5 pb-0 pt-10 sm:px-8 sm:pt-12 lg:px-10 lg:pt-5">
         <section className="grid items-center gap-12 lg:min-h-[650px] lg:grid-cols-[1.05fr_.95fr] lg:gap-8">

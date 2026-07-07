@@ -65,11 +65,17 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 > - **Friction #6 travel buffer** — code-ready; needs the Maps/ETA key (owner item 3 above).
 > - **Twin projector** — add doctors / smart-home entities once those domains land.
 > - **GIF picker** (Messages/photos) — code path exists; needs the provider key (owner item 3).
-> - [x] **Social share cards (OpenGraph / Twitter)** ✅ — `app/opengraph-image.tsx` +
+> - [x] **Social share cards (OpenGraph / Twitter)** ✅ (#245) — `app/opengraph-image.tsx` +
 >   `app/twitter-image.tsx` render a brand-gradient 1200×630 card (Bubaly wordmark + tagline)
 >   via `next/og`, shared from `lib/og/social-image.tsx`. Fully self-contained (wordmark
 >   inlined from disk, no network fetch). Fixes the previously-blank `summary_large_image`
 >   preview on iMessage/Slack/X/Facebook. Build-verified (both routes generate).
+> - [x] **JSON-LD + canonical SEO (2026-07-07)** ✅ (#246) — (a) JSON-LD structured data
+>   (`components/marketing/structured-data.tsx`: Organization + WebSite + SoftwareApplication on
+>   the homepage, FAQPage on `/faq`) for Google/Bing rich results — honest data only; (b)
+>   self-referential canonical URLs (`alternates.canonical: './'` in the root layout resolves
+>   per-route — verified home→`/`, `/pricing`→`/pricing`, `/faq`→`/faq`), preventing duplicate
+>   indexing of www/non-www/trailing-slash/preview-domain variants. Build- and server-verified.
 
 ### A. Decisions only the owner can make
 - [x] **Intelligence Network aggregation** ✅ — decisions signed off + pipeline **built**
