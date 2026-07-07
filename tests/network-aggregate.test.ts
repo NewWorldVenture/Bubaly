@@ -78,6 +78,15 @@ describe('aggregatesToInsights', () => {
     // a different cohort sees nothing
     expect(aggregatesToInsights(agg, 'kids:none|size:1–2')).toEqual([]);
   });
+
+  it('privacy invariant: the human-readable detail exposes the DP-noised count, never the true cohort size', () => {
+    // Force noise so noised count (123) differs from the true cohortSize (120).
+    const agg = aggregateContributions(cohortOf(120, 'f'), { noise: () => 3 });
+    const insights = aggregatesToInsights(agg, 'kids:6–9|size:3–4');
+    expect(insights[0].detail).toContain('123');       // the noised count is shown
+    expect(insights[0].detail).not.toContain('120');   // the true size is never shown
+    expect(insights[0].cohortSize).toBe(120);          // true size retained only for the k-floor gate
+  });
 });
 
 describe('filterMetricsByScopes — write-side granular consent', () => {
