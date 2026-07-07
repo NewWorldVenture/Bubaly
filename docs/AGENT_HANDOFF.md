@@ -122,6 +122,32 @@
 > carries the right `next` (plain + invite), callback error path. tsc/eslint/vitest/build green. (Shim
 > gained `/auth/v1/otp`+`/verify`; scripts in `sbstack/`.)
 >
+> ## 🗳️ 2026-07-07 (T6 — AI-facilitated group decisions, shipped)
+>
+> Group Voting (`/voting`) went from a plain democratic tally to **AI-facilitated consensus**. It now
+> blends two signals over the same poll: the **votes** (what the family wants) and the shared **Decision
+> Engine**'s objective fit (`evaluateDecision` on cost/travel, with hard **budget** + **required-tag**
+> vetoes). All on `main`; tsc/eslint/**1990 tests**/`next build` green; migration + seed PG16-validated.
+>
+> - **Pure core:** `lib/voting/consensus.ts` — `facilitateConsensus(options, constraints)` returns a
+>   blended ranking, a **recommendation** (top *feasible*), the raw **vote leader**, a **consensusLevel**
+>   (leader's vote share), and explicit **conflicts** ("the favorite is over budget", "votes lean X but Y
+>   fits better once budget/fit are weighed"). Plus `budgetCapForCategory()` mapping a poll category →
+>   the family's real budget. **14 tests** (`tests/voting-consensus.test.ts`). Degrades gracefully: with
+>   no metrics it collapses to the pure vote ranking (never worse than voting).
+> - **Schema:** `0142_poll_facilitation.sql` — additive columns only (`family_polls`: `decision_category`
+>   {general/meal/vacation/shopping/activity}, `budget_cents`, `required_tags text[]`; `family_poll_options`:
+>   `cost_cents`, `travel_minutes`, `tags text[]`). **No new tables**, so the existing 0078 family-scoped
+>   `FOR ALL is_family_member` RLS already governs everything. Idempotent (re-run just skips). Types updated.
+> - **UI:** `components/modules/voting-module.tsx` loads real **budgets** (reasoning context), computes
+>   consensus per poll, and renders a green **recommendation** banner, amber **conflict** callouts, and
+>   per-option cost/travel/tag + "over budget"/"missing {tag}" badges. Create-poll form gained category,
+>   budget cap, required tags, and per-option cost/travel/tags.
+> - **Seed:** `seed_group_decisions_one_family.sql` (Kramer family, idempotent via `T6 · ` question prefix
+>   → cascade delete) — **100 polls / 400 options / ~800 votes (~1,300 rows)**. Even polls bias the
+>   plurality onto the pricey option so a real vote-vs-fit conflict fires (verified: "Meal choice 10" —
+>   favorite Option D is $220 vs an $80 cap and only Option B is vegetarian-feasible → recommends B).
+>
 > ## 📊 2026-07-07 (FOI #7 fully wired + full-capacity test seeds)
 >
 > Session shipped to `main` (`642d47f`; tsc/eslint/vitest/`next build` green, seeds PG16-validated).

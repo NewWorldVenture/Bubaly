@@ -224,9 +224,17 @@ before asking the user to build anything.**
   PG16-validated + idempotent). Verified: tsc · eslint · vitest · `next build`. (Area 10.)
 
 **P2 — Collaboration, transparency, premium consistency.**
-- [ ] **T6. AI-facilitated group decisions.** Turn `/voting` + `/decisions` into AI-driven consensus:
-  meal voting with budget+dietary constraints, vacation planning that balances availability, shopping
-  with cost comparison. Wire the decision engine + reasoning context into the group flow. (Area 4.)
+- [x] **T6. AI-facilitated group decisions.** ✅ Group Voting (`/voting`) now facilitates consensus:
+  every poll carries a **category** (meal/vacation/shopping/activity), an optional **budget cap**, and
+  **required tags** (e.g. dietary needs); each option carries real **cost / travel / tags**. Pure
+  `lib/voting/consensus.ts` (`facilitateConsensus`, **14 tests**) blends the democratic signal (votes)
+  with the shared Decision Engine's objective fit (cost/travel + hard budget/dietary vetoes), then
+  surfaces a **recommendation**, a **consensus level**, and explicit **vote-vs-fit conflicts** ("the
+  favorite is over budget", "votes lean X but Y fits better"). Reasoning context is real: the module
+  pulls the family's **budgets** and funds the cap via `budgetCapForCategory` when a poll omits one.
+  Migration `0142_poll_facilitation.sql` (additive, idempotent, PG16-validated — no new tables so 0078
+  RLS already governs it) + types. Seed `seed_group_decisions_one_family.sql` (100 polls / 400 options /
+  ~800 votes = ~1,300 rows) biases favorites over budget so conflicts fire. tsc/eslint/**1990 tests**/build. (Area 4.)
 - [ ] **T7. "Why this?" everywhere.** Standard inline affordance on every AI recommendation/automation:
   reason + inputs used + adjust/undo. Reusable component consumed by autopilot/agents/insight-of-day.
   (Area 7.)
@@ -527,6 +535,10 @@ missing-location events, colliding events for conflicts). Run it, then open
   (FOI snapshot history over N days for real trend lines; role permission surfaces), **approval_requests /
   meal_votes / family_polls** volume (comms dimension — FK-chained, needs parent rows), **autopilot_suggestions**
   (orchestrator Q2). The FOI comms/routine dims are covered today by running `seed_messages` + `seed_chores`.
+- ☑ **NEW `seed_group_decisions_one_family.sql`** (≈1,300 rows: 100 polls / 400 options / ~800 votes)
+  fully exercises T6 AI-facilitated group decisions — categories, budgets, dietary tags, and biased
+  votes so the consensus engine's recommendations AND vote-vs-fit conflicts render (also gives
+  `family_polls`/options/votes real volume). Run it, open `/dashboard/voting`.
 
 ### A. Operating Layer slices still to build (agent-doable, build top-down)
 - [x] **Slice 1 — Family Operating Index** (engine + page + 0125). PR #227. ✅

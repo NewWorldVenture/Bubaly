@@ -784,14 +784,14 @@ export interface Database {
         Partial<{ pet_id: string; kind: PetCareKind; title: string; record_date: string; next_due: string | null; dose: string | null; weight_kg: number | null; notes: string | null }>
       >;
       family_polls: T<
-        { id: string; family_id: string; vacation_id: string | null; question: string; description: string | null; kind: string; status: string; closes_at: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; vacation_id?: string | null; question: string; description?: string | null; kind?: string; status?: string; closes_at?: string | null; created_by?: string | null },
-        Partial<{ vacation_id: string | null; question: string; description: string | null; kind: string; status: string; closes_at: string | null }>
+        { id: string; family_id: string; vacation_id: string | null; question: string; description: string | null; kind: string; status: string; closes_at: string | null; decision_category: string; budget_cents: number | null; required_tags: string[]; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; vacation_id?: string | null; question: string; description?: string | null; kind?: string; status?: string; closes_at?: string | null; decision_category?: string; budget_cents?: number | null; required_tags?: string[]; created_by?: string | null },
+        Partial<{ vacation_id: string | null; question: string; description: string | null; kind: string; status: string; closes_at: string | null; decision_category: string; budget_cents: number | null; required_tags: string[] }>
       >;
       family_poll_options: T<
-        { id: string; family_id: string; poll_id: string; label: string; sort: number; created_at: string },
-        { id?: string; family_id: string; poll_id: string; label: string; sort?: number },
-        Partial<{ label: string; sort: number }>
+        { id: string; family_id: string; poll_id: string; label: string; sort: number; cost_cents: number | null; travel_minutes: number | null; tags: string[]; created_at: string },
+        { id?: string; family_id: string; poll_id: string; label: string; sort?: number; cost_cents?: number | null; travel_minutes?: number | null; tags?: string[] },
+        Partial<{ label: string; sort: number; cost_cents: number | null; travel_minutes: number | null; tags: string[] }>
       >;
       family_poll_votes: T<
         { id: string; family_id: string; poll_id: string; option_id: string; member_id: string; created_at: string },
