@@ -65,6 +65,11 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 > - **Friction #6 travel buffer** — code-ready; needs the Maps/ETA key (owner item 3 above).
 > - **Twin projector** — add doctors / smart-home entities once those domains land.
 > - **GIF picker** (Messages/photos) — code path exists; needs the provider key (owner item 3).
+> - [x] **Backend production hardening (2026-07-07, reasoning/network lane)** ✅ — Intelligence
+>   Network aggregation hardened (write-side granular-consent `filterMetricsByScopes`, atomic
+>   upsert-then-prune republish, **per-family try/catch isolation** in the nightly cron); prod audits
+>   all clean (11/11 crons `CRON_SECRET`-guarded; `vercel.json` ↔ cron routes match 1:1); Knowledge
+>   Graph path-finder `<Select>` a11y labels. tsc/eslint/**1915 tests**/build green.
 > - [x] **Social share cards (OpenGraph / Twitter)** ✅ (#245) — `app/opengraph-image.tsx` +
 >   `app/twitter-image.tsx` render a brand-gradient 1200×630 card (Bubaly wordmark + tagline)
 >   via `next/og`, shared from `lib/og/social-image.tsx`. Fully self-contained (wordmark

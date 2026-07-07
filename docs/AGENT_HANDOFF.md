@@ -6,6 +6,26 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## 🧠 REASONING/NETWORK LANE — 2026-07-06/07 (parallel to the onboarding/marketing sessions)
+>
+> A separate session owned the **reasoning + data layer** (graph, twin, decisions, prep, readiness,
+> intent, Intelligence Network) and its production hardening. All on `main`, each commit tsc/eslint/
+> vitest/`next build` green (**1915 tests**). Non-colliding lanes — touches `lib/network/*`,
+> `lib/graph/*`, `lib/decisions/*`, `lib/planning/*`, `lib/readiness/*`, `lib/intent/*`, their
+> `/dashboard/*` pages, and `app/api/cron/{model-refresh,network-aggregate}`.
+>
+> - **Intelligence Network aggregation** built + hardened (`0135`): pure `lib/network/aggregate.ts`
+>   (k-anonymity K=20 + Laplace DP noise + ≥100-family launch gate + `filterMetricsByScopes` write-side
+>   granular consent); `aggregate-server.ts` (atomic upsert-then-prune republish + **per-family
+>   try/catch isolation** so one family can't abort the nightly cron); daily `network-aggregate` cron;
+>   real insights wired into `/dashboard/intelligence`; seed `seed_network_aggregates.sql`.
+> - **Prod audits (clean):** all 11 cron routes are `CRON_SECRET`-guarded; `vercel.json` schedules ↔
+>   cron routes match 1:1 (no never-firing route, no 404 schedule); no `as any`/TODO/`console.log` in
+>   the reasoning lane. a11y: labelled the Knowledge Graph path-finder `<Select>`s; dropped dead imports.
+> - Full moat layer shipped + seeded: Knowledge Graph `0129`, twin projector, Decision Engine `0130`,
+>   Prep Plans `0131`, Life Readiness, Intent-Based UX, model-refresh cron `0134`, Network consent
+>   `0132` / aggregates `0135`. **Newest migration overall on main: `0137`** (child-login throttle, other lane).
+>
 > ## ⏱️ SESSION END STATE — 2026-07-06 (branch `claude/festive-bohr-m4cbeg`) — READ THIS FIRST
 >
 > Everything below is **shipped to `main`** (fast-forward, each commit tsc/eslint/vitest/`next build`
