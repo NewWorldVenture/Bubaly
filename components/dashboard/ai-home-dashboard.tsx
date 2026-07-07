@@ -28,6 +28,9 @@ import { type ParentApprovalRow, type RenewalRow, type DocumentRow } from '@/lib
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { HomeApprovalActions } from '@/components/dashboard/home-approval-actions';
+import { buildHomeBrief, homeBriefSummary } from '@/lib/home/home-brief';
+import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
+import { CircleCheck, Circle, Utensils } from 'lucide-react';
 
 function greeting() {
   const h = new Date().getHours();
@@ -245,6 +248,48 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     5,
   );
   const hasUpcoming = upcomingItems.length > 0;
+
+  // ── T3: outcome-first home. When the page would otherwise be empty (nothing
+  // needs you, nothing today), compute an OUTCOME — how ready the week is, the
+  // next best getting-started steps, and dinner ideas — instead of a bland
+  // "all caught up" void. Reuses the onboarding first-brief engine so home + the
+  // first-run screen tell the same story.
+  const showOutcome = needs.shown.length === 0 && !hasEvents;
+  let homeBrief: ReturnType<typeof buildHomeBrief> | null = null;
+  if (showOutcome) {
+    const { data: dinnerRows } = await supabase
+      .from('meal_ideas').select('title, cuisine, effort, prep_minutes, description').eq('is_active', true).limit(200);
+    const dinnerCandidates: DinnerIdea[] = (dinnerRows ?? []).map((r) => ({
+      title: r.title, cuisine: r.cuisine, effort: r.effort as DinnerEffort, prepMinutes: r.prep_minutes, description: r.description ?? null,
+    }));
+    homeBrief = buildHomeBrief({
+      upcomingEvents: ((upcomingEvents ?? []) as { title: string; starts_at: string; all_day: boolean }[])
+        .map((e) => ({ title: e.title, start: e.starts_at, allDay: e.all_day })),
+      dinnerCandidates,
+      choresPending: pendingChores ?? 0,
+      openTodos: openTodos ?? 0,
+      groceryOpen: groceryCount ?? 0,
+      memberCount: (members ?? []).length,
+    }, now);
+
+    // Persist today's snapshot (idempotent, one row/family/day) — the durable
+    // "never empty" record + TTFV signal. Best-effort: never block the render.
+    try {
+      await supabase.from('home_briefs').upsert({
+        family_id: familyId,
+        as_of_date: todayStart.toISOString().slice(0, 10),
+        is_sparse: homeBrief.isSparse,
+        readiness_pct: homeBrief.readinessPct,
+        week_count: homeBrief.weekCount,
+        conflict_count: homeBrief.conflictCount,
+        dinner_count: homeBrief.dinnerIdeas.length,
+        time_saved_minutes: homeBrief.timeSavedMinutes,
+        headline: homeBrief.headline,
+        brief: homeBriefSummary(homeBrief) as never,
+        created_by: ctx.user.id,
+      }, { onConflict: 'family_id,as_of_date' });
+    } catch { /* best-effort snapshot */ }
+  }
 
   return (
     <div className="space-y-6 pb-32">
@@ -508,19 +553,64 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         settings={dashSettings}
       />
 
-      {/* Empty state when no cards */}
-      {homeNeeds.length === 0 && !hasEvents && (
-        <div className="flex flex-col items-center gap-4 rounded-2xl border border-border bg-surface/40 py-12 text-center">
-          <div className="grid h-16 w-16 place-items-center rounded-full bg-brand/10">
-            <Sparkles className="h-8 w-8 text-brand" />
+      {/* T3: Outcome-first home — a real "here's your week + next steps + dinners"
+          instead of an empty "all caught up" card. */}
+      {showOutcome && homeBrief && (
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-brand/10 to-violet-500/5 p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-brand" /> {homeBrief.isSparse ? 'Your first wins' : 'Your week'}</p>
+                <p className="mt-1 text-sm text-fg/85">{homeBrief.headline}</p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-2xl font-black leading-none">{homeBrief.readinessPct}%</p>
+                <p className="text-[10px] uppercase tracking-wide text-muted">ready</p>
+              </div>
+            </div>
+            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-border">
+              <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${homeBrief.readinessPct}%` }} />
+            </div>
+            {homeBrief.timeSavedMinutes > 0 && (
+              <p className="mt-2 text-xs text-muted">Bubaly’s already saved you ~{homeBrief.timeSavedMinutes} min of planning this week.</p>
+            )}
           </div>
-          <div>
-            <p className="font-semibold">You&apos;re all caught up!</p>
-            <p className="mt-1 text-sm text-muted">No urgent items. Add something via the + button.</p>
+
+          {/* Next best steps — real outcomes, unfinished first */}
+          <div className="space-y-2">
+            {homeBrief.steps.slice(0, 4).map((s) => (
+              <Link key={s.id} href={s.href}
+                className={cn('flex items-center gap-3 rounded-2xl border p-4 transition hover:bg-elevated',
+                  s.done ? 'border-border/60 bg-surface/20' : 'border-border bg-surface/40')}>
+                {s.done
+                  ? <CircleCheck className="h-5 w-5 shrink-0 text-emerald-400" />
+                  : <Circle className="h-5 w-5 shrink-0 text-brand" />}
+                <div className="min-w-0 flex-1">
+                  <p className={cn('truncate text-sm font-semibold', s.done && 'text-muted line-through')}>{s.label}</p>
+                  <p className="truncate text-xs text-muted">{s.detail}</p>
+                </div>
+                {!s.done && <ChevronRight className="h-4 w-4 shrink-0 text-brand" />}
+              </Link>
+            ))}
           </div>
-          <Link href="/capture" className="rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand/90">
-            Capture something
-          </Link>
+
+          {/* Dinner ideas — value even on a blank week */}
+          {homeBrief.dinnerIdeas.length > 0 && (
+            <div className="rounded-2xl border border-border bg-surface/40 p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="flex items-center gap-2 text-sm font-semibold"><Utensils className="h-4 w-4 text-brand" /> Dinner ideas for this week</p>
+                <Link href="/dashboard/meals" className="text-xs font-semibold text-brand hover:underline">Plan meals</Link>
+              </div>
+              <ul className="space-y-1.5 text-sm">
+                {homeBrief.dinnerIdeas.map((d) => (
+                  <li key={d.title} className="flex items-baseline justify-between gap-3">
+                    <span className="truncate"><span className="font-medium">{d.title}</span> <span className="text-muted">· {d.cuisine}</span></span>
+                    <span className="shrink-0 text-xs text-muted">{d.prepMinutes} min</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

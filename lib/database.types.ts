@@ -408,6 +408,11 @@ export interface Database {
         { id?: string; title: string; cuisine?: string; effort?: string; prep_minutes?: number; tags?: string[]; description?: string | null; is_active?: boolean },
         Partial<{ title: string; cuisine: string; effort: string; prep_minutes: number; tags: string[]; description: string | null; is_active: boolean }>
       >;
+      home_briefs: T<
+        { id: string; family_id: string; as_of_date: string; is_sparse: boolean; readiness_pct: number; week_count: number; conflict_count: number; dinner_count: number; time_saved_minutes: number; headline: string | null; brief: Json; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; as_of_date?: string; is_sparse?: boolean; readiness_pct?: number; week_count?: number; conflict_count?: number; dinner_count?: number; time_saved_minutes?: number; headline?: string | null; brief?: Json; created_by?: string | null },
+        Partial<{ as_of_date: string; is_sparse: boolean; readiness_pct: number; week_count: number; conflict_count: number; dinner_count: number; time_saved_minutes: number; headline: string | null; brief: Json }>
+      >;
       journey_events: T<
         { id: string; family_id: string; member_id: string | null; journey: string; phase: string; step: number; session_id: string; duration_ms: number | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; journey: string; phase?: string; step?: number; session_id: string; duration_ms?: number | null },

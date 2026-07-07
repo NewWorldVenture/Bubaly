@@ -186,9 +186,18 @@ before asking the user to build anything.**
   Verified: tsc · eslint · **vitest (80 onboarding)** · `next build`. *(Deferred: rendering the brief
   on the AiHome empty state is T3; dinner ideas draw from the curated catalog, not yet the family's own
   learned tastes — that's a Playbook/R10 follow-up.)*
-- [ ] **T3. New-family home = outcome, never empty.** `AiHomeDashboard` for a family with little data
-  must render the first-brief outcome (T2) + one hero insight (T4), not empty widgets. Add
-  seeded-empty-state outcomes.
+- [x] **T3. New-family home = outcome, never empty.** ✅ SHIPPED (2026-07-07). When `AiHomeDashboard`
+  would otherwise show the bland "You're all caught up / Capture something" empty card (nothing needs
+  you + nothing today), it now renders an **outcome hero**: a week-readiness % + progress bar, the
+  next best **getting-started steps** (Fill your week · Plan dinners · Invite family · Grocery list ·
+  Chores — each marked done from the family's real state, unfinished first), and **3 dinner ideas**.
+  Pure engine `lib/home/home-brief.ts` (`buildHomeBrief`, 6 tests) reuses the T1/T2 first-brief engine
+  so home + first-run tell the same story. Persists a daily snapshot to **`home_briefs`** (`0140`,
+  family-scoped RLS, one row/family/day — the "never empty" substrate + home-side TTFV signal),
+  idempotent upsert on read (mirrors the FOI pattern). Seed `seed_home_briefs.sql` (500 daily
+  snapshots, readiness trend, idempotent; in `SEED_ALL.sql`, now 27). Verified: tsc · eslint ·
+  **vitest (home + onboarding)** · `next build`. *(One ranked hero "insight of the day" is the
+  separate T4; this ships the outcome + steps + dinners.)*
 
 **P1 — One daily "wow" + partner tone.**
 - [ ] **T4. Insight-of-the-day.** One ranked proactive insight surfaced above the fold on Home
