@@ -58,6 +58,7 @@ After applying, hard-refresh the app: Marketplace, `/dashboard/voice`,
 | 0133 | `0133_onboarding_events.sql` | `onboarding_events` | Onboarding funnel `/dashboard/onboarding-funnel` (super-admin) |
 | 0134 | `0134_model_dirty.sql` | `family_model_dirty` + `mark_model_dirty()` triggers | Event-driven twin/prep refresh (the `model-refresh` cron; also needs `CRON_SECRET`) |
 | 0135 | `0135_network_aggregates.sql` | `network_contributions`, `network_aggregates` | Intelligence Network insights `/dashboard/intelligence` (the `network-aggregate` cron; also needs `CRON_SECRET`) |
+| 0137 | `0137_child_login_throttle.sql` | `child_login_throttle` (per-username brute-force lockout) | Hardens **Kid Logins** (`/kid-login`) — child PIN sign-in is rate-limited/locked after repeated failures. Safe before apply: sign-in still works, just un-throttled until the table exists. |
 
 If prod is further behind than 0118, `supabase db push` will also pick up any
 earlier un-applied migrations (0104, 0111, 0113, 0117, …) — all additive, all
@@ -71,7 +72,7 @@ Several version prefixes are **duplicated** by parallel work streams:
 (`documents_favorite`, `finance_rls_repair`, `user_preferences_rls_repair`), and
 `0110` (`family_profile`, `transactions_member`). Supabase orders by full
 filename so this still applies deterministically, but a future migration should
-**not** reuse a taken prefix. Next free number: **0136**.
+**not** reuse a taken prefix. Next free number: **0138**.
 
 ## Environment variables (set alongside the migrations)
 
@@ -79,6 +80,12 @@ filename so this still applies deterministically, but a future migration should
   `model-refresh` (event-driven twin + prep-plan refresh) and `network-aggregate`
   (daily Intelligence Network aggregation — nothing publishes until ≥100 families
   opt in). Without it those endpoints return 401.
+- **`CHILD_LOGIN_SECRET`** — required for **Kid Logins** (username + PIN, no email).
+  It's mixed into the child's derived auth password so a 4-digit PIN can't be
+  brute-forced offline. Without it, `/kid-login` and "create child login" report
+  "not configured yet" and no child accounts can be created or signed in. Use a
+  long random value; changing it later invalidates existing child passwords (a
+  parent PIN reset re-derives them).
 - Optional keys that light up already-built, key-gated paths: **VAPID/FCM** (push),
   **Maps/ETA** (leave-by travel buffer), **Giphy/Tenor** (Messages GIF picker),
   **Stripe Issuing** (real-time Wallet card balances).

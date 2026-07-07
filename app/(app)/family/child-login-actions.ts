@@ -93,6 +93,12 @@ export async function resetChildPinAction(input: { memberId: string; pin: string
   const { error } = await admin.auth.admin.updateUserById(row.user_id, { password });
   if (error) return { ok: false, error: 'Could not reset the PIN.' };
 
+  // A parent reset should also lift any brute-force lockout on that username, so
+  // the child can sign in immediately with the new PIN.
+  await admin.from('child_login_throttle')
+    .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
+    .eq('username', normalizeUsername(row.username));
+
   await logAudit(admin, {
     familyId: row.family_id, actorId: ctx.user.id, action: 'update',
     resource: 'child_logins', resourceId: input.memberId, metadata: { reset_pin: true },
