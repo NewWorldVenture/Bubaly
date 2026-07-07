@@ -80,10 +80,13 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   - [x] Shared reasoning core `lib/reasoning/insights.ts` — `familyInsights(ctx)` (coordination hubs +
     blast radius + unlinked coverage gaps) over a `FamilyContext`; `insightsToPromptLines` for LLM
     grounding. Pure, 5 tests. `lib/agents/graph-insight.ts` now DELEGATES to it (one engine, not two).
-  - [x] **Briefing** (flagship "what does my family need today"): `app/api/ai/briefing/route.ts` now
-    loads `loadFamilyContext`, adds a FAMILY CONNECTIONS section to the LLM grounding + a system-prompt
-    rule to reason about knock-on effects, and folds hub insights into the deterministic (AI-off) fallback.
-  - [ ] Next engines: Concierge digest, Calm inbox, Decisions, Playbook, Prep-Plans, Outcomes, FOI.
+  - [x] **Briefing** (flagship "what does my family need today"): `app/api/ai/briefing/route.ts` +
+    `app/api/ai/weekly-briefing/route.ts` now load `loadFamilyContext`, add a FAMILY CONNECTIONS section
+    to the LLM grounding + a system-prompt rule to reason about knock-on effects, and the daily route
+    folds hub insights into the deterministic (AI-off) fallback. Daily + weekly Briefing engine done.
+  - Note: Concierge page reuses the (now graph-aware) briefing API; Calm's ethos is *fewer* signals so
+    informational graph insights are intentionally NOT folded there (would be noise).
+  - [ ] Next engines: Decisions, Playbook, Prep-Plans, Outcomes, FOI.
 - [ ] **R3. Auto-maintain the graph** — the `family_model_dirty` trigger (`0134`) already flags
   changes; make the projector run on-dirty so the graph is always current (not a manual "Rebuild").
 

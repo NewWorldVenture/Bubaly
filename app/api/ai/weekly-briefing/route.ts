@@ -4,6 +4,8 @@ import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { weekWindow, weekRangeLabel, choreCompletionRate, bucketByDay, dayLoad } from '@/lib/ai/weekly';
 import { resolveProvider } from '@/lib/ai/provider';
+import { loadFamilyContext } from '@/lib/reasoning/server';
+import { familyInsights, insightsToPromptLines } from '@/lib/reasoning/insights';
 
 /**
  * Plus-tier Weekly AI Briefing. Distinct from the daily briefing: it reads a
@@ -26,6 +28,9 @@ export async function POST(req: NextRequest) {
 
     const now = new Date();
     const w = weekWindow(now);
+
+    // Knowledge-graph relationship reasoning (moat R2): load in parallel with rows.
+    const familyCtxPromise = loadFamilyContext(supabase, familyId);
 
     const [
       { data: members },
@@ -75,6 +80,9 @@ export async function POST(req: NextRequest) {
     const recapRate = choreCompletionRate((recapChores ?? []).map((c) => ({ status: c.status })));
     const aheadRate = choreCompletionRate((choresDueAhead ?? []).map((c) => ({ status: c.status })));
 
+    // Relationship insights (coordination hubs, blast radius) for the week ahead.
+    const graphInsights = familyInsights(await familyCtxPromise);
+
     const context = `
 WEEK OF: ${weekRangeLabel(w)} (generated ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })})
 FAMILY: ${ctx.active.family.name}
@@ -111,6 +119,9 @@ ${(groceryItems ?? []).map((g) => `- ${g.name}${g.category ? ` (${g.category})` 
 
 UPCOMING REMINDERS:
 ${(reminders ?? []).map((r) => `- ${r.remind_at?.slice(0, 10) ?? 'soon'}: ${r.title}`).join('\n') || '- none'}
+
+═══ FAMILY CONNECTIONS (knowledge-graph reasoning — how things relate) ═══
+${insightsToPromptLines(graphInsights)}
     `.trim();
 
     const systemPrompt = `You are the Bubaly AI Chief of Staff producing a WEEKLY family briefing for a Family+ subscriber. Look both backward (recap) and forward (the week ahead).
@@ -156,7 +167,8 @@ Rules:
 - Detect genuine conflicts (overlaps, tight turnarounds, double-booked people).
 - prepChecklist should be concrete things to do BEFORE a specific day.
 - Score categories 0-100 honestly from the data; be encouraging if data is sparse but never invent events.
-- Emojis: 🏥 medical, ⚽ sports, 📚 school, ✈️ travel, 🍽️ dinner, 💼 work, 🎂 birthday.`;
+- Emojis: 🏥 medical, ⚽ sports, 📚 school, ✈️ travel, 🍽️ dinner, 💼 work, 🎂 birthday.
+- Use the FAMILY CONNECTIONS section to reason about knock-on effects across the week: when a coordination hub is under pressure, prefer a focusOfTheWeek and prepChecklist that protect it. Only reference connections that are given.`;
 
     const provider = await resolveProvider();
     const completion = await provider.complete({
