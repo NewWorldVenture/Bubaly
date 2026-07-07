@@ -20,6 +20,7 @@ import { NotificationBell } from './notification-bell';
 import { UpgradeModal } from './upgrade-modal';
 import { QuickCapture } from './quick-capture';
 import { SignOutButton } from '@/components/auth/sign-out-button';
+import { SkipLink } from '@/components/a11y/skip-link';
 import { AIOrb } from './ai-orb';
 import { CommandBar } from './command-bar';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
@@ -328,6 +329,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-dvh bg-bg text-fg lg:flex">
+      <SkipLink />
       {/* Desktop sidebar */}
       <aside className="hidden w-sidebar shrink-0 flex-col border-r border-border/60 bg-surface/30 lg:flex">
         <div className="px-5 py-5 xl:px-7 xl:py-7">
@@ -361,7 +363,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <UserMenu />
         </header>
 
-        <main className="app-main flex-1 pb-24 pt-4 sm:pt-6 lg:pb-8">
+        <main id="main-content" className="app-main flex-1 pb-24 pt-4 sm:pt-6 lg:pb-8">
           <div className="mx-auto max-w-[1480px]">{children}</div>
         </main>
       </div>
