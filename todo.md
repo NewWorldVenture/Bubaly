@@ -81,6 +81,13 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 >   self-referential canonical URLs (`alternates.canonical: './'` in the root layout resolves
 >   per-route — verified home→`/`, `/pricing`→`/pricing`, `/faq`→`/faq`), preventing duplicate
 >   indexing of www/non-www/trailing-slash/preview-domain variants. Build- and server-verified.
+> - [x] **HSTS security header (2026-07-07)** ✅ (#247) — `Strict-Transport-Security:
+>   max-age=63072000; includeSubDomains` added to the global header block in `next.config.mjs`
+>   (no `preload` — avoids the irreversible preload-list commitment). Rounds out the existing
+>   X-Frame-Options / nosniff / Referrer-Policy / Permissions-Policy set.
+> - [x] **Skip-to-content link, WCAG 2.4.1 (2026-07-07)** ✅ (#248) — `components/a11y/skip-link.tsx`
+>   (sr-only until focused) rendered first in the marketing layout AND app shell; each `<main>` given
+>   `id="main-content"`. Keyboard/SR users can bypass the nav on every page. Build-verified.
 
 ### A. Decisions only the owner can make
 - [x] **Intelligence Network aggregation** ✅ — decisions signed off + pipeline **built**
