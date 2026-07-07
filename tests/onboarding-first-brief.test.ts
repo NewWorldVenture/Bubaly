@@ -83,6 +83,18 @@ describe('buildFirstBrief', () => {
     const b = buildFirstBrief([ev({ title: 'X', start: '2026-07-07T09:00:00.000Z' })], NOW);
     expect(b.headline).toContain('Tuesday');
   });
+
+  it('carries dinner ideas when a catalog is supplied (empty by default)', () => {
+    const noCatalog = buildFirstBrief([ev({ title: 'X', start: '2026-07-07T09:00:00.000Z' })], NOW);
+    expect(noCatalog.dinnerIdeas).toEqual([]);
+    const withCatalog = buildFirstBrief([], NOW, [
+      { title: 'Tacos', cuisine: 'Mexican', effort: 'quick', prepMinutes: 25, description: null },
+      { title: 'Lasagna', cuisine: 'Italian', effort: 'involved', prepMinutes: 75, description: null },
+      { title: 'Stir-fry', cuisine: 'Asian', effort: 'quick', prepMinutes: 20, description: null },
+      { title: 'Curry', cuisine: 'Indian', effort: 'standard', prepMinutes: 45, description: null },
+    ]);
+    expect(withCatalog.dinnerIdeas).toHaveLength(3);
+  });
 });
 
 describe('briefSummary', () => {

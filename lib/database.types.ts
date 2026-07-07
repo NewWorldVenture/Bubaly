@@ -403,6 +403,11 @@ export interface Database {
         { id?: string; family_id: string; source?: string; event_count?: number; today_count?: number; conflict_count?: number; action_count?: number; time_saved_minutes?: number; brief?: Json; created_by?: string | null },
         Partial<{ source: string; event_count: number; today_count: number; conflict_count: number; action_count: number; time_saved_minutes: number; brief: Json }>
       >;
+      meal_ideas: T<
+        { id: string; title: string; cuisine: string; effort: string; prep_minutes: number; tags: string[]; description: string | null; is_active: boolean; created_at: string },
+        { id?: string; title: string; cuisine?: string; effort?: string; prep_minutes?: number; tags?: string[]; description?: string | null; is_active?: boolean },
+        Partial<{ title: string; cuisine: string; effort: string; prep_minutes: number; tags: string[]; description: string | null; is_active: boolean }>
+      >;
       journey_events: T<
         { id: string; family_id: string; member_id: string | null; journey: string; phase: string; step: number; session_id: string; duration_ms: number | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; journey: string; phase?: string; step?: number; session_id: string; duration_ms?: number | null },

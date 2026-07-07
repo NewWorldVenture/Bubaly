@@ -7,6 +7,8 @@
 // value step is a thin renderer, and the same brief summary is persisted to
 // onboarding_imports at finalize (the seed of the TTFV metric).
 
+import { pickDinnerIdeas, type DinnerIdea } from './dinner-ideas';
+
 export interface BriefEvent {
   title: string;
   start: string;              // ISO 8601
@@ -56,6 +58,7 @@ export interface FirstBrief {
   conflicts: BriefConflict[];
   actions: BriefAction[];
   opportunities: BriefOpportunity[];
+  dinnerIdeas: DinnerIdea[];
   timeSavedMinutes: number;
 }
 
@@ -101,8 +104,10 @@ function dayLabel(iso: string, now: Date): string {
 /**
  * Build the first-run brief. Everything is derived from the imported events + now;
  * an empty import yields a valid, calm brief (no crash, honest "nothing yet").
+ * `dinnerCandidates` (the curated meal_ideas catalog) is optional — omit it and
+ * the brief simply carries no dinner ideas (keeps the engine pure + DB-free).
  */
-export function buildFirstBrief(events: BriefEvent[], now: Date): FirstBrief {
+export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidates: DinnerIdea[] = []): FirstBrief {
   const valid = (events ?? []).filter((e) => e && typeof e.start === 'string' && Number.isFinite(Date.parse(e.start)));
   const nowMs = now.getTime();
   const weekEndMs = nowMs + 7 * DAY_MS;
@@ -221,6 +226,10 @@ export function buildFirstBrief(events: BriefEvent[], now: Date): FirstBrief {
     headline = `Here's your ${dow} — ${timeline.length} event${timeline.length === 1 ? '' : 's'}, and you're in good shape.`;
   }
 
+  // 3 dinner ideas that fit the day (quick when today is busy, more involved on
+  // the weekend). Drawn from the curated catalog passed in by the caller.
+  const dinnerIdeas = pickDinnerIdeas(dinnerCandidates, { now, busyCount: timeline.length });
+
   return {
     now: now.toISOString(),
     headline,
@@ -230,6 +239,7 @@ export function buildFirstBrief(events: BriefEvent[], now: Date): FirstBrief {
     conflicts,
     actions: actions.slice(0, 6),
     opportunities: top,
+    dinnerIdeas,
     timeSavedMinutes,
   };
 }
@@ -242,6 +252,7 @@ export function briefSummary(brief: FirstBrief): Record<string, unknown> {
     weekCount: brief.weekCount,
     conflictCount: brief.conflicts.length,
     actionCount: brief.actions.length,
+    dinnerCount: brief.dinnerIdeas.length,
     timeSavedMinutes: brief.timeSavedMinutes,
     opportunities: brief.opportunities.map((o) => ({ label: o.label, minutes: o.minutes })),
   };

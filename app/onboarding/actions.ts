@@ -15,9 +15,38 @@ import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { upsertOnboardingContact } from '@/lib/marketing/onboarding-contact';
 import { parseIcs, toBriefEvents, demoBriefEvents } from '@/lib/onboarding/ics';
 import { buildFirstBrief, briefSummary, type BriefEvent, type FirstBrief } from '@/lib/onboarding/first-brief';
+import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/constants/roles';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
+
+/**
+ * Load the curated dinner catalog (meal_ideas) the first-run brief draws its 3
+ * dinner ideas from. Best-effort: if the table isn't migrated yet the brief just
+ * carries no dinner ideas (never blocks onboarding). Capped so the pure picker
+ * has plenty of variety without shipping the whole catalog.
+ */
+async function fetchDinnerCandidates(supabase: SupabaseClient<Database>): Promise<DinnerIdea[]> {
+  try {
+    const { data, error } = await supabase
+      .from('meal_ideas')
+      .select('title, cuisine, effort, prep_minutes, description')
+      .eq('is_active', true)
+      .limit(200);
+    if (error || !data) return [];
+    return data.map((r) => ({
+      title: r.title,
+      cuisine: r.cuisine,
+      effort: r.effort as DinnerEffort,
+      prepMinutes: r.prep_minutes,
+      description: r.description ?? null,
+    }));
+  } catch {
+    return [];
+  }
+}
 
 /**
  * VALUE-FIRST (T1): parse the family's existing calendar (pasted .ics or a
@@ -52,7 +81,8 @@ export async function previewCalendarImportAction(input: {
     source = 'paste';
   }
 
-  const brief = buildFirstBrief(events, now);
+  const dinnerCandidates = await fetchDinnerCandidates(supabase);
+  const brief = buildFirstBrief(events, now, dinnerCandidates);
   return { ok: true, data: { brief, events, source } };
 }
 
@@ -402,7 +432,7 @@ export async function finalizeOnboardingAction(input: {
   >;
   appearance?: { color?: string; age?: number | null; avatarUrl?: string; pin?: string };
   calendarImport?: { source: string; events: BriefEvent[] };
-}): Promise<Result<{ familyId: string }>> {
+}): Promise<Result<{ familyId: string; brief?: FirstBrief }>> {
   const parsed = finalizeOnboardingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid onboarding data' };
 
@@ -547,7 +577,13 @@ export async function finalizeOnboardingAction(input: {
   //     in onboarding_imports (the seed of the TTFV metric). Both are best-effort —
   //     a hiccup here must never block the user finishing onboarding. The brief is
   //     recomputed server-side (never trust the client) for the durable summary.
+  // Compute the first brief server-side (never trust the client) — with the
+  // curated dinner ideas — so the Done screen ALWAYS shows a real payoff, even
+  // when no calendar was imported (dinner ideas are value on their own).
   const importEvents = (calendarImport?.events ?? []).slice(0, 1000);
+  const dinnerCandidates = await fetchDinnerCandidates(supabase);
+  const finalBrief = buildFirstBrief(importEvents, new Date(), dinnerCandidates);
+
   if (importEvents.length > 0) {
     const eventRows = importEvents.map((e) => ({
       family_id: familyId,
@@ -570,16 +606,15 @@ export async function finalizeOnboardingAction(input: {
     }
 
     try {
-      const brief = buildFirstBrief(importEvents, new Date());
       const { error: impErr } = await admin.from('onboarding_imports').insert({
         family_id: familyId,
         source: (calendarImport?.source as 'ics' | 'paste' | 'url' | 'demo') || 'paste',
         event_count: importedCount,
-        today_count: brief.todayCount,
-        conflict_count: brief.conflicts.length,
-        action_count: brief.actions.length,
-        time_saved_minutes: brief.timeSavedMinutes,
-        brief: briefSummary(brief) as never,
+        today_count: finalBrief.todayCount,
+        conflict_count: finalBrief.conflicts.length,
+        action_count: finalBrief.actions.length,
+        time_saved_minutes: finalBrief.timeSavedMinutes,
+        brief: briefSummary(finalBrief) as never,
         created_by: auth.user.id,
       });
       if (impErr) console.error('[onboarding] import record failed', impErr.message);
@@ -650,5 +685,5 @@ export async function finalizeOnboardingAction(input: {
     console.error('[onboarding] automation event failed', e);
   }
 
-  return { ok: true, data: { familyId } };
+  return { ok: true, data: { familyId, brief: finalBrief } };
 }

@@ -174,10 +174,18 @@ before asking the user to build anything.**
   idempotent; wired into `SEED_ALL.sql`). Verified: tsc · eslint · **vitest (73 onboarding)** ·
   `next build`. *(OAuth "Connect your calendar" stays owner-gated per R9/B3 — paste + sample deliver
   the value moment with zero external keys.)*
-- [◐] **T2. First-run "instant briefing" builder.** Engine SHIPPED as `lib/onboarding/first-brief.ts`
-  (built with T1): today's timeline · likely conflicts · prioritized action list · **time-saved
-  opportunities**, tested against fixture calendars. Remaining for T2: also render it as the
-  `done`/first-home screen (replace "Welcome"), and fold in **3 dinner ideas** (meals engine).
+- [x] **T2. First-run "instant briefing" builder.** ✅ SHIPPED (2026-07-07). `lib/onboarding/first-brief.ts`
+  produces today's timeline · likely conflicts · prioritized action list · **time-saved opportunities**
+  · **3 dinner ideas**. Dinner ideas come from a curated, family-agnostic catalog **`meal_ideas`**
+  (`0139`, reference data, PG16-validated) via the pure, deterministic `lib/onboarding/dinner-ideas.ts`
+  (`pickDinnerIdeas` — quick meals on busy days, involved on weekends, rotates daily; 6 tests). The
+  brief is now **rendered as the celebration/done screen** (`finalizeOnboardingAction` computes it
+  server-side — with dinner ideas — and returns it; `DonePanel` shows headline · time-saved · today ·
+  clashes · dinner ideas instead of the old generic "Welcome"), and also inline in the value step.
+  Seed `seed_meal_ideas.sql` (500 dishes × cuisine × effort, idempotent; in `SEED_ALL.sql`, now 26).
+  Verified: tsc · eslint · **vitest (80 onboarding)** · `next build`. *(Deferred: rendering the brief
+  on the AiHome empty state is T3; dinner ideas draw from the curated catalog, not yet the family's own
+  learned tastes — that's a Playbook/R10 follow-up.)*
 - [ ] **T3. New-family home = outcome, never empty.** `AiHomeDashboard` for a family with little data
   must render the first-brief outcome (T2) + one hero insight (T4), not empty widgets. Add
   seeded-empty-state outcomes.

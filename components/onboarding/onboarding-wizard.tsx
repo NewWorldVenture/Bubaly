@@ -36,7 +36,7 @@ import {
 } from '@/lib/onboarding/flow';
 import { finalizeOnboardingAction, previewCalendarImportAction } from '@/app/onboarding/actions';
 import { buildFirstBrief, type FirstBrief } from '@/lib/onboarding/first-brief';
-import { CalendarDays, Clipboard, AlertTriangle, ListChecks, Clock, Wand2 } from 'lucide-react';
+import { CalendarDays, Clipboard, AlertTriangle, ListChecks, Clock, Wand2, Utensils } from 'lucide-react';
 
 const inputCls = 'h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring';
 /** Pragmatic "looks like an email" check for the invite field. */
@@ -51,6 +51,9 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
     emptyDraft({ name: initialName, lastName: initialLastName, color: MEMBER_COLORS[0], familyName: suggestFamilyName(initialName) }));
   const [familyNameTouched, setFamilyNameTouched] = useState(false);
   const [saving, setSaving] = useState(false);
+  // The server-computed first brief (timeline · clashes · dinner ideas · time
+  // saved), returned by finalize and shown on the celebration screen.
+  const [doneBrief, setDoneBrief] = useState<FirstBrief | null>(null);
 
   const update = useCallback((patch: Partial<OnboardingDraft>) => setDraft((d) => ({ ...d, ...patch })), []);
   const firstName = draft.name.trim().split(' ')[0] || 'there';
@@ -119,6 +122,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
     const res = await finalizeOnboardingAction(buildFinalizePayload(draft));
     setSaving(false);
     if (!res.ok) { toastError(res.error ?? 'Something went wrong finishing setup'); return; }
+    setDoneBrief(res.data?.brief ?? null);
     trackOnboarding('done', 'completed');
     try { sessionStorage.removeItem(DRAFT_STORAGE_KEY); } catch { /* ignore */ }
     setStep('done');
@@ -174,7 +178,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '' }: { i
         {step === 'about' && <AboutPanel draft={draft} update={update} />}
         {step === 'members' && <MembersPanel draft={draft} update={update} />}
         {step === 'pin' && <PinPanel draft={draft} update={update} firstName={firstName} />}
-        {step === 'done' && <DonePanel draft={draft} firstName={firstName} onGo={() => { router.push('/dashboard'); router.refresh(); }} />}
+        {step === 'done' && <DonePanel draft={draft} firstName={firstName} brief={doneBrief} onGo={() => { router.push('/dashboard'); router.refresh(); }} />}
       </div>
 
       {step !== 'done' && (
@@ -375,6 +379,20 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
             <ul className="space-y-1.5 text-sm">
               {brief.opportunities.map((o) => (
                 <li key={o.id}><span className="font-medium">{o.label}</span> <span className="text-muted">· {o.detail}</span></li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {brief.dinnerIdeas.length > 0 && (
+          <section className="rounded-2xl border border-border p-4">
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Utensils className="h-4 w-4 text-brand" /> Dinner ideas for tonight</h2>
+            <ul className="space-y-1.5 text-sm">
+              {brief.dinnerIdeas.map((d) => (
+                <li key={d.title} className="flex items-baseline justify-between gap-3">
+                  <span className="truncate"><span className="font-medium">{d.title}</span> <span className="text-muted">· {d.cuisine}</span></span>
+                  <span className="shrink-0 text-xs text-muted">{d.prepMinutes} min</span>
+                </li>
               ))}
             </ul>
           </section>
@@ -602,7 +620,8 @@ function PinPanel({ draft, update, firstName }: { draft: OnboardingDraft; update
 }
 
 // ─── Step 6: Done ─────────────────────────────────────────────────────────────
-function DonePanel({ draft, firstName, onGo }: { draft: OnboardingDraft; firstName: string; onGo: () => void }) {
+function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; firstName: string; brief: FirstBrief | null; onGo: () => void }) {
+  const hasBrief = !!brief && (brief.todayCount > 0 || brief.dinnerIdeas.length > 0 || brief.timeSavedMinutes > 0 || brief.conflicts.length > 0);
   const memberCount = draft.members.length;
   const goalCount = draft.goals.length;
   // Local (no-email) kids can't sign in with an email — nudge the parent to give
@@ -625,6 +644,39 @@ function DonePanel({ draft, firstName, onGo }: { draft: OnboardingDraft; firstNa
       </div>
       <h1 className="mt-4 flex items-center justify-center gap-2 text-2xl font-bold">You’re all set, {firstName}! <PartyPopper className="h-6 w-6 text-brand" /></h1>
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{draft.familyName || 'Your family'} is ready. Welcome to Bubaly!</p>
+
+      {hasBrief && brief && (
+        <div className="mt-6 space-y-3 text-left">
+          <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
+            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand" /> {brief.headline}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {brief.timeSavedMinutes > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1 text-xs font-medium text-brand"><Clock className="h-3 w-3" /> ~{brief.timeSavedMinutes} min saved</span>
+              )}
+              {brief.todayCount > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-xs font-medium"><CalendarDays className="h-3 w-3 text-brand" /> {brief.todayCount} today</span>
+              )}
+              {brief.conflicts.length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600"><AlertTriangle className="h-3 w-3" /> {brief.conflicts.length} clash{brief.conflicts.length === 1 ? '' : 'es'}</span>
+              )}
+            </div>
+          </div>
+
+          {brief.dinnerIdeas.length > 0 && (
+            <div className="rounded-2xl border border-border p-4">
+              <p className="mb-2 flex items-center gap-2 text-sm font-semibold"><Utensils className="h-4 w-4 text-brand" /> Dinner ideas for this week</p>
+              <ul className="space-y-1.5 text-sm">
+                {brief.dinnerIdeas.map((d) => (
+                  <li key={d.title} className="flex items-baseline justify-between gap-3">
+                    <span className="truncate"><span className="font-medium">{d.title}</span> <span className="text-muted">· {d.cuisine}</span></span>
+                    <span className="shrink-0 text-xs text-muted">{d.prepMinutes} min</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-6 space-y-3 text-left">
         {[
