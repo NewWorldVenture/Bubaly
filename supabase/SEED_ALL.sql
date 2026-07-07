@@ -5,7 +5,9 @@
 -- first — it creates the to-do/grocery lists later seeds reuse). Each resolves
 -- the family by email (newworldventurellc@gmail.com, falls back to the oldest
 -- family) and clears its own sentinel rows first, so re-running never dupes.
--- Requires migrations 0125-0134 applied (see APPLY_PENDING_0118-0134.sql).
+-- Schema-drift safe: every surface is guarded on its own table existing
+-- (to_regclass), so a database that is behind on a migration seeds every OTHER
+-- surface and skips only the missing one — the script never aborts partway.
 -- Where: Supabase → SQL Editor → paste → Run.
 -- ============================================================================
 
@@ -35,73 +37,94 @@ begin
   if v_family is null then raise exception 'No families found.'; end if;
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
 
-  select id into v_todo_list from public.todo_lists where family_id = v_family and archived_at is null order by created_at limit 1;
-  if v_todo_list is null then insert into public.todo_lists (family_id, name) values (v_family, 'To-Do') returning id into v_todo_list; end if;
-  select id into v_groc_list from public.grocery_lists where family_id = v_family and is_archived = false order by created_at limit 1;
-  if v_groc_list is null then insert into public.grocery_lists (family_id, name) values (v_family, 'Shopping List') returning id into v_groc_list; end if;
+  -- Each surface is guarded on its own table existing, so a production schema that
+  -- is behind on a migration (e.g. habits not yet applied) seeds every OTHER surface
+  -- instead of aborting the whole script. A skipped `if` branch is never planned, so
+  -- a missing enum type (journal_mood/habit_cadence) can't error either.
 
-  -- Clean prior core-seed rows.
-  delete from public.calendar_events where family_id = v_family and description like '%[seed:core]%';
-  delete from public.todo_items      where family_id = v_family and notes like '%[seed:core]%';
-  delete from public.grocery_items   where family_id = v_family and category = 'seed-core';
-  delete from public.notes           where family_id = v_family and body like '%[seed:core]%';
-  delete from public.family_photos   where family_id = v_family and caption like '%[seed:core]%';
-  delete from public.journal_entries where family_id = v_family and prompt = '[seed:core]';
-  delete from public.habits          where family_id = v_family and description = '[seed:core]';
+  if to_regclass('public.todo_lists') is not null then
+    select id into v_todo_list from public.todo_lists where family_id = v_family and archived_at is null order by created_at limit 1;
+    if v_todo_list is null then insert into public.todo_lists (family_id, name) values (v_family, 'To-Do') returning id into v_todo_list; end if;
+  end if;
+  if to_regclass('public.grocery_lists') is not null then
+    select id into v_groc_list from public.grocery_lists where family_id = v_family and is_archived = false order by created_at limit 1;
+    if v_groc_list is null then insert into public.grocery_lists (family_id, name) values (v_family, 'Shopping List') returning id into v_groc_list; end if;
+  end if;
 
   -- Calendar — 500 events across ±30 days.
-  insert into public.calendar_events (family_id, title, description, starts_at, ends_at, all_day, assignee_id)
-  select v_family, 'Event #' || g.i, '[seed:core]',
-    (current_date + (floor(random()*60) - 30)::int)::timestamp + time '09:00' + (floor(random()*9)*interval '1 hour'),
-    null, false, v_members[1 + floor(random()*array_length(v_members,1))::int]
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.calendar_events') is not null then
+    delete from public.calendar_events where family_id = v_family and description like '%[seed:core]%';
+    insert into public.calendar_events (family_id, title, description, starts_at, ends_at, all_day, assignee_id)
+    select v_family, 'Event #' || g.i, '[seed:core]',
+      (current_date + (floor(random()*60) - 30)::int)::timestamp + time '09:00' + (floor(random()*9)*interval '1 hour'),
+      null, false, v_members[1 + floor(random()*array_length(v_members,1))::int]
+    from generate_series(1, n) as g(i);
+  end if;
 
   -- To-Dos — 500 (mix of done/overdue/upcoming).
-  insert into public.todo_items (family_id, list_id, title, notes, is_done, priority, due_date)
-  select v_family, v_todo_list, 'Task #' || g.i, '[seed:core]',
-    (g.i % 4 = 0),
-    (array['low','medium','high'])[1 + (g.i % 3)],
-    (current_date + (floor(random()*40) - 20)::int)
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.todo_items') is not null then
+    delete from public.todo_items where family_id = v_family and notes like '%[seed:core]%';
+    insert into public.todo_items (family_id, list_id, title, notes, is_done, priority, due_date)
+    select v_family, v_todo_list, 'Task #' || g.i, '[seed:core]',
+      (g.i % 4 = 0),
+      (array['low','medium','high'])[1 + (g.i % 3)],
+      (current_date + (floor(random()*40) - 20)::int)
+    from generate_series(1, n) as g(i);
+  end if;
 
   -- Groceries — 500 open items.
-  insert into public.grocery_items (family_id, list_id, name, category, is_checked)
-  select v_family, v_groc_list,
-    (array['Milk','Eggs','Bread','Apples','Chicken','Rice','Pasta','Cheese','Bananas','Coffee'])[1 + (g.i % 10)] || ' #' || g.i,
-    'seed-core', (g.i % 6 = 0)
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.grocery_items') is not null then
+    delete from public.grocery_items where family_id = v_family and category = 'seed-core';
+    insert into public.grocery_items (family_id, list_id, name, category, is_checked)
+    select v_family, v_groc_list,
+      (array['Milk','Eggs','Bread','Apples','Chicken','Rice','Pasta','Cheese','Bananas','Coffee'])[1 + (g.i % 10)] || ' #' || g.i,
+      'seed-core', (g.i % 6 = 0)
+    from generate_series(1, n) as g(i);
+  end if;
 
   -- Notes — 500.
-  insert into public.notes (family_id, title, body, is_pinned, created_by)
-  select v_family, 'Note #' || g.i, 'Sample note content #' || g.i || ' [seed:core]', (g.i % 25 = 0), null
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.notes') is not null then
+    delete from public.notes where family_id = v_family and body like '%[seed:core]%';
+    insert into public.notes (family_id, title, body, is_pinned, created_by)
+    select v_family, 'Note #' || g.i, 'Sample note content #' || g.i || ' [seed:core]', (g.i % 25 = 0), null
+    from generate_series(1, n) as g(i);
+  end if;
 
   -- Photos — 500 (placeholder storage paths; caption tags the seed).
-  insert into public.family_photos (family_id, uploaded_by, storage_path, url, caption, taken_at)
-  select v_family, null,
-    v_family || '/seed/core/photo-' || g.i || '.jpg',
-    'https://placehold.co/400?text=Photo+' || g.i,
-    'Memory #' || g.i || ' [seed:core]',
-    now() - (random()*365 || ' days')::interval
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.family_photos') is not null then
+    delete from public.family_photos where family_id = v_family and caption like '%[seed:core]%';
+    insert into public.family_photos (family_id, uploaded_by, storage_path, url, caption, taken_at)
+    select v_family, null,
+      v_family || '/seed/core/photo-' || g.i || '.jpg',
+      'https://placehold.co/400?text=Photo+' || g.i,
+      'Memory #' || g.i || ' [seed:core]',
+      now() - (random()*365 || ' days')::interval
+    from generate_series(1, n) as g(i);
+  end if;
 
   -- Journal — 500 entries.
-  insert into public.journal_entries (family_id, member_id, entry_date, mood, title, body, prompt, tags)
-  select v_family,
-    case when v_members is null then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end,
-    (current_date - (g.i % 365)),
-    (array['great','good','okay','low','stressed'])[1 + (g.i % 5)]::journal_mood,
-    'Journal #' || g.i, 'A little reflection #' || g.i, '[seed:core]', '{}'
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.journal_entries') is not null then
+    delete from public.journal_entries where family_id = v_family and prompt = '[seed:core]';
+    insert into public.journal_entries (family_id, member_id, entry_date, mood, title, body, prompt, tags)
+    select v_family,
+      case when v_members is null then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end,
+      (current_date - (g.i % 365)),
+      (array['great','good','okay','low','stressed'])[1 + (g.i % 5)]::journal_mood,
+      'Journal #' || g.i, 'A little reflection #' || g.i, '[seed:core]', '{}'
+    from generate_series(1, n) as g(i);
+  end if;
 
   -- Habits — 500.
-  insert into public.habits (family_id, member_id, title, description, icon, color, cadence, target_per_period, weekdays, is_active)
-  select v_family,
-    case when v_members is null then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end,
-    (array['Drink water','Read','Exercise','Meditate','Tidy up','Practice','Walk','Stretch'])[1 + (g.i % 8)] || ' #' || g.i,
-    '[seed:core]', 'star', '#7c5dff',
-    (array['daily','weekly'])[1 + (g.i % 2)]::habit_cadence, 1, '{1,2,3,4,5}', true
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.habits') is not null then
+    delete from public.habits where family_id = v_family and description = '[seed:core]';
+    insert into public.habits (family_id, member_id, title, description, icon, color, cadence, target_per_period, weekdays, is_active)
+    select v_family,
+      case when v_members is null then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end,
+      (array['Drink water','Read','Exercise','Meditate','Tidy up','Practice','Walk','Stretch'])[1 + (g.i % 8)] || ' #' || g.i,
+      '[seed:core]', 'star', '#7c5dff',
+      (array['daily','weekly'])[1 + (g.i % 2)]::habit_cadence, 1, '{1,2,3,4,5}', true
+    from generate_series(1, n) as g(i);
+  end if;
 
   raise notice 'Core content seeded (500 each) for family %', v_family;
 end $$;
@@ -132,37 +155,40 @@ begin
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
   if v_members is null then raise exception 'Family % has no members.', v_family; end if;
 
-  delete from public.calendar_events where family_id = v_family and description like '%[seed:p1]%';
-  delete from public.family_polls    where family_id = v_family and description like '%[seed:p1]%';
-
   -- 500 events across the next ~45 days. Overlaps (same member, same day) become
   -- conflicts; ~15% are unassigned + location-less ("missing info"); the busiest
   -- member reads as "overloaded".
-  insert into public.calendar_events (family_id, title, description, starts_at, ends_at, all_day, assignee_id, location)
-  select
-    v_family,
-    (array['Soccer practice','Dentist','Piano lesson','Work call','Swim meet','Study group',
-           'Playdate','Doctor visit','Recital','Team game','Tutoring','Scouts','Band','Checkup'])[1 + floor(random()*14)::int] || ' #' || g.i,
-    '[seed:p1]',
-    ts,
-    ts + interval '45 min' + (floor(random()*3) * interval '30 min'),
-    false,
-    case when random() < 0.15 then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end,
-    case when random() < 0.15 then null else (array['Home','Field 3','School','Clinic','Studio','Gym','Library'])[1 + floor(random()*7)::int] end
-  from generate_series(1, n_events) as g(i)
-  cross join lateral (
-    select (current_date + (floor(random()*45))::int)::timestamp
-           + time '08:00' + (floor(random()*11) * interval '1 hour') as ts
-  ) t;
+  if to_regclass('public.calendar_events') is not null then
+    delete from public.calendar_events where family_id = v_family and description like '%[seed:p1]%';
+    insert into public.calendar_events (family_id, title, description, starts_at, ends_at, all_day, assignee_id, location)
+    select
+      v_family,
+      (array['Soccer practice','Dentist','Piano lesson','Work call','Swim meet','Study group',
+             'Playdate','Doctor visit','Recital','Team game','Tutoring','Scouts','Band','Checkup'])[1 + floor(random()*14)::int] || ' #' || g.i,
+      '[seed:p1]',
+      ts,
+      ts + interval '45 min' + (floor(random()*3) * interval '30 min'),
+      false,
+      case when random() < 0.15 then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end,
+      case when random() < 0.15 then null else (array['Home','Field 3','School','Clinic','Studio','Gym','Library'])[1 + floor(random()*7)::int] end
+    from generate_series(1, n_events) as g(i)
+    cross join lateral (
+      select (current_date + (floor(random()*45))::int)::timestamp
+             + time '08:00' + (floor(random()*11) * interval '1 hour') as ts
+    ) t;
+  end if;
 
   -- A dozen open decisions → "what to decide next".
-  insert into public.family_polls (family_id, question, description, kind, status, created_by)
-  select v_family,
-    (array['Where should we go for spring break?','Which weekend for Grandma''s visit?',
-           'Whose turn to host game night?','What''s for the holiday dinner?','Which camp this summer?',
-           'Should we adopt a pet?'])[1 + floor(random()*6)::int] || ' (#' || g.i || ')',
-    '[seed:p1]', 'single', 'open', null
-  from generate_series(1, 12) as g(i);
+  if to_regclass('public.family_polls') is not null then
+    delete from public.family_polls where family_id = v_family and description like '%[seed:p1]%';
+    insert into public.family_polls (family_id, question, description, kind, status, created_by)
+    select v_family,
+      (array['Where should we go for spring break?','Which weekend for Grandma''s visit?',
+             'Whose turn to host game night?','What''s for the holiday dinner?','Which camp this summer?',
+             'Should we adopt a pet?'])[1 + floor(random()*6)::int] || ' (#' || g.i || ')',
+      '[seed:p1]', 'single', 'open', null
+    from generate_series(1, 12) as g(i);
+  end if;
 
   raise notice 'Pillar #1 (orchestrator) seeded % events + 12 polls for family %', n_events, v_family;
 end $$;
@@ -192,41 +218,51 @@ begin
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
   if v_members is null then raise exception 'Family % has no members.', v_family; end if;
 
-  delete from public.calendar_events where family_id = v_family and description like '%[seed:p2]%';
-  delete from public.teams          where family_id = v_family and season = '[seed:p2]';
-  delete from public.school_classes where family_id = v_family and room   = '[seed:p2]';
-  delete from public.family_routines where family_id = v_family and description = '[seed:p2]';
-  delete from public.budgets        where family_id = v_family and category like 'seed-p2-%';
-
   -- 470 scheduled commitments the twin simulates against.
-  insert into public.calendar_events (family_id, title, description, starts_at, ends_at, all_day, assignee_id, location)
-  select v_family,
-    (array['Practice','Game','Rehearsal','Lesson','Meeting','Appointment','Shift','Club'])[1 + floor(random()*8)::int] || ' #' || g.i,
-    '[seed:p2]',
-    ts, ts + interval '1 hour', false,
-    v_members[1 + floor(random()*array_length(v_members,1))::int],
-    (array['Home','School','Field','Studio','Downtown'])[1 + floor(random()*5)::int]
-  from generate_series(1, n_events) as g(i)
-  cross join lateral (select (current_date + (floor(random()*60))::int)::timestamp + time '15:00' + (floor(random()*6)*interval '1 hour') as ts) t;
+  if to_regclass('public.calendar_events') is not null then
+    delete from public.calendar_events where family_id = v_family and description like '%[seed:p2]%';
+    insert into public.calendar_events (family_id, title, description, starts_at, ends_at, all_day, assignee_id, location)
+    select v_family,
+      (array['Practice','Game','Rehearsal','Lesson','Meeting','Appointment','Shift','Club'])[1 + floor(random()*8)::int] || ' #' || g.i,
+      '[seed:p2]',
+      ts, ts + interval '1 hour', false,
+      v_members[1 + floor(random()*array_length(v_members,1))::int],
+      (array['Home','School','Field','Studio','Downtown'])[1 + floor(random()*5)::int]
+    from generate_series(1, n_events) as g(i)
+    cross join lateral (select (current_date + (floor(random()*60))::int)::timestamp + time '15:00' + (floor(random()*6)*interval '1 hour') as ts) t;
+  end if;
+
+  if to_regclass('public.teams') is not null then delete from public.teams where family_id = v_family and season = '[seed:p2]'; end if;
+  if to_regclass('public.school_classes') is not null then delete from public.school_classes where family_id = v_family and room = '[seed:p2]'; end if;
+  if to_regclass('public.family_routines') is not null then delete from public.family_routines where family_id = v_family and description = '[seed:p2]'; end if;
 
   -- Linked model: 2 teams + 2 classes + 2 routines per member, plus budgets.
   foreach m in array v_members loop
-    insert into public.teams (family_id, member_id, sport, team_name, season, is_active, created_by) values
-      (v_family, m, (array['Soccer','Basketball','Swim','Baseball'])[1+floor(random()*4)::int], 'Team ' || substr(m::text,1,4), '[seed:p2]', true, null),
-      (v_family, m, (array['Track','Tennis','Volleyball'])[1+floor(random()*3)::int], 'Squad ' || substr(m::text,1,4), '[seed:p2]', true, null);
-    insert into public.school_classes (family_id, member_id, subject, room, created_by) values
-      (v_family, m, (array['Math','Science','English','History'])[1+floor(random()*4)::int], '[seed:p2]', null),
-      (v_family, m, (array['Art','Music','PE','Spanish'])[1+floor(random()*4)::int], '[seed:p2]', null);
-    insert into public.family_routines (family_id, member_id, title, description, status, days_of_week, created_by) values
-      (v_family, m, 'Morning routine', '[seed:p2]', 'active', '{1,2,3,4,5}', null),
-      (v_family, m, 'Bedtime routine', '[seed:p2]', 'active', '{0,1,2,3,4,5,6}', null);
+    if to_regclass('public.teams') is not null then
+      insert into public.teams (family_id, member_id, sport, team_name, season, is_active, created_by) values
+        (v_family, m, (array['Soccer','Basketball','Swim','Baseball'])[1+floor(random()*4)::int], 'Team ' || substr(m::text,1,4), '[seed:p2]', true, null),
+        (v_family, m, (array['Track','Tennis','Volleyball'])[1+floor(random()*3)::int], 'Squad ' || substr(m::text,1,4), '[seed:p2]', true, null);
+    end if;
+    if to_regclass('public.school_classes') is not null then
+      insert into public.school_classes (family_id, member_id, subject, room, created_by) values
+        (v_family, m, (array['Math','Science','English','History'])[1+floor(random()*4)::int], '[seed:p2]', null),
+        (v_family, m, (array['Art','Music','PE','Spanish'])[1+floor(random()*4)::int], '[seed:p2]', null);
+    end if;
+    if to_regclass('public.family_routines') is not null then
+      insert into public.family_routines (family_id, member_id, title, description, status, days_of_week, created_by) values
+        (v_family, m, 'Morning routine', '[seed:p2]', 'active', '{1,2,3,4,5}', null),
+        (v_family, m, 'Bedtime routine', '[seed:p2]', 'active', '{0,1,2,3,4,5,6}', null);
+    end if;
   end loop;
 
-  insert into public.budgets (family_id, category, amount, period, created_by) values
-    (v_family, 'seed-p2-groceries', 800, 'monthly', null),
-    (v_family, 'seed-p2-activities', 300, 'monthly', null),
-    (v_family, 'seed-p2-travel', 5000, 'yearly', null),
-    (v_family, 'seed-p2-dining', 250, 'monthly', null);
+  if to_regclass('public.budgets') is not null then
+    delete from public.budgets where family_id = v_family and category like 'seed-p2-%';
+    insert into public.budgets (family_id, category, amount, period, created_by) values
+      (v_family, 'seed-p2-groceries', 800, 'monthly', null),
+      (v_family, 'seed-p2-activities', 300, 'monthly', null),
+      (v_family, 'seed-p2-travel', 5000, 'yearly', null),
+      (v_family, 'seed-p2-dining', 250, 'monthly', null);
+  end if;
 
   raise notice 'Pillar #2 (digital twin) seeded % events + linked model for family %', n_events, v_family;
 end $$;
@@ -253,19 +289,21 @@ begin
   if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
   if v_family is null then raise exception 'No families found.'; end if;
 
-  insert into public.family_playbook_suggestions (family_id, member_id, category, label, value, evidence, confidence, signature, status)
-  select
-    v_family, null,
-    (array['preference','preference','preference','date','preference','other'])[1 + (g.i % 6)],
-    (array['Go-to dinner','Grocery staple','Favorite activity','Family tradition','Travel style','Weekend ritual'])[1 + (g.i % 6)],
-    (array['Taco night','Oat milk','Movie night','Summer camping','Beach getaways','Sunday pancakes',
-           'Pizza Friday','Pasta night','Trail hikes','Game night','Farmers market','Bike rides'])[1 + floor(random()*12)::int] || ' #' || g.i,
-    'Seen ' || (3 + floor(random()*9))::int || ' times in recent activity',
-    45 + floor(random()*50)::int,
-    'seed-p3:' || g.i,        -- unique, stable signature (idempotent)
-    'suggested'
-  from generate_series(1, n) as g(i)
-  on conflict (family_id, signature) do nothing;
+  if to_regclass('public.family_playbook_suggestions') is not null then
+    insert into public.family_playbook_suggestions (family_id, member_id, category, label, value, evidence, confidence, signature, status)
+    select
+      v_family, null,
+      (array['preference','preference','preference','date','preference','other'])[1 + (g.i % 6)],
+      (array['Go-to dinner','Grocery staple','Favorite activity','Family tradition','Travel style','Weekend ritual'])[1 + (g.i % 6)],
+      (array['Taco night','Oat milk','Movie night','Summer camping','Beach getaways','Sunday pancakes',
+             'Pizza Friday','Pasta night','Trail hikes','Game night','Farmers market','Bike rides'])[1 + floor(random()*12)::int] || ' #' || g.i,
+      'Seen ' || (3 + floor(random()*9))::int || ' times in recent activity',
+      45 + floor(random()*50)::int,
+      'seed-p3:' || g.i,        -- unique, stable signature (idempotent)
+      'suggested'
+    from generate_series(1, n) as g(i)
+    on conflict (family_id, signature) do nothing;
+  end if;
 
   raise notice 'Pillar #3 (playbook) seeded up to % suggestions for family %', n, v_family;
 end $$;
@@ -296,44 +334,54 @@ begin
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
 
   -- Get-or-create the family's default lists.
-  select id into v_todo_list from public.todo_lists where family_id = v_family and archived_at is null order by created_at limit 1;
-  if v_todo_list is null then insert into public.todo_lists (family_id, name) values (v_family, 'To-Do') returning id into v_todo_list; end if;
-  select id into v_groc_list from public.grocery_lists where family_id = v_family and is_archived = false order by created_at limit 1;
-  if v_groc_list is null then insert into public.grocery_lists (family_id, name) values (v_family, 'Shopping List') returning id into v_groc_list; end if;
-
-  -- Clean prior seed rows.
-  delete from public.calendar_events where family_id = v_family and description like '%[seed:p4]%';
-  delete from public.todo_items      where family_id = v_family and notes like '%[seed:p4]%';
-  delete from public.grocery_items   where family_id = v_family and category = 'seed-p4';
+  if to_regclass('public.todo_lists') is not null then
+    select id into v_todo_list from public.todo_lists where family_id = v_family and archived_at is null order by created_at limit 1;
+    if v_todo_list is null then insert into public.todo_lists (family_id, name) values (v_family, 'To-Do') returning id into v_todo_list; end if;
+  end if;
+  if to_regclass('public.grocery_lists') is not null then
+    select id into v_groc_list from public.grocery_lists where family_id = v_family and is_archived = false order by created_at limit 1;
+    if v_groc_list is null then insert into public.grocery_lists (family_id, name) values (v_family, 'Shopping List') returning id into v_groc_list; end if;
+  end if;
 
   -- 200 events: 100 today, 100 across the next 30 days.
-  insert into public.calendar_events (family_id, title, description, starts_at, ends_at, all_day, assignee_id)
-  select v_family, 'Event #' || g.i, '[seed:p4]',
-    case when g.i <= 100 then current_date::timestamp + time '08:00' + (g.i * interval '7 min')
-         else (current_date + (1 + floor(random()*30))::int)::timestamp + time '09:00' + (floor(random()*8)*interval '1 hour') end,
-    null, false, v_members[1 + floor(random()*array_length(v_members,1))::int]
-  from generate_series(1, 200) as g(i);
+  if to_regclass('public.calendar_events') is not null then
+    delete from public.calendar_events where family_id = v_family and description like '%[seed:p4]%';
+    insert into public.calendar_events (family_id, title, description, starts_at, ends_at, all_day, assignee_id)
+    select v_family, 'Event #' || g.i, '[seed:p4]',
+      case when g.i <= 100 then current_date::timestamp + time '08:00' + (g.i * interval '7 min')
+           else (current_date + (1 + floor(random()*30))::int)::timestamp + time '09:00' + (floor(random()*8)*interval '1 hour') end,
+      null, false, v_members[1 + floor(random()*array_length(v_members,1))::int]
+    from generate_series(1, 200) as g(i);
+  end if;
 
   -- 150 overdue to-dos (due before today, not done).
-  insert into public.todo_items (family_id, list_id, title, notes, is_done, priority, due_date)
-  select v_family, v_todo_list,
-    (array['Pay bill','Return package','Call plumber','RSVP','Renew pass','Book appointment','Fix bike','Water plants'])[1 + floor(random()*8)::int] || ' #' || g.i,
-    '[seed:p4]', false,
-    (array['low','medium','high'])[1 + floor(random()*3)::int],
-    (current_date - (1 + floor(random()*20))::int)
-  from generate_series(1, 150) as g(i);
+  if to_regclass('public.todo_items') is not null then
+    delete from public.todo_items where family_id = v_family and notes like '%[seed:p4]%';
+    insert into public.todo_items (family_id, list_id, title, notes, is_done, priority, due_date)
+    select v_family, v_todo_list,
+      (array['Pay bill','Return package','Call plumber','RSVP','Renew pass','Book appointment','Fix bike','Water plants'])[1 + floor(random()*8)::int] || ' #' || g.i,
+      '[seed:p4]', false,
+      (array['low','medium','high'])[1 + floor(random()*3)::int],
+      (current_date - (1 + floor(random()*20))::int)
+    from generate_series(1, 150) as g(i);
+  end if;
 
   -- 150 open grocery items (category tag = idempotency marker).
-  insert into public.grocery_items (family_id, list_id, name, category, is_checked)
-  select v_family, v_groc_list,
-    (array['Milk','Eggs','Bread','Apples','Chicken','Rice','Pasta','Cheese','Bananas','Coffee','Yogurt','Spinach'])[1 + floor(random()*12)::int] || ' #' || g.i,
-    'seed-p4', false
-  from generate_series(1, 150) as g(i);
+  if to_regclass('public.grocery_items') is not null then
+    delete from public.grocery_items where family_id = v_family and category = 'seed-p4';
+    insert into public.grocery_items (family_id, list_id, name, category, is_checked)
+    select v_family, v_groc_list,
+      (array['Milk','Eggs','Bread','Apples','Chicken','Rice','Pasta','Cheese','Bananas','Coffee','Yogurt','Spinach'])[1 + floor(random()*12)::int] || ' #' || g.i,
+      'seed-p4', false
+    from generate_series(1, 150) as g(i);
+  end if;
 
   -- A birthday within the next 2 weeks so the "Celebrate" badge fires.
-  update public.family_members
-    set birthday = (current_date + 6)
-    where id = v_members[1];
+  if v_members is not null then
+    update public.family_members
+      set birthday = (current_date + 6)
+      where id = v_members[1];
+  end if;
 
   raise notice 'Pillar #4 (outcomes) seeded 500 records for family %', v_family;
 end $$;
@@ -360,25 +408,27 @@ begin
   if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
   if v_family is null then raise exception 'No families found.'; end if;
 
-  insert into public.family_operating_index (family_id, as_of_date, composite, band, dimensions, suggestions)
-  select
-    v_family,
-    current_date - g.i,
-    comp,
-    case when comp >= 85 then 'thriving' when comp >= 70 then 'steady' when comp >= 55 then 'stretched' else 'overloaded' end,
-    jsonb_build_object(
-      'planning', comp, 'schedule', greatest(0, comp - 6), 'financial', least(100, comp + 5),
-      'readiness', comp, 'communication', least(100, comp + 3), 'routines', greatest(0, comp - 4), 'goals', comp),
-    case when g.i in (1, 2) then
-      '[{"id":"seed-doc","title":"A document is expiring soon","detail":"Renew it before it lapses","href":"/dashboard/documents","dimension":"readiness","impact":8},
-        {"id":"seed-dinner","title":"3 dinners this week are unplanned","detail":"Plan meals","href":"/dashboard/meals","dimension":"routines","impact":6},
-        {"id":"seed-conflict","title":"A schedule clash tomorrow","detail":"Decide who covers what","href":"/dashboard/conflicts","dimension":"schedule","impact":9}]'::jsonb
-    else '[]'::jsonb end
-  from generate_series(0, 499) as g(i)
-  cross join lateral (select (55 + ((g.i * 7) % 45))::int as comp) c
-  on conflict (family_id, as_of_date) do update
-    set composite = excluded.composite, band = excluded.band,
-        dimensions = excluded.dimensions, suggestions = excluded.suggestions;
+  if to_regclass('public.family_operating_index') is not null then
+    insert into public.family_operating_index (family_id, as_of_date, composite, band, dimensions, suggestions)
+    select
+      v_family,
+      current_date - g.i,
+      comp,
+      case when comp >= 85 then 'thriving' when comp >= 70 then 'steady' when comp >= 55 then 'stretched' else 'overloaded' end,
+      jsonb_build_object(
+        'planning', comp, 'schedule', greatest(0, comp - 6), 'financial', least(100, comp + 5),
+        'readiness', comp, 'communication', least(100, comp + 3), 'routines', greatest(0, comp - 4), 'goals', comp),
+      case when g.i in (1, 2) then
+        '[{"id":"seed-doc","title":"A document is expiring soon","detail":"Renew it before it lapses","href":"/dashboard/documents","dimension":"readiness","impact":8},
+          {"id":"seed-dinner","title":"3 dinners this week are unplanned","detail":"Plan meals","href":"/dashboard/meals","dimension":"routines","impact":6},
+          {"id":"seed-conflict","title":"A schedule clash tomorrow","detail":"Decide who covers what","href":"/dashboard/conflicts","dimension":"schedule","impact":9}]'::jsonb
+      else '[]'::jsonb end
+    from generate_series(0, 499) as g(i)
+    cross join lateral (select (55 + ((g.i * 7) % 45))::int as comp) c
+    on conflict (family_id, as_of_date) do update
+      set composite = excluded.composite, band = excluded.band,
+          dimensions = excluded.dimensions, suggestions = excluded.suggestions;
+  end if;
 
   raise notice 'Pillar #5 (command center) seeded 500 daily snapshots for family %', v_family;
 end $$;
@@ -419,22 +469,23 @@ begin
   if v_family is null then raise exception 'No families found.'; end if;
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
 
-  delete from public.agent_activity where family_id = v_family and detail like '%[seed:p6]%';
-
-  insert into public.agent_activity (family_id, member_id, agent, kind, title, detail, href, severity, status, created_at)
-  select
-    v_family,
-    case when random() < 0.5 or v_members is null then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end,
-    agents[1 + floor(random()*array_length(agents,1))::int],
-    kinds[1 + floor(random()*array_length(kinds,1))::int],
-    titles[1 + floor(random()*array_length(titles,1))::int] || ' #' || g.i,
-    '[seed:p6] auto-logged by the agent',
-    hrefs[1 + floor(random()*array_length(hrefs,1))::int],
-    sevs[1 + floor(random()*array_length(sevs,1))::int],
-    -- ~70% active (visible), the rest already resolved for history.
-    (array['active','active','active','active','active','active','active','done','done','dismissed'])[1 + floor(random()*10)::int],
-    now() - (random() * 90 || ' days')::interval
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.agent_activity') is not null then
+    delete from public.agent_activity where family_id = v_family and detail like '%[seed:p6]%';
+    insert into public.agent_activity (family_id, member_id, agent, kind, title, detail, href, severity, status, created_at)
+    select
+      v_family,
+      case when random() < 0.5 or v_members is null then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end,
+      agents[1 + floor(random()*array_length(agents,1))::int],
+      kinds[1 + floor(random()*array_length(kinds,1))::int],
+      titles[1 + floor(random()*array_length(titles,1))::int] || ' #' || g.i,
+      '[seed:p6] auto-logged by the agent',
+      hrefs[1 + floor(random()*array_length(hrefs,1))::int],
+      sevs[1 + floor(random()*array_length(sevs,1))::int],
+      -- ~70% active (visible), the rest already resolved for history.
+      (array['active','active','active','active','active','active','active','done','done','dismissed'])[1 + floor(random()*10)::int],
+      now() - (random() * 90 || ' days')::interval
+    from generate_series(1, n) as g(i);
+  end if;
 
   raise notice 'Pillar #6 (agents) seeded % activity records for family %', n, v_family;
 end $$;
@@ -472,17 +523,18 @@ begin
   if v_family is null then raise exception 'No families found.'; end if;
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
 
-  delete from public.reminders where family_id = v_family and notes like '%[seed:p8]%';
-
-  insert into public.reminders (family_id, title, notes, remind_at, is_done, member_id)
-  select
-    v_family,
-    titles[1 + (g.i % array_length(titles, 1))] || ' #' || g.i,
-    '[seed:p8]',
-    now() + ((1 + floor(random() * 1439)) || ' minutes')::interval,   -- within the next ~24h
-    false,
-    case when v_members is null or random() < 0.4 then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.reminders') is not null then
+    delete from public.reminders where family_id = v_family and notes like '%[seed:p8]%';
+    insert into public.reminders (family_id, title, notes, remind_at, is_done, member_id)
+    select
+      v_family,
+      titles[1 + (g.i % array_length(titles, 1))] || ' #' || g.i,
+      '[seed:p8]',
+      now() + ((1 + floor(random() * 1439)) || ' minutes')::interval,   -- within the next ~24h
+      false,
+      case when v_members is null or random() < 0.4 then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end
+    from generate_series(1, n) as g(i);
+  end if;
 
   raise notice 'Pillar #8 (calm) seeded % reminders for family %', n, v_family;
 end $$;
@@ -518,24 +570,25 @@ begin
   if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
   if v_family is null then raise exception 'No families found.'; end if;
 
-  delete from public.family_connections where family_id = v_family and external_account_id like 'seed-p9-%';
-
-  -- Cycle providers + statuses with modulo (even spread; avoids the lateral
-  -- random() constant-folding pitfall). external_account_id stays unique per row.
-  insert into public.family_connections
-    (family_id, provider, category, status, account_label, external_account_id, last_synced_at, error_message)
-  select
-    v_family,
-    providers[1 + (g.i % array_length(providers, 1))],
-    categories[1 + (g.i % array_length(categories, 1))],
-    statuses[1 + (g.i % array_length(statuses, 1))],
-    'Account #' || g.i,
-    'seed-p9-' || g.i,
-    case when statuses[1 + (g.i % array_length(statuses, 1))] in ('connected','syncing')
-         then now() - (random() * 30 || ' days')::interval else null end,
-    case when statuses[1 + (g.i % array_length(statuses, 1))] = 'error'
-         then 'Reauthorize this connection' else null end
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.family_connections') is not null then
+    delete from public.family_connections where family_id = v_family and external_account_id like 'seed-p9-%';
+    -- Cycle providers + statuses with modulo (even spread; avoids the lateral
+    -- random() constant-folding pitfall). external_account_id stays unique per row.
+    insert into public.family_connections
+      (family_id, provider, category, status, account_label, external_account_id, last_synced_at, error_message)
+    select
+      v_family,
+      providers[1 + (g.i % array_length(providers, 1))],
+      categories[1 + (g.i % array_length(categories, 1))],
+      statuses[1 + (g.i % array_length(statuses, 1))],
+      'Account #' || g.i,
+      'seed-p9-' || g.i,
+      case when statuses[1 + (g.i % array_length(statuses, 1))] in ('connected','syncing')
+           then now() - (random() * 30 || ' days')::interval else null end,
+      case when statuses[1 + (g.i % array_length(statuses, 1))] = 'error'
+           then 'Reauthorize this connection' else null end
+    from generate_series(1, n) as g(i);
+  end if;
 
   raise notice 'Pillar #9 (connections) seeded % records for family %', n, v_family;
 end $$;
@@ -572,27 +625,30 @@ begin
   if v_family is null then raise exception 'No families found.'; end if;
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
 
-  select id into v_convo from public.family_conversations
-    where family_id = v_family and name = 'Seed Chat' limit 1;
-  if v_convo is null then
-    insert into public.family_conversations (family_id, name, kind, avatar_emoji)
-    values (v_family, 'Seed Chat', 'group', '💬') returning id into v_convo;
+  if to_regclass('public.family_conversations') is not null then
+    select id into v_convo from public.family_conversations
+      where family_id = v_family and name = 'Seed Chat' limit 1;
+    if v_convo is null then
+      insert into public.family_conversations (family_id, name, kind, avatar_emoji)
+      values (v_family, 'Seed Chat', 'group', '💬') returning id into v_convo;
+    end if;
   end if;
 
-  delete from public.family_messages where family_id = v_family and content like '%[seed:msg]%';
-
-  -- sender_id references auth.users; seed rows use a null sender + a display name
-  -- so no real auth user is required.
-  insert into public.family_messages (conversation_id, family_id, sender_id, sender_name, content, kind, is_pinned, created_at)
-  select
-    v_convo, v_family,
-    null,
-    (array['Mom','Dad','Alex','Sam','Jordan'])[1 + (g.i % 5)],
-    bodies[1 + (g.i % array_length(bodies,1))] || ' #' || g.i || ' [seed:msg]',
-    kinds[1 + (g.i % array_length(kinds,1))],
-    (g.i % 50 = 0),
-    now() - ((g.i) || ' minutes')::interval
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.family_messages') is not null and v_convo is not null then
+    delete from public.family_messages where family_id = v_family and content like '%[seed:msg]%';
+    -- sender_id references auth.users; seed rows use a null sender + a display name
+    -- so no real auth user is required.
+    insert into public.family_messages (conversation_id, family_id, sender_id, sender_name, content, kind, is_pinned, created_at)
+    select
+      v_convo, v_family,
+      null,
+      (array['Mom','Dad','Alex','Sam','Jordan'])[1 + (g.i % 5)],
+      bodies[1 + (g.i % array_length(bodies,1))] || ' #' || g.i || ' [seed:msg]',
+      kinds[1 + (g.i % array_length(kinds,1))],
+      (g.i % 50 = 0),
+      now() - ((g.i) || ' minutes')::interval
+    from generate_series(1, n) as g(i);
+  end if;
 
   raise notice 'Messages seeded % rows for family %', n, v_family;
 end $$;
@@ -628,35 +684,37 @@ begin
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
   if v_members is null then raise exception 'Family has no members (needed for chore assignments).'; end if;
 
-  delete from public.chore_assignments a using public.chores c
-    where a.chore_id = c.id and c.family_id = v_family and c.description like '%[seed:chore]%';
-  delete from public.chores where family_id = v_family and description like '%[seed:chore]%';
+  if to_regclass('public.chores') is not null then
+    delete from public.chore_assignments a using public.chores c
+      where a.chore_id = c.id and c.family_id = v_family and c.description like '%[seed:chore]%';
+    delete from public.chores where family_id = v_family and description like '%[seed:chore]%';
 
-  with new_chores as (
-    insert into public.chores (family_id, title, description, points, priority, recurrence, due_at, requires_approval, is_active)
+    with new_chores as (
+      insert into public.chores (family_id, title, description, points, priority, recurrence, due_at, requires_approval, is_active)
+      select
+        v_family,
+        titles[1 + (g.i % array_length(titles,1))] || ' #' || g.i,
+        '[seed:chore]',
+        5 + (g.i % 20),
+        prios[1 + (g.i % array_length(prios,1))]::priority,
+        recurs[1 + (g.i % array_length(recurs,1))]::recurrence_freq,
+        now() + ((g.i % 14) || ' days')::interval,
+        (g.i % 5 = 0),
+        true
+      from generate_series(1, n) as g(i)
+      returning id
+    ), numbered as (
+      select id, row_number() over () as rn from new_chores
+    )
+    insert into public.chore_assignments (family_id, chore_id, member_id, status, due_at, points_awarded)
     select
-      v_family,
-      titles[1 + (g.i % array_length(titles,1))] || ' #' || g.i,
-      '[seed:chore]',
-      5 + (g.i % 20),
-      prios[1 + (g.i % array_length(prios,1))]::priority,
-      recurs[1 + (g.i % array_length(recurs,1))]::recurrence_freq,
-      now() + ((g.i % 14) || ' days')::interval,
-      (g.i % 5 = 0),
-      true
-    from generate_series(1, n) as g(i)
-    returning id
-  ), numbered as (
-    select id, row_number() over () as rn from new_chores
-  )
-  insert into public.chore_assignments (family_id, chore_id, member_id, status, due_at, points_awarded)
-  select
-    v_family, nc.id,
-    v_members[1 + (nc.rn::int % array_length(v_members,1))],
-    statuses[1 + (nc.rn::int % array_length(statuses,1))]::task_status,
-    now() + ((nc.rn % 14) || ' days')::interval,
-    case when statuses[1 + (nc.rn::int % array_length(statuses,1))] in ('approved','done') then 10 else 0 end
-  from numbered nc;
+      v_family, nc.id,
+      v_members[1 + (nc.rn::int % array_length(v_members,1))],
+      statuses[1 + (nc.rn::int % array_length(statuses,1))]::task_status,
+      now() + ((nc.rn % 14) || ' days')::interval,
+      case when statuses[1 + (nc.rn::int % array_length(statuses,1))] in ('approved','done') then 10 else 0 end
+    from numbered nc;
+  end if;
 
   raise notice 'Chores + assignments seeded % rows each for family %', n, v_family;
 end $$;
@@ -686,39 +744,43 @@ begin
   if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
   if v_family is null then raise exception 'No families found.'; end if;
 
-  delete from public.meal_plans mp using public.meals m
-    where mp.meal_id = m.id and m.family_id = v_family and m.notes = '[seed:meal]';
-  delete from public.meals where family_id = v_family and notes = '[seed:meal]';
-  delete from public.family_recipes where family_id = v_family and description = '[seed:meal]';
-
   -- Meals library (500) + one meal_plan per meal (500 planned days).
-  with new_meals as (
-    insert into public.meals (family_id, name, meal_type, notes)
-    select v_family,
-      names[1 + (g.i % array_length(names,1))] || ' #' || g.i,
-      types[1 + (g.i % array_length(types,1))]::meal_type,
-      '[seed:meal]'
-    from generate_series(1, n) as g(i)
-    returning id, meal_type
-  ), numbered as (
-    select id, meal_type, row_number() over () as rn from new_meals
-  )
-  insert into public.meal_plans (family_id, meal_id, plan_date, meal_type)
-  select v_family, nm.id, (current_date + (nm.rn::int - 250)), nm.meal_type
-  from numbered nm;
+  if to_regclass('public.meals') is not null then
+    delete from public.meal_plans mp using public.meals m
+      where mp.meal_id = m.id and m.family_id = v_family and m.notes = '[seed:meal]';
+    delete from public.meals where family_id = v_family and notes = '[seed:meal]';
+
+    with new_meals as (
+      insert into public.meals (family_id, name, meal_type, notes)
+      select v_family,
+        names[1 + (g.i % array_length(names,1))] || ' #' || g.i,
+        types[1 + (g.i % array_length(types,1))]::meal_type,
+        '[seed:meal]'
+      from generate_series(1, n) as g(i)
+      returning id, meal_type
+    ), numbered as (
+      select id, meal_type, row_number() over () as rn from new_meals
+    )
+    insert into public.meal_plans (family_id, meal_id, plan_date, meal_type)
+    select v_family, nm.id, (current_date + (nm.rn::int - 250)), nm.meal_type
+    from numbered nm;
+  end if;
 
   -- Recipe book (500).
-  insert into public.family_recipes (family_id, name, description, category, servings, prep_time_mins, cook_time_mins, difficulty, ingredients, instructions)
-  select v_family,
-    names[1 + (g.i % array_length(names,1))] || ' (recipe #' || g.i || ')',
-    '[seed:meal]',
-    (array['dinner','lunch','breakfast','dessert'])[1 + (g.i % 4)],
-    2 + (g.i % 6),
-    5 + (g.i % 30),
-    10 + (g.i % 45),
-    (array['easy','medium','hard'])[1 + (g.i % 3)],
-    '[]'::jsonb, '[]'::jsonb
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.family_recipes') is not null then
+    delete from public.family_recipes where family_id = v_family and description = '[seed:meal]';
+    insert into public.family_recipes (family_id, name, description, category, servings, prep_time_mins, cook_time_mins, difficulty, ingredients, instructions)
+    select v_family,
+      names[1 + (g.i % array_length(names,1))] || ' (recipe #' || g.i || ')',
+      '[seed:meal]',
+      (array['dinner','lunch','breakfast','dessert'])[1 + (g.i % 4)],
+      2 + (g.i % 6),
+      5 + (g.i % 30),
+      10 + (g.i % 45),
+      (array['easy','medium','hard'])[1 + (g.i % 3)],
+      '[]'::jsonb, '[]'::jsonb
+    from generate_series(1, n) as g(i);
+  end if;
 
   raise notice 'Meals + recipes + plans seeded % rows each for family %', n, v_family;
 end $$;
@@ -748,19 +810,20 @@ begin
   if v_family is null then raise exception 'No families found.'; end if;
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
 
-  delete from public.documents where family_id = v_family and title like '%[seed:doc]%';
-
-  insert into public.documents (family_id, title, category, storage_path, mime_type, size_bytes, expires_at, member_id, is_secure)
-  select v_family,
-    initcap(cats[1 + (g.i % array_length(cats,1))]) || ' Doc #' || g.i || ' [seed:doc]',
-    cats[1 + (g.i % array_length(cats,1))],
-    v_family || '/seed/docs/doc-' || g.i || '.pdf',
-    'application/pdf',
-    (50000 + (g.i * 137) % 2000000),
-    case when g.i % 3 = 0 then (current_date + ((g.i % 90) - 15)) else null end,  -- some expiring soon/expired
-    case when v_members is null or g.i % 2 = 0 then null else v_members[1 + (g.i % array_length(v_members,1))] end,
-    (g.i % 7 = 0)
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.documents') is not null then
+    delete from public.documents where family_id = v_family and title like '%[seed:doc]%';
+    insert into public.documents (family_id, title, category, storage_path, mime_type, size_bytes, expires_at, member_id, is_secure)
+    select v_family,
+      initcap(cats[1 + (g.i % array_length(cats,1))]) || ' Doc #' || g.i || ' [seed:doc]',
+      cats[1 + (g.i % array_length(cats,1))],
+      v_family || '/seed/docs/doc-' || g.i || '.pdf',
+      'application/pdf',
+      (50000 + (g.i * 137) % 2000000),
+      case when g.i % 3 = 0 then (current_date + ((g.i % 90) - 15)) else null end,  -- some expiring soon/expired
+      case when v_members is null or g.i % 2 = 0 then null else v_members[1 + (g.i % array_length(v_members,1))] end,
+      (g.i % 7 = 0)
+    from generate_series(1, n) as g(i);
+  end if;
 
   raise notice 'Documents seeded % rows for family %', n, v_family;
 end $$;
@@ -792,33 +855,41 @@ begin
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
   if v_members is null then raise exception 'Family has no members (needed for location events).'; end if;
 
-  delete from public.location_events where family_id = v_family and place_name like '%[seed:loc]%';
-  delete from public.family_places where family_id = v_family and name like '%[seed:loc]%';
-  delete from public.member_locations where family_id = v_family and address = '[seed:loc]';
+  if to_regclass('public.location_events') is not null then
+    delete from public.location_events where family_id = v_family and place_name like '%[seed:loc]%';
+  end if;
 
   -- Places (one per name).
-  insert into public.family_places (family_id, name, icon, address, latitude, longitude, radius_m, geofence_enabled)
-  select v_family, pn || ' [seed:loc]', '📍', pn || ' address',
-    37.77 + (row_number() over () * 0.01), -122.41 - (row_number() over () * 0.01), 150, true
-  from unnest(place_names) as pn;
-  select array_agg(id) into v_places from public.family_places where family_id = v_family and name like '%[seed:loc]%';
+  if to_regclass('public.family_places') is not null then
+    delete from public.family_places where family_id = v_family and name like '%[seed:loc]%';
+    insert into public.family_places (family_id, name, icon, address, latitude, longitude, radius_m, geofence_enabled)
+    select v_family, pn || ' [seed:loc]', '📍', pn || ' address',
+      37.77 + (row_number() over () * 0.01), -122.41 - (row_number() over () * 0.01), 150, true
+    from unnest(place_names) as pn;
+    select array_agg(id) into v_places from public.family_places where family_id = v_family and name like '%[seed:loc]%';
+  end if;
 
   -- 500 location events across members/places/types.
-  insert into public.location_events (family_id, member_id, place_id, place_name, event_type, latitude, longitude, occurred_at)
-  select v_family,
-    v_members[1 + (g.i % array_length(v_members,1))],
-    v_places[1 + (g.i % array_length(v_places,1))],
-    place_names[1 + (g.i % array_length(place_names,1))] || ' [seed:loc]',
-    events[1 + (g.i % array_length(events,1))]::location_event_type,
-    37.77 + (g.i % 50) * 0.001, -122.41 - (g.i % 50) * 0.001,
-    now() - ((g.i * 7) || ' minutes')::interval
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.location_events') is not null and v_places is not null then
+    insert into public.location_events (family_id, member_id, place_id, place_name, event_type, latitude, longitude, occurred_at)
+    select v_family,
+      v_members[1 + (g.i % array_length(v_members,1))],
+      v_places[1 + (g.i % array_length(v_places,1))],
+      place_names[1 + (g.i % array_length(place_names,1))] || ' [seed:loc]',
+      events[1 + (g.i % array_length(events,1))]::location_event_type,
+      37.77 + (g.i % 50) * 0.001, -122.41 - (g.i % 50) * 0.001,
+      now() - ((g.i * 7) || ' minutes')::interval
+    from generate_series(1, n) as g(i);
+  end if;
 
   -- Current member locations (upsert one row per member; not 500 — bounded by members).
-  insert into public.member_locations (family_id, member_id, latitude, longitude, accuracy_m, battery, is_sharing, address, updated_at)
-  select v_family, m, 37.77 + random()*0.05, -122.41 - random()*0.05, 8 + random()*20,
-    20 + floor(random()*80)::int, true, '[seed:loc]', now()
-  from unnest(v_members) as m;
+  if to_regclass('public.member_locations') is not null then
+    delete from public.member_locations where family_id = v_family and address = '[seed:loc]';
+    insert into public.member_locations (family_id, member_id, latitude, longitude, accuracy_m, battery, is_sharing, address, updated_at)
+    select v_family, m, 37.77 + random()*0.05, -122.41 - random()*0.05, 8 + random()*20,
+      20 + floor(random()*80)::int, true, '[seed:loc]', now()
+    from unnest(v_members) as m;
+  end if;
 
   raise notice 'Location seeded % events (+places, member locations) for family %', n, v_family;
 end $$;
@@ -854,43 +925,48 @@ begin
   if v_family is null then raise exception 'No families found.'; end if;
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
 
-  delete from public.transactions where family_id = v_family and notes = '[seed:fin]';
-  delete from public.bills where family_id = v_family and category = 'seed-fin';
-  delete from public.financial_accounts where family_id = v_family and institution = '[seed:fin]';
-
   -- Accounts.
-  insert into public.financial_accounts (family_id, name, type, institution, last_four, balance, currency)
-  select v_family, acct_names[i], acct_types[i]::account_type, '[seed:fin]',
-    lpad((1000 + i)::text, 4, '0'), (round((random()*9000+100)::numeric, 2)), 'USD'
-  from generate_series(1, array_length(acct_names,1)) as i;
-  select array_agg(id) into v_accts from public.financial_accounts where family_id = v_family and institution = '[seed:fin]';
+  if to_regclass('public.financial_accounts') is not null then
+    delete from public.financial_accounts where family_id = v_family and institution = '[seed:fin]';
+    insert into public.financial_accounts (family_id, name, type, institution, last_four, balance, currency)
+    select v_family, acct_names[i], acct_types[i]::account_type, '[seed:fin]',
+      lpad((1000 + i)::text, 4, '0'), (round((random()*9000+100)::numeric, 2)), 'USD'
+    from generate_series(1, array_length(acct_names,1)) as i;
+    select array_agg(id) into v_accts from public.financial_accounts where family_id = v_family and institution = '[seed:fin]';
+  end if;
 
   -- 500 transactions.
-  insert into public.transactions (family_id, account_id, name, amount, category, date, type, notes, merchant, member_id)
-  select v_family,
-    v_accts[1 + (g.i % array_length(v_accts,1))],
-    merchants[1 + (g.i % array_length(merchants,1))] || ' purchase',
-    round((random()*250 + 3)::numeric, 2),
-    cats[1 + (g.i % array_length(cats,1))],
-    (current_date - (g.i % 180)),
-    ttypes[1 + (g.i % array_length(ttypes,1))]::transaction_type,
-    '[seed:fin]',
-    merchants[1 + (g.i % array_length(merchants,1))],
-    case when v_members is null then null else v_members[1 + (g.i % array_length(v_members,1))] end
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.transactions') is not null and v_accts is not null then
+    delete from public.transactions where family_id = v_family and notes = '[seed:fin]';
+    insert into public.transactions (family_id, account_id, name, amount, category, date, type, notes, merchant, member_id)
+    select v_family,
+      v_accts[1 + (g.i % array_length(v_accts,1))],
+      merchants[1 + (g.i % array_length(merchants,1))] || ' purchase',
+      round((random()*250 + 3)::numeric, 2),
+      cats[1 + (g.i % array_length(cats,1))],
+      (current_date - (g.i % 180)),
+      ttypes[1 + (g.i % array_length(ttypes,1))]::transaction_type,
+      '[seed:fin]',
+      merchants[1 + (g.i % array_length(merchants,1))],
+      case when v_members is null then null else v_members[1 + (g.i % array_length(v_members,1))] end
+    from generate_series(1, n) as g(i);
+  end if;
 
   -- 500 bills.
-  insert into public.bills (family_id, name, amount, due_date, is_recurring, recurrence, status, category, autopay)
-  select v_family,
-    (array['Electric','Water','Internet','Rent','Phone','Insurance','Gym','Streaming'])[1 + (g.i % 8)] || ' Bill #' || g.i,
-    round((random()*300 + 15)::numeric, 2),
-    (current_date + ((g.i % 60) - 30)),
-    (g.i % 2 = 0),
-    (array['monthly','yearly','weekly'])[1 + (g.i % 3)],
-    bstatus[1 + (g.i % array_length(bstatus,1))]::bill_status,
-    'seed-fin',
-    (g.i % 4 = 0)
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.bills') is not null then
+    delete from public.bills where family_id = v_family and category = 'seed-fin';
+    insert into public.bills (family_id, name, amount, due_date, is_recurring, recurrence, status, category, autopay)
+    select v_family,
+      (array['Electric','Water','Internet','Rent','Phone','Insurance','Gym','Streaming'])[1 + (g.i % 8)] || ' Bill #' || g.i,
+      round((random()*300 + 15)::numeric, 2),
+      (current_date + ((g.i % 60) - 30)),
+      (g.i % 2 = 0),
+      (array['monthly','yearly','weekly'])[1 + (g.i % 3)],
+      bstatus[1 + (g.i % array_length(bstatus,1))]::bill_status,
+      'seed-fin',
+      (g.i % 4 = 0)
+    from generate_series(1, n) as g(i);
+  end if;
 
   raise notice 'Finance seeded % transactions + % bills (+accounts) for family %', n, n, v_family;
 end $$;
@@ -922,29 +998,32 @@ begin
   if v_family is null then raise exception 'No families found.'; end if;
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
 
-  delete from public.family_memories where family_id = v_family and body = '[seed:mem]';
-  delete from public.trip_memories where family_id = v_family and note = '[seed:mem]';
+  if to_regclass('public.family_memories') is not null then
+    delete from public.family_memories where family_id = v_family and body = '[seed:mem]';
+    insert into public.family_memories (family_id, member_id, title, body, kind, memory_date, tags, is_favorite, status)
+    select v_family,
+      case when v_members is null then null else v_members[1 + (g.i % array_length(v_members,1))] end,
+      titles[1 + (g.i % array_length(titles,1))] || ' #' || g.i,
+      '[seed:mem]',
+      kinds[1 + (g.i % array_length(kinds,1))],
+      (current_date - (g.i % 730)),
+      '{seed}',
+      (g.i % 20 = 0),
+      'active'
+    from generate_series(1, n) as g(i);
+  end if;
 
-  insert into public.family_memories (family_id, member_id, title, body, kind, memory_date, tags, is_favorite, status)
-  select v_family,
-    case when v_members is null then null else v_members[1 + (g.i % array_length(v_members,1))] end,
-    titles[1 + (g.i % array_length(titles,1))] || ' #' || g.i,
-    '[seed:mem]',
-    kinds[1 + (g.i % array_length(kinds,1))],
-    (current_date - (g.i % 730)),
-    '{seed}',
-    (g.i % 20 = 0),
-    'active'
-  from generate_series(1, n) as g(i);
-
-  insert into public.trip_memories (family_id, member_id, title, note, location, memory_date)
-  select v_family,
-    case when v_members is null then null else v_members[1 + (g.i % array_length(v_members,1))] end,
-    titles[1 + (g.i % array_length(titles,1))] || ' (trip #' || g.i || ')',
-    '[seed:mem]',
-    (array['Beach','Mountains','City','Lake','Grandma''s','Theme Park'])[1 + (g.i % 6)],
-    (current_date - (g.i % 730))
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.trip_memories') is not null then
+    delete from public.trip_memories where family_id = v_family and note = '[seed:mem]';
+    insert into public.trip_memories (family_id, member_id, title, note, location, memory_date)
+    select v_family,
+      case when v_members is null then null else v_members[1 + (g.i % array_length(v_members,1))] end,
+      titles[1 + (g.i % array_length(titles,1))] || ' (trip #' || g.i || ')',
+      '[seed:mem]',
+      (array['Beach','Mountains','City','Lake','Grandma''s','Theme Park'])[1 + (g.i % 6)],
+      (current_date - (g.i % 730))
+    from generate_series(1, n) as g(i);
+  end if;
 
   raise notice 'Memories seeded % family + % trip rows for family %', n, n, v_family;
 end $$;
@@ -982,34 +1061,37 @@ begin
   if v_family is null then raise exception 'No families found.'; end if;
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
 
-  delete from public.autopilot_suggestions where family_id = v_family and dedupe_key like 'seed-ap-%';
-  delete from public.approval_requests where family_id = v_family and summary = '[seed:ap]';
+  if to_regclass('public.autopilot_suggestions') is not null then
+    delete from public.autopilot_suggestions where family_id = v_family and dedupe_key like 'seed-ap-%';
+    insert into public.autopilot_suggestions (family_id, member_id, kind, title, detail, confidence, urgency, status, action_type, action_label, dedupe_key)
+    select v_family,
+      case when v_members is null then null else v_members[1 + (g.i % array_length(v_members,1))] end,
+      (array['schedule','grocery','prep','document','meal'])[1 + (g.i % 5)],
+      s_titles[1 + (g.i % array_length(s_titles,1))] || ' #' || g.i,
+      'Autopilot spotted this and can handle it for you.',
+      50 + (g.i % 50),
+      1 + (g.i % 3),
+      s_status[1 + (g.i % array_length(s_status,1))]::autopilot_status,
+      'confirm', 'Approve',
+      'seed-ap-' || g.i
+    from generate_series(1, n) as g(i);
+  end if;
 
-  insert into public.autopilot_suggestions (family_id, member_id, kind, title, detail, confidence, urgency, status, action_type, action_label, dedupe_key)
-  select v_family,
-    case when v_members is null then null else v_members[1 + (g.i % array_length(v_members,1))] end,
-    (array['schedule','grocery','prep','document','meal'])[1 + (g.i % 5)],
-    s_titles[1 + (g.i % array_length(s_titles,1))] || ' #' || g.i,
-    'Autopilot spotted this and can handle it for you.',
-    50 + (g.i % 50),
-    1 + (g.i % 3),
-    s_status[1 + (g.i % array_length(s_status,1))]::autopilot_status,
-    'confirm', 'Approve',
-    'seed-ap-' || g.i
-  from generate_series(1, n) as g(i);
-
-  insert into public.approval_requests (family_id, domain, title, summary, requested_by_kind, agent, amount_cents, confidence, approval_model, status, priority)
-  select v_family,
-    (array['finance','calendar','safety','commerce'])[1 + (g.i % 4)],
-    a_titles[1 + (g.i % array_length(a_titles,1))] || ' #' || g.i,
-    '[seed:ap]',
-    'ai', 'autopilot',
-    (500 + (g.i * 37) % 20000),
-    round((0.5 + (g.i % 50) * 0.01)::numeric, 2),
-    'single',
-    a_status[1 + (g.i % array_length(a_status,1))],
-    a_prio[1 + (g.i % array_length(a_prio,1))]
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.approval_requests') is not null then
+    delete from public.approval_requests where family_id = v_family and summary = '[seed:ap]';
+    insert into public.approval_requests (family_id, domain, title, summary, requested_by_kind, agent, amount_cents, confidence, approval_model, status, priority)
+    select v_family,
+      (array['finance','calendar','safety','commerce'])[1 + (g.i % 4)],
+      a_titles[1 + (g.i % array_length(a_titles,1))] || ' #' || g.i,
+      '[seed:ap]',
+      'ai', 'autopilot',
+      (500 + (g.i * 37) % 20000),
+      round((0.5 + (g.i % 50) * 0.01)::numeric, 2),
+      'single',
+      a_status[1 + (g.i % array_length(a_status,1))],
+      a_prio[1 + (g.i % array_length(a_prio,1))]
+    from generate_series(1, n) as g(i);
+  end if;
 
   raise notice 'Autopilot seeded % suggestions + % approvals for family %', n, n, v_family;
 end $$;
@@ -1040,19 +1122,20 @@ begin
   if v_family is null then raise exception 'No families found.'; end if;
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
 
-  delete from public.family_credentials where family_id = v_family and notes = '[seed:vault]';
-
-  insert into public.family_credentials (family_id, category, label, username, secret, url, notes, member_id, is_favorite)
-  select v_family,
-    cats[1 + (g.i % array_length(cats,1))],
-    labels[1 + (g.i % array_length(labels,1))] || ' #' || g.i,
-    'user' || g.i || '@example.com',
-    'placeholder-secret-' || g.i,
-    'https://example.com/' || g.i,
-    '[seed:vault]',
-    case when v_members is null or g.i % 3 = 0 then null else v_members[1 + (g.i % array_length(v_members,1))] end,
-    (g.i % 15 = 0)
-  from generate_series(1, n) as g(i);
+  if to_regclass('public.family_credentials') is not null then
+    delete from public.family_credentials where family_id = v_family and notes = '[seed:vault]';
+    insert into public.family_credentials (family_id, category, label, username, secret, url, notes, member_id, is_favorite)
+    select v_family,
+      cats[1 + (g.i % array_length(cats,1))],
+      labels[1 + (g.i % array_length(labels,1))] || ' #' || g.i,
+      'user' || g.i || '@example.com',
+      'placeholder-secret-' || g.i,
+      'https://example.com/' || g.i,
+      '[seed:vault]',
+      case when v_members is null or g.i % 3 = 0 then null else v_members[1 + (g.i % array_length(v_members,1))] end,
+      (g.i % 15 = 0)
+    from generate_series(1, n) as g(i);
+  end if;
 
   raise notice 'Vault seeded % credentials for family %', n, v_family;
 end $$;
@@ -1085,38 +1168,40 @@ begin
   if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
   if v_family is null then raise exception 'No families found.'; end if;
 
-  -- Clear prior seed (edges cascade on entity delete).
-  delete from public.graph_entities where family_id = v_family and attributes->>'seed' = 'graph';
+  if to_regclass('public.graph_entities') is not null then
+    -- Clear prior seed (edges cascade on entity delete).
+    delete from public.graph_entities where family_id = v_family and attributes->>'seed' = 'graph';
 
-  -- 500 entities, cycling kinds + drawing readable names by kind.
-  insert into public.graph_entities (family_id, kind, name, attributes)
-  select v_family,
-    kinds[1 + (g.i % array_length(kinds,1))],
-    case kinds[1 + (g.i % array_length(kinds,1))]
-      when 'person'   then people[1 + (g.i % array_length(people,1))]
-      when 'activity' then acts[1 + (g.i % array_length(acts,1))]
-      when 'place'    then places[1 + (g.i % array_length(places,1))]
-      else initcap(kinds[1 + (g.i % array_length(kinds,1))])
-    end || ' #' || g.i,
-    '{"seed":"graph"}'::jsonb
-  from generate_series(1, n) as g(i);
+    -- 500 entities, cycling kinds + drawing readable names by kind.
+    insert into public.graph_entities (family_id, kind, name, attributes)
+    select v_family,
+      kinds[1 + (g.i % array_length(kinds,1))],
+      case kinds[1 + (g.i % array_length(kinds,1))]
+        when 'person'   then people[1 + (g.i % array_length(people,1))]
+        when 'activity' then acts[1 + (g.i % array_length(acts,1))]
+        when 'place'    then places[1 + (g.i % array_length(places,1))]
+        else initcap(kinds[1 + (g.i % array_length(kinds,1))])
+      end || ' #' || g.i,
+      '{"seed":"graph"}'::jsonb
+    from generate_series(1, n) as g(i);
 
-  -- Collect the freshly-seeded ids in stable order.
-  select array_agg(id order by created_at, id) into v_ids
-  from public.graph_entities where family_id = v_family and attributes->>'seed' = 'graph';
+    -- Collect the freshly-seeded ids in stable order.
+    select array_agg(id order by created_at, id) into v_ids
+    from public.graph_entities where family_id = v_family and attributes->>'seed' = 'graph';
 
-  -- 500 edges as a cyclic ring (node i -> next node; 500 -> 1). Guarantees every
-  -- edge is valid (source <> target), unique, and the whole graph is connected so
-  -- path-finding + impact propagation traverse end to end. Relations + weights vary.
-  insert into public.graph_edges (family_id, source_id, target_id, relation, weight, attributes)
-  select v_family,
-    v_ids[g.i],
-    v_ids[1 + (g.i % n)],                 -- i -> i+1, wrapping 500 -> 1
-    rels[1 + (g.i % array_length(rels,1))],
-    round((0.4 + (g.i % 6) * 0.1)::numeric, 2),
-    '{"seed":"graph"}'::jsonb
-  from generate_series(1, n) as g(i)
-  on conflict (family_id, source_id, target_id, relation) do nothing;
+    -- 500 edges as a cyclic ring (node i -> next node; 500 -> 1). Guarantees every
+    -- edge is valid (source <> target), unique, and the whole graph is connected so
+    -- path-finding + impact propagation traverse end to end. Relations + weights vary.
+    insert into public.graph_edges (family_id, source_id, target_id, relation, weight, attributes)
+    select v_family,
+      v_ids[g.i],
+      v_ids[1 + (g.i % n)],                 -- i -> i+1, wrapping 500 -> 1
+      rels[1 + (g.i % array_length(rels,1))],
+      round((0.4 + (g.i % 6) * 0.1)::numeric, 2),
+      '{"seed":"graph"}'::jsonb
+    from generate_series(1, n) as g(i)
+    on conflict (family_id, source_id, target_id, relation) do nothing;
+  end if;
 
   raise notice 'Knowledge Graph seeded % entities (+edges) for family %', n, v_family;
 end $$;
@@ -1151,30 +1236,32 @@ begin
   if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
   if v_family is null then raise exception 'No families found.'; end if;
 
-  delete from public.family_decisions where family_id = v_family and detail = '[seed:dec]';
+  if to_regclass('public.family_decisions') is not null then
+    delete from public.family_decisions where family_id = v_family and detail = '[seed:dec]';
 
-  -- 500 decisions, then 3 options each via a lateral generate_series.
-  with new_decisions as (
-    insert into public.family_decisions (family_id, question, detail, status, budget_cents, max_travel_minutes)
-    select v_family,
-      questions[1 + (g.i % array_length(questions,1))] || ' #' || g.i,
-      '[seed:dec]',
-      case when g.i % 5 = 0 then 'decided' else 'open' end,
-      case when g.i % 3 = 0 then (50000 + (g.i % 20) * 10000)::bigint else null end,
-      case when g.i % 4 = 0 then 60 + (g.i % 6) * 30 else null end
-    from generate_series(1, n) as g(i)
-    returning id, family_id
-  )
-  insert into public.decision_options (family_id, decision_id, label, cost_cents, time_minutes, travel_minutes, load_delta, benefit)
-  select nd.family_id, nd.id,
-    (array['Option A','Option B','Option C'])[k.k],
-    (30000 + (k.k * 40000) + floor(random()*30000))::bigint,
-    (30 + k.k * 20 + floor(random()*30))::int,
-    (20 + k.k * 40 + floor(random()*30))::int,
-    (15 + k.k * 20 + floor(random()*20))::int,
-    (90 - k.k * 15 + floor(random()*10))::int
-  from new_decisions nd
-  cross join generate_series(1, 3) as k(k);
+    -- 500 decisions, then 3 options each via a lateral generate_series.
+    with new_decisions as (
+      insert into public.family_decisions (family_id, question, detail, status, budget_cents, max_travel_minutes)
+      select v_family,
+        questions[1 + (g.i % array_length(questions,1))] || ' #' || g.i,
+        '[seed:dec]',
+        case when g.i % 5 = 0 then 'decided' else 'open' end,
+        case when g.i % 3 = 0 then (50000 + (g.i % 20) * 10000)::bigint else null end,
+        case when g.i % 4 = 0 then 60 + (g.i % 6) * 30 else null end
+      from generate_series(1, n) as g(i)
+      returning id, family_id
+    )
+    insert into public.decision_options (family_id, decision_id, label, cost_cents, time_minutes, travel_minutes, load_delta, benefit)
+    select nd.family_id, nd.id,
+      (array['Option A','Option B','Option C'])[k.k],
+      (30000 + (k.k * 40000) + floor(random()*30000))::bigint,
+      (30 + k.k * 20 + floor(random()*30))::int,
+      (20 + k.k * 40 + floor(random()*30))::int,
+      (15 + k.k * 20 + floor(random()*20))::int,
+      (90 - k.k * 15 + floor(random()*10))::int
+    from new_decisions nd
+    cross join generate_series(1, 3) as k(k);
+  end if;
 
   raise notice 'Decision Engine seeded % decisions (+3 options each) for family %', n, v_family;
 end $$;
@@ -1210,30 +1297,32 @@ begin
   if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
   if v_family is null then raise exception 'No families found.'; end if;
 
-  delete from public.prep_plans where family_id = v_family and signal_id like 'seed-prep-%';
+  if to_regclass('public.prep_plans') is not null then
+    delete from public.prep_plans where family_id = v_family and signal_id like 'seed-prep-%';
 
-  with new_plans as (
-    insert into public.prep_plans (family_id, signal_kind, signal_id, title, target_date, urgency, status)
-    select v_family,
-      kinds[1 + (g.i % array_length(kinds,1))],
-      'seed-prep-' || g.i,
-      titles[1 + (g.i % array_length(titles,1))] || ' #' || g.i,
-      (current_date + (5 + (g.i % 110)))::date,
-      urg[1 + (g.i % array_length(urg,1))],
-      'active'
-    from generate_series(1, n) as g(i)
-    returning id, family_id, target_date
-  )
-  insert into public.prep_plan_steps (family_id, plan_id, label, href, due_date, lead_days, is_done, sort_order)
-  select np.family_id, np.id,
-    (array['Confirm details','Gather what''s needed','Book/order','Final prep'])[k.k],
-    '/dashboard/calendar',
-    (np.target_date - (array[21,14,7,1])[k.k])::date,
-    (array[21,14,7,1])[k.k],
-    (k.k = 1 and random() < 0.3),
-    k.k - 1
-  from new_plans np
-  cross join generate_series(1, 4) as k(k);
+    with new_plans as (
+      insert into public.prep_plans (family_id, signal_kind, signal_id, title, target_date, urgency, status)
+      select v_family,
+        kinds[1 + (g.i % array_length(kinds,1))],
+        'seed-prep-' || g.i,
+        titles[1 + (g.i % array_length(titles,1))] || ' #' || g.i,
+        (current_date + (5 + (g.i % 110)))::date,
+        urg[1 + (g.i % array_length(urg,1))],
+        'active'
+      from generate_series(1, n) as g(i)
+      returning id, family_id, target_date
+    )
+    insert into public.prep_plan_steps (family_id, plan_id, label, href, due_date, lead_days, is_done, sort_order)
+    select np.family_id, np.id,
+      (array['Confirm details','Gather what''s needed','Book/order','Final prep'])[k.k],
+      '/dashboard/calendar',
+      (np.target_date - (array[21,14,7,1])[k.k])::date,
+      (array[21,14,7,1])[k.k],
+      (k.k = 1 and random() < 0.3),
+      k.k - 1
+    from new_plans np
+    cross join generate_series(1, 4) as k(k);
+  end if;
 
   raise notice 'Prep Plans seeded % plans (+4 steps each) for family %', n, v_family;
 end $$;
@@ -1254,24 +1343,26 @@ do $$
 declare
   n_sessions int := 250;
 begin
-  delete from public.onboarding_events where meta->>'seed' = 'onboarding';
+  if to_regclass('public.onboarding_events') is not null then
+    delete from public.onboarding_events where meta->>'seed' = 'onboarding';
 
-  -- Step 1: profile — every session starts here.
-  insert into public.onboarding_events (user_id, session_id, step, phase, duration_ms, meta)
-  select null, 'seed-ob-' || g.i, 'profile', 'started', 0, '{"seed":"onboarding"}'::jsonb
-  from generate_series(1, n_sessions) as g(i);
+    -- Step 1: profile — every session starts here.
+    insert into public.onboarding_events (user_id, session_id, step, phase, duration_ms, meta)
+    select null, 'seed-ob-' || g.i, 'profile', 'started', 0, '{"seed":"onboarding"}'::jsonb
+    from generate_series(1, n_sessions) as g(i);
 
-  -- Step 2: pin — ~70% of sessions advance.
-  insert into public.onboarding_events (user_id, session_id, step, phase, duration_ms, meta)
-  select null, 'seed-ob-' || g.i, 'pin', 'step', (3000 + floor(random()*12000))::int, '{"seed":"onboarding"}'::jsonb
-  from generate_series(1, n_sessions) as g(i)
-  where (g.i % 10) < 7;
+    -- Step 2: pin — ~70% of sessions advance.
+    insert into public.onboarding_events (user_id, session_id, step, phase, duration_ms, meta)
+    select null, 'seed-ob-' || g.i, 'pin', 'step', (3000 + floor(random()*12000))::int, '{"seed":"onboarding"}'::jsonb
+    from generate_series(1, n_sessions) as g(i)
+    where (g.i % 10) < 7;
 
-  -- Step 3: done — ~50% complete.
-  insert into public.onboarding_events (user_id, session_id, step, phase, duration_ms, meta)
-  select null, 'seed-ob-' || g.i, 'done', 'completed', (8000 + floor(random()*32000))::int, '{"seed":"onboarding"}'::jsonb
-  from generate_series(1, n_sessions) as g(i)
-  where (g.i % 10) < 5;
+    -- Step 3: done — ~50% complete.
+    insert into public.onboarding_events (user_id, session_id, step, phase, duration_ms, meta)
+    select null, 'seed-ob-' || g.i, 'done', 'completed', (8000 + floor(random()*32000))::int, '{"seed":"onboarding"}'::jsonb
+    from generate_series(1, n_sessions) as g(i)
+    where (g.i % 10) < 5;
+  end if;
 
   raise notice 'Onboarding funnel seeded for % sessions', n_sessions;
 end $$;
@@ -1306,26 +1397,30 @@ begin
   where lower(u.email) = lower(v_email) limit 1;
   if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
 
-  delete from public.network_aggregates;
-  -- Full product: each cohort (kids × size) × each metric value → exactly one row.
-  insert into public.network_aggregates (scope, cohort_key, metric, value, count, cohort_size)
-  select 'benchmarks', 'kids:' || k || '|size:' || s, mv.metric, mv.value,
-    (20 + floor(random()*480))::int, (20 + floor(random()*480))::int
-  from unnest(kid_bands) k
-  cross join unnest(size_bands) s
-  cross join (values
-    ('dinner_habit','rarely (0–1)'), ('dinner_habit','sometimes (2–3)'),
-    ('dinner_habit','often (4–5)'),  ('dinner_habit','most nights (6–7)'),
-    ('activities','none'), ('activities','1–2'), ('activities','3–4'), ('activities','5+')
-  ) as mv(metric, value)
-  on conflict (scope, cohort_key, metric, value) do update
-    set count = excluded.count, cohort_size = excluded.cohort_size, computed_at = now();
+  if to_regclass('public.network_aggregates') is not null then
+    delete from public.network_aggregates;
+    -- Full product: each cohort (kids × size) × each metric value → exactly one row.
+    insert into public.network_aggregates (scope, cohort_key, metric, value, count, cohort_size)
+    select 'benchmarks', 'kids:' || k || '|size:' || s, mv.metric, mv.value,
+      (20 + floor(random()*480))::int, (20 + floor(random()*480))::int
+    from unnest(kid_bands) k
+    cross join unnest(size_bands) s
+    cross join (values
+      ('dinner_habit','rarely (0–1)'), ('dinner_habit','sometimes (2–3)'),
+      ('dinner_habit','often (4–5)'),  ('dinner_habit','most nights (6–7)'),
+      ('activities','none'), ('activities','1–2'), ('activities','3–4'), ('activities','5+')
+    ) as mv(metric, value)
+    on conflict (scope, cohort_key, metric, value) do update
+      set count = excluded.count, cohort_size = excluded.cohort_size, computed_at = now();
+  end if;
 
   -- Opt the seed family in so the insights actually render on screen.
-  insert into public.network_consent (family_id, enabled, scopes, consented_at)
-  values (v_family, true, '{"timing":true,"benchmarks":true,"recommendations":true}'::jsonb, now())
-  on conflict (family_id) do update set enabled = true,
-    scopes = '{"timing":true,"benchmarks":true,"recommendations":true}'::jsonb;
+  if to_regclass('public.network_consent') is not null then
+    insert into public.network_consent (family_id, enabled, scopes, consented_at)
+    values (v_family, true, '{"timing":true,"benchmarks":true,"recommendations":true}'::jsonb, now())
+    on conflict (family_id) do update set enabled = true,
+      scopes = '{"timing":true,"benchmarks":true,"recommendations":true}'::jsonb;
+  end if;
 
   raise notice 'Network aggregates seeded (>=20 cohort size) + family % opted in', v_family;
 end $$;
@@ -1362,40 +1457,46 @@ begin
   select array_agg(id) into v_members from public.family_members where family_id = v_family;
 
   -- ── Pets (500) ──────────────────────────────────────────────────────────
-  delete from public.pets where family_id = v_family and notes = '[seed:matrix]';
-  insert into public.pets (family_id, name, species, breed, color, notes, is_active)
-  select v_family,
-    (array['Bella','Max','Luna','Charlie','Lucy','Cooper','Daisy','Rocky'])[1+(g.i%8)] || ' #' || g.i,
-    (array['dog','cat','bird','fish','reptile','small_mammal','horse','other'])[1+(g.i%8)]::pet_species,
-    (array['Labrador','Tabby','Parakeet','Goldfish','Gecko','Hamster'])[1+(g.i%6)],
-    (array['Brown','Black','White','Golden','Grey'])[1+(g.i%5)], '[seed:matrix]', true
-  from generate_series(1,n) g(i);
+  if to_regclass('public.pets') is not null then
+    delete from public.pets where family_id = v_family and notes = '[seed:matrix]';
+    insert into public.pets (family_id, name, species, breed, color, notes, is_active)
+    select v_family,
+      (array['Bella','Max','Luna','Charlie','Lucy','Cooper','Daisy','Rocky'])[1+(g.i%8)] || ' #' || g.i,
+      (array['dog','cat','bird','fish','reptile','small_mammal','horse','other'])[1+(g.i%8)]::pet_species,
+      (array['Labrador','Tabby','Parakeet','Goldfish','Gecko','Hamster'])[1+(g.i%6)],
+      (array['Brown','Black','White','Golden','Grey'])[1+(g.i%5)], '[seed:matrix]', true
+    from generate_series(1,n) g(i);
+  end if;
 
   -- ── Vehicles (500) ──────────────────────────────────────────────────────
-  delete from public.vehicles where family_id = v_family and notes = '[seed:matrix]';
-  insert into public.vehicles (family_id, nickname, make, model, year, color, mileage, status, notes, primary_driver)
-  select v_family,
-    (array['Family SUV','Commuter','The Van','Weekend Car'])[1+(g.i%4)] || ' #' || g.i,
-    (array['Toyota','Honda','Ford','Subaru','Tesla'])[1+(g.i%5)],
-    (array['Highlander','CR-V','F-150','Outback','Model Y'])[1+(g.i%5)],
-    2012 + (g.i % 13), (array['Silver','Blue','Black','Red','White'])[1+(g.i%5)],
-    10000 + (g.i*137)%140000, 'active', '[seed:matrix]',
-    case when v_members is null then null else v_members[1+(g.i%array_length(v_members,1))] end
-  from generate_series(1,n) g(i);
+  if to_regclass('public.vehicles') is not null then
+    delete from public.vehicles where family_id = v_family and notes = '[seed:matrix]';
+    insert into public.vehicles (family_id, nickname, make, model, year, color, mileage, status, notes, primary_driver)
+    select v_family,
+      (array['Family SUV','Commuter','The Van','Weekend Car'])[1+(g.i%4)] || ' #' || g.i,
+      (array['Toyota','Honda','Ford','Subaru','Tesla'])[1+(g.i%5)],
+      (array['Highlander','CR-V','F-150','Outback','Model Y'])[1+(g.i%5)],
+      2012 + (g.i % 13), (array['Silver','Blue','Black','Red','White'])[1+(g.i%5)],
+      10000 + (g.i*137)%140000, 'active', '[seed:matrix]',
+      case when v_members is null then null else v_members[1+(g.i%array_length(v_members,1))] end
+    from generate_series(1,n) g(i);
+  end if;
 
   -- ── Family contacts (500) ───────────────────────────────────────────────
-  delete from public.family_contacts where family_id = v_family and notes = '[seed:matrix]';
-  insert into public.family_contacts (family_id, name, relationship, category, phone, email, is_emergency, notes)
-  select v_family,
-    (array['Dr. Lee','Coach Rivera','Grandma Sue','Aunt Mia','Mr. Park','Nurse Kim'])[1+(g.i%6)] || ' #' || g.i,
-    (array['Doctor','Coach','Grandparent','Aunt','Teacher','Neighbor'])[1+(g.i%6)],
-    (array['doctor','coach','family','emergency','neighbor','teacher'])[1+(g.i%6)],
-    '555-' || lpad((g.i%10000)::text,4,'0'), 'contact'||g.i||'@example.com',
-    (g.i%7=0), '[seed:matrix]'
-  from generate_series(1,n) g(i);
+  if to_regclass('public.family_contacts') is not null then
+    delete from public.family_contacts where family_id = v_family and notes = '[seed:matrix]';
+    insert into public.family_contacts (family_id, name, relationship, category, phone, email, is_emergency, notes)
+    select v_family,
+      (array['Dr. Lee','Coach Rivera','Grandma Sue','Aunt Mia','Mr. Park','Nurse Kim'])[1+(g.i%6)] || ' #' || g.i,
+      (array['Doctor','Coach','Grandparent','Aunt','Teacher','Neighbor'])[1+(g.i%6)],
+      (array['doctor','coach','family','emergency','neighbor','teacher'])[1+(g.i%6)],
+      '555-' || lpad((g.i%10000)::text,4,'0'), 'contact'||g.i||'@example.com',
+      (g.i%7=0), '[seed:matrix]'
+    from generate_series(1,n) g(i);
+  end if;
 
   -- ── Wish lists (500) — needs a member ───────────────────────────────────
-  if v_members is not null then
+  if v_members is not null and to_regclass('public.wishlist_items') is not null then
     delete from public.wishlist_items where family_id = v_family and notes = '[seed:matrix]';
     insert into public.wishlist_items (family_id, member_id, title, url, price, priority, notes, is_purchased)
     select v_family, v_members[1+(g.i%array_length(v_members,1))],
@@ -1406,75 +1507,89 @@ begin
   end if;
 
   -- ── Medications (500) ───────────────────────────────────────────────────
-  delete from public.medications where family_id = v_family and instructions = '[seed:matrix]';
-  insert into public.medications (family_id, member_id, name, dosage, instructions, is_active, refill_on)
-  select v_family, case when v_members is null then null else v_members[1+(g.i%array_length(v_members,1))] end,
-    (array['Amoxicillin','Vitamin D','Ibuprofen','Allergy Rx','Inhaler','Melatonin'])[1+(g.i%6)] || ' #' || g.i,
-    (array['5mg','10mg','1 tab','2 tabs','1 puff'])[1+(g.i%5)], '[seed:matrix]', true,
-    (current_date + (g.i%40))
-  from generate_series(1,n) g(i);
+  if to_regclass('public.medications') is not null then
+    delete from public.medications where family_id = v_family and instructions = '[seed:matrix]';
+    insert into public.medications (family_id, member_id, name, dosage, instructions, is_active, refill_on)
+    select v_family, case when v_members is null then null else v_members[1+(g.i%array_length(v_members,1))] end,
+      (array['Amoxicillin','Vitamin D','Ibuprofen','Allergy Rx','Inhaler','Melatonin'])[1+(g.i%6)] || ' #' || g.i,
+      (array['5mg','10mg','1 tab','2 tabs','1 puff'])[1+(g.i%5)], '[seed:matrix]', true,
+      (current_date + (g.i%40))
+    from generate_series(1,n) g(i);
+  end if;
 
   -- ── Homework (500) ──────────────────────────────────────────────────────
-  delete from public.homework_assignments where family_id = v_family and details = '[seed:matrix]';
-  insert into public.homework_assignments (family_id, member_id, subject, title, details, due_at, status)
-  select v_family, case when v_members is null then null else v_members[1+(g.i%array_length(v_members,1))] end,
-    (array['Math','Science','English','History','Art','PE'])[1+(g.i%6)],
-    (array['Worksheet','Reading','Project','Essay','Lab report'])[1+(g.i%5)] || ' #' || g.i,
-    '[seed:matrix]', now() + ((g.i%21) || ' days')::interval,
-    (array['assigned','in_progress','done','submitted'])[1+(g.i%4)]::homework_status
-  from generate_series(1,n) g(i);
+  if to_regclass('public.homework_assignments') is not null then
+    delete from public.homework_assignments where family_id = v_family and details = '[seed:matrix]';
+    insert into public.homework_assignments (family_id, member_id, subject, title, details, due_at, status)
+    select v_family, case when v_members is null then null else v_members[1+(g.i%array_length(v_members,1))] end,
+      (array['Math','Science','English','History','Art','PE'])[1+(g.i%6)],
+      (array['Worksheet','Reading','Project','Essay','Lab report'])[1+(g.i%5)] || ' #' || g.i,
+      '[seed:matrix]', now() + ((g.i%21) || ' days')::interval,
+      (array['assigned','in_progress','done','submitted'])[1+(g.i%4)]::homework_status
+    from generate_series(1,n) g(i);
+  end if;
 
   -- ── Insurance policies (500) ────────────────────────────────────────────
-  delete from public.family_insurance_policies where family_id = v_family and notes = '[seed:matrix]';
-  insert into public.family_insurance_policies (family_id, policy_type, insurer, policy_number, premium_amount, premium_frequency, renewal_date, notes, is_active)
-  select v_family,
-    (array['health','dental','vision','auto','home','life'])[1+(g.i%6)]::insurance_policy_type,
-    (array['Aetna','Delta','VSP','Geico','StateFarm','Prudential'])[1+(g.i%6)],
-    'POL-' || lpad(g.i::text,6,'0'), round((50+random()*400)::numeric,2),
-    (array['monthly','quarterly','semiannual','annual'])[1+(g.i%4)]::premium_frequency,
-    (current_date + (g.i%365)), '[seed:matrix]', true
-  from generate_series(1,n) g(i);
+  if to_regclass('public.family_insurance_policies') is not null then
+    delete from public.family_insurance_policies where family_id = v_family and notes = '[seed:matrix]';
+    insert into public.family_insurance_policies (family_id, policy_type, insurer, policy_number, premium_amount, premium_frequency, renewal_date, notes, is_active)
+    select v_family,
+      (array['health','dental','vision','auto','home','life'])[1+(g.i%6)]::insurance_policy_type,
+      (array['Aetna','Delta','VSP','Geico','StateFarm','Prudential'])[1+(g.i%6)],
+      'POL-' || lpad(g.i::text,6,'0'), round((50+random()*400)::numeric,2),
+      (array['monthly','quarterly','semiannual','annual'])[1+(g.i%4)]::premium_frequency,
+      (current_date + (g.i%365)), '[seed:matrix]', true
+    from generate_series(1,n) g(i);
+  end if;
 
   -- ── Utility bills (500) ─────────────────────────────────────────────────
-  delete from public.utility_bills where family_id = v_family and note = '[seed:matrix]';
-  insert into public.utility_bills (family_id, kind, provider, period_month, amount_cents, usage, unit, note)
-  select v_family,
-    (array['electric','water','gas','internet','trash'])[1+(g.i%5)],
-    (array['PG&E','City Water','SoCalGas','Comcast','WM'])[1+(g.i%5)],
-    (date_trunc('month', current_date) - ((g.i%24) || ' months')::interval)::date,
-    (3000 + (g.i*97)%25000), round((random()*500)::numeric,1),
-    (array['kWh','gal','therm','GB','lbs'])[1+(g.i%5)], '[seed:matrix]'
-  from generate_series(1,n) g(i);
+  if to_regclass('public.utility_bills') is not null then
+    delete from public.utility_bills where family_id = v_family and note = '[seed:matrix]';
+    insert into public.utility_bills (family_id, kind, provider, period_month, amount_cents, usage, unit, note)
+    select v_family,
+      (array['electric','water','gas','internet','trash'])[1+(g.i%5)],
+      (array['PG&E','City Water','SoCalGas','Comcast','WM'])[1+(g.i%5)],
+      (date_trunc('month', current_date) - ((g.i%24) || ' months')::interval)::date,
+      (3000 + (g.i*97)%25000), round((random()*500)::numeric,1),
+      (array['kWh','gal','therm','GB','lbs'])[1+(g.i%5)], '[seed:matrix]'
+    from generate_series(1,n) g(i);
+  end if;
 
   -- ── Family tree (500) ───────────────────────────────────────────────────
-  delete from public.family_tree_nodes where family_id = v_family and bio = '[seed:matrix]';
-  insert into public.family_tree_nodes (family_id, name, relationship, birth_year, bio)
-  select v_family,
-    (array['Grandpa Joe','Grandma Ann','Uncle Ray','Cousin Kai','Great Aunt Bea'])[1+(g.i%5)] || ' #' || g.i,
-    (array['grandparent','uncle','aunt','cousin','sibling'])[1+(g.i%5)],
-    1930 + (g.i%80), '[seed:matrix]'
-  from generate_series(1,n) g(i);
+  if to_regclass('public.family_tree_nodes') is not null then
+    delete from public.family_tree_nodes where family_id = v_family and bio = '[seed:matrix]';
+    insert into public.family_tree_nodes (family_id, name, relationship, birth_year, bio)
+    select v_family,
+      (array['Grandpa Joe','Grandma Ann','Uncle Ray','Cousin Kai','Great Aunt Bea'])[1+(g.i%5)] || ' #' || g.i,
+      (array['grandparent','uncle','aunt','cousin','sibling'])[1+(g.i%5)],
+      1930 + (g.i%80), '[seed:matrix]'
+    from generate_series(1,n) g(i);
+  end if;
 
   -- ── Announcements (500) ─────────────────────────────────────────────────
-  delete from public.family_announcements where family_id = v_family and body like '%[seed:matrix]%';
-  insert into public.family_announcements (family_id, title, body, is_pinned)
-  select v_family,
-    (array['Family meeting','Chore day','Movie night','Trip planning','Reminder'])[1+(g.i%5)] || ' #' || g.i,
-    'Details for this announcement #' || g.i || ' [seed:matrix]', (g.i%25=0)
-  from generate_series(1,n) g(i);
+  if to_regclass('public.family_announcements') is not null then
+    delete from public.family_announcements where family_id = v_family and body like '%[seed:matrix]%';
+    insert into public.family_announcements (family_id, title, body, is_pinned)
+    select v_family,
+      (array['Family meeting','Chore day','Movie night','Trip planning','Reminder'])[1+(g.i%5)] || ' #' || g.i,
+      'Details for this announcement #' || g.i || ' [seed:matrix]', (g.i%25=0)
+    from generate_series(1,n) g(i);
+  end if;
 
   -- ── Subscriptions (500) ─────────────────────────────────────────────────
-  delete from public.subscriptions_tracked where family_id = v_family and note = '[seed:matrix]';
-  insert into public.subscriptions_tracked (family_id, name, cost_cents, cadence, category, status, next_charge, note)
-  select v_family,
-    (array['Netflix','Spotify','Disney+','Amazon Prime','iCloud','NYT'])[1+(g.i%6)] || ' #' || g.i,
-    (499 + (g.i*13)%3000), (array['monthly','yearly'])[1+(g.i%2)],
-    (array['streaming','music','storage','news','shopping'])[1+(g.i%5)],
-    (array['active','trial','canceled'])[1+(g.i%3)], (current_date + (g.i%30)), '[seed:matrix]'
-  from generate_series(1,n) g(i);
+  if to_regclass('public.subscriptions_tracked') is not null then
+    delete from public.subscriptions_tracked where family_id = v_family and note = '[seed:matrix]';
+    insert into public.subscriptions_tracked (family_id, name, cost_cents, cadence, category, status, next_charge, note)
+    select v_family,
+      (array['Netflix','Spotify','Disney+','Amazon Prime','iCloud','NYT'])[1+(g.i%6)] || ' #' || g.i,
+      (499 + (g.i*13)%3000), (array['monthly','yearly'])[1+(g.i%2)],
+      (array['streaming','music','storage','news','shopping'])[1+(g.i%5)],
+      (array['active','trial','canceled'])[1+(g.i%3)], (current_date + (g.i%30)), '[seed:matrix]'
+    from generate_series(1,n) g(i);
+  end if;
 
   -- ── Health metrics (500) — needs a member; unit='seed' is the sentinel ───
-  if v_members is not null then
+  if v_members is not null and to_regclass('public.health_metrics') is not null then
     delete from public.health_metrics where family_id = v_family and unit = 'seed';
     insert into public.health_metrics (family_id, member_id, type, value, unit, recorded_at)
     select v_family, v_members[1+(g.i%array_length(v_members,1))],
