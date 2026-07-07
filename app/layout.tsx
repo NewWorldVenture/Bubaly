@@ -9,7 +9,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Bubaly — Less Life Admin. More Living Life.',
+    default: 'Bubaly — Less Managing Life. More Living It.',
     template: '%s · Bubaly',
   },
   description:
@@ -32,11 +32,11 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: 'Bubaly',
-    title: 'Bubaly — Less Life Admin. More Living Life.',
+    title: 'Bubaly — Less Managing Life. More Living It.',
     description: 'The AI operating system for family life. Bubaly handles the logistics so your family can spend less time managing life and more time living it.',
     url: SITE_URL,
   },
-  twitter: { card: 'summary_large_image', title: 'Bubaly — Less Life Admin. More Living Life.', description: 'The AI operating system for family life — so you spend less time managing life and more time living it.' },
+  twitter: { card: 'summary_large_image', title: 'Bubaly — Less Managing Life. More Living It.', description: 'The AI operating system for family life — so you spend less time managing life and more time living it.' },
   // Relative canonical resolves per-route against metadataBase, so every page
   // gets a self-referential canonical (https://www.bubaly.com<path>). This stops
   // duplicate URL variants — non-www, trailing slash, query strings, and the

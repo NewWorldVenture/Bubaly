@@ -22,7 +22,7 @@ export default function AIPage() {
     <>
       <Section className="pt-20 text-center">
         <SectionHeading
-          eyebrow="Less Life Admin. More Living Life."
+          eyebrow="Less Managing Life. More Living It."
           title="The AI that handles the work behind family life"
           description="Ask in plain language. Bubaly takes real action in your family’s data — securely, within your family only — so the invisible work gets done without you."
         />

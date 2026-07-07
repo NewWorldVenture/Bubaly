@@ -164,7 +164,7 @@ export function FeaturesReferencePage() {
     <ReferencePage>
       <div className="mx-auto w-full max-w-[1024px] px-5 pb-2 pt-[26px] sm:px-7">
         <section className="text-center">
-          <Eyebrow>Less Life Admin. More Living Life.</Eyebrow>
+          <Eyebrow>Less Managing Life. More Living It.</Eyebrow>
           <h1 className="mt-3 text-[38px] font-extrabold leading-[1.06] tracking-[-0.035em] sm:text-[48px]">
             Everything your family needs,
             <br />
@@ -405,7 +405,7 @@ export function HowItWorksReferencePage() {
       <div className="mx-auto w-full max-w-[1024px] px-5 pb-3 pt-8 sm:px-[31px]">
         <section className="relative min-h-[463px] lg:h-[463px]">
           <div className="max-w-[414px] pt-[26px] lg:pl-[14px]">
-            <Eyebrow>Less Life Admin. More Living Life.</Eyebrow>
+            <Eyebrow>Less Managing Life. More Living It.</Eyebrow>
             <h1 className="mt-3 text-[50px] font-extrabold leading-[1.05] tracking-[-0.04em] sm:text-[58px]">
               How Bubaly
               <br />

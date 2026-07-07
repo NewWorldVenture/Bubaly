@@ -297,7 +297,7 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
         {/* Hero */}
         <section className="mx-auto max-w-3xl text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-violet-300/80">
-            Less Life Admin. More Living Life.
+            Less Managing Life. More Living It.
           </p>
           <h1 className="mt-3 text-5xl font-black leading-[1.08] sm:text-6xl">
             Bubaly Pricing

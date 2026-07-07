@@ -80,7 +80,7 @@ export function renderSocialImage(): ImageResponse {
             padding: '0 80px',
           }}
         >
-          Less Life Admin. More Living Life.
+          Less Managing Life. More Living It.
         </div>
 
         <div

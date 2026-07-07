@@ -46,7 +46,7 @@ export function SiteFooter() {
         <div className="col-span-2 md:col-span-3 lg:col-span-2">
           <Logo />
           <p className="mt-3 max-w-[240px] text-[11px] font-semibold leading-5 text-muted">
-            Less Life Admin. More Living Life.
+            Less Managing Life. More Living It.
           </p>
           <p className="mt-2 max-w-[240px] text-[11px] leading-5 text-muted">
             The AI operating system for family life.
