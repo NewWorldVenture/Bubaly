@@ -578,8 +578,10 @@ missing-location events, colliding events for conflicts). Run it, then open
   Seed `seed_pillar9_connections.sql`. **Remainder: OAuth token exchange + live sync needs provider keys.**
 
 ### B. Smaller follow-ups (agent-doable)
-- [ ] FOI financial dimension: real **budget-overspend** (budgets vs expenses) + **negative
-  ledger balance** detection (currently 0 — placeholders in `lib/operating-index/server.ts`).
+- [x] FOI financial dimension: real **budget-overspend** (budgets vs expenses) + **negative
+  ledger balance** detection ✅ — all 5 previously-hardcoded inputs now read live data via pure
+  `lib/operating-index/inputs.ts` (`countOverspentBudgets`, 7 tests); `negativeBalances` excludes
+  credit cards; `lowInventory`/`eventsMissingInfo`/`unreadThreads` wired too. FOI is 100% Supabase-wired.
 - [ ] Onboarding: infer/defer more; anonymous **pre-family telemetry** path (`journey_events`
   is family-scoped, no family_id until completion).
 - [ ] AI Concierge: deeper **write-back of accepted recommendations**.
