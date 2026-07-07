@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
-  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, type LucideIcon,
+  Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, Milestone, ClipboardCheck, type LucideIcon,
 } from 'lucide-react';
 import { AllServicesIcon } from '@/components/app/icons/all-services-icon';
 
@@ -142,6 +142,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/vacations', label: 'Vacation Planner', icon: Sun, minLevel: 1 },
       { href: '/dashboard/weekend', label: 'Weekend Planner', icon: CalendarRange, minLevel: 1 },
       { href: '/dashboard/voting', label: 'Group Voting', icon: ListChecks, minLevel: 1 },
+      { href: '/dashboard/life-events', label: 'Life & Milestones', icon: Milestone, minLevel: 0 },
       { href: '/dashboard/trip-memories', label: 'Trip Memories', icon: BookHeart, minLevel: 1 },
       { href: '/dashboard/sports', label: 'Sports', icon: Trophy, minLevel: 1 },
       { href: '/dashboard/rides', label: 'Rides & Carpool', icon: Car, minLevel: 1 },
@@ -194,6 +195,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/family-memory', label: 'Memory Brain', icon: BookHeart, minLevel: 2 },
       { href: '/dashboard/knowledge', label: 'Knowledge Base', icon: Brain, minLevel: 0 },
       { href: '/dashboard/playbook', label: 'Family Playbook', icon: Wand2, minLevel: 0 },
+      { href: '/dashboard/experience', label: 'Experience Scorecard', icon: ClipboardCheck, minLevel: 0 },
       { href: '/dashboard/family-emergency', label: 'Emergency Hub', icon: ShieldAlert, minLevel: 2 },
       { href: '/dashboard/family-stress', label: 'Stress Prediction', icon: Gauge, minLevel: 2 },
       { href: '/dashboard/family-automation', label: 'Life Automation', icon: Zap, minLevel: 2 },
