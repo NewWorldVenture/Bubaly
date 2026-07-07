@@ -119,6 +119,19 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 - Marketing/nav polish (findability of Shopping, AI Inbox, Smart Imports, Kitchen Mode, etc.) is fine
   and cheap, but it is **positioning, not moat** — don't confuse it with the work above.
 
+### ○ Non-strategic verification follow-ups (tactical debt — do when convenient; NOT moat work)
+- [ ] **Child-login flow — verify end-to-end (never tested).** `/kid-login` + `/dashboard/family-access`
+  + `0105_child_logins.sql` (synthetic auth user, username+PIN, no email) + `CHILD_LOGIN_SECRET` env.
+  A feasibility check was started this session but not completed. Drive it in the browser harness
+  (`scratchpad/sbstack`): parent creates a child login on `/dashboard/family-access` → child signs in
+  at `/kid-login` with username+PIN → lands scoped to their role. Requires `CHILD_LOGIN_SECRET` set
+  locally + `0105` applied. Watch for: PIN hashing parity, role scoping/RLS, wrong-PIN handling.
+- [ ] **Phone auth — real-SMS + edge cases.** Phone signup/login was verified against a local OTP
+  **shim** (send→store→verify) and the auto-submit stale-closure bug was fixed (commit `f669776`).
+  Still open: a real-provider (Twilio) smoke once keys exist; and phone-number edge cases —
+  international formatting/validation (`lib/auth/otp.ts` `isLikelyE164`), resend cooldown, code
+  expiry, and "use a different number" reset. Not a blocker; the graceful-degradation path is honest.
+
 ---
 
 ## ⚑ OPEN ITEMS & DECISIONS — single source of truth (2026-07-06)
