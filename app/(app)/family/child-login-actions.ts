@@ -69,6 +69,13 @@ export async function createChildLoginAction(input: {
   await admin.from('user_preferences').upsert(
     { user_id: childUserId, active_family_id: member.family_id }, { onConflict: 'user_id' });
 
+  // A username can be reused after an earlier child login was removed. Clear any
+  // stale throttle row so the brand-new child doesn't inherit a leftover lockout
+  // from whoever held this username before.
+  await admin.from('child_login_throttle')
+    .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
+    .eq('username', username);
+
   await logAudit(admin, {
     familyId: member.family_id, actorId: ctx.user.id, action: 'create',
     resource: 'child_logins', resourceId: member.id, metadata: { username },
