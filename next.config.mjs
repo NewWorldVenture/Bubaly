@@ -32,6 +32,12 @@ const nextConfig = {
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          // HSTS: force HTTPS for two years across subdomains. The site is
+          // HTTPS-only (canonical is https://www.bubaly.com and Vercel serves
+          // TLS), so this only hardens against protocol-downgrade / SSL-strip.
+          // No `preload` — that commits every subdomain to the browser preload
+          // list irreversibly, which we don't want to assert blindly.
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
         ],
       },
       {
