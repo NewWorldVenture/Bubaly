@@ -122,6 +122,28 @@
 > carries the right `next` (plain + invite), callback error path. tsc/eslint/vitest/build green. (Shim
 > gained `/auth/v1/otp`+`/verify`; scripts in `sbstack/`.)
 >
+> ## 🎈 2026-07-07 (T9 — "What Bubaly has learned" + life-event playbooks, shipped)
+>
+> New `/dashboard/life-events` ("Life & Milestones") deepens the felt moat with two halves. All on
+> `main`; tsc/eslint/**2022 tests**/`next build` green; migration + seed PG16-validated & idempotent.
+>
+> - **What Bubaly has learned:** the family's accumulated preferences/routines/traditions shown back to
+>   them and **editable inline** (add/edit/pin/delete). Reuses the existing `family_facts` table (no new
+>   store) filtered to preference/about/important — the learned surface, made felt.
+> - **Life-event playbooks:** 6 one-tap templates (New Baby, Moving, School Start, Vacation, New Pet, New
+>   Job) that materialize a real **dated checklist**. Pure `lib/life-events/templates.ts` — the catalog +
+>   `buildPlanItems(template, eventDate)` (offset-based due dates, chronological sort). **10 tests**.
+> - **Atomic launch:** `launchLifeEventAction` (`app/(app)/dashboard/life-event-actions.ts`) creates the
+>   plan + all items in one round-trip and **rolls back the orphan plan** if item insert fails.
+>   `setLifeEventStatusAction` handles complete/archive/reopen.
+> - **Storage:** `0145_life_event_plans.sql` — `life_event_plans` + `life_event_plan_items` (cascade),
+>   family-scoped RLS, updated_at triggers. Types added.
+> - **UI:** `components/modules/life-events-module.tsx` (realtime) — learned grid, template gallery
+>   (date-picker launch modal), active plans with progress bars, checkable items, complete/archive.
+>   **Not in the global nav** (standing rule) — reachable at `/dashboard/life-events`.
+> - **Seed:** `seed_life_events_one_family.sql` — 44 plans (active/completed/archived mix) × ~493 dated
+>   items + 30 learned facts (567 rows). Idempotent: plans tagged notes `[seed:t9]` (cascade), facts by label prefix.
+>
 > ## 📐 2026-07-07 (T8 — premium-consistency sweep, made measurable, shipped)
 >
 > The premium-consistency sweep is now **data-backed**: a Supabase-backed Experience Scorecard grades

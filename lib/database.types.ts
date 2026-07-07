@@ -418,6 +418,16 @@ export interface Database {
         { id?: string; family_id: string; as_of_date?: string; kind: string; title: string; detail?: string | null; href?: string | null; impact?: number; status?: string; member_id?: string | null; created_by?: string | null },
         Partial<{ kind: string; title: string; detail: string | null; href: string | null; impact: number; status: string; member_id: string | null }>
       >;
+      life_event_plans: T<
+        { id: string; family_id: string; template_key: string; title: string; event_date: string | null; status: string; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; template_key: string; title: string; event_date?: string | null; status?: string; notes?: string | null; created_by?: string | null },
+        Partial<{ template_key: string; title: string; event_date: string | null; status: string; notes: string | null }>
+      >;
+      life_event_plan_items: T<
+        { id: string; family_id: string; plan_id: string; title: string; category: string; due_on: string | null; is_done: boolean; sort: number; note: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; plan_id: string; title: string; category?: string; due_on?: string | null; is_done?: boolean; sort?: number; note?: string | null; created_by?: string | null },
+        Partial<{ title: string; category: string; due_on: string | null; is_done: boolean; sort: number; note: string | null }>
+      >;
       experience_audits: T<
         { id: string; family_id: string; surface_key: string; surface_label: string; category: string; audited_on: string; empty_state: number | null; error_recovery: number | null; transitions: number | null; performance: number | null; accessibility: number | null; consistency: number | null; score: number | null; grade: string | null; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; surface_key: string; surface_label: string; category?: string; audited_on?: string; empty_state?: number | null; error_recovery?: number | null; transitions?: number | null; performance?: number | null; accessibility?: number | null; consistency?: number | null; score?: number | null; grade?: string | null; notes?: string | null; created_by?: string | null },

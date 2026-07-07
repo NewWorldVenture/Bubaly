@@ -257,10 +257,16 @@ before asking the user to build anything.**
   (Area 8.)
 
 **P3 — Felt switching cost (compounding context).**
-- [ ] **T9. "What Bubaly has learned" surface + life-event templates.** Show accumulated context back
-  to the family (preferences, routines, traditions), editable; add life-event templates (New Baby,
-  Moving, School Start, Vacation) as one-tap guided outcomes. Deepens the moat *and* makes it felt.
-  (Areas 5 + 6; complements R10/R12.)
+- [x] **T9. "What Bubaly has learned" surface + life-event templates.** ✅ New `/dashboard/life-events`
+  ("Life & Milestones") with two halves: (1) **What Bubaly has learned** — accumulated preferences/
+  routines/traditions (reuses `family_facts`), fully editable inline (add/edit/pin/delete); (2)
+  **Life-event playbooks** — 6 one-tap templates (New Baby, Moving, School Start, Vacation, New Pet,
+  New Job) that materialize a real **dated checklist** via pure `lib/life-events/templates.ts`
+  (`buildPlanItems`, **10 tests**). Launch is atomic (`launchLifeEventAction`: plan + items, rolls back
+  orphans). Plans/items in `life_event_plans` + `life_event_plan_items` (`0145`, family-scoped RLS,
+  PG16-validated) + types; realtime module with progress bars, checkable items, complete/archive. Seed
+  `seed_life_events_one_family.sql` (44 plans / ~493 items / 30 learned facts). tsc/eslint/**2022 tests**/build.
+  *(Route not in global nav per the standing rule — reachable at `/dashboard/life-events`.)* (Areas 5 + 6.)
 
 **Instrumentation (proves the bet):**
 - [ ] **T10. TTFV metric.** Instrument **time-from-signup-to-first-outcome-viewed** and
@@ -557,6 +563,8 @@ missing-location events, colliding events for conflicts). Run it, then open
   all 6 surfaces (insight/autopilot/agent/voting/decision/briefing) × 5 signals, over the last ~60 days.
 - ☑ **NEW `seed_experience_audits_one_family.sql`** (540 rows) exercises T8 Experience Scorecard —
   30 surfaces × 18 dates over ~68 days, upward trend, accessibility weakest, 4 surfaces below the bar.
+- ☑ **NEW `seed_life_events_one_family.sql`** (567 rows) exercises T9 Life & Milestones — 44 plans
+  (active/completed/archived) × ~493 dated checklist items + 30 learned facts. Run it, open `/dashboard/life-events`.
 
 ### A. Operating Layer slices still to build (agent-doable, build top-down)
 - [x] **Slice 1 — Family Operating Index** (engine + page + 0125). PR #227. ✅
