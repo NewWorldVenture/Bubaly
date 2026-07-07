@@ -66,19 +66,25 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   // 'benchmarks' aggregates.
   const contributions: Contribution[] = [];
   for (const c of optedIn) {
-    const contrib = await buildContribution(sb, c.family_id, now);
-    if (!contrib) continue;
-    const scopes = (c.scopes ?? {}) as Partial<Record<ConsentScope, boolean>>;
-    contrib.metrics = filterMetricsByScopes(contrib.metrics, scopes);
-    contributions.push(contrib);
-    const { error: upErr } = await sb.from('network_contributions').upsert({
-      family_id: c.family_id,
-      cohort_key: cohortKey(contrib.features),
-      features: contrib.features as unknown as Database['public']['Tables']['network_contributions']['Insert']['features'],
-      metrics: contrib.metrics,
-      scopes: c.scopes,
-    }, { onConflict: 'family_id' });
-    if (upErr) console.error(`network_contributions upsert failed for ${c.family_id}:`, upErr.message);
+    // Per-family isolation: one family's bad data or a transient read error must
+    // never abort the whole nightly aggregation for everyone else.
+    try {
+      const contrib = await buildContribution(sb, c.family_id, now);
+      if (!contrib) continue;
+      const scopes = (c.scopes ?? {}) as Partial<Record<ConsentScope, boolean>>;
+      contrib.metrics = filterMetricsByScopes(contrib.metrics, scopes);
+      contributions.push(contrib);
+      const { error: upErr } = await sb.from('network_contributions').upsert({
+        family_id: c.family_id,
+        cohort_key: cohortKey(contrib.features),
+        features: contrib.features as unknown as Database['public']['Tables']['network_contributions']['Insert']['features'],
+        metrics: contrib.metrics,
+        scopes: c.scopes,
+      }, { onConflict: 'family_id' });
+      if (upErr) console.error(`network_contributions upsert failed for ${c.family_id}:`, upErr.message);
+    } catch (err) {
+      console.error(`network contribution failed for family ${c.family_id}:`, err);
+    }
   }
   // Right-to-be-forgotten: remove contributions for families no longer opted in.
   const keepIds = new Set(optedIn.map((c) => c.family_id));
