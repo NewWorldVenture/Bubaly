@@ -32,6 +32,95 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 
 ---
 
+## ★★ STRATEGIC ALIGNMENT — MOATS OVER FEATURES (owner directive, 2026-07-07) — READ FIRST
+
+> **Owner directive (verbatim intent):** *"I would not pursue more features next. I would pursue
+> platform moats. Anyone can copy features in 6–18 months; it's much harder to copy the underlying
+> intelligence and infrastructure that makes those features work."*
+>
+> **This section now governs the roadmap.** The competitive review confirms it: Bubaly's public
+> feature matrix already **out-covers Cozi / FamilyWall / OurHome** on nearly every row — more
+> features is NOT the gap. The gap is the **moat underneath** and making the highest-value surfaces
+> *findable and coordinated*. **Freeze net-new feature modules.** New work must deepen one of the five
+> ownable layers below or it doesn't ship.
+
+**The five layers to OWN (this is the scoring rubric for any proposed work):**
+1. **Own the data model** — the Family Knowledge Graph (the brain).
+2. **Own the intelligence layer** — the Family Reasoning Engine.
+3. **Own the experience** — intent-based, AI-first journeys ("one assistant coordinates the rest").
+4. **Own the ecosystem** — orchestrate the services families already use (don't duplicate them).
+5. **Own the category** — measure success in **reduced mental load / time saved**, not app time.
+
+### ▣ Honest audit — what's BUILT vs. the real GAP (as of 2026-07-07)
+
+| Strategy layer | Built (this is real) | The moat gap that must close |
+|---|---|---|
+| **1. Knowledge Graph** | `0129` `graph_entities`/`graph_edges`, `lib/graph/reason.ts` (16 tests), twin projector, `/dashboard/graph`. | **The graph is a standalone page, not the brain.** Only **4 files** touch `lib/graph` (the graph page/module, the projector, one agent helper). FOI, Concierge, Briefing, Playbook, Calm, Decisions, Prep-Plans, Outcomes, Moments all still read **isolated tables**. The graph must become the substrate every capability reasons over. |
+| **2. Reasoning Engine** | FOI + orchestrator questions, agents roster, decisions, prep-plans, autopilot — good *engines*, individually tested. | **No single reasoning engine.** ~8 engines each answer part of "what matters / what's likely forgotten / highest-impact / auto-completable / who needs help / what next" from their own inputs. Consolidate into ONE `lib/reasoning/*` core that reads the graph + snapshot and every surface consumes. |
+| **3. Experience (one assistant)** | 26 AI/reasoning routes: assistant, agents, concierge, command-center, calm, graph, decisions, prep-plans, intelligence, outcomes, operating-index, moments, briefing, autopilot, front-desk, inbox, readiness, next-best-actions, weekly-briefing, family-ai-assistant, family-digital-twin, family-memory, knowledge, family-knowledge-graph, playbook… | **This is the biggest misalignment.** The strategy is *"users interact with ONE assistant; it coordinates the rest."* We shipped 26 separate destinations — with **duplicates** (two knowledge-graphs, two assistants, two memory pages). Consolidate into **one Chief-of-Staff front door**; demote the rest to internal capabilities it calls. |
+| **4. Ecosystem** | `0128` connections hub, 11-provider registry, Connect/Disconnect CRUD, `/dashboard/connections`. | Hub + model are ready but **no live OAuth/token exchange or two-way sync** — it's a directory, not an orchestrator. Needs provider keys (owner) + per-provider sync adapters (agent). |
+| **5. Category metric** | FOI measures household *functioning*; journey/onboarding telemetry exists. | **The North-Star metric isn't in the product.** No surfaced "time saved / decisions handled for you / mental load reduced." Only marketing copy says it. Instrument + surface it. |
+| **Family Intelligence** | Playbook learns favorite meals/grocery staples/favorites/traditions/travel. | Strategy wants the *harder* signals: **which reminders get ignored, when the family is most stressed, which chores create conflict, which routines actually work, communication style.** Expand the learning surface (transparent + editable). |
+| **Moments** | `lib/moments/*` engines + `/dashboard/moments`. | Moments is **one page among 70 modules**, not the organizing principle. Strategy: *"organize by moments, not modules"* (Morning · School · Dinner · Vacation · Birthday · Moving · Holiday · New Baby · Graduation · Emergency · Weekend). Elevate to a first-class organizing layer. |
+| **Chief of Staff** | Autopilot (≥90%-conf auto-exec), Calm digest, agents. | Not yet the *"Good morning — I already did X, Y, Z; pending your approval: A, B"* front door. Assemble the pieces into that single proactive home experience. |
+
+### ▶ THE REALIGNMENT BACKLOG (do these INSTEAD of new features — priority order)
+
+**P1 — Make the Knowledge Graph the brain (Phase 1; 6–12mo moat).**
+- [ ] **R1. `lib/reasoning/context.ts`** — one graph-backed context loader every AI surface calls
+  (`loadFamilyContext(familyId)` → entities + edges + live snapshot). Pure, tested.
+- [ ] **R2. Re-point existing engines at the graph** — FOI, Concierge, Briefing, Playbook, Calm,
+  Decisions, Prep-Plans, Outcomes read graph relationships (Emma→Soccer→Field→Weather→Dinner) instead
+  of isolated `.from()` calls. No new tables; rewire reads. Ship one engine at a time behind tests.
+- [ ] **R3. Auto-maintain the graph** — the `family_model_dirty` trigger (`0134`) already flags
+  changes; make the projector run on-dirty so the graph is always current (not a manual "Rebuild").
+
+**P2 — One assistant / AI Operating Layer (Phase 2; 6–12mo, category-defining).**
+- [ ] **R4. Consolidate the 26 surfaces into ONE Chief-of-Staff home** — a single assistant that
+  *coordinates* the specialist engines (agents/FOI/concierge/prep-plans/calm) behind one interface.
+  The others become tabs/capabilities it routes to, not top-level nav. **De-duplicate first**
+  (merge graph+family-knowledge-graph, assistant+family-ai-assistant, knowledge+family-memory).
+- [ ] **R5. The proactive front door** — "I already did A, B, C · pending approval: X, Y" (wire
+  Autopilot's completed actions + pending approvals + Calm digest into the Home hero). Reversible +
+  transparent.
+- [ ] **R6. Intent-based entry** — the ⌘K/command bar + Voice already parse intent; make them the
+  primary way in ("plan Emma's party", "who's free Saturday") routing to the reasoning engine.
+
+**P3 — Digital Twin / Reasoning Engine depth (Phase 3; 12–18mo differentiation).**
+- [ ] **R7. Unify the reasoning engine** — fold FOI-orchestrator + agents + decisions into
+  `lib/reasoning/*` answering the six questions (what matters most · what's likely forgotten ·
+  highest-impact decision · what's auto-completable · who needs help · what next) over the graph.
+- [ ] **R8. Deepen twin simulation** — extend `lib/twin/simulate.ts` beyond add-commitment/big-spend
+  to the full "if Emma joins travel soccer" projection (schedule · travel · cost · family time ·
+  homework · meals · vacation conflicts) reading the linked graph model.
+
+**P4 — Ecosystem orchestration (Phase 4; 18–24mo network effects).**
+- [ ] **R9. Per-provider sync adapters** behind the Connections hub (calendar/email first) — real
+  two-way sync, not a directory. *(OAuth keys are owner-gated; build the adapter contract now.)*
+
+**Cross-cutting moat work (start now, threads through all phases):**
+- [ ] **R10. Family Intelligence — the hard signals.** Extend Playbook/learning to: ignored-reminder
+  detection (reminders dismissed/overdue repeatedly), stress windows (density × conflicts × overdue by
+  time-of-day/day-of-week), chore-conflict detection (reassignments/disputes), routine-adherence
+  (which `routine_templates` actually get completed). Transparent + editable. New pure engines + tests.
+- [ ] **R11. The category metric — surface "time saved / mental load."** Instrument admin actions the
+  system handles (autopilot executions, auto-built lists, resolved conflicts, reminders that landed)
+  → a real "hours saved this week / decisions handled for you" number on Home and in the Scorecard.
+  This is the metric the whole thesis rests on; today it's only marketing copy.
+- [ ] **R12. Moments as an organizing layer** — promote `lib/moments/*` from one page to a home
+  organizing principle (Morning/School/Dinner/Vacation/Birthday/Emergency/Weekend as orchestrated
+  experiences that pull the right capabilities), reducing reliance on the 70-module list.
+
+### ⛔ What to STOP
+- **No net-new feature modules.** The matrix is saturated; more rows don't move the moat and add
+  surface area to maintain. Every new PR should cite which of R1–R12 (or a moat layer) it advances.
+- **Stop adding standalone AI pages** — new AI capability goes *through* the one assistant, not as a
+  27th destination.
+- Marketing/nav polish (findability of Shopping, AI Inbox, Smart Imports, Kitchen Mode, etc.) is fine
+  and cheap, but it is **positioning, not moat** — don't confuse it with the work above.
+
+---
+
 ## ⚑ OPEN ITEMS & DECISIONS — single source of truth (2026-07-06)
 
 > ### ▣ EVERYTHING STILL OPEN — consolidated (as of 2026-07-06, evening)
