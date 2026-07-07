@@ -120,11 +120,14 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
       console.error(`network contribution failed for family ${c.family_id}:`, err);
     }
   }
-  // Right-to-be-forgotten: remove contributions for families no longer opted in.
-  const keepIds = new Set(optedIn.map((c) => c.family_id));
-  const { data: existing } = await sb.from('network_contributions').select('family_id');
-  for (const row of existing ?? []) {
-    if (!keepIds.has(row.family_id)) await sb.from('network_contributions').delete().eq('family_id', row.family_id);
+  // Right-to-be-forgotten: remove contributions for families no longer opted in —
+  // in ONE delete rather than a read + N per-row deletes.
+  const keepIds = optedIn.map((c) => c.family_id);
+  if (keepIds.length > 0) {
+    await sb.from('network_contributions').delete().not('family_id', 'in', `(${keepIds.join(',')})`);
+  } else {
+    // No one opted in → clear every contribution (family_id is NOT NULL).
+    await sb.from('network_contributions').delete().not('family_id', 'is', null);
   }
 
   // 3. AGGREGATE — pure k-anonymity + DP noise + launch gate.
