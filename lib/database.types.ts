@@ -413,6 +413,11 @@ export interface Database {
         { id?: string; family_id: string; as_of_date?: string; is_sparse?: boolean; readiness_pct?: number; week_count?: number; conflict_count?: number; dinner_count?: number; time_saved_minutes?: number; headline?: string | null; brief?: Json; created_by?: string | null },
         Partial<{ as_of_date: string; is_sparse: boolean; readiness_pct: number; week_count: number; conflict_count: number; dinner_count: number; time_saved_minutes: number; headline: string | null; brief: Json }>
       >;
+      daily_insights: T<
+        { id: string; family_id: string; as_of_date: string; kind: string; title: string; detail: string | null; href: string | null; impact: number; status: string; member_id: string | null; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; as_of_date?: string; kind: string; title: string; detail?: string | null; href?: string | null; impact?: number; status?: string; member_id?: string | null; created_by?: string | null },
+        Partial<{ kind: string; title: string; detail: string | null; href: string | null; impact: number; status: string; member_id: string | null }>
+      >;
       journey_events: T<
         { id: string; family_id: string; member_id: string | null; journey: string; phase: string; step: number; session_id: string; duration_ms: number | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; journey: string; phase?: string; step?: number; session_id: string; duration_ms?: number | null },

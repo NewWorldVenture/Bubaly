@@ -31,6 +31,8 @@ import { HomeApprovalActions } from '@/components/dashboard/home-approval-action
 import { buildHomeBrief, homeBriefSummary } from '@/lib/home/home-brief';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import { CircleCheck, Circle, Utensils } from 'lucide-react';
+import { buildInsightCandidates, rankInsights, type InsightKind, type InsightSources } from '@/lib/home/insight-of-day';
+import { InsightHero } from '@/components/dashboard/insight-hero';
 
 function greeting() {
   const h = new Date().getHours();
@@ -95,6 +97,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     { data: renewalRows },
     { data: conflictEventRows },
     { data: documentRows },
+    { data: homeworkRows },
+    { count: plannedDinnerCount },
   ] = await Promise.all([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
@@ -172,6 +176,16 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('documents').select('id, title, expires_at')
       .eq('family_id', familyId).not('expires_at', 'is', null)
       .lte('expires_at', new Date(Date.now() + 30 * 86400000).toISOString()).limit(50),
+    // T4 sources: assignments due TOMORROW that haven't been acknowledged.
+    supabase.from('homework_assignments').select('title, member_id')
+      .eq('family_id', familyId).eq('status', 'assigned')
+      .gte('due_at', todayEnd.toISOString())
+      .lt('due_at', new Date(todayEnd.getTime() + 86400000).toISOString()).limit(20),
+    // T4 sources: dinners planned in the next 7 days (→ how many nights are unplanned).
+    supabase.from('meal_plans').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).eq('meal_type', 'dinner')
+      .gte('plan_date', todayStart.toISOString().slice(0, 10))
+      .lte('plan_date', new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)),
   ]);
 
   // Soonest relationship date inside its reminder window (gentle proactive nudge).
@@ -291,6 +305,61 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     } catch { /* best-effort snapshot */ }
   }
 
+  // ── T4: the one proactive "insight of the day". Build candidate insights from
+  // the family's live signals, rank by impact, and surface exactly ONE above the
+  // fold. Candidates are persisted to daily_insights so a dismissal sticks and the
+  // next-best insight takes its place. All best-effort — never blocks the render.
+  let insightRow: { id: string; kind: string; title: string; detail: string; href: string } | null = null;
+  try {
+    const dayIso = new Date(todayStart.getTime() + 86400000).toISOString().slice(0, 10);
+    const daysUntil = (iso: string) => Math.ceil((new Date(iso).getTime() - now.getTime()) / 86400000);
+    const sources: InsightSources = {
+      conflictsSoon: homeConflicts.map((c) => ({
+        title: c.assigneeName ? `${c.assigneeName}’s day` : 'Two events',
+        when: c.startsAt.slice(0, 10) === todayStart.toISOString().slice(0, 10) ? 'Today'
+          : c.startsAt.slice(0, 10) === dayIso ? 'Tomorrow' : 'This week',
+      })),
+      homeworkDueTomorrow: ((homeworkRows ?? []) as { title: string; member_id: string | null }[])
+        .map((h) => ({ title: h.title, who: h.member_id ? (memberNameById.get(h.member_id) ?? '')?.split(' ')[0] ?? null : null })),
+      pendingApprovals: ((approvalRows ?? []) as ParentApprovalRow[]).length + (pendingApprovals ?? 0),
+      overdueReminders: overdueReminders,
+      renewalsSoon: ((renewalRows ?? []) as RenewalRow[])
+        .map((r) => ({ title: r.title, days: daysUntil(r.expires_at) })).filter((r) => r.days >= 0),
+      documentsSoon: ((documentRows ?? []) as DocumentRow[])
+        .filter((d) => d.expires_at).map((d) => ({ title: d.title, days: daysUntil(d.expires_at as string) })).filter((d) => d.days >= 0),
+      unplannedDinners: Math.max(0, 7 - Math.min(7, plannedDinnerCount ?? 0)),
+      lowGrocery: groceryCount ?? 0,
+      autopilotTop: openSuggestions[0] ? { title: openSuggestions[0].title, confidence: openSuggestions[0].confidence } : null,
+    };
+    const candidates = buildInsightCandidates(sources);
+    if (candidates.length > 0) {
+      const today = todayStart.toISOString().slice(0, 10);
+      // Which kinds has the family already dismissed today? Never re-surface those.
+      const { data: existingIns } = await supabase.from('daily_insights')
+        .select('kind, status').eq('family_id', familyId).eq('as_of_date', today);
+      const blocked = new Set(((existingIns ?? []) as { kind: string; status: string }[]).filter((r) => r.status !== 'active').map((r) => r.kind));
+      const toUpsert = candidates.filter((c) => !blocked.has(c.kind));
+      if (toUpsert.length > 0) {
+        await supabase.from('daily_insights').upsert(
+          toUpsert.map((c) => ({
+            family_id: familyId, as_of_date: today, kind: c.kind,
+            title: c.title, detail: c.detail, href: c.href, impact: c.impact,
+            status: 'active', created_by: ctx.user.id,
+          })),
+          { onConflict: 'family_id,as_of_date,kind' },
+        );
+      }
+      // Re-read active rows so the DB id (needed to dismiss) + persisted dismissals win.
+      const { data: activeRows } = await supabase.from('daily_insights')
+        .select('id, kind, title, detail, href, impact')
+        .eq('family_id', familyId).eq('as_of_date', today).eq('status', 'active');
+      const ranked = rankInsights(((activeRows ?? []) as { id: string; kind: string; title: string; detail: string | null; href: string | null; impact: number }[])
+        .map((r) => ({ id: r.id, kind: r.kind as InsightKind, title: r.title, detail: r.detail ?? '', href: r.href ?? '/dashboard', impact: r.impact })));
+      const top = ranked[0];
+      if (top) insightRow = { id: top.id, kind: top.kind, title: top.title, detail: top.detail, href: top.href };
+    }
+  } catch { /* daily_insights not migrated yet — skip the hero */ }
+
   return (
     <div className="space-y-6 pb-32">
       {/* Greeting header */}
@@ -306,6 +375,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
 
       {/* Ask-anything bar → deep-links to the assistant (auto-sends) */}
       <HomeAskBar />
+
+      {/* T4: the one proactive insight of the day, above the fold */}
+      {insightRow && <InsightHero insight={insightRow} />}
 
       {/* Relationship reminder — gentle proactive nudge for an upcoming date */}
       {relReminder && (

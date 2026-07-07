@@ -200,10 +200,19 @@ before asking the user to build anything.**
   separate T4; this ships the outcome + steps + dinners.)*
 
 **P1 — One daily "wow" + partner tone.**
-- [ ] **T4. Insight-of-the-day.** One ranked proactive insight surfaced above the fold on Home
-  (pull from agents/calm/autopilot/outcomes, rank by impact, show ONE). Pure ranker + test.
-  Examples the ranker must support: leave-earlier (traffic+weather), grocery-savings, unacknowledged
-  homework due tomorrow.
+- [x] **T4. Insight-of-the-day.** ✅ SHIPPED (2026-07-07). The home surfaces exactly ONE ranked,
+  proactive insight above the fold (right under the Ask bar) instead of a pile of notifications. Pure
+  ranker `lib/home/insight-of-day.ts` (`buildInsightCandidates` + `rankInsights`/`topInsight`, 9 tests)
+  scores candidates by impact and picks the best; supports **leave-earlier (traffic+weather)**,
+  **unacknowledged homework due tomorrow**, **grocery/meal savings**, plus conflicts · approvals ·
+  overdue reminders · renewals · documents · autopilot. Wired into `AiHomeDashboard` from live signals
+  (added homework-due-tomorrow + planned-dinner queries) and persisted to **`daily_insights`** (`0141`,
+  family-scoped RLS, one row/family/day/kind). Dismissible via `InsightHero` + `dismissInsightAction`
+  (the ✕ marks the row dismissed and the **next-best** insight surfaces). Seed `seed_daily_insights.sql`
+  (500 rows, every kind × ~56 days, status spread; in `SEED_ALL.sql`, now 28). Verified: tsc · eslint ·
+  **vitest (insight + home + onboarding)** · `next build`. *(The traffic+weather source for the
+  leave-earlier insight is owner-gated on a Maps/weather key per B3 — the ranker + seed exercise the
+  kind; it goes live when the key lands.)*
 - [ ] **T5. Partner-tone pass.** Replace count-based badges/notifications copy with partner framing
   ("You're in good shape — 3 quick approvals finish tomorrow"). Centralize the phrasing helper; sweep
   surfaced counts. (Area 10.)
