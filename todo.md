@@ -121,6 +121,97 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 
 ---
 
+## ★★★ TIME-TO-FIRST-VALUE — the 24-hour transformation (owner directive, 2026-07-07) — READ FIRST
+
+> **Owner directive (verbatim intent):** *"The next level is to make Bubaly feel indispensable within
+> the first 24 hours… invert the experience: deliver obvious value immediately, then let the platform
+> learn over time. Help Bubaly build an understanding of the household from information users already
+> have, then immediately solve a real problem. The biggest bet: **reduce time to first meaningful
+> value.**"* Directly serves the mission — **Less Managing Life. More Living It.**
+
+> **How this section relates to the MOATS directive above:** that section is about what to *own* (the
+> graph, the reasoning engine, the one assistant). This section is about *when the user first feels it*
+> — the **first-run funnel**. They are complementary: the moat is the engine; TTFV is the ignition.
+> The honest finding of this audit is that Bubaly has **already built the destinations** (outcome
+> dashboards, operating index, next-best-actions, chief-of-staff pieces) but still makes users
+> **configure a household before any of it lights up**. Closing that gap is mostly *wiring existing
+> capabilities into the first session*, not building new features — which is exactly aligned with
+> "moats/UX over new modules."
+
+### ▣ Honest audit — what's BUILT vs. the TTFV gap (grounded in the code, 2026-07-07)
+
+| Owner's area | Built today (real) | The gap that blocks day-one value |
+|---|---|---|
+| **1. Unforgettable first session** | ICS calendar import **exists** (`app/api/calendar/sync/route.ts` hand-rolled RFC-5545 parser + `api/cron/calendar-feeds`); conflict detection (`/dashboard/conflicts`); dinner suggestions (meals engines); outcomes/next-best-actions engines. | **None of it runs during onboarding.** The 6-step wizard (`profile→family→about→members→pin→done`, `lib/onboarding/flow.ts`) is **configuration-first** and `done` delivers a "Welcome" screen, **not a built timeline / conflicts / dinner ideas / action list**. The import is buried in settings. **This is the #1 gap.** |
+| **2. Outcomes over dashboards** | `AiHomeDashboard` is the **default** home; `/dashboard/outcomes`, `/family-operating-index`, `/readiness`, `/weekly-briefing`, `/next-best-actions` all exist and are outcome-framed. | Mostly **DONE** — but the outcome framing ("Your week is 92% prepared") isn't the onboarding payoff, and empty/new-family states show scaffolding, not an outcome. Ensure a brand-new family sees an outcome, not an empty widget. |
+| **3. One daily "wow"** | Calm digest, agents, autopilot, moments engines produce insights. | No **single, ranked, proactive "insight of the day"** surfaced above everything else. Today it's *many* small items (the thesis's anti-pattern). Need one hero insight/day (traffic+weather, grocery savings, unacknowledged homework). |
+| **4. Collaborative AI** | `/dashboard/voting` + `/dashboard/decisions` + `family_polls` + decision engine (options/scoring) exist. | Voting/decisions are **standalone pages**, not an AI-facilitated group flow ("meal voting with budget+dietary constraints", "vacation planning balancing availability"). The AI doesn't yet *drive the group to agreement*. Wire the reasoning engine into the voting/decision surfaces. |
+| **5. Switching costs (accumulated context)** | Playbook (favorite meals/staples/traditions), knowledge graph, digital twin, routines, long-term FOI history. | The accumulated context isn't **surfaced back as felt value** ("Bubaly knows your family now"). Add life-event templates + a visible "what Bubaly has learned" surface so the moat is *felt*, and make it editable (ties to R10). |
+| **6. Onboarding as guided transformation** | Wizard is clean, 6 steps, a11y-announced, draft-persisted. | It guides through **settings**, not **outcomes**. Each step should end in visible value ("Let's make tomorrow easier" → shows tomorrow's timeline). Re-sequence: value FIRST (import → show), household-building SECOND/deferred. |
+| **7. Trust & transparency** | Informed-consent preview (network), `/dashboard/trust`, autopilot approvals, undo patterns. | Not **consistent across every AI action**. Every recommend/automate should carry *why + inputs used + adjust/undo* inline. Standardize a "why this?" affordance on AI outputs (partly R5). |
+| **8. Premium feeling** | a11y pass (skip-link/WCAG), `MiniEmpty` empty states, toasts, optimistic updates in many modules. | Inconsistent: not every module has helpful empty states / error recovery / motion. Needs a **consistency sweep** (perf budget, predictable transitions, empty+error states everywhere) — measurable, not vibes. |
+| **9. Compounding value** | Connections hub + graph make cross-domain links *possible*; twin links calendar↔meals↔budget. | The cross-service wins (Calendar+Weather→travel, Shopping+Budget→savings, Health+Calendar→med timing) aren't **shipped as visible insights**. This IS moat-work **R2** (re-point engines at the graph) surfaced as day-one wins. |
+| **10. Partner tone** | Copy is warm in places; Calm digest is reassuring. | Notification/label voice is still **count-based** in modules ("17 notifications") rather than **partner-framed** ("You're in good shape — 3 quick approvals finish tomorrow"). Tone pass across surfaced counts/badges. |
+
+**Verdict:** ~6 of 10 areas are *substantially built as destinations*; the value is trapped behind a
+config-first first-run. **Highest-leverage change = make the first session deliver a concrete outcome
+before asking the user to build anything.**
+
+### ▶ THE TTFV BACKLOG (priority order — most is *wiring existing engines into the first run*)
+
+**P0 — The "magic first session" (the single biggest conversion/retention bet).**
+- [ ] **T1. Value-first onboarding re-sequence.** Restructure `lib/onboarding/flow.ts` so the flow is
+  *import → show value → (defer) configure*: after profile+family, offer **"Connect your calendar"**
+  (reuse `api/calendar/sync` ICS + the connections hub) and, on import, immediately compute and show a
+  **"Here's your day/week"** payoff. Members/PIN become **optional, post-value** steps. Keep the pure
+  flow engine + tests; add a `value` step.
+- [ ] **T2. First-run "instant briefing" builder.** New pure engine `lib/onboarding/first-brief.ts`
+  that, from imported events (or a 60-second guided quick-add if the user skips import), produces:
+  today's timeline · likely conflicts (reuse conflicts engine) · 3 dinner ideas (meals engine) ·
+  a prioritized action list · **3 "time-saved" opportunities**. Rendered as the `done`/first-home
+  screen instead of "Welcome". Tested against fixture calendars.
+- [ ] **T3. New-family home = outcome, never empty.** `AiHomeDashboard` for a family with little data
+  must render the first-brief outcome (T2) + one hero insight (T4), not empty widgets. Add
+  seeded-empty-state outcomes.
+
+**P1 — One daily "wow" + partner tone.**
+- [ ] **T4. Insight-of-the-day.** One ranked proactive insight surfaced above the fold on Home
+  (pull from agents/calm/autopilot/outcomes, rank by impact, show ONE). Pure ranker + test.
+  Examples the ranker must support: leave-earlier (traffic+weather), grocery-savings, unacknowledged
+  homework due tomorrow.
+- [ ] **T5. Partner-tone pass.** Replace count-based badges/notifications copy with partner framing
+  ("You're in good shape — 3 quick approvals finish tomorrow"). Centralize the phrasing helper; sweep
+  surfaced counts. (Area 10.)
+
+**P2 — Collaboration, transparency, premium consistency.**
+- [ ] **T6. AI-facilitated group decisions.** Turn `/voting` + `/decisions` into AI-driven consensus:
+  meal voting with budget+dietary constraints, vacation planning that balances availability, shopping
+  with cost comparison. Wire the decision engine + reasoning context into the group flow. (Area 4.)
+- [ ] **T7. "Why this?" everywhere.** Standard inline affordance on every AI recommendation/automation:
+  reason + inputs used + adjust/undo. Reusable component consumed by autopilot/agents/insight-of-day.
+  (Area 7.)
+- [ ] **T8. Premium-consistency sweep.** Every module: helpful empty state, clear error recovery,
+  predictable transitions, perf budget. Track in `docs/EXPERIENCE_SCORECARD.md`; make it measurable.
+  (Area 8.)
+
+**P3 — Felt switching cost (compounding context).**
+- [ ] **T9. "What Bubaly has learned" surface + life-event templates.** Show accumulated context back
+  to the family (preferences, routines, traditions), editable; add life-event templates (New Baby,
+  Moving, School Start, Vacation) as one-tap guided outcomes. Deepens the moat *and* makes it felt.
+  (Areas 5 + 6; complements R10/R12.)
+
+**Instrumentation (proves the bet):**
+- [ ] **T10. TTFV metric.** Instrument **time-from-signup-to-first-outcome-viewed** and
+  **% of new families who import a calendar / see a first-brief in session 1** in the onboarding
+  telemetry (`lib/analytics/onboarding*`). This is the number every T-item above is optimizing; put it
+  on the onboarding-funnel dashboard next to the existing step funnel.
+
+**Alignment note:** T1–T3 + T8 are pure UX/wiring of existing capabilities (no new modules — consistent
+with the freeze). T4/T6/T9 route *through* the reasoning engine/graph (advance R2/R4/R5/R10/R12), not
+new standalone destinations. T10 is the missing half of the category metric (R11).
+
+---
+
 ## ⚑ OPEN ITEMS & DECISIONS — single source of truth (2026-07-06)
 
 > ### ▣ EVERYTHING STILL OPEN — consolidated (as of 2026-07-06, evening)
