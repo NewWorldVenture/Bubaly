@@ -97,6 +97,15 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   SECURITY DEFINER trigger on every cross-domain source table; `needsRefresh()` (dirty wins, else TTL,
   3 tests); the `model-refresh` cron prioritizes dirty families + clears the flag. Now event-driven.
 - [ ] **Messages GIF picker** — blocked on the provider key. *(external key — not agent-doable)*
+- [x] **Kid-login brute-force hardening** ✅ (2026-07-07) — the no-email child sign-in (username +
+  4-digit PIN) had NO throttle, so a guessable username + 10k PINs was brute-forceable. Added a durable
+  per-username lockout: pure `lib/auth/child-throttle.ts` (10 tests: window/lockout/escalation/reset)
+  + `0137_child_login_throttle.sql` (service-role-only table, RLS deny-all; PG16-validated) wired into
+  `childSignInAction` (locks after 5 fails/15 min, escalating; cleared on success) and cleared on a
+  parent PIN reset. Degrades safely before the migration is applied (still works, just un-throttled).
+  Doc: `CHILD_LOGIN_SECRET` + `0137` added to `PENDING_PROD_MIGRATIONS.md`.
+  *(Phone-number deep-dive deferred: the parallel session is actively rewriting `phone-auth`/OTP on
+  main — building there now would collide. Revisit once that settles.)*
 
 > **Section C status: closed except the GIF picker (needs an external provider key).** All four
 > agent-doable items are done — 2 built this session (onboarding telemetry, twin trigger), 2 were
