@@ -26,6 +26,55 @@
 >   Prep Plans `0131`, Life Readiness, Intent-Based UX, model-refresh cron `0134`, Network consent
 >   `0132` / aggregates `0135`. **Newest migration overall on main: `0137`** (child-login throttle, other lane).
 >
+> ## ⏱️ SESSION END STATE — 2026-07-07 (multi-branch `claude/*`) — READ THIS FIRST
+>
+> **Theme this session:** no-email auth hardening + a "world-class bubaly.com" public-surface pass.
+> All work landed as small, single-purpose PRs, each `tsc`/`eslint`/`vitest`/`next build` green and
+> **non-colliding** with the parallel session's auth/onboarding rewrite (no Supabase schema touched
+> except the additive `0137`). Merged to `main` in order:
+>
+> 1. **#243 — Kid-login brute-force hardening.** The no-email child sign-in (username + 4-digit PIN)
+>    had **no throttle**, so a guessable username × 10k PINs was brute-forceable. Added a durable
+>    per-username lockout: pure `lib/auth/child-throttle.ts` (10 tests — window / escalating lockout /
+>    auto-reset) + **`0137_child_login_throttle.sql`** (service-role-only table, RLS deny-all;
+>    PG16-validated) wired into `childSignInAction` (checked BEFORE any password work so it's not a
+>    username oracle; locks after 5 fails/15 min; cleared on success) and cleared on a parent PIN reset.
+>    Degrades safely before the migration is applied (still works, just un-throttled).
+> 2. **#244 — child-login create-path stale-lock fix.** `createChildLoginAction` now clears any
+>    leftover throttle row when a parent reuses a username a removed child once held.
+> 3. **#245 — brand OpenGraph/Twitter social cards.** The metadata declared `summary_large_image`
+>    with **no image**, so every shared bubaly.com link rendered a blank card. Added
+>    `app/opengraph-image.tsx` + `app/twitter-image.tsx` (shared `lib/og/social-image.tsx`) — a
+>    1200×630 brand-gradient card with the Bubaly wordmark, rendered via `next/og`, wordmark **inlined
+>    from disk** (no network fetch). Verified by rendering a real PNG.
+> 4. **#246 — JSON-LD + canonical URLs.** `components/marketing/structured-data.tsx`: Organization +
+>    WebSite + SoftwareApplication (homepage) and FAQPage (`/faq`) — honest data only, no fabricated
+>    ratings. Plus `alternates.canonical: './'` in the root layout → self-referential canonicals
+>    per-route (verified via `next start` + curl: home→`/`, `/pricing`→`/pricing`, `/faq`→`/faq`;
+>    NOT the "everything canonicals to `/`" footgun). Stops www/non-www/trailing-slash/`*.vercel.app`
+>    duplicate indexing.
+> 5. **#247 — HSTS.** Added `Strict-Transport-Security: max-age=63072000; includeSubDomains` to the
+>    global header block in `next.config.mjs` (no `preload` — irreversible preload-list commitment).
+> 6. **#248 — skip-to-content link (WCAG 2.4.1).** New `components/a11y/skip-link.tsx` (sr-only until
+>    focused) as the first focusable element in the marketing layout AND app shell, each `<main>`
+>    given `id="main-content"`. **(In flight as of session end — required checks were green/finishing;
+>    merge-when-green cron `b893806c` armed. If not yet on `main`, merge `claude/polish-a11y-skiplink`.)**
+>
+> **Newest migration on main: `0137`.** ⚠️ **HUMAN-OWNED BLOCKER unchanged + extended:** apply pending
+> prod migrations **`0118`→`0137`** (adds `0137_child_login_throttle.sql`) AND set **`CHILD_LOGIN_SECRET`**
+> (required for Kid Logins at all) alongside `CRON_SECRET`. `docs/PENDING_PROD_MIGRATIONS.md` is current
+> (0137 + `CHILD_LOGIN_SECRET` documented). Agent cannot execute — no prod DB creds/CLI in sandbox.
+>
+> **Baseline at session start (verified):** 1915 vitest passing (221 files), `tsc`/`eslint`/`next build`
+> all green. The app is **genuinely mature** — no mock/placeholder data surfaces found; the only
+> user-facing "coming soon" strings are correctly key-gated (Stripe Issuing cards) or the Messages GIF
+> picker (needs a provider key). So the world-class wins were on the public surface (shareability, SEO,
+> security, a11y) rather than repair.
+>
+> **DEFERRED (do NOT start without confirming the collision cleared):** the **phone-number deep-dive**.
+> `main`'s `f669776` is the parallel session **actively rewriting `phone-auth`/OTP**; building phone
+> surface now guarantees a merge conflict. Revisit once that settles.
+>
 > ## ⏱️ SESSION END STATE — 2026-07-06 (branch `claude/festive-bohr-m4cbeg`) — READ THIS FIRST
 >
 > Everything below is **shipped to `main`** (fast-forward, each commit tsc/eslint/vitest/`next build`
