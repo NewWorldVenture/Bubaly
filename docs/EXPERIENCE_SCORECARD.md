@@ -13,11 +13,41 @@ next*); this is *how good each journey is now*.
 - **Perceived perf** — optimistic UI / skeletons / instant feedback.
 - **Recovery** — undo / confirm-destructive / clear errors.
 
-> ⚠️ **Measurement status:** values below are **design-time estimates** from
-> reading the code, not instrumented telemetry. To make this a true scorecard,
-> add lightweight analytics (a `journey_started/completed` event with a step
-> counter) and a Playwright "taps to complete" harness per journey, then replace
-> these estimates with medians. Treat cells as a baseline to beat.
+> ⚠️ **Measurement status:** the *journey* table below is still **design-time
+> estimates** from reading the code. To make this a true scorecard, add
+> lightweight analytics (a `journey_started/completed` event with a step counter)
+> and a Playwright "taps to complete" harness per journey, then replace these
+> estimates with medians. Treat cells as a baseline to beat.
+
+## ✅ Now measured: the live Experience Scorecard (T8)
+
+The premium-consistency sweep is now **data-backed and tracked over time**, not
+just asserted here. Every surface (module or journey) gets a dated audit across
+six premium dimensions, rolled up into a live grade with a trend.
+
+- **Where:** `/dashboard/experience` (family-scoped, realtime).
+- **Dimensions (0–100 each):** Empty state · Error recovery · Transitions ·
+  Performance · Accessibility · Consistency. The composite is a weighted average
+  (error-recovery and a11y weigh slightly more) → a letter grade (A ≥90 … F <60).
+- **Rubric + rollup:** pure `lib/experience/scorecard.ts` (`scoreAudit`,
+  `gradeFor`, `rollUpScorecard`; **13 tests**). Missing dimensions are excluded,
+  not zeroed, so partial audits stay fair; un-audited dimensions never rank as
+  "weakest".
+- **Storage:** `experience_audits` (migration `0144`, family-scoped RLS,
+  `unique(family_id, surface_key, audited_on)` → one audit per surface per day).
+  Dated rows give real **trend lines** (score movement since the previous audit).
+- **What it surfaces:** overall grade + Δ since last audit, per-dimension health
+  bars, a "needs work" callout (surfaces < 70), and a per-surface table ordered
+  **worst-first** so the sweep runs top-down. Accessibility currently trails —
+  the seed reflects that, and it's the weakest dimension to attack first.
+- **Seed baseline:** `seed_experience_audits_one_family.sql` (540 rows: 30
+  surfaces × 18 dates over ~68 days) — an upward trend with 4 surfaces still
+  below the bar (Connections, Messages, Wallet, Homework).
+
+> **Next telemetry step (unchanged):** replace seeded audit scores with values
+> derived from real signals — error rates, skeleton coverage, Lighthouse/perf
+> budgets, and the T7 `ai_feedback` helpful-ratio — written as a nightly audit row
+> per surface. The table + rollup are ready; only the collectors remain.
 
 | Journey | Taps | Typing | Switches | Time | A11y | Perceived perf | Recovery | Notes / top friction |
 |---|---|---|---|---|---|---|---|---|

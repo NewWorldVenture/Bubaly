@@ -122,6 +122,28 @@
 > carries the right `next` (plain + invite), callback error path. tsc/eslint/vitest/build green. (Shim
 > gained `/auth/v1/otp`+`/verify`; scripts in `sbstack/`.)
 >
+> ## 📐 2026-07-07 (T8 — premium-consistency sweep, made measurable, shipped)
+>
+> The premium-consistency sweep is now **data-backed**: a Supabase-backed Experience Scorecard grades
+> every surface across six premium dimensions and tracks the trend, instead of the design-time estimates
+> in `docs/EXPERIENCE_SCORECARD.md`. All on `main`; tsc/eslint/**2012 tests**/`next build` green;
+> migration + seed PG16-validated & idempotent.
+>
+> - **Rubric (pure):** `lib/experience/scorecard.ts` — six dimensions (empty_state, error_recovery,
+>   transitions, performance, accessibility, consistency), weighted composite (error-recovery + a11y
+>   weigh more), `gradeFor` (A ≥90 … F <60), and `rollUpScorecard` → latest-per-surface score, trend Δ
+>   vs the previous audit, per-dimension averages, weakest **measured** dimensions, worst-first ordering,
+>   `needsWork` (<70). Missing dims are excluded (not zeroed) so partial audits are fair. **13 tests**.
+> - **Storage:** `0144_experience_audits.sql` — dated audit per surface, `unique(family_id, surface_key,
+>   audited_on)` (one/day → real trend lines), family-scoped RLS, CHECK-bounded 0..100 + grade. Types added.
+> - **UI:** `/dashboard/experience` + `components/modules/experience-scorecard-module.tsx` (realtime):
+>   overall grade + Δ, per-dimension bars, "needs work" callout, worst-first per-surface table.
+>   **Not added to the global nav** (standing rule) — reachable by URL; a nav entry is a one-line add on request.
+> - **Doc:** `docs/EXPERIENCE_SCORECARD.md` gained a "Now measured" section (closes its own stated gap);
+>   next step is wiring real collectors (error rates, skeleton coverage, Lighthouse, T7 helpful-ratio).
+> - **Seed:** `seed_experience_audits_one_family.sql` — 540 rows (30 surfaces × 18 dates), upward trend,
+>   accessibility weakest, 4 surfaces below the bar (Connections/Messages/Wallet/Homework). Idempotent via notes `[seed:t8]`.
+>
 > ## 💡 2026-07-07 (T7 — "Why this?" everywhere, shipped)
 >
 > Every AI recommendation/automation now carries a consistent inline **"Why this?"** disclosure —

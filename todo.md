@@ -243,8 +243,17 @@ before asking the user to build anything.**
   Feedback persists via `recordAiFeedbackAction` → **`ai_feedback`** (`0143`, append-only, family-scoped
   RLS, PG16-validated) — the learning loop a future model-refresh can weigh. Seed
   `seed_ai_feedback_one_family.sql` (600 rows across all 6 surfaces × 5 signals). tsc/eslint/**1999 tests**/build. (Area 7.)
-- [ ] **T8. Premium-consistency sweep.** Every module: helpful empty state, clear error recovery,
-  predictable transitions, perf budget. Track in `docs/EXPERIENCE_SCORECARD.md`; make it measurable.
+- [x] **T8. Premium-consistency sweep.** ✅ Made **measurable**: a Supabase-backed Experience Scorecard
+  grades every surface (module/journey) on the six premium dimensions (empty state, error recovery,
+  transitions, performance, accessibility, consistency), tracked over time. Pure
+  `lib/experience/scorecard.ts` (`scoreAudit`/`gradeFor`/`rollUpScorecard`, **13 tests**) — weighted
+  composite → letter grade, worst-first ordering, per-dimension averages, trend vs previous audit,
+  "needs work" (<70) flags. Table `experience_audits` (`0144`, family-scoped RLS, one audit/surface/day,
+  PG16-validated) + types. Live `/dashboard/experience` module (realtime). `docs/EXPERIENCE_SCORECARD.md`
+  extended to document the live system (closes the doc's own "make it measurable" gap). Seed
+  `seed_experience_audits_one_family.sql` (540 rows / 30 surfaces × 18 dates) with an upward trend +
+  4 surfaces below the bar. tsc/eslint/**2012 tests**/build. *(Route not added to global nav per the
+  standing rule — reachable at `/dashboard/experience`; add a nav entry on request.)* (Area 8.)
   (Area 8.)
 
 **P3 — Felt switching cost (compounding context).**
@@ -546,6 +555,8 @@ missing-location events, colliding events for conflicts). Run it, then open
   `family_polls`/options/votes real volume). Run it, open `/dashboard/voting`.
 - ☑ **NEW `seed_ai_feedback_one_family.sql`** (600 rows) exercises T7 "Why this?" feedback log —
   all 6 surfaces (insight/autopilot/agent/voting/decision/briefing) × 5 signals, over the last ~60 days.
+- ☑ **NEW `seed_experience_audits_one_family.sql`** (540 rows) exercises T8 Experience Scorecard —
+  30 surfaces × 18 dates over ~68 days, upward trend, accessibility weakest, 4 surfaces below the bar.
 
 ### A. Operating Layer slices still to build (agent-doable, build top-down)
 - [x] **Slice 1 — Family Operating Index** (engine + page + 0125). PR #227. ✅
