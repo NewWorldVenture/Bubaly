@@ -69,7 +69,11 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 >   Network aggregation hardened (write-side granular-consent `filterMetricsByScopes`, atomic
 >   upsert-then-prune republish, **per-family try/catch isolation** in the nightly cron); prod audits
 >   all clean (11/11 crons `CRON_SECRET`-guarded; `vercel.json` ↔ cron routes match 1:1); Knowledge
->   Graph path-finder `<Select>` a11y labels. tsc/eslint/**1915 tests**/build green.
+>   Graph path-finder `<Select>` a11y labels. **Cron N+1 scalability fixes:** `model-refresh`
+>   skip-decision batched to **1 query** (was 2/family) via the dirty table's `refreshed_at`;
+>   `network-aggregate` contribute phase batched to **4 queries** (was 4/family) via `.in(family_ids)`
+>   — both now scale past thousands of families without hitting the 60s cron limit. Privacy-invariant
+>   regression test added (noised count never leaks true cohort size). tsc/eslint/**1916 tests**/build green.
 > - [x] **Social share cards (OpenGraph / Twitter)** ✅ (#245) — `app/opengraph-image.tsx` +
 >   `app/twitter-image.tsx` render a brand-gradient 1200×630 card (Bubaly wordmark + tagline)
 >   via `next/og`, shared from `lib/og/social-image.tsx`. Fully self-contained (wordmark
