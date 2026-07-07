@@ -21,16 +21,25 @@ export async function GET(req: NextRequest) {
     const { data: families, error } = await supabase.from('families').select('id').limit(5000);
     if (error) throw error;
 
+    // Batch the skip-decision reads into ONE query instead of 2-per-family, so the
+    // cron scales to thousands of families without blowing maxDuration. The dirty
+    // table's own `refreshed_at` (written below on success) is the authoritative
+    // last-refresh time. Best-effort: if the table isn't migrated yet, the map is
+    // empty and every family falls through to a refresh.
+    const dirtyByFamily = new Map<string, { dirty: boolean; refreshedAt: string | null }>();
+    const { data: dirtyRows } = await supabase.from('family_model_dirty')
+      .select('family_id, dirty, refreshed_at').limit(10000);
+    for (const r of dirtyRows ?? []) {
+      dirtyByFamily.set(r.family_id, { dirty: r.dirty ?? false, refreshedAt: r.refreshed_at ?? null });
+    }
+
     const outcomes: RefreshOutcome[] = [];
     for (const fam of families ?? []) {
       try {
         // Event-driven: refresh if a source change marked the family dirty, or if
-        // the last refresh is stale past the TTL. Otherwise skip.
-        const { data: dirtyRow } = await supabase.from('family_model_dirty')
-          .select('dirty').eq('family_id', fam.id).maybeSingle();
-        const { data: latest } = await supabase.from('graph_entities')
-          .select('updated_at').eq('family_id', fam.id).order('updated_at', { ascending: false }).limit(1).maybeSingle();
-        if (!needsRefresh({ dirty: dirtyRow?.dirty ?? false, lastRefreshedAt: latest?.updated_at ?? null, now })) {
+        // the last completed refresh is stale past the TTL. Otherwise skip.
+        const state = dirtyByFamily.get(fam.id);
+        if (!needsRefresh({ dirty: state?.dirty ?? false, lastRefreshedAt: state?.refreshedAt ?? null, now })) {
           outcomes.push({ familyId: fam.id, ok: true, skipped: true });
           continue;
         }
