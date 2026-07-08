@@ -584,6 +584,111 @@ manual payout review (if enabled), and subscription billing for premium storefro
   creators, rentals, borrowing deposits, platform commissions, automatic payouts, secure checkout,
   complete audit logging, production-ready and scalable to millions of users.
 
+#### 1b. ★ WORLD-CLASS AI-FIRST MARKETPLACE — full product spec (owner spec, 2026-07-08)  ☐ NOT STARTED
+> Build a world-class **AI-first marketplace** inside Bubaly that beats eBay, Craigslist, Facebook
+> Marketplace, OfferUp, Poshmark, Etsy, Pinterest, Airbnb rentals, and local borrow/lend platforms
+> combined. Feel = Pinterest discovery + eBay commerce + Craigslist simplicity + Airbnb trust + Uber
+> ratings + AI concierge. No MVP, no placeholders, no faked listings/payments/verification/rentals/
+> reviews/AI results. Payments run through the Stripe engine in §1a. Ship in verified slices behind tests.
+> **Entry:** `/dashboard/marketplace` (primary) **and** a direct logged-in `/marketplace`.
+
+**Product vision — the easiest marketplace for families & communities to:** buy · sell · borrow · lend ·
+rent · request-to-borrow · request-to-rent · swap · donate · discover local creators · build
+Pinterest-style product pages · build personal storefronts · verify both sides · rate both sides
+(Uber-style) · message safely · and use AI to create listings, find items, match requests, and price.
+
+**Core flow (< 60s to publish):** open Marketplace → tap `+` → choose (sell / rent out / lend / give away /
+request-to-borrow / request-to-rent / create creator storefront / create collection) → upload unlimited
+photos+videos → AI drafts title/description/category/pricing/rental terms/availability/tags/condition/SEO →
+user confirms → publish → receive offers/requests → message securely → complete → two-sided rating.
+**Never publish without user confirmation.**
+
+- [ ] **Routes** — public logged-in: `/marketplace`, `/browse`, `/search`, `/item/[id]`, `/post` (+ `/sell`
+  `/rent` `/lend` `/request` `/donate`), `/requests`, `/collections` (+ `/[id]`), `/creators` (+ `/[id]`),
+  `/my-store`, `/my-listings`, `/my-rentals`, `/my-borrowing`, `/my-requests`, `/messages`, `/offers`,
+  `/orders`, `/verification`, `/reviews`, `/saved`, `/settings`. Mirror inside `/dashboard/marketplace/*`
+  (`my-store`, `my-listings`, `messages`, `orders`, `verification`). Admin: `/admin/marketplace`.
+- [ ] **Supabase data model** (create/update; FKs, indexes, unique constraints, RLS with user/family
+  isolation + public-listing visibility + private-message security, audit + updated_at triggers; common
+  cols where apt: `id, user_id, family_id, seller_id, buyer_id, owner_id, renter_id, borrower_id,
+  listing_id, request_id, status, created_at, updated_at, created_by, updated_by, deleted_at, metadata`):
+  `marketplace_profiles`, `_verifications`, `_categories`, `_subcategories`, `_listings`, `_listing_media`,
+  `_listing_videos`, `_listing_attributes`, `_listing_availability`, `_listing_pricing`,
+  `_listing_locations`, `_requests`, `_request_matches`, `_offers`, `_orders`, `_rentals`,
+  `_borrowing_agreements`, `_lending_agreements`, `_returns`, `_deposits`, `_payments`, `_refunds`,
+  `_disputes`, `_messages`, `_conversations`, `_reviews`, `_ratings`, `_trust_scores`, `_collections`,
+  `_collection_items`, `_creator_stores`, `_creator_products`, `_saved_items`, `_saved_searches`,
+  `_search_events`, `_ai_generations`, `_ai_matches`, `_reports`, `_moderation_queue`, `_activity_logs`,
+  `_audit_logs`, `_notifications`, `_usage_events`, `_settings`. (NOTE: reconcile with the SHIPPED
+  `marketplace_listings` + `marketplace_offers` from 0120 — extend, don't duplicate.)
+- [ ] **Listing modes** — every listing supports one+ of: buy now · make offer · optional auction · rent ·
+  borrow · lend · donate · swap · request-wanted. Auto-match wanted↔available (e.g. "borrow red dress
+  size 8 Saturday" → nearby rentals/lends/sellers).
+- [ ] **AI listing assistant** — from photos/videos or one sentence, draft title, description, category,
+  subcategory, condition, size, color, brand, price, rental price, deposit, borrow/lend terms, tags,
+  availability, safety notes, SEO, and a Pinterest-style card preview. Editable; confirm before publish.
+- [ ] **Unlimited media** — drag/drop + mobile camera, reorder, cover selection, video previews,
+  compression, alt text, AI captions, gallery + Pinterest masonry. Supabase Storage; metadata persisted;
+  no broken uploads.
+- [ ] **Creator storefronts** (`/marketplace/creators/[id]`) — banner, avatar, bio, verification badge,
+  store categories, product collections, featured items, videos, story sections, follow, reviews, ratings,
+  policies, shipping/pickup/rental terms, message button.
+- [ ] **Pinterest-style collections** — mood/product/closet/event/rental boards, gift guides, seasonal,
+  family favorites (e.g. "Wedding Guest Dresses", "Baby Gear to Borrow"). Beautiful, shareable,
+  searchable, shoppable.
+- [ ] **Request-to-borrow / request-to-rent** — item type, size, color, brand pref, condition pref, needed
+  date, return date, location radius, budget, borrow/rent/buy pref, notes, example photos. AI matches
+  requests → listings (rentals, lends, sellers, similar, nearby).
+- [ ] **Local borrow/rent engine** — availability calendar, rental/borrow duration, pickup/return times,
+  deposit, late-fee rules, condition checklist, handoff + return confirmation, damage reporting, dispute
+  flow. Statuses: requested · approved · declined · active · picked_up · returned · late · damaged ·
+  completed · disputed.
+- [ ] **Buy/sell engine** — buy now, make/counter/accept/decline offer, checkout, pickup/shipping, order
+  status, buyer-protection workflow, seller dashboard. Statuses: available · pending · sold · canceled ·
+  refunded · disputed.
+- [ ] **Trust, verification & safety** — levels: email · phone · payment-method · identity (where provider
+  exists) · address/location · trusted-family/community · repeat-seller · top-renter · fast-responder.
+  Trust score from completed txns, reviews, ratings, response time, disputes, cancellations, verification.
+  Show trust indicators before transacting.
+- [ ] **Uber-style two-sided ratings** — buyer↔seller, renter↔owner, borrower↔lender across
+  communication, reliability, item accuracy, timeliness, condition-returned, overall. Show average, count,
+  badge summary, recent reviews.
+- [ ] **AI buyer assistant** — natural-language search ("blue dress size 6 to rent near me", "safest
+  seller for camping gear", "is this a fair price?") → ranked results with reasoning.
+- [ ] **AI seller assistant** — improve listing quality, suggest price/photos, detect missing details,
+  rent-vs-sale, demand-based pricing, best category, promo copy.
+- [ ] **Discovery** — personalized/nearby/trending-local/new-today/under-$25/free/borrow-nearby/
+  rent-nearby feeds, creator spotlight, saved searches, smart alerts, map view, Pinterest masonry. Search:
+  keyword · natural language · category · size · color · brand · distance · price · availability · mode ·
+  verified-only.
+- [ ] **Messaging** — listing-scoped conversations, offer/rental/borrow request cards, pickup scheduling,
+  media sharing, safety reminders, report/block, AI suggested replies. Private + Supabase-backed.
+- [ ] **Payments** — via the §1a Stripe engine: purchases, rental payments, deposits, refunds, platform
+  fees, disputes, payouts. Never mark paid unless the provider confirms; if unconfigured, show setup states
+  and support non-payment inquiry flows (do NOT fake payments).
+- [ ] **Admin & moderation** (`/admin/marketplace`) — listing moderation, verification review, reported
+  listings/users, disputes, payment issues, trust-score review, category management, featured listings,
+  creator review, audit logs.
+- [ ] **Bubaly integrations** — vacation planner suggests renting beach gear; sports hub suggests borrowing
+  equipment; chores/rewards let kids earn toward items; calendar holds pickup/return dates; shopping lists
+  include marketplace items; the family AI can search the marketplace; notifications remind on returns.
+- [ ] **Mobile-first UX** — photo-first listing, voice search, one-tap post, swipeable media, large tap
+  targets, simple checkout, safe messaging, fast browse, location-aware. No desktop-only flows.
+- [ ] **Theme** — full dark/light/system; no unreadable cards, no broken buttons.
+- [ ] **Testing** — listing creation, AI generation, unlimited media upload, creator store, collections,
+  request-to-borrow/rent, matching engine, buy/rent/borrow/offer flows, messaging, verification gates,
+  two-sided reviews, search/filtering, saved searches, admin moderation, RLS security, mobile viewports,
+  themes. Gates: typecheck · lint · build · unit · integration · E2E · a11y · mobile viewport. Fix every
+  failure.
+- **Final status target (owner):** PASS — a production-ready, AI-first, verified, two-sided marketplace for
+  buying, selling, renting, borrowing, lending, donating, swapping, creator storefronts, Pinterest-style
+  product pages, unlimited media, trusted ratings, and frictionless local commerce. If not PASS, keep
+  building until PASS.
+- **Sequencing note:** this is a multi-slice epic. Build order: data model (extend 0120) → listing modes +
+  AI listing assistant → media → discovery/search → requests + matching → borrow/rent + buy/sell engines →
+  trust/verification + two-sided ratings → messaging → payments (§1a) → creator stores + collections →
+  admin/moderation → Bubaly integrations. One verified, tested, pushed slice at a time.
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:
