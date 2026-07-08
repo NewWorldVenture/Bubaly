@@ -5,6 +5,9 @@ import { BriefingModule } from '@/components/modules/briefing-module';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
 import { summarizeChange, type SnapshotView } from '@/lib/operating-index/summary';
 import { ActivationBeacon } from '@/components/analytics/activation-beacon';
+import { loadFamilyContext } from '@/lib/reasoning/context';
+import { reasoningInsights } from '@/lib/reasoning/insights';
+import { RelationshipInsights } from '@/components/reasoning/relationship-insights';
 
 export const metadata: Metadata = { title: 'Daily Briefing | Bubaly' };
 
@@ -29,10 +32,19 @@ export default async function BriefingPage() {
     ? summarizeChange(toView(foiSnaps[0]), foiSnaps[1] ? toView(foiSnaps[1]) : null)
     : null;
 
+  // R2: the morning briefing now reasons over Knowledge Graph relationships
+  // (hub / ripple / coverage), via the shared loader. Best-effort — a missing
+  // graph simply renders nothing.
+  const reasoning = await loadFamilyContext(supabase, ctx.active.familyId).catch(() => null);
+  const insights = reasoning ? reasoningInsights(reasoning) : [];
+
   return (
     <>
       <ActivationBeacon milestone="first_brief_viewed" familyId={ctx.active.familyId} userId={ctx.user.id} signupAtIso={ctx.active.family.created_at} />
-      <BriefingModule recap={change ? <ChangeRecap change={change} /> : null} />
+      <BriefingModule
+        recap={change ? <ChangeRecap change={change} /> : null}
+        relationships={insights.length ? <RelationshipInsights insights={insights} /> : null}
+      />
     </>
   );
 }
