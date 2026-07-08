@@ -155,6 +155,12 @@ export async function loadFamilyGraph(supabase: DB, familyId: string): Promise<G
       .select('id, source_id, target_id, relation, weight, attributes')
       .eq('family_id', familyId).limit(8000),
   ]);
+  // R3: keep the graph current at the point of use. Fire-and-forget + dynamic
+  // import so context.ts's static graph stays free of `server-only`/`next` deps
+  // (the pure core + its tests still import cleanly). No-op outside a request.
+  void import('@/lib/reasoning/auto-refresh')
+    .then((m) => m.scheduleGraphAutoRefresh(supabase, familyId))
+    .catch(() => {});
   return {
     entities: (ents.data ?? []).map(mapEntityRow),
     edges: (edges.data ?? []).map(mapEdgeRow),

@@ -1,7 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { shouldRefresh, needsRefresh, summarizeSweep, DEFAULT_TTL_MINUTES, type RefreshOutcome } from '@/lib/planning/refresh';
+import { shouldRefresh, needsRefresh, shouldAutoRefreshGraph, summarizeSweep, DEFAULT_TTL_MINUTES, type RefreshOutcome } from '@/lib/planning/refresh';
 
 const NOW = new Date('2026-07-06T12:00:00Z');
+
+describe('shouldAutoRefreshGraph (on-read throttle)', () => {
+  it('never refreshes a clean family, however stale', () => {
+    expect(shouldAutoRefreshGraph({ dirty: false, refreshedAt: null, now: NOW })).toBe(false);
+  });
+  it('refreshes a dirty family that was never (or long ago) refreshed', () => {
+    expect(shouldAutoRefreshGraph({ dirty: true, refreshedAt: null, now: NOW })).toBe(true);
+    const old = new Date(NOW.getTime() - 30 * 60_000); // 30 min ago
+    expect(shouldAutoRefreshGraph({ dirty: true, refreshedAt: old, now: NOW })).toBe(true);
+  });
+  it('throttles a dirty family refreshed within the cooldown', () => {
+    const recent = new Date(NOW.getTime() - 3 * 60_000); // 3 min ago < 10 min cooldown
+    expect(shouldAutoRefreshGraph({ dirty: true, refreshedAt: recent, now: NOW })).toBe(false);
+  });
+  it('honors a custom cooldown', () => {
+    const t = new Date(NOW.getTime() - 3 * 60_000);
+    expect(shouldAutoRefreshGraph({ dirty: true, refreshedAt: t, now: NOW, cooldownMinutes: 1 })).toBe(true);
+  });
+});
 
 describe('shouldRefresh', () => {
   it('refreshes when never refreshed before', () => {
