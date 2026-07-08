@@ -8,7 +8,8 @@
 // menu. Deterministic patterns => testable; the command bar surfaces the result.
 
 export type FamilyIntent =
-  | 'make_decision' | 'check_readiness' | 'plan_trip' | 'prep_for' | 'plan_meals';
+  | 'make_decision' | 'check_readiness' | 'plan_trip' | 'prep_for' | 'plan_meals'
+  | 'check_availability' | 'plan_event';
 
 export type IntentMatch = {
   intent: FamilyIntent;
@@ -23,6 +24,17 @@ type Rule = { intent: FamilyIntent; href: string; cta: string; test: RegExp };
 // Order matters: the first matching rule wins. Patterns are intentionally narrow
 // so ordinary navigation/capture text doesn't trip them.
 const RULES: Rule[] = [
+  {
+    // "who's free Saturday", "when are we all free", "find a time" → the calendar.
+    // First so a broad decision pattern (…or…?) can't swallow an availability ask.
+    intent: 'check_availability', href: '/dashboard/calendar', cta: "See who's free → Calendar",
+    test: /\b(who'?s (free|available|around)|who is (free|available)|are we (all )?(free|available)|any(one|body) (free|available)|when are we (all )?free|find (a|some) time)\b/i,
+  },
+  {
+    // "plan Emma's party", "throw a birthday party", "plan a sleepover" → Prep Plans.
+    intent: 'plan_event', href: '/dashboard/prep-plans', cta: 'Plan it → Prep Plans',
+    test: /\b(plan (a |an |the |\w+'?s )?(party|birthday|celebration|sleepover|playdate|get-?together|graduation|shower)|throw (a |an )?(party|celebration|bash)|(birthday|party|event) planning)\b/i,
+  },
   {
     intent: 'make_decision', href: '/dashboard/decisions', cta: 'Weigh this → Decision Engine',
     test: /\b(should we|should i|which (one|option)|help me (pick|decide|choose)|decide between|choose between|worth it|.+\bvs\.?\b.+|.+\bor\b.+\?)\b/i,

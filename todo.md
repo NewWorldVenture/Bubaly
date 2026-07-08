@@ -120,8 +120,13 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   `components/home/front-door-hero.tsx` renders it above the Focus strip. Transparent (every item
   named + linked) and reversible. Best-effort loads (hidden hero on a drifted DB). Seed
   `seed_front_door.sql` (300 auto-executed + 250 pending = 550 records). tsc/eslint/**2072 tests**/build.
-- [ ] **R6. Intent-based entry** — the ⌘K/command bar + Voice already parse intent; make them the
-  primary way in ("plan Emma's party", "who's free Saturday") routing to the reasoning engine.
+- [x] **R6. Intent-based entry** ✅ — a prominent NL **AskBar** at the top of Home routes through the
+  same pure `routeCommand` the ⌘K bar uses: a recognized goal jumps straight to its reasoning engine,
+  a page name navigates, anything else hands to the assistant. Extended `detectIntent` with the two
+  missing goals from the brief — **`check_availability`** ("who's free Saturday" → Calendar) and
+  **`plan_event`** ("plan Emma's party" → Prep Plans) — with tests. `components/home/ask-bar.tsx`
+  (+ suggestion chips). Intent entry is now the primary, visible way in on the default landing.
+  Pure/tested; no new data surface. tsc/eslint/**2074 tests**/build.
 
 **P3 — Digital Twin / Reasoning Engine depth (Phase 3; 12–18mo differentiation).**
 - [ ] **R7. Unify the reasoning engine** — fold FOI-orchestrator + agents + decisions into

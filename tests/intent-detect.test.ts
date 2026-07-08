@@ -30,6 +30,20 @@ describe('detectIntent', () => {
     expect(detectIntent('plan the meals for the week')?.intent).toBe('plan_meals');
   });
 
+  it('routes availability questions to the Calendar', () => {
+    expect(detectIntent("who's free Saturday")?.intent).toBe('check_availability');
+    expect(detectIntent('when are we all free')?.href).toBe('/dashboard/calendar');
+    expect(detectIntent('anyone free tonight?')?.intent).toBe('check_availability');
+    expect(detectIntent('find a time this week')?.intent).toBe('check_availability');
+  });
+
+  it('routes party/event planning to Prep Plans', () => {
+    expect(detectIntent("plan Emma's party")?.intent).toBe('plan_event');
+    expect(detectIntent('plan a birthday party')?.href).toBe('/dashboard/prep-plans');
+    expect(detectIntent('throw a party')?.intent).toBe('plan_event');
+    expect(detectIntent('plan a sleepover')?.intent).toBe('plan_event');
+  });
+
   it('returns null for plain navigation / capture / noise', () => {
     for (const q of ['billing', 'remind me to call the dentist', 'calendar', 'x', '']) {
       expect(detectIntent(q)).toBeNull();
