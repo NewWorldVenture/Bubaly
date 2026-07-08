@@ -651,9 +651,15 @@ user confirms → publish → receive offers/requests → message securely → c
 - [ ] **Pinterest-style collections** — mood/product/closet/event/rental boards, gift guides, seasonal,
   family favorites (e.g. "Wedding Guest Dresses", "Baby Gear to Borrow"). Beautiful, shareable,
   searchable, shoppable.
-- [ ] **Request-to-borrow / request-to-rent** — item type, size, color, brand pref, condition pref, needed
+- [~] **Request-to-borrow / request-to-rent** — item type, size, color, brand pref, condition pref, needed
   date, return date, location radius, budget, borrow/rent/buy pref, notes, example photos. AI matches
   requests → listings (rentals, lends, sellers, similar, nearby).
+  - [x] Matching engine `lib/marketplace/matching.ts` — pure `matchRequest()` scores each listing 0–100
+    with reasons: hard filters (eligibility/visibility, supported mode, budget, radius via haversine) +
+    soft weighted dimensions (keywords, category, brand, size, color, condition, price fit) counted only
+    when both sides specify. Backs `marketplace_request_matches` + `marketplace_ai_matches`. Tests
+    `tests/marketplace-matching.test.ts` (11). Verified tsc/eslint/vitest(1952). Next: server loader +
+    persist top matches; date-availability scoring once availability rows are wired.
 - [ ] **Local borrow/rent engine** — availability calendar, rental/borrow duration, pickup/return times,
   deposit, late-fee rules, condition checklist, handoff + return confirmation, damage reporting, dispute
   flow. Statuses: requested · approved · declined · active · picked_up · returned · late · damaged ·
