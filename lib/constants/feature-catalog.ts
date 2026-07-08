@@ -96,7 +96,6 @@ export const FEATURE_CATALOG: FeatureDef[] = [
   F('kitchen', 'Kitchen', 'Family & Home', 'basic', '/display'),
   F('communications-hub', 'Communications Hub', 'Family & Home', 'basic', '/dashboard/inbox'),
   F('sports', 'Sports', 'Family & Home', 'plus', '/dashboard/sports'),
-  F('ai-companion', 'AI Companion', 'Family & Home', 'plus', '/dashboard/family-ai-assistant'),
   F('auto', 'Auto', 'Family & Home', 'plus', '/dashboard/auto'),
   F('ai-advisor', 'AI Advisor', 'Family & Home', 'plus', '/dashboard/family-operations'),
   F('digital-health', 'Digital Health', 'Family & Home', 'plus', '/dashboard/family-digital-twin'),

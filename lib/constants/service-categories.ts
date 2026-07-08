@@ -124,8 +124,8 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
       '/dashboard/autopilot', '/dashboard/briefing', '/dashboard/weekly-briefing',
       '/dashboard/command-center', '/dashboard/concierge', '/dashboard/trip-intel',
       '/dashboard/conflicts', '/dashboard/family-operations', '/dashboard/family-coo',
-      '/dashboard/family-automation', '/dashboard/family-knowledge-graph',
-      '/dashboard/autonomous-family-management', '/dashboard/family-ai-assistant',
+      '/dashboard/family-automation',
+      '/dashboard/autonomous-family-management',
     ],
   },
   {

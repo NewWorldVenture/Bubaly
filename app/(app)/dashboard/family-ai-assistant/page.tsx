@@ -1,10 +1,8 @@
-import type { Metadata } from 'next';
-import { AssistantModule } from '@/components/modules/assistant-module';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Family AI Assistant' };
-
-// The assistant persists every conversation to ai_conversations / ai_messages
-// via /api/ai/chat. This route is the canonical Bubaly entry point for it.
+// R4 (de-dup): the "Family AI Assistant" was a duplicate of the AI Assistant —
+// both rendered the same AssistantModule. Consolidated into the one assistant;
+// this route redirects so existing links keep working.
 export default function FamilyAiAssistantPage() {
-  return <AssistantModule />;
+  redirect('/dashboard/assistant');
 }
