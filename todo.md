@@ -74,9 +74,14 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   the Agents/Chief-of-Staff page (replacing its inline graph load) and a new reasoning-summary strip on
   `/dashboard/graph`. Seed `seed_reasoning_context.sql` (500 entities + members, ~520 edges, hub +
   chain + orphans, ref-linked mirrors). Next: **R2** re-points the other engines at this loader.
-- [ ] **R2. Re-point existing engines at the graph** — FOI, Concierge, Briefing, Playbook, Calm,
+- [◐] **R2. Re-point existing engines at the graph** — FOI, Concierge, Briefing, Playbook, Calm,
   Decisions, Prep-Plans, Outcomes read graph relationships (Emma→Soccer→Field→Weather→Dinner) instead
   of isolated `.from()` calls. No new tables; rewire reads. Ship one engine at a time behind tests.
+  **Started:** pure `lib/reasoning/insights.ts::reasoningInsights(ctx)` (hub / ripple = graph × snapshot /
+  coverage; **4 tests**) built on R1's `FamilyContext`, and **Calm re-pointed** — the one prioritized
+  inbox now folds a `graph` source (relationship insights) alongside agents/autopilot/FOI/approvals/
+  reminders. Seed `seed_reasoning_insights.sql` (named hub + 500 entities + ~540 edges + orphans).
+  **Next engines:** Briefing, Decisions, Prep-Plans, Playbook, Concierge, Outcomes, FOI.
 - [ ] **R3. Auto-maintain the graph** — the `family_model_dirty` trigger (`0134`) already flags
   changes; make the projector run on-dirty so the graph is always current (not a manual "Rebuild").
 

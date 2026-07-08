@@ -3,6 +3,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { CalmModule } from '@/components/modules/calm-module';
 import { buildCalmInbox, type CalmItem, type ItemSeverity } from '@/lib/calm/inbox';
+import { loadFamilyContext } from '@/lib/reasoning/context';
+import { reasoningInsights } from '@/lib/reasoning/insights';
 
 export const metadata: Metadata = { title: 'Calm | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -53,6 +55,16 @@ export default async function CalmPage() {
   }
   for (const r of reminderRows as { id: string; title: string; remind_at: string }[]) {
     items.push({ id: `reminder:${r.id}`, source: 'reminder', title: r.title, detail: 'Coming up soon.', href: '/dashboard/reminders', severity: 'attention', at: r.remind_at });
+  }
+
+  // R2: relationship-level reasoning over the Knowledge Graph (hub risk, ripple,
+  // coverage) folded into the same calm inbox — best-effort, so a missing graph
+  // never breaks the page.
+  const reasoning = await loadFamilyContext(supabase, familyId).catch(() => null);
+  if (reasoning) {
+    for (const ins of reasoningInsights(reasoning)) {
+      items.push({ id: `graph:${ins.id}`, source: 'graph', title: ins.title, detail: ins.detail, href: ins.href, severity: ins.severity });
+    }
   }
 
   const inbox = buildCalmInbox(items);

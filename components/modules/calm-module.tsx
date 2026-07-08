@@ -7,17 +7,17 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  Leaf, AlertCircle, Sun, ArrowRight, CheckCircle2, Bot, Gauge, Inbox, Bell, ChevronDown,
+  Leaf, AlertCircle, Sun, ArrowRight, CheckCircle2, Bot, Gauge, Inbox, Bell, ChevronDown, Network,
 } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { CalmInbox, CalmItem, CalmSource } from '@/lib/calm/inbox';
 
 const SOURCE_ICON: Record<CalmSource, typeof Bot> = {
-  agent: Bot, autopilot: Sun, operating_index: Gauge, approval: Inbox, reminder: Bell,
+  agent: Bot, autopilot: Sun, operating_index: Gauge, approval: Inbox, reminder: Bell, graph: Network,
 };
 const SOURCE_LABEL: Record<CalmSource, string> = {
-  agent: 'Assistant', autopilot: 'Autopilot', operating_index: 'Operating Index', approval: 'Approval', reminder: 'Reminder',
+  agent: 'Assistant', autopilot: 'Autopilot', operating_index: 'Operating Index', approval: 'Approval', reminder: 'Reminder', graph: 'Relationships',
 };
 
 function Row({ item, urgent }: { item: CalmItem; urgent?: boolean }) {
