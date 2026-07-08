@@ -203,11 +203,13 @@ function GenerateCTA({ onGenerate, loading, type }: { onGenerate: () => void; lo
 
 // ─── Morning Content ──────────────────────────────────────────────────────────
 
-function MorningContent({ data }: { data: BriefingData }) {
+function MorningContent({ data, relationships }: { data: BriefingData; relationships?: React.ReactNode }) {
   const ops = data.operationsScore;
   const stress = ops?.stressLevel ? STRESS_CONFIG[ops.stressLevel] : STRESS_CONFIG.low;
   return (
     <div className="space-y-6">
+      {/* Relationship reasoning (R2 — graph-backed) */}
+      {relationships}
       {/* Ops Score */}
       {ops && (
         <div className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-border p-6">
@@ -610,7 +612,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
-export function BriefingModule({ recap }: { recap?: React.ReactNode } = {}) {
+export function BriefingModule({ recap, relationships }: { recap?: React.ReactNode; relationships?: React.ReactNode } = {}) {
   const { familyId, members } = useApp();
   const [tab, setTab] = useState<TabType>('morning');
   const [briefings, setBriefings] = useState<Partial<Record<TabType, BriefingData>>>({});
@@ -789,7 +791,7 @@ export function BriefingModule({ recap }: { recap?: React.ReactNode } = {}) {
           {/* Cross-domain concierge: "What does my family need to do today?" */}
           {digests[tab] && <div className="mb-6"><NeedsAttention digest={digests[tab]!} /></div>}
 
-          {tab === 'morning' && <MorningContent data={currentBriefing} />}
+          {tab === 'morning' && <MorningContent data={currentBriefing} relationships={relationships} />}
           {tab === 'evening' && <EveningContent data={currentBriefing} recap={recap} />}
           {tab === 'weekly'  && <WeeklyContent  data={currentBriefing} />}
         </div>
