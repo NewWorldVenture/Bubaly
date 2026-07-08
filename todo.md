@@ -132,9 +132,18 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   Pure/tested; no new data surface. tsc/eslint/**2074 tests**/build.
 
 **P3 — Digital Twin / Reasoning Engine depth (Phase 3; 12–18mo differentiation).**
-- [ ] **R7. Unify the reasoning engine** — fold FOI-orchestrator + agents + decisions into
-  `lib/reasoning/*` answering the six questions (what matters most · what's likely forgotten ·
-  highest-impact decision · what's auto-completable · who needs help · what next) over the graph.
+- [x] **R7. Unify the reasoning engine** ✅ SHIPPED (2026-07-08). One core in `lib/reasoning/engine.ts`
+  (`answerFamilyQuestions`, pure + deterministic, 8 tests) answers the six questions every surface
+  consumes — **what matters most · what's likely forgotten · what to decide next · what Bubaly can
+  just handle · who needs help · what's next** — by *composing* the existing engines: the FOI
+  orchestrator, the graph reasoning insights (R2), the hard signals (R10), and ranked next-actions.
+  Server `lib/reasoning/engine-server.ts` (`loadReasoningReport` / `loadAndSnapshotReasoning`)
+  assembles them from live family data best-effort (any failing source → calm) and persists one
+  snapshot per day to **`reasoning_snapshots`** (`0149`, family-scoped RLS). Surface
+  `/dashboard/reasoning` (nav: Family Reasoning) renders the six answers + all-clear state. Seed
+  `seed_reasoning_snapshots.sql` (500 days, calm/attention mix; in `SEED_ALL.sql`). Verified:
+  tsc · **vitest (8 reasoning)** · migration + seed validated on PG16 (500 rows, both idempotent).
+  ⚠️ apply `0149` to prod (see `docs/PENDING_PROD_MIGRATIONS.md`).
 - [x] **R8. Deepen twin simulation** ✅ SHIPPED (2026-07-08). Pure `projectActivity` added to
   `lib/twin/simulate.ts` (7 tests) — the full "if Emma joins travel soccer, what has to move?"
   projection across **schedule · travel · cost · family time · homework · meals · vacation**, each a

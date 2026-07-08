@@ -66,6 +66,7 @@ After applying, hard-refresh the app: Marketplace, `/dashboard/voice`,
 | 0142 | `0142_family_signals.sql` | `family_signals` (hard-signal family intelligence) | Powers **Family Intelligence / R10** (`/dashboard/family-signals`): the harder-to-copy behavioral signals (ignored reminders, stress windows, chore friction, routines that don't stick), transparent + editable (acknowledge/dismiss). Recomputed on demand + by the `model-refresh` cron. Family-scoped; seeded by `seed_family_signals.sql` (500 rows). Safe before apply: detection no-ops until the table exists (Refresh returns an error only inside the page). |
 | 0147 | `0147_twin_simulations.sql` | `twin_simulations` (saved Digital Twin projections) | Powers **R8** — the full activity projection on `/dashboard/family-digital-twin` ("if Emma joins travel soccer…" across schedule/travel/cost/family-time/homework/meals/vacation). Projection is a pure no-write what-if; this stores SAVED scenarios. Family-scoped; seeded by `seed_twin_simulations.sql` (500 rows). Safe before apply: projecting still works; only Save/list is disabled until the table exists. |
 | 0148 | `0148_moment_activations.sql` | `moment_activations` (Moments organizing-layer log) | Powers **R12** — the "Right now" life-moment band atop `/dashboard/moments` (Morning/School/Dinner/Weekend/Vacation/Birthday…), logging which moments surfaced + engage/dismiss. Family-scoped; seeded by `seed_moment_activations.sql` (500 rows). Safe before apply: the band is best-effort (wrapped in try/catch), so it just doesn't render until the table exists. |
+| 0149 | `0149_reasoning_snapshots.sql` | `reasoning_snapshots` (unified Family Reasoning Engine log) | Powers **R7** — the one reasoning engine on `/dashboard/reasoning` (Family Reasoning) that answers the six questions every surface consumes (what matters most · forgotten · decide next · auto-complete · who needs help · what next) by composing the FOI orchestrator, graph insights (R2) and hard signals (R10). Stores one snapshot per day so the answers trend. Family-scoped; seeded by `seed_reasoning_snapshots.sql` (500 rows). Safe before apply: the page reasons live; only the daily snapshot upsert is skipped (best-effort try/catch) until the table exists. |
 
 If prod is further behind than 0118, `supabase db push` will also pick up any
 earlier un-applied migrations (0104, 0111, 0113, 0117, …) — all additive, all
@@ -99,7 +100,7 @@ filename so this still applies deterministically, but a future migration should
 
 ## Test data (optional, after migrations)
 
-**One-paste option:** `supabase/SEED_ALL.sql` runs all 23 paste-ready seeds in
+**One-paste option:** `supabase/SEED_ALL.sql` runs all 38 paste-ready seeds in
 dependency order — one paste fills every user-facing surface with ≥500 rows for
 the resolved family. Idempotent (re-run safe); validated on PG16. Requires the
 migrations above to be applied first.

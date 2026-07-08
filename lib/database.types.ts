@@ -458,6 +458,11 @@ export interface Database {
         { id?: string; family_id: string; moment_key: string; as_of_date?: string; status?: string; reason?: string | null; priority?: number; created_by?: string | null },
         Partial<{ moment_key: string; status: string; reason: string | null; priority: number }>
       >;
+      reasoning_snapshots: T<
+        { id: string; family_id: string; as_of_date: string; all_clear: boolean; attention_count: number; report: Json; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; as_of_date?: string; all_clear?: boolean; attention_count?: number; report?: Json; created_by?: string | null },
+        Partial<{ as_of_date: string; all_clear: boolean; attention_count: number; report: Json }>
+      >;
       journey_events: T<
         { id: string; family_id: string; member_id: string | null; journey: string; phase: string; step: number; session_id: string; duration_ms: number | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; journey: string; phase?: string; step?: number; session_id: string; duration_ms?: number | null },
