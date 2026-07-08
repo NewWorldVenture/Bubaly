@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { reasoningInsights } from '@/lib/reasoning/insights';
+import { reasoningInsights, graphReasoningInsights } from '@/lib/reasoning/insights';
 import { assembleFamilyContext } from '@/lib/reasoning/context';
 import type { Graph } from '@/lib/graph/reason';
 import type { HouseholdSnapshot } from '@/lib/operating-index/score';
@@ -66,5 +66,23 @@ describe('reasoningInsights', () => {
     expect(ripple).toBeTruthy();
     expect(ripple?.severity).toBe('attention');
     expect(ripple?.title).toContain('ripple wide');
+  });
+});
+
+describe('graphReasoningInsights (graph + band, no snapshot)', () => {
+  it('matches reasoningInsights for the same graph + band', () => {
+    const g = hubGraph();
+    const fromGraph = graphReasoningInsights(g, 'thriving');
+    const fromCtx = reasoningInsights(assembleFamilyContext({ familyId: 'f', graph: g, snapshot: snapshot() }));
+    expect(fromGraph).toEqual(fromCtx); // calm snapshot → band 'thriving'
+  });
+
+  it('fires the ripple alert when the band is overloaded, no snapshot needed', () => {
+    const ins = graphReasoningInsights(hubGraph(), 'overloaded');
+    expect(ins.some((i) => i.kind === 'ripple')).toBe(true);
+  });
+
+  it('is empty for an empty graph', () => {
+    expect(graphReasoningInsights({ entities: [], edges: [] }, 'steady')).toEqual([]);
   });
 });
