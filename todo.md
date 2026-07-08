@@ -148,10 +148,14 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   detection (reminders dismissed/overdue repeatedly), stress windows (density × conflicts × overdue by
   time-of-day/day-of-week), chore-conflict detection (reassignments/disputes), routine-adherence
   (which `routine_templates` actually get completed). Transparent + editable. New pure engines + tests.
-- [ ] **R11. The category metric — surface "time saved / mental load."** Instrument admin actions the
-  system handles (autopilot executions, auto-built lists, resolved conflicts, reminders that landed)
-  → a real "hours saved this week / decisions handled for you" number on Home and in the Scorecard.
-  This is the metric the whole thesis rests on; today it's only marketing copy.
+- [x] **R11. The category metric — surface "time saved / mental load."** ✅ Pure
+  `lib/metric/time-saved.ts::computeTimeSaved` (4 tests) turns this week's system-handled actions —
+  autopilot auto-executions (5 min), assistant-handled items (4 min), reminders delivered (2 min) —
+  into a real "≈ N hours saved this week · M things handled for you" figure with a transparent
+  breakdown. Server loader `time-saved-server.ts` (best-effort 7-day counts); `TimeSavedBanner`
+  rendered on **Home** (under the front door) and atop the **Experience Scorecard**. Seed
+  `seed_time_saved.sql` (250 autopilot + 150 agent + 150 reminders = 550 → ~35.8h). The thesis metric
+  is now IN the product, not just marketing copy. tsc/eslint/**2078 tests**/build.
 - [ ] **R12. Moments as an organizing layer** — promote `lib/moments/*` from one page to a home
   organizing principle (Morning/School/Dinner/Vacation/Birthday/Emergency/Weekend as orchestrated
   experiences that pull the right capabilities), reducing reliance on the 70-module list.
