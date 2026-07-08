@@ -5,7 +5,7 @@
 // approvals, reminders) into ONE ranked, de-duplicated, de-noised list. DB-free;
 // the route feeds it real Supabase rows.
 
-export type CalmSource = 'agent' | 'autopilot' | 'operating_index' | 'approval' | 'reminder';
+export type CalmSource = 'agent' | 'autopilot' | 'operating_index' | 'approval' | 'reminder' | 'graph';
 export type ItemSeverity = 'action' | 'attention' | 'info';
 
 export type CalmItem = {
