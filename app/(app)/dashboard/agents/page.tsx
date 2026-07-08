@@ -4,7 +4,8 @@ import { createServer } from '@/lib/supabase/server';
 import { AgentsModule } from '@/components/modules/agents-module';
 import { runAllAgents, type AgentContext } from '@/lib/agents/roster';
 import { graphInsights } from '@/lib/agents/graph-insight';
-import type { EntityKind, Graph } from '@/lib/graph/reason';
+import type { Graph } from '@/lib/graph/reason';
+import { loadFamilyGraph } from '@/lib/reasoning/context';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import type { Tables } from '@/lib/database.types';
 
@@ -54,19 +55,10 @@ export default async function AgentsPage() {
     count(supabase.from('family_photos').select('id', { count: 'exact', head: true }).eq('family_id', familyId).gte('created_at', new Date(now.getTime() - 14 * 86_400_000).toISOString())),
   ]);
 
-  // Knowledge graph → relationship-level reasoning for the Chief of Staff. Reads are
-  // best-effort: a missing table (migration not yet applied) yields no insights, never
-  // an error.
-  const [graphEntities, graphEdges] = await Promise.all([
-    supabase.from('graph_entities').select('id, kind, name').eq('family_id', familyId).limit(2000),
-    supabase.from('graph_edges').select('id, source_id, target_id, relation, weight').eq('family_id', familyId).limit(4000),
-  ]);
-  const graph: Graph = {
-    entities: (graphEntities.data ?? []).map((e) => ({ id: e.id, kind: e.kind as EntityKind, name: e.name })),
-    edges: (graphEdges.data ?? []).map((e) => ({
-      id: e.id, sourceId: e.source_id, targetId: e.target_id, relation: e.relation, weight: Number(e.weight),
-    })),
-  };
+  // Knowledge graph → relationship-level reasoning for the Chief of Staff, via the
+  // one shared graph-backed loader (R1). Best-effort: a missing table (migration not
+  // yet applied) yields an empty graph → no insights, never an error.
+  const graph: Graph = await loadFamilyGraph(supabase, familyId);
 
   const events = weekEvents.data ?? [];
   const eventsToday = events.filter((e) => e.starts_at.slice(0, 10) === todayKey).length;
