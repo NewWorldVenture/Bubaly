@@ -31,6 +31,23 @@ export function needsRefresh(
   return shouldRefresh(opts.lastRefreshedAt ?? null, opts.now ?? new Date(), opts.ttlMinutes ?? DEFAULT_TTL_MINUTES);
 }
 
+/** Default cooldown between on-read auto-refreshes of one family's graph (R3). */
+export const AUTO_REFRESH_COOLDOWN_MINUTES = 10;
+
+/**
+ * On-READ throttle (R3): when a graph surface loads and the family was marked
+ * dirty, re-project — but at most once per cooldown, so opening several graph
+ * surfaces in a burst doesn't stampede the projector. Unlike `needsRefresh`
+ * (cron; dirty always wins), this requires dirty AND a cooled-down last refresh.
+ */
+export function shouldAutoRefreshGraph(
+  opts: { dirty?: boolean; refreshedAt?: string | Date | null; now?: Date; cooldownMinutes?: number },
+): boolean {
+  if (!opts.dirty) return false;
+  const cd = opts.cooldownMinutes ?? AUTO_REFRESH_COOLDOWN_MINUTES;
+  return shouldRefresh(opts.refreshedAt ?? null, opts.now ?? new Date(), cd);
+}
+
 export type RefreshOutcome = { familyId: string; ok: boolean; entities?: number; edges?: number; plans?: number; skipped?: boolean; error?: string };
 
 export type SweepSummary = { families: number; refreshed: number; skipped: number; failures: number };

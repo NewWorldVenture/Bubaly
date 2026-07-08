@@ -93,8 +93,15 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   band (no double `buildSnapshot`); `reasoningInsights(ctx)` and it share one rule set. **DONE: all 9
   surfaces** reason over the graph through one core (Calm · Chief of Staff · Briefing · Concierge ·
   Outcomes · Decisions · Prep-Plans · Playbook · FOI). Next: **R3** (auto-maintain the graph on-dirty).
-- [ ] **R3. Auto-maintain the graph** — the `family_model_dirty` trigger (`0134`) already flags
-  changes; make the projector run on-dirty so the graph is always current (not a manual "Rebuild").
+- [x] **R3. Auto-maintain the graph** ✅ — the `family_model_dirty` trigger (`0134`) flags changes;
+  the graph now re-projects itself with no manual "Rebuild". Two layers: (1) the `model-refresh` cron
+  already re-projects dirty families twice daily (backstop); (2) **new on-read auto-refresh** — every
+  graph read (`loadFamilyGraph`, now used by all 9 R2 surfaces) checks the dirty flag and, if dirty past
+  a cooldown, re-projects the twin in the BACKGROUND via Next `after()` (post-response, no page
+  slowdown) then clears the flag. Pure throttle `shouldAutoRefreshGraph` (dirty AND cooled-down; 4
+  tests); server `lib/reasoning/auto-refresh.ts` (fire-and-forget dynamic import keeps `context.ts`
+  test-pure). Seed `seed_model_dirty.sql` (500 `family_places` → fires the trigger → materialize on next
+  read). tsc/eslint/**2065 tests**/build green.
 
 **P2 — One assistant / AI Operating Layer (Phase 2; 6–12mo, category-defining).**
 - [ ] **R4. Consolidate the 26 surfaces into ONE Chief-of-Staff home** — a single assistant that
