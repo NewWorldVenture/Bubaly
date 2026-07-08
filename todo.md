@@ -505,6 +505,79 @@ missing-location events, colliding events for conflicts). Run it, then open
 - [x] Nav entry (Family & Home group, `Store` icon).
 - [x] Verified: tsc, eslint, vitest (1562), build.
 
+#### 1a. ★ STRIPE COMMERCE PLATFORM — primary payment engine (owner spec, 2026-07-08)  ☐ NOT STARTED
+> Expand the marketplace into a fully integrated, **Stripe-first** commerce platform. Every financial
+> transaction flows securely through Stripe where supported. Target an experience that rivals or exceeds
+> Airbnb, Etsy, Turo, Shopify Marketplace, and eBay in simplicity while staying fully inside Bubaly.
+> Everything must be secure, PCI-compliant, auditable, and production-ready. **Never store raw card data.**
+> This is the marketplace's payment section — it supersedes any prior payment notes.
+
+**Primary objective — complete Stripe Connect marketplace architecture.** Support: buyer payments, seller
+payouts, creator storefront payments, rental payments, borrow security deposits, refunds, partial refunds,
+marketplace commissions, platform service fees, taxes where applicable, promotional discounts, coupons,
+gift cards (future-ready), escrow-style flow where appropriate, split payments, automatic seller payouts,
+manual payout review (if enabled), and subscription billing for premium storefronts (future-ready).
+
+- [ ] **Stripe Connect (marketplace model)** — every seller/creator can become a connected account.
+  Support Express accounts (Standard where appropriate), onboarding, identity verification, tax-info
+  collection, bank linking, payout preferences, dashboard access where supported, re-onboarding,
+  account status, restricted-account handling. Track: pending verification · active · restricted ·
+  disabled · requires information.
+- [ ] **Buyer checkout (world-class, < 1 minute)** — cards, Apple Pay, Google Pay, Link by Stripe, saved
+  payment methods, one-click for returning users, promo codes, gift certificates (future-ready), tax
+  calculation hooks, shipping/pickup selection, rental duration selection, deposit summary, marketplace
+  fee transparency.
+- [ ] **Rental payments** — buyer pays rental fee + security deposit + platform fee + taxes. System holds
+  deposit per configured policy, releases/refunds after a successful return workflow, and handles partial
+  deductions only when damage is confirmed via the dispute process. **Never release deposits without the
+  configured workflow.**
+- [ ] **Borrowing deposits** — optional: none · flat · percentage · admin-defined · seller-defined. AI
+  recommends whether a deposit is appropriate from item value, borrow duration, trust score, verification
+  level, and prior transaction history.
+- [ ] **Marketplace commissions (configurable)** — flat · percentage · tiered · category-specific ·
+  creator-specific · promotional overrides. Display complete fee transparency (marketplace fee, seller
+  receives, platform receives, Stripe processing fee) **before** checkout.
+- [ ] **Creator storefronts** — sell physical products, digital downloads, handmade goods, print-on-demand,
+  rental inventory, services, event tickets, courses (future-ready). Payouts via Stripe Connect. Provide
+  revenue dashboard, sales analytics, refund management, payout history, tax reporting, order management.
+- [ ] **Subscriptions (future-ready, architect only)** — recurring billing via Stripe Billing for monthly
+  rental memberships, creator premium memberships, VIP storefront subscriptions, Marketplace Pro. Do NOT
+  fully enable unless configured.
+- [ ] **Refunds** — full · partial · seller-approved · admin override · automatic cancellation ·
+  rental-deposit · failed-delivery. Track reason, initiator, timestamp, Stripe refund id, status.
+- [ ] **Disputes** — item not received · damaged · not as described · rental damage · late return · fraud.
+  Store evidence, images, videos, messages, timeline, admin decisions. **Never fabricate dispute outcomes.**
+- [ ] **Stripe webhooks (production-ready)** — handle `checkout.session.completed`, `payment_intent.succeeded`,
+  `payment_intent.payment_failed`, `payment_intent.canceled`, `charge.refunded`, `payout.created`,
+  `payout.failed`, `payout.paid`, `account.updated`, `account.application.authorized`,
+  `account.application.deauthorized`, `customer.subscription.created/updated/deleted`, `invoice.paid`,
+  `invoice.payment_failed`. Every webhook must verify signatures, be idempotent, retry safely, persist to
+  Supabase, and generate audit logs.
+- [ ] **Supabase tables** (create/update, each with `id, user_id, seller_id, buyer_id, marketplace_listing_id,
+  stripe_object_id, status, created_at, updated_at, metadata jsonb`, plus FKs, indexes, RLS, audit +
+  updated_at triggers): `stripe_customers`, `stripe_connected_accounts`, `stripe_checkout_sessions`,
+  `stripe_payment_intents`, `stripe_payment_methods`, `stripe_orders`, `stripe_refunds`, `stripe_disputes`,
+  `stripe_payouts`, `stripe_balance_transactions`, `stripe_platform_fees`, `stripe_rental_deposits`,
+  `stripe_transfer_records`, `stripe_webhook_events`, `stripe_tax_records`, `stripe_coupon_usage`,
+  `stripe_promotion_codes`, `stripe_audit_logs`.
+- [ ] **AI payment assistant** — recommend pricing / rental pricing / deposits, detect pricing anomalies,
+  explain marketplace fees, predict demand, suggest promos, identify high-converting price points,
+  recommend bundles and cross-sells.
+- [ ] **Seller dashboard** — gross & net revenue, marketplace fees, Stripe processing fees, pending &
+  available payouts, deposit holds, refunds, disputes, conversion rates, top-performing listings, AI recos.
+- [ ] **Buyer experience** — secure checkout badges, Stripe-powered checkout, payment confirmations, order
+  history, rental history, deposit status, refund history, receipts, invoices, purchase-protection status.
+- [ ] **Security** — server-side payment creation, webhook signature validation, idempotency keys, fraud
+  hooks, rate limiting, secure key handling (no secret keys in client code), PCI-compliant architecture,
+  audit logs for every financial event.
+- [ ] **Testing** — Stripe Connect onboarding, checkout, Apple Pay, Google Pay, Link, commission math,
+  rental deposits, refunds, partial refunds, connected-account payouts, webhook processing, failed
+  payments, failed payouts, RLS enforcement, mobile checkout, accessibility. Gates: typecheck, lint, build,
+  unit, integration, E2E, Stripe test-mode validation. **Fix every failure.**
+- **Final status target:** marketplace payments powered by Stripe via Stripe Connect — buyers, sellers,
+  creators, rentals, borrowing deposits, platform commissions, automatic payouts, secure checkout,
+  complete audit logging, production-ready and scalable to millions of users.
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:
