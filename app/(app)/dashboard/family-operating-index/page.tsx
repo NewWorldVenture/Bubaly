@@ -13,6 +13,9 @@ import { ChangeRecap } from '@/components/operating-index/change-recap';
 import { DIMENSION_LABELS, type Band, type DimensionId } from '@/lib/operating-index/score';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
+import { loadFamilyGraph } from '@/lib/reasoning/context';
+import { graphReasoningInsights } from '@/lib/reasoning/insights';
+import { RelationshipInsights } from '@/components/reasoning/relationship-insights';
 
 export const metadata: Metadata = { title: 'Family Operating Index' };
 export const dynamic = 'force-dynamic';
@@ -54,6 +57,11 @@ export default async function FamilyOperatingIndexPage() {
   const supabase = await createServer();
   const { index, priorComposite, trend, change, orchestrator } = await loadOperatingIndex(supabase, ctx.active.familyId);
   const band = BAND_COPY[index.band];
+
+  // R2: relationship reasoning over the Knowledge Graph, reusing the band we just
+  // computed (no second snapshot build). Best-effort — missing graph → no insights.
+  const graph = await loadFamilyGraph(supabase, ctx.active.familyId).catch(() => null);
+  const relationshipInsights = graph ? graphReasoningInsights(graph, index.band) : [];
 
   // SVG ring geometry.
   const R = 52, C = 2 * Math.PI * R;
@@ -106,6 +114,13 @@ export default async function FamilyOperatingIndexPage() {
           </div>
         </div>
       </section>
+
+      {/* Relationships — graph-backed reasoning (R2), tied to today's band */}
+      {relationshipInsights.length > 0 && (
+        <div className="mt-5">
+          <RelationshipInsights insights={relationshipInsights} />
+        </div>
+      )}
 
       {/* Since yesterday — the evening "what changed" recap (pillar #5) */}
       <ChangeRecap change={change} className="mt-5" />

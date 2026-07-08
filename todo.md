@@ -74,9 +74,9 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   the Agents/Chief-of-Staff page (replacing its inline graph load) and a new reasoning-summary strip on
   `/dashboard/graph`. Seed `seed_reasoning_context.sql` (500 entities + members, ~520 edges, hub +
   chain + orphans, ref-linked mirrors). Next: **R2** re-points the other engines at this loader.
-- [◐] **R2. Re-point existing engines at the graph** — FOI, Concierge, Briefing, Playbook, Calm,
+- [x] **R2. Re-point existing engines at the graph** ✅ — FOI, Concierge, Briefing, Playbook, Calm,
   Decisions, Prep-Plans, Outcomes read graph relationships (Emma→Soccer→Field→Weather→Dinner) instead
-  of isolated `.from()` calls. No new tables; rewire reads. Ship one engine at a time behind tests.
+  of isolated `.from()` calls. No new tables; rewire reads. Shipped one engine at a time behind tests.
   **Started:** pure `lib/reasoning/insights.ts::reasoningInsights(ctx)` (hub / ripple = graph × snapshot /
   coverage; **4 tests**) built on R1's `FamilyContext`, and **Calm re-pointed** — the one prioritized
   inbox now folds a `graph` source (relationship insights) alongside agents/autopilot/FOI/approvals/
@@ -88,10 +88,11 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   section (`components/reasoning/relationship-insights.tsx`, server-computed via `reasoningInsights`,
   passed into `BriefingModule` like `recap`). **+ Concierge + Outcomes re-pointed** — both server
   pages render the shared `RelationshipInsights` card above their module via one `loadFamilyContext`
-  call. **+ Decisions + Prep-Plans + Playbook re-pointed** (same shared card). **8 engines** now reason
-  over the graph (Calm · Chief of Staff · Briefing · Concierge · Outcomes · Decisions · Prep-Plans ·
-  Playbook), all via the one `loadFamilyContext` → `reasoningInsights` core. **Remaining:** FOI (needs
-  the efficient snapshot-reuse to avoid a double `buildSnapshot`). R2 essentially complete.
+  call. **+ Decisions + Prep-Plans + Playbook re-pointed** (same shared card). **+ FOI re-pointed** via
+  `graphReasoningInsights(graph, band)` — a lean second entry point that reuses FOI's already-computed
+  band (no double `buildSnapshot`); `reasoningInsights(ctx)` and it share one rule set. **DONE: all 9
+  surfaces** reason over the graph through one core (Calm · Chief of Staff · Briefing · Concierge ·
+  Outcomes · Decisions · Prep-Plans · Playbook · FOI). Next: **R3** (auto-maintain the graph on-dirty).
 - [ ] **R3. Auto-maintain the graph** — the `family_model_dirty` trigger (`0134`) already flags
   changes; make the projector run on-dirty so the graph is always current (not a manual "Rebuild").
 

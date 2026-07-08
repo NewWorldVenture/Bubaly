@@ -8,6 +8,11 @@
 // briefings, the Chief of Staff) fold these in alongside their other signals.
 
 import { impactFrom, type FamilyContext } from '@/lib/reasoning/context';
+import {
+  buildIndex, hubs as graphHubs, orphans as graphOrphans, propagateImpact,
+  type Graph, type GraphEntity,
+} from '@/lib/graph/reason';
+import type { Band } from '@/lib/operating-index/score';
 
 export type ReasoningInsightKind = 'hub' | 'ripple' | 'coverage';
 export type InsightSeverity = 'action' | 'attention' | 'info';
@@ -23,16 +28,24 @@ export type ReasoningInsight = {
 
 const GRAPH_HREF = '/dashboard/graph';
 
-/**
- * Derive relationship-level insights from a family reasoning context. Deterministic
- * and DB-free. Returns [] for an empty graph so callers can fold it in blindly.
- */
-export function reasoningInsights(ctx: FamilyContext): ReasoningInsight[] {
-  const out: ReasoningInsight[] = [];
-  if (ctx.stats.entities === 0) return out;
+/** The reasoning primitives the rules run on — sourced either from a full
+ *  FamilyContext or from a graph + a known operating-index band. */
+type InsightParts = {
+  hubs: Array<{ entity: GraphEntity; degree: number }>;
+  orphanCount: number;
+  band: Band;
+  entityCount: number;
+  /** outgoing impact blast-radius size from an entity. */
+  rippleCountFor: (entityId: string) => number;
+};
 
-  const top = ctx.hubs[0];
-  const rippleCount = top ? impactFrom(ctx, top.entity.id).length : 0;
+/** The shared rule set — one place, two entry points. */
+function buildInsights(p: InsightParts): ReasoningInsight[] {
+  const out: ReasoningInsight[] = [];
+  if (p.entityCount === 0) return out;
+
+  const top = p.hubs[0];
+  const rippleCount = top ? p.rippleCountFor(top.entity.id) : 0;
 
   // 1) The coordination hub + its blast radius — where coordination concentrates.
   if (top && top.degree >= 3) {
@@ -52,7 +65,7 @@ export function reasoningInsights(ctx: FamilyContext): ReasoningInsight[] {
   // 2) Ripple risk — the graph × the live snapshot. When the household is stretched
   //    or overloaded AND coordination concentrates on a hub, a single change there is
   //    high-impact. This is the reasoning a count-only engine can't do.
-  const band = ctx.operatingIndex.band;
+  const band = p.band;
   if ((band === 'stretched' || band === 'overloaded') && top && top.degree >= 4 && rippleCount >= 3) {
     out.push({
       id: `ripple:${top.entity.id}`,
@@ -65,11 +78,11 @@ export function reasoningInsights(ctx: FamilyContext): ReasoningInsight[] {
   }
 
   // 3) Coverage gaps — unlinked entities the AI can't yet reason about.
-  if (ctx.orphanCount >= 3) {
+  if (p.orphanCount >= 3) {
     out.push({
       id: 'coverage',
       kind: 'coverage',
-      title: `${ctx.orphanCount} things aren't linked yet`,
+      title: `${p.orphanCount} things aren't linked yet`,
       detail: 'Connect them in the graph so the assistant can reason about their dependencies.',
       href: GRAPH_HREF,
       severity: 'info',
@@ -77,4 +90,35 @@ export function reasoningInsights(ctx: FamilyContext): ReasoningInsight[] {
   }
 
   return out;
+}
+
+/**
+ * Relationship insights from a full family reasoning context (R1). Deterministic
+ * and DB-free. Returns [] for an empty graph so callers can fold it in blindly.
+ */
+export function reasoningInsights(ctx: FamilyContext): ReasoningInsight[] {
+  return buildInsights({
+    hubs: ctx.hubs,
+    orphanCount: ctx.orphanCount,
+    band: ctx.operatingIndex.band,
+    entityCount: ctx.stats.entities,
+    rippleCountFor: (id) => impactFrom(ctx, id).length,
+  });
+}
+
+/**
+ * Same insights from a bare graph + a known operating-index band — for callers
+ * that already computed the band (e.g. the FOI page) and want to avoid a second
+ * snapshot build. Builds the graph index once, internally.
+ */
+export function graphReasoningInsights(graph: Graph, band: Band): ReasoningInsight[] {
+  if (graph.entities.length === 0) return [];
+  const index = buildIndex(graph);
+  return buildInsights({
+    hubs: graphHubs(index, 5),
+    orphanCount: graphOrphans(index).length,
+    band,
+    entityCount: graph.entities.length,
+    rippleCountFor: (id) => propagateImpact(index, id).length,
+  });
 }
