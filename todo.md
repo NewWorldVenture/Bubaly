@@ -104,10 +104,15 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   read). tsc/eslint/**2065 tests**/build green.
 
 **P2 — One assistant / AI Operating Layer (Phase 2; 6–12mo, category-defining).**
-- [ ] **R4. Consolidate the 26 surfaces into ONE Chief-of-Staff home** — a single assistant that
+- [◐] **R4. Consolidate the 26 surfaces into ONE Chief-of-Staff home** — a single assistant that
   *coordinates* the specialist engines (agents/FOI/concierge/prep-plans/calm) behind one interface.
   The others become tabs/capabilities it routes to, not top-level nav. **De-duplicate first**
   (merge graph+family-knowledge-graph, assistant+family-ai-assistant, knowledge+family-memory).
+  **Started (de-dup):** `family-ai-assistant` → redirects to `assistant` (was a literal dupe —
+  same AssistantModule); `family-knowledge-graph` → redirects to `graph` (second view of the same
+  graph tables). Both removed from nav / feature-catalog / service-categories. **Next de-dup:** the
+  memory trio — `family-memory` (family_memories timeline) vs `memories` (photos) vs `knowledge`
+  (facts) — needs a canonical pick without losing the timeline/milestones. Then the front-door build.
 - [ ] **R5. The proactive front door** — "I already did A, B, C · pending approval: X, Y" (wire
   Autopilot's completed actions + pending approvals + Calm digest into the Home hero). Reversible +
   transparent.

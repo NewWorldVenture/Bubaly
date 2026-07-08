@@ -185,7 +185,6 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/family-operations', label: 'Operations', icon: Command, minLevel: 2 },
       { href: '/dashboard/conflicts', label: 'AI Conflict Resolution', icon: CalendarClock, minLevel: 2 },
       { href: '/dashboard/autonomous-family-management', label: 'Autonomous AI', icon: Bot, minLevel: 2 },
-      { href: '/dashboard/family-ai-assistant', label: 'AI Assistant', icon: Sparkles, minLevel: 2 },
       { href: '/dashboard/voice', label: 'Voice Control', icon: Mic, minLevel: 0 },
       { href: '/dashboard/family-digital-twin', label: 'Digital Twin', icon: Brain, minLevel: 2 },
       { href: '/dashboard/family-cfo', label: 'Family CFO', icon: Wallet, minLevel: 2 },
@@ -200,7 +199,6 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/family-emergency', label: 'Emergency Hub', icon: ShieldAlert, minLevel: 2 },
       { href: '/dashboard/family-stress', label: 'Stress Prediction', icon: Gauge, minLevel: 2 },
       { href: '/dashboard/family-automation', label: 'Life Automation', icon: Zap, minLevel: 2 },
-      { href: '/dashboard/family-knowledge-graph', label: 'Knowledge Graph', icon: Network, minLevel: 2 },
     ],
   },
 ];
