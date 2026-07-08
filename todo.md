@@ -88,8 +88,10 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   section (`components/reasoning/relationship-insights.tsx`, server-computed via `reasoningInsights`,
   passed into `BriefingModule` like `recap`). **+ Concierge + Outcomes re-pointed** — both server
   pages render the shared `RelationshipInsights` card above their module via one `loadFamilyContext`
-  call. **5 engines** now reason over the graph (Calm · Chief of Staff · Briefing · Concierge · Outcomes).
-  **Next engines:** Decisions, Prep-Plans, Playbook, FOI.
+  call. **+ Decisions + Prep-Plans + Playbook re-pointed** (same shared card). **8 engines** now reason
+  over the graph (Calm · Chief of Staff · Briefing · Concierge · Outcomes · Decisions · Prep-Plans ·
+  Playbook), all via the one `loadFamilyContext` → `reasoningInsights` core. **Remaining:** FOI (needs
+  the efficient snapshot-reuse to avoid a double `buildSnapshot`). R2 essentially complete.
 - [ ] **R3. Auto-maintain the graph** — the `family_model_dirty` trigger (`0134`) already flags
   changes; make the projector run on-dirty so the graph is always current (not a manual "Rebuild").
 
