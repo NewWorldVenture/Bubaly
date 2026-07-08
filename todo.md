@@ -175,9 +175,18 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   rendered on **Home** (under the front door) and atop the **Experience Scorecard**. Seed
   `seed_time_saved.sql` (250 autopilot + 150 agent + 150 reminders = 550 → ~35.8h). The thesis metric
   is now IN the product, not just marketing copy. tsc/eslint/**2078 tests**/build.
-- [ ] **R12. Moments as an organizing layer** — promote `lib/moments/*` from one page to a home
-  organizing principle (Morning/School/Dinner/Vacation/Birthday/Emergency/Weekend as orchestrated
-  experiences that pull the right capabilities), reducing reliance on the 70-module list.
+- [x] **R12. Moments as an organizing layer** ✅ SHIPPED (2026-07-08). Pure `lib/moments/organizer.ts`
+  (`activeMoments`, 9 tests) defines the 10 canonical life moments (Morning · School · Dinner · Homework
+  · Bedtime · Weekend · Vacation · Birthday · Holiday · Emergency), each orchestrating the handful of
+  capabilities it needs, and decides which are LIVE now from the clock + family signals (upcoming
+  birthday/trip/holiday, homework due tomorrow) — episodic-near outranks the daily rhythm; Emergency
+  always reachable. `/dashboard/moments` now OPENS with a "Right now" organizing band (server-computed,
+  deep-linked capability chips, dismiss-for-the-day) above the existing event-prep view — organize by
+  moment, not by hunting 70 modules. Durable **`moment_activations`** (`0148`, family-scoped RLS) logs
+  surfaced/engaged/dismissed per day (engagement signal for the reasoning layer); `dismissMomentAction`/
+  `engageMomentAction`. Seed `seed_moment_activations.sql` (500 rows, every moment × ~50 days, status
+  spread; in `SEED_ALL.sql`). Verified: tsc · eslint · **vitest (9)** · `next build`; migration + seed
+  validated on PG16 (500 rows, idempotent). Additive — the event-prep MomentsView is untouched.
 
 ### ⛔ What to STOP
 - **No net-new feature modules.** The matrix is saturated; more rows don't move the moat and add

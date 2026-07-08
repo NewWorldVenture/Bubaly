@@ -453,6 +453,11 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; activity_name: string; verdict?: string; weekly_hours?: number; input?: Json; dimensions?: Json; created_by?: string | null },
         Partial<{ member_id: string | null; activity_name: string; verdict: string; weekly_hours: number; input: Json; dimensions: Json }>
       >;
+      moment_activations: T<
+        { id: string; family_id: string; moment_key: string; as_of_date: string; status: string; reason: string | null; priority: number; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; moment_key: string; as_of_date?: string; status?: string; reason?: string | null; priority?: number; created_by?: string | null },
+        Partial<{ moment_key: string; status: string; reason: string | null; priority: number }>
+      >;
       journey_events: T<
         { id: string; family_id: string; member_id: string | null; journey: string; phase: string; step: number; session_id: string; duration_ms: number | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; journey: string; phase?: string; step?: number; session_id: string; duration_ms?: number | null },
