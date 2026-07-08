@@ -608,10 +608,24 @@ user confirms → publish → receive offers/requests → message securely → c
   `/my-store`, `/my-listings`, `/my-rentals`, `/my-borrowing`, `/my-requests`, `/messages`, `/offers`,
   `/orders`, `/verification`, `/reviews`, `/saved`, `/settings`. Mirror inside `/dashboard/marketplace/*`
   (`my-store`, `my-listings`, `messages`, `orders`, `verification`). Admin: `/admin/marketplace`.
-- [ ] **Supabase data model** (create/update; FKs, indexes, unique constraints, RLS with user/family
-  isolation + public-listing visibility + private-message security, audit + updated_at triggers; common
-  cols where apt: `id, user_id, family_id, seller_id, buyer_id, owner_id, renter_id, borrower_id,
-  listing_id, request_id, status, created_at, updated_at, created_by, updated_by, deleted_at, metadata`):
+- [x] **Supabase data model** — ✅ DONE 2026-07-08 via `0138_marketplace_platform.sql`. Extends the
+  shipped `marketplace_listings`/`marketplace_offers` (0120) with commerce columns (owner/visibility/modes/
+  deposit/currency/geo/tags/metadata/deleted_at) and adds 41 new tables covering identity+verification,
+  taxonomy, creator stores + Pinterest collections, listing children (media/videos/attributes/availability/
+  pricing/locations), wanted requests + matching, orders/rentals/borrow+lend agreements/returns/deposits,
+  payments/refunds/disputes, messaging, reviews/ratings/trust, saved items+searches, AI generations/matches,
+  reports/moderation, and activity/audit/usage logs + settings. FKs, indexes, unique constraints, updated_at
+  triggers, `metadata jsonb` throughout. **Three-layer RLS**: reference taxonomy public-read; listings
+  public-when-`visibility='public'`-or-family with children following the parent's visibility; all private
+  transaction data family-scoped. Verified on PG16 in the full 150-migration chain: clean apply, idempotent
+  re-run, and an RLS isolation test proving a non-member sees only public listings+media and zero private
+  orders while a member sees their own. Follow-ups: (1) TS types in `lib/database.types.ts`; (2) a
+  participant model so cross-family order/message threads are visible to both sides.
+  <details><summary>original spec (tables)</summary>
+  FKs, indexes, unique constraints, RLS with user/family isolation + public-listing visibility +
+  private-message security, audit + updated_at triggers; common cols where apt: `id, user_id, family_id,
+  seller_id, buyer_id, owner_id, renter_id, borrower_id, listing_id, request_id, status, created_at,
+  updated_at, created_by, updated_by, deleted_at, metadata`:
   `marketplace_profiles`, `_verifications`, `_categories`, `_subcategories`, `_listings`, `_listing_media`,
   `_listing_videos`, `_listing_attributes`, `_listing_availability`, `_listing_pricing`,
   `_listing_locations`, `_requests`, `_request_matches`, `_offers`, `_orders`, `_rentals`,
@@ -621,6 +635,7 @@ user confirms → publish → receive offers/requests → message securely → c
   `_search_events`, `_ai_generations`, `_ai_matches`, `_reports`, `_moderation_queue`, `_activity_logs`,
   `_audit_logs`, `_notifications`, `_usage_events`, `_settings`. (NOTE: reconcile with the SHIPPED
   `marketplace_listings` + `marketplace_offers` from 0120 — extend, don't duplicate.)
+  </details>
 - [ ] **Listing modes** — every listing supports one+ of: buy now · make offer · optional auction · rent ·
   borrow · lend · donate · swap · request-wanted. Auto-match wanted↔available (e.g. "borrow red dress
   size 8 Saturday" → nearby rentals/lends/sellers).
