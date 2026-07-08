@@ -14,6 +14,8 @@ import { familyScore } from '@/lib/home/family-score';
 import { HomeMomentCard } from '@/components/moments/home-moment-card';
 import { OnThisDayCard } from '@/components/memories/on-this-day-card';
 import { TimeOfDayFocus } from '@/components/home/time-of-day-focus';
+import { FrontDoorHero } from '@/components/home/front-door-hero';
+import { buildFrontDoor } from '@/lib/home/front-door';
 import { dayPhase } from '@/lib/home/time-of-day';
 import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
 import {
@@ -203,6 +205,29 @@ export default async function HomePage() {
 
   const msgs = (messages ?? []) as { id: string; sender_id: string | null; sender_name: string | null; sender_avatar: string | null; content: string | null; created_at: string; read_by: string[] }[];
 
+  // R5 — the proactive front door: what the assistant already handled (reversible
+  // auto-executed autopilot actions, last 48h) + what still needs a human (pending
+  // approvals). Best-effort: Supabase returns {data:null} for a missing table, so a
+  // drifted DB degrades to a hidden hero rather than crashing Home.
+  const since48h = new Date(now.getTime() - 2 * 86400000).toISOString();
+  const [doneRes, doneCountRes, pendingRes, pendingCountRes] = await Promise.all([
+    supabase.from('autopilot_suggestions').select('id, title, kind')
+      .eq('family_id', familyId).eq('status', 'auto_executed').gte('created_at', since48h)
+      .order('created_at', { ascending: false }).limit(5),
+    supabase.from('autopilot_suggestions').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).eq('status', 'auto_executed').gte('created_at', since48h),
+    supabase.from('approval_requests').select('id, title, agent, priority')
+      .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
+    supabase.from('approval_requests').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).eq('status', 'pending'),
+  ]);
+  const frontDoor = buildFrontDoor({
+    done: (doneRes.data ?? []) as { id: string; title: string; kind?: string | null }[],
+    doneCount: doneCountRes.count ?? undefined,
+    pending: (pendingRes.data ?? []) as { id: string; title: string; agent?: string | null; priority?: string | null }[],
+    pendingCount: pendingCountRes.count ?? undefined,
+  });
+
   return (
     <div className="space-y-6 pb-28">
       {/* Header: greeting + quick actions */}
@@ -226,6 +251,9 @@ export default async function HomePage() {
           ))}
         </div>
       </div>
+
+      {/* R5 — the proactive front door: "I already handled X · waiting on you: Y" */}
+      <FrontDoorHero frontDoor={frontDoor} />
 
       {/* Time-of-day "Focus now" strip — surfaces what matters at this hour
           (morning: schedule/weather/school · night: tomorrow/prep/reflect). */}

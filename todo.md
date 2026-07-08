@@ -113,9 +113,13 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   graph tables). Both removed from nav / feature-catalog / service-categories. **Next de-dup:** the
   memory trio — `family-memory` (family_memories timeline) vs `memories` (photos) vs `knowledge`
   (facts) — needs a canonical pick without losing the timeline/milestones. Then the front-door build.
-- [ ] **R5. The proactive front door** — "I already did A, B, C · pending approval: X, Y" (wire
-  Autopilot's completed actions + pending approvals + Calm digest into the Home hero). Reversible +
-  transparent.
+- [x] **R5. The proactive front door** ✅ — the Home hero now leads with "I already handled N
+  things — M need your OK." Pure `lib/home/front-door.ts::buildFrontDoor` (7 tests) folds recent
+  **auto-executed** autopilot actions (reversible → link to Autopilot to undo) + **pending**
+  approval_requests (most-urgent first → link to the inbox) into one proactive summary;
+  `components/home/front-door-hero.tsx` renders it above the Focus strip. Transparent (every item
+  named + linked) and reversible. Best-effort loads (hidden hero on a drifted DB). Seed
+  `seed_front_door.sql` (300 auto-executed + 250 pending = 550 records). tsc/eslint/**2072 tests**/build.
 - [ ] **R6. Intent-based entry** — the ⌘K/command bar + Voice already parse intent; make them the
   primary way in ("plan Emma's party", "who's free Saturday") routing to the reasoning engine.
 
