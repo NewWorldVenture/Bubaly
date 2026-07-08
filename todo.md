@@ -135,9 +135,19 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 - [ ] **R7. Unify the reasoning engine** — fold FOI-orchestrator + agents + decisions into
   `lib/reasoning/*` answering the six questions (what matters most · what's likely forgotten ·
   highest-impact decision · what's auto-completable · who needs help · what next) over the graph.
-- [ ] **R8. Deepen twin simulation** — extend `lib/twin/simulate.ts` beyond add-commitment/big-spend
-  to the full "if Emma joins travel soccer" projection (schedule · travel · cost · family time ·
-  homework · meals · vacation conflicts) reading the linked graph model.
+- [x] **R8. Deepen twin simulation** ✅ SHIPPED (2026-07-08). Pure `projectActivity` added to
+  `lib/twin/simulate.ts` (7 tests) — the full "if Emma joins travel soccer, what has to move?"
+  projection across **schedule · travel · cost · family time · homework · meals · vacation**, each a
+  scored dimension with an overall verdict + weekly-hours. Additive (existing commitment/spend
+  simulator untouched; 10 tests still green). Server `projectActivityAction` assembles the real
+  household (member events + budgets w/ period spend + `vacations` windows) and runs it — a safe
+  no-write what-if; `saveSimulationAction`/`deleteSimulationAction` persist kept scenarios to
+  **`twin_simulations`** (`0147`, family-scoped RLS). UI `components/twin/activity-projection.tsx`
+  mounted on `/dashboard/family-digital-twin` (form → per-dimension ripple → Save; saved-scenario
+  list). Seed `seed_twin_simulations.sql` (500 rows, verdict spread; in `SEED_ALL.sql`). Verified:
+  tsc · eslint · **vitest (17 twin)** · `next build`; migration + seed validated on PG16 (500 rows,
+  idempotent). *(Reads the family's real linked model — events/budgets/vacations; deeper graph-entity
+  wiring can layer on later.)*
 
 **P4 — Ecosystem orchestration (Phase 4; 18–24mo network effects).**
 - [ ] **R9. Per-provider sync adapters** behind the Connections hub (calendar/email first) — real

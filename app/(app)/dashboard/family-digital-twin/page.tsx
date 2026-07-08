@@ -8,6 +8,7 @@ import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { QuickAdd } from '@/components/family/quick-add';
 import { Avatar } from '@/components/ui/avatar';
 import { DecisionSimulator } from '@/components/twin/decision-simulator';
+import { ActivityProjection, type SavedSim } from '@/components/twin/activity-projection';
 
 export const metadata: Metadata = { title: 'Family Digital Twin' };
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,12 @@ export default async function FamilyDigitalTwinPage() {
     supabase.from('goals').select('id, title').eq('family_id', familyId).eq('is_complete', false).limit(20),
     supabase.from('budgets').select('category').eq('family_id', familyId).order('category'),
   ]);
+  const { data: savedSimRows } = await supabase
+    .from('twin_simulations').select('id, activity_name, verdict, weekly_hours, created_at')
+    .eq('family_id', familyId).order('created_at', { ascending: false }).limit(20);
+  const savedSims: SavedSim[] = (savedSimRows ?? []).map((s) => ({
+    id: s.id, activityName: s.activity_name, verdict: s.verdict, weeklyHours: Number(s.weekly_hours), createdAt: s.created_at,
+  }));
   const budgetCategories = [...new Set((budgets ?? []).map((b) => b.category).filter(Boolean))];
   const memberList = (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name }));
 
@@ -52,6 +59,8 @@ export default async function FamilyDigitalTwinPage() {
       />
 
       {memberList.length > 0 && <DecisionSimulator members={memberList} budgetCategories={budgetCategories} />}
+
+      {memberList.length > 0 && <ActivityProjection members={memberList} budgetCategories={budgetCategories} saved={savedSims} />}
 
       <div className="grid gap-5 lg:grid-cols-2">
         {(members ?? []).map((m) => {

@@ -64,6 +64,8 @@ export interface SimContext {
   budgets: SimBudget[];
   /** Events/week for this member that counts as a heavy week. Default 8. */
   heavyWeek?: number;
+  /** Known vacation/trip windows (for the activity projection's vacation check). */
+  vacationWindows?: { start: string; end: string; label: string }[];
 }
 
 const MIN = 60_000;
@@ -179,4 +181,159 @@ function simulateSpend(d: Extract<SimDecision, { kind: 'spend' }>, ctx: SimConte
 /** Simulate a proposed decision against the household context. Pure. */
 export function simulateDecision(decision: SimDecision, ctx: SimContext): SimResult {
   return decision.kind === 'commitment' ? simulateCommitment(decision, ctx) : simulateSpend(decision, ctx);
+}
+
+// ── Full activity projection (R8) ────────────────────────────────────────────
+// The category-defining "if Emma joins travel soccer, what has to move?" — a
+// multi-dimensional look-ahead across the whole household model, not just one
+// calendar. Pure + deterministic: given the activity's shape + the family
+// context (events, budgets, vacation windows) it projects the ripple across
+// schedule · travel · cost · family time · homework · meals · vacation.
+
+export interface ActivityDecision {
+  memberName: string;
+  activityName: string;
+  startsAt: string;          // first session (ISO) — sets the weekly day/time
+  durationMin: number;       // minutes per session
+  sessionsPerWeek: number;   // e.g. 2 practices + a game = 3
+  weeks: number;             // how many weeks it runs
+  travelMinEach?: number;    // one-way travel to the venue
+  costCents?: number;        // total (or per-period) cost, if any
+  costCategory?: string;     // which budget it draws from
+}
+
+export interface ProjectionDimension {
+  key: 'schedule' | 'travel' | 'cost' | 'family_time' | 'homework' | 'meals' | 'vacation';
+  label: string;
+  severity: 'blocker' | 'caution' | 'ok';
+  headline: string;
+  detail?: string;
+}
+
+export interface ProjectionResult {
+  verdict: Verdict;
+  headline: string;
+  /** Added hours per week (sessions × (duration + round-trip travel)). */
+  weeklyHours: number;
+  dimensions: ProjectionDimension[];
+}
+
+const HRS = (min: number) => Math.round((min / 60) * 10) / 10;
+
+/** Project a proposed activity across every dimension of the household model. */
+export function projectActivity(d: ActivityDecision, ctx: SimContext): ProjectionResult {
+  const start = Date.parse(d.startsAt);
+  if (Number.isNaN(start)) {
+    return { verdict: 'conflict', headline: 'That start time isn’t valid.', weeklyHours: 0,
+      dimensions: [{ key: 'schedule', label: 'Schedule', severity: 'blocker', headline: 'Invalid start time' }] };
+  }
+  const sessions = Math.max(1, Math.round(d.sessionsPerWeek || 1));
+  const travelEach = Math.max(0, d.travelMinEach ?? 0);
+  const perSessionMin = d.durationMin + travelEach * 2;
+  const weeklyMin = perSessionMin * sessions;
+  const weeklyHours = HRS(weeklyMin);
+  const startDate = new Date(start);
+  const hour = startDate.getUTCHours();
+  const dow = startDate.getUTCDay(); // 0=Sun
+  const dims: ProjectionDimension[] = [];
+
+  // 1. Schedule — first-session conflicts + resulting weekly load.
+  const first = simulateCommitment(
+    { kind: 'commitment', memberName: d.memberName, title: d.activityName, startsAt: d.startsAt, durationMin: d.durationMin },
+    ctx,
+  );
+  const heavy = ctx.heavyWeek ?? 8;
+  const sameWeek = ctx.memberEvents.filter((e) => !e.allDay && !Number.isNaN(Date.parse(e.startsAt))
+    && isoWeekKey(new Date(Date.parse(e.startsAt))) === isoWeekKey(startDate)).length;
+  const projected = sameWeek + sessions;
+  const schedBlocker = first.impacts.some((i) => i.severity === 'blocker');
+  dims.push({
+    key: 'schedule', label: 'Schedule',
+    severity: schedBlocker ? 'blocker' : projected >= heavy ? 'caution' : 'ok',
+    headline: schedBlocker ? 'Clashes with something already booked'
+      : projected >= heavy ? `${d.memberName}'s week would hit ${projected} commitments`
+      : `Fits — ${sessions} session${sessions === 1 ? '' : 's'}/week added`,
+    detail: schedBlocker ? first.impacts.find((i) => i.severity === 'blocker')?.title : undefined,
+  });
+
+  // 2. Travel — added driving per week.
+  if (travelEach > 0) {
+    const travelWeekMin = travelEach * 2 * sessions;
+    dims.push({
+      key: 'travel', label: 'Travel',
+      severity: travelWeekMin >= 300 ? 'blocker' : travelWeekMin >= 120 ? 'caution' : 'ok',
+      headline: `${HRS(travelWeekMin)}h of driving a week`,
+      detail: `${sessions} round trip${sessions === 1 ? '' : 's'} × ${travelEach} min each way.`,
+    });
+  }
+
+  // 3. Cost — against the named budget.
+  if (d.costCents && d.costCents > 0) {
+    const spend = simulateSpend({ kind: 'spend', label: d.activityName, category: d.costCategory ?? '', amountCents: d.costCents }, ctx);
+    dims.push({
+      key: 'cost', label: 'Cost',
+      severity: spend.verdict === 'conflict' ? 'blocker' : spend.verdict === 'tight' ? 'caution' : 'ok',
+      headline: spend.headline,
+      detail: spend.impacts[0]?.detail,
+    });
+  }
+
+  // 4. Family time — how much of the week it eats.
+  dims.push({
+    key: 'family_time', label: 'Family time',
+    severity: weeklyHours >= 10 ? 'blocker' : weeklyHours >= 6 ? 'caution' : 'ok',
+    headline: `≈ ${weeklyHours}h a week`,
+    detail: weeklyHours >= 6 ? 'That’s a meaningful chunk of family time — worth a conscious yes.' : 'A modest, manageable commitment.',
+  });
+
+  // 5. Homework — weekday-evening sessions squeeze school nights.
+  const schoolNight = dow >= 1 && dow <= 4; // Mon–Thu
+  if (schoolNight && hour >= 17 && hour <= 20) {
+    dims.push({
+      key: 'homework', label: 'Homework',
+      severity: 'caution',
+      headline: 'Lands on school nights',
+      detail: `${sessions} school-night evening${sessions === 1 ? '' : 's'} — plan homework around it.`,
+    });
+  }
+
+  // 6. Meals — sessions over dinnertime disrupt family dinner.
+  if (hour >= 17 && hour < 19) {
+    dims.push({
+      key: 'meals', label: 'Meals',
+      severity: 'caution',
+      headline: `Overlaps dinner ${sessions}× a week`,
+      detail: 'Plan make-ahead or later dinners on those nights.',
+    });
+  }
+
+  // 7. Vacation — do any sessions fall inside a known trip window?
+  const clash = (ctx.vacationWindows ?? []).find((v) => {
+    const vs = Date.parse(v.start), ve = Date.parse(v.end);
+    if (Number.isNaN(vs) || Number.isNaN(ve)) return false;
+    for (let w = 0; w < Math.max(1, d.weeks); w++) {
+      const occ = start + w * 7 * 86_400_000;
+      if (occ >= vs && occ <= ve) return true;
+    }
+    return false;
+  });
+  if (clash) {
+    dims.push({
+      key: 'vacation', label: 'Vacation',
+      severity: 'caution',
+      headline: `Overlaps “${clash.label}”`,
+      detail: 'Some sessions fall during a planned trip — you’ll miss them or reschedule.',
+    });
+  }
+
+  const verdict = verdictFrom(dims.map((x) => ({ severity: x.severity, title: x.headline })));
+  const blockers = dims.filter((x) => x.severity === 'blocker').length;
+  const cautions = dims.filter((x) => x.severity === 'caution').length;
+  const headline = verdict === 'conflict'
+    ? `“${d.activityName}” has ${blockers} hard conflict${blockers === 1 ? '' : 's'} to resolve first.`
+    : verdict === 'tight'
+      ? `“${d.activityName}” is doable — ${cautions} thing${cautions === 1 ? '' : 's'} to plan around (${weeklyHours}h/week).`
+      : `“${d.activityName}” fits cleanly — about ${weeklyHours}h a week.`;
+
+  return { verdict, headline, weeklyHours, dimensions: dims };
 }
