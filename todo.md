@@ -66,6 +66,39 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 
 ### ▶ THE REALIGNMENT BACKLOG (do these INSTEAD of new features — priority order)
 
+**◆ LIVE STATUS ROLL-UP (updated 2026-07-08) — 21 of 22 backlog items shipped; only R9 remains (owner-gated).**
+
+| # | Item | Phase | Status | Migration | Seed |
+|---|------|-------|--------|-----------|------|
+| R1 | `lib/reasoning/context.ts` — one graph-backed context loader | P1 | ✅ Shipped | — | `seed_reasoning_context.sql` |
+| R2 | Re-point existing engines at the graph | P1 | ✅ Shipped | — | — |
+| R3 | Auto-maintain the graph on-dirty | P1 | ✅ Shipped | `0134` | `seed_model_dirty.sql` |
+| R4 | Consolidate 26 surfaces → one Chief-of-Staff home | P2 | ✅ Shipped | — | — |
+| R5 | The proactive front door | P2 | ✅ Shipped | — | `seed_front_door.sql` |
+| R6 | Intent-based entry (Home AskBar) | P2 | ✅ Shipped | — | — |
+| R7 | **Unify the reasoning engine (one core, six Qs)** | P3 | ✅ **Shipped 07-08** | `0149` | `seed_reasoning_snapshots.sql` |
+| R8 | Deepen twin simulation (full activity projection) | P3 | ✅ Shipped 07-08 | `0147` | `seed_twin_simulations.sql` |
+| R9 | Per-provider sync adapters (OAuth two-way) | P4 | ☐ **Open — owner-gated on OAuth keys (B3)** | — | — |
+| R10 | Family Intelligence — the hard signals | X-cut | ✅ Shipped | `0142` | `seed_family_signals.sql` |
+| R11 | The category metric — "time saved / mental load" | X-cut | ✅ Shipped | — | `seed_time_saved.sql` |
+| R12 | Moments as an organizing layer | X-cut | ✅ Shipped 07-08 | `0148` | `seed_moment_activations.sql` |
+| T1 | Value-first onboarding re-sequence | P1 | ✅ Shipped | `0138` | (import-driven) |
+| T2 | First-run "instant briefing" builder | P1 | ✅ Shipped | `0139` | `seed_meal_ideas.sql` |
+| T3 | New-family home = outcome, never empty | P1 | ✅ Shipped | `0140` | `seed_home_briefs.sql` |
+| T4 | Insight-of-the-day | P1 | ✅ Shipped | `0141` | `seed_daily_insights.sql` |
+| T5 | Partner-tone pass | P1 | ✅ Shipped | — | `seed_notifications.sql` |
+| T6 | AI-facilitated group decisions | P2 | ✅ Shipped | `0142*` | `seed_group_decisions_one_family.sql` |
+| T7 | "Why this?" everywhere | P2 | ✅ Shipped | `0143` | `seed_ai_feedback_one_family.sql` |
+| T8 | Premium-consistency sweep (Experience Scorecard) | P2 | ✅ Shipped | `0144` | `seed_experience_audits_one_family.sql` |
+| T9 | "What Bubaly has learned" + life-event templates | P3 | ✅ Shipped | `0145` | `seed_life_events_one_family.sql` |
+| T10 | TTFV metric (signup→first outcome) | Instr. | ✅ Shipped | `0146` | `seed_activation_events.sql` |
+
+> **The one open item — R9** is not blocked by engineering: it needs the owner to provision
+> per-provider OAuth client keys/secrets (see §B / decision B3). The buildable-now slice is the
+> **adapter contract** (a typed two-way-sync interface + a stub provider + tests) that goes live
+> when keys land. All migrations `0138–0149` are ⚠️ **pending apply to prod** — see
+> `docs/PENDING_PROD_MIGRATIONS.md`.
+
 **P1 — Make the Knowledge Graph the brain (Phase 1; 6–12mo moat).**
 - [x] **R1. `lib/reasoning/context.ts`** ✅ — one graph-backed context loader every AI surface calls.
   `loadFamilyContext(supabase, familyId)` → graph (entities + edges) + live household snapshot +
