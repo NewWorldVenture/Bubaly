@@ -17,6 +17,8 @@ import { TimeOfDayFocus } from '@/components/home/time-of-day-focus';
 import { FrontDoorHero } from '@/components/home/front-door-hero';
 import { buildFrontDoor } from '@/lib/home/front-door';
 import { AskBar } from '@/components/home/ask-bar';
+import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
+import { loadTimeSaved } from '@/lib/metric/time-saved-server';
 import { dayPhase } from '@/lib/home/time-of-day';
 import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
 import {
@@ -229,6 +231,9 @@ export default async function HomePage() {
     pendingCount: pendingCountRes.count ?? undefined,
   });
 
+  // R11 — the category metric: how much family admin the system removed this week.
+  const timeSaved = await loadTimeSaved(supabase, familyId, now);
+
   return (
     <div className="space-y-6 pb-28">
       {/* Header: greeting + quick actions */}
@@ -259,6 +264,9 @@ export default async function HomePage() {
 
       {/* R5 — the proactive front door: "I already handled X · waiting on you: Y" */}
       <FrontDoorHero frontDoor={frontDoor} />
+
+      {/* R11 — the category metric: "N hours saved this week" */}
+      <TimeSavedBanner data={timeSaved} />
 
       {/* Time-of-day "Focus now" strip — surfaces what matters at this hour
           (morning: schedule/weather/school · night: tomorrow/prep/reflect). */}
