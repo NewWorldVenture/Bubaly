@@ -192,8 +192,16 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   wiring can layer on later.)*
 
 **P4 — Ecosystem orchestration (Phase 4; 18–24mo network effects).**
-- [ ] **R9. Per-provider sync adapters** behind the Connections hub (calendar/email first) — real
-  two-way sync, not a directory. *(OAuth keys are owner-gated; build the adapter contract now.)*
+- [◐] **R9. Per-provider sync adapters** behind the Connections hub. **Adapter contract SHIPPED
+  (2026-07-08):** `lib/connections/adapter.ts` defines the uniform `SyncAdapter` contract (typed
+  capabilities, normalized `NormalizedEvent`/`NormalizedMessage` shapes, `AdapterContext` with a
+  secret-store credential bundle, pull/push results) + the pure `planSync` decision core (blocks
+  cleanly on `needs_setup`/`not_connected`/`unsupported`, switches full→incremental once a cursor
+  exists). Reference adapters in `lib/connections/adapters/` — `google-calendar` (two-way events) and
+  `gmail` (pull-only messages) — declare real capabilities and stay **inert until owner-gated
+  `GOOGLE_OAUTH_*` keys land** (no network calls). Registry `adapterFor`/`syncableProviderIds`. 12 tests;
+  tsc · eslint · `next build` green. **Remaining (owner-gated):** the live OAuth token flow + real API
+  calls behind the `TODO(keys)` markers — goes live the moment the provider keys are set.
 
 **Cross-cutting moat work (start now, threads through all phases):**
 - [x] **R10. Family Intelligence — the hard signals.** ✅ SHIPPED (2026-07-07). Four pure detectors in
