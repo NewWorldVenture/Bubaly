@@ -81,6 +81,9 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   coverage; **4 tests**) built on R1's `FamilyContext`, and **Calm re-pointed** — the one prioritized
   inbox now folds a `graph` source (relationship insights) alongside agents/autopilot/FOI/approvals/
   reminders. Seed `seed_reasoning_insights.sql` (named hub + 500 entities + ~540 edges + orphans).
+  **+ Agents / Chief of Staff re-pointed** onto the SAME shared engine (`loadFamilyContext` +
+  `reasoningInsights`), retiring the bespoke `lib/agents/graph-insight.ts` (dedup) and gaining the
+  graph×snapshot ripple insight. Two engines now share one relationship-reasoning core.
   **Next engines:** Briefing, Decisions, Prep-Plans, Playbook, Concierge, Outcomes, FOI.
 - [ ] **R3. Auto-maintain the graph** — the `family_model_dirty` trigger (`0134`) already flags
   changes; make the projector run on-dirty so the graph is always current (not a manual "Rebuild").

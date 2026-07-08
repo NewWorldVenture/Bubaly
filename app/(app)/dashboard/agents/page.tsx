@@ -2,10 +2,9 @@ import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { AgentsModule } from '@/components/modules/agents-module';
-import { runAllAgents, type AgentContext } from '@/lib/agents/roster';
-import { graphInsights } from '@/lib/agents/graph-insight';
-import type { Graph } from '@/lib/graph/reason';
-import { loadFamilyGraph } from '@/lib/reasoning/context';
+import { runAllAgents, type AgentContext, type AgentItem } from '@/lib/agents/roster';
+import { loadFamilyContext } from '@/lib/reasoning/context';
+import { reasoningInsights } from '@/lib/reasoning/insights';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import type { Tables } from '@/lib/database.types';
 
@@ -56,9 +55,12 @@ export default async function AgentsPage() {
   ]);
 
   // Knowledge graph → relationship-level reasoning for the Chief of Staff, via the
-  // one shared graph-backed loader (R1). Best-effort: a missing table (migration not
-  // yet applied) yields an empty graph → no insights, never an error.
-  const graph: Graph = await loadFamilyGraph(supabase, familyId);
+  // ONE shared reasoning engine (R1 context + R2 insights) — the same one Calm folds
+  // in. Best-effort: a missing graph yields no insights, never an error.
+  const reasoning = await loadFamilyContext(supabase, familyId, now).catch(() => null);
+  const graphItems: AgentItem[] = reasoning
+    ? reasoningInsights(reasoning).map((i) => ({ title: i.title, detail: i.detail, href: i.href, severity: i.severity }))
+    : [];
 
   const events = weekEvents.data ?? [];
   const eventsToday = events.filter((e) => e.starts_at.slice(0, 10) === todayKey).length;
@@ -96,6 +98,6 @@ export default async function AgentsPage() {
     newMemories, unreadMessages: 0, pendingApprovals,
   };
 
-  const briefings = runAllAgents(context, graphInsights(graph));
+  const briefings = runAllAgents(context, graphItems);
   return <AgentsModule briefings={briefings} activity={(activityRows.data ?? []) as Tables<'agent_activity'>[]} />;
 }
