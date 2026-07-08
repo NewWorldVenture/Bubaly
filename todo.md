@@ -67,8 +67,13 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 ### ▶ THE REALIGNMENT BACKLOG (do these INSTEAD of new features — priority order)
 
 **P1 — Make the Knowledge Graph the brain (Phase 1; 6–12mo moat).**
-- [ ] **R1. `lib/reasoning/context.ts`** — one graph-backed context loader every AI surface calls
-  (`loadFamilyContext(familyId)` → entities + edges + live snapshot). Pure, tested.
+- [x] **R1. `lib/reasoning/context.ts`** ✅ — one graph-backed context loader every AI surface calls.
+  `loadFamilyContext(supabase, familyId)` → graph (entities + edges) + live household snapshot +
+  operating index, assembled by a pure, DB-free core (`assembleFamilyContext` + `entityForRow` row→node
+  join, `relatedTo`, `impactFrom`, `contextSummary`; **10 tests**). Shared `loadFamilyGraph` now backs
+  the Agents/Chief-of-Staff page (replacing its inline graph load) and a new reasoning-summary strip on
+  `/dashboard/graph`. Seed `seed_reasoning_context.sql` (500 entities + members, ~520 edges, hub +
+  chain + orphans, ref-linked mirrors). Next: **R2** re-points the other engines at this loader.
 - [ ] **R2. Re-point existing engines at the graph** — FOI, Concierge, Briefing, Playbook, Calm,
   Decisions, Prep-Plans, Outcomes read graph relationships (Emma→Soccer→Field→Weather→Dinner) instead
   of isolated `.from()` calls. No new tables; rewire reads. Ship one engine at a time behind tests.
