@@ -16,6 +16,7 @@ import { OnThisDayCard } from '@/components/memories/on-this-day-card';
 import { TimeOfDayFocus } from '@/components/home/time-of-day-focus';
 import { FrontDoorHero } from '@/components/home/front-door-hero';
 import { buildFrontDoor } from '@/lib/home/front-door';
+import { AskBar } from '@/components/home/ask-bar';
 import { dayPhase } from '@/lib/home/time-of-day';
 import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
 import {
@@ -251,6 +252,10 @@ export default async function HomePage() {
           ))}
         </div>
       </div>
+
+      {/* R6 — intent-based entry, made primary: one NL bar routes to the reasoning
+          engine ("plan Emma's party"), a page, or the assistant. */}
+      <AskBar />
 
       {/* R5 — the proactive front door: "I already handled X · waiting on you: Y" */}
       <FrontDoorHero frontDoor={frontDoor} />
