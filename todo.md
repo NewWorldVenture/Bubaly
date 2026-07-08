@@ -86,8 +86,10 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   graph×snapshot ripple insight. Two engines now share one relationship-reasoning core.
   **+ Daily Briefing re-pointed** — the morning briefing renders a graph-backed "Relationships"
   section (`components/reasoning/relationship-insights.tsx`, server-computed via `reasoningInsights`,
-  passed into `BriefingModule` like `recap`). **3 engines** now reason over the graph.
-  **Next engines:** Decisions, Prep-Plans, Playbook, Concierge, Outcomes, FOI.
+  passed into `BriefingModule` like `recap`). **+ Concierge + Outcomes re-pointed** — both server
+  pages render the shared `RelationshipInsights` card above their module via one `loadFamilyContext`
+  call. **5 engines** now reason over the graph (Calm · Chief of Staff · Briefing · Concierge · Outcomes).
+  **Next engines:** Decisions, Prep-Plans, Playbook, FOI.
 - [ ] **R3. Auto-maintain the graph** — the `family_model_dirty` trigger (`0134`) already flags
   changes; make the projector run on-dirty so the graph is always current (not a manual "Rebuild").
 
