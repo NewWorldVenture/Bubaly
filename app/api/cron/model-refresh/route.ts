@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runTwinProjection } from '@/lib/twin/project-server';
 import { runPrepGeneration } from '@/lib/planning/prep-server';
+import { runSignalDetection } from '@/lib/intelligence/hard-signals-server';
 import { needsRefresh, summarizeSweep, type RefreshOutcome } from '@/lib/planning/refresh';
 
 export const runtime = 'nodejs';
@@ -45,6 +46,9 @@ export async function GET(req: NextRequest) {
         }
         const twin = await runTwinProjection(supabase, fam.id, null);
         const prep = await runPrepGeneration(supabase, fam.id, null, now);
+        // R10: keep the hard-signal family intelligence current too. Non-fatal —
+        // a signal-detection hiccup must not fail the twin/prep refresh.
+        try { await runSignalDetection(supabase, fam.id, now); } catch (e) { console.error(`Signal detection failed for ${fam.id}:`, e); }
         const ok = twin.ok && prep.ok;
         // Clear the dirty flag once a refresh succeeds.
         if (ok) {

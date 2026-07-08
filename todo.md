@@ -144,10 +144,19 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   two-way sync, not a directory. *(OAuth keys are owner-gated; build the adapter contract now.)*
 
 **Cross-cutting moat work (start now, threads through all phases):**
-- [ ] **R10. Family Intelligence — the hard signals.** Extend Playbook/learning to: ignored-reminder
-  detection (reminders dismissed/overdue repeatedly), stress windows (density × conflicts × overdue by
-  time-of-day/day-of-week), chore-conflict detection (reassignments/disputes), routine-adherence
-  (which `routine_templates` actually get completed). Transparent + editable. New pure engines + tests.
+- [x] **R10. Family Intelligence — the hard signals.** ✅ SHIPPED (2026-07-07). Four pure detectors in
+  `lib/intelligence/hard-signals.ts` (11 tests): **ignored-reminder** (same reminder overdue-without-
+  done ≥3×, grouped by normalized title), **stress windows** (events×4 + clashes×12 + overdue×6 bucketed
+  by day-type × part-of-day → the peak crunch window), **chore friction** (rejections×2 + disputes×3 +
+  hand-offs, per chore), **routine adherence** (expected weekday occurrences vs actual completions →
+  flags routines under 60%). Service core `hard-signals-server.ts` (`runSignalDetection`) maps live
+  rows (family_reminders/calendar_events/chore_assignments/routine_templates) to the engines and upserts
+  into **`family_signals`** (`0142`, family-scoped RLS) — **preserving dismissals**. Transparent +
+  editable surface at **`/dashboard/family-signals`** (evidence chips + Acknowledge/Dismiss/Restore +
+  Refresh) + nav entry. Runs on demand AND in the **model-refresh cron** (always-learning, non-fatal).
+  Seed `seed_family_signals.sql` (500 rows, 4 kinds × status spread; in `SEED_ALL.sql`).
+  Verified: tsc · eslint · **vitest (11)** · `next build`; migration + seed validated on PG16 (500 rows,
+  idempotent). Feeds the Playbook/reasoning layer (family_signals is now a readable substrate).
 - [x] **R11. The category metric — surface "time saved / mental load."** ✅ Pure
   `lib/metric/time-saved.ts::computeTimeSaved` (4 tests) turns this week's system-handled actions —
   autopilot auto-executions (5 min), assistant-handled items (4 min), reminders delivered (2 min) —

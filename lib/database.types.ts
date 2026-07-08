@@ -443,6 +443,11 @@ export interface Database {
         { id?: string; family_id: string; member_id?: string | null; surface: string; ref_kind?: string | null; ref_id?: string | null; signal: string; reason?: string | null; note?: string | null; created_by?: string | null },
         Partial<{ member_id: string | null; surface: string; ref_kind: string | null; ref_id: string | null; signal: string; reason: string | null; note: string | null }>
       >;
+      family_signals: T<
+        { id: string; family_id: string; kind: string; subject_key: string; title: string; detail: string | null; score: number; evidence: Json; status: string; member_id: string | null; first_seen_at: string; last_seen_at: string; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; kind: string; subject_key: string; title: string; detail?: string | null; score?: number; evidence?: Json; status?: string; member_id?: string | null; first_seen_at?: string; last_seen_at?: string; created_by?: string | null },
+        Partial<{ kind: string; subject_key: string; title: string; detail: string | null; score: number; evidence: Json; status: string; member_id: string | null; last_seen_at: string }>
+      >;
       journey_events: T<
         { id: string; family_id: string; member_id: string | null; journey: string; phase: string; step: number; session_id: string; duration_ms: number | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; journey: string; phase?: string; step?: number; session_id: string; duration_ms?: number | null },
