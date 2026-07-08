@@ -534,9 +534,15 @@ manual payout review (if enabled), and subscription billing for premium storefro
 - [ ] **Borrowing deposits** — optional: none · flat · percentage · admin-defined · seller-defined. AI
   recommends whether a deposit is appropriate from item value, borrow duration, trust score, verification
   level, and prior transaction history.
-- [ ] **Marketplace commissions (configurable)** — flat · percentage · tiered · category-specific ·
+- [~] **Marketplace commissions (configurable)** — flat · percentage · tiered · category-specific ·
   creator-specific · promotional overrides. Display complete fee transparency (marketplace fee, seller
   receives, platform receives, Stripe processing fee) **before** checkout.
+  - [x] Pure fee engine `lib/marketplace/fees.ts` — `computeFees()` resolves the commission (flat/
+    percentage/tiered, with promo→creator→category→default override precedence), applies coupon/promo
+    discounts, reuses the flat Bubaly service fee, computes the Stripe processing fee (2.9%+30¢,
+    configurable payer), and returns a reconciled buyer-total / seller-net / platform-take breakdown with
+    labeled line items + `explainFees()` for AI/seller-dashboard use. Tests `tests/marketplace-fees.test.ts`
+    (10). Verified tsc/eslint/vitest(1941)/build. Consumed next by checkout + seller dashboard + AI assistant.
 - [ ] **Creator storefronts** — sell physical products, digital downloads, handmade goods, print-on-demand,
   rental inventory, services, event tickets, courses (future-ready). Payouts via Stripe Connect. Provide
   revenue dashboard, sales analytics, refund management, payout history, tax reporting, order management.
