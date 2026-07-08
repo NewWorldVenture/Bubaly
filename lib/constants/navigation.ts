@@ -192,7 +192,6 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/family-health', label: 'Health Coordinator', icon: HeartPulse, minLevel: 2 },
       { href: '/dashboard/family-school', label: 'School Hub', icon: GraduationCap, minLevel: 2 },
       { href: '/dashboard/family-sports', label: 'Sports Hub', icon: Trophy, minLevel: 2 },
-      { href: '/dashboard/family-memory', label: 'Memory Brain', icon: BookHeart, minLevel: 2 },
       { href: '/dashboard/knowledge', label: 'Knowledge Base', icon: Brain, minLevel: 0 },
       { href: '/dashboard/playbook', label: 'Family Playbook', icon: Wand2, minLevel: 0 },
       { href: '/dashboard/experience', label: 'Experience Scorecard', icon: ClipboardCheck, minLevel: 0 },

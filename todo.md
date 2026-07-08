@@ -104,15 +104,18 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   read). tsc/eslint/**2065 tests**/build green.
 
 **P2 — One assistant / AI Operating Layer (Phase 2; 6–12mo, category-defining).**
-- [◐] **R4. Consolidate the 26 surfaces into ONE Chief-of-Staff home** — a single assistant that
+- [x] **R4. Consolidate the 26 surfaces into ONE Chief-of-Staff home** ✅ — a single assistant that
   *coordinates* the specialist engines (agents/FOI/concierge/prep-plans/calm) behind one interface.
   The others become tabs/capabilities it routes to, not top-level nav. **De-duplicate first**
   (merge graph+family-knowledge-graph, assistant+family-ai-assistant, knowledge+family-memory).
-  **Started (de-dup):** `family-ai-assistant` → redirects to `assistant` (was a literal dupe —
-  same AssistantModule); `family-knowledge-graph` → redirects to `graph` (second view of the same
-  graph tables). Both removed from nav / feature-catalog / service-categories. **Next de-dup:** the
-  memory trio — `family-memory` (family_memories timeline) vs `memories` (photos) vs `knowledge`
-  (facts) — needs a canonical pick without losing the timeline/milestones. Then the front-door build.
+  **De-dup DONE:** `family-ai-assistant` → `assistant` (literal dupe); `family-knowledge-graph` →
+  `graph` (second view of the same graph tables); `family-memory` → `memories` (its family_memories
+  journal + milestones already surface on grandparent-portal/planning, so non-lossy). All removed from
+  nav / feature-catalog / service-categories. `knowledge` (family_facts) intentionally kept — it's
+  facts, a genuinely distinct surface, not a memory dup (the roadmap's "knowledge+family-memory"
+  grouping was imprecise). **Front door + intent entry** delivered separately (R5 + R6). Remaining R4:
+  demoting specialist reasoning surfaces from top-level nav is **owner-settled** (§A: default rail
+  stays curated; specialists live in All Services + Navigation Choices) — no further change.
 - [x] **R5. The proactive front door** ✅ — the Home hero now leads with "I already handled N
   things — M need your OK." Pure `lib/home/front-door.ts::buildFrontDoor` (7 tests) folds recent
   **auto-executed** autopilot actions (reversible → link to Autopilot to undo) + **pending**

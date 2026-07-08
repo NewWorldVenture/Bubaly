@@ -48,7 +48,7 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
       '/dashboard/memories', '/dashboard/family-tree', '/dashboard/grandparent-portal',
       '/dashboard/pets', '/dashboard/celebrations', '/dashboard/relationship',
       '/dashboard/journal', '/dashboard/photos', '/dashboard/wishlists',
-      '/dashboard/activity', '/dashboard/voting', '/dashboard/family-memory',
+      '/dashboard/activity', '/dashboard/voting',
       '/dashboard/family-digital-twin',
     ],
   },
