@@ -7,6 +7,9 @@ import {
   OUTCOMES, buildOutcomePlan, outcomeUrgencyCount, type OutcomeContext,
 } from '@/lib/outcomes/launcher';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
+import { loadFamilyContext } from '@/lib/reasoning/context';
+import { reasoningInsights } from '@/lib/reasoning/insights';
+import { RelationshipInsights } from '@/components/reasoning/relationship-insights';
 
 export const metadata: Metadata = { title: 'Outcomes | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -53,9 +56,18 @@ export default async function OutcomesPage() {
     urgency: outcomeUrgencyCount(outcome.id, context),
   }));
 
+  // R2: surface Knowledge Graph relationship reasoning alongside the outcomes.
+  const reasoning = await loadFamilyContext(supabase, familyId, now).catch(() => null);
+  const insights = reasoning ? reasoningInsights(reasoning) : [];
+
   return (
     <>
       <ActivationBeacon milestone="first_outcome_viewed" familyId={familyId} userId={ctx.user.id} signupAtIso={ctx.active.family.created_at} />
+      {insights.length > 0 && (
+        <div className="mx-auto mb-4 max-w-5xl px-4 pt-2">
+          <RelationshipInsights insights={insights} />
+        </div>
+      )}
       <OutcomesLauncher plans={plans} />
     </>
   );
