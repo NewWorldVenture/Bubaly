@@ -923,6 +923,15 @@ missing-location events, colliding events for conflicts). Run it, then open
   listings/saves/offers (NO new schema — the existing marketplace seeds populate it). Nav entry (Pulse,
   `Activity`, additive). Verified: tsc · eslint · **vitest (6)** · `next build` (`/marketplace/insights`).
 
+- [x] **Listing Q&A ✅ SHIPPED (2026-07-09).** "Ask a question" on any listing — public within the
+  family. Inline thread on the item detail page (`ListingQuestions`: buyers ask, the owner answers
+  inline, realtime) + a seller **Questions inbox** at `/marketplace/questions` (Needs-your-answer / Your
+  questions / Answered). Table **`marketplace_questions`** (`0153`, family-scoped RLS, PG16-validated) +
+  types; pure `lib/marketplace/questions.ts` (`categorizeQuestions`/`unansweredCount`/`isAnswered`,
+  **5 tests**). Nav entry (Questions, `MessageSquare`; one surgical mount on the detail page). Seed
+  `seed_marketplace_questions.sql` (~400 Q&A, ~half answered by the owner). Verified: tsc · eslint ·
+  **vitest (5)** · `next build`. ⚠️ apply `0153` to prod.
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:

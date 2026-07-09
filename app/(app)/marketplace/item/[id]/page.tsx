@@ -10,6 +10,7 @@ import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { SaveButton } from '@/components/marketplace/save-button';
 import { InterestButton } from '@/components/marketplace/interest-button';
+import { ListingQuestions } from '@/components/marketplace/listing-questions';
 import { computeTrustScore, ratingSummary, TRUST_BAND_LABELS } from '@/lib/marketplace/trust';
 import {
   KIND_LABELS, CATEGORY_LABELS, CONDITION_LABELS, priceLabel, kindHasPrice,
@@ -181,6 +182,9 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           </ul>
         </div>
       )}
+
+      {/* Q&A */}
+      <ListingQuestions listingId={listing.id} isOwner={isOwner} />
     </div>
   );
 }

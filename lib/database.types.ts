@@ -398,6 +398,11 @@ export interface Database {
         { id?: string; family_id: string; member_id: string; label?: string | null; query?: string | null; kind?: string | null; category?: string | null; max_price_cents?: number | null; is_active?: boolean; last_seen_at?: string; created_by?: string | null },
         Partial<{ label: string | null; query: string | null; kind: string | null; category: string | null; max_price_cents: number | null; is_active: boolean; last_seen_at: string }>
       >;
+      marketplace_questions: T<
+        { id: string; family_id: string; listing_id: string; asker_member: string | null; question: string; answer: string | null; answered_at: string | null; answered_by: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; listing_id: string; asker_member?: string | null; question: string; answer?: string | null; answered_at?: string | null; answered_by?: string | null; created_by?: string | null },
+        Partial<{ asker_member: string | null; question: string; answer: string | null; answered_at: string | null; answered_by: string | null }>
+      >;
       marketplace_collections: T<
         { id: string; family_id: string; name: string; description: string | null; emoji: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name: string; description?: string | null; emoji?: string | null; created_by?: string | null },
