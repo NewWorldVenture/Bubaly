@@ -701,10 +701,17 @@ user confirms → publish → receive offers/requests → message securely → c
 - [ ] **Buy/sell engine** — buy now, make/counter/accept/decline offer, checkout, pickup/shipping, order
   status, buyer-protection workflow, seller dashboard. Statuses: available · pending · sold · canceled ·
   refunded · disputed.
-- [ ] **Trust, verification & safety** — levels: email · phone · payment-method · identity (where provider
+- [~] **Trust, verification & safety** — levels: email · phone · payment-method · identity (where provider
   exists) · address/location · trusted-family/community · repeat-seller · top-renter · fast-responder.
   Trust score from completed txns, reviews, ratings, response time, disputes, cancellations, verification.
   Show trust indicators before transacting.
+  - [x] Engine `lib/marketplace/trust.ts` — `computeTrustScore(signals)` → 0–100 from four capped
+    components (verification 0–30, ratings 0–30 confidence-weighted by review count, experience 0–20 with
+    diminishing returns, reliability 0–20 penalized by dispute/cancellation rate) + earned badges
+    (id_verified/verified/repeat_seller/fast_responder/top_rated/trusted); `verificationScore()`,
+    `trustTier()`, `badgeLabel()`. Backs `marketplace_trust_scores`. Tests `tests/marketplace-trust.test.ts`
+    (8). Verified tsc/eslint/vitest(1988). Next: server aggregation of the signals + trust chip on
+    profiles/listings/checkout.
 - [ ] **Uber-style two-sided ratings** — buyer↔seller, renter↔owner, borrower↔lender across
   communication, reliability, item accuracy, timeliness, condition-returned, overall. Show average, count,
   badge summary, recent reviews.
