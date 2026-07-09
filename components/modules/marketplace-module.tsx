@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Store, Plus, Search, Tag, Clock, HandHeart, Check, X, Pencil, Trash2,
-  ShoppingBag, Package, Gift, HelpCircle, MapPin, Inbox, Database,
+  ShoppingBag, Package, Gift, HelpCircle, MapPin, Inbox, Database, Repeat,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -31,6 +31,7 @@ type Offer = Tables<'marketplace_offers'>;
 
 const KIND_ICON: Record<ListingKind, typeof Store> = {
   sell: ShoppingBag, rent: Clock, borrow: Package, free: Gift, wanted: HelpCircle,
+  swap: Repeat, donate: HandHeart,
 };
 const KIND_STYLE: Record<ListingKind, string> = {
   sell: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30',
@@ -38,6 +39,8 @@ const KIND_STYLE: Record<ListingKind, string> = {
   borrow: 'text-violet-300 bg-violet-500/10 border-violet-500/30',
   free: 'text-amber-300 bg-amber-500/10 border-amber-500/30',
   wanted: 'text-rose-300 bg-rose-500/10 border-rose-500/30',
+  swap: 'text-teal-300 bg-teal-500/10 border-teal-500/30',
+  donate: 'text-pink-300 bg-pink-500/10 border-pink-500/30',
 };
 
 const blank = {
@@ -46,16 +49,28 @@ const blank = {
   price: '', rent_period: 'day' as RentPeriod, location: '',
 };
 
-export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
+export function MarketplaceModule({
+  canSeed = false,
+  initialKind = 'all',
+  initialCategory = 'all',
+  initialQuery = '',
+  autoOpenPost = null,
+}: {
+  canSeed?: boolean;
+  initialKind?: ListingKind | 'all';
+  initialCategory?: ListingCategory | 'all';
+  initialQuery?: string;
+  autoOpenPost?: ListingKind | null;
+}) {
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
 
-  const [kindFilter, setKindFilter] = useState<ListingKind | 'all'>('all');
-  const [catFilter, setCatFilter] = useState<ListingCategory | 'all'>('all');
-  const [q, setQ] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState(blank);
+  const [kindFilter, setKindFilter] = useState<ListingKind | 'all'>(initialKind);
+  const [catFilter, setCatFilter] = useState<ListingCategory | 'all'>(initialCategory);
+  const [q, setQ] = useState(initialQuery);
+  const [modalOpen, setModalOpen] = useState(!!autoOpenPost);
+  const [form, setForm] = useState(autoOpenPost ? { ...blank, kind: autoOpenPost } : blank);
   const [saving, setSaving] = useState(false);
   const [offersFor, setOffersFor] = useState<Listing | null>(null);
 
@@ -156,6 +171,17 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
     await sb.from('marketplace_offers').update({ status: 'accepted' }).eq('id', offer.id);
     await sb.from('marketplace_offers').update({ status: 'declined' })
       .eq('listing_id', l.id).eq('status', 'open').neq('id', offer.id);
+    // Record the exchange as an order (drives Orders + two-sided Reviews + the
+    // trust score). Best-effort: pre-0151 databases just skip it.
+    try {
+      const orderKind = l.kind === 'sell' ? 'buy' : ['rent', 'borrow', 'swap', 'donate', 'free'].includes(l.kind) ? l.kind : 'buy';
+      await sb.from('marketplace_orders').insert({
+        family_id: familyId, listing_id: l.id,
+        buyer_member: offer.member_id, seller_member: l.member_id,
+        kind: orderKind, status: 'confirmed',
+        amount_cents: offer.amount_cents ?? l.price_cents, created_by: userId,
+      });
+    } catch { /* orders table not applied yet */ }
     success(`Handed off to ${memberName(offer.member_id)}`);
     setOffersFor(null);
   }

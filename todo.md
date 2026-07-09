@@ -793,6 +793,70 @@ missing-location events, colliding events for conflicts). Run it, then open
 - [x] Route `/dashboard/marketplace` + admin-only `/dashboard/marketplace/seed` (500-record test seed screen).
 - [x] Nav entry (Family & Home group, `Store` icon).
 - [x] Verified: tsc, eslint, vitest (1562), build.
+#### ▶ Marketplace V2 — the AI-first marketplace (owner design, 2026-07-09) — FULL INCORPORATION CHECKLIST
+
+> **Owner directive:** incorporate the provided design as the `bubaly.com` marketplace page.
+> "The world's easiest AI-first marketplace — buy, sell, rent, borrow, lend & more, all in one
+> trusted community." Keep the **bubaly global header**; the section rail's **Home** returns to the
+> bubaly landing; **no marketplace-specific Messages** — the Messages entry routes to the ONE bubaly
+> Messages surface. 100% Supabase-wired, 100% production ready.
+
+**Schema + engines (shipped ✅):**
+- [x] Migration **`0151_marketplace_v2.sql`** — `marketplace_stores` (one storefront/member) ·
+  `marketplace_follows` · `marketplace_saves` (♥) · `marketplace_collections`+`_items` ·
+  `marketplace_orders` (requested→confirmed→active→returned→completed/cancelled) ·
+  `marketplace_reviews` (two-sided, 1–5★, one per side per order) · listing kinds widened with
+  **`swap` + `donate`**. All family-scoped RLS; validated idempotent on PG16.
+- [x] Types for all 7 tables in `lib/database.types.ts`; `swap`/`donate` in `lib/marketplace/listings.ts`.
+- [x] Pure **`lib/marketplace/trust.ts`** — `computeTrustScore` (volume-scaled ratings + completed
+  exchanges + activity − disputes; new members start at 50 "Building"), `ratingSummary`.
+- [x] Pure **`lib/marketplace/discover.ts`** — `aiPicks` (badges: AI Match · Hot Rental · Great Deal ·
+  Borrow Nearby · Trending · New Today, variety-first), `activityFeed` ("Sarah rented a dress · 2 min
+  ago"), `rankCreators`. **14 tests** across both engines.
+- [x] Server actions: `toggleSaveAction` · `toggleFollowAction` · `upsertStoreAction` ·
+  `setOrderStatusAction` (legal-transition-enforced) · `leaveReviewAction` (completed orders only,
+  both parties, one review per side).
+- [x] Accepting an offer now records a **`marketplace_orders`** row (best-effort) — offers→orders→
+  reviews→trust is one connected loop.
+
+**Surfaces (shipped ✅):**
+- [x] **`/dashboard/marketplace`** — the V2 home inside the bubaly global frame: hero ("AI-first
+  marketplace" + trust chips + featured cards) · 8-tile action grid (Sell/Rent/Lend/Borrow/Request/
+  Donate/Swap/Create Store) · **AI Picks for You** (badged, ♥-save) · AI Buyer Assistant + Request &
+  Get Matched (live match count) + Verified-Trusted-Safe row · Browse by Category · Popular
+  Collections · right rail: **AI Marketplace Assistant** (prompt chips → the ONE bubaly assistant) ·
+  Recent Activity · Top Creators (Follow) · **Your Trust Score** · Safety First.
+- [x] Marketplace **section rail** (`components/marketplace/marketplace-nav.tsx`): Marketplace ·
+  **Home → `/dashboard`** (bubaly landing) · AI Assistant · Browse · Requests · Rentals · Borrow &
+  Lend · Buy & Sell · Donate · Swap · Collections · Creators · My Store · My Listings ·
+  **Messages → `/dashboard/messages`** (global bubaly Messages — no marketplace inbox) · Orders ·
+  Reviews · Saved · **Verifications → `/dashboard/trust`** · Post an Item.
+- [x] **`/browse`** — the full board (existing realtime module) + match strip; rail-driven via
+  `?kind=` `?cat=` `?q=` `?post=1&kind=` (deep-linked post modal).
+- [x] **`/saved`** · **`/orders`** (lifecycle controls + leave-review) · **`/reviews`** (received/given
+  + your rating) · **`/collections`** (grid + detail) · **`/creators`** (ranked storefronts + Follow) ·
+  **`/store`** (storefront editor + follower/rating/listing stats + My Listings).
+- [x] Seed **`seed_marketplace_v2.sql`** (~1,200 rows: stores, follows, 6 collections + 150 items,
+  300 saves, 300 orders across the status spread, ~500 two-sided reviews; in `SEED_ALL.sql`, now 42).
+  PG16-validated ×2 (idempotent). Verified: tsc · eslint · **vitest (34 marketplace)** · `next build`
+  (all 9 routes).
+- [x] ⚠️ apply **`0151`** to prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe before apply: every
+  V2 read is best-effort — the home renders with empty rails and the 0120 board still works.
+
+**Remaining to reach the full design vision (open):**
+- [ ] **Listing photos** — `photo_url` exists but there's no upload path; needs a Supabase Storage
+  bucket + policies (owner decision on storage) so cards can look like the design's imagery.
+- [ ] **Real LLM marketplace assistant** — the rail panel routes to the bubaly assistant with prompt
+  chips today; a marketplace-tuned conversational flow ("is this a fair price?") is key-gated on the
+  LLM key (B3) and should route through the ONE assistant, not a second chat.
+- [ ] **"Post in under 60 seconds with AI"** — AI-drafted listing (title/category/price suggestion
+  from a photo or one sentence); LLM-key-gated (B3).
+- [ ] **Secure payments** — real checkout/escrow is Stripe-gated (B3/owner); today amounts are
+  recorded on orders and settled off-platform (family context makes this acceptable pre-keys).
+- [ ] **Geo "near me" distances** — needs the Maps key (B3); location is stored free-text today.
+- [ ] **Cross-family network marketplace** — the design's "community" reach beyond one household
+  rides on the Intelligence-Network consent rails (`network_consent`) — a strategy decision (§A).
+
 - [x] **Match intelligence (next level) ✅ SHIPPED (2026-07-09).** The board is now proactive:
   it connects open **`wanted`** requests to the supply already posted (`sell`/`free`/`rent`/`borrow`)
   — *"You're looking for a bike; Mom listed a balance bike for free."* Pure `lib/marketplace/matches.ts`
@@ -801,7 +865,7 @@ missing-location events, colliding events for conflicts). Run it, then open
   wanted. Server `matches-server.ts` (`loadAndSnapshotMatches`) computes from live listings + persists
   to **`marketplace_matches`** (`0150`, family-scoped RLS, one row per wanted/supply) **preserving
   dismissals**. A "Matches on the board" strip (`components/marketplace/matches-strip.tsx`) sits atop
-  `/dashboard/marketplace` with Got-it / Dismiss (`setMatchStatusAction`). Seed
+  the board (now `/dashboard/marketplace/browse` under V2) with Got-it / Dismiss (`setMatchStatusAction`). Seed
   `seed_marketplace_matches.sql` (500 rows, status spread; in `SEED_ALL.sql`). Verified: tsc · eslint ·
   **vitest (10 match + 10 listings)** · `next build`; migration + seed validated on PG16 (500 rows,
   idempotent). ⚠️ apply `0150` to prod (see `docs/PENDING_PROD_MIGRATIONS.md`).

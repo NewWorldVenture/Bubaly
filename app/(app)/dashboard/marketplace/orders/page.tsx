@@ -1,0 +1,90 @@
+import type { Metadata } from 'next';
+import { Receipt } from 'lucide-react';
+import { requireUserContext } from '@/lib/supabase/auth';
+import { createServer } from '@/lib/supabase/server';
+import { PageHeader } from '@/components/app/page-header';
+import { OrderControls, ReviewForm } from '@/components/marketplace/order-controls';
+import { formatCents } from '@/lib/marketplace/listings';
+import { cn } from '@/lib/utils/cn';
+
+export const metadata: Metadata = { title: 'Orders · Marketplace | Bubaly' };
+export const dynamic = 'force-dynamic';
+
+const STATUS_CHIP: Record<string, string> = {
+  requested: 'bg-amber-500/12 text-amber-600 dark:text-amber-400',
+  confirmed: 'bg-sky-500/12 text-sky-600 dark:text-sky-400',
+  active: 'bg-brand/12 text-brand',
+  returned: 'bg-violet-500/12 text-violet-600 dark:text-violet-400',
+  completed: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400',
+  cancelled: 'bg-border/60 text-muted',
+};
+
+export default async function MarketplaceOrdersPage() {
+  const ctx = await requireUserContext();
+  const sb = await createServer();
+  const familyId = ctx.active.familyId;
+  const selfId = ctx.active.member.id;
+
+  const { data: orders } = await sb
+    .from('marketplace_orders')
+    .select('id, listing_id, buyer_member, seller_member, kind, status, amount_cents, created_at')
+    .eq('family_id', familyId)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  const mine = (orders ?? []).filter((o) => o.buyer_member === selfId || o.seller_member === selfId);
+  const listingIds = [...new Set(mine.map((o) => o.listing_id))];
+  const { data: listings } = listingIds.length
+    ? await sb.from('marketplace_listings').select('id, title').in('id', listingIds)
+    : { data: [] };
+  const titleOf = new Map((listings ?? []).map((l) => [l.id, l.title]));
+
+  const { data: members } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
+  const nameOf = (id: string | null) => members?.find((m) => m.id === id)?.display_name ?? 'Someone';
+
+  // Which completed orders have I already reviewed?
+  const { data: myReviews } = await sb
+    .from('marketplace_reviews')
+    .select('order_id')
+    .eq('family_id', familyId)
+    .eq('reviewer_member', selfId);
+  const reviewed = new Set((myReviews ?? []).map((r) => r.order_id));
+
+  return (
+    <div>
+      <PageHeader title="Orders" description="Every exchange you’re part of — confirm, hand off, complete, and review." />
+      {mine.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
+          <Receipt className="mx-auto mb-2 h-6 w-6" />
+          No orders yet — accept an offer on one of your listings, or claim something on the board.
+        </div>
+      ) : (
+        <ul className="space-y-2.5">
+          {mine.map((o) => {
+            const role = o.buyer_member === selfId ? 'buyer' : 'seller';
+            const other = role === 'buyer' ? nameOf(o.seller_member) : nameOf(o.buyer_member);
+            return (
+              <li key={o.id} className="rounded-xl border border-border bg-surface/60 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide', STATUS_CHIP[o.status] ?? STATUS_CHIP.cancelled)}>{o.status}</span>
+                  <p className="min-w-0 flex-1 truncate text-sm font-medium">{titleOf.get(o.listing_id) ?? 'Listing'}</p>
+                  {o.amount_cents > 0 && <span className="text-sm font-semibold text-brand">{formatCents(o.amount_cents)}</span>}
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  {role === 'buyer' ? `You’re getting this from ${other}` : `${other} is getting this from you`} · {o.kind}
+                </p>
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  <OrderControls orderId={o.id} status={o.status} />
+                  {o.status === 'completed' && !reviewed.has(o.id) && <ReviewForm orderId={o.id} />}
+                  {o.status === 'completed' && reviewed.has(o.id) && (
+                    <p className="text-xs text-muted">You reviewed this exchange ✓</p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}

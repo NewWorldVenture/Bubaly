@@ -28,7 +28,7 @@ export type MarketplaceMatch = {
   supplyFree: boolean;
 };
 
-const SUPPLY_KINDS = new Set(['sell', 'rent', 'borrow', 'free']);
+const SUPPLY_KINDS = new Set(['sell', 'rent', 'borrow', 'free', 'swap', 'donate']);
 const OPEN_STATUS = new Set(['available', 'pending']);
 
 // Small, deliberately generic stopword list so "a bike" and "the Bike!" match.
@@ -65,7 +65,7 @@ export function scoreMatch(wanted: MatchListing, supply: MatchListing): Marketpl
   const terms = sharedTerms(wanted.title, supply.title);
   if (!sameCategory && terms.length === 0) return null;
 
-  const supplyFree = supply.kind === 'free';
+  const supplyFree = supply.kind === 'free' || supply.kind === 'donate';
   let score = 10;
   if (sameCategory) score += 45;
   score += Math.min(2, terms.length) * 22;

@@ -378,6 +378,41 @@ export interface Database {
         { id?: string; family_id: string; wanted_id: string; supply_id: string; score?: number; reason?: string | null; status?: string; created_by?: string | null },
         Partial<{ score: number; reason: string | null; status: string }>
       >;
+      marketplace_stores: T<
+        { id: string; family_id: string; member_id: string; name: string; tagline: string | null; description: string | null; emoji: string | null; is_active: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; name: string; tagline?: string | null; description?: string | null; emoji?: string | null; is_active?: boolean; created_by?: string | null },
+        Partial<{ name: string; tagline: string | null; description: string | null; emoji: string | null; is_active: boolean }>
+      >;
+      marketplace_follows: T<
+        { id: string; family_id: string; store_id: string; member_id: string; created_at: string },
+        { id?: string; family_id: string; store_id: string; member_id: string },
+        Partial<{ store_id: string; member_id: string }>
+      >;
+      marketplace_saves: T<
+        { id: string; family_id: string; listing_id: string; member_id: string; created_at: string },
+        { id?: string; family_id: string; listing_id: string; member_id: string },
+        Partial<{ listing_id: string; member_id: string }>
+      >;
+      marketplace_collections: T<
+        { id: string; family_id: string; name: string; description: string | null; emoji: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; description?: string | null; emoji?: string | null; created_by?: string | null },
+        Partial<{ name: string; description: string | null; emoji: string | null }>
+      >;
+      marketplace_collection_items: T<
+        { id: string; family_id: string; collection_id: string; listing_id: string; created_at: string },
+        { id?: string; family_id: string; collection_id: string; listing_id: string },
+        Partial<{ collection_id: string; listing_id: string }>
+      >;
+      marketplace_orders: T<
+        { id: string; family_id: string; listing_id: string; buyer_member: string | null; seller_member: string | null; kind: string; status: string; amount_cents: number; starts_on: string | null; ends_on: string | null; notes: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; listing_id: string; buyer_member?: string | null; seller_member?: string | null; kind?: string; status?: string; amount_cents?: number; starts_on?: string | null; ends_on?: string | null; notes?: string | null; created_by?: string | null },
+        Partial<{ buyer_member: string | null; seller_member: string | null; kind: string; status: string; amount_cents: number; starts_on: string | null; ends_on: string | null; notes: string | null }>
+      >;
+      marketplace_reviews: T<
+        { id: string; family_id: string; order_id: string | null; listing_id: string | null; reviewer_member: string | null; reviewee_member: string | null; role: string; rating: number; comment: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; order_id?: string | null; listing_id?: string | null; reviewer_member?: string | null; reviewee_member?: string | null; role?: string; rating?: number; comment?: string | null; created_by?: string | null },
+        Partial<{ role: string; rating: number; comment: string | null }>
+      >;
       voice_commands: T<
         { id: string; family_id: string; member_id: string | null; transcript: string; resolved_kind: string | null; action_table: string | null; action_count: number; status: string; created_by: string | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; transcript: string; resolved_kind?: string | null; action_table?: string | null; action_count?: number; status?: string; created_by?: string | null },

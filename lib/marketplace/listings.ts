@@ -2,7 +2,7 @@
 // and any server code import these so labels, money math, filtering and the
 // offer/claim state machine live in one tested place.
 
-export type ListingKind = 'sell' | 'rent' | 'borrow' | 'free' | 'wanted';
+export type ListingKind = 'sell' | 'rent' | 'borrow' | 'free' | 'wanted' | 'swap' | 'donate';
 export type ListingCategory =
   | 'toys' | 'clothing' | 'books' | 'electronics' | 'furniture'
   | 'sports' | 'tools' | 'baby' | 'games' | 'other';
@@ -17,6 +17,8 @@ export const KIND_LABELS: Record<ListingKind, string> = {
   borrow: 'To borrow',
   free: 'Free',
   wanted: 'Wanted',
+  swap: 'Swap',
+  donate: 'Donate',
 };
 
 export const CATEGORY_LABELS: Record<ListingCategory, string> = {
@@ -33,9 +35,9 @@ export const RENT_PERIOD_LABELS: Record<RentPeriod, string> = {
   hour: '/hr', day: '/day', week: '/wk', month: '/mo',
 };
 
-export const KIND_ORDER: ListingKind[] = ['sell', 'rent', 'borrow', 'free', 'wanted'];
+export const KIND_ORDER: ListingKind[] = ['sell', 'rent', 'borrow', 'free', 'wanted', 'swap', 'donate'];
 
-/** Kinds that carry a price/rate. `borrow`/`free`/`wanted` do not show money. */
+/** Kinds that carry a price/rate. `borrow`/`free`/`wanted`/`swap`/`donate` do not show money. */
 export function kindHasPrice(kind: ListingKind): boolean {
   return kind === 'sell' || kind === 'rent';
 }
