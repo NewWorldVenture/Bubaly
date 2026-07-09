@@ -551,8 +551,14 @@ manual payout review (if enabled), and subscription billing for premium storefro
   fully enable unless configured.
 - [ ] **Refunds** — full · partial · seller-approved · admin override · automatic cancellation ·
   rental-deposit · failed-delivery. Track reason, initiator, timestamp, Stripe refund id, status.
-- [ ] **Disputes** — item not received · damaged · not as described · rental damage · late return · fraud.
+- [~] **Disputes** — item not received · damaged · not as described · rental damage · late return · fraud.
   Store evidence, images, videos, messages, timeline, admin decisions. **Never fabricate dispute outcomes.**
+  - [x] State machine + remedy rules `lib/marketplace/disputes.ts` — `DISPUTE_TRANSITIONS`/
+    `canDisputeTransition`/`isDisputeTerminal` (open→under_review→resolved/rejected/escalated),
+    `applicableRemedies(kind)`/`isValidRemedy`, and `resolveDispute(from, kind, remedy)` which requires an
+    explicit human remedy, validates it's legal + applicable, and never auto-decides (no_action→rejected).
+    Backs `marketplace_disputes`. Tests `tests/marketplace-disputes.test.ts` (8). Verified tsc/eslint/vitest.
+    Next: evidence storage + admin resolution UI in `/admin/marketplace`.
 - [ ] **Stripe webhooks (production-ready)** — handle `checkout.session.completed`, `payment_intent.succeeded`,
   `payment_intent.payment_failed`, `payment_intent.canceled`, `charge.refunded`, `payout.created`,
   `payout.failed`, `payout.paid`, `account.updated`, `account.application.authorized`,
