@@ -849,9 +849,33 @@ missing-location events, colliding events for conflicts). Run it, then open
 - [x] ⚠️ apply **`0151`** to prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe before apply: every
   V2 read is best-effort — the home renders with empty rails and the 0120 board still works.
 
+- [x] **Marketplace top-level URL move ✅ SHIPPED (2026-07-09, #275).** The whole surface moved from
+  `/dashboard/marketplace*` to top-level **`/marketplace*`** (home, `/browse`, `/collections`,
+  `/creators`, `/store`, `/orders`, `/reviews`, `/saved`, `/seed`) under `app/(app)/marketplace/`.
+
+- [x] **Listing photos ✅ SHIPPED (2026-07-09, #277).** Cards + post/edit now render `photo_url`:
+  listing cards show the image as a header (`object-cover`) with a gradient + kind-icon placeholder
+  fallback; the post/edit form has a **Photo URL** field with a live preview. Seed
+  `seed_marketplace.sql` gives all 500 listings a photo (`picsum.photos`). PG16-verified · tsc ·
+  eslint · `next build`. *(Still open: a Supabase Storage **upload** path — bucket + policies — so
+  owners can attach a file instead of pasting a URL; owner decision on storage.)*
+
+- [x] **Listing detail page ✅ SHIPPED (2026-07-09, #278).** Clicking a listing now opens a real
+  detail page — **`/marketplace/item/[id]`** (`app/(app)/marketplace/item/[id]/page.tsx`),
+  server-rendered, family-scoped via RLS. Hero photo (with placeholder), title/price/category/
+  condition/location/description + live status, a **seller trust card** (`computeTrustScore` from the
+  seller's real reviews received + completed orders + listings posted → score, band, star rating, top
+  factor; links to the seller's storefront when present), and this listing's reviews. Actions: **Save
+  (♥)** + an **Interest/Claim** CTA via the new guarded server action **`makeOfferAction`** (rejects
+  own-listing / closed / duplicate open offers; flips an `available` listing to `pending`) driving the
+  optimistic **`InterestButton`** client component. Listing cards now **deep-link** to it from the
+  browse module (photo + title) and the marketplace home hero + AI picks (were browse-search links).
+  Verified: tsc 0 · eslint 0 · `next build` 0 (`/marketplace/item/[id]` registered) · Vercel preview
+  deployed green.
+
 **Remaining to reach the full design vision (open):**
-- [ ] **Listing photos** — `photo_url` exists but there's no upload path; needs a Supabase Storage
-  bucket + policies (owner decision on storage) so cards can look like the design's imagery.
+- [ ] **Listing photo uploads** — render + URL capture + seed shipped (#277); still needs a Supabase
+  Storage bucket + policies (owner decision on storage) so owners can upload a file, not paste a URL.
 - [ ] **Real LLM marketplace assistant** — the rail panel routes to the bubaly assistant with prompt
   chips today; a marketplace-tuned conversational flow ("is this a fair price?") is key-gated on the
   LLM key (B3) and should route through the ONE assistant, not a second chat.
