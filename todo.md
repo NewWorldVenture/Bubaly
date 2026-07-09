@@ -631,8 +631,14 @@ Progress across 10 verified, pushed slices on PR #251:
     block). Verified tsc/eslint/vitest.
   - [x] Wired into the Stripe webhook route `app/api/webhooks/money/route.ts` — `payment_intent.succeeded/
     payment_failed/canceled` now dispatch to `handleMarketplacePayment` (after signature verification +
-    `recordEvent` dedup). Verified next build. Next: create the PaymentIntent in checkout (attach
-    `stripe_payment_intent_id` to the payment row); then persist request matches + surface trust/fees in UI.
+    `recordEvent` dedup). Verified next build.
+  - [x] Persist request matches `lib/marketplace/matching-server.ts` — `saveRequestMatches()` loads the
+    wanted request + the public browsable listings (cross-family), runs `matchRequest`, and idempotently
+    rewrites `marketplace_request_matches` (clear-then-insert). Pure mappers `requestToMatchRequest`/
+    `listingRowToMatchListing`/`matchToInsert`. Extended the `marketplace_listings` type with the 0138
+    columns + added `marketplace_requests`/`_request_matches` types. Tests
+    `tests/marketplace-matching-server.test.ts` (5). Verified tsc/eslint/vitest/next build.
+  - Next: create the PaymentIntent in checkout (attach `stripe_payment_intent_id`); surface trust/fees in UI.
 - **Still queued** — `/marketplace/requests` wanted-post surface; media upload; creator stores + collections;
   messaging; admin/moderation. See items below.
 
