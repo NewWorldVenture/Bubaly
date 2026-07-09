@@ -694,10 +694,17 @@ user confirms → publish → receive offers/requests → message securely → c
     when both sides specify. Backs `marketplace_request_matches` + `marketplace_ai_matches`. Tests
     `tests/marketplace-matching.test.ts` (11). Verified tsc/eslint/vitest(1952). Next: server loader +
     persist top matches; date-availability scoring once availability rows are wired.
-- [ ] **Local borrow/rent engine** — availability calendar, rental/borrow duration, pickup/return times,
+- [~] **Local borrow/rent engine** — availability calendar, rental/borrow duration, pickup/return times,
   deposit, late-fee rules, condition checklist, handoff + return confirmation, damage reporting, dispute
   flow. Statuses: requested · approved · declined · active · picked_up · returned · late · damaged ·
   completed · disputed.
+  - [x] Lifecycle + deposit engine `lib/marketplace/rental-lifecycle.ts` — the full status state machine
+    (`RENTAL_TRANSITIONS`/`canTransition`/`nextStatuses`/`isTerminal`), deposit settlement that ENFORCES
+    "never release without the return workflow" (`canSettleDeposit` guard + `settleDeposit` throwing before
+    return; damage forfeits up to assessed damage capped at the deposit; lost forfeits all), and late-fee
+    math (`daysLate`/`lateFeeCents`). Backs `marketplace_rentals`/`_borrowing_agreements`/`_deposits`.
+    Tests `tests/marketplace-rental-lifecycle.test.ts` (9). Verified tsc/eslint/vitest. Next: availability
+    calendar checks + wiring to orders/deposits server-side.
 - [ ] **Buy/sell engine** — buy now, make/counter/accept/decline offer, checkout, pickup/shipping, order
   status, buyer-protection workflow, seller dashboard. Statuses: available · pending · sold · canceled ·
   refunded · disputed.
