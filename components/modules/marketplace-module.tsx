@@ -25,6 +25,8 @@ import {
   type ListingKind, type ListingCategory, type ListingCondition, type RentPeriod, type ListingLike,
 } from '@/lib/marketplace/listings';
 import { buildDraft, legacyKindFromModes } from '@/lib/marketplace/listing-draft';
+import { searchListings } from '@/lib/marketplace/buyer-search';
+import type { MatchListing } from '@/lib/marketplace/matching';
 import type { Tables } from '@/lib/database.types';
 
 type Listing = Tables<'marketplace_listings'>;
@@ -55,6 +57,7 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
   const [kindFilter, setKindFilter] = useState<ListingKind | 'all'>('all');
   const [catFilter, setCatFilter] = useState<ListingCategory | 'all'>('all');
   const [q, setQ] = useState('');
+  const [smart, setSmart] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(blank);
   const [saving, setSaving] = useState(false);
@@ -72,10 +75,30 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? 'Someone';
 
-  const visible = useMemo(
-    () => filterListings(listings as ListingLike[], { kind: kindFilter, category: catFilter, q }),
-    [listings, kindFilter, catFilter, q],
-  ) as Listing[];
+  // AI Buyer Assistant: when Smart search is on, rank the board with the natural-
+  // language matching engine (lib/marketplace/buyer-search) and surface a "why"
+  // reason per listing. Falls back to the plain title/category filter otherwise.
+  const smartResults = useMemo(() => {
+    if (!smart || !q.trim()) return null;
+    const ml: MatchListing[] = (listings as Listing[]).map((l) => ({
+      id: l.id, title: l.title, description: l.description, category: l.category,
+      kind: l.kind, condition: l.condition, priceCents: l.price_cents, status: l.status,
+    }));
+    return searchListings(q, ml, { minScore: 1, limit: 60 });
+  }, [smart, q, listings]);
+
+  const visible = useMemo(() => {
+    if (smartResults) {
+      const byId = new Map((listings as Listing[]).map((l) => [l.id, l]));
+      return smartResults.map((r) => byId.get(r.listing.id)).filter(Boolean) as Listing[];
+    }
+    return filterListings(listings as ListingLike[], { kind: kindFilter, category: catFilter, q }) as Listing[];
+  }, [smartResults, listings, kindFilter, catFilter, q]);
+
+  const reasonById = useMemo(
+    () => new Map((smartResults ?? []).map((r) => [r.listing.id, r.reasons.slice(0, 3).join(' · ')])),
+    [smartResults],
+  );
 
   const myOpenOffers = useMemo(
     () => new Set((offers ?? []).filter((o) => o.member_id === selfId && o.status === 'open').map((o) => o.listing_id)),
@@ -224,7 +247,13 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
       <div className="mb-5 space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search listings…" className="pl-9" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder={smart ? 'Ask AI — e.g. "blue jacket size M to rent under $50"' : 'Search listings…'} className="pl-9 pr-24" />
+          <button type="button" onClick={() => setSmart((s) => !s)} aria-pressed={smart}
+            className={cn('absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition',
+              smart ? 'border-violet-500/40 bg-violet-500/15 text-violet-300' : 'border-border text-muted hover:text-fg')}>
+            <Sparkles className="h-3.5 w-3.5" /> Smart
+          </button>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <FilterChip active={kindFilter === 'all'} onClick={() => setKindFilter('all')}>All</FilterChip>
@@ -241,9 +270,14 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
       </div>
 
       {visible.length === 0 ? (
-        <EmptyState icon={Store} title="Nothing on the board yet"
-          description="Post the first item — sell outgrown toys, lend a tool, or give away hand-me-downs."
-          action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Post a listing</Button>} />
+        smartResults ? (
+          <EmptyState icon={Sparkles} title="No matches found"
+            description="Try describing it differently, widening your budget, or turning off Smart search to browse everything." />
+        ) : (
+          <EmptyState icon={Store} title="Nothing on the board yet"
+            description="Post the first item — sell outgrown toys, lend a tool, or give away hand-me-downs."
+            action={<Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> Post a listing</Button>} />
+        )
       ) : (
         <>
           <p className="mb-3 text-xs text-muted">{availableCount(listings as ListingLike[])} available · {visible.length} shown</p>
@@ -268,6 +302,11 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
 
                   <div className="mt-2 font-semibold text-fg">{l.title}</div>
                   {l.description && <p className="mt-0.5 line-clamp-2 text-sm text-muted">{l.description}</p>}
+                  {reasonById.get(l.id) && (
+                    <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-violet-300">
+                      <Sparkles className="h-3 w-3" /> {reasonById.get(l.id)}
+                    </p>
+                  )}
 
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                     <span className="inline-flex items-center gap-1"><Tag className="h-3.5 w-3.5" />{CATEGORY_LABELS[l.category as ListingCategory]}</span>

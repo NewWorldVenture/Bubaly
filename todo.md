@@ -694,6 +694,9 @@ user confirms → publish → receive offers/requests → message securely → c
     rent/borrow/buy/any), and `searchListings()` runs it through the shared matching engine → ranked results
     with reasons. Tests `tests/marketplace-buyer-search.test.ts` (6). Verified tsc/eslint/vitest(1972). Next:
     a search box UI + thin LLM paraphrase of reasons; "is this a fair price?" via `computeFees`/comparables.
+  - [x] **Live in browse UI**: `marketplace-module.tsx` search bar has a "✨ Smart" toggle — when on, the
+    query runs `searchListings` and the board is ranked with a per-card "why" reason line; a dedicated
+    no-matches empty state. Verified tsc/eslint/next build.
 - [ ] **AI seller assistant** — improve listing quality, suggest price/photos, detect missing details,
   rent-vs-sale, demand-based pricing, best category, promo copy.
 - [ ] **Discovery** — personalized/nearby/trending-local/new-today/under-$25/free/borrow-nearby/
