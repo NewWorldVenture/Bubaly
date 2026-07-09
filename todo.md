@@ -712,9 +712,15 @@ user confirms → publish → receive offers/requests → message securely → c
     `trustTier()`, `badgeLabel()`. Backs `marketplace_trust_scores`. Tests `tests/marketplace-trust.test.ts`
     (8). Verified tsc/eslint/vitest(1988). Next: server aggregation of the signals + trust chip on
     profiles/listings/checkout.
-- [ ] **Uber-style two-sided ratings** — buyer↔seller, renter↔owner, borrower↔lender across
+- [~] **Uber-style two-sided ratings** — buyer↔seller, renter↔owner, borrower↔lender across
   communication, reliability, item accuracy, timeliness, condition-returned, overall. Show average, count,
   badge summary, recent reviews.
+  - [x] Aggregation engine `lib/marketplace/reviews.ts` — `aggregateReviews()` rolls received reviews into
+    an overall average (1-decimal), a 1–5 star histogram, per-dimension means, and the most-recent few;
+    `toTrustRatingSignals()` bridges into the trust engine; `ratingLabel()` for display. Ignores
+    out-of-range stars. Backs `marketplace_reviews` + `marketplace_ratings`. Tests
+    `tests/marketplace-reviews.test.ts` (6, incl. the trust bridge earning `top_rated`). Verified
+    tsc/eslint/vitest. Next: server aggregation per member + a post-transaction rate-both-sides UI.
 - [~] **AI buyer assistant** — natural-language search ("blue dress size 6 to rent near me", "safest
   seller for camping gear", "is this a fair price?") → ranked results with reasoning.
   - [x] Deterministic core `lib/marketplace/buyer-search.ts` — `parseBuyerQuery()` turns a NL query into
