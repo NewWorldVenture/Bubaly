@@ -705,9 +705,15 @@ user confirms → publish → receive offers/requests → message securely → c
     math (`daysLate`/`lateFeeCents`). Backs `marketplace_rentals`/`_borrowing_agreements`/`_deposits`.
     Tests `tests/marketplace-rental-lifecycle.test.ts` (9). Verified tsc/eslint/vitest. Next: availability
     calendar checks + wiring to orders/deposits server-side.
-- [ ] **Buy/sell engine** — buy now, make/counter/accept/decline offer, checkout, pickup/shipping, order
+- [~] **Buy/sell engine** — buy now, make/counter/accept/decline offer, checkout, pickup/shipping, order
   status, buyer-protection workflow, seller dashboard. Statuses: available · pending · sold · canceled ·
   refunded · disputed.
+  - [x] Offer + order state machine `lib/marketplace/order-lifecycle.ts` — `OFFER_TRANSITIONS`/
+    `ORDER_TRANSITIONS` with `canOfferTransition`/`canOrderTransition`/`nextOrderStatuses`/`isOrderTerminal`/
+    `isOrderPaid`, plus `resolveOfferAcceptance()` (accept one → auto-decline the other OPEN offers, throws
+    if target isn't open). Statuses match the DB check constraints exactly (offers 0120, orders 0138). Tests
+    `tests/marketplace-order-lifecycle.test.ts` (7). Verified tsc/eslint/vitest(2010). Next: checkout wiring
+    (`computeFees` → order + payment via §1a Stripe) + a seller dashboard reading these states.
 - [~] **Trust, verification & safety** — levels: email · phone · payment-method · identity (where provider
   exists) · address/location · trusted-family/community · repeat-seller · top-renter · fast-responder.
   Trust score from completed txns, reviews, ratings, response time, disputes, cancellations, verification.
