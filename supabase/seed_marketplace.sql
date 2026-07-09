@@ -32,7 +32,7 @@ begin
   delete from public.marketplace_listings where family_id = v_family and description = '[seed]';
 
   insert into public.marketplace_listings
-    (family_id, member_id, title, description, kind, category, condition, price_cents, status, location, created_at)
+    (family_id, member_id, title, description, kind, category, condition, price_cents, status, location, photo_url, created_at)
   select v_family,
     case when v_members is null then null else v_members[1 + (g.i % array_length(v_members,1))] end,
     titles[1 + (g.i % array_length(titles,1))] || ' #' || g.i,
@@ -43,6 +43,7 @@ begin
     (g.i % 6) * 500,
     stats[1 + (g.i % array_length(stats,1))],
     (array['Home','Garage','Attic','Neighborhood','Storage'])[1 + (g.i % 5)],
+    'https://picsum.photos/seed/mkt' || g.i || '/600/450',
     now() - ((g.i % 200) || ' days')::interval
   from generate_series(1, n) as g(i);
 
