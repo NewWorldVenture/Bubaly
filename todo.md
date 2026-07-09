@@ -705,6 +705,9 @@ user confirms → publish → receive offers/requests → message securely → c
     great_deal/fair/above_market/overpriced + suggested price) which ALSO powers the buyer's "is this a
     fair price?". Tests `tests/marketplace-seller-assistant.test.ts` (8). Verified tsc/eslint/vitest(1980).
     Next: surface tips + quality score in the post modal; a price chip on cards.
+  - [x] **Live in the post modal**: `marketplace-module.tsx` shows ranked quality tips (photo tip omitted —
+    modal has no photo field) and a fair-price stance (`priceVerdict` vs the board's comparables) that update
+    live as the seller fills the form. Verified tsc/eslint/next build.
 - [ ] **Discovery** — personalized/nearby/trending-local/new-today/under-$25/free/borrow-nearby/
   rent-nearby feeds, creator spotlight, saved searches, smart alerts, map view, Pinterest masonry. Search:
   keyword · natural language · category · size · color · brand · distance · price · availability · mode ·

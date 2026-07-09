@@ -27,6 +27,7 @@ import {
 import { buildDraft, legacyKindFromModes } from '@/lib/marketplace/listing-draft';
 import { searchListings } from '@/lib/marketplace/buyer-search';
 import type { MatchListing } from '@/lib/marketplace/matching';
+import { listingQualityTips, priceVerdict, type PriceComparable } from '@/lib/marketplace/seller-assistant';
 import type { Tables } from '@/lib/database.types';
 
 type Listing = Tables<'marketplace_listings'>;
@@ -99,6 +100,25 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
     () => new Map((smartResults ?? []).map((r) => [r.listing.id, r.reasons.slice(0, 3).join(' · ')])),
     [smartResults],
   );
+
+  // AI Seller Assistant: live listing-quality tips + a fair-price stance as the
+  // seller fills the post form (lib/marketplace/seller-assistant). The photo tip
+  // is dropped here — this modal doesn't manage photos.
+  const formQuality = useMemo(() => {
+    const priceCents = dollarsToCents(form.price);
+    const tips = listingQualityTips({
+      kind: form.kind, title: form.title, description: form.description,
+      category: form.category, condition: form.condition || null,
+      priceCents, location: form.location, photoUrl: 'n/a',
+    }).filter((t) => t.key !== 'photo');
+    const comps: PriceComparable[] = (listings as Listing[])
+      .filter((l) => l.id !== form.id)
+      .map((l) => ({ priceCents: l.price_cents, category: l.category, condition: l.condition }));
+    const price = kindHasPrice(form.kind) && priceCents > 0
+      ? priceVerdict(priceCents, comps, { category: form.category, condition: form.condition || null })
+      : null;
+    return { tips, price };
+  }, [form, listings]);
 
   const myOpenOffers = useMemo(
     () => new Set((offers ?? []).filter((o) => o.member_id === selfId && o.status === 'open').map((o) => o.listing_id)),
@@ -433,6 +453,29 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
           <Field label="Details">
             {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Size, age, why you're passing it on…" />}
           </Field>
+
+          {/* AI Seller Assistant: quality tips + fair-price stance */}
+          {(formQuality.tips.length > 0 || formQuality.price) && (
+            <div className="space-y-2 rounded-lg border border-border bg-surface/50 p-3">
+              {formQuality.price && (
+                <p className={cn('flex items-center gap-1.5 text-xs font-medium',
+                  formQuality.price.stance === 'overpriced' || formQuality.price.stance === 'above_market'
+                    ? 'text-amber-300'
+                    : formQuality.price.stance === 'great_deal' ? 'text-emerald-300' : 'text-muted')}>
+                  <Tag className="h-3.5 w-3.5" /> {formQuality.price.message}
+                </p>
+              )}
+              {formQuality.tips.length > 0 && (
+                <ul className="space-y-1">
+                  {formQuality.tips.slice(0, 3).map((t) => (
+                    <li key={t.key} className="flex items-start gap-1.5 text-xs text-muted">
+                      <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-violet-300" /> {t.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
