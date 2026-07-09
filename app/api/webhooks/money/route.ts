@@ -10,6 +10,7 @@ import { getStripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { recordEvent, handleAuthorizationRequest, handleTransactionCreated } from '@/lib/stripe/webhook';
 import { syncConnectedAccount } from '@/lib/stripe/connect';
+import { handleMarketplacePayment } from '@/lib/marketplace/payment-webhook';
 
 export const runtime = 'nodejs';
 
@@ -52,6 +53,12 @@ export async function POST(req: NextRequest) {
         if (familyId) await syncConnectedAccount(supabase, familyId, acct.id);
         break;
       }
+      // Marketplace checkout payments: confirm a pending order/payment (or cancel).
+      case 'payment_intent.succeeded':
+      case 'payment_intent.payment_failed':
+      case 'payment_intent.canceled':
+        await handleMarketplacePayment(supabase, event.data.object as Stripe.PaymentIntent, event.type);
+        break;
       default:
         // Unhandled event types are acknowledged (and recorded) so Stripe stops retrying.
         break;

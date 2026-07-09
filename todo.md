@@ -628,8 +628,11 @@ Progress across 10 verified, pushed slices on PR #251:
     succeeded + order→sold (guarded by the order state machine), failed/canceled→canceled. Idempotent
     (no-ops if already applied / unknown payment / non-payment event). Pure mappers `paymentStatusFromEvent`
     + `orderTargetForPayment`. Tests `tests/marketplace-payment-webhook.test.ts` (6, incl. a state-machine
-    block). Verified tsc/eslint/vitest. Next: wire into the Stripe webhook route (recordEvent + dispatch)
-    and create the PaymentIntent in checkout; then persist request matches.
+    block). Verified tsc/eslint/vitest.
+  - [x] Wired into the Stripe webhook route `app/api/webhooks/money/route.ts` — `payment_intent.succeeded/
+    payment_failed/canceled` now dispatch to `handleMarketplacePayment` (after signature verification +
+    `recordEvent` dedup). Verified next build. Next: create the PaymentIntent in checkout (attach
+    `stripe_payment_intent_id` to the payment row); then persist request matches + surface trust/fees in UI.
 - **Still queued** — `/marketplace/requests` wanted-post surface; media upload; creator stores + collections;
   messaging; admin/moderation. See items below.
 
