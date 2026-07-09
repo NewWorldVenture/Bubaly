@@ -916,6 +916,13 @@ missing-location events, colliding events for conflicts). Run it, then open
   idempotent). Verified: tsc · eslint · **vitest (12)** · `next build` (`/marketplace/alerts`).
   ⚠️ apply `0152` to prod.
 
+- [x] **Marketplace Pulse ✅ SHIPPED (2026-07-09).** A read-only intelligence view at
+  **`/marketplace/insights`** — supply by kind, **where demand outruns supply** (open `wanted` vs
+  available per category), **price benchmarks** (median/avg per category), and **what's hot** (saves ×2
+  + offers ×3). Pure `lib/marketplace/insights.ts` (`marketplaceInsights`, **6 tests**); reads existing
+  listings/saves/offers (NO new schema — the existing marketplace seeds populate it). Nav entry (Pulse,
+  `Activity`, additive). Verified: tsc · eslint · **vitest (6)** · `next build` (`/marketplace/insights`).
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:
