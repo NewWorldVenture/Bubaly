@@ -639,9 +639,17 @@ user confirms → publish → receive offers/requests → message securely → c
 - [ ] **Listing modes** — every listing supports one+ of: buy now · make offer · optional auction · rent ·
   borrow · lend · donate · swap · request-wanted. Auto-match wanted↔available (e.g. "borrow red dress
   size 8 Saturday" → nearby rentals/lends/sellers).
-- [ ] **AI listing assistant** — from photos/videos or one sentence, draft title, description, category,
+- [~] **AI listing assistant** — from photos/videos or one sentence, draft title, description, category,
   subcategory, condition, size, color, brand, price, rental price, deposit, borrow/lend terms, tags,
   availability, safety notes, SEO, and a Pinterest-style card preview. Editable; confirm before publish.
+  - [x] Deterministic core `lib/marketplace/listing-draft.ts` — `parseListingHints()` extracts
+    category/condition/mode/color/size/brand from a sentence; `suggestPricing()` gives buy/rent/deposit
+    baselines by category×condition; `buildDraft()` assembles a full editable draft (title, description,
+    tags, SEO, safety notes) that grounds the LLM and stands alone when AI is off; `draftReadiness()` is
+    the publish gate (never auto-publishes — surfaces `missing`). Tests
+    `tests/marketplace-listing-draft.test.ts` (13). Verified tsc/eslint/vitest(1965). Next: thin LLM
+    wrapper to refine prose + the media→draft path; server action to persist as a `marketplace_listings`
+    row on confirm.
 - [ ] **Unlimited media** — drag/drop + mobile camera, reorder, cover selection, video previews,
   compression, alt text, AI captions, gallery + Pinterest masonry. Supabase Storage; metadata persisted;
   no broken uploads.
