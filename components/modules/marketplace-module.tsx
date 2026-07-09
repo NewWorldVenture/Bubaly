@@ -28,6 +28,7 @@ import { buildDraft, legacyKindFromModes } from '@/lib/marketplace/listing-draft
 import { searchListings } from '@/lib/marketplace/buyer-search';
 import type { MatchListing } from '@/lib/marketplace/matching';
 import { listingQualityTips, priceVerdict, type PriceComparable } from '@/lib/marketplace/seller-assistant';
+import { computeFees, formatCents as formatFeeCents } from '@/lib/marketplace/fees';
 import type { Tables } from '@/lib/database.types';
 
 type Listing = Tables<'marketplace_listings'>;
@@ -117,7 +118,11 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
     const price = kindHasPrice(form.kind) && priceCents > 0
       ? priceVerdict(priceCents, comps, { category: form.category, condition: form.condition || null })
       : null;
-    return { tips, price };
+    // Fee transparency for the seller: what the buyer pays vs. what they net.
+    const fees = form.kind === 'sell' && priceCents > 0
+      ? computeFees({ subtotalCents: priceCents, policy: { default: { kind: 'percentage', bps: 1000 } }, category: form.category })
+      : null;
+    return { tips, price, fees };
   }, [form, listings]);
 
   const myOpenOffers = useMemo(
@@ -454,9 +459,17 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
             {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Size, age, why you're passing it on…" />}
           </Field>
 
-          {/* AI Seller Assistant: quality tips + fair-price stance */}
-          {(formQuality.tips.length > 0 || formQuality.price) && (
+          {/* AI Seller Assistant: quality tips + fair-price stance + fee transparency */}
+          {(formQuality.tips.length > 0 || formQuality.price || formQuality.fees) && (
             <div className="space-y-2 rounded-lg border border-border bg-surface/50 p-3">
+              {formQuality.fees && (
+                <p className="flex items-center gap-1.5 text-xs text-muted">
+                  <Tag className="h-3.5 w-3.5" />
+                  Buyer pays <span className="font-medium text-fg">{formatFeeCents(formQuality.fees.buyerTotalCents)}</span> ·
+                  you net <span className="font-medium text-emerald-300">{formatFeeCents(formQuality.fees.sellerNetCents)}</span>
+                  <span className="text-muted"> after {formatFeeCents(formQuality.fees.marketplaceFeeCents + formQuality.fees.serviceFeeCents)} fees</span>
+                </p>
+              )}
               {formQuality.price && (
                 <p className={cn('flex items-center gap-1.5 text-xs font-medium',
                   formQuality.price.stance === 'overpriced' || formQuality.price.stance === 'above_market'

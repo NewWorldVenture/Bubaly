@@ -638,7 +638,10 @@ Progress across 10 verified, pushed slices on PR #251:
     `listingRowToMatchListing`/`matchToInsert`. Extended the `marketplace_listings` type with the 0138
     columns + added `marketplace_requests`/`_request_matches` types. Tests
     `tests/marketplace-matching-server.test.ts` (5). Verified tsc/eslint/vitest/next build.
-  - Next: create the PaymentIntent in checkout (attach `stripe_payment_intent_id`); surface trust/fees in UI.
+  - [x] Fee transparency in the post modal — for a sale, the seller assistant panel now shows a live
+    "Buyer pays $X · you net $Y after $Z fees" line via `computeFees` (10% default). Verified tsc/eslint/build.
+  - Next: create the PaymentIntent in checkout (attach `stripe_payment_intent_id`); a per-owner trust chip
+    on cards (needs a server load); the `/marketplace/requests` wanted-post surface driving saveRequestMatches.
 - **Still queued** — `/marketplace/requests` wanted-post surface; media upload; creator stores + collections;
   messaging; admin/moderation. See items below.
 
