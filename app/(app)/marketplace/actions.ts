@@ -173,3 +173,50 @@ export async function leaveReviewAction(input: { orderId: string; rating: number
   revalidatePath(`${MARKETPLACE}/orders`);
   return { ok: true };
 }
+
+/**
+ * Express interest ('interest') or claim ('claim') on a listing from its detail
+ * page. Guards: the listing must be browsable and not the member's own, and they
+ * mustn't already have an open offer on it. Flips an available listing to
+ * 'pending' so others see it's being discussed. Family-scoped via RLS.
+ */
+export async function makeOfferAction(listingId: string): Promise<Result> {
+  if (!listingId) return { ok: false, error: 'Invalid listing' };
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+  const memberId = ctx.active.member.id;
+
+  const { data: listing } = await supabase
+    .from('marketplace_listings')
+    .select('id, kind, status, member_id')
+    .eq('id', listingId)
+    .eq('family_id', ctx.active.familyId)
+    .maybeSingle();
+  if (!listing) return { ok: false, error: 'Listing not found' };
+  if (listing.member_id === memberId) return { ok: false, error: 'This is your own listing' };
+  if (listing.status !== 'available' && listing.status !== 'pending') {
+    return { ok: false, error: 'This listing is no longer open' };
+  }
+
+  const { data: existing } = await supabase
+    .from('marketplace_offers')
+    .select('id')
+    .eq('listing_id', listingId)
+    .eq('member_id', memberId)
+    .eq('status', 'open')
+    .maybeSingle();
+  if (existing) return { ok: false, error: 'You already reached out about this' };
+
+  const kind = listing.kind === 'sell' || listing.kind === 'rent' ? 'interest' : 'claim';
+  const { error } = await supabase.from('marketplace_offers').insert({
+    family_id: ctx.active.familyId, listing_id: listingId, member_id: memberId, kind, created_by: ctx.user.id,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  if (listing.status === 'available') {
+    await supabase.from('marketplace_listings').update({ status: 'pending' }).eq('id', listingId);
+  }
+  revalidatePath(`${MARKETPLACE}/item/${listingId}`);
+  revalidatePath(`${MARKETPLACE}/browse`);
+  return { ok: true };
+}
