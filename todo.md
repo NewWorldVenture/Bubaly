@@ -697,8 +697,14 @@ user confirms → publish → receive offers/requests → message securely → c
   - [x] **Live in browse UI**: `marketplace-module.tsx` search bar has a "✨ Smart" toggle — when on, the
     query runs `searchListings` and the board is ranked with a per-card "why" reason line; a dedicated
     no-matches empty state. Verified tsc/eslint/next build.
-- [ ] **AI seller assistant** — improve listing quality, suggest price/photos, detect missing details,
+- [~] **AI seller assistant** — improve listing quality, suggest price/photos, detect missing details,
   rent-vs-sale, demand-based pricing, best category, promo copy.
+  - [x] Engine `lib/marketplace/seller-assistant.ts` — `listingQualityTips()` (ranked missing-detail
+    suggestions: photo/title/price/description/category/condition/location + rent-vs-sale nudge),
+    `qualityScore()` (0–100 completeness), and `priceVerdict()` (comparable-median fair-price stance —
+    great_deal/fair/above_market/overpriced + suggested price) which ALSO powers the buyer's "is this a
+    fair price?". Tests `tests/marketplace-seller-assistant.test.ts` (8). Verified tsc/eslint/vitest(1980).
+    Next: surface tips + quality score in the post modal; a price chip on cards.
 - [ ] **Discovery** — personalized/nearby/trending-local/new-today/under-$25/free/borrow-nearby/
   rent-nearby feeds, creator spotlight, saved searches, smart alerts, map view, Pinterest masonry. Search:
   keyword · natural language · category · size · color · brand · distance · price · availability · mode ·
