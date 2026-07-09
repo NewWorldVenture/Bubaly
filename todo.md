@@ -592,6 +592,22 @@ manual payout review (if enabled), and subscription billing for premium storefro
 > reviews/AI results. Payments run through the Stripe engine in §1a. Ship in verified slices behind tests.
 > **Entry:** `/dashboard/marketplace` (primary) **and** a direct logged-in `/marketplace`.
 
+**◆ STATUS (updated 2026-07-09) — foundations + all AI assistants shipped; deployed to www.bubaly.com.**
+Progress across 10 verified, pushed slices on PR #251:
+- **Data model** ✅ — `0138_marketplace_platform.sql`: 43 tables (extends 0120 + 41 new), FKs/indexes/RLS/
+  triggers. Three-layer RLS **proven on PG16** (non-member sees only public listings+media, zero private
+  orders; member sees own). Clean apply + idempotent across the full 150-migration chain.
+- **Pure engines (all tested)** ✅ — `fees.ts` (commission + fee transparency), `matching.ts` (request→listing
+  ranking w/ haversine + hard filters), `listing-draft.ts` (AI seller drafting + publish gate),
+  `buyer-search.ts` (NL query → ranked results), `seller-assistant.ts` (quality tips + fair-price verdict).
+- **Live in the UI** ✅ — post modal: "Describe it → AI drafts the listing" + live quality tips & fair-price
+  stance; browse: "✨ Smart" NL search with per-card reasons. All in `marketplace-module.tsx`.
+- **Routing** ✅ — dual entry `/marketplace` + `/dashboard/marketplace`.
+- **Gates every slice**: tsc 0 · eslint 0 · vitest 1980 · next build 0.
+- **Next up** ▶ — TS types for the 0138 tables → server loaders (persist request matches; checkout intent via
+  `computeFees` + the §1a Stripe engine); `/marketplace/requests` wanted-post surface; media upload; creator
+  stores + collections; verification + two-sided ratings; messaging; admin/moderation. See items below.
+
 **Product vision — the easiest marketplace for families & communities to:** buy · sell · borrow · lend ·
 rent · request-to-borrow · request-to-rent · swap · donate · discover local creators · build
 Pinterest-style product pages · build personal storefronts · verify both sides · rate both sides
