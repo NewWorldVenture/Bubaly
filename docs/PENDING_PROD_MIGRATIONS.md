@@ -97,10 +97,15 @@ filename so this still applies deterministically, but a future migration should
 - Optional keys that light up already-built, key-gated paths: **VAPID/FCM** (push),
   **Maps/ETA** (leave-by travel buffer), **Giphy/Tenor** (Messages GIF picker),
   **Stripe Issuing** (real-time Wallet card balances).
+- **`MICROSOFT_SYNC_CLIENT_ID` / `MICROSOFT_SYNC_CLIENT_SECRET`** (+ optional
+  `MICROSOFT_SYNC_TENANT`, `MICROSOFT_SYNC_REDIRECT_URI`, `MICROSOFT_SYNC_SCOPES`) — flip on **live
+  Microsoft / Outlook two-way sync** (R9). The whole adapter + generic engine is built and tested
+  offline; without these keys `isConfigured()` is false and `/api/sync/run` returns 503 for Microsoft
+  (Google sync is unaffected). Same pattern as the existing `GOOGLE_SYNC_*` pair.
 
 ## Test data (optional, after migrations)
 
-**One-paste option:** `supabase/SEED_ALL.sql` runs all 38 paste-ready seeds in
+**One-paste option:** `supabase/SEED_ALL.sql` runs all 39 paste-ready seeds in
 dependency order — one paste fills every user-facing surface with ≥500 rows for
 the resolved family. Idempotent (re-run safe); validated on PG16. Requires the
 migrations above to be applied first.

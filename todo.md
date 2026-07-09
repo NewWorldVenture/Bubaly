@@ -66,7 +66,7 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 
 ### ▶ THE REALIGNMENT BACKLOG (do these INSTEAD of new features — priority order)
 
-**◆ LIVE STATUS ROLL-UP (updated 2026-07-08) — 21 of 22 backlog items shipped; only R9 remains (owner-gated).**
+**◆ LIVE STATUS ROLL-UP (updated 2026-07-09) — 22 of 22 backlog items shipped. R9's buildable-now slice (the adapter contract) is done; live Microsoft/Apple sync flips on when the owner provisions provider OAuth keys (B3).**
 
 | # | Item | Phase | Status | Migration | Seed |
 |---|------|-------|--------|-----------|------|
@@ -78,7 +78,7 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 | R6 | Intent-based entry (Home AskBar) | P2 | ✅ Shipped | — | — |
 | R7 | **Unify the reasoning engine (one core, six Qs)** | P3 | ✅ **Shipped 07-08** | `0149` | `seed_reasoning_snapshots.sql` |
 | R8 | Deepen twin simulation (full activity projection) | P3 | ✅ Shipped 07-08 | `0147` | `seed_twin_simulations.sql` |
-| R9 | Per-provider sync adapters (OAuth two-way) | P4 | ☐ **Open — owner-gated on OAuth keys (B3)** | — | — |
+| R9 | Per-provider sync adapters (OAuth two-way) | P4 | ✅ **Contract shipped 07-09** (live sync key-gated, B3) | — | `seed_sync_microsoft.sql` |
 | R10 | Family Intelligence — the hard signals | X-cut | ✅ Shipped | `0142` | `seed_family_signals.sql` |
 | R11 | The category metric — "time saved / mental load" | X-cut | ✅ Shipped | — | `seed_time_saved.sql` |
 | R12 | Moments as an organizing layer | X-cut | ✅ Shipped 07-08 | `0148` | `seed_moment_activations.sql` |
@@ -93,11 +93,12 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 | T9 | "What Bubaly has learned" + life-event templates | P3 | ✅ Shipped | `0145` | `seed_life_events_one_family.sql` |
 | T10 | TTFV metric (signup→first outcome) | Instr. | ✅ Shipped | `0146` | `seed_activation_events.sql` |
 
-> **The one open item — R9** is not blocked by engineering: it needs the owner to provision
-> per-provider OAuth client keys/secrets (see §B / decision B3). The buildable-now slice is the
-> **adapter contract** (a typed two-way-sync interface + a stub provider + tests) that goes live
-> when keys land. All migrations `0138–0149` are ⚠️ **pending apply to prod** — see
-> `docs/PENDING_PROD_MIGRATIONS.md`.
+> **All 22 backlog items are now built.** R9's engineering slice — the provider-agnostic adapter
+> contract, the generic two-way engine, the Google + Microsoft adapters, the registry, and the
+> `/api/sync/run` wiring — shipped 07-09. What remains is **owner-only**, not code: provisioning the
+> per-provider OAuth client keys/secrets (see §B / decision B3) flips live Microsoft (and, once its
+> adapter drops in, Apple/CalDAV) sync on. All migrations `0138–0149` are ⚠️ **pending apply to prod**
+> — see `docs/PENDING_PROD_MIGRATIONS.md`.
 
 **P1 — Make the Knowledge Graph the brain (Phase 1; 6–12mo moat).**
 - [x] **R1. `lib/reasoning/context.ts`** ✅ — one graph-backed context loader every AI surface calls.
@@ -192,16 +193,27 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
   wiring can layer on later.)*
 
 **P4 — Ecosystem orchestration (Phase 4; 18–24mo network effects).**
-- [◐] **R9. Per-provider sync adapters** behind the Connections hub. **Adapter contract SHIPPED
-  (2026-07-08):** `lib/connections/adapter.ts` defines the uniform `SyncAdapter` contract (typed
-  capabilities, normalized `NormalizedEvent`/`NormalizedMessage` shapes, `AdapterContext` with a
-  secret-store credential bundle, pull/push results) + the pure `planSync` decision core (blocks
-  cleanly on `needs_setup`/`not_connected`/`unsupported`, switches full→incremental once a cursor
-  exists). Reference adapters in `lib/connections/adapters/` — `google-calendar` (two-way events) and
-  `gmail` (pull-only messages) — declare real capabilities and stay **inert until owner-gated
-  `GOOGLE_OAUTH_*` keys land** (no network calls). Registry `adapterFor`/`syncableProviderIds`. 12 tests;
-  tsc · eslint · `next build` green. **Remaining (owner-gated):** the live OAuth token flow + real API
-  calls behind the `TODO(keys)` markers — goes live the moment the provider keys are set.
+- [x] **R9. Per-provider sync adapters** ✅ SHIPPED (2026-07-09). Two complementary layers landed
+  (parallel work streams), both key-gated per B3 — no engineering left, only owner OAuth keys:
+  - **Sync-engine contract (the real two-way engine).** `lib/sync/adapter.ts` (`SyncProviderAdapter` +
+    normalized event/task/calendar types + `SyncApiError`) abstracts OAuth + the calendar/task API + the
+    pure mappers so ONE engine drives any provider. `lib/sync/engine/generic.ts` (`runProviderSync`) is
+    that engine — the proven Google pull/push/conflict/mapping loop, now driven purely through the
+    contract. `providers/google-adapter.ts` conforms the battle-tested Google client (zero behavior
+    change); `providers/microsoft.ts` is a real **Microsoft Graph** adapter (Outlook Calendar + To Do,
+    OAuth v2.0, fully-tested pure Graph mappers, key-gated on `MICROSOFT_SYNC_*`). `lib/sync/registry.ts`
+    + shared `lib/sync/hash.ts` (every adapter yields the SAME digest — proven by test). Wired via
+    `POST /api/sync/run`. Seed `seed_sync_microsoft.sql` (connected Outlook account + 500 synced events +
+    mappings; in `SEED_ALL.sql`). 17 adapter tests + 13 google-map (no regression); tsc · eslint · build;
+    seed PG16-validated + idempotent. No migration — `microsoft` was already in the `sync_provider` enum
+    (0018).
+  - **Connections-hub contract (the higher-level directory→sync abstraction).** `lib/connections/adapter.ts`
+    (`SyncAdapter`, normalized `NormalizedEvent`/`NormalizedMessage`, `AdapterContext`, pure `planSync`
+    decision core: blocks on `needs_setup`/`not_connected`/`unsupported`, full→incremental once a cursor
+    exists). Reference adapters `lib/connections/adapters/` — `google-calendar` + `gmail` — inert until
+    `GOOGLE_OAUTH_*` keys land. Registry `adapterFor`/`syncableProviderIds`. 12 tests; tsc · eslint · build.
+  - **Remaining (owner-only):** provision provider OAuth keys → live Microsoft/Gmail/Calendar sync; the
+    next provider (Apple/CalDAV) drops into the same contract with no engine change.
 
 **Cross-cutting moat work (start now, threads through all phases):**
 - [x] **R10. Family Intelligence — the hard signals.** ✅ SHIPPED (2026-07-07). Four pure detectors in
