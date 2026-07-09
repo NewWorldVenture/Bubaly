@@ -21,6 +21,35 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 
 ---
 
+## 🤝 SESSION HANDOVER — read first (2026-07-09, session `01VJs1Px…`)
+
+State of `main` at handover: **`e1db43a`** (plus PR #275 landing — see below).
+
+**Shipped to `main` this session (all squash-merged, CI-green):**
+- **#268** `0e79e9d` — seed: 8 features ×500 (rides, renewals, immunizations, health_visits, family_dates, screen_time_entries, wallet_goals, reminder_lists).
+- **#269** `e6ed0d0` — seed batch 2 ×500 (smart_devices, home_warranties, babysitter_profiles, expense_splits, relationship_dates).
+- **#270** `13bf3fb` — seed FK-parented ×500 (medication_doses on seed meds; invest_orders on a ZSEED* asset catalog + child_wallets + holdings).
+- **#271** `edb1b70` — seed: **Trips + Vacation Planner OS** — all 29 tables (`trips`/`trip_items` + the 27-table `vacations` subsystem), ~5,700 rows, primary scrollable lists at 500. PG16-validated vs migrations 0029+0070.
+- **#272** `dd03925` — marketplace **backend engines cherry-picked from #251**: `lib/marketplace/{fees,disputes,order-lifecycle,rental-lifecycle}.ts` (pure, 34 tests).
+- **#273** `9827e90` — activated the fee engine: honest per-order fee breakdown on the marketplace Orders page (`lib/marketplace/fee-policy.ts`, gated on `stripe_settings` — never invents a charge).
+- **#274** `e1db43a` — **CI fix**: Playwright `webServer.timeout` 240s→420s (kills the recurring "Timed out waiting …config.webServer" E2E flake; the window covers the full `next build`).
+
+**In flight (was landing at handover):**
+- **#275** — `refactor(marketplace): move to top-level /marketplace URL` (branch `claude/marketplace-url-move`). Relocates `app/(app)/dashboard/marketplace/**` → `app/(app)/marketplace/**` (its layout now renders `AppFrame` like `/wallet`); updates every internal ref; adds permanent redirects `/dashboard/marketplace(/:path*)` → `/marketplace(/:path*)` in `next.config.mjs`. `next build` green. Merge-when-green cron was armed; **verify it merged** (PR #275 state) and ff-sync `main`.
+
+**Decision recorded — PR #251 (CLOSED, do not reopen):** a *competing* second marketplace + reasoning architecture from a parallel session. `main` already ships Marketplace V2 (migs `0120/0150/0151`) + the reasoning engine, so per owner direction we **cherry-picked only its four non-conflicting backend engines** (→ #272) and **closed #251 as superseded**. Its payment/escrow/webhook + listing/matching pieces collided with main's `marketplace_orders` schema and were intentionally excluded.
+
+**Operating notes for the next bot:**
+- **Merge-when-green pattern:** develop on `claude/<slice>` branches, open **draft** PRs, then a one-shot `CronCreate` that checks the two required checks — `Typecheck · Lint · Test · Build` **and** `E2E smoke (public routes)` (ignore `Vercel Preview Comments`) — and on both-green does `update_pull_request(draft:false)` + `merge_pull_request(squash)`.
+- **E2E flake** is now mitigated (420s) but if `Timed out waiting …config.webServer` recurs, `actions_run_trigger rerun_failed_jobs` (only after the whole run completes, else 403).
+- **`SEED_ALL.sql` rebase treadmill:** every merged seed PR makes other open seed PRs `dirty` on `supabase/SEED_ALL.sql`. Resolve by `git show origin/main:supabase/SEED_ALL.sql > supabase/SEED_ALL.sql` then re-append the branch's standalone seed file; force-push.
+- **A parallel Claude session also ships to this repo fast** — always `git fetch origin main` before branching, and abandon duplicates.
+- **Seed validation harness:** throwaway PG16 in `/tmp` as OS user `pguser` (initdb refuses root and can't traverse the scratchpad path — stage SQL into `/tmp`), port 55432, `-k /tmp`; stub `auth.users`, `public.families/family_members/documents`, `set_updated_at()`, `is_family_member()`, the `ai_role` enum, then load the real migrations.
+- **Agents can't apply prod migrations** (no prod DB creds) and **GitHub MCP is scoped to `newworldventure/familyos` only**.
+- **Next candidate work (agent-doable, no external keys):** AI "post a listing in 60 seconds" draft-assist (reuse `lib/ai/provider.ts` + an `/api/ai/*` route); marketplace **listing photo uploads** via Supabase Storage (`photo_url` exists, no upload path yet).
+
+---
+
 ## ★ NORTH STAR — The Family Operating Layer (category-defining, 2026-07-05)
 
 > **Thesis:** today's products (ours included, so far) are **systems of record** — they
