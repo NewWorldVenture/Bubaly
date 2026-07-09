@@ -650,6 +650,11 @@ user confirms → publish → receive offers/requests → message securely → c
     `tests/marketplace-listing-draft.test.ts` (13). Verified tsc/eslint/vitest(1965). Next: thin LLM
     wrapper to refine prose + the media→draft path; server action to persist as a `marketplace_listings`
     row on confirm.
+  - [x] **Wired into the live post flow**: `components/modules/marketplace-module.tsx` create modal now has
+    a "Describe it — AI drafts the listing" step (Sparkles) that runs `buildDraft` and prefills
+    title/description/type/category/condition/price; the user still reviews + posts (no auto-publish).
+    `legacyKindFromModes()` (pure, tested) bridges the rich `modes[]` to the board's single `kind`.
+    Verified tsc/eslint/vitest(1966)/next build.
 - [ ] **Unlimited media** — drag/drop + mobile camera, reorder, cover selection, video previews,
   compression, alt text, AI captions, gallery + Pinterest masonry. Supabase Storage; metadata persisted;
   no broken uploads.

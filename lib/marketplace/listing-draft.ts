@@ -226,6 +226,19 @@ function safetyNotesFor(category: ListingCategory, modes: ListingMode[]): string
   return notes;
 }
 
+/**
+ * Collapse the rich `modes[]` to the legacy single `kind` (sell/rent/borrow/
+ * free/wanted) used by the shipped 0120 board + its post form. Precedence follows
+ * intent: a wanted post first, then rent, borrow/lend, donate, else a sale/swap.
+ */
+export function legacyKindFromModes(modes: ListingMode[]): 'sell' | 'rent' | 'borrow' | 'free' | 'wanted' {
+  if (modes.includes('wanted')) return 'wanted';
+  if (modes.includes('rent')) return 'rent';
+  if (modes.includes('borrow') || modes.includes('lend')) return 'borrow';
+  if (modes.includes('donate')) return 'free';
+  return 'sell';
+}
+
 export interface DraftReadiness { ready: boolean; missing: string[] }
 
 /**

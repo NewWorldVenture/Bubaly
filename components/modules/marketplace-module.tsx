@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Store, Plus, Search, Tag, Clock, HandHeart, Check, X, Pencil, Trash2,
-  ShoppingBag, Package, Gift, HelpCircle, MapPin, Inbox, Database,
+  ShoppingBag, Package, Gift, HelpCircle, MapPin, Inbox, Database, Sparkles,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -24,6 +24,7 @@ import {
   canOffer, isOwner, openOffersFor,
   type ListingKind, type ListingCategory, type ListingCondition, type RentPeriod, type ListingLike,
 } from '@/lib/marketplace/listings';
+import { buildDraft, legacyKindFromModes } from '@/lib/marketplace/listing-draft';
 import type { Tables } from '@/lib/database.types';
 
 type Listing = Tables<'marketplace_listings'>;
@@ -58,6 +59,7 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
   const [form, setForm] = useState(blank);
   const [saving, setSaving] = useState(false);
   const [offersFor, setOffersFor] = useState<Listing | null>(null);
+  const [aiText, setAiText] = useState('');
 
   const { data: listings, loading, error } = useRealtimeQuery<Listing>({
     table: 'marketplace_listings', familyId, deps: [familyId],
@@ -81,7 +83,28 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
   );
   const openOfferCount = (listingId: string) => openOffersFor(listingId, offers ?? []).length;
 
-  function openNew() { setForm(blank); setModalOpen(true); }
+  function openNew() { setForm(blank); setAiText(''); setModalOpen(true); }
+
+  // AI Listing Assistant: turn one sentence into a full draft, then let the user
+  // edit before posting (never auto-publishes). Pure — lib/marketplace/listing-draft.
+  function draftWithAi() {
+    const text = aiText.trim();
+    if (!text) return;
+    const d = buildDraft({ text });
+    const kind = legacyKindFromModes(d.modes);
+    const rate = kind === 'rent' ? d.rentDayCents : d.priceCents;
+    setForm((f) => ({
+      ...f,
+      title: d.title,
+      description: d.description,
+      kind,
+      category: d.category,
+      condition: d.condition,
+      price: rate ? String(rate / 100) : '',
+      rent_period: 'day' as RentPeriod,
+    }));
+    success('Draft ready — review and edit before posting.');
+  }
   function openEdit(l: Listing) {
     setForm({
       id: l.id, title: l.title, description: l.description ?? '', kind: l.kind as ListingKind,
@@ -300,6 +323,23 @@ export function MarketplaceModule({ canSeed = false }: { canSeed?: boolean }) {
       {/* Post / edit listing */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit listing' : 'Post a listing'}>
         <form onSubmit={save} className="space-y-4">
+          {!form.id && (
+            <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 space-y-2">
+              <label htmlFor="mp-ai-draft" className="flex items-center gap-1.5 text-xs font-medium text-violet-300">
+                <Sparkles className="h-3.5 w-3.5" /> Describe it — AI drafts the listing
+              </label>
+              <Textarea
+                id="mp-ai-draft"
+                value={aiText}
+                onChange={(e) => setAiText(e.target.value)}
+                placeholder="e.g. Renting out my like-new blue Nike jacket, size medium"
+                rows={2}
+              />
+              <Button type="button" variant="outline" size="sm" onClick={draftWithAi} disabled={!aiText.trim()}>
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Draft with AI
+              </Button>
+            </div>
+          )}
           <Field label="What is it?" required>
             {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Kids' balance bike" autoFocus />}
           </Field>

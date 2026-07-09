@@ -1,8 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseListingHints, suggestPricing, buildDraft, buildTags,
-  buildSeoDescription, draftReadiness,
+  buildSeoDescription, draftReadiness, legacyKindFromModes,
 } from '@/lib/marketplace/listing-draft';
+
+describe('legacyKindFromModes', () => {
+  it('collapses rich modes to the legacy board kind by intent precedence', () => {
+    expect(legacyKindFromModes(['wanted', 'buy'])).toBe('wanted');
+    expect(legacyKindFromModes(['rent', 'buy'])).toBe('rent');
+    expect(legacyKindFromModes(['borrow'])).toBe('borrow');
+    expect(legacyKindFromModes(['lend'])).toBe('borrow');
+    expect(legacyKindFromModes(['donate'])).toBe('free');
+    expect(legacyKindFromModes(['buy'])).toBe('sell');
+    expect(legacyKindFromModes(['swap'])).toBe('sell');
+  });
+});
 
 describe('parseListingHints', () => {
   it('extracts category, condition, mode, color, size, brand from a sentence', () => {
