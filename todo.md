@@ -623,8 +623,13 @@ Progress across 10 verified, pushed slices on PR #251:
     Recomputes the quote server-side (never trusts client amounts), resolves the seller from the listing,
     inserts a **pending** order + a **pending** payment — no faked charge; a later Stripe/webhook step
     confirms (honors "never mark paid unless the provider confirms"). Pure mapper tested; action build-verified.
-  - Next: surface the trust chip + rating + fee summary in the listing UI; a Stripe PaymentIntent step +
-    webhook to flip payment→succeeded / order→sold; persist request matches.
+  - [x] Payment webhook handler `lib/marketplace/payment-webhook.ts` — `handleMarketplacePayment()` applies
+    a confirmed Stripe `payment_intent.*` outcome to the pending payment + order: succeeded→payment
+    succeeded + order→sold (guarded by the order state machine), failed/canceled→canceled. Idempotent
+    (no-ops if already applied / unknown payment / non-payment event). Pure mappers `paymentStatusFromEvent`
+    + `orderTargetForPayment`. Tests `tests/marketplace-payment-webhook.test.ts` (6, incl. a state-machine
+    block). Verified tsc/eslint/vitest. Next: wire into the Stripe webhook route (recordEvent + dispatch)
+    and create the PaymentIntent in checkout; then persist request matches.
 - **Still queued** — `/marketplace/requests` wanted-post surface; media upload; creator stores + collections;
   messaging; admin/moderation. See items below.
 
