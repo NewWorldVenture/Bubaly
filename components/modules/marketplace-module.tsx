@@ -46,7 +46,7 @@ const KIND_STYLE: Record<ListingKind, string> = {
 const blank = {
   id: '', title: '', description: '', kind: 'sell' as ListingKind,
   category: 'other' as ListingCategory, condition: '' as '' | ListingCondition,
-  price: '', rent_period: 'day' as RentPeriod, location: '',
+  price: '', rent_period: 'day' as RentPeriod, location: '', photo_url: '',
 };
 
 export function MarketplaceModule({
@@ -103,6 +103,7 @@ export function MarketplaceModule({
       category: l.category as ListingCategory, condition: (l.condition ?? '') as '' | ListingCondition,
       price: l.price_cents ? String(l.price_cents / 100) : '',
       rent_period: (l.rent_period ?? 'day') as RentPeriod, location: l.location ?? '',
+      photo_url: l.photo_url ?? '',
     });
     setModalOpen(true);
   }
@@ -122,6 +123,7 @@ export function MarketplaceModule({
       price_cents: priced ? dollarsToCents(form.price) : 0,
       rent_period: form.kind === 'rent' ? form.rent_period : null,
       location: form.location.trim() || null,
+      photo_url: form.photo_url.trim() || null,
     };
     const { error: err } = form.id
       ? await sb.from('marketplace_listings').update(fields).eq('id', form.id)
@@ -260,8 +262,17 @@ export function MarketplaceModule({
               const alreadyOffered = myOpenOffers.has(l.id);
               const offerable = canOffer(l as ListingLike, selfId, offers ?? []);
               return (
-                <div key={l.id} className={cn('flex flex-col rounded-2xl border border-border bg-surface/50 p-4',
+                <div key={l.id} className={cn('flex flex-col overflow-hidden rounded-2xl border border-border bg-surface/50',
                   l.status === 'claimed' && 'opacity-80')}>
+                  {l.photo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={l.photo_url} alt={l.title} loading="lazy" className="h-40 w-full object-cover" />
+                  ) : (
+                    <div className="flex h-40 w-full items-center justify-center bg-gradient-to-br from-surface to-border">
+                      <KindIcon className="h-8 w-8 text-muted" />
+                    </div>
+                  )}
+                  <div className="flex flex-1 flex-col p-4">
                   <div className="flex items-start justify-between gap-2">
                     <span className={cn('inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide', KIND_STYLE[kind])}>
                       <KindIcon className="h-3 w-3" />{KIND_LABELS[kind]}
@@ -315,6 +326,7 @@ export function MarketplaceModule({
                     ) : (
                       <span className="text-xs text-muted capitalize">{l.status}</span>
                     )}
+                  </div>
                   </div>
                 </div>
               );
@@ -376,6 +388,14 @@ export function MarketplaceModule({
               {(id) => <Input id={id} value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} placeholder="e.g. Garage shelf" />}
             </Field>
           </div>
+
+          <Field label="Photo URL">
+            {(id) => <Input id={id} value={form.photo_url} onChange={(e) => setForm((f) => ({ ...f, photo_url: e.target.value }))} placeholder="https://… (a photo makes it sell faster)" />}
+          </Field>
+          {form.photo_url.trim() && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={form.photo_url} alt="Listing preview" className="h-40 w-full rounded-lg object-cover" />
+          )}
 
           <Field label="Details">
             {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Size, age, why you're passing it on…" />}
