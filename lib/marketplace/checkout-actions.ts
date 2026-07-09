@@ -8,6 +8,7 @@
 
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getStripe } from '@/lib/stripe';
 import { loadCheckoutQuote, orderInsertFromQuote } from './server';
 import type { PromoOverride } from './fees';
 
@@ -87,4 +88,51 @@ export async function createMarketplaceOrder(input: CreateOrderInput): Promise<C
   if (payErr) console.error('[marketplace] createOrder: payment insert failed', payErr);
 
   return { ok: true, orderId: created.id, totalCents: quote.breakdown.buyerTotalCents };
+}
+
+export type PaymentIntentResult =
+  | { ok: true; clientSecret: string; paymentIntentId: string }
+  | { ok: false; setupRequired: true }
+  | { ok: false; error: string };
+
+/**
+ * Create a Stripe PaymentIntent for a pending order and stamp its id on the
+ * payment row so the webhook can confirm it. When Stripe isn't configured this
+ * returns `setupRequired` instead of faking a charge (spec: "if payment provider
+ * is not configured, create setup states … without faking payments"). The
+ * payment stays 'pending' until payment_intent.succeeded arrives.
+ */
+export async function createPaymentIntentForOrder(orderId: string): Promise<PaymentIntentResult> {
+  if (!process.env.STRIPE_SECRET_KEY) return { ok: false, setupRequired: true };
+
+  const ctx = await requireUserContext();
+  const familyId = ctx.active.familyId;
+  const sb = await createServer();
+
+  const { data: payment } = await sb
+    .from('marketplace_payments')
+    .select('id, amount_cents, currency, status, stripe_payment_intent_id')
+    .eq('order_id', orderId)
+    .eq('family_id', familyId)
+    .maybeSingle();
+  if (!payment) return { ok: false, error: 'No payment found for that order.' };
+  if (payment.status === 'succeeded') return { ok: false, error: 'This order is already paid.' };
+  if ((payment.amount_cents ?? 0) <= 0) return { ok: false, error: 'Nothing to charge for that order.' };
+
+  try {
+    const intent = await getStripe().paymentIntents.create({
+      amount: payment.amount_cents,
+      currency: (payment.currency || 'usd').toLowerCase(),
+      automatic_payment_methods: { enabled: true },
+      metadata: { marketplace_order_id: orderId, marketplace_payment_id: payment.id, family_id: familyId },
+    });
+    await sb.from('marketplace_payments')
+      .update({ stripe_payment_intent_id: intent.id, status: 'processing' })
+      .eq('id', payment.id);
+    if (!intent.client_secret) return { ok: false, error: 'Could not start payment.' };
+    return { ok: true, clientSecret: intent.client_secret, paymentIntentId: intent.id };
+  } catch (e) {
+    console.error('[marketplace] createPaymentIntent failed', e);
+    return { ok: false, error: 'Could not start payment. Please try again.' };
+  }
 }

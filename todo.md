@@ -640,8 +640,13 @@ Progress across 10 verified, pushed slices on PR #251:
     `tests/marketplace-matching-server.test.ts` (5). Verified tsc/eslint/vitest/next build.
   - [x] Fee transparency in the post modal — for a sale, the seller assistant panel now shows a live
     "Buyer pays $X · you net $Y after $Z fees" line via `computeFees` (10% default). Verified tsc/eslint/build.
-  - Next: create the PaymentIntent in checkout (attach `stripe_payment_intent_id`); a per-owner trust chip
-    on cards (needs a server load); the `/marketplace/requests` wanted-post surface driving saveRequestMatches.
+  - [x] PaymentIntent creation `createPaymentIntentForOrder()` (`checkout-actions.ts`) — creates a Stripe
+    PaymentIntent for a pending order (amount from the payment row), stamps `stripe_payment_intent_id`, and
+    sets the payment to `processing`; the already-wired webhook flips it to `succeeded`/order→`sold` on
+    confirmation. When `STRIPE_SECRET_KEY` is absent it returns `{ setupRequired: true }` — a setup state,
+    never a faked charge. Build-verified. **Checkout money loop is now complete in code end-to-end.**
+  - Next (needs live Stripe/Connect or browser E2E): Connect destination charge + application_fee for
+    seller payouts; a per-owner trust chip on cards; `/marketplace/requests` surface driving saveRequestMatches.
 - **Still queued** — `/marketplace/requests` wanted-post surface; media upload; creator stores + collections;
   messaging; admin/moderation. See items below.
 
