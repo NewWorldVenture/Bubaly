@@ -6,6 +6,7 @@
 // 'pending' and a later Stripe step (§1a) confirms them via webhook. Honors the
 // spec's "never mark paid unless the provider confirms".
 
+import type Stripe from 'stripe';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getStripe } from '@/lib/stripe';
@@ -111,7 +112,7 @@ export async function createPaymentIntentForOrder(orderId: string): Promise<Paym
 
   const { data: payment } = await sb
     .from('marketplace_payments')
-    .select('id, amount_cents, currency, status, stripe_payment_intent_id')
+    .select('id, amount_cents, fee_cents, currency, status, stripe_payment_intent_id')
     .eq('order_id', orderId)
     .eq('family_id', familyId)
     .maybeSingle();
@@ -119,13 +120,30 @@ export async function createPaymentIntentForOrder(orderId: string): Promise<Paym
   if (payment.status === 'succeeded') return { ok: false, error: 'This order is already paid.' };
   if ((payment.amount_cents ?? 0) <= 0) return { ok: false, error: 'Nothing to charge for that order.' };
 
+  const params: Stripe.PaymentIntentCreateParams = {
+    amount: payment.amount_cents,
+    currency: (payment.currency || 'usd').toLowerCase(),
+    automatic_payment_methods: { enabled: true },
+    metadata: { marketplace_order_id: orderId, marketplace_payment_id: payment.id, family_id: familyId },
+  };
+
+  // Connect payout: when the seller's connected account is enabled, split the
+  // charge — the platform keeps its commission (application_fee_amount) and the
+  // rest is transferred to the seller. Otherwise the platform collects and the
+  // payout is handled separately.
+  const { data: acct } = await sb
+    .from('stripe_connected_accounts')
+    .select('stripe_account_id, status')
+    .eq('family_id', familyId)
+    .maybeSingle();
+  const fee = payment.fee_cents ?? 0;
+  if (acct?.status === 'enabled' && fee > 0 && fee < payment.amount_cents) {
+    params.application_fee_amount = fee;
+    params.transfer_data = { destination: acct.stripe_account_id };
+  }
+
   try {
-    const intent = await getStripe().paymentIntents.create({
-      amount: payment.amount_cents,
-      currency: (payment.currency || 'usd').toLowerCase(),
-      automatic_payment_methods: { enabled: true },
-      metadata: { marketplace_order_id: orderId, marketplace_payment_id: payment.id, family_id: familyId },
-    });
+    const intent = await getStripe().paymentIntents.create(params);
     await sb.from('marketplace_payments')
       .update({ stripe_payment_intent_id: intent.id, status: 'processing' })
       .eq('id', payment.id);

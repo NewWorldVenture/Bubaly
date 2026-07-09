@@ -645,8 +645,13 @@ Progress across 10 verified, pushed slices on PR #251:
     sets the payment to `processing`; the already-wired webhook flips it to `succeeded`/order→`sold` on
     confirmation. When `STRIPE_SECRET_KEY` is absent it returns `{ setupRequired: true }` — a setup state,
     never a faked charge. Build-verified. **Checkout money loop is now complete in code end-to-end.**
-  - Next (needs live Stripe/Connect or browser E2E): Connect destination charge + application_fee for
-    seller payouts; a per-owner trust chip on cards; `/marketplace/requests` surface driving saveRequestMatches.
+  - [x] Connect payout split — when the seller's `stripe_connected_accounts` row is `enabled`, the
+    PaymentIntent now sets `application_fee_amount` (platform commission) + `transfer_data.destination`
+    (seller's account), so the seller is paid automatically and the platform keeps its fee; otherwise the
+    platform collects and payout is handled separately. Build-verified. (v1 resolves the account by the
+    order's family; cross-family seller payout is a follow-up.)
+  - Next (needs live Stripe/Connect or browser E2E): a per-owner trust chip on cards; `/marketplace/requests`
+    surface driving saveRequestMatches; media upload; creator stores + collections.
 - **Still queued** — `/marketplace/requests` wanted-post surface; media upload; creator stores + collections;
   messaging; admin/moderation. See items below.
 
