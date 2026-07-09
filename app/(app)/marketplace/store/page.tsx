@@ -65,7 +65,7 @@ export default async function MarketplaceStorePage() {
       <section id="listings" className="mt-6">
         <div className="mb-2 flex items-baseline justify-between">
           <h2 className="flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand" /> My Listings</h2>
-          <Link href="/dashboard/marketplace/browse?post=1" className="text-xs text-brand hover:underline">Post an item</Link>
+          <Link href="/marketplace/browse?post=1" className="text-xs text-brand hover:underline">Post an item</Link>
         </div>
         {(myListings ?? []).length === 0 ? (
           <p className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">

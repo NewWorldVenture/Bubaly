@@ -149,7 +149,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/trip-memories', label: 'Trip Memories', icon: BookHeart, minLevel: 1 },
       { href: '/dashboard/sports', label: 'Sports', icon: Trophy, minLevel: 1 },
       { href: '/dashboard/rides', label: 'Rides & Carpool', icon: Car, minLevel: 1 },
-      { href: '/dashboard/marketplace', label: 'Marketplace', icon: Store, minLevel: 0 },
+      { href: '/marketplace', label: 'Marketplace', icon: Store, minLevel: 0 },
       { href: '/display', label: 'Kitchen Display', icon: Monitor, minLevel: 1 },
       { href: '/dashboard/health', label: 'Health', icon: HeartPulse, minLevel: 1 },
       { href: '/dashboard/scan', label: 'Scan Flyer', icon: ScanLine, minLevel: 1 },

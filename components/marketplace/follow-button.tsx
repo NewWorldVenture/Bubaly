@@ -3,7 +3,7 @@
 // Follow / Following toggle for a creator store — optimistic.
 
 import { useState, useTransition } from 'react';
-import { toggleFollowAction } from '@/app/(app)/dashboard/marketplace/actions';
+import { toggleFollowAction } from '@/app/(app)/marketplace/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 

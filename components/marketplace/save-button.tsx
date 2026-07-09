@@ -4,7 +4,7 @@
 
 import { useState, useTransition } from 'react';
 import { Heart } from 'lucide-react';
-import { toggleSaveAction } from '@/app/(app)/dashboard/marketplace/actions';
+import { toggleSaveAction } from '@/app/(app)/marketplace/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 

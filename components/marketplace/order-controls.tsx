@@ -5,7 +5,7 @@
 
 import { useState, useTransition } from 'react';
 import { Star, Check, X } from 'lucide-react';
-import { setOrderStatusAction, leaveReviewAction } from '@/app/(app)/dashboard/marketplace/actions';
+import { setOrderStatusAction, leaveReviewAction } from '@/app/(app)/marketplace/actions';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/input';

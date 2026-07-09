@@ -21,6 +21,20 @@ const nextConfig = {
         destination: 'https://www.bubaly.com/:path*',
         permanent: true,
       },
+      // Marketplace moved from /dashboard/marketplace to the top-level
+      // /marketplace URL. Permanently redirect the old paths (and every
+      // sub-route: browse, store, creators, saved, collections, orders, reviews,
+      // seed) so existing links, bookmarks, and shares keep working.
+      {
+        source: '/dashboard/marketplace',
+        destination: '/marketplace',
+        permanent: true,
+      },
+      {
+        source: '/dashboard/marketplace/:path*',
+        destination: '/marketplace/:path*',
+        permanent: true,
+      },
     ];
   },
   async headers() {

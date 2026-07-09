@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils/cn';
 export const metadata: Metadata = { title: 'Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
-const BASE = '/dashboard/marketplace';
+const BASE = '/marketplace';
 
 type ListingRow = PickListing & { rent_period: string | null; location: string | null; condition: string | null };
 
