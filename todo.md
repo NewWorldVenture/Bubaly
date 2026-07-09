@@ -932,6 +932,13 @@ missing-location events, colliding events for conflicts). Run it, then open
   `seed_marketplace_questions.sql` (~400 Q&A, ~half answered by the owner). Verified: tsc · eslint ·
   **vitest (5)** · `next build`. ⚠️ apply `0153` to prod.
 
+- [x] **Following feed ✅ SHIPPED (2026-07-09).** Seller-based discovery to complement keyword Alerts:
+  **`/marketplace/following`** shows the latest browsable listings from the creators/stores you follow,
+  newest first, each with store attribution + a "NEW this week" flag. Pure `lib/marketplace/following.ts`
+  (`buildFollowingFeed`/`newFromFollowingCount`, **5 tests**); reads existing `marketplace_follows` /
+  `marketplace_stores` / listings (NO new schema). Nav entry (Following, `UserCheck`, additive).
+  Verified: tsc · eslint · **vitest (5)** · `next build` (`/marketplace/following`).
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:
