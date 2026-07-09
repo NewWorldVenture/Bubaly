@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadMemberTrust, loadCheckoutQuote } from '@/lib/marketplace/server';
+import { loadMemberTrust, loadCheckoutQuote, orderInsertFromQuote } from '@/lib/marketplace/server';
 
 // Minimal thenable query stub: .select()/.eq() chain, awaits to a canned result.
 // .maybeSingle() resolves to the same canned result (data already single/null).
@@ -84,5 +84,25 @@ describe('loadCheckoutQuote', () => {
       marketplace_settings: { data: null, error: null },
     });
     expect(await loadCheckoutQuote(db, { familyId: 'f1', listingId: 'nope' })).toBeNull();
+  });
+});
+
+describe('orderInsertFromQuote', () => {
+  it('maps a quote into a pending order with server-computed amounts', async () => {
+    const db = fakeDb({
+      marketplace_listings: { data: { id: 'l1', title: 'Bike', price_cents: 10_000, category: 'sports' }, error: null },
+      marketplace_settings: { data: { commission_bps: 1000, default_currency: 'USD' }, error: null },
+    });
+    const quote = (await loadCheckoutQuote(db, { familyId: 'f1', listingId: 'l1', depositCents: 2000, taxCents: 800 }))!;
+    const order = orderInsertFromQuote(quote, { familyId: 'f1', buyerUserId: 'buyer', sellerUserId: 'seller', mode: 'buy' });
+    expect(order.status).toBe('pending');            // never pre-paid
+    expect(order.listing_id).toBe('l1');
+    expect(order.buyer_user_id).toBe('buyer');
+    expect(order.seller_user_id).toBe('seller');
+    expect(order.subtotal_cents).toBe(10_000);
+    expect(order.deposit_cents).toBe(2000);
+    expect(order.tax_cents).toBe(800);
+    expect(order.total_cents).toBe(quote.breakdown.buyerTotalCents);
+    expect(order.fee_cents).toBe(quote.breakdown.marketplaceFeeCents + quote.breakdown.serviceFeeCents);
   });
 });

@@ -618,8 +618,13 @@ Progress across 10 verified, pushed slices on PR #251:
   - [x] Checkout quote loader `loadCheckoutQuote()` (+ `marketplace_settings` type) — reads the listing +
     family commission setting and runs `computeFees` → the full transparent breakdown; falls back to the
     10% platform default when unconfigured; null if the listing is gone. 3 more fake-DB tests.
-  - Next: surface the trust chip + rating on profiles/listings; a checkout server ACTION that persists an
-    order + payment via §1a Stripe; persist request matches.
+  - [x] Checkout server ACTION `createMarketplaceOrder()` (`lib/marketplace/checkout-actions.ts`, `'use
+    server'`) + `marketplace_orders`/`marketplace_payments` types + pure `orderInsertFromQuote()` mapper.
+    Recomputes the quote server-side (never trusts client amounts), resolves the seller from the listing,
+    inserts a **pending** order + a **pending** payment — no faked charge; a later Stripe/webhook step
+    confirms (honors "never mark paid unless the provider confirms"). Pure mapper tested; action build-verified.
+  - Next: surface the trust chip + rating + fee summary in the listing UI; a Stripe PaymentIntent step +
+    webhook to flip payment→succeeded / order→sold; persist request matches.
 - **Still queued** — `/marketplace/requests` wanted-post surface; media upload; creator stores + collections;
   messaging; admin/moderation. See items below.
 

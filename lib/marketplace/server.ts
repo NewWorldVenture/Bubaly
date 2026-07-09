@@ -8,6 +8,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { aggregateReviews, toTrustRatingSignals, type ReviewInput, type ReviewSummary } from './reviews';
 import { computeTrustScore, type TrustResult, type TrustSignals, type VerificationKind } from './trust';
 import { computeFees, type CommissionPolicy, type FeeBreakdown, type PromoOverride } from './fees';
+import type { Database } from '@/lib/database.types';
+
+type OrderInsert = Database['public']['Tables']['marketplace_orders']['Insert'];
 
 // Accept any Supabase client (server or service-role); the caller owns auth/RLS.
 type DB = Pick<SupabaseClient, 'from'>;
@@ -121,5 +124,46 @@ export async function loadCheckoutQuote(sb: DB, args: CheckoutQuoteArgs): Promis
   return {
     listing: { id: listing.id, title: listing.title, priceCents: listing.price_cents, category: listing.category, currency },
     breakdown,
+  };
+}
+
+export interface OrderPartiesArgs {
+  familyId: string;
+  buyerUserId?: string | null;
+  buyerMemberId?: string | null;
+  sellerUserId?: string | null;
+  sellerMemberId?: string | null;
+  mode?: string;
+  fulfillment?: string | null;
+  offerId?: string | null;
+  createdBy?: string | null;
+}
+
+/**
+ * Map a server-computed checkout quote into a `marketplace_orders` insert row.
+ * Pure: amounts come straight from the quote's breakdown (never the client), and
+ * the order starts `pending` — no charge is implied until payment is confirmed.
+ */
+export function orderInsertFromQuote(quote: CheckoutQuote, parties: OrderPartiesArgs): OrderInsert {
+  const b = quote.breakdown;
+  return {
+    family_id: parties.familyId,
+    listing_id: quote.listing.id,
+    offer_id: parties.offerId ?? null,
+    buyer_user_id: parties.buyerUserId ?? null,
+    buyer_member_id: parties.buyerMemberId ?? null,
+    seller_user_id: parties.sellerUserId ?? null,
+    seller_member_id: parties.sellerMemberId ?? null,
+    mode: parties.mode ?? 'buy',
+    fulfillment: parties.fulfillment ?? null,
+    subtotal_cents: b.subtotalCents,
+    fee_cents: b.marketplaceFeeCents + b.serviceFeeCents,
+    deposit_cents: b.depositCents,
+    tax_cents: b.taxCents,
+    total_cents: b.buyerTotalCents,
+    currency: quote.listing.currency,
+    status: 'pending',
+    created_by: parties.createdBy ?? null,
+    metadata: {},
   };
 }

@@ -393,6 +393,16 @@ export interface Database {
         { id?: string; family_id: string; default_currency?: string; default_fulfillment?: string | null; commission_bps?: number | null; require_verification?: boolean; preferences?: Json; created_by?: string | null; updated_by?: string | null; metadata?: Json },
         Partial<{ default_currency: string; default_fulfillment: string | null; commission_bps: number | null; require_verification: boolean; preferences: Json; updated_by: string | null; metadata: Json }>
       >;
+      marketplace_orders: T<
+        { id: string; family_id: string; listing_id: string | null; offer_id: string | null; seller_user_id: string | null; buyer_user_id: string | null; seller_member_id: string | null; buyer_member_id: string | null; mode: string; fulfillment: string | null; subtotal_cents: number; fee_cents: number; deposit_cents: number; tax_cents: number; total_cents: number; currency: string; status: string; created_by: string | null; updated_by: string | null; deleted_at: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; listing_id?: string | null; offer_id?: string | null; seller_user_id?: string | null; buyer_user_id?: string | null; seller_member_id?: string | null; buyer_member_id?: string | null; mode?: string; fulfillment?: string | null; subtotal_cents?: number; fee_cents?: number; deposit_cents?: number; tax_cents?: number; total_cents?: number; currency?: string; status?: string; created_by?: string | null; updated_by?: string | null; deleted_at?: string | null; metadata?: Json },
+        Partial<{ status: string; fulfillment: string | null; subtotal_cents: number; fee_cents: number; deposit_cents: number; tax_cents: number; total_cents: number; updated_by: string | null; deleted_at: string | null; metadata: Json }>
+      >;
+      marketplace_payments: T<
+        { id: string; family_id: string; order_id: string | null; buyer_user_id: string | null; seller_user_id: string | null; amount_cents: number; fee_cents: number; currency: string; status: string; stripe_payment_intent_id: string | null; stripe_checkout_session_id: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; order_id?: string | null; buyer_user_id?: string | null; seller_user_id?: string | null; amount_cents?: number; fee_cents?: number; currency?: string; status?: string; stripe_payment_intent_id?: string | null; stripe_checkout_session_id?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ status: string; amount_cents: number; fee_cents: number; stripe_payment_intent_id: string | null; stripe_checkout_session_id: string | null; updated_by: string | null; metadata: Json }>
+      >;
       voice_commands: T<
         { id: string; family_id: string; member_id: string | null; transcript: string; resolved_kind: string | null; action_table: string | null; action_count: number; status: string; created_by: string | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; transcript: string; resolved_kind?: string | null; action_table?: string | null; action_count?: number; status?: string; created_by?: string | null },
