@@ -323,7 +323,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // On marketplace routes the left rail becomes the Marketplace rail (the design's
   // AI-first marketplace), replacing the global nav BODY — the Bubaly logo + top
   // header stay, so there's ONE rail, not two.
-  const onMarketplace = pathname === '/dashboard/marketplace' || pathname.startsWith('/dashboard/marketplace/');
+  const onMarketplace = pathname === '/marketplace' || pathname.startsWith('/marketplace/');
   const mobileTabs = resolveItems(MOBILE_TABS, featureTiers, planLevel, isSuperAdmin, isManager(role));
   const upgradeLevel: 1 | 2 = upgradeFor
     ? (featureTiers[upgradeFor.href] === 'plus' ? 2 : 1)

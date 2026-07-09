@@ -26,7 +26,7 @@ export function MarketplaceSeedScreen() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:py-8">
       <div className="mb-6 flex items-center gap-3">
-        <Link href="/dashboard/marketplace" className="grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg" aria-label="Back to marketplace">
+        <Link href="/marketplace" className="grid h-9 w-9 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg" aria-label="Back to marketplace">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>

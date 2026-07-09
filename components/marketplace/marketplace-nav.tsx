@@ -20,7 +20,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { SidebarTrustScore } from './sidebar-trust-score';
 
-const BASE = '/dashboard/marketplace';
+const BASE = '/marketplace';
 
 type Item = { href: string; label: string; icon: typeof Store; exact?: boolean; kind?: string };
 

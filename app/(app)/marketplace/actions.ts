@@ -10,7 +10,7 @@ import { createServer } from '@/lib/supabase/server';
 
 type Result = { ok: true } | { ok: false; error: string };
 
-const MARKETPLACE = '/dashboard/marketplace';
+const MARKETPLACE = '/marketplace';
 
 /** Set a match's status: dismissed (hide) or actioned (they connected). */
 export async function setMatchStatusAction(id: string, status: 'dismissed' | 'actioned'): Promise<Result> {

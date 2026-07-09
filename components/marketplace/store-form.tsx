@@ -4,7 +4,7 @@
 
 import { useState, useTransition } from 'react';
 import { Building2 } from 'lucide-react';
-import { upsertStoreAction } from '@/app/(app)/dashboard/marketplace/actions';
+import { upsertStoreAction } from '@/app/(app)/marketplace/actions';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea, Field } from '@/components/ui/input';

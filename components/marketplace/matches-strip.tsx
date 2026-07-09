@@ -9,7 +9,7 @@ import { useState, useTransition } from 'react';
 import { Sparkles, HandHeart, X, Check } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
-import { setMatchStatusAction } from '@/app/(app)/dashboard/marketplace/actions';
+import { setMatchStatusAction } from '@/app/(app)/marketplace/actions';
 import type { EnrichedMatch } from '@/lib/marketplace/matches-server';
 
 export function MarketplaceMatchesStrip({ matches }: { matches: EnrichedMatch[] }) {

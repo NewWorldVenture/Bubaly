@@ -213,7 +213,7 @@ export function MarketplaceModule({
         action={
           <div className="flex items-center gap-2">
             {canSeed && (
-              <Link href="/dashboard/marketplace/seed"
+              <Link href="/marketplace/seed"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted transition hover:bg-elevated hover:text-fg">
                 <Database className="h-4 w-4" /> Seed test data
               </Link>

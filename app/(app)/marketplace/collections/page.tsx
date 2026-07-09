@@ -39,14 +39,14 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
       : { data: [] };
     return (
       <div>
-        <Link href="/dashboard/marketplace/collections" className="mb-3 inline-flex items-center gap-1 text-xs text-muted hover:text-brand">
+        <Link href="/marketplace/collections" className="mb-3 inline-flex items-center gap-1 text-xs text-muted hover:text-brand">
           <ArrowLeft className="h-3 w-3" /> All collections
         </Link>
         <PageHeader title={`${open.emoji ?? '🗂️'} ${open.name}`} description={open.description ?? `${ids.length} items in this collection.`} />
         <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {(listings ?? []).map((l) => (
             <li key={l.id} className="rounded-xl border border-border bg-surface/60 p-3.5">
-              <Link href={`/dashboard/marketplace/browse?q=${encodeURIComponent(l.title)}`} className="line-clamp-2 text-sm font-medium hover:text-brand">{l.title}</Link>
+              <Link href={`/marketplace/browse?q=${encodeURIComponent(l.title)}`} className="line-clamp-2 text-sm font-medium hover:text-brand">{l.title}</Link>
               <p className="mt-1 text-xs text-muted">
                 {KIND_LABELS[l.kind as ListingKind] ?? l.kind}
                 {priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null) && ` · ${priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null)}`}
@@ -70,7 +70,7 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
         <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
           {(collections ?? []).map((c) => (
             <li key={c.id}>
-              <Link href={`/dashboard/marketplace/collections?id=${c.id}`} className="block rounded-xl border border-border bg-surface/60 p-4 transition hover:border-brand/40">
+              <Link href={`/marketplace/collections?id=${c.id}`} className="block rounded-xl border border-border bg-surface/60 p-4 transition hover:border-brand/40">
                 <span className="text-2xl">{c.emoji ?? '🗂️'}</span>
                 <p className="mt-1.5 line-clamp-1 text-sm font-semibold">{c.name}</p>
                 {c.description && <p className="mt-0.5 line-clamp-2 text-xs text-muted">{c.description}</p>}
