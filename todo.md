@@ -655,6 +655,14 @@ Progress across 10 verified, pushed slices on PR #251:
 - **Still queued** — `/marketplace/requests` wanted-post surface; media upload; creator stores + collections;
   messaging; admin/moderation. See items below.
 
+- [x] **Seed data (graphics-rich, 500+)** ✅ `supabase/seed_marketplace_platform.sql` — for the 5 demo
+  families: 500 listings (every one with a picsum photo) + 1500 gallery images + 500 pricing rows, 25
+  profiles (avatars/banners), 50 verifications, 25 trust scores (+badges), 5 creator storefronts, 25
+  Pinterest collections (covers) + 125 pinned items, 119 offers, 50 wanted requests + 150 AI matches, 100
+  orders + 100 payments (mixed states), 60 reviews + 240 dimension ratings. Idempotent + pooler-safe.
+  Verified on PG16 across the full migration chain: clean apply, idempotent re-run, 0 FK mismatches, and an
+  RLS check proving a non-member sees all 500 public listings + 1500 images (cross-family discovery).
+
 **Product vision — the easiest marketplace for families & communities to:** buy · sell · borrow · lend ·
 rent · request-to-borrow · request-to-rent · swap · donate · discover local creators · build
 Pinterest-style product pages · build personal storefronts · verify both sides · rate both sides
