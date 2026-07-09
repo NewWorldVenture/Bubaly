@@ -184,7 +184,7 @@ export default async function MarketplaceHomePage() {
             {hero.length > 0 && (
               <div className="flex shrink-0 gap-2.5 overflow-x-auto">
                 {hero.map((l) => (
-                  <Link key={l.id} href={`${BASE}/browse?q=${encodeURIComponent(l.title)}`} className="w-36 shrink-0 rounded-xl border border-border bg-surface/80 p-3 transition hover:border-brand/40">
+                  <Link key={l.id} href={`${BASE}/item/${l.id}`} className="w-36 shrink-0 rounded-xl border border-border bg-surface/80 p-3 transition hover:border-brand/40">
                     <span className="inline-block rounded-md bg-brand/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">
                       {KIND_LABELS[l.kind as ListingKind]}
                     </span>
@@ -241,7 +241,7 @@ export default async function MarketplaceHomePage() {
                     <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-semibold', BADGE_STYLE[badge])}>{badge}</span>
                     <SaveButton listingId={l.id} saved={selfSaved.has(l.id)} />
                   </div>
-                  <Link href={`${BASE}/browse?q=${encodeURIComponent(l.title)}`}>
+                  <Link href={`${BASE}/item/${l.id}`}>
                     <p className="line-clamp-2 text-xs font-medium">{l.title}</p>
                     <p className="mt-1 text-sm font-semibold text-brand">{listingChip(l)}</p>
                     <p className="mt-0.5 flex items-center gap-1 text-[10px] text-muted">

@@ -264,14 +264,16 @@ export function MarketplaceModule({
               return (
                 <div key={l.id} className={cn('flex flex-col overflow-hidden rounded-2xl border border-border bg-surface/50',
                   l.status === 'claimed' && 'opacity-80')}>
+                  <Link href={`/marketplace/item/${l.id}`} className="group block" aria-label={`View ${l.title}`}>
                   {l.photo_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={l.photo_url} alt={l.title} loading="lazy" className="h-40 w-full object-cover" />
+                    <img src={l.photo_url} alt={l.title} loading="lazy" className="h-40 w-full object-cover transition group-hover:opacity-90" />
                   ) : (
-                    <div className="flex h-40 w-full items-center justify-center bg-gradient-to-br from-surface to-border">
+                    <div className="flex h-40 w-full items-center justify-center bg-gradient-to-br from-surface to-border transition group-hover:opacity-90">
                       <KindIcon className="h-8 w-8 text-muted" />
                     </div>
                   )}
+                  </Link>
                   <div className="flex flex-1 flex-col p-4">
                   <div className="flex items-start justify-between gap-2">
                     <span className={cn('inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide', KIND_STYLE[kind])}>
@@ -280,7 +282,7 @@ export function MarketplaceModule({
                     {price && <span className="text-sm font-semibold text-fg">{price}</span>}
                   </div>
 
-                  <div className="mt-2 font-semibold text-fg">{l.title}</div>
+                  <Link href={`/marketplace/item/${l.id}`} className="mt-2 font-semibold text-fg hover:text-brand">{l.title}</Link>
                   {l.description && <p className="mt-0.5 line-clamp-2 text-sm text-muted">{l.description}</p>}
 
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
