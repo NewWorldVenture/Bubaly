@@ -687,8 +687,13 @@ user confirms → publish → receive offers/requests → message securely → c
 - [ ] **Uber-style two-sided ratings** — buyer↔seller, renter↔owner, borrower↔lender across
   communication, reliability, item accuracy, timeliness, condition-returned, overall. Show average, count,
   badge summary, recent reviews.
-- [ ] **AI buyer assistant** — natural-language search ("blue dress size 6 to rent near me", "safest
+- [~] **AI buyer assistant** — natural-language search ("blue dress size 6 to rent near me", "safest
   seller for camping gear", "is this a fair price?") → ranked results with reasoning.
+  - [x] Deterministic core `lib/marketplace/buyer-search.ts` — `parseBuyerQuery()` turns a NL query into
+    a `MatchRequest` (reuses the listing hint extractor; adds `parseBudgetCents` "under $50" + `parseBuyerMode`
+    rent/borrow/buy/any), and `searchListings()` runs it through the shared matching engine → ranked results
+    with reasons. Tests `tests/marketplace-buyer-search.test.ts` (6). Verified tsc/eslint/vitest(1972). Next:
+    a search box UI + thin LLM paraphrase of reasons; "is this a fair price?" via `computeFees`/comparables.
 - [ ] **AI seller assistant** — improve listing quality, suggest price/photos, detect missing details,
   rent-vs-sale, demand-based pricing, best category, promo copy.
 - [ ] **Discovery** — personalized/nearby/trending-local/new-today/under-$25/free/borrow-nearby/
