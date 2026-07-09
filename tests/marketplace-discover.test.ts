@@ -71,7 +71,7 @@ describe('aiPicks', () => {
   it('surfaces badge variety before best-remaining, and respects the limit', () => {
     // 3 high-score Trending + 1 low-score New Today; limit 2 should still surface the New Today.
     const picks = aiPicks([
-      listing('t1', { savesByListing: undefined, created_at: daysAgo(30) }),
+      listing('t1', { created_at: daysAgo(30) }),
       listing('t2', { created_at: daysAgo(30) }),
       listing('t3', { created_at: daysAgo(30) }),
       listing('n1', { created_at: hoursAgo(1) }),

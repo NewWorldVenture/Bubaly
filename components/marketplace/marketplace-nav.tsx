@@ -15,7 +15,7 @@ import { Suspense } from 'react';
 import {
   Store, Home, Sparkles, Search, HelpCircle, Clock, Package, ShoppingBag,
   Gift, Repeat, FolderHeart, Users, Building2, ListChecks, MessageCircle,
-  Receipt, Star, Heart, ShieldCheck, Plus,
+  Receipt, Star, Heart, ShieldCheck, Plus, BellRing,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { SidebarTrustScore } from './sidebar-trust-score';
@@ -43,6 +43,7 @@ const ITEMS: Item[] = [
   { href: `${BASE}/orders`, label: 'Orders', icon: Receipt },
   { href: `${BASE}/reviews`, label: 'Reviews', icon: Star },
   { href: `${BASE}/saved`, label: 'Saved', icon: Heart },
+  { href: `${BASE}/alerts`, label: 'Alerts', icon: BellRing },
   { href: '/dashboard/trust', label: 'Verifications', icon: ShieldCheck },
 ];
 

@@ -393,6 +393,11 @@ export interface Database {
         { id?: string; family_id: string; listing_id: string; member_id: string },
         Partial<{ listing_id: string; member_id: string }>
       >;
+      marketplace_saved_searches: T<
+        { id: string; family_id: string; member_id: string; label: string | null; query: string | null; kind: string | null; category: string | null; max_price_cents: number | null; is_active: boolean; last_seen_at: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; label?: string | null; query?: string | null; kind?: string | null; category?: string | null; max_price_cents?: number | null; is_active?: boolean; last_seen_at?: string; created_by?: string | null },
+        Partial<{ label: string | null; query: string | null; kind: string | null; category: string | null; max_price_cents: number | null; is_active: boolean; last_seen_at: string }>
+      >;
       marketplace_collections: T<
         { id: string; family_id: string; name: string; description: string | null; emoji: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; name: string; description?: string | null; emoji?: string | null; created_by?: string | null },

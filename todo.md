@@ -903,6 +903,19 @@ missing-location events, colliding events for conflicts). Run it, then open
   **vitest (10 match + 10 listings)** · `next build`; migration + seed validated on PG16 (500 rows,
   idempotent). ⚠️ apply `0150` to prod (see `docs/PENDING_PROD_MIGRATIONS.md`).
 
+- [x] **Saved Searches & Alerts ✅ SHIPPED (2026-07-09).** "Alert me when someone lists X." A member
+  saves a standing search (keyword + optional kind / category / price ceiling); **`/marketplace/alerts`**
+  matches it against the live board and badges what's **NEW** since they last looked (`last_seen_at`
+  cursor). Pure `lib/marketplace/saved-search.ts` (`listingMatchesSearch`/`matchesForSearch`/
+  `countNewSince`/`describeSearch`, **12 tests**) — AND-combined criteria, all-terms keyword match over
+  title+description, price ceiling on priced kinds only, excludes the viewer's own supply. Table
+  **`marketplace_saved_searches`** (`0152`, family-scoped RLS, PG16-validated) + types; server actions
+  (`createSavedSearchAction`/`deleteSavedSearchAction`/`markSearchSeenAction`); client `AlertComposer` +
+  `AlertActions`; nav entry (Alerts, `BellRing`, additive). Pull-based (no notification hook → zero
+  collision with the board). Seed `seed_marketplace_saved_searches.sql` (500 alerts, varied criteria,
+  idempotent). Verified: tsc · eslint · **vitest (12)** · `next build` (`/marketplace/alerts`).
+  ⚠️ apply `0152` to prod.
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:
