@@ -603,7 +603,12 @@ photos+videos → AI drafts title/description/category/pricing/rental terms/avai
 user confirms → publish → receive offers/requests → message securely → complete → two-sided rating.
 **Never publish without user confirmation.**
 
-- [ ] **Routes** — public logged-in: `/marketplace`, `/browse`, `/search`, `/item/[id]`, `/post` (+ `/sell`
+- [~] **Routes** — public logged-in: `/marketplace`, `/browse`, `/search`, `/item/[id]`, `/post` (+ `/sell`
+  - [x] Direct `/marketplace` entry added (`app/(app)/marketplace/page.tsx`), mirroring
+    `/dashboard/marketplace` — both render `MarketplaceModule`. Dual-entry requirement met. Verified next build
+    (route registered). Remaining sub-routes (`/browse` `/search` `/item/[id]` `/post/*` `/requests`
+    `/collections` `/creators` `/my-*`) are later slices.
+  - [ ] (original) public logged-in: `/marketplace`, `/browse`, `/search`, `/item/[id]`, `/post` (+ `/sell`
   `/rent` `/lend` `/request` `/donate`), `/requests`, `/collections` (+ `/[id]`), `/creators` (+ `/[id]`),
   `/my-store`, `/my-listings`, `/my-rentals`, `/my-borrowing`, `/my-requests`, `/messages`, `/offers`,
   `/orders`, `/verification`, `/reviews`, `/saved`, `/settings`. Mirror inside `/dashboard/marketplace/*`
