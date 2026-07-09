@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import { Receipt } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { OrderControls, ReviewForm } from '@/components/marketplace/order-controls';
 import { formatCents } from '@/lib/marketplace/listings';
+import { marketplaceServiceFeeCents, orderFeeBreakdown } from '@/lib/marketplace/fee-policy';
 import { cn } from '@/lib/utils/cn';
 
 export const metadata: Metadata = { title: 'Orders · Marketplace | Bubaly' };
@@ -31,6 +32,18 @@ export default async function MarketplaceOrdersPage() {
     .eq('family_id', familyId)
     .order('created_at', { ascending: false })
     .limit(100);
+
+  // Honest fee disclosure: the Bubaly service fee is applied only when Super
+  // Admin has enabled it (same non-secret config the billing page reads). When
+  // off, the buyer pays exactly the sale price and the seller keeps all of it.
+  let serviceFeeCents = 0;
+  try {
+    const { data: feeCfg } = await createServiceClient()
+      .from('stripe_settings').select('enabled, service_fee_cents, service_fee_price_id').eq('id', 'singleton').maybeSingle();
+    serviceFeeCents = marketplaceServiceFeeCents(feeCfg);
+  } catch {
+    /* stripe_settings may not exist yet — no fee */
+  }
 
   const mine = (orders ?? []).filter((o) => o.buyer_member === selfId || o.seller_member === selfId);
   const listingIds = [...new Set(mine.map((o) => o.listing_id))];
@@ -63,6 +76,7 @@ export default async function MarketplaceOrdersPage() {
           {mine.map((o) => {
             const role = o.buyer_member === selfId ? 'buyer' : 'seller';
             const other = role === 'buyer' ? nameOf(o.seller_member) : nameOf(o.buyer_member);
+            const fee = o.amount_cents > 0 ? orderFeeBreakdown(o.amount_cents, serviceFeeCents) : null;
             return (
               <li key={o.id} className="rounded-xl border border-border bg-surface/60 p-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -73,6 +87,23 @@ export default async function MarketplaceOrdersPage() {
                 <p className="mt-1 text-xs text-muted">
                   {role === 'buyer' ? `You’re getting this from ${other}` : `${other} is getting this from you`} · {o.kind}
                 </p>
+                {fee && (
+                  <p className="mt-1 text-xs text-muted">
+                    {role === 'buyer' ? (
+                      <>
+                        You pay <span className="font-semibold text-brand">{formatCents(fee.buyerTotalCents)}</span>
+                        {fee.serviceFeeCents > 0 && (
+                          <span> · {formatCents(fee.subtotalCents)} item + {formatCents(fee.serviceFeeCents)} Bubaly service fee</span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        You receive <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCents(fee.sellerNetCents)}</span>
+                        <span> · Bubaly takes {formatCents(fee.platformReceivesCents)}</span>
+                      </>
+                    )}
+                  </p>
+                )}
                 <div className="mt-2.5 flex flex-wrap items-center gap-2">
                   <OrderControls orderId={o.id} status={o.status} />
                   {o.status === 'completed' && !reviewed.has(o.id) && <ReviewForm orderId={o.id} />}
