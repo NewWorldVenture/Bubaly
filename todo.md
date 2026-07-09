@@ -610,9 +610,14 @@ Progress across 10 verified, pushed slices on PR #251:
   stance; browse: "✨ Smart" NL search with per-card reasons. All in `marketplace-module.tsx`.
 - **Routing** ✅ — dual entry `/marketplace` + `/dashboard/marketplace`.
 - **Gates every slice**: tsc 0 · eslint 0 · vitest 1980 · next build 0.
-- **Next up** ▶ — TS types for the 0138 tables → server loaders (persist request matches; checkout intent via
-  `computeFees` + the §1a Stripe engine); `/marketplace/requests` wanted-post surface; media upload; creator
-  stores + collections; verification + two-sided ratings; messaging; admin/moderation. See items below.
+- **Server integration (started 2026-07-09)** ▶ — TS types added for `marketplace_verifications`/`_reviews`/
+  `_trust_scores` (0138) in `database.types.ts`; first typed loader `lib/marketplace/server.ts`
+  `loadMemberTrust()` reads real reviews + verified badges and runs them through the reviews+trust engines →
+  a `{ reviews, trust }` profile (degrades to safe empties on error). Tests `tests/marketplace-server.test.ts`
+  (3, fake-DB). Verified tsc/eslint/vitest/next build. Next: surface the trust chip + rating on
+  profiles/listings; a checkout server action (`computeFees` → order/payment via §1a Stripe); persist matches.
+- **Still queued** — `/marketplace/requests` wanted-post surface; media upload; creator stores + collections;
+  messaging; admin/moderation. See items below.
 
 **Product vision — the easiest marketplace for families & communities to:** buy · sell · borrow · lend ·
 rent · request-to-borrow · request-to-rent · swap · donate · discover local creators · build

@@ -373,6 +373,21 @@ export interface Database {
         { id?: string; family_id: string; listing_id: string; member_id?: string | null; kind?: string; amount_cents?: number | null; message?: string | null; status?: string; created_by?: string | null },
         Partial<{ member_id: string | null; kind: string; amount_cents: number | null; message: string | null; status: string }>
       >;
+      marketplace_verifications: T<
+        { id: string; family_id: string; user_id: string | null; member_id: string | null; kind: string; status: string; verified_at: string | null; provider: string | null; reference: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; member_id?: string | null; kind: string; status?: string; verified_at?: string | null; provider?: string | null; reference?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ kind: string; status: string; verified_at: string | null; provider: string | null; reference: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      marketplace_reviews: T<
+        { id: string; family_id: string; order_id: string | null; reviewer_user_id: string | null; reviewee_user_id: string | null; role: string | null; rating: number | null; body: string | null; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; order_id?: string | null; reviewer_user_id?: string | null; reviewee_user_id?: string | null; role?: string | null; rating?: number | null; body?: string | null; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ role: string | null; rating: number | null; body: string | null; updated_by: string | null; metadata: Json }>
+      >;
+      marketplace_trust_scores: T<
+        { id: string; family_id: string; user_id: string | null; member_id: string | null; score: number; completed_transactions: number; average_rating: number | null; response_minutes: number | null; disputes: number; cancellations: number; badges: string[]; computed_at: string; metadata: Json } & Stamps,
+        { id?: string; family_id: string; user_id?: string | null; member_id?: string | null; score?: number; completed_transactions?: number; average_rating?: number | null; response_minutes?: number | null; disputes?: number; cancellations?: number; badges?: string[]; computed_at?: string; metadata?: Json },
+        Partial<{ score: number; completed_transactions: number; average_rating: number | null; response_minutes: number | null; disputes: number; cancellations: number; badges: string[]; computed_at: string; metadata: Json }>
+      >;
       voice_commands: T<
         { id: string; family_id: string; member_id: string | null; transcript: string; resolved_kind: string | null; action_table: string | null; action_count: number; status: string; created_by: string | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; transcript: string; resolved_kind?: string | null; action_table?: string | null; action_count?: number; status?: string; created_by?: string | null },
