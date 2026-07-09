@@ -766,9 +766,12 @@ missing-location events, colliding events for conflicts). Run it, then open
   ledger balance** detection ✅ — all 5 previously-hardcoded inputs now read live data via pure
   `lib/operating-index/inputs.ts` (`countOverspentBudgets`, 7 tests); `negativeBalances` excludes
   credit cards; `lowInventory`/`eventsMissingInfo`/`unreadThreads` wired too. FOI is 100% Supabase-wired.
-- [ ] Onboarding: infer/defer more; anonymous **pre-family telemetry** path (`journey_events`
-  is family-scoped, no family_id until completion).
-- [ ] AI Concierge: deeper **write-back of accepted recommendations**.
+- [x] Onboarding: anonymous **pre-family telemetry** ✅ — shipped as `0133_onboarding_events.sql` +
+  `lib/analytics/onboarding.ts` + `onboarding-track.ts` (wired into the wizard) + super-admin
+  `/dashboard/onboarding-funnel` (+ the **T10 TTFV / activation** panel: `0146_activation_events.sql`,
+  `lib/analytics/activation.ts`). (Was a stale duplicate of Section C — verified done.)
+- [x] AI Concierge: **write-back of accepted recommendations** ✅ — the module creates/updates/deletes
+  `concierge_plans` and converts a plan → real `calendar_events`. (Stale duplicate of Section C — verified done.)
 
 ### C. Human-owned / blocked (NOT agent-doable — surfaced, not buildable here)
 - [ ] **Apply pending prod migrations 0125→0132** (`supabase db push`, or paste each in the
