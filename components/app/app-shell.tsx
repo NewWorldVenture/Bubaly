@@ -20,6 +20,7 @@ import { NotificationBell } from './notification-bell';
 import { UpgradeModal } from './upgrade-modal';
 import { QuickCapture } from './quick-capture';
 import { SignOutButton } from '@/components/auth/sign-out-button';
+import { MarketplaceNav } from '@/components/marketplace/marketplace-nav';
 import { SkipLink } from '@/components/a11y/skip-link';
 import { AIOrb } from './ai-orb';
 import { CommandBar } from './command-bar';
@@ -319,6 +320,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { planLevel, isSuperAdmin, featureTiers, role } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // On marketplace routes the left rail becomes the Marketplace rail (the design's
+  // AI-first marketplace), replacing the global nav BODY — the Bubaly logo + top
+  // header stay, so there's ONE rail, not two.
+  const onMarketplace = pathname === '/dashboard/marketplace' || pathname.startsWith('/dashboard/marketplace/');
   const mobileTabs = resolveItems(MOBILE_TABS, featureTiers, planLevel, isSuperAdmin, isManager(role));
   const upgradeLevel: 1 | 2 = upgradeFor
     ? (featureTiers[upgradeFor.href] === 'plus' ? 2 : 1)
@@ -330,12 +335,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh bg-bg text-fg lg:flex">
       <SkipLink />
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — global nav, or the Marketplace rail on /marketplace */}
       <aside className="hidden w-sidebar shrink-0 flex-col border-r border-border/60 bg-surface/30 lg:flex">
         <div className="px-5 py-5 xl:px-7 xl:py-7">
           <Logo href="/home" markVariant="home" />
         </div>
-        <SidebarBody onLocked={setUpgradeFor} />
+        {onMarketplace ? <MarketplaceNav /> : <SidebarBody onLocked={setUpgradeFor} />}
       </aside>
 
       {/* Main column */}
@@ -397,7 +402,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <SidebarBody onLocked={(item) => { setMobileNavOpen(false); setUpgradeFor(item); }} />
+            {onMarketplace
+              ? <MarketplaceNav />
+              : <SidebarBody onLocked={(item) => { setMobileNavOpen(false); setUpgradeFor(item); }} />}
           </div>
         </div>
       )}

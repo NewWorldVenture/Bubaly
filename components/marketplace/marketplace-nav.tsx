@@ -1,11 +1,13 @@
 'use client';
 
-// The Marketplace section rail (V2 design). Lives INSIDE the bubaly global
-// header/frame — it never replaces the app chrome. Per the design decisions:
+// The Marketplace rail — it REPLACES the global bubaly sidebar body on marketplace
+// routes (rendered by AppShell inside the same <aside>, so the Bubaly logo + the
+// global top header stay). Per the design + owner decisions:
 //   • Home returns to the bubaly landing (/dashboard), not a marketplace home.
 //   • Messages routes to the ONE bubaly Messages surface (/dashboard/messages) —
 //     the marketplace has no separate inbox.
 //   • Verifications routes to Trust & Permissions (the existing trust surface).
+//   • "Post an Item" + "Your Trust Score" pin to the bottom, as in the design.
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -16,6 +18,7 @@ import {
   Receipt, Star, Heart, ShieldCheck, Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { SidebarTrustScore } from './sidebar-trust-score';
 
 const BASE = '/dashboard/marketplace';
 
@@ -43,6 +46,8 @@ const ITEMS: Item[] = [
   { href: '/dashboard/trust', label: 'Verifications', icon: ShieldCheck },
 ];
 
+const EXTERNAL = new Set(['/dashboard', '/dashboard/assistant', '/dashboard/messages', '/dashboard/trust']);
+
 function NavList() {
   const pathname = usePathname();
   const params = useSearchParams();
@@ -52,9 +57,7 @@ function NavList() {
     const [path] = it.href.split(/[?#]/);
     if (it.kind) return path === pathname && activeKind === it.kind;
     if (it.exact) return pathname === path && (path !== `${BASE}/browse` || !activeKind);
-    if (path === '/dashboard' || path === '/dashboard/assistant' || path === '/dashboard/messages' || path === '/dashboard/trust') {
-      return pathname === path;
-    }
+    if (EXTERNAL.has(path)) return pathname === path;
     return pathname.startsWith(path);
   };
 
@@ -83,17 +86,22 @@ function NavList() {
 
 export function MarketplaceNav() {
   return (
-    <div className="flex h-full flex-col gap-3">
-      <Suspense fallback={null}>
-        <NavList />
-      </Suspense>
-      <Link
-        href={`${BASE}/browse?post=1`}
-        className="mt-1 inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
-      >
-        <Plus className="h-4 w-4" /> Post an Item
-      </Link>
-      <p className="text-center text-[11px] text-muted">Sell, rent, lend, borrow &amp; more</p>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+        <Suspense fallback={null}>
+          <NavList />
+        </Suspense>
+      </div>
+      <div className="space-y-3 border-t border-border/60 px-3 py-3">
+        <Link
+          href={`${BASE}/browse?post=1`}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+        >
+          <Plus className="h-4 w-4" /> Post an Item
+        </Link>
+        <p className="text-center text-[11px] text-muted">Sell, rent, lend, borrow &amp; more</p>
+        <SidebarTrustScore />
+      </div>
     </div>
   );
 }

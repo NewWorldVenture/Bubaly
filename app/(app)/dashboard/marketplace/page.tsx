@@ -14,7 +14,7 @@ import {
   aiPicks, activityFeed, rankCreators,
   type PickListing, type ActivityOrder, type ActivityReview, type CreatorStore,
 } from '@/lib/marketplace/discover';
-import { computeTrustScore, ratingSummary, TRUST_BAND_LABELS } from '@/lib/marketplace/trust';
+import { ratingSummary } from '@/lib/marketplace/trust';
 import { KIND_LABELS, CATEGORY_LABELS, priceLabel, type ListingKind, type ListingCategory, type RentPeriod } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
 
@@ -134,13 +134,6 @@ export default async function MarketplaceHomePage() {
     listings.map((l) => ({ id: l.id, title: l.title, member_id: l.member_id, created_at: l.created_at })),
     nameOf, now, 5,
   );
-
-  const myCompleted = orders.filter((o) => o.status === 'completed' && (o.buyer_member === selfId || o.seller_member === selfId)).length;
-  const trust = computeTrustScore({
-    ratingsReceived: ratingsByMember.get(selfId) ?? [],
-    ordersCompleted: myCompleted,
-    listingsPosted: listings.filter((l) => l.member_id === selfId).length,
-  });
 
   const itemsByCollection = new Map<string, number>();
   for (const it of collItems) itemsByCollection.set(it.collection_id, (itemsByCollection.get(it.collection_id) ?? 0) + 1);
@@ -349,7 +342,8 @@ export default async function MarketplaceHomePage() {
 
         {/* Nearby Activity */}
         <section className="rounded-2xl border border-border bg-surface/60 p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold"><ActivityIcon className="h-4 w-4 text-brand" /> Recent Activity</p>
+          <p className="flex items-center gap-2 text-sm font-semibold"><ActivityIcon className="h-4 w-4 text-brand" /> Nearby Activity</p>
+          <p className="mt-0.5 text-[11px] text-muted">See what’s happening near you</p>
           {feed.length === 0 ? (
             <p className="mt-2 text-xs text-muted">Quiet so far — activity shows here as the family trades.</p>
           ) : (
@@ -391,26 +385,6 @@ export default async function MarketplaceHomePage() {
               ))}
             </ul>
           )}
-        </section>
-
-        {/* Your Trust Score */}
-        <section className="rounded-2xl border border-border bg-surface/60 p-4">
-          <p className="text-sm font-semibold">Your Trust Score</p>
-          <div className="mt-2 flex items-center gap-3">
-            <span className="grid h-12 w-12 place-items-center rounded-full border-2 border-brand/40 bg-brand/10 text-base font-bold text-brand">
-              {trust.stars.toFixed(1)}
-            </span>
-            <div>
-              <p className="text-sm font-semibold">{TRUST_BAND_LABELS[trust.band]}</p>
-              <p className="text-[11px] text-muted">{trust.score}/100</p>
-            </div>
-          </div>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-border/50">
-            <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${trust.score}%` }} />
-          </div>
-          <ul className="mt-2 space-y-0.5">
-            {trust.factors.slice(0, 3).map((f) => <li key={f} className="text-[11px] text-muted">· {f}</li>)}
-          </ul>
         </section>
 
         {/* Safety First */}

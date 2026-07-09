@@ -826,6 +826,12 @@ missing-location events, colliding events for conflicts). Run it, then open
   Get Matched (live match count) + Verified-Trusted-Safe row · Browse by Category · Popular
   Collections · right rail: **AI Marketplace Assistant** (prompt chips → the ONE bubaly assistant) ·
   Recent Activity · Top Creators (Follow) · **Your Trust Score** · Safety First.
+- [x] **Single left rail (fix, 2026-07-09):** the Marketplace rail now REPLACES the global bubaly
+  sidebar *body* on `/dashboard/marketplace*` (swapped inside the same AppShell `<aside>`), so the
+  Bubaly logo + global top header stay and there's ONE rail — not the global nav + a second rail.
+  "Your Trust Score" moved to the bottom of the rail (client-computed via `SidebarTrustScore`),
+  matching the design; the page's right rail is now Assistant · Nearby Activity · Top Creators ·
+  Safety First. `next build` green (9 routes).
 - [x] Marketplace **section rail** (`components/marketplace/marketplace-nav.tsx`): Marketplace ·
   **Home → `/dashboard`** (bubaly landing) · AI Assistant · Browse · Requests · Rentals · Borrow &
   Lend · Buy & Sell · Donate · Swap · Collections · Creators · My Store · My Listings ·
