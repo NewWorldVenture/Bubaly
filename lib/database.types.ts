@@ -373,6 +373,11 @@ export interface Database {
         { id?: string; family_id: string; listing_id: string; member_id?: string | null; kind?: string; amount_cents?: number | null; message?: string | null; status?: string; created_by?: string | null },
         Partial<{ member_id: string | null; kind: string; amount_cents: number | null; message: string | null; status: string }>
       >;
+      marketplace_matches: T<
+        { id: string; family_id: string; wanted_id: string; supply_id: string; score: number; reason: string | null; status: string; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; wanted_id: string; supply_id: string; score?: number; reason?: string | null; status?: string; created_by?: string | null },
+        Partial<{ score: number; reason: string | null; status: string }>
+      >;
       voice_commands: T<
         { id: string; family_id: string; member_id: string | null; transcript: string; resolved_kind: string | null; action_table: string | null; action_count: number; status: string; created_by: string | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; transcript: string; resolved_kind?: string | null; action_table?: string | null; action_count?: number; status?: string; created_by?: string | null },

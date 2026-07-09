@@ -793,6 +793,18 @@ missing-location events, colliding events for conflicts). Run it, then open
 - [x] Route `/dashboard/marketplace` + admin-only `/dashboard/marketplace/seed` (500-record test seed screen).
 - [x] Nav entry (Family & Home group, `Store` icon).
 - [x] Verified: tsc, eslint, vitest (1562), build.
+- [x] **Match intelligence (next level) ✅ SHIPPED (2026-07-09).** The board is now proactive:
+  it connects open **`wanted`** requests to the supply already posted (`sell`/`free`/`rent`/`borrow`)
+  — *"You're looking for a bike; Mom listed a balance bike for free."* Pure `lib/marketplace/matches.ts`
+  (`computeMatches`/`scoreMatch`/`titleTerms`, **10 tests**) scores each wanted↔supply pair by shared
+  category + title-term overlap + a free bonus, never matches a member to their own supply, caps per
+  wanted. Server `matches-server.ts` (`loadAndSnapshotMatches`) computes from live listings + persists
+  to **`marketplace_matches`** (`0150`, family-scoped RLS, one row per wanted/supply) **preserving
+  dismissals**. A "Matches on the board" strip (`components/marketplace/matches-strip.tsx`) sits atop
+  `/dashboard/marketplace` with Got-it / Dismiss (`setMatchStatusAction`). Seed
+  `seed_marketplace_matches.sql` (500 rows, status spread; in `SEED_ALL.sql`). Verified: tsc · eslint ·
+  **vitest (10 match + 10 listings)** · `next build`; migration + seed validated on PG16 (500 rows,
+  idempotent). ⚠️ apply `0150` to prod (see `docs/PENDING_PROD_MIGRATIONS.md`).
 
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
