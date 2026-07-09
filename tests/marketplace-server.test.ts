@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { loadMemberTrust } from '@/lib/marketplace/server';
+import { loadMemberTrust, loadCheckoutQuote } from '@/lib/marketplace/server';
 
 // Minimal thenable query stub: .select()/.eq() chain, awaits to a canned result.
+// .maybeSingle() resolves to the same canned result (data already single/null).
 function fakeQuery(result: { data: unknown; error: unknown }) {
   const q: Record<string, unknown> = {};
   q.select = () => q;
   q.eq = () => q;
+  q.maybeSingle = () => Promise.resolve(result);
   q.then = (resolve: (r: unknown) => unknown) => resolve(result);
   return q;
 }
@@ -50,5 +52,37 @@ describe('loadMemberTrust', () => {
     expect(p.reviews.count).toBe(0);
     // Falls back to signals-only trust (no reviews/verifications), still computes.
     expect(p.trust.badges).toContain('repeat_seller');
+  });
+});
+
+describe('loadCheckoutQuote', () => {
+  it('quotes fees using the family commission setting', async () => {
+    const db = fakeDb({
+      marketplace_listings: { data: { id: 'l1', title: 'Bike', price_cents: 10_000, category: 'sports' }, error: null },
+      marketplace_settings: { data: { commission_bps: 500, default_currency: 'USD' }, error: null }, // 5%
+    });
+    const q = await loadCheckoutQuote(db, { familyId: 'f1', listingId: 'l1' });
+    expect(q).not.toBeNull();
+    expect(q!.listing.title).toBe('Bike');
+    expect(q!.breakdown.marketplaceFeeCents).toBe(500); // 5% of $100
+    expect(q!.breakdown.buyerTotalCents).toBe(10_000 + q!.breakdown.serviceFeeCents);
+  });
+
+  it('falls back to the default commission when settings are absent', async () => {
+    const db = fakeDb({
+      marketplace_listings: { data: { id: 'l1', title: 'Bike', price_cents: 10_000, category: 'sports' }, error: null },
+      marketplace_settings: { data: null, error: null },
+    });
+    const q = await loadCheckoutQuote(db, { familyId: 'f1', listingId: 'l1' });
+    expect(q!.breakdown.marketplaceFeeCents).toBe(1000); // default 10%
+    expect(q!.listing.currency).toBe('USD');
+  });
+
+  it('returns null when the listing is gone', async () => {
+    const db = fakeDb({
+      marketplace_listings: { data: null, error: null },
+      marketplace_settings: { data: null, error: null },
+    });
+    expect(await loadCheckoutQuote(db, { familyId: 'f1', listingId: 'nope' })).toBeNull();
   });
 });

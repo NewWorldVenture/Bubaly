@@ -614,8 +614,12 @@ Progress across 10 verified, pushed slices on PR #251:
   `_trust_scores` (0138) in `database.types.ts`; first typed loader `lib/marketplace/server.ts`
   `loadMemberTrust()` reads real reviews + verified badges and runs them through the reviews+trust engines →
   a `{ reviews, trust }` profile (degrades to safe empties on error). Tests `tests/marketplace-server.test.ts`
-  (3, fake-DB). Verified tsc/eslint/vitest/next build. Next: surface the trust chip + rating on
-  profiles/listings; a checkout server action (`computeFees` → order/payment via §1a Stripe); persist matches.
+  (3, fake-DB). Verified tsc/eslint/vitest/next build.
+  - [x] Checkout quote loader `loadCheckoutQuote()` (+ `marketplace_settings` type) — reads the listing +
+    family commission setting and runs `computeFees` → the full transparent breakdown; falls back to the
+    10% platform default when unconfigured; null if the listing is gone. 3 more fake-DB tests.
+  - Next: surface the trust chip + rating on profiles/listings; a checkout server ACTION that persists an
+    order + payment via §1a Stripe; persist request matches.
 - **Still queued** — `/marketplace/requests` wanted-post surface; media upload; creator stores + collections;
   messaging; admin/moderation. See items below.
 

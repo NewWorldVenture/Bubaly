@@ -7,6 +7,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { aggregateReviews, toTrustRatingSignals, type ReviewInput, type ReviewSummary } from './reviews';
 import { computeTrustScore, type TrustResult, type TrustSignals, type VerificationKind } from './trust';
+import { computeFees, type CommissionPolicy, type FeeBreakdown, type PromoOverride } from './fees';
 
 // Accept any Supabase client (server or service-role); the caller owns auth/RLS.
 type DB = Pick<SupabaseClient, 'from'>;
@@ -66,4 +67,59 @@ export async function loadMemberTrust(
   });
 
   return { reviews, trust };
+}
+
+// ── Checkout quote ─────────────────────────────────────────────────────────
+
+/** Platform commission when a family hasn't configured one (10%). */
+export const DEFAULT_COMMISSION_BPS = 1000;
+
+export interface CheckoutQuoteArgs {
+  familyId: string;
+  listingId: string;
+  promo?: PromoOverride | null;
+  depositCents?: number;
+  taxCents?: number;
+}
+
+export interface CheckoutQuote {
+  listing: { id: string; title: string; priceCents: number; category: string; currency: string };
+  breakdown: FeeBreakdown;
+}
+
+/**
+ * Build a checkout fee quote for a listing: read the listing + the family's
+ * marketplace settings (commission), then run the fee engine to produce the full
+ * transparent breakdown shown before checkout. Returns null if the listing is
+ * gone. The commission falls back to the platform default when unconfigured.
+ */
+export async function loadCheckoutQuote(sb: DB, args: CheckoutQuoteArgs): Promise<CheckoutQuote | null> {
+  const [listingRes, settingsRes] = await Promise.all([
+    sb.from('marketplace_listings').select('id, title, price_cents, category').eq('id', args.listingId).maybeSingle(),
+    sb.from('marketplace_settings').select('commission_bps, default_currency').eq('family_id', args.familyId).maybeSingle(),
+  ]);
+  if (listingRes.error || !listingRes.data) {
+    if (listingRes.error) console.error('[marketplace] checkout quote: listing load failed', listingRes.error);
+    return null;
+  }
+  const listing = listingRes.data;
+  const settings = settingsRes.error ? null : settingsRes.data;
+
+  const bps = settings?.commission_bps ?? DEFAULT_COMMISSION_BPS;
+  const currency = settings?.default_currency ?? 'USD';
+  const policy: CommissionPolicy = { default: { kind: 'percentage', bps } };
+
+  const breakdown = computeFees({
+    subtotalCents: listing.price_cents,
+    policy,
+    category: listing.category,
+    promo: args.promo,
+    depositCents: args.depositCents,
+    taxCents: args.taxCents,
+  });
+
+  return {
+    listing: { id: listing.id, title: listing.title, priceCents: listing.price_cents, category: listing.category, currency },
+    breakdown,
+  };
 }

@@ -388,6 +388,11 @@ export interface Database {
         { id?: string; family_id: string; user_id?: string | null; member_id?: string | null; score?: number; completed_transactions?: number; average_rating?: number | null; response_minutes?: number | null; disputes?: number; cancellations?: number; badges?: string[]; computed_at?: string; metadata?: Json },
         Partial<{ score: number; completed_transactions: number; average_rating: number | null; response_minutes: number | null; disputes: number; cancellations: number; badges: string[]; computed_at: string; metadata: Json }>
       >;
+      marketplace_settings: T<
+        { id: string; family_id: string; default_currency: string; default_fulfillment: string | null; commission_bps: number | null; require_verification: boolean; preferences: Json; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
+        { id?: string; family_id: string; default_currency?: string; default_fulfillment?: string | null; commission_bps?: number | null; require_verification?: boolean; preferences?: Json; created_by?: string | null; updated_by?: string | null; metadata?: Json },
+        Partial<{ default_currency: string; default_fulfillment: string | null; commission_bps: number | null; require_verification: boolean; preferences: Json; updated_by: string | null; metadata: Json }>
+      >;
       voice_commands: T<
         { id: string; family_id: string; member_id: string | null; transcript: string; resolved_kind: string | null; action_table: string | null; action_count: number; status: string; created_by: string | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; transcript: string; resolved_kind?: string | null; action_table?: string | null; action_count?: number; status?: string; created_by?: string | null },
