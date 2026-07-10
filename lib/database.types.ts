@@ -2163,6 +2163,7 @@ export interface Database {
       marketplace_accept_offer: { Args: { p_offer: string }; Returns: string };
       marketplace_decline_offer: { Args: { p_offer: string }; Returns: undefined };
       marketplace_set_listing_status: { Args: { p_listing: string; p_status: string }; Returns: undefined };
+      wallet_reserve_card_auth: { Args: { p_family: string; p_child_wallet: string; p_amount: number; p_auth_id: string; p_description: string }; Returns: boolean };
     };
     Enums: {
       member_role: MemberRole;

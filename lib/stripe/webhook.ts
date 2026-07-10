@@ -12,22 +12,40 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
-import { childSpendableCents, debitCardSpend } from '@/lib/wallet/server';
+import { reserveCardAuth, releaseCardHold, debitCardSpend } from '@/lib/wallet/server';
 
 type DB = SupabaseClient<Database>;
 
 /**
- * Record the event for idempotency. Returns true if this is the first time we've
- * seen it (caller should process), false if it's a duplicate (caller should skip).
+ * Record the event for idempotency, replay-safely (audit PAY-2). Inserts the id
+ * with status 'processing'. Returns 'fresh' when the caller should process it —
+ * either the first delivery, or a re-delivery of an event whose prior handling
+ * did NOT complete (still 'processing' or 'error'), so a failed handler is
+ * retried rather than silently dropped. Only a fully 'processed' event is a true
+ * duplicate. All money handlers are idempotent, so reprocessing is safe.
  */
-export async function recordEvent(supabase: DB, event: Stripe.Event): Promise<boolean> {
+export async function recordEvent(supabase: DB, event: Stripe.Event): Promise<'fresh' | 'duplicate'> {
   const { error } = await supabase.from('stripe_webhook_events').insert({
-    stripe_event_id: event.id, type: event.type,
+    stripe_event_id: event.id, type: event.type, status: 'processing',
     payload_summary: { account: (event as { account?: string }).account ?? null, created: event.created },
   });
-  // Unique-violation (23505) → already processed.
-  if (error) return false;
-  return true;
+  if (!error) return 'fresh';
+  // Row already exists — a duplicate only if the earlier delivery fully processed.
+  const { data } = await supabase
+    .from('stripe_webhook_events').select('status').eq('stripe_event_id', event.id).maybeSingle();
+  return data?.status === 'processed' ? 'duplicate' : 'fresh';
+}
+
+/** Mark an event as fully processed (so future deliveries short-circuit). */
+export async function markEventProcessed(supabase: DB, eventId: string): Promise<void> {
+  await supabase.from('stripe_webhook_events')
+    .update({ status: 'processed', error: null }).eq('stripe_event_id', eventId);
+}
+
+/** Mark an event as errored (kept reprocessable; the route returns 500 to retry). */
+export async function markEventError(supabase: DB, eventId: string, message: string): Promise<void> {
+  await supabase.from('stripe_webhook_events')
+    .update({ status: 'error', error: message }).eq('stripe_event_id', eventId);
 }
 
 /** Look up the card + family for an authorization, by Stripe card id. */
@@ -60,8 +78,25 @@ export function decideAuthorization(input: {
 }
 
 /**
+ * PURE card-level pre-check (everything except balance). Returns a decline reason
+ * or null when the card itself is fine and the balance must be reserved next.
+ */
+export function precheckCardAuthorization(input: {
+  isFrozen: boolean; cardStatus: string; blockedCategories: string[]; merchantCategory: string | null;
+}): AuthDecision | null {
+  if (input.cardStatus !== 'active') return { approve: false, reason: 'card_inactive' };
+  if (input.isFrozen) return { approve: false, reason: 'card_frozen' };
+  if (input.merchantCategory && input.blockedCategories.includes(input.merchantCategory)) {
+    return { approve: false, reason: 'blocked_category' };
+  }
+  return null;
+}
+
+/**
  * Handle issuing_authorization.request — the real-time approve/decline. Responds
- * to Stripe via the approve/decline API within the webhook window.
+ * to Stripe via the approve/decline API within the webhook window. The balance
+ * decision goes through an ATOMIC reserve (audit PAY-1): the hold it writes stops
+ * a concurrent authorization from approving against the same funds.
  */
 export async function handleAuthorizationRequest(
   supabase: DB, auth: Stripe.Issuing.Authorization, stripeAccount: string | undefined,
@@ -78,11 +113,19 @@ export async function handleAuthorizationRequest(
   if (!card) {
     decision = { approve: false, reason: 'unknown_card' };
   } else {
-    const spendable = await childSpendableCents(supabase, card.family_id, card.child_wallet_id);
-    decision = decideAuthorization({
-      isFrozen: card.is_frozen, cardStatus: card.status, blockedCategories: card.blocked_categories,
-      spendableCents: spendable, amountCents: amount, merchantCategory,
+    const pre = precheckCardAuthorization({
+      isFrozen: card.is_frozen, cardStatus: card.status,
+      blockedCategories: card.blocked_categories, merchantCategory,
     });
+    if (pre) {
+      decision = pre;
+    } else {
+      const reserved = await reserveCardAuth(supabase, {
+        familyId: card.family_id, childWalletId: card.child_wallet_id,
+        amountCents: amount, authId: auth.id, description: merchantName ?? 'Card hold',
+      });
+      decision = reserved ? { approve: true, reason: 'approved' } : { approve: false, reason: 'insufficient_spend_balance' };
+    }
   }
 
   // Tell Stripe. (On connected accounts, pass the stripeAccount header.)
@@ -107,8 +150,9 @@ export async function handleAuthorizationRequest(
 }
 
 /**
- * Handle issuing_transaction.created — the capture. Posts a debit to the ledger
- * so the child's spend balance reflects the real purchase. Idempotent.
+ * Handle issuing_transaction.created — the capture. Posts the real debit (keyed
+ * by the transaction id, idempotent) and releases the authorization hold that was
+ * reserved at approval, so the two never double-count. Idempotent.
  */
 export async function handleTransactionCreated(
   supabase: DB, txn: Stripe.Issuing.Transaction,
@@ -116,12 +160,29 @@ export async function handleTransactionCreated(
   const cardId = typeof txn.card === 'string' ? txn.card : txn.card?.id;
   const card = cardId ? await cardForAuthorization(supabase, cardId) : null;
   if (!card) return;
+  const authId = typeof txn.authorization === 'string' ? txn.authorization : txn.authorization?.id ?? null;
   // Stripe issuing transaction amounts are negative for spends.
   const spend = Math.abs(txn.amount ?? 0);
-  if (spend <= 0) return;
-  const merchant = txn.merchant_data?.name ?? 'Card purchase';
-  await debitCardSpend(supabase, {
-    familyId: card.family_id, childWalletId: card.child_wallet_id,
-    amountCents: spend, description: merchant, stripeRef: txn.id,
-  });
+  if (spend > 0) {
+    const merchant = txn.merchant_data?.name ?? 'Card purchase';
+    await debitCardSpend(supabase, {
+      familyId: card.family_id, childWalletId: card.child_wallet_id,
+      amountCents: spend, description: merchant, stripeRef: txn.id,
+    });
+  }
+  // The captured debit now represents the spend; drop the pending hold.
+  if (authId) await releaseCardHold(supabase, authId);
+}
+
+/**
+ * Handle issuing_authorization.updated — release the hold when an authorization
+ * will no longer be captured (reversed / expired / closed). No-op if already
+ * released by the capture path (only `processing` holds are touched).
+ */
+export async function handleAuthorizationUpdated(
+  supabase: DB, auth: Stripe.Issuing.Authorization,
+): Promise<void> {
+  if (['reversed', 'expired', 'closed'].includes(auth.status)) {
+    await releaseCardHold(supabase, auth.id);
+  }
 }
