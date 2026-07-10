@@ -24,8 +24,9 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 ## 🔒 SECURITY AUDIT — status & remaining items (2026-07-10) — READ FIRST
 
 A dedicated adversarial audit ran over Marketplace, Payments/Stripe, Auth/OAuth, and AI/concierge.
-Fixes landed as PRs; the rest is queued below for the next session. **Do not** re-audit these from
-scratch — pick up the open items directly.
+**All identified items are now fixed** (Marketplace authz + PAY-1/PAY-2 in round 1; AUTH-1, PAY-3,
+AI-1, PAY-4/5, AI-2 in round 2 — this session). The only remaining action is human-owned: **apply the
+coupled migrations `0154`/`0155`/`0156` to prod with the deploy.** **Do not** re-audit from scratch.
 
 **✅ Fixed & merged**
 - **Marketplace object-level authz** (SEC-1/SEC-2/REL-1/REL-3/RACE-1/RACE-2, A11Y, img) — PR #281 →
@@ -40,29 +41,40 @@ scratch — pick up the open items directly.
   errored/unfinished events reprocessable) and the route returns 500 on handler error so Stripe retries.
 
 **⚠️ Coupled prod migrations — apply with the deployed code** (see `docs/PENDING_PROD_MIGRATIONS.md`):
-`0154_marketplace_ownership.sql` **and** `0155_wallet_auth_holds.sql`. Until applied: marketplace
-owner accept/withdraw/complete error, and card auth holds don't reserve.
+`0154_marketplace_ownership.sql`, `0155_wallet_auth_holds.sql`, **and `0156_rate_limits.sql`**. Until
+applied: marketplace owner accept/withdraw/complete error, card auth holds don't reserve, and the
+durable AI rate-limit fails open (in-memory limiter still caps per instance).
 
-**☐ Open audit items (next session — priority order)**
-- ☐ **AUTH-1 (High)** — Google Calendar OAuth `state` is unsigned base64 and the callback trusts
-  `userId` from it (`app/api/google/calendar/auth|callback/route.ts`). OAuth CSRF / calendar-link
-  hijack. Fix: random single-use `state` in an httpOnly cookie, verify on callback; derive `userId`
-  from the session (`getUser()`), never from `state`.
-- ☐ **PAY-3 (Med)** — `app/api/billing/checkout/route.ts` has no admin gate (any member can start a
-  subscription); `change-plan`/`cancel` already gate on `isAdmin(ctx.active.role)`. Add the same.
-- ☐ **AI-1 (Med)** — guardian inbound (SMS/WhatsApp/voice) feeds attacker-controlled message text to
-  the LLM scam classifier (`app/api/guardian/inbound/*`). Prompt-injection can flip the verdict.
-  Fix: delimit untrusted text, instruct model to ignore embedded instructions, validate structured
-  output; never let classifier text trigger irreversible actions. (Twilio signature IS verified in prod.)
-- ☐ **PAY-4/5 (Low)** — `/api/webhooks/stripe` has no event-id dedup (verify `markReferralConverted`
-  is idempotent on replay); billing success/return URLs use the request `Origin` header (prefer
-  `NEXT_PUBLIC_APP_URL`). **AI-2 (Low)** — `/api/ai/gift` rate-limit is in-memory per-instance (weak
-  on serverless); consider a durable store.
+**✅ Fixed & merged — round 2 (2026-07-10, this session)** — all remaining audit items closed:
+- **AUTH-1 (High)** ✅ — Google Calendar OAuth is now CSRF-safe: `auth/route.ts` issues a random,
+  single-use, opaque `state` in an **httpOnly cookie**; `callback/route.ts` verifies `state` against
+  the cookie (constant-time) and derives the connected user from the **session** (`getUser()`), never
+  from `state`. Closes the calendar-link hijack. (`app/api/google/calendar/auth|callback/route.ts`.)
+- **PAY-3 (Med)** ✅ — `app/api/billing/checkout/route.ts` now gates on `isAdmin(ctx.active.role)`
+  (only a parent can start a subscription), matching change-plan/cancel.
+- **AI-1 (Med)** ✅ — the scam classifier (`lib/guardian/scam-ai.ts`) is prompt-injection-hardened:
+  instructions live in the **system** role; untrusted transcript + family context are wrapped in a
+  **random-nonce fence** the model is told to treat strictly as data (injection attempts = a scam
+  signal, never commands); output is **strictly validated** against known enums so the model can never
+  emit an off-list recommendation/scamType/confidence — it only informs the pipeline. `ai-screen.ts`
+  got the same defense-in-depth rule. Test `tests/guardian-scam-ai.test.ts` (6) proves the validator.
+- **PAY-4 (Low)** ✅ — `/api/webhooks/stripe` (subscription webhook) now dedups by Stripe event id via
+  the replay-safe `recordEvent`/`markEventProcessed`/`markEventError` store (reused from PAY-2), and
+  returns 500 on handler error so Stripe retries instead of silently dropping. (`markReferralConverted`
+  was already idempotent — only acts on `status = 'signed_up'`.)
+- **PAY-5 (Low)** ✅ — billing success/return URLs now build from the trusted `NEXT_PUBLIC_APP_URL`
+  first, not the caller-controlled `Origin` header (checkout, change-plan, portal).
+- **AI-2 (Low)** ✅ — durable, cross-instance rate limiting: **`0156_rate_limits.sql`**
+  (`rate_limits` + `rate_limit_hit()` RPC) + `lib/server/rate-limit-db.ts` (fail-open), wired into
+  `/api/ai/gift` alongside the per-instance in-memory gate. PG16-verified.
+- Verified: tsc · eslint · **vitest (56 existing + 6 new)** · `next build` (218 pages); `0156`
+  applied twice on PG16 (idempotent) and exercised.
+
 - Full report + evidence: see session notes. No cross-tenant (cross-family) breach was found; RLS
   isolates families. External AI `fetch`es all target fixed provider hosts (no SSRF).
 
-**Release posture:** card-spend/Issuing now safe to ship once `0155` is applied; fix **AUTH-1** before
-exposing Google Calendar linking to real users.
+**Release posture:** card-spend/Issuing safe to ship once `0155` is applied; **AUTH-1 is fixed**, so
+Google Calendar linking is safe to expose. Apply `0154`/`0155`/`0156` with the deploy.
 
 ---
 

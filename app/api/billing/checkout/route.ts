@@ -4,10 +4,16 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { stripeFromKey, STRIPE_PLANS, type StripePlan } from '@/lib/stripe';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { serviceFeeAddInvoiceItems } from '@/lib/stripe/service-fee';
+import { isAdmin } from '@/lib/constants/roles';
 
 export async function POST(req: NextRequest) {
   try {
     const ctx = await requireUserContext();
+    // PAY-3: only a family admin (parent) may start a paid subscription — the
+    // same gate change-plan/cancel already enforce.
+    if (!isAdmin(ctx.active.role)) {
+      return NextResponse.json({ error: 'Only a parent can start a subscription.' }, { status: 403 });
+    }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
     const stripeSettings = await getStripeSettings();
@@ -41,7 +47,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const origin = req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+    // PAY-5: build success/cancel URLs from the trusted configured base, not the
+    // caller-controlled Origin header (only fall back to it when unset in dev).
+    const origin = process.env.NEXT_PUBLIC_APP_URL ?? req.headers.get('origin') ?? 'http://localhost:3000';
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,

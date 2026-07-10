@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { markReferralConverted } from '@/lib/referrals/server';
+import { recordEvent, markEventProcessed, markEventError } from '@/lib/stripe/webhook';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import type Stripe from 'stripe';
@@ -69,46 +70,63 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
 
-  switch (event.type) {
-    case 'customer.subscription.created':
-    case 'customer.subscription.updated':
-    case 'customer.subscription.deleted': {
-      await upsertSubscription(supabase, event.data.object as Stripe.Subscription);
-      break;
-    }
-
-    case 'checkout.session.completed': {
-      const session = event.data.object as Stripe.Response<Stripe.Checkout.Session>;
-      // Ensure billing_customer row has the customer_ref
-      const familyId = session.metadata?.family_id;
-      if (familyId && session.customer) {
-        await supabase.from('billing_customers').upsert(
-          { family_id: familyId, provider: 'stripe', customer_ref: String(session.customer) },
-          { onConflict: 'family_id' },
-        );
-      }
-      // Close out the tracked checkout so the abandoned-checkout cron skips it.
-      await supabase
-        .from('checkout_sessions')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('session_id', session.id);
-      // Fire event-driven "payment_completed" automation workflows (deduped by
-      // the Stripe session id). Best-effort: never fail the webhook on it.
-      try {
-        const buyerEmail = session.customer_details?.email ?? session.customer_email ?? null;
-        await fireAutomationEvent(supabase, {
-          trigger: 'payment_completed',
-          email: buyerEmail,
-          name: session.customer_details?.name ?? null,
-          subjectKey: eventSubjectKey('payment_completed', [session.id]),
-          context: { familyId: familyId ?? null, sessionId: session.id },
-        });
-      } catch {
-        /* non-fatal */
-      }
-      break;
-    }
+  // PAY-4: dedup by Stripe event id so a re-delivered event isn't processed
+  // twice (reuses the replay-safe store from PAY-2). A fully-processed event
+  // short-circuits; a prior failed/unfinished one is reprocessed.
+  if ((await recordEvent(supabase, event)) === 'duplicate') {
+    return NextResponse.json({ received: true, duplicate: true });
   }
 
+  try {
+    switch (event.type) {
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated':
+      case 'customer.subscription.deleted': {
+        await upsertSubscription(supabase, event.data.object as Stripe.Subscription);
+        break;
+      }
+
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Response<Stripe.Checkout.Session>;
+        // Ensure billing_customer row has the customer_ref
+        const familyId = session.metadata?.family_id;
+        if (familyId && session.customer) {
+          await supabase.from('billing_customers').upsert(
+            { family_id: familyId, provider: 'stripe', customer_ref: String(session.customer) },
+            { onConflict: 'family_id' },
+          );
+        }
+        // Close out the tracked checkout so the abandoned-checkout cron skips it.
+        await supabase
+          .from('checkout_sessions')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('session_id', session.id);
+        // Fire event-driven "payment_completed" automation workflows (deduped by
+        // the Stripe session id). Best-effort: never fail the webhook on it.
+        try {
+          const buyerEmail = session.customer_details?.email ?? session.customer_email ?? null;
+          await fireAutomationEvent(supabase, {
+            trigger: 'payment_completed',
+            email: buyerEmail,
+            name: session.customer_details?.name ?? null,
+            subjectKey: eventSubjectKey('payment_completed', [session.id]),
+            context: { familyId: familyId ?? null, sessionId: session.id },
+          });
+        } catch {
+          /* non-fatal */
+        }
+        break;
+      }
+    }
+  } catch (err) {
+    // Leave the event reprocessable and return 500 so Stripe retries it, rather
+    // than 200'ing on a dropped subscription update.
+    const message = err instanceof Error ? err.message : String(err);
+    await markEventError(supabase, event.id, message);
+    console.error('[stripe webhook] handler error', message);
+    return NextResponse.json({ error: 'handler failed' }, { status: 500 });
+  }
+
+  await markEventProcessed(supabase, event.id);
   return NextResponse.json({ received: true });
 }

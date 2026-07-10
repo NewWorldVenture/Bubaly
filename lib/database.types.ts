@@ -2164,6 +2164,8 @@ export interface Database {
       marketplace_decline_offer: { Args: { p_offer: string }; Returns: undefined };
       marketplace_set_listing_status: { Args: { p_listing: string; p_status: string }; Returns: undefined };
       wallet_reserve_card_auth: { Args: { p_family: string; p_child_wallet: string; p_amount: number; p_auth_id: string; p_description: string }; Returns: boolean };
+      rate_limit_hit: { Args: { p_key: string; p_limit: number; p_window_seconds: number }; Returns: { allowed: boolean; retry_after: number }[] };
+      rate_limit_prune: { Args: Record<string, never>; Returns: undefined };
     };
     Enums: {
       member_role: MemberRole;

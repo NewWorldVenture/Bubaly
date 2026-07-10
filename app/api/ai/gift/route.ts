@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { resolveProvider } from '@/lib/ai/provider';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { buildGiftAssistPrompt, parseGiftSuggestions } from '@/lib/wallet/gift-ai';
 
 // POST /api/ai/gift — PUBLIC AI Gift Assistant for the gift-link page.
@@ -12,14 +13,19 @@ export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   // Tight limit: a public, model-backed endpoint. 5 requests/minute/IP.
+  // AI-2: per-instance in-memory gate first (cheap), then a durable, cross-instance
+  // limit via Postgres so the cap holds under horizontal scale.
   const ip = clientIp(req.headers);
   const limited = rateLimit(`ai-gift:${ip}`, { limit: 5, windowMs: 60_000 });
-  if (!limited.ok) {
-    return NextResponse.json(
-      { error: 'Please wait a moment before asking for more ideas.' },
-      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
-    );
-  }
+  const rejected = (retryAfter: number) => NextResponse.json(
+    { error: 'Please wait a moment before asking for more ideas.' },
+    { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+  );
+  if (!limited.ok) return rejected(limited.retryAfter);
+
+  const supabase = createServiceClient();
+  const durable = await rateLimitDb(supabase, `ai-gift:${ip}`, { limit: 5, windowMs: 60_000 });
+  if (!durable.ok) return rejected(durable.retryAfter);
 
   let body: { token?: string; relationship?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Bad request' }, { status: 400 }); }
@@ -27,7 +33,6 @@ export async function POST(req: NextRequest) {
   if (!token) return NextResponse.json({ error: 'Missing gift link.' }, { status: 400 });
   const relationship = typeof body.relationship === 'string' ? body.relationship.slice(0, 40).trim() || null : null;
 
-  const supabase = createServiceClient();
   const { data: link } = await supabase
     .from('gift_links')
     .select('id, is_active, occasion, child_wallet_id, family_id')

@@ -85,7 +85,8 @@ export async function POST(req: NextRequest) {
       await supabase.from('billing_customers').upsert({ family_id: familyId, provider: 'stripe', customer_ref: customerId });
     }
 
-    const origin = req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+    // PAY-5: trusted configured base first, not the caller-controlled Origin header.
+    const origin = process.env.NEXT_PUBLIC_APP_URL ?? req.headers.get('origin') ?? 'http://localhost:3000';
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
