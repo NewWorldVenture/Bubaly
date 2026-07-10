@@ -52,17 +52,19 @@ export default async function MarketplaceCreatorsPage() {
       ) : (
         <ul className="grid gap-2.5 sm:grid-cols-2">
           {ranked.map((c) => (
-            <li key={c.storeId} className="flex items-start gap-3 rounded-xl border border-border bg-surface/60 p-4">
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-elevated text-xl">{c.emoji ?? '🛍️'}</span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{c.name}</p>
-                {taglineOf.get(c.storeId) && <p className="line-clamp-1 text-xs text-muted">{taglineOf.get(c.storeId)}</p>}
-                <p className="mt-1 text-[11px] text-muted">
-                  {c.reviewCount > 0 ? `★ ${c.avgRating.toFixed(1)} (${c.reviewCount})` : 'New store'}
-                  {c.followerCount > 0 && ` · ${c.followerCount} follower${c.followerCount === 1 ? '' : 's'}`}
-                  {(openByMember.get(c.memberId) ?? 0) > 0 && ` · ${openByMember.get(c.memberId)} open listing${openByMember.get(c.memberId) === 1 ? '' : 's'}`}
-                </p>
-              </div>
+            <li key={c.storeId} className="flex items-start gap-3 rounded-xl border border-border bg-surface/60 p-4 transition hover:border-brand/40">
+              <Link href={`/marketplace/creators/${c.storeId}`} className="flex min-w-0 flex-1 items-start gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-elevated text-xl">{c.emoji ?? '🛍️'}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{c.name}</p>
+                  {taglineOf.get(c.storeId) && <p className="line-clamp-1 text-xs text-muted">{taglineOf.get(c.storeId)}</p>}
+                  <p className="mt-1 text-[11px] text-muted">
+                    {c.reviewCount > 0 ? `★ ${c.avgRating.toFixed(1)} (${c.reviewCount})` : 'New store'}
+                    {c.followerCount > 0 && ` · ${c.followerCount} follower${c.followerCount === 1 ? '' : 's'}`}
+                    {(openByMember.get(c.memberId) ?? 0) > 0 && ` · ${openByMember.get(c.memberId)} open listing${openByMember.get(c.memberId) === 1 ? '' : 's'}`}
+                  </p>
+                </div>
+              </Link>
               {c.memberId !== selfId && <FollowButton storeId={c.storeId} following={selfFollows.has(c.storeId)} />}
             </li>
           ))}
