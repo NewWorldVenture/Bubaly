@@ -12,9 +12,10 @@ import { SaveButton } from '@/components/marketplace/save-button';
 import { InterestButton } from '@/components/marketplace/interest-button';
 import { ListingQuestions } from '@/components/marketplace/listing-questions';
 import { ListingImage } from '@/components/marketplace/listing-image';
+import { OfferInbox } from '@/components/marketplace/offer-inbox';
 import { computeTrustScore, ratingSummary, TRUST_BAND_LABELS } from '@/lib/marketplace/trust';
 import {
-  KIND_LABELS, CATEGORY_LABELS, CONDITION_LABELS, priceLabel, kindHasPrice,
+  KIND_LABELS, CATEGORY_LABELS, CONDITION_LABELS, priceLabel, formatCents,
   type ListingKind, type ListingCategory, type RentPeriod,
 } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
@@ -54,7 +55,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     sb.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', sellerId),
     sb.from('marketplace_reviews').select('id, reviewer_member, rating, comment, created_at').eq('family_id', familyId).eq('listing_id', id).order('created_at', { ascending: false }).limit(10),
     sb.from('marketplace_saves').select('id').eq('listing_id', id).eq('member_id', selfId).maybeSingle(),
-    sb.from('marketplace_offers').select('id', { count: 'exact', head: true }).eq('listing_id', id).eq('status', 'open'),
+    sb.from('marketplace_offers').select('id, member_id, kind, amount_cents, message, created_at').eq('listing_id', id).eq('status', 'open').order('created_at', { ascending: true }),
     sb.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', sellerId),
     sb.from('marketplace_orders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('seller_member', sellerId).eq('status', 'completed'),
     listing.member_id
@@ -69,10 +70,24 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     listingsPosted: sellerListingsRes.count ?? 0,
   });
   const rs = ratingSummary(sellerRatings);
-  const openOffers = offerRes.count ?? 0;
+  const openOfferRows = offerRes.data ?? [];
+  const openOffers = openOfferRows.length;
+  const alreadySent = openOfferRows.some((o) => o.member_id === selfId);
   const alreadySaved = !!saveRes.data;
   const store = storeRes.data as { id: string; name: string; emoji: string | null } | null;
   const nameOf = (mid: string | null) => members?.find((m) => m.id === mid)?.display_name ?? 'Someone';
+
+  // Pre-format the owner's offer inbox (server-side) so the client panel stays dumb.
+  const OFFER_KIND_LABEL: Record<string, string> = { interest: 'Interested', claim: 'Claim', offer: 'Offer' };
+  const inboxOffers = isOwner
+    ? openOfferRows.map((o) => ({
+        id: o.id,
+        name: nameOf(o.member_id),
+        kindLabel: OFFER_KIND_LABEL[o.kind] ?? 'Offer',
+        amount: o.amount_cents ? formatCents(o.amount_cents) : '',
+        message: o.message ?? '',
+      }))
+    : [];
 
   const claimLabel = kind === 'sell' || kind === 'rent' ? "I'm interested" : kind === 'wanted' ? 'I have this' : 'Claim it';
   const sentLabel = kind === 'sell' || kind === 'rent' ? 'Interest sent' : 'Claim sent';
@@ -155,13 +170,18 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
             {isOwner ? (
               <span className="text-sm text-muted">This is your listing{openOffers > 0 ? ` · ${openOffers} open offer${openOffers === 1 ? '' : 's'}` : ''}.</span>
             ) : open ? (
-              <InterestButton listingId={listing.id} label={claimLabel} sentLabel={sentLabel} />
+              <InterestButton listingId={listing.id} label={claimLabel} sentLabel={sentLabel} alreadySent={alreadySent} />
             ) : (
               <span className="text-sm text-muted capitalize">{listing.status}</span>
             )}
             <SaveButton listingId={listing.id} saved={alreadySaved}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-muted hover:text-fg" />
           </div>
+
+          {/* Owner: accept / decline the offers on this listing */}
+          {isOwner && inboxOffers.length > 0 && (
+            <OfferInbox offers={inboxOffers} />
+          )}
         </div>
       </div>
 
