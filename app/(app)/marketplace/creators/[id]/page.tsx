@@ -9,6 +9,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { FollowButton } from '@/components/marketplace/follow-button';
+import { ListingImage } from '@/components/marketplace/listing-image';
 import { computeTrustScore, ratingSummary, TRUST_BAND_LABELS } from '@/lib/marketplace/trust';
 import {
   KIND_LABELS, CATEGORY_LABELS, priceLabel,
@@ -113,14 +114,16 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
             const price = priceLabel(kind, l.price_cents, l.rent_period as RentPeriod | null);
             return (
               <Link key={l.id} href={`/marketplace/item/${l.id}`} className="group flex flex-col overflow-hidden rounded-xl border border-border bg-surface/60 transition hover:border-brand/40">
-                {l.photo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={l.photo_url} alt={l.title} loading="lazy" className="h-32 w-full object-cover transition group-hover:opacity-90" />
-                ) : (
-                  <div className="flex h-32 w-full items-center justify-center bg-gradient-to-br from-surface to-border">
-                    <KindIcon className="h-7 w-7 text-muted" />
-                  </div>
-                )}
+                <ListingImage
+                  src={l.photo_url}
+                  alt={l.title}
+                  className="h-32 w-full object-cover transition group-hover:opacity-90"
+                  fallback={
+                    <div className="flex h-32 w-full items-center justify-center bg-gradient-to-br from-surface to-border">
+                      <KindIcon className="h-7 w-7 text-muted" />
+                    </div>
+                  }
+                />
                 <div className="flex flex-1 flex-col p-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted">

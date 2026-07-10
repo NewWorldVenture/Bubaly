@@ -2159,6 +2159,10 @@ export interface Database {
       social_role_for: { Args: { p_family_id: string }; Returns: SocialRoleEnum };
       social_has_permission: { Args: { p_family_id: string; p_permission: string }; Returns: boolean };
       bump_exit_intent: { Args: { p_id: string; p_metric: string }; Returns: undefined };
+      marketplace_member_id: { Args: { p_family_id: string }; Returns: string | null };
+      marketplace_accept_offer: { Args: { p_offer: string }; Returns: string };
+      marketplace_decline_offer: { Args: { p_offer: string }; Returns: undefined };
+      marketplace_set_listing_status: { Args: { p_listing: string; p_status: string }; Returns: undefined };
     };
     Enums: {
       member_role: MemberRole;

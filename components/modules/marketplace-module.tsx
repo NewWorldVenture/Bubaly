@@ -17,6 +17,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
+import { ListingImage } from '@/components/marketplace/listing-image';
 import { cn } from '@/lib/utils/cn';
 import {
   KIND_LABELS, KIND_ORDER, CATEGORY_LABELS, CONDITION_LABELS, RENT_PERIOD_LABELS,
@@ -73,6 +74,7 @@ export function MarketplaceModule({
   const [form, setForm] = useState(autoOpenPost ? { ...blank, kind: autoOpenPost } : blank);
   const [saving, setSaving] = useState(false);
   const [offersFor, setOffersFor] = useState<Listing | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const { data: listings, loading, error } = useRealtimeQuery<Listing>({
     table: 'marketplace_listings', familyId, deps: [familyId],
@@ -144,7 +146,7 @@ export function MarketplaceModule({
 
   async function withdraw(l: Listing) {
     const sb = createClient();
-    const { error: err } = await sb.from('marketplace_listings').update({ status: 'withdrawn' }).eq('id', l.id);
+    const { error: err } = await sb.rpc('marketplace_set_listing_status', { p_listing: l.id, p_status: 'withdrawn' });
     if (err) { toastError(describeDbError(err)); return; }
     success('Listing withdrawn');
   }
@@ -152,52 +154,46 @@ export function MarketplaceModule({
   // A member expresses interest / claims → creates an open offer + flips the
   // listing to "pending" so others see it's being discussed.
   async function makeOffer(l: Listing) {
-    if (!canOffer(l as ListingLike, selfId, offers ?? [])) return;
-    const sb = createClient();
-    const kind = l.kind === 'sell' || l.kind === 'rent' ? 'interest' : 'claim';
-    const { error: err } = await sb.from('marketplace_offers').insert({
-      family_id: familyId, listing_id: l.id, member_id: selfId, kind, created_by: userId,
-    });
-    if (err) { toastError(describeDbError(err)); return; }
-    if (l.status === 'available') await sb.from('marketplace_listings').update({ status: 'pending' }).eq('id', l.id);
-    success(kind === 'claim' ? 'You claimed this — the owner will confirm' : 'Interest sent to the owner');
+    if (busyId || !canOffer(l as ListingLike, selfId, offers ?? [])) return;
+    setBusyId(l.id);
+    try {
+      const sb = createClient();
+      const kind = l.kind === 'sell' || l.kind === 'rent' ? 'interest' : 'claim';
+      // Insert the offer; a DB trigger flips an available listing to 'pending', and
+      // a partial unique index makes a second open offer a no-op ("already sent").
+      const { error: err } = await sb.from('marketplace_offers').insert({
+        family_id: familyId, listing_id: l.id, member_id: selfId, kind, created_by: userId,
+      });
+      if (err) {
+        if (err.code === '23505') { success('You already reached out about this'); return; }
+        toastError(describeDbError(err)); return;
+      }
+      success(kind === 'claim' ? 'You claimed this — the owner will confirm' : 'Interest sent to the owner');
+    } finally {
+      setBusyId(null);
+    }
   }
 
-  // Owner accepts an offer → listing goes to that member; other open offers decline.
+  // Owner accepts an offer → one atomic, ownership-checked RPC claims the listing,
+  // accepts this offer, declines the rest, and records the order.
   async function acceptOffer(l: Listing, offer: Offer) {
     const sb = createClient();
-    const { error: err } = await sb.from('marketplace_listings')
-      .update({ status: 'claimed', claimed_by: offer.member_id, claimed_at: new Date().toISOString() })
-      .eq('id', l.id);
+    const { error: err } = await sb.rpc('marketplace_accept_offer', { p_offer: offer.id });
     if (err) { toastError(describeDbError(err)); return; }
-    await sb.from('marketplace_offers').update({ status: 'accepted' }).eq('id', offer.id);
-    await sb.from('marketplace_offers').update({ status: 'declined' })
-      .eq('listing_id', l.id).eq('status', 'open').neq('id', offer.id);
-    // Record the exchange as an order (drives Orders + two-sided Reviews + the
-    // trust score). Best-effort: pre-0151 databases just skip it.
-    try {
-      const orderKind = l.kind === 'sell' ? 'buy' : ['rent', 'borrow', 'swap', 'donate', 'free'].includes(l.kind) ? l.kind : 'buy';
-      await sb.from('marketplace_orders').insert({
-        family_id: familyId, listing_id: l.id,
-        buyer_member: offer.member_id, seller_member: l.member_id,
-        kind: orderKind, status: 'confirmed',
-        amount_cents: offer.amount_cents ?? l.price_cents, created_by: userId,
-      });
-    } catch { /* orders table not applied yet */ }
     success(`Handed off to ${memberName(offer.member_id)}`);
     setOffersFor(null);
   }
 
   async function declineOffer(offer: Offer) {
     const sb = createClient();
-    const { error: err } = await sb.from('marketplace_offers').update({ status: 'declined' }).eq('id', offer.id);
+    const { error: err } = await sb.rpc('marketplace_decline_offer', { p_offer: offer.id });
     if (err) { toastError(describeDbError(err)); return; }
     success('Offer declined');
   }
 
   async function markCompleted(l: Listing) {
     const sb = createClient();
-    const { error: err } = await sb.from('marketplace_listings').update({ status: 'completed' }).eq('id', l.id);
+    const { error: err } = await sb.rpc('marketplace_set_listing_status', { p_listing: l.id, p_status: 'completed' });
     if (err) { toastError(describeDbError(err)); return; }
     success('Marked complete 🎉');
   }
@@ -265,14 +261,16 @@ export function MarketplaceModule({
                 <div key={l.id} className={cn('flex flex-col overflow-hidden rounded-2xl border border-border bg-surface/50',
                   l.status === 'claimed' && 'opacity-80')}>
                   <Link href={`/marketplace/item/${l.id}`} className="group block" aria-label={`View ${l.title}`}>
-                  {l.photo_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={l.photo_url} alt={l.title} loading="lazy" className="h-40 w-full object-cover transition group-hover:opacity-90" />
-                  ) : (
-                    <div className="flex h-40 w-full items-center justify-center bg-gradient-to-br from-surface to-border transition group-hover:opacity-90">
-                      <KindIcon className="h-8 w-8 text-muted" />
-                    </div>
-                  )}
+                  <ListingImage
+                    src={l.photo_url}
+                    alt={l.title}
+                    className="h-40 w-full object-cover transition group-hover:opacity-90"
+                    fallback={
+                      <div className="flex h-40 w-full items-center justify-center bg-gradient-to-br from-surface to-border transition group-hover:opacity-90">
+                        <KindIcon className="h-8 w-8 text-muted" />
+                      </div>
+                    }
+                  />
                   </Link>
                   <div className="flex flex-1 flex-col p-4">
                   <div className="flex items-start justify-between gap-2">
@@ -322,8 +320,8 @@ export function MarketplaceModule({
                     ) : alreadyOffered ? (
                       <span className="inline-flex items-center gap-1 text-xs text-emerald-300"><Check className="h-3.5 w-3.5" /> {kind === 'sell' || kind === 'rent' ? 'Interest sent' : 'Claim sent'}</span>
                     ) : offerable ? (
-                      <Button size="sm" onClick={() => makeOffer(l)} className="h-7 gap-1 text-xs">
-                        <HandHeart className="h-3.5 w-3.5" /> {kind === 'sell' || kind === 'rent' ? "I'm interested" : kind === 'wanted' ? 'I have this' : 'Claim it'}
+                      <Button size="sm" onClick={() => makeOffer(l)} disabled={busyId === l.id} aria-busy={busyId === l.id} className="h-7 gap-1 text-xs">
+                        <HandHeart className="h-3.5 w-3.5" /> {busyId === l.id ? 'Sending…' : kind === 'sell' || kind === 'rent' ? "I'm interested" : kind === 'wanted' ? 'I have this' : 'Claim it'}
                       </Button>
                     ) : (
                       <span className="text-xs text-muted capitalize">{l.status}</span>

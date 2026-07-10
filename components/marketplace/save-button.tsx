@@ -10,10 +10,11 @@ import { cn } from '@/lib/utils/cn';
 
 export function SaveButton({ listingId, saved: initial, className }: { listingId: string; saved: boolean; className?: string }) {
   const [saved, setSaved] = useState(initial);
-  const [, startTransition] = useTransition();
+  const [pending, startTransition] = useTransition();
   const { error: toastError } = useToast();
 
   const toggle = () => {
+    if (pending) return;
     const next = !saved;
     setSaved(next);
     startTransition(async () => {
@@ -26,9 +27,12 @@ export function SaveButton({ listingId, saved: initial, className }: { listingId
     <button
       type="button"
       onClick={toggle}
+      disabled={pending}
       aria-label={saved ? 'Remove from saved' : 'Save this listing'}
       aria-pressed={saved}
+      aria-busy={pending}
       className={cn(
+        'disabled:opacity-60',
         'inline-flex h-7 w-7 items-center justify-center rounded-full border transition',
         saved ? 'border-rose-500/40 bg-rose-500/15 text-rose-500' : 'border-border bg-surface/70 text-muted hover:text-rose-500',
         className,
