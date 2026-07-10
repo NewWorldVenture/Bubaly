@@ -207,15 +207,18 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
     .maybeSingle();
   if (existing) return { ok: false, error: 'You already reached out about this' };
 
+  // A DB trigger flips an available listing to 'pending' on insert; a partial
+  // unique index (listing_id, member_id where status='open') makes a racing
+  // duplicate a caught 23505 rather than a second open offer.
   const kind = listing.kind === 'sell' || listing.kind === 'rent' ? 'interest' : 'claim';
   const { error } = await supabase.from('marketplace_offers').insert({
     family_id: ctx.active.familyId, listing_id: listingId, member_id: memberId, kind, created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
-
-  if (listing.status === 'available') {
-    await supabase.from('marketplace_listings').update({ status: 'pending' }).eq('id', listingId);
+  if (error) {
+    if (error.code === '23505') return { ok: false, error: 'You already reached out about this' };
+    return { ok: false, error: error.message };
   }
+
   revalidatePath(`${MARKETPLACE}/item/${listingId}`);
   revalidatePath(`${MARKETPLACE}/browse`);
   return { ok: true };

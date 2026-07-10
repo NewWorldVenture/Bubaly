@@ -11,6 +11,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { SaveButton } from '@/components/marketplace/save-button';
 import { InterestButton } from '@/components/marketplace/interest-button';
 import { ListingQuestions } from '@/components/marketplace/listing-questions';
+import { ListingImage } from '@/components/marketplace/listing-image';
 import { computeTrustScore, ratingSummary, TRUST_BAND_LABELS } from '@/lib/marketplace/trust';
 import {
   KIND_LABELS, CATEGORY_LABELS, CONDITION_LABELS, priceLabel, kindHasPrice,
@@ -86,14 +87,16 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Photo */}
         <div className="overflow-hidden rounded-2xl border border-border bg-surface/50">
-          {listing.photo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={listing.photo_url} alt={listing.title} className="aspect-[4/3] w-full object-cover" />
-          ) : (
-            <div className="flex aspect-[4/3] w-full items-center justify-center bg-gradient-to-br from-surface to-border">
-              <KindIcon className="h-12 w-12 text-muted" />
-            </div>
-          )}
+          <ListingImage
+            src={listing.photo_url}
+            alt={listing.title}
+            className="aspect-[4/3] w-full object-cover"
+            fallback={
+              <div className="flex aspect-[4/3] w-full items-center justify-center bg-gradient-to-br from-surface to-border">
+                <KindIcon className="h-12 w-12 text-muted" />
+              </div>
+            }
+          />
         </div>
 
         {/* Details */}
