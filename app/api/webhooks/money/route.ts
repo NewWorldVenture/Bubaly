@@ -8,7 +8,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
-import { recordEvent, handleAuthorizationRequest, handleTransactionCreated } from '@/lib/stripe/webhook';
+import {
+  recordEvent, markEventProcessed, markEventError,
+  handleAuthorizationRequest, handleTransactionCreated, handleAuthorizationUpdated,
+} from '@/lib/stripe/webhook';
 import { syncConnectedAccount } from '@/lib/stripe/connect';
 
 export const runtime = 'nodejs';
@@ -37,14 +40,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
-  // Everything else is deduped.
-  const fresh = await recordEvent(supabase, event);
-  if (!fresh) return NextResponse.json({ received: true, duplicate: true });
+  // Everything else is deduped. A re-delivery of an event that never finished
+  // processing is treated as fresh so a failed handler is retried, not dropped.
+  const outcome = await recordEvent(supabase, event);
+  if (outcome === 'duplicate') return NextResponse.json({ received: true, duplicate: true });
 
   try {
     switch (event.type) {
       case 'issuing_transaction.created':
         await handleTransactionCreated(supabase, event.data.object as Stripe.Issuing.Transaction);
+        break;
+      case 'issuing_authorization.updated':
+        await handleAuthorizationUpdated(supabase, event.data.object as Stripe.Issuing.Authorization);
         break;
       case 'account.updated': {
         const acct = event.data.object as Stripe.Account;
@@ -53,16 +60,18 @@ export async function POST(req: NextRequest) {
         break;
       }
       default:
-        // Unhandled event types are acknowledged (and recorded) so Stripe stops retrying.
+        // Unhandled event types are acknowledged (and marked processed) so Stripe stops retrying.
         break;
     }
   } catch (e) {
-    await supabase.from('stripe_webhook_events')
-      .update({ status: 'error', error: e instanceof Error ? e.message : String(e) })
-      .eq('stripe_event_id', event.id);
-    // Still 200 so Stripe doesn't hammer us; the error is logged for replay.
+    const message = e instanceof Error ? e.message : String(e);
+    await markEventError(supabase, event.id, message);
     console.error('[money webhook] handler error', event.type, e);
+    // Return 500 so Stripe retries; recordEvent keeps errored events reprocessable
+    // and the money handlers are idempotent, so the retry settles correctly.
+    return NextResponse.json({ error: 'handler_failed' }, { status: 500 });
   }
 
+  await markEventProcessed(supabase, event.id);
   return NextResponse.json({ received: true });
 }

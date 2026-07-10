@@ -35,6 +35,44 @@ export async function childSpendableCents(supabase: DB, familyId: string, childW
 }
 
 /**
+ * Atomically reserve a hold for a card authorization. Under a per-child lock the
+ * DB re-checks the spendable balance and, if sufficient, writes a `processing`
+ * debit keyed by the authorization id — so concurrent authorizations can't each
+ * approve against the same balance (audit PAY-1). Returns whether the hold was
+ * placed (i.e. whether to approve). Idempotent on the authorization id.
+ */
+export async function reserveCardAuth(supabase: DB, params: {
+  familyId: string; childWalletId: string; amountCents: number; authId: string; description: string;
+}): Promise<boolean> {
+  const { data, error } = await supabase.rpc('wallet_reserve_card_auth', {
+    p_family: params.familyId,
+    p_child_wallet: params.childWalletId,
+    p_amount: Math.max(0, Math.trunc(params.amountCents)),
+    p_auth_id: params.authId,
+    p_description: params.description,
+  });
+  if (error) {
+    console.error('[wallet] reserveCardAuth failed', error.message);
+    return false; // fail closed — decline rather than risk an unfunded approval
+  }
+  return data === true;
+}
+
+/**
+ * Release a card authorization hold (status → 'cancelled') so it stops reducing
+ * the spendable balance. Called on capture (the real debit replaces it) and on
+ * authorization reversal/expiry. Idempotent: only `processing` holds are touched.
+ */
+export async function releaseCardHold(supabase: DB, authId: string): Promise<void> {
+  await supabase
+    .from('wallet_transactions')
+    .update({ status: 'cancelled' })
+    .eq('stripe_ref', authId)
+    .eq('type', 'card_spend')
+    .eq('status', 'processing');
+}
+
+/**
  * Post a card spend as a DEBIT against the child's SPEND bucket. Used by the
  * Issuing webhook when an authorization is captured. Immutable: a refund is a new
  * credit, never an edit. Idempotent on the Stripe ref.

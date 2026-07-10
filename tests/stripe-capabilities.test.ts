@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolveCapabilities, DEFAULT_MONEY_FLAGS, type MoneyFlags, type StripeEnv } from '@/lib/stripe/capabilities';
-import { decideAuthorization } from '@/lib/stripe/webhook';
+import { decideAuthorization, precheckCardAuthorization } from '@/lib/stripe/webhook';
 
 const NO_ENV: StripeEnv = { hasSecretKey: false, hasWebhookSecret: false };
 const FULL_ENV: StripeEnv = { hasSecretKey: true, hasWebhookSecret: true };
@@ -94,5 +94,30 @@ describe('decideAuthorization', () => {
 
   it('allows spending exactly the full balance', () => {
     expect(decideAuthorization({ ...base, spendableCents: 2500, amountCents: 2500 }).approve).toBe(true);
+  });
+});
+
+describe('precheckCardAuthorization (card-level, no balance — balance is reserved atomically)', () => {
+  const base = { isFrozen: false, cardStatus: 'active', blockedCategories: [] as string[], merchantCategory: null as string | null };
+
+  it('returns null when the card is fine (caller then reserves funds)', () => {
+    expect(precheckCardAuthorization(base)).toBeNull();
+  });
+
+  it('declines an inactive card', () => {
+    expect(precheckCardAuthorization({ ...base, cardStatus: 'inactive' })).toEqual({ approve: false, reason: 'card_inactive' });
+  });
+
+  it('declines a frozen card', () => {
+    expect(precheckCardAuthorization({ ...base, isFrozen: true })).toEqual({ approve: false, reason: 'card_frozen' });
+  });
+
+  it('declines a blocked merchant category', () => {
+    expect(precheckCardAuthorization({ ...base, blockedCategories: ['gambling'], merchantCategory: 'gambling' }))
+      .toEqual({ approve: false, reason: 'blocked_category' });
+  });
+
+  it('passes an allowed category through (null)', () => {
+    expect(precheckCardAuthorization({ ...base, blockedCategories: ['gambling'], merchantCategory: 'grocery_stores' })).toBeNull();
   });
 });

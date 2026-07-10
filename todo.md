@@ -21,6 +21,51 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 
 ---
 
+## 🔒 SECURITY AUDIT — status & remaining items (2026-07-10) — READ FIRST
+
+A dedicated adversarial audit ran over Marketplace, Payments/Stripe, Auth/OAuth, and AI/concierge.
+Fixes landed as PRs; the rest is queued below for the next session. **Do not** re-audit these from
+scratch — pick up the open items directly.
+
+**✅ Fixed & merged**
+- **Marketplace object-level authz** (SEC-1/SEC-2/REL-1/REL-3/RACE-1/RACE-2, A11Y, img) — PR #281 →
+  migration **`0154_marketplace_ownership.sql`** (per-member RLS + ownership-checked RPCs + offer
+  hold trigger + unique open-offer index). Item-detail offer inbox #283.
+- **PAY-1 — card-authorization overspend** (concurrent auths approved against the same balance).
+  Fixed: atomic `wallet_reserve_card_auth` RPC (per-child lock + sufficient-funds check + `processing`
+  hold keyed by auth id) → migration **`0155_wallet_auth_holds.sql`**; holds released on capture /
+  reversal in `lib/stripe/webhook.ts`. PG16-verified (2nd concurrent auth declined; capture reconciles).
+- **PAY-2 — dropped financial events**: money webhook recorded events *before* handling then 200'd on
+  error, so a failed capture was never retried. Now `recordEvent` is replay-safe (processing→processed;
+  errored/unfinished events reprocessable) and the route returns 500 on handler error so Stripe retries.
+
+**⚠️ Coupled prod migrations — apply with the deployed code** (see `docs/PENDING_PROD_MIGRATIONS.md`):
+`0154_marketplace_ownership.sql` **and** `0155_wallet_auth_holds.sql`. Until applied: marketplace
+owner accept/withdraw/complete error, and card auth holds don't reserve.
+
+**☐ Open audit items (next session — priority order)**
+- ☐ **AUTH-1 (High)** — Google Calendar OAuth `state` is unsigned base64 and the callback trusts
+  `userId` from it (`app/api/google/calendar/auth|callback/route.ts`). OAuth CSRF / calendar-link
+  hijack. Fix: random single-use `state` in an httpOnly cookie, verify on callback; derive `userId`
+  from the session (`getUser()`), never from `state`.
+- ☐ **PAY-3 (Med)** — `app/api/billing/checkout/route.ts` has no admin gate (any member can start a
+  subscription); `change-plan`/`cancel` already gate on `isAdmin(ctx.active.role)`. Add the same.
+- ☐ **AI-1 (Med)** — guardian inbound (SMS/WhatsApp/voice) feeds attacker-controlled message text to
+  the LLM scam classifier (`app/api/guardian/inbound/*`). Prompt-injection can flip the verdict.
+  Fix: delimit untrusted text, instruct model to ignore embedded instructions, validate structured
+  output; never let classifier text trigger irreversible actions. (Twilio signature IS verified in prod.)
+- ☐ **PAY-4/5 (Low)** — `/api/webhooks/stripe` has no event-id dedup (verify `markReferralConverted`
+  is idempotent on replay); billing success/return URLs use the request `Origin` header (prefer
+  `NEXT_PUBLIC_APP_URL`). **AI-2 (Low)** — `/api/ai/gift` rate-limit is in-memory per-instance (weak
+  on serverless); consider a durable store.
+- Full report + evidence: see session notes. No cross-tenant (cross-family) breach was found; RLS
+  isolates families. External AI `fetch`es all target fixed provider hosts (no SSRF).
+
+**Release posture:** card-spend/Issuing now safe to ship once `0155` is applied; fix **AUTH-1** before
+exposing Google Calendar linking to real users.
+
+---
+
 ## ★ NORTH STAR — The Family Operating Layer (category-defining, 2026-07-05)
 
 > **Thesis:** today's products (ours included, so far) are **systems of record** — they
