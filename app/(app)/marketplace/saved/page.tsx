@@ -47,7 +47,7 @@ export default async function MarketplaceSavedPage() {
           {rows.map(({ save, listing: l }) => (
             <li key={save.id} className="flex items-start gap-3 rounded-xl border border-border bg-surface/60 p-3.5">
               <div className="min-w-0 flex-1">
-                <Link href={`/marketplace/browse?q=${encodeURIComponent(l.title)}`} className="line-clamp-2 text-sm font-medium hover:text-brand">{l.title}</Link>
+                <Link href={`/marketplace/item/${l.id}`} className="line-clamp-2 text-sm font-medium hover:text-brand">{l.title}</Link>
                 <p className="mt-1 text-xs text-muted">
                   {KIND_LABELS[l.kind as ListingKind] ?? l.kind}
                   {priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null) && ` · ${priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null)}`}

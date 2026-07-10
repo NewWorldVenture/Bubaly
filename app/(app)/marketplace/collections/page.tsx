@@ -4,6 +4,7 @@ import { FolderHeart, ArrowLeft } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
+import { ListingImage } from '@/components/marketplace/listing-image';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
 
 export const metadata: Metadata = { title: 'Collections · Marketplace | Bubaly' };
@@ -35,7 +36,7 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
   if (open) {
     const ids = (items ?? []).filter((i) => i.collection_id === open.id).map((i) => i.listing_id);
     const { data: listings } = ids.length
-      ? await sb.from('marketplace_listings').select('id, title, kind, status, price_cents, rent_period').in('id', ids).limit(200)
+      ? await sb.from('marketplace_listings').select('id, title, kind, status, price_cents, rent_period, photo_url').in('id', ids).limit(200)
       : { data: [] };
     return (
       <div>
@@ -43,17 +44,33 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
           <ArrowLeft className="h-3 w-3" /> All collections
         </Link>
         <PageHeader title={`${open.emoji ?? '🗂️'} ${open.name}`} description={open.description ?? `${ids.length} items in this collection.`} />
-        <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-          {(listings ?? []).map((l) => (
-            <li key={l.id} className="rounded-xl border border-border bg-surface/60 p-3.5">
-              <Link href={`/marketplace/browse?q=${encodeURIComponent(l.title)}`} className="line-clamp-2 text-sm font-medium hover:text-brand">{l.title}</Link>
-              <p className="mt-1 text-xs text-muted">
-                {KIND_LABELS[l.kind as ListingKind] ?? l.kind}
-                {priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null) && ` · ${priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null)}`}
-              </p>
-            </li>
-          ))}
-        </ul>
+        {(listings ?? []).length === 0 ? (
+          <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">Nothing in this collection yet.</div>
+        ) : (
+          <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {(listings ?? []).map((l) => {
+              const price = priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null);
+              return (
+                <li key={l.id}>
+                  <Link href={`/marketplace/item/${l.id}`} className="group flex flex-col overflow-hidden rounded-xl border border-border bg-surface/60 transition hover:border-brand/40">
+                    <ListingImage
+                      src={l.photo_url}
+                      alt={l.title}
+                      className="h-28 w-full object-cover transition group-hover:opacity-90"
+                      fallback={<div className="h-28 w-full bg-gradient-to-br from-surface to-border" />}
+                    />
+                    <div className="p-3">
+                      <p className="line-clamp-2 text-sm font-medium text-fg group-hover:text-brand">{l.title}</p>
+                      <p className="mt-1 text-xs text-muted">
+                        {KIND_LABELS[l.kind as ListingKind] ?? l.kind}{price && ` · ${price}`}
+                      </p>
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     );
   }
