@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
-import { DEMO_ACCOUNT_EMAIL, DEMO_ACCOUNT_NAME, DEMO_ACCOUNT_LEGACY_NAME, demoExpiry } from './config';
+import { DEMO_ACCOUNT_EMAIL, DEMO_ACCOUNT_NAME, DEMO_ACCOUNT_LEGACY_NAME } from './config';
 import { seedDemoFamily } from './seed';
 
 type Admin = SupabaseClient<Database>;
@@ -107,9 +107,9 @@ export async function resetDemoData(admin: Admin, familyId: string, ownerId: str
  * Prepare a demo login: ensure the single "Bubaly Demo" account exists, reset its
  * data to a fresh, fully-seeded state, rotate its password (so we can sign the
  * visitor in without storing a secret), and open a demo_sessions row with the
- * 5-minute clock STARTED immediately — so the countdown runs the moment the
- * visitor lands in the demo account (no gate to click through first). Returns
- * credentials for sign-in.
+ * clock NOT started yet (expires_at = null). The app opens behind the blurred
+ * email-capture gate; the 5-minute countdown begins only once the visitor submits
+ * their email (see `startDemoClockAction`). Returns credentials for sign-in.
  */
 export async function startDemoSession(): Promise<DemoCreds | null> {
   const admin = createServiceClient();
@@ -123,11 +123,11 @@ export async function startDemoSession(): Promise<DemoCreds | null> {
   const { error: pErr } = await admin.auth.admin.updateUserById(userId, { password });
   if (pErr) { console.error('[demo] password rotation failed', pErr); return null; }
 
-  // Start the 5-minute clock NOW — the countdown shows the instant they enter.
-  // (Setting expires_at also means abandoned demos get reaped by the cleanup
-  // cron, which only expires rows with expires_at < now.)
+  // Clock deferred: expires_at stays null until the email gate is submitted, so
+  // (1) the app opens behind the email-capture pop-up and (2) the 5-minute clock
+  // is fair — it starts when the visitor actually begins, not at provisioning.
   await admin.from('demo_sessions').upsert(
-    { user_id: userId, family_id: familyId, expires_at: demoExpiry().toISOString(), email: null },
+    { user_id: userId, family_id: familyId, expires_at: null, email: null },
     { onConflict: 'user_id' },
   );
 
