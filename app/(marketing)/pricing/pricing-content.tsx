@@ -162,8 +162,8 @@ function TryDemoButton() {
   );
 }
 
-/** The compact "Demo Account" card that sits beside the billing toggle: one
- *  click → a fully-seeded Family+ demo for 5 minutes. */
+/** The compact "Demo Account" card that floats to the left of the hero title:
+ *  one click → a fully-seeded Family+ demo for 5 minutes. */
 function TestAccountCard() {
   return (
     <article className="relative w-full overflow-hidden rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-500/[0.12] to-white/[0.03] p-5 text-left ring-1 ring-emerald-400/20">
@@ -376,48 +376,52 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
   return (
     <PageWrap>
       <Container className="pb-16 pt-10">
-        {/* Hero */}
-        <section className="mx-auto max-w-3xl text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-violet-300/80">
-            Less Managing Life. More Living It.
-          </p>
-          <h1 className="mt-3 text-5xl font-black leading-[1.08] sm:text-6xl">
-            Bubaly Pricing
-          </h1>
-          <p className="mx-auto mt-5 max-w-xl text-lg text-white/65">
-            Try everything free for 5 days — no credit card required. After that, keep it all with Family Basic or Family+.
-          </p>
-        </section>
-
-        {/* Test Account (left) + billing toggle (centered). On mobile they stack:
-            the demo card first, then the toggle. */}
-        <div className="mt-8 grid items-center gap-6 lg:grid-cols-[1fr_auto_1fr]">
-          <div className="w-full justify-self-center lg:max-w-sm lg:justify-self-start">
+        {/* Hero with the Demo Account card floated to its left, vertically
+            centered beside the title. Three columns: [card | hero+toggle |
+            spacer] keep the hero optically centered. On mobile it collapses to a
+            single column — hero first, then the demo card. */}
+        <div className="grid items-center gap-8 lg:grid-cols-[1fr_auto_1fr]">
+          {/* Demo Account card — left column. */}
+          <div className="order-2 w-full justify-self-center lg:order-1 lg:max-w-sm lg:justify-self-start">
             <TestAccountCard />
           </div>
 
-          <div className="flex justify-center">
-            <div className="inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
-              <button
-                onClick={() => setPeriod('monthly')}
-                className={cn('rounded-full px-6 py-2 font-bold transition', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
-              >
-                Monthly
-              </button>
-              <button
-                onClick={() => setPeriod('yearly')}
-                className={cn('rounded-full px-6 py-2 font-bold transition', period === 'yearly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
-              >
-                Yearly
-              </button>
-              {yearly && (
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
-                  Save up to {basicSavings}%
-                </span>
-              )}
-            </div>
-          </div>
+          {/* Hero + billing toggle — center column. */}
+          <section className="order-1 mx-auto max-w-2xl text-center lg:order-2">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-violet-300/80">
+              Less Managing Life. More Living It.
+            </p>
+            <h1 className="mt-3 text-5xl font-black leading-[1.08] sm:text-6xl">
+              Bubaly Pricing
+            </h1>
+            <p className="mx-auto mt-5 max-w-xl text-lg text-white/65">
+              Try everything free for 5 days — no credit card required. After that, keep it all with Family Basic or Family+.
+            </p>
 
+            <div className="mt-7 flex justify-center">
+              <div className="inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
+                <button
+                  onClick={() => setPeriod('monthly')}
+                  className={cn('rounded-full px-6 py-2 font-bold transition', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
+                >
+                  Monthly
+                </button>
+                <button
+                  onClick={() => setPeriod('yearly')}
+                  className={cn('rounded-full px-6 py-2 font-bold transition', period === 'yearly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
+                >
+                  Yearly
+                </button>
+                {yearly && (
+                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
+                    Save up to {basicSavings}%
+                  </span>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Right spacer — keeps the hero optically centered on desktop. */}
           <div className="hidden lg:block" aria-hidden />
         </div>
 
