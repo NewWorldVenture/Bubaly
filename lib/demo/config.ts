@@ -4,6 +4,11 @@
 export const DEMO_TTL_MINUTES = 5;
 export const DEMO_EMAIL_DOMAIN = 'demo.bubaly.app';
 
+// The single, shared demo account everyone logs into (there is exactly one — no
+// throwaway per-visitor users). Its family is looked up by this exact name.
+export const DEMO_ACCOUNT_NAME = 'Bubaly Demo';
+export const DEMO_ACCOUNT_EMAIL = `demo@${DEMO_EMAIL_DOMAIN}`;
+
 /** When a demo session created `now` should expire. */
 export function demoExpiry(now: Date = new Date()): Date {
   return new Date(now.getTime() + DEMO_TTL_MINUTES * 60_000);

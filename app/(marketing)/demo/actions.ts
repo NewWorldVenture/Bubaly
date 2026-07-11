@@ -2,29 +2,28 @@
 
 import { redirect } from 'next/navigation';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
-import { startDemoSession, endDemoSession, cleanupExpiredDemoSessions } from '@/lib/demo/session';
+import { startDemoSession, endDemoSession, cleanupExpiredDemoSessions, rotateDemoPassword } from '@/lib/demo/session';
 import { demoExpiry } from '@/lib/demo/config';
 
 /**
- * One-click demo: provision a fresh Family+ demo, then sign the visitor straight
- * in (the cookie-bound client sets the session) and drop them on Home. No form,
- * no input — but the app opens behind a blurred email-capture gate, and the
- * 5-minute clock only starts once they submit it (see startDemoClockAction).
- * Also reaps any expired demos first, so abandoned tabs never pile up.
+ * One-click demo: refresh THE single shared "Bubaly Demo" account (reset its data
+ * to a fresh, fully-seeded state), then sign the visitor straight in (the
+ * cookie-bound client sets the session) and drop them on Home. No form, no input
+ * — but the app opens behind a blurred email-capture gate, and the 5-minute clock
+ * only starts once they submit it (see startDemoClockAction).
  */
 export async function startDemoAction(): Promise<void> {
-  await cleanupExpiredDemoSessions().catch(() => {});
-
   const creds = await startDemoSession();
   if (!creds) redirect('/pricing?demo=error');
 
   const supabase = await createServer();
-  const { error } = await supabase.auth.signInWithPassword({ email: creds.email, password: creds.password });
+  let { error } = await supabase.auth.signInWithPassword({ email: creds.email, password: creds.password });
   if (error) {
-    // Sign-in failed — don't leave the provisioned demo dangling.
-    await endDemoSession(creds.userId).catch(() => {});
-    redirect('/pricing?demo=error');
+    // A concurrent login rotated the shared password first — rotate again + retry.
+    const password = await rotateDemoPassword();
+    if (password) ({ error } = await supabase.auth.signInWithPassword({ email: creds.email, password }));
   }
+  if (error) redirect('/pricing?demo=error');
   redirect('/home');
 }
 
@@ -51,9 +50,9 @@ export async function startDemoClockAction(formData: FormData): Promise<void> {
 
 /**
  * The demo ended (5 minutes elapsed) and the visitor chose a plan from the
- * blurred pop-up. Tear the demo down (sign out + delete the family/auth user so
- * it resets for the next person), then send them into signup for the plan they
- * picked: 'free' → the 5-day trial, else Family Basic / Family+.
+ * blurred pop-up. Sign out + clear the shared demo's session row (the account
+ * itself is preserved and re-seeds fresh on the next login), then send them into
+ * signup for the plan they picked: 'free' → the 5-day trial, else Basic / Plus.
  */
 export async function choosePlanAfterDemoAction(formData: FormData): Promise<void> {
   const plan = String(formData.get('plan') ?? 'free');
@@ -71,9 +70,9 @@ export async function choosePlanAfterDemoAction(formData: FormData): Promise<voi
 }
 
 /**
- * Exit a demo early: sign out (clears the cookie) and fully delete the demo
- * (family + auth user), so it resets for the next visitor. Called by the "Exit"
- * button on the countdown banner. `endDemoAction` redirects to /pricing.
+ * Exit a demo early: sign out (clears the cookie) and clear the shared demo's
+ * session row so the next visitor starts behind a fresh email gate. The account
+ * is preserved. Called by the "Exit" button on the countdown banner.
  */
 export async function endDemoAction(): Promise<void> {
   const supabase = await createServer();
