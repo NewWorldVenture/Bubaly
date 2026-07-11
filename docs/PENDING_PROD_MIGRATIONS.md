@@ -75,6 +75,7 @@ After applying, hard-refresh the app: Marketplace, `/dashboard/voice`,
 | 0156 | `0156_rate_limits.sql` | `rate_limits` table + `rate_limit_hit()` / `rate_limit_prune()` RPCs | **Security (audit AI-2).** Durable, cross-instance fixed-window rate limiting for public model-backed endpoints (`/api/ai/gift`), replacing the per-instance in-memory limiter that a serverless fleet could multiply. Safe before apply: `rateLimitDb` **fails open** (allows) until the RPC exists, and the in-memory limiter still caps each instance. Service-role only; idempotent. PG16-verified (4th hit in a 3/window bucket declined with retry_after). |
 | 0157 | `0157_family_signals_budget_drift.sql` | Widens `family_signals.kind` CHECK with `budget_drift` | Adds the 5th **hard signal** (R10): a budget category over its cap this period (stronger when the prior period was over too), surfaced on `/dashboard/family-signals`. Additive/idempotent — just re-creates the CHECK. Safe before apply: detection skips writing `budget_drift` rows until the constraint allows the value (the other four kinds are unaffected). PG16-verified. |
 | 0158 | `0158_concierge_plan_actions.sql` | `concierge_plan_actions` (concierge deeper write-back audit) | Powers the **AI Concierge deeper write-back**: an accepted plan materializes into real records across surfaces (calendar event · reminder · prep task) via `/dashboard/concierge`, each logged here so the flow is idempotent (never double-applies) + auditable. Family-scoped; seeded by `seed_concierge_plan_actions.sql` (500 rows). Safe before apply: the write-back buttons no-op the audit until the table exists (the underlying calendar/reminder writes still work). |
+| 0159 | `0159_onboarding_progress.sql` | `onboarding_progress` (one durable row per account: onboarding lifecycle + marketing signal) | Powers the **onboarding lifecycle + marketing layer**: makes the previously-invisible "needs setup" cohort (accounts auto-provisioned by `ensureActiveFamily` that skipped the wizard) queryable, drives the `/dashboard/setup` re-onboarding surface + reset flow, and feeds marketing segments first-class columns (value_engaged / source / status / goals / completeness) instead of a JSON blob in `crm_contacts.notes`. Self-scoped RLS (a user reads/writes only their own row; cross-account aggregation is service-role). Seeded by `seed_onboarding_progress.sql` (500 synthetic accounts). Safe before apply: every write is best-effort and degrades silently (`recordOnboardingProgress` swallows a missing table), so onboarding + the setup page still work — the marketing signal just isn't persisted until applied. PG16-verified (idempotent ×2; cascade, CHECK, unique, trigger, RLS all confirmed). |
 
 If prod is further behind than 0118, `supabase db push` will also pick up any
 earlier un-applied migrations (0104, 0111, 0113, 0117, …) — all additive, all
@@ -113,7 +114,7 @@ filename so this still applies deterministically, but a future migration should
 
 ## Test data (optional, after migrations)
 
-**One-paste option:** `supabase/SEED_ALL.sql` runs all 45 paste-ready seeds in
+**One-paste option:** `supabase/SEED_ALL.sql` runs all 46 paste-ready seeds in
 dependency order — one paste fills every user-facing surface with ≥500 rows for
 the resolved family. Idempotent (re-run safe); validated on PG16. Requires the
 migrations above to be applied first.

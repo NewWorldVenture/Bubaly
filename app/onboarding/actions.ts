@@ -13,6 +13,8 @@ import { cleanGoals, cleanReferralSource } from '@/lib/onboarding/family';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { upsertOnboardingContact } from '@/lib/marketing/onboarding-contact';
+import { recordOnboardingProgress } from '@/lib/server/onboarding-progress';
+import { computeCompleteness } from '@/lib/onboarding/completeness';
 import { parseIcs, toBriefEvents, demoBriefEvents } from '@/lib/onboarding/ics';
 import { buildFirstBrief, briefSummary, type BriefEvent, type FirstBrief } from '@/lib/onboarding/first-brief';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
@@ -330,6 +332,20 @@ export async function completeProfileOnboardingAction(input: {
   //    user is the family's parent/admin (ensureActiveFamily provisions the
   //    `parent` member), so the contact is stamped as such. Best-effort — never
   //    blocks the user finishing onboarding.
+  await recordOnboardingProgress(admin, {
+    userId: auth.user.id,
+    familyId: familyId || null,
+    source: 'wizard',
+    status: 'completed',
+    stepsCompleted: ['profile', 'pin'],
+    hasPin: !!(input.pin && isValidPin(input.pin)),
+    completeness: computeCompleteness({
+      hasName: firstName.length > 0, hasFamily: true, hasQuestionnaire: false,
+      hasGoals: false, valueEngaged: false, memberCount: 0,
+      hasPin: !!(input.pin && isValidPin(input.pin)), source: 'wizard', status: 'completed',
+    }).score,
+  });
+
   try {
     const email = auth.user.email ?? null;
     await upsertOnboardingContact(admin, {
@@ -348,6 +364,47 @@ export async function completeProfileOnboardingAction(input: {
   }
 
   return { ok: true, data: { familyId } };
+}
+
+/**
+ * Reset onboarding for the signed-in account: mark the durable lifecycle row as
+ * `reset` and clear the `onboardingComplete` flag in preferences, so the app can
+ * route the user back through the setup questionnaire (their EXISTING family is
+ * untouched — reset re-opens setup, it never creates a second family or deletes
+ * anything). Service-role writes for the same flaky-RLS reason as finalize.
+ */
+export async function resetOnboardingAction(): Promise<Result> {
+  const supabase = await createServer();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { ok: false, error: 'Not signed in' };
+
+  const admin = createServiceClient();
+
+  // 1. Clear the completion flag (merge — never clobber other prefs).
+  const { data: prefRow } = await admin
+    .from('user_preferences').select('notification_prefs, active_family_id').eq('user_id', auth.user.id).maybeSingle();
+  const prefs = (prefRow?.notification_prefs as Record<string, unknown> | null) ?? {};
+  const merged: Record<string, unknown> = { ...prefs, onboardingComplete: false };
+  const { error: prefErr } = await admin.from('user_preferences').upsert(
+    { user_id: auth.user.id, notification_prefs: merged as never },
+    { onConflict: 'user_id' },
+  );
+  if (prefErr) console.error('[onboarding] reset flag clear failed', prefErr);
+
+  // 2. Mark the lifecycle row reset (best-effort, degrades pre-migration).
+  await recordOnboardingProgress(admin, {
+    userId: auth.user.id,
+    familyId: (prefRow?.active_family_id as string | null) ?? null,
+    status: 'reset',
+  });
+
+  await logAudit(supabase, {
+    familyId: (prefRow?.active_family_id as string | null) ?? null, actorId: auth.user.id,
+    action: 'update', resource: 'onboarding_progress', resourceId: auth.user.id,
+    metadata: { onboarding: 'reset' },
+  });
+
+  return { ok: true };
 }
 
 /** Adds a managed member with no login (e.g. a young child). */
@@ -652,6 +709,45 @@ export async function finalizeOnboardingAction(input: {
   });
 
   // 8. Feed the marketing engine (CRM contact + welcome automation) — best-effort.
+  const membersAdded = members.filter((m) => m.kind === 'local').length;
+  const membersInvited = members.filter((m) => m.kind === 'invite').length;
+  const valueEngaged = importEvents.length > 0;
+
+  // 8a. Record the durable onboarding lifecycle + marketing signal (migration
+  //     0159). This is the queryable per-account record that drives re-onboard /
+  //     reset detection and marketing segments. We compute a completeness score
+  //     from the just-completed wizard so segments can rank engaged sign-ups.
+  const completeness = computeCompleteness({
+    hasName: profile.firstName.trim().length > 0,
+    hasFamily: true,
+    hasQuestionnaire: true,
+    hasGoals: goals.length > 0,
+    valueEngaged,
+    memberCount: membersAdded + membersInvited,
+    hasPin: !!(appearance.pin && isValidPin(appearance.pin)),
+    source: 'wizard',
+    status: 'completed',
+  }).score;
+  await recordOnboardingProgress(admin, {
+    userId: auth.user.id,
+    familyId,
+    source: 'wizard',
+    status: 'completed',
+    stepsCompleted: ['profile', 'family', 'value', 'about', 'members', 'pin'],
+    valueEngaged,
+    importSource: calendarImport?.source || null,
+    eventsImported: importEvents.length,
+    timeSavedMinutes: finalBrief.timeSavedMinutes,
+    goals,
+    referralSource,
+    householdAdults: details.householdAdults,
+    householdChildren: details.householdChildren,
+    membersAdded,
+    membersInvited,
+    hasPin: !!(appearance.pin && isValidPin(appearance.pin)),
+    completeness,
+  });
+
   try {
     const { data: prof } = await supabase
       .from('profiles').select('display_name, full_name, email, phone').eq('id', auth.user.id).maybeSingle();
@@ -670,8 +766,13 @@ export async function finalizeOnboardingAction(input: {
         household_adults: details.householdAdults,
         household_children: details.householdChildren,
         child_ages: details.childAges,
-        members_invited: members.filter((m) => m.kind === 'invite').length,
-        members_added: members.filter((m) => m.kind === 'local').length,
+        members_invited: membersInvited,
+        members_added: membersAdded,
+        // Value-step engagement — the strongest activation signal — now segmentable.
+        value_engaged: valueEngaged,
+        events_imported: importEvents.length,
+        time_saved_minutes: finalBrief.timeSavedMinutes,
+        onboarding_completeness: completeness,
       },
     });
     await fireAutomationEvent(admin, {
@@ -679,7 +780,7 @@ export async function finalizeOnboardingAction(input: {
       email: prof?.email ?? profile.email ?? auth.user.email ?? null,
       name: prof?.display_name ?? prof?.full_name ?? profile.firstName ?? null,
       subjectKey: eventSubjectKey('onboarding_completed', [familyId]),
-      context: { familyId, goals, referral_source: referralSource },
+      context: { familyId, goals, referral_source: referralSource, value_engaged: valueEngaged, completeness },
     });
   } catch (e) {
     console.error('[onboarding] automation event failed', e);

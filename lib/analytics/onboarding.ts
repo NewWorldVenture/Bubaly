@@ -10,6 +10,7 @@ export type OnboardingPhase = 'started' | 'step' | 'completed' | 'abandoned';
 export const ONBOARDING_STEPS: { key: string; label: string }[] = [
   { key: 'profile', label: 'Profile' },
   { key: 'family', label: 'Family name' },
+  { key: 'value', label: 'See your week (calendar)' },
   { key: 'about', label: 'About your family' },
   { key: 'members', label: 'Add members' },
   { key: 'pin', label: 'App lock (PIN)' },

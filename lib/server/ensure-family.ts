@@ -131,5 +131,22 @@ export async function ensureActiveFamily(
     console.error('[ensure-family] membership missing after provisioning family', family.id);
     return false;
   }
+
+  // Mark this account as the "needs setup" cohort: it got a space WITHOUT going
+  // through the guided wizard, so it has no questionnaire/goals/marketing profile.
+  // The onboarding_progress row (migration 0159) makes that visible so the app can
+  // nudge them to finish and marketing can segment them. Best-effort, never blocks
+  // — and never DOWNGRADES a completed record (only creates when absent).
+  try {
+    const { data: prior } = await admin
+      .from('onboarding_progress').select('user_id').eq('user_id', user.id).maybeSingle();
+    if (!prior) {
+      await admin.from('onboarding_progress').insert({
+        user_id: user.id, family_id: family.id, source: 'auto_provision',
+        status: 'in_progress', steps_completed: ['profile'], completeness: 40,
+      } as never);
+    }
+  } catch { /* table may be pre-migration — degrade silently */ }
+
   return true;
 }

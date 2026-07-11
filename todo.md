@@ -1045,6 +1045,24 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   Seed `seed_concierge_plan_actions.sql` (500 rows, balanced across the 3 kinds; in `SEED_ALL.sql`).
   Verified: tsc · eslint · **vitest (7)** · `next build`; migration + seed PG16-validated (idempotent).
   ⚠️ apply `0158` to prod.
+- [x] **Onboarding deep dive — lifecycle + marketing-signal layer ✅ SHIPPED (2026-07-11).** Deep
+  audit of onboarding for new accounts AND accounts needing reset. Found five gaps and closed them:
+  (1) the funnel analytics (`lib/analytics/onboarding.ts`) was **missing the `value` step** the wizard
+  added — fixed; (2) the `onboardingComplete` flag was **write-only dead data** read nowhere;
+  (3) the huge **auto-provisioned cohort** (users `ensureActiveFamily` gives a space to, skipping the
+  wizard — no questionnaire/goals/**no marketing profile**) was **invisible** with no path to finish;
+  (4) **value-step engagement** (imported? events? time saved — the strongest activation signal) never
+  reached marketing; (5) no durable, **segmentable** per-account onboarding record. New
+  **`onboarding_progress`** table (`0159`, one row per account, self-scoped RLS) is the queryable
+  lifecycle + marketing signal; pure **`lib/onboarding/completeness.ts`** (9 tests) scores completeness
+  + flags the needs-setup / needs-reset cohorts; `ensureActiveFamily` now stamps the auto-provision
+  cohort, both finalize actions record progress + feed **value engagement / completeness** to the CRM
+  contact + `onboarding_completed` automation; new **`/dashboard/setup`** re-onboarding surface (live
+  score + what's-left + questionnaire against the EXISTING family — never creates a second one) +
+  **`resetOnboardingAction`**. Seed `seed_onboarding_progress.sql` (500 synthetic accounts, realistic
+  55/35/10 completed/needs-setup/reset spread; in `SEED_ALL.sql` → 46 seeds). Verified: tsc · **vitest
+  (20: 9 completeness + 11 funnel)**; migration + seed PG16-validated (idempotent ×2; cascade, CHECK,
+  unique, trigger, RLS confirmed). ⚠️ apply `0159` to prod.
 
 ### 5. Family Memory — "Build persistent family knowledge graph"  ☑ DONE
 `/dashboard/family-memory` + `/dashboard/family-knowledge-graph`, `lib/memories/*`.
