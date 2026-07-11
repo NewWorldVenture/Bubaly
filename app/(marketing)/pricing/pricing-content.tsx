@@ -208,7 +208,7 @@ function PlanCard({
 }) {
   return (
     <article className={cn(
-      'relative flex flex-col rounded-2xl p-7',
+      'relative flex flex-col rounded-2xl p-5 sm:p-7',
       featured
         ? 'showcase-card border-violet-400/80 shadow-glow ring-1 ring-violet-400/40'
         : 'border border-white/10 bg-white/[0.04]',
@@ -375,40 +375,40 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
 
   return (
     <PageWrap>
-      <Container className="pb-16 pt-10">
-        {/* Hero with the Demo Account card floated to its left, vertically
-            centered beside the title. Three columns: [card | hero+toggle |
-            spacer] keep the hero optically centered. On mobile it collapses to a
-            single column — hero first, then the demo card. */}
-        <div className="grid items-center gap-8 lg:grid-cols-[1fr_auto_1fr]">
+      <Container className="pb-12 pt-8 sm:pb-16 sm:pt-10">
+        {/* Split hero — the Demo Account card and the title share a balanced
+            two-column row on desktop (card left, hero right, meeting in the middle
+            and vertically centered). On mobile/tablet it collapses to one centered
+            column: hero first, then the card. */}
+        <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-10 xl:gap-14">
           {/* Demo Account card — left column. */}
-          <div className="order-2 w-full justify-self-center lg:order-1 lg:max-w-sm lg:justify-self-start">
+          <div className="order-2 mx-auto w-full max-w-sm lg:order-1 lg:mx-0 lg:justify-self-end">
             <TestAccountCard />
           </div>
 
-          {/* Hero + billing toggle — center column. */}
-          <section className="order-1 mx-auto max-w-2xl text-center lg:order-2">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-violet-300/80">
+          {/* Hero + billing toggle — right column, left-aligned on desktop. */}
+          <section className="order-1 mx-auto max-w-xl px-1 text-center lg:order-2 lg:mx-0 lg:max-w-none lg:justify-self-start lg:text-left">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300/80 sm:text-sm">
               Less Managing Life. More Living It.
             </p>
-            <h1 className="mt-3 text-5xl font-black leading-[1.08] sm:text-6xl">
+            <h1 className="mt-3 text-4xl font-black leading-[1.05] sm:text-5xl md:text-6xl">
               Bubaly Pricing
             </h1>
-            <p className="mx-auto mt-5 max-w-xl text-lg text-white/65">
+            <p className="mx-auto mt-4 max-w-xl text-base text-white/65 sm:mt-5 sm:text-lg lg:mx-0">
               Try everything free for 5 days — no credit card required. After that, keep it all with Family Basic or Family+.
             </p>
 
-            <div className="mt-7 flex justify-center">
-              <div className="inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
+            <div className="mt-6 flex justify-center sm:mt-7 lg:justify-start">
+              <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
                 <button
                   onClick={() => setPeriod('monthly')}
-                  className={cn('rounded-full px-6 py-2 font-bold transition', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
+                  className={cn('rounded-full px-5 py-2 font-bold transition sm:px-6', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
                 >
                   Monthly
                 </button>
                 <button
                   onClick={() => setPeriod('yearly')}
-                  className={cn('rounded-full px-6 py-2 font-bold transition', period === 'yearly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
+                  className={cn('rounded-full px-5 py-2 font-bold transition sm:px-6', period === 'yearly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
                 >
                   Yearly
                 </button>
@@ -420,13 +420,10 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
               </div>
             </div>
           </section>
-
-          {/* Right spacer — keeps the hero optically centered on desktop. */}
-          <div className="hidden lg:block" aria-hidden />
         </div>
 
-        {/* Plan cards — 3 columns */}
-        <section className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Plan cards — responsive 1 / 2 / 3 columns */}
+        <section className="mt-10 grid gap-4 sm:mt-12 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
           <PlanCard
             name="5-Day Free Trial"
             goal="Experience all of Bubaly — free, no credit card."
@@ -474,7 +471,7 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
         <WhySwitch />
 
         {/* Smart Imports callout */}
-        <section className="showcase-panel mt-8 p-7">
+        <section className="showcase-panel mt-8 p-5 sm:p-7">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
             <div className="shrink-0 text-3xl">📸</div>
             <div>
