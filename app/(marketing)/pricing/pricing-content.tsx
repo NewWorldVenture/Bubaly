@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Check, Zap, Crown, Sparkles, Lock, ArrowLeftRight, Archive } from 'lucide-react';
+import { Check, Zap, Crown, Sparkles, Lock, ArrowLeftRight, Archive, PlayCircle, Loader2 } from 'lucide-react';
+import { startDemoAction } from '@/app/(marketing)/demo/actions';
 import {
   Container,
   GradientText,
@@ -144,6 +146,55 @@ function HowTrialWorks() {
 }
 
 // ── Plan card ──────────────────────────────────────────────────────────────
+/** The one-click, no-signup demo submit button (server action). */
+function TryDemoButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-brand text-sm font-bold text-white shadow-glow transition hover:opacity-90 disabled:opacity-70"
+    >
+      {pending
+        ? <><Loader2 className="h-4 w-4 animate-spin" /> Starting your demo…</>
+        : <><PlayCircle className="h-5 w-5" /> Login Now to Try Me</>}
+    </button>
+  );
+}
+
+/** The "Test Account" card: one click → a fully-seeded Family+ demo for 5 minutes. */
+function TestAccountCard() {
+  return (
+    <article className="relative flex flex-col rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-500/[0.10] to-white/[0.03] p-7 ring-1 ring-emerald-400/20">
+      <span className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-emerald-500 px-4 py-1 text-[11px] font-black tracking-wide text-white">
+        NO SIGNUP · 5-MIN DEMO
+      </span>
+      <div className="flex items-center gap-3">
+        <Zap className="h-7 w-7 text-emerald-400" />
+        <h2 className="text-xl font-black">Test Account</h2>
+      </div>
+      <p className="mt-2 text-sm text-white/60">Try the whole thing — no email, no card.</p>
+
+      <div className="mt-5 flex items-end gap-1">
+        <span className="text-4xl font-black">Free</span>
+        <span className="pb-1.5 text-white/60">demo</span>
+      </div>
+      <p className="mt-1 min-h-[18px] text-xs text-white/50">Nothing to enter — it logs you straight in.</p>
+
+      <form action={startDemoAction}>
+        <TryDemoButton />
+      </form>
+
+      <div className="mt-6 space-y-2 border-t border-white/10 pt-6 text-sm text-white/70">
+        <p className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> <span className="font-semibold text-white">100% full Family+ functionality</span></p>
+        <p className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> Add, edit &amp; delete real seed data</p>
+        <p className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> A 5-minute countdown up top</p>
+        <p className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> Fully resets when you leave</p>
+      </div>
+    </article>
+  );
+}
+
 function PlanCard({
   name, goal, icon, price, priceSub, cta, ctaHref, featured, featureSections, prelude, badge,
 }: {
@@ -364,7 +415,9 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
         </section>
 
         {/* Plan cards — 3 columns */}
-        <section className="mt-12 grid gap-5 lg:grid-cols-3">
+        <section className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <TestAccountCard />
+
           <PlanCard
             name="5-Day Free Trial"
             goal="Experience all of Bubaly — free, no credit card."

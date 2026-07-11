@@ -1263,6 +1263,13 @@ idempotent, stable across re-runs):
 ---
 
 ## Build log (append as features land)
+- **2026-07-08 — One-click demo ("Test Account").** Pricing-page button → a throwaway
+  Family+ demo, no signup: `lib/demo/session.ts` provisions a fresh auth user + Family+
+  family (plan 'plus') seeded via `lib/demo/seed.ts`, `demo_sessions` (0138) tracks a
+  5-min expiry, `startDemoAction`/`endDemoAction` sign in/out, `DemoTimer` countdown
+  banner, `/api/cron/demo-cleanup` (+ on-exit + on-expiry) fully deletes the family +
+  user so it resets for the next visitor. Pure `lib/demo/config.ts` (4 tests). Each
+  click = its own ephemeral family (collision-free). Owner: apply 0138. tsc/eslint/2082/build.
 - **2026-07-06 (eve) — onboarding + role-tailoring + a11y run (7 PRs).** #235 onboarding→marketing
   wiring (`crm_contacts` upsert + `onboarding_completed`) & **child logins without email**
   (`0105_child_logins`, synthetic auth user, username+PIN, `/kid-login` + `/dashboard/family-access`).

@@ -55,6 +55,11 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
     : 'personal';
   const featureTiers = await getFeatureTiersByHref(supabase);
 
+  // One-click demo session? Drive the countdown banner. Best-effort — a missing
+  // table (migration not applied) just means "not a demo".
+  const { data: demo } = await supabase
+    .from('demo_sessions').select('expires_at').eq('user_id', ctx.user.id).maybeSingle();
+
   return (
     <AppProvider
       value={{
@@ -69,6 +74,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
         planLevel,
         featureTiers,
         unreadMessages: unreadMessages ?? 0,
+        demoExpiresAt: demo?.expires_at ?? null,
       }}
       initialMembers={members ?? []}
     >
