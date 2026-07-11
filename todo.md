@@ -78,6 +78,47 @@ Google Calendar linking is safe to expose. Apply `0154`/`0155`/`0156` with the d
 
 ---
 
+## 👤 VISITOR INTELLIGENCE / LEAD CAPTURE — coverage matrix (2026-07-11)
+
+Audited the "privacy-first visitor intelligence + lead capture" brief against the codebase. **Most of
+it already exists**; the one central gap (consent) is now closed. Honest status below — **not** a
+17-phase greenfield build. Pick up the ☐ items directly; don't rebuild the ☑ ones.
+
+| Capability | Status | Where |
+|---|---|---|
+| Anonymous visitor spine (CDP) | ☑ exists | `mkt_visitors` (0058) + `/api/mkt/track` |
+| Session + attribution (source/medium/campaign/landing) | ☑ exists | `mkt_sessions`, `mkt_touchpoints` (0058) |
+| Multi-touch + conversion attribution | ☑ exists | `mkt_touchpoints.kind` |
+| CRM / marketing contacts | ☑ exists | `crm_contacts`, `crm_deals`, marketing_* |
+| Lead capture forms + submissions | ☑ exists | `marketing_forms`, `marketing_form_submissions`, `/api/forms/submit` |
+| Segments / suppressions | ☑ exists | `marketing_segments`, `marketing_suppressions` |
+| Exit-intent | ☑ exists | `marketing_exit_intent`, `components/marketing/exit-intent.tsx`, `/api/exit-intent/*` |
+| Personalization rules | ☑ exists | `marketing_personalization_rules`, `lib/marketing/personalization.ts` |
+| A/B experiments | ☑ exists | `ab_experiments`, `ab_events`, `lib/marketing/ab.ts`, `/api/ab/track` |
+| Admin marketing intelligence page | ◐ partial | `/admin/marketing/intelligence` (no dedicated `/admin/visitor-intelligence/*` set) |
+| **Granular consent (necessary/analytics/personalization/marketing) + GPC + revocation** | ☑ **NEW** | `mkt_consent_events` (0160), `lib/marketing/consent.ts`, `/api/mkt/consent` |
+| **Consent-gated tracking** | ☑ **NEW** | `/api/mkt/track` gates on analytics consent |
+| Identity linking (anon → contact) | ◐ partial | `mkt_visitors.contact_id` FK exists; server-side stitch-on-signup not wired |
+| Progressive profiling UI | ☐ open | fields exist on contacts; no staged-capture UI |
+| Consent banner / preference-center UI | ☐ open | API is ready (`/api/mkt/consent` GET/POST); client banner not built |
+| Lead scoring | ◐ partial | signals exist; no transparent score ledger |
+| Abandoned-journey recovery (identified users only) | ◐ partial | `checkout_sessions` + `/api/cron/checkout-abandoned`; other journeys not covered |
+
+**☐ Next (privacy-safe, priority order)**
+- ☐ Client **consent banner + preference center** calling `/api/mkt/consent` (GET to hydrate, POST to
+  save); pass the resolved analytics flag + GPC to `/api/mkt/track`. **Never** pre-checked marketing.
+- ☐ **Identity stitch on signup/login**: server-side, set `mkt_visitors.contact_id` and copy the
+  visitor's consent forward to the contact; dedupe; don't merge unrelated users on a shared device.
+- ☐ Progressive-profiling capture (email first → name/role/interests later), one field at a time.
+- ☐ Dedicated `/admin/visitor-intelligence/*` dashboards if the marketing intelligence page isn't enough.
+
+**Privacy invariants (already enforced — keep them):** no fingerprinting; no PII from anonymous
+visitors; `necessary` always on + non-revocable; `analytics` = first-party legitimate interest (on
+until denied/GPC); `personalization`+`marketing_*` strict opt-in; consent is append-only, timestamped,
+versioned, revocable (`mkt_consent_events`). **⚠️ Apply `0160_visitor_consent.sql` to prod with the deploy.**
+
+---
+
 ## ★ NORTH STAR — The Family Operating Layer (category-defining, 2026-07-05)
 
 > **Thesis:** today's products (ours included, so far) are **systems of record** — they
