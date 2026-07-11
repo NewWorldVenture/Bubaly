@@ -162,35 +162,31 @@ function TryDemoButton() {
   );
 }
 
-/** The "Test Account" card: one click → a fully-seeded Family+ demo for 5 minutes. */
+/** The compact "Test Account" card that sits beside the billing toggle: one
+ *  click → a fully-seeded Family+ demo for 5 minutes, no signup. */
 function TestAccountCard() {
   return (
-    <article className="relative flex flex-col rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-500/[0.10] to-white/[0.03] p-7 ring-1 ring-emerald-400/20">
-      <span className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-emerald-500 px-4 py-1 text-[11px] font-black tracking-wide text-white">
-        NO SIGNUP · 5-MIN DEMO
-      </span>
+    <article className="relative w-full overflow-hidden rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-500/[0.12] to-white/[0.03] p-5 text-left ring-1 ring-emerald-400/20">
       <div className="flex items-center gap-3">
-        <Zap className="h-7 w-7 text-emerald-400" />
-        <h2 className="text-xl font-black">Test Account</h2>
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-500/15 ring-1 ring-emerald-400/30">
+          <Zap className="h-6 w-6 text-emerald-400" />
+        </span>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-black">Test Account</h2>
+            <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
+              Free · 5-min demo
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs text-white/60">
+            No email, no card — logs you straight into full Family+.
+          </p>
+        </div>
       </div>
-      <p className="mt-2 text-sm text-white/60">Try the whole thing — no email, no card.</p>
-
-      <div className="mt-5 flex items-end gap-1">
-        <span className="text-4xl font-black">Free</span>
-        <span className="pb-1.5 text-white/60">demo</span>
-      </div>
-      <p className="mt-1 min-h-[18px] text-xs text-white/50">Nothing to enter — it logs you straight in.</p>
 
       <form action={startDemoAction}>
         <TryDemoButton />
       </form>
-
-      <div className="mt-6 space-y-2 border-t border-white/10 pt-6 text-sm text-white/70">
-        <p className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> <span className="font-semibold text-white">100% full Family+ functionality</span></p>
-        <p className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> Add, edit &amp; delete real seed data</p>
-        <p className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> A 5-minute countdown up top</p>
-        <p className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> Fully resets when you leave</p>
-      </div>
     </article>
   );
 }
@@ -391,33 +387,42 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
           <p className="mx-auto mt-5 max-w-xl text-lg text-white/65">
             Try everything free for 5 days — no credit card required. After that, keep it all with Family Basic or Family+.
           </p>
-
-          {/* Billing toggle */}
-          <div className="mt-7 inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
-            <button
-              onClick={() => setPeriod('monthly')}
-              className={cn('rounded-full px-6 py-2 font-bold transition', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setPeriod('yearly')}
-              className={cn('rounded-full px-6 py-2 font-bold transition', period === 'yearly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
-            >
-              Yearly
-            </button>
-            {yearly && (
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
-                Save up to {basicSavings}%
-              </span>
-            )}
-          </div>
         </section>
 
-        {/* Plan cards — 3 columns */}
-        <section className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          <TestAccountCard />
+        {/* Test Account (left) + billing toggle (centered). On mobile they stack:
+            the demo card first, then the toggle. */}
+        <div className="mt-8 grid items-center gap-6 lg:grid-cols-[1fr_auto_1fr]">
+          <div className="w-full justify-self-center lg:max-w-sm lg:justify-self-start">
+            <TestAccountCard />
+          </div>
 
+          <div className="flex justify-center">
+            <div className="inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
+              <button
+                onClick={() => setPeriod('monthly')}
+                className={cn('rounded-full px-6 py-2 font-bold transition', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setPeriod('yearly')}
+                className={cn('rounded-full px-6 py-2 font-bold transition', period === 'yearly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
+              >
+                Yearly
+              </button>
+              {yearly && (
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
+                  Save up to {basicSavings}%
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="hidden lg:block" aria-hidden />
+        </div>
+
+        {/* Plan cards — 3 columns */}
+        <section className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <PlanCard
             name="5-Day Free Trial"
             goal="Experience all of Bubaly — free, no credit card."
