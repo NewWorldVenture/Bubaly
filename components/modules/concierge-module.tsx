@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
+import { PlanWriteBacks } from '@/components/concierge/plan-write-backs';
 import type { Tables } from '@/lib/database.types';
 
 type Plan = Tables<'concierge_plans'>;
@@ -397,13 +398,11 @@ export function ConciergeModule() {
 }
 
 // ─── Plan Detail ──────────────────────────────────────────────────────────────
-function PlanDetail({ plan, familyId, userId, onClose, onDelete, onRefresh }: {
+function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
   plan: Plan; familyId: string; userId: string; onClose: () => void; onDelete: (p: Plan) => void; onRefresh: () => void;
 }) {
-  const { success, error: toastError } = useToast();
+  const { error: toastError } = useToast();
   const [editStatus, setEditStatus] = useState(plan.status);
-  const [addedToCal, setAddedToCal] = useState(false);
-  const [addingCal, setAddingCal] = useState(false);
   const cfg = KIND_CONFIG[plan.kind] ?? KIND_CONFIG.general;
 
   async function updateStatus(status: string) {
@@ -412,28 +411,6 @@ function PlanDetail({ plan, familyId, userId, onClose, onDelete, onRefresh }: {
     const { error } = await supabase.from('concierge_plans').update({ status }).eq('id', plan.id);
     if (error) toastError(describeDbError(error));
     else onRefresh();
-  }
-
-  // One-tap: put a dated plan on the family calendar (all-day) so it's not lost.
-  async function addToCalendar() {
-    if (!plan.planned_for || addingCal) return;
-    setAddingCal(true);
-    const supabase = createClient();
-    const descParts = [plan.description, plan.location ? `Location: ${plan.location}` : null,
-      plan.budget_cents ? `Budget: ${fmtCents(plan.budget_cents)}` : null].filter(Boolean);
-    const { error } = await supabase.from('calendar_events').insert({
-      family_id: familyId, created_by: userId,
-      title: plan.title,
-      description: descParts.length ? descParts.join('\n') : null,
-      location: plan.location,
-      category: 'general',
-      starts_at: new Date(`${plan.planned_for}T00:00:00`).toISOString(),
-      all_day: true,
-    });
-    setAddingCal(false);
-    if (error) { toastError(describeDbError(error)); return; }
-    setAddedToCal(true);
-    success('Added to your calendar');
   }
 
   return (
@@ -459,20 +436,13 @@ function PlanDetail({ plan, familyId, userId, onClose, onDelete, onRefresh }: {
         </div>
 
         {plan.planned_for && (
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs">
-              <Calendar className="h-3.5 w-3.5 text-muted" />
-              <span>{fmtDate(plan.planned_for)}</span>
-            </div>
-            <button onClick={addToCalendar} disabled={addedToCal || addingCal}
-              className={cn('flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition flex-shrink-0',
-                addedToCal ? 'text-green-400' : 'bg-brand/10 text-brand hover:bg-brand/20')}>
-              {addedToCal ? <><Check className="h-3 w-3" /> On calendar</>
-                : addingCal ? <Loader2 className="h-3 w-3 animate-spin" />
-                : <><CalendarPlus className="h-3 w-3" /> Add to calendar</>}
-            </button>
+          <div className="flex items-center gap-2 text-xs">
+            <Calendar className="h-3.5 w-3.5 text-muted" />
+            <span>{fmtDate(plan.planned_for)}</span>
           </div>
         )}
+        {/* Deeper write-back: materialize the plan across calendar / reminder / task. */}
+        <PlanWriteBacks planId={plan.id} plan={{ title: plan.title, planned_for: plan.planned_for, budget_cents: plan.budget_cents, location: plan.location }} />
         {plan.location && (
           <div className="flex items-center gap-2 text-xs">
             <MapPin className="h-3.5 w-3.5 text-muted" />

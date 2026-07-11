@@ -774,10 +774,13 @@ files · planning · food · home · roles(#8) · pillars 1–6 & 9. **NEW `seed
 spendable account < 0, low pantry, expiring docs, overdue maintenance/reminders, off-track goals,
 missing-location events, colliding events for conflicts). Run it, then open
 `/dashboard/family-operating-index`.
-- ☐ Remaining seed gaps to close for "every feature at full capacity": **pillars 7/8 detail tables**
-  (FOI snapshot history over N days for real trend lines; role permission surfaces), **approval_requests /
-  meal_votes / family_polls** volume (comms dimension — FK-chained, needs parent rows), **autopilot_suggestions**
-  (orchestrator Q2). The FOI comms/routine dims are covered today by running `seed_messages` + `seed_chores`.
+- [x] **Remaining seed gaps closed ✅ (2026-07-10).** The two genuine gaps are now seeded at 500:
+  **FOI snapshot history** — `seed_operating_index_history.sql` (500 daily `family_operating_index`
+  snapshots, gentle wave + band spread) so the FOI **trend line** + day-over-day recap render (was
+  "first reading" until history existed); and **`meal_votes`** — `seed_meal_votes.sql` (500 votes +
+  ~1,000 options, open/closed spread) for the comms dimension + `/dashboard/voting` volume. Both
+  idempotent, PG16-validated, in `SEED_ALL.sql` (now 45). *(Already covered at 500: `autopilot_suggestions`
+  + `approval_requests` via `seed_autopilot.sql`; `family_polls` via `seed_group_decisions_one_family.sql`.)*
 - ☑ **NEW `seed_group_decisions_one_family.sql`** (≈1,300 rows: 100 polls / 400 options / ~800 votes)
   fully exercises T6 AI-facilitated group decisions — categories, budgets, dietary tags, and biased
   votes so the consensus engine's recommendations AND vote-vs-fit conflicts render (also gives
@@ -1033,7 +1036,15 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 
 ### 4. AI Concierge — "Become category defining"  ◐ (already wired)
 `/dashboard/concierge`, `lib/concierge/digest.ts`; module has 6 `.from()` + realtime. No mock data.
-- [ ] Stretch: deeper write-back of accepted recommendations.
+- [x] **Deeper write-back of accepted recommendations ✅ SHIPPED (2026-07-10).** An accepted concierge
+  plan now materializes across MORE surfaces than the calendar — **calendar event · reminder · prep
+  task** — via `applyConciergePlanAction`, each logged to **`concierge_plan_actions`** (`0158`,
+  family-scoped RLS) so the flow is **idempotent** (never double-applies) + auditable. Pure
+  `lib/concierge/apply.ts` (`planWriteBacks`/`reminderLeadAt`/`writeBackTitle`, 7 tests); client
+  `PlanWriteBacks` "Make it happen" buttons in the plan detail (replaces the calendar-only button).
+  Seed `seed_concierge_plan_actions.sql` (500 rows, balanced across the 3 kinds; in `SEED_ALL.sql`).
+  Verified: tsc · eslint · **vitest (7)** · `next build`; migration + seed PG16-validated (idempotent).
+  ⚠️ apply `0158` to prod.
 
 ### 5. Family Memory — "Build persistent family knowledge graph"  ☑ DONE
 `/dashboard/family-memory` + `/dashboard/family-knowledge-graph`, `lib/memories/*`.

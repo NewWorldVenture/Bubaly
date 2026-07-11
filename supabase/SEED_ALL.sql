@@ -1,7 +1,7 @@
 -- ============================================================================
 -- FamilyOS :: SEED_ALL — one paste populates EVERY surface with 500-row test data.
 -- ============================================================================
--- Runs all 42 paste-ready, idempotent seeds in dependency order (core content
+-- Runs all 45 paste-ready, idempotent seeds in dependency order (core content
 -- first — it creates the to-do/grocery lists later seeds reuse). Each resolves
 -- the family by email (newworldventurellc@gmail.com, falls back to the oldest
 -- family) and clears its own sentinel rows first, so re-running never dupes.
@@ -3616,3 +3616,217 @@ begin
 
   raise notice 'Trips + Vacation Planner seed complete for family % (trips 12/items 500; 12 vacations; itinerary/activities/reservations/expenses/packing/checklists/logs/messages at 500).', v_family;
 end $$;
+
+-- ==================== seed_operating_index_history.sql ====================
+-- ============================================================================
+-- FamilyOS · SEED — Family Operating Index history (500 daily snapshots).
+-- Fills family_operating_index with 500 days of daily snapshots so the FOI
+-- **trend line** + "since yesterday" day-over-day recap render at volume (the
+-- page shows "first reading" until history exists). A gentle wave around the mid-
+-- 70s with a slight recent upward drift; per-dimension scores + captured
+-- suggestions per snapshot. Idempotent: upserts on (family_id, as_of_date), so
+-- re-running overwrites the same 500 days and never deletes real snapshots.
+-- Resolves the family by email. (Needs migration 0125 applied.)
+-- Where: Supabase → SQL Editor → paste → Run.
+-- ============================================================================
+do $$
+declare
+  v_email  text := 'newworldventurellc@gmail.com';
+  v_family uuid;
+  n int := 500;
+begin
+  if to_regclass('public.family_operating_index') is null then
+    raise notice 'family_operating_index not present — apply migration 0125 first. Skipping.';
+    return;
+  end if;
+
+  select f.id into v_family
+  from public.families f
+  join public.family_members fm on fm.family_id = f.id
+  join auth.users u on u.id = fm.user_id
+  where lower(u.email) = lower(v_email) limit 1;
+  if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
+  if v_family is null then raise exception 'No families found.'; end if;
+
+  insert into public.family_operating_index (family_id, as_of_date, composite, band, dimensions, suggestions)
+  select
+    v_family,
+    (current_date - g.i),
+    c.composite,
+    case when c.composite >= 85 then 'thriving'
+         when c.composite >= 70 then 'steady'
+         when c.composite >= 50 then 'stretched'
+         else 'overloaded' end,
+    -- per-dimension scores derived from the composite with fixed per-dim offsets.
+    jsonb_build_object(
+      'planning',      greatest(0, least(100, c.composite + 4)),
+      'routine',       greatest(0, least(100, c.composite - 3)),
+      'stability',     greatest(0, least(100, c.composite + 1)),
+      'financial',     greatest(0, least(100, c.composite - 6)),
+      'readiness',     greatest(0, least(100, c.composite + 2)),
+      'communication', greatest(0, least(100, c.composite - 2)),
+      'goals',         greatest(0, least(100, c.composite + 5))
+    ),
+    jsonb_build_array(
+      jsonb_build_object('id','s1','title','Confirm 2 events missing a location','detail','Tap to add where they are','href','/dashboard/calendar','dimension','planning','impact','medium'),
+      jsonb_build_object('id','s2','title','Review this week''s budget','detail','One category is trending over','href','/wallet','dimension','financial','impact','low')
+    )
+  from generate_series(0, n - 1) g(i)
+  cross join lateral (
+    -- recent days drift a little higher; a ±12 wave keeps bands varied.
+    select greatest(30, least(98, round(60 + ((n - g.i)::numeric / n) * 18 + 12 * sin(g.i / 7.0))::int)) as composite
+  ) c
+  on conflict (family_id, as_of_date) do update
+    set composite = excluded.composite, band = excluded.band,
+        dimensions = excluded.dimensions, suggestions = excluded.suggestions;
+
+  raise notice 'FOI history seeded 500 daily snapshots for family %', v_family;
+end $$;
+
+-- Verify:
+--   select count(*) from family_operating_index where family_id = (select id from families order by created_at limit 1);  -- ≥ 500
+--   select band, count(*) from family_operating_index group by band;
+--   select as_of_date, composite, band from family_operating_index order by as_of_date desc limit 10;
+
+-- ==================== seed_meal_votes.sql ====================
+-- ============================================================================
+-- FamilyOS · SEED — Meal votes (500 + 2 options each).
+-- Fills meal_votes (+ meal_vote_options) at volume so the FOI **communication**
+-- dimension (open decisions) and /dashboard/voting render at scale. 500 votes
+-- with a status/meal-type spread, each with two options. Idempotent via title
+-- like '%[seed-mv]%'; resolves the family by email. (Needs the meals schema.)
+-- Where: Supabase → SQL Editor → paste → Run.
+-- ============================================================================
+do $$
+declare
+  v_email  text := 'newworldventurellc@gmail.com';
+  v_family uuid;
+  v_user   uuid;
+  n int := 500;
+  types    text[] := array['breakfast','lunch','dinner','snack'];
+  statuses text[] := array['open','open','open','closed'];
+  dishes   text[] := array['Tacos','Pasta night','Stir-fry','Pizza','Curry','Burgers','Salad bar','Soup & bread','Breakfast-for-dinner','Grill night'];
+begin
+  if to_regclass('public.meal_votes') is null then
+    raise notice 'meal_votes not present — apply the meals schema first. Skipping.';
+    return;
+  end if;
+
+  select f.id into v_family
+  from public.families f
+  join public.family_members fm on fm.family_id = f.id
+  join auth.users u on u.id = fm.user_id
+  where lower(u.email) = lower(v_email) limit 1;
+  if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
+  if v_family is null then raise exception 'No families found.'; end if;
+
+  select fm.user_id into v_user from public.family_members fm
+  where fm.family_id = v_family and fm.user_id is not null limit 1;
+
+  -- Options first (FK), then votes: delete children before parents.
+  delete from public.meal_vote_options o
+    using public.meal_votes v
+    where o.vote_id = v.id and v.family_id = v_family and v.title like '%[seed-mv]%';
+  delete from public.meal_votes where family_id = v_family and title like '%[seed-mv]%';
+
+  -- 500 votes.
+  insert into public.meal_votes (family_id, created_by, title, meal_type, status, meal_date, allow_maybe, created_at)
+  select
+    v_family, v_user,
+    'What''s for ' || types[1+(g.i % 4)] || '? #' || g.i || ' [seed-mv]',
+    types[1+(g.i % 4)],
+    statuses[1+(g.i % 4)],
+    (current_date + (g.i % 21)),
+    (g.i % 2 = 0),
+    now() - ((g.i % 120) || ' days')::interval
+  from generate_series(1, n) g(i);
+
+  -- Two options per seeded vote (distinct dishes).
+  insert into public.meal_vote_options (vote_id, family_id, label)
+  select v.id, v_family, d.label
+  from public.meal_votes v
+  cross join lateral (
+    select dishes[1 + (abs(hashtext(v.id::text))     % 10)] as label
+    union all
+    select dishes[1 + ((abs(hashtext(v.id::text)) + 3) % 10)]
+  ) d
+  where v.family_id = v_family and v.title like '%[seed-mv]%';
+
+  raise notice 'Meal votes seeded 500 (+ options) for family %', v_family;
+end $$;
+
+-- Verify:
+--   select count(*) from meal_votes where title like '%[seed-mv]%';                     -- 500
+--   select count(*) from meal_vote_options o join meal_votes v on v.id=o.vote_id where v.title like '%[seed-mv]%';  -- ~1000
+--   select status, count(*) from meal_votes where title like '%[seed-mv]%' group by status;
+
+-- ==================== seed_concierge_plan_actions.sql ====================
+-- ============================================================================
+-- FamilyOS · SEED — Concierge plan actions (500 records).
+-- Fills concierge_plan_actions so the deeper write-back audit renders at volume:
+-- 500 materializations (calendar / reminder / task) across the family's concierge
+-- plans, one per (plan, kind). Requires the concierge plans seeded first
+-- (seed_concierge.sql) and migration 0158. Idempotent via detail like '%[seed]%';
+-- resolves the family by email.
+-- Where: Supabase → SQL Editor → paste → Run.
+-- ============================================================================
+do $$
+declare
+  v_email  text := 'newworldventurellc@gmail.com';
+  v_family uuid;
+  v_user   uuid;
+  v_plans  uuid[];
+  np int; n int := 500;
+  kinds  text[] := array['calendar','reminder','task'];
+  tables text[] := array['calendar_events','family_reminders','family_reminders'];
+begin
+  if to_regclass('public.concierge_plan_actions') is null then
+    raise notice 'concierge_plan_actions not present — apply migration 0158 first. Skipping.';
+    return;
+  end if;
+
+  select f.id into v_family
+  from public.families f
+  join public.family_members fm on fm.family_id = f.id
+  join auth.users u on u.id = fm.user_id
+  where lower(u.email) = lower(v_email) limit 1;
+  if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
+  if v_family is null then raise exception 'No families found.'; end if;
+
+  select fm.user_id into v_user from public.family_members fm
+  where fm.family_id = v_family and fm.user_id is not null limit 1;
+
+  select array_agg(id) into v_plans from (
+    select id from public.concierge_plans where family_id = v_family order by created_at limit 1000
+  ) s;
+  np := coalesce(array_length(v_plans, 1), 0);
+  if np = 0 then
+    raise notice 'No concierge plans — run seed_concierge.sql first. Skipping.';
+    return;
+  end if;
+
+  delete from public.concierge_plan_actions where family_id = v_family and detail like '%[seed]%';
+
+  -- Grid walk: kind = i % 3 (even spread across all three kinds), plan = i / 3.
+  -- Each plan gets its 3 kinds before the next → distinct (plan, kind) pairs,
+  -- balanced, unique for np ≥ 167.
+  insert into public.concierge_plan_actions
+    (family_id, plan_id, action_kind, target_table, target_id, detail, created_by, created_at)
+  select
+    v_family,
+    v_plans[1 + ((g.i / 3) % np)],
+    kinds[1 + (g.i % 3)],
+    tables[1 + (g.i % 3)],
+    null,
+    'Materialized by the concierge. [seed]',
+    v_user,
+    now() - ((g.i % 90) || ' days')::interval
+  from generate_series(0, n - 1) g(i)
+  on conflict (family_id, plan_id, action_kind) do nothing;
+
+  raise notice 'Concierge plan actions seeded (up to 500) across % plans for family %', np, v_family;
+end $$;
+
+-- Verify:
+--   select count(*) from concierge_plan_actions where detail like '%[seed]%';   -- up to 500
+--   select action_kind, count(*) from concierge_plan_actions group by action_kind;

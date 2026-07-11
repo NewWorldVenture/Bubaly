@@ -1249,6 +1249,11 @@ export interface Database {
         { id?: string; family_id: string; session_id?: string | null; created_by?: string | null; title: string; kind?: string; description?: string | null; ai_suggestion?: string | null; status?: string; planned_for?: string | null; budget_cents?: number | null; location?: string | null; members?: unknown[]; links?: unknown[] },
         Partial<{ title: string; kind: string; description: string | null; ai_suggestion: string | null; status: string; planned_for: string | null; budget_cents: number | null; location: string | null; members: unknown[]; links: unknown[]; updated_at: string }>
       >;
+      concierge_plan_actions: T<
+        { id: string; family_id: string; plan_id: string; action_kind: string; target_table: string; target_id: string | null; detail: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; plan_id: string; action_kind: string; target_table: string; target_id?: string | null; detail?: string | null; created_by?: string | null },
+        Partial<{ action_kind: string; target_table: string; target_id: string | null; detail: string | null }>
+      >;
       trip_plans: T<
         { id: string; family_id: string; created_by: string | null; event_id: string | null; title: string; destination: string; dest_lat: number | null; dest_lng: number | null; start_date: string | null; end_date: string | null; members: unknown[]; interests: string | null; recommendations: Json; weather_summary: string | null; status: string; created_at: string; updated_at: string },
         { id?: string; family_id: string; created_by?: string | null; event_id?: string | null; title: string; destination: string; dest_lat?: number | null; dest_lng?: number | null; start_date?: string | null; end_date?: string | null; members?: unknown[]; interests?: string | null; recommendations?: Json; weather_summary?: string | null; status?: string },
