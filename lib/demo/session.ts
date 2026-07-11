@@ -88,10 +88,12 @@ const SEED_TABLES = [
   // Children strictly before their parents (FK / cascade safety).
   'marketplace_saves', 'marketplace_reviews', 'marketplace_listings',
   'meal_plans', 'meals', 'meal_votes',
-  'calendar_events', 'family_reminders', 'chores', 'pantry_items',
+  'calendar_events', 'family_reminders', 'pantry_items',
+  'chore_assignments', 'chores',
   'todo_items', 'todo_lists', 'grocery_items', 'grocery_lists',
-  'transactions', 'budgets', 'financial_accounts', 'bills',
+  'transactions', 'budgets', 'financial_accounts', 'bills', 'savings_goals',
   'goals', 'documents', 'maintenance_tasks', 'family_facts', 'family_polls',
+  'routine_template_items', 'routine_templates', 'family_memories', 'family_milestones',
   // Health
   'medications', 'appointments', 'health_visits', 'immunizations',
   // Kids / school

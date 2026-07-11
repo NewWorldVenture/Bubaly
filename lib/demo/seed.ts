@@ -109,7 +109,20 @@ export async function seedDemoFamily(admin: DB, familyId: string, ownerId: strin
     }
   } catch { /* best-effort */ }
   const choreTitles = ['Take out the trash', 'Feed the dog', 'Load the dishwasher', 'Fold laundry', 'Vacuum the living room', 'Water the garden', 'Make the beds', 'Wipe the counters'] as const;
-  await ins('chores', choreTitles.map((title, g) => ({ ...fam, title, points: 3 + (g % 5), created_by: ownerId })));
+  // Capture chore ids so we can assign them to kids (the chores board reads
+  // chore_assignments for who's-doing-what + status; without them it looks unused).
+  try {
+    const { data: choreRows } = await admin.from('chores').insert(
+      choreTitles.map((title, g) => ({ ...fam, title, points: 3 + (g % 5), created_by: ownerId })),
+    ).select('id');
+    const choreIds = (choreRows ?? []).map((c: { id: string }) => c.id);
+    if (choreIds.length) {
+      const choreStatuses = ['todo', 'in_progress', 'submitted', 'done', 'approved'] as const;
+      await ins('chore_assignments', choreIds.map((chore_id: string, g: number) => ({
+        ...fam, chore_id, member_id: member(g % 3 + 1), status: pick(choreStatuses, g), due_at: iso((g % 7) - 2, 17),
+      })));
+    }
+  } catch { /* best-effort */ }
   const pantryNames = ['Milk', 'Eggs', 'Flour', 'Rice', 'Pasta', 'Cereal', 'Coffee', 'Sugar', 'Butter', 'Bread', 'Apples', 'Chicken'] as const;
   const pantryLoc = ['pantry', 'fridge', 'freezer', 'counter'] as const;
   await ins('pantry_items', range(20).map((g) => ({
@@ -133,6 +146,13 @@ export async function seedDemoFamily(admin: DB, familyId: string, ownerId: strin
   await ins('bills', range(12).map((g) => ({
     ...fam, name: pick(billNames, g), amount: 30 + ((g * 13) % 220), due_date: dateKey(g % 20),
     is_recurring: true, recurrence: 'monthly', status: g % 6 === 0 ? 'overdue' : 'upcoming', category: 'Utilities', autopay: g % 3 === 0, created_by: ownerId,
+  })));
+  // Savings goals power the Finances → Savings tab (separate from Goals above).
+  await ins('savings_goals', ([
+    ['Vacation Fund', '🏖️', 4500, 1800], ['Emergency Fund', '🛟', 10000, 6200], ['New Bike', '🚲', 300, 120],
+    ['Kids College', '🎓', 20000, 8600], ['Holiday Gifts', '🎁', 1200, 450],
+  ] as const).map(([name, emoji, target_amount, current_amount], g) => ({
+    ...fam, name, emoji, target_amount, current_amount, target_date: dateKey((g + 1) * 60), created_by: ownerId,
   })));
 
   // ── Goals, documents, maintenance ─────────────────────────────────────────
@@ -266,6 +286,34 @@ export async function seedDemoFamily(admin: DB, familyId: string, ownerId: strin
     { ...fam, created_by: ownerId, name: 'Household' },
     { ...fam, created_by: ownerId, name: 'Kids' },
   ]);
+
+  // ── Routines (Morning / Bedtime) with their steps ─────────────────────────
+  try {
+    const { data: routines } = await admin.from('routine_templates').insert([
+      { ...fam, name: 'Morning Routine', icon: '☀️', color: '#f4996e', weekday_mask: 62, is_active: true, source: 'demo', created_by: ownerId },
+      { ...fam, name: 'Bedtime Routine', icon: '🌙', color: '#6aa9ff', weekday_mask: 127, is_active: true, source: 'demo', created_by: ownerId },
+    ]).select('id, name');
+    for (const r of (routines ?? []) as { id: string; name: string }[]) {
+      const steps = r.name.startsWith('Morning')
+        ? [['Wake up + make bed', 420, 10], ['Breakfast', 435, 20], ['Brush teeth', 460, 5], ['Pack backpack', 470, 10]] as const
+        : [['Tidy up toys', 1140, 10], ['Bath time', 1155, 20], ['Story time', 1180, 15], ['Lights out', 1200, 5]] as const;
+      await ins('routine_template_items', steps.map(([title, start_minutes, duration_minutes], i) => ({
+        ...fam, template_id: r.id, title, category: 'general', start_minutes, duration_minutes, assignee_id: member(i + 1), sort_order: i,
+      })));
+    }
+  } catch { /* best-effort */ }
+
+  // ── Family memories + milestones (grandparent portal / planning surfaces) ──
+  const memTitles = ['First day of school', 'Beach vacation', 'Leo lost a tooth', 'Family reunion', 'Dance recital', 'Snow day'] as const;
+  await ins('family_memories', range(6).map((g) => ({
+    ...fam, member_id: member(g), title: pick(memTitles, g), body: 'A little moment worth keeping.', kind: 'photo',
+    memory_date: dateKey(-((g % 6) * 45 + 10)), tags: ['family'], is_favorite: g % 3 === 0, status: 'active', created_by: ownerId,
+  })));
+  await ins('family_milestones', ([
+    ['Leo first steps', 'baby'], ['Emma 10th birthday', 'birthday'], ['Moved into the new house', 'home'], ['Adopted Biscuit', 'pet'],
+  ] as const).map(([title, category], g) => ({
+    ...fam, member_id: member(g), title, description: 'A family milestone.', milestone_date: dateKey(-((g + 1) * 120)), category, status: 'active', created_by: ownerId,
+  })));
 
   // ── Family economy: a currency + a small reward catalog ───────────────────
   try {

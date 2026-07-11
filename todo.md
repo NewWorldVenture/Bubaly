@@ -192,6 +192,19 @@ re-find and click the plan. Now the choice is carried the whole way and checkout
   the order signup→billing→Stripe just works. Falls back to a highlighted, scrolled-to plan card if
   auto-checkout can't run (non-admin / already subscribed). tsc + eslint clean.
 
+**☑ NEW (2026-07-11) — Demo deep-dive pass 2: five more surfaces that read live tables but had no seed.**
+Found by cross-referencing every module's `.from()` reads against the seed. Added (columns verified
+against migrations + `database.types.ts`; FK targets checked so nothing silently fails):
+- **chore_assignments** — chores are now *assigned to kids* with a status spread (todo→approved), so the
+  Chores board shows who's doing what (was: chores existed but looked unclaimed). `chores` insert made
+  capturing to get ids.
+- **savings_goals** — 5 goals so Finances → **Savings** tab isn't empty (distinct from the Goals module).
+- **routine_templates** (+ **routine_template_items**) — Morning & Bedtime routines with 4 steps each, so
+  the Routines panel renders a real day.
+- **family_memories** (6) + **family_milestones** (4) — the grandparent-portal / planning memory surfaces.
+- `SEED_TABLES` extended in child-before-parent order (chore_assignments before chores,
+  routine_template_items before routine_templates). tsc + eslint clean.
+
 ---
 
 ## ★ NORTH STAR — The Family Operating Layer (category-defining, 2026-07-05)
