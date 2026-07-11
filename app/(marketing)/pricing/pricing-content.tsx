@@ -376,22 +376,23 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
   return (
     <PageWrap>
       <Container className="pb-12 pt-8 sm:pb-16 sm:pt-10">
-        {/* Split hero — the Demo Account card and the title share a balanced
-            two-column row on desktop (card left, hero right, meeting in the middle
-            and vertically centered). On mobile/tablet it collapses to one centered
-            column: hero first, then the card. */}
-        <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-10 xl:gap-14">
-          {/* Demo Account card — left column. */}
-          <div className="order-2 mx-auto w-full max-w-sm lg:order-1 lg:mx-0 lg:justify-self-end">
+        {/* Hero sits on the SAME 3-column grid (and identical gaps) as the plan
+            cards below, so the Demo Account card lines up EXACTLY above the first
+            plan card and the title spans the other two columns — everything on one
+            grid. Below lg it stacks into one centered column: title first, then
+            the card. Fully fluid (clamp type, no fixed widths). */}
+        <div className="grid items-center gap-4 sm:gap-5 lg:grid-cols-3">
+          {/* Demo Account card — column 1 (aligns above the first plan card). */}
+          <div className="order-2 mx-auto w-full max-w-sm lg:order-1 lg:mx-0 lg:max-w-none">
             <TestAccountCard />
           </div>
 
-          {/* Hero + billing toggle — right column, left-aligned on desktop. */}
-          <section className="order-1 mx-auto max-w-xl px-1 text-center lg:order-2 lg:mx-0 lg:max-w-none lg:justify-self-start lg:text-left">
+          {/* Hero + billing toggle — spans columns 2-3, left-aligned on desktop. */}
+          <section className="order-1 mx-auto max-w-2xl text-center lg:order-2 lg:col-span-2 lg:mx-0 lg:max-w-none lg:text-left">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300/80 sm:text-sm">
               Less Managing Life. More Living It.
             </p>
-            <h1 className="mt-3 text-4xl font-black leading-[1.05] sm:text-5xl md:text-6xl">
+            <h1 className="mt-3 font-black leading-[1.05] text-[clamp(2.25rem,6vw,3.75rem)]">
               Bubaly Pricing
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-base text-white/65 sm:mt-5 sm:text-lg lg:mx-0">
