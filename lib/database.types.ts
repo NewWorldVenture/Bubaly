@@ -2005,6 +2005,11 @@ export interface Database {
         { id?: string; user_id: string; family_id?: string | null; status?: string; source?: string; steps_completed?: string[]; value_engaged?: boolean; import_source?: string | null; events_imported?: number; time_saved_minutes?: number; goals?: string[]; referral_source?: string | null; household_adults?: number | null; household_children?: number | null; members_added?: number; members_invited?: number; has_pin?: boolean; marketing_opt_in?: boolean; completeness?: number; completed_at?: string | null; reset_at?: string | null },
         Partial<{ family_id: string | null; status: string; source: string; steps_completed: string[]; value_engaged: boolean; import_source: string | null; events_imported: number; time_saved_minutes: number; goals: string[]; referral_source: string | null; household_adults: number | null; household_children: number | null; members_added: number; members_invited: number; has_pin: boolean; marketing_opt_in: boolean; completeness: number; completed_at: string | null; reset_at: string | null }>
       >;
+      demo_email_uses: T<
+        { email: string; first_used_at: string; last_used_at: string; expires_at: string; uses: number; created_at: string },
+        { email: string; first_used_at?: string; last_used_at?: string; expires_at: string; uses?: number; created_at?: string },
+        Partial<{ last_used_at: string; expires_at: string; uses: number }>
+      >;
 
       // ---- Vacation Planner (migration 0070) ----
       vacations: T<

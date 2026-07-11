@@ -41,10 +41,43 @@ export async function startDemoClockAction(formData: FormData): Promise<void> {
   if (!user) redirect('/pricing?demo=error');
 
   const admin = createServiceClient();
+
+  // One demo per email: if this email already used a demo that has since expired,
+  // don't let it run another. End the just-provisioned session and route them to
+  // the plan-choice page instead. (Checked out-of-band so a missing table pre-
+  // migration simply doesn't gate — the redirect stays OUTSIDE the try so Next's
+  // redirect signal isn't swallowed.)
+  let blocked = false;
+  if (email) {
+    try {
+      const { data: prior } = await admin
+        .from('demo_email_uses').select('expires_at').eq('email', email).maybeSingle();
+      blocked = !!(prior?.expires_at && new Date(prior.expires_at).getTime() <= Date.now());
+    } catch { /* table missing (migration not applied) → don't gate */ }
+  }
+  if (blocked) {
+    await supabase.auth.signOut();
+    await endDemoSession(user.id).catch(() => {});
+    redirect('/demo/upgrade');
+  }
+
+  const expiresAt = demoExpiry();
   await admin
     .from('demo_sessions')
-    .update({ email: email || null, expires_at: demoExpiry().toISOString() })
+    .update({ email: email || null, expires_at: expiresAt.toISOString() })
     .eq('user_id', user.id);
+
+  // Record this email's demo window durably so a repeat after expiry is blocked
+  // above. Best-effort. (uses stays at its default 1 on first insert; a within-
+  // window re-entry just refreshes the timestamps.)
+  if (email) {
+    try {
+      await admin.from('demo_email_uses').upsert(
+        { email, expires_at: expiresAt.toISOString(), last_used_at: new Date().toISOString() },
+        { onConflict: 'email' },
+      );
+    } catch (e) { console.error('[demo] demo_email_uses upsert failed (migration 0162 applied?)', e); }
+  }
 
   // Feed the marketing engine: capture the email as a DURABLE crm_contacts lead
   // (the demo_sessions.email above is a single shared row the next visitor
@@ -70,8 +103,14 @@ export async function choosePlanAfterDemoAction(formData: FormData): Promise<voi
   await supabase.auth.signOut();
   if (userId) await endDemoSession(userId).catch(() => {});
 
-  const href = plan === 'basic' ? '/signup?plan=basic'
-    : plan === 'plus' ? '/signup?plan=plus'
+  // Free → the 5-day trial (signup → onboarding, no card). Paid → create the
+  // account, then land on billing to complete payment for the chosen plan
+  // (checkout needs a family, which requireUserContext auto-provisions, so the
+  // order must be signup → billing → Stripe).
+  const billing = (p: 'basic' | 'plus') =>
+    `/signup?plan=${p}&redirect=${encodeURIComponent('/dashboard/billing?view=manage')}`;
+  const href = plan === 'basic' ? billing('basic')
+    : plan === 'plus' ? billing('plus')
     : '/signup';
   redirect(href);
 }
