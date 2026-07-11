@@ -328,10 +328,6 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
           </div>
         </section>
 
-        {/* Above-the-fold differentiators — make the highest-value features
-            easy to understand and find before the plan cards. */}
-        <WhySwitch />
-
         {/* Plan cards — 3 columns */}
         <section className="mt-12 grid gap-5 lg:grid-cols-3">
           <PlanCard
@@ -371,6 +367,10 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
             featureSections={PLUS_FEATURES}
           />
         </section>
+
+        {/* Differentiators — the highest-value features, placed below the plan
+            cards so pricing details lead the page. */}
+        <WhySwitch />
 
         {/* Smart Imports callout */}
         <section className="showcase-panel mt-8 p-7">
