@@ -18,6 +18,7 @@ export type DomainTeam = { id: string; member_id: string | null; sport: string |
 export type DomainRoutine = { id: string; member_id: string | null; title: string | null };
 export type DomainPlace = { id: string; name: string | null };
 export type DomainAccount = { id: string; name: string | null };
+export type DomainProvider = { id: string; member_id: string | null; name: string | null; specialty?: string | null };
 
 export type TwinSnapshot = {
   members: DomainMember[];
@@ -28,6 +29,7 @@ export type TwinSnapshot = {
   routines: DomainRoutine[];
   places: DomainPlace[];
   accounts: DomainAccount[];
+  providers: DomainProvider[];
 };
 
 /** A projected node — `key` = `${refTable}:${refId}`, its stable identity. */
@@ -37,7 +39,7 @@ export type ProjectedEdge = { sourceKey: string; targetKey: string; relation: st
 export type TwinProjection = { entities: ProjectedEntity[]; edges: ProjectedEdge[] };
 
 export const EMPTY_SNAPSHOT: TwinSnapshot = {
-  members: [], pets: [], vehicles: [], classes: [], teams: [], routines: [], places: [], accounts: [],
+  members: [], pets: [], vehicles: [], classes: [], teams: [], routines: [], places: [], accounts: [], providers: [],
 };
 
 const key = (table: string, id: string) => `${table}:${id}`;
@@ -94,6 +96,16 @@ export function projectTwin(snap: TwinSnapshot): TwinProjection {
   }
   for (const a of snap.accounts) {
     add({ key: key('financial_accounts', a.id), kind: 'item', name: clean(a.name, 'Account'), refTable: 'financial_accounts', refId: a.id });
+  }
+  // Care providers (doctors / dentists / specialists) — an `org` node the member
+  // "sees", so the graph can reason over health relationships (Emma → Dr. Lee).
+  for (const p of snap.providers) {
+    const k = key('health_providers', p.id);
+    const spec = clean(p.specialty, '');
+    const name = clean(p.name, 'Provider');
+    add({ key: k, kind: 'org', name: spec ? `${name} (${spec})` : name, refTable: 'health_providers', refId: p.id });
+    const mk = p.member_id ? key('family_members', p.member_id) : null;
+    if (mk && memberKeys.has(mk)) edges.push({ sourceKey: mk, targetKey: k, relation: 'sees', weight: 0.6 });
   }
 
   // Drop any edge whose endpoints aren't both present (defensive).

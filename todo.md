@@ -520,7 +520,13 @@ new standalone destinations. T10 is the missing half of the category metric (R11
 > - **Instrument real journey medians** — Playwright "taps to complete" harness +
 >   `journey_events` step counter, to replace the Experience Scorecard's design-time estimates.
 > - **Friction #6 travel buffer** — code-ready; needs the Maps/ETA key (owner item 3 above).
-> - **Twin projector** — add doctors / smart-home entities once those domains land.
+> - [x] **Twin projector — care providers ✅ (2026-07-10).** The cross-domain projector now links
+>   **health providers** (doctors / dentists / specialists) from `health_providers` as `org` nodes the
+>   member "sees" (`Emma → Dr. Lee (Pediatrics)`), so the graph + reasoning layer can reason over health
+>   relationships. Pure `projectTwin` extension (+1 test; family-level + dangling providers make a node
+>   but no edge); `runTwinProjection` loads the extra table. No migration (reuses `graph_entities/edges`).
+>   tsc · eslint · **vitest (17 twin-project)** · build. *(Smart-home entities still deferred — no
+>   device domain has landed yet.)*
 > - **GIF picker** (Messages/photos) — code path exists; needs the provider key (owner item 3).
 > - [x] **Backend production hardening (2026-07-07, reasoning/network lane)** ✅ — Intelligence
 >   Network aggregation hardened (write-side granular-consent `filterMetricsByScopes`, atomic

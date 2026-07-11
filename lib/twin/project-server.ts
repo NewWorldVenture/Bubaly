@@ -13,7 +13,7 @@ type DB = SupabaseClient<Database>;
 export type TwinProjectionResult = { ok: boolean; error?: string; entities: number; edges: number };
 
 export async function runTwinProjection(sb: DB, familyId: string, createdBy: string | null): Promise<TwinProjectionResult> {
-  const [members, pets, vehicles, classes, teams, routines, places, accounts] = await Promise.all([
+  const [members, pets, vehicles, classes, teams, routines, places, accounts, providers] = await Promise.all([
     sb.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     sb.from('pets').select('id, name, species').eq('family_id', familyId).eq('is_active', true),
     sb.from('vehicles').select('id, nickname, make, model, primary_driver').eq('family_id', familyId).is('deleted_at', null),
@@ -22,9 +22,10 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     sb.from('family_routines').select('id, member_id, title').eq('family_id', familyId).eq('status', 'active'),
     sb.from('family_places').select('id, name').eq('family_id', familyId),
     sb.from('financial_accounts').select('id, name').eq('family_id', familyId),
+    sb.from('health_providers').select('id, member_id, name, specialty').eq('family_id', familyId),
   ]);
 
-  const firstErr = [members, pets, vehicles, classes, teams, routines, places, accounts].find((r) => r.error)?.error;
+  const firstErr = [members, pets, vehicles, classes, teams, routines, places, accounts, providers].find((r) => r.error)?.error;
   if (firstErr) return { ok: false, error: firstErr.message, entities: 0, edges: 0 };
 
   const snap: TwinSnapshot = {
@@ -38,6 +39,7 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     routines: (routines.data ?? []).map((r) => ({ id: r.id, member_id: r.member_id, title: r.title })),
     places: (places.data ?? []).map((p) => ({ id: p.id, name: p.name })),
     accounts: (accounts.data ?? []).map((a) => ({ id: a.id, name: a.name })),
+    providers: (providers.data ?? []).map((p) => ({ id: p.id, member_id: p.member_id, name: p.name, specialty: p.specialty })),
   };
 
   const projection = projectTwin(snap);

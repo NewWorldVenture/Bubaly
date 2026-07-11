@@ -11,6 +11,7 @@ const snap: TwinSnapshot = {
   routines: [{ id: 'r1', member_id: 'm1', title: 'Bedtime' }],
   places: [{ id: 'pl1', name: 'Field' }],
   accounts: [{ id: 'a1', name: 'Checking' }],
+  providers: [],
 };
 
 describe('projectTwin', () => {
@@ -47,6 +48,26 @@ describe('projectTwin', () => {
     const { entities } = projectTwin({ ...EMPTY_SNAPSHOT, members: [{ id: 'm', name: '  ' }], pets: [{ id: 'p', name: null, species: 'cat' }] });
     expect(entities.find((e) => e.refTable === 'family_members')?.name).toBe('Member');
     expect(entities.find((e) => e.refTable === 'pets')?.name).toBe('cat');
+  });
+
+  it('projects care providers as org nodes the member "sees"', () => {
+    const { entities, edges } = projectTwin({
+      ...EMPTY_SNAPSHOT,
+      members: [{ id: 'm1', name: 'Emma' }],
+      providers: [
+        { id: 'd1', member_id: 'm1', name: 'Dr. Lee', specialty: 'Pediatrics' },
+        { id: 'd2', member_id: null, name: 'Bright Smiles', specialty: 'Dentist' }, // family-level, no edge
+        { id: 'd3', member_id: 'ghost', name: 'Dr. Nobody', specialty: null },       // dangling → no edge
+      ],
+    });
+    const lee = entities.find((e) => e.refTable === 'health_providers' && e.refId === 'd1');
+    expect(lee).toMatchObject({ kind: 'org', name: 'Dr. Lee (Pediatrics)', key: 'health_providers:d1' });
+    expect(entities.find((e) => e.refId === 'd2')?.name).toBe('Bright Smiles (Dentist)');
+    expect(entities.find((e) => e.refId === 'd3')?.name).toBe('Dr. Nobody'); // no specialty suffix
+    expect(edges).toContainEqual({ sourceKey: 'family_members:m1', targetKey: 'health_providers:d1', relation: 'sees', weight: 0.6 });
+    // family-level + dangling providers produce a node but no edge
+    expect(edges.some((e) => e.targetKey === 'health_providers:d2')).toBe(false);
+    expect(edges.some((e) => e.targetKey === 'health_providers:d3')).toBe(false);
   });
 
   it('handles the empty snapshot', () => {
