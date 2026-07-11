@@ -7,7 +7,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Brain, RefreshCw, AlarmClock, Gauge, Repeat2, ListChecks, Check, X, RotateCcw, ChevronDown,
+  Brain, RefreshCw, AlarmClock, Gauge, Repeat2, ListChecks, Check, X, RotateCcw, ChevronDown, Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -24,6 +24,7 @@ const KIND_META: Record<string, { icon: React.ComponentType<{ className?: string
   stress_window: { icon: Gauge, label: 'Stress window', accent: 'text-amber-400 bg-amber-500/10' },
   chore_conflict: { icon: Repeat2, label: 'Chore friction', accent: 'text-orange-400 bg-orange-500/10' },
   routine_adherence: { icon: ListChecks, label: 'Routine slipping', accent: 'text-violet-400 bg-violet-500/10' },
+  budget_drift: { icon: Wallet, label: 'Over budget', accent: 'text-emerald-400 bg-emerald-500/10' },
 };
 
 function evidenceChips(kind: string, ev: Record<string, unknown>): string[] {
@@ -33,6 +34,7 @@ function evidenceChips(kind: string, ev: Record<string, unknown>): string[] {
     case 'stress_window': return [n('events') && `${ev.events} events`, Number(ev.conflicts) > 0 && `${ev.conflicts} clashes`, Number(ev.overdue) > 0 && `${ev.overdue} overdue`].filter(Boolean) as string[];
     case 'chore_conflict': return [Number(ev.rejected) > 0 && `${ev.rejected} rejected`, Number(ev.disputed) > 0 && `${ev.disputed} disputed`, n('members') && `${ev.members} people`].filter(Boolean) as string[];
     case 'routine_adherence': return [n('adherencePct') && `${ev.adherencePct}% adherence`, `${ev.actual}/${ev.expected} done`].filter(Boolean) as string[];
+    case 'budget_drift': return [n('spent') && `$${ev.spent} spent`, n('limit') && `$${ev.limit} cap`, ev.recurring === true && '2 periods'].filter(Boolean) as string[];
     default: return [];
   }
 }

@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   detectIgnoredReminders, detectStressWindows, detectChoreConflicts,
-  detectRoutineAdherence, buildHardSignals,
+  detectRoutineAdherence, detectBudgetDrift, buildHardSignals,
   type ReminderRow, type ChoreRow, type RoutineRow,
 } from '@/lib/intelligence/hard-signals';
+import type { BudgetRow, ExpenseRow } from '@/lib/operating-index/inputs';
 
 const NOW = new Date('2026-07-07T12:00:00.000Z'); // Tuesday
 const past = (h: number) => new Date(NOW.getTime() - h * 3600_000).toISOString();
@@ -119,5 +120,55 @@ describe('buildHardSignals', () => {
     expect(kinds.has('routine_adherence')).toBe(true);
     // Ranked descending by score.
     for (let i = 1; i < sigs.length; i++) expect(sigs[i - 1].score).toBeGreaterThanOrEqual(sigs[i].score);
+  });
+});
+
+describe('detectBudgetDrift', () => {
+  // NOW is 2026-07-07 (July). Monthly current period starts 2026-07-01; prior 2026-06-01.
+  const budget = (category: string, amount: number, period: BudgetRow['period'] = 'monthly'): BudgetRow => ({ category, amount, period });
+  const exp = (category: string, amount: number, date: string): ExpenseRow => ({ category, amount, date });
+
+  it('flags a category over its monthly cap this period', () => {
+    const sigs = detectBudgetDrift(
+      [budget('Groceries', 500)],
+      [exp('Groceries', 400, '2026-07-03'), exp('groceries', 200, '2026-07-06')], // $600 > $500
+      NOW,
+    );
+    expect(sigs).toHaveLength(1);
+    expect(sigs[0]).toMatchObject({ kind: 'budget_drift', subjectKey: 'budget:groceries' });
+    expect(sigs[0].evidence).toMatchObject({ limit: 500, spent: 600, overBy: 100, recurring: false });
+    expect(sigs[0].detail).toContain('$600');
+  });
+
+  it('does not flag a category within its cap', () => {
+    expect(detectBudgetDrift([budget('Dining', 300)], [exp('Dining', 120, '2026-07-02')], NOW)).toHaveLength(0);
+  });
+
+  it('scores higher + marks recurring when the prior period was also over', () => {
+    const oneOff = detectBudgetDrift([budget('Gas', 100)], [exp('Gas', 120, '2026-07-04')], NOW)[0];
+    const recurring = detectBudgetDrift(
+      [budget('Gas', 100)],
+      [exp('Gas', 120, '2026-07-04'), exp('Gas', 150, '2026-06-15')], // prior month over too
+      NOW,
+    )[0];
+    expect(oneOff.evidence.recurring).toBe(false);
+    expect(recurring.evidence.recurring).toBe(true);
+    expect(recurring.evidence.priorSpent).toBe(150);
+    expect(recurring.score).toBeGreaterThan(oneOff.score); // one-off 69, recurring +25 = 94
+  });
+
+  it('ignores zero/negative budgets and matches categories case-insensitively', () => {
+    expect(detectBudgetDrift([budget('X', 0)], [exp('X', 50, '2026-07-01')], NOW)).toHaveLength(0);
+    const s = detectBudgetDrift([budget('KIDS', 50)], [exp('kids', 90, '2026-07-02')], NOW);
+    expect(s).toHaveLength(1);
+  });
+
+  it('is included in buildHardSignals', () => {
+    const sigs = buildHardSignals(
+      { reminders: [], events: [], conflicts: [], overdue: [], chores: [], routines: [], routineCompletions: [],
+        budgets: [budget('Fun', 40)], expenses: [exp('Fun', 90, '2026-07-05')] },
+      NOW,
+    );
+    expect(sigs.some((s) => s.kind === 'budget_drift')).toBe(true);
   });
 });

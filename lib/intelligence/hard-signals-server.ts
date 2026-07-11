@@ -12,6 +12,7 @@ import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import {
   buildHardSignals, type HardSignalInputs, type ReminderRow, type ChoreRow, type RoutineRow, type RoutineCompletion,
 } from './hard-signals';
+import type { BudgetRow, ExpenseRow } from '@/lib/operating-index/inputs';
 
 type DB = SupabaseClient<Database>;
 
@@ -25,8 +26,11 @@ export async function runSignalDetection(sb: DB, familyId: string, now: Date = n
   const windowStart = new Date(now.getTime() - 21 * DAY).toISOString();
   const windowEnd = new Date(now.getTime() + 14 * DAY).toISOString();
 
+  // Budget drift needs this-year expenses so weekly/monthly/yearly windows resolve.
+  const yearStart = `${now.getUTCFullYear()}-01-01`;
+
   // ── Read sources in parallel ──
-  const [reminders, events, choreRows, routines] = await Promise.all([
+  const [reminders, events, choreRows, routines, budgetsRes, expensesRes] = await Promise.all([
     sb.from('family_reminders')
       .select('id, title, remind_at, status, completed_at, member_id')
       .eq('family_id', familyId).not('remind_at', 'is', null)
@@ -40,6 +44,8 @@ export async function runSignalDetection(sb: DB, familyId: string, now: Date = n
       .eq('family_id', familyId).gte('created_at', since90).limit(2000),
     sb.from('routine_templates')
       .select('id, name, weekday_mask').eq('family_id', familyId).eq('is_active', true).limit(200),
+    sb.from('budgets').select('category, amount, period').eq('family_id', familyId).limit(200),
+    sb.from('transactions').select('category, amount, date').eq('family_id', familyId).eq('type', 'expense').gte('date', yearStart).limit(5000),
   ]);
   if (reminders.error) return { ok: false, error: reminders.error.message, signals: 0 };
 
@@ -78,6 +84,8 @@ export async function runSignalDetection(sb: DB, familyId: string, now: Date = n
   const inputs: HardSignalInputs = {
     reminders: reminderRows, events: stressEvents, conflicts, overdue,
     chores, routines: routineRows, routineCompletions,
+    budgets: (budgetsRes.data ?? []) as BudgetRow[],
+    expenses: (expensesRes.data ?? []) as ExpenseRow[],
   };
   const signals = buildHardSignals(inputs, now);
 

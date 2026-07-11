@@ -7,7 +7,9 @@
 // transparent + editable — each signal carries its evidence and is acknowledged /
 // dismissed by the family (family_signals table).
 
-export type SignalKind = 'ignored_reminder' | 'stress_window' | 'chore_conflict' | 'routine_adherence';
+import { periodWindowStart, type BudgetRow, type ExpenseRow } from '@/lib/operating-index/inputs';
+
+export type SignalKind = 'ignored_reminder' | 'stress_window' | 'chore_conflict' | 'routine_adherence' | 'budget_drift';
 
 export interface FamilySignal {
   kind: SignalKind;
@@ -204,6 +206,64 @@ export function detectRoutineAdherence(routines: RoutineRow[], completions: Rout
   return out;
 }
 
+// ── 5. Budget drift (recurring overspend) ────────────────────────────────────
+const norm = (c: string | null | undefined) => (c ?? '').trim().toLowerCase();
+const round2 = (n: number) => Math.round(n * 100) / 100;
+function money(n: number): string {
+  const v = round2(Math.max(0, n));
+  return v % 1 === 0 ? `$${v.toLocaleString('en-US')}` : `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * A budget "drifts" when a category is over its cap for the CURRENT period —
+ * and it's a harder signal (not just a number in the operating index) when the
+ * PRIOR period was over too, i.e. the overspend is a pattern, not a one-off.
+ * Complements FOI's overspent-budget count with a transparent, dismissable,
+ * evidence-carrying signal the family can act on. Pure + deterministic.
+ */
+export function detectBudgetDrift(budgets: BudgetRow[], expenses: ExpenseRow[], now: Date): FamilySignal[] {
+  const out: FamilySignal[] = [];
+  for (const b of budgets) {
+    if (!b.amount || b.amount <= 0) continue;
+    const cat = norm(b.category);
+    if (!cat) continue;
+
+    const curStart = periodWindowStart(b.period, now);
+    const prevStart = periodWindowStart(b.period, new Date(Date.parse(curStart) - 86_400_000));
+
+    let spentNow = 0;
+    let spentPrev = 0;
+    for (const e of expenses) {
+      if (norm(e.category) !== cat) continue;
+      const amt = Number(e.amount) || 0;
+      if (e.date >= curStart) spentNow += amt;
+      else if (e.date >= prevStart) spentPrev += amt;
+    }
+
+    if (spentNow <= b.amount) continue; // only flag when currently over cap
+    const overBy = spentNow - b.amount;
+    const recurring = spentPrev > b.amount; // over last period too → real drift
+    let score = clamp(45 + (overBy / b.amount) * 120);
+    if (recurring) score = clamp(score + 25);
+
+    out.push({
+      kind: 'budget_drift',
+      subjectKey: `budget:${cat}`,
+      title: `Over budget on ${b.category}`,
+      detail: recurring
+        ? `Spent ${money(spentNow)} of your ${money(b.amount)} ${b.period} ${b.category} budget — over two ${b.period} periods running.`
+        : `Spent ${money(spentNow)} of your ${money(b.amount)} ${b.period} ${b.category} budget this period.`,
+      score,
+      evidence: {
+        category: b.category, period: b.period, limit: round2(b.amount),
+        spent: round2(spentNow), priorSpent: round2(spentPrev), overBy: round2(overBy), recurring,
+      },
+      memberId: null,
+    });
+  }
+  return out.sort((a, b) => b.score - a.score);
+}
+
 // ── Unifier ──────────────────────────────────────────────────────────────────
 export interface HardSignalInputs {
   reminders: ReminderRow[];
@@ -213,6 +273,8 @@ export interface HardSignalInputs {
   chores: ChoreRow[];
   routines: RoutineRow[];
   routineCompletions: RoutineCompletion[];
+  budgets?: BudgetRow[];
+  expenses?: ExpenseRow[];
 }
 
 /** Run every detector and return the signals ranked by severity (highest first). */
@@ -222,5 +284,6 @@ export function buildHardSignals(inp: HardSignalInputs, now: Date): FamilySignal
     ...detectStressWindows(inp.events ?? [], inp.conflicts ?? [], inp.overdue ?? [], now),
     ...detectChoreConflicts(inp.chores ?? []),
     ...detectRoutineAdherence(inp.routines ?? [], inp.routineCompletions ?? [], now),
+    ...detectBudgetDrift(inp.budgets ?? [], inp.expenses ?? [], now),
   ].sort((a, b) => b.score - a.score);
 }

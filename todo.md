@@ -283,9 +283,17 @@ Google Calendar linking is safe to expose. Apply `0154`/`0155`/`0156` with the d
   into **`family_signals`** (`0142`, family-scoped RLS) — **preserving dismissals**. Transparent +
   editable surface at **`/dashboard/family-signals`** (evidence chips + Acknowledge/Dismiss/Restore +
   Refresh) + nav entry. Runs on demand AND in the **model-refresh cron** (always-learning, non-fatal).
-  Seed `seed_family_signals.sql` (500 rows, 4 kinds × status spread; in `SEED_ALL.sql`).
+  Seed `seed_family_signals.sql` (500 rows, status spread; in `SEED_ALL.sql`).
   Verified: tsc · eslint · **vitest (11)** · `next build`; migration + seed validated on PG16 (500 rows,
   idempotent). Feeds the Playbook/reasoning layer (family_signals is now a readable substrate).
+  - [x] **5th detector — budget drift ✅ SHIPPED (2026-07-10).** `detectBudgetDrift` (pure, +5 tests)
+    flags a budget **category over its cap this period**, scored by overspend ratio and boosted when the
+    **prior period was over too** (a real drift pattern, not FOI's single number). Reuses FOI's
+    period-window math; `runSignalDetection` now also loads `budgets` + this-year expense `transactions`.
+    Migration **`0157_family_signals_budget_drift.sql`** widens the `kind` check with `budget_drift`
+    (additive/idempotent, PG16-validated); the Family Intelligence surface renders it (Wallet icon,
+    spent/cap/"2 periods" evidence chips). Seed extended to 5 kinds (100 budget_drift rows). Verified:
+    tsc · eslint · **vitest (16 hard-signals)** · `next build`. ⚠️ apply `0157` to prod.
 - [x] **R11. The category metric — surface "time saved / mental load."** ✅ Pure
   `lib/metric/time-saved.ts::computeTimeSaved` (4 tests) turns this week's system-handled actions —
   autopilot auto-executions (5 min), assistant-handled items (4 min), reminders delivered (2 min) —
