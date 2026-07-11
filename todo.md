@@ -127,6 +127,42 @@ Family Basic / Family+ → routes into signup). Files: `components/demo/demo-exp
 `0161_demo_session_email_gate.sql` to prod with the deploy** (nullable `expires_at` + `email`).
 Follow-up (◐): stitch the captured demo email into `crm_contacts` / `mkt_visitors` for real lead flow.
 
+**☑ NEW (2026-07-11) — Demo is now ONE shared "Bubaly Demo" account (supersedes the throwaway-user
+model above).** Owner directive: *"a Single Demo User, no other Demo Users, called Bubaly Demo; use
+all the seed data for this single account."* Implemented (commits `f942a28`, `4139d89`, `e9dbebc`,
+`dc02676` on `main`):
+- **Single account, not per-visitor users.** `lib/demo/session.ts` rewritten: `ensureDemoAccount()`
+  get-or-creates exactly **one** auth user `demo@demo.bubaly.app` (`full_name`/family name = **"Bubaly
+  Demo"**), found by the stable family name so it's **reused, never duplicated**. Family+ subscription +
+  owning member + active-family pref set on first run only. **No new migration** — reuses the existing
+  `demo_sessions` schema (`0138` + `0161`).
+- **Fresh every login.** `resetDemoData()` wipes the seed-scoped tables (`SEED_TABLES`, children-first)
+  and re-seeds via `seedDemoFamily()` on each `startDemoAction`, so every visitor lands on a pristine,
+  fully-seeded demo (self-heals the shared account).
+- **Seed expanded to ~200 rows.** `lib/demo/seed.ts` now populates every Family+ surface (calendar 24 ·
+  transactions 24 · bills 12 · reminders 14 · pantry 20 · goals 10 · documents 10 · maintenance 8 ·
+  family_facts 12 · budgets/accounts · meals+plans+votes · groceries · chores · polls · marketplace
+  listings+saves+reviews · autopilot/approvals/agent activity). Column choices mirror the PG16-validated
+  `seed_demo_account.sql`; every insert best-effort (schema-drift safe). *(Previously the one-click demo
+  seeded only ~30 rows → empty Home. Fixed.)*
+- **No teardown.** `endDemoSession()` no longer deletes anything — it only clears the `demo_sessions`
+  row (`expires_at`/`email` → null) so the next visitor gets a fresh email gate; the cron
+  (`/api/cron/demo-cleanup` → `cleanupExpiredDemoSessions`) does the same for expired clocks. Sign-in
+  rotates a random password per login with a one-shot retry (`rotateDemoPassword`) to absorb a
+  concurrent-login race — **no stored secret**.
+- **Email gate + 5-min countdown + upgrade pop-up (#292) unchanged.** Trade-off (by design): concurrent
+  visitors share the one account's live data between re-seeds; the old per-tester isolation is gone.
+- **Pricing card** (`app/(marketing)/pricing/pricing-content.tsx`): renamed **"Test Account" →
+  "Demo Account"**, dropped the inaccurate **"No email"** copy → *"No card needed — logs you straight
+  into full Family+."*, and **floated the card to the LEFT of the hero title** (single 3-col grid
+  `[card | hero+toggle | spacer]`, card vertically centered; stacks on mobile).
+- **Docs:** `docs/demo-mode.md` rewritten to describe the single-account model.
+- ⚠️ **Left-over cleanup (owner, optional):** old ephemeral `demo-<token>@demo.bubaly.app` auth users
+  from the previous model may still linger in Supabase Auth — harmless, bulk-deletable.
+- ⚠️ **Coordination note for other bots:** a parallel session has an **unmerged branch** reworking the
+  pricing hero layout (`pricing-content.tsx`). If it lands it will likely conflict with `dc02676` on
+  that file — reconcile carefully (keep the "Demo Account" copy + card-left-of-hero layout).
+
 ---
 
 ## ★ NORTH STAR — The Family Operating Layer (category-defining, 2026-07-05)
@@ -1077,9 +1113,11 @@ missing-location events, colliding events for conflicts). Run it, then open
   maintenance / pantry / knowledge / meals+polls / marketplace for the primary demo family (The Patel
   Family, 1111…), **schema-drift safe** (each table guarded so an unmigrated table is skipped, not
   fatal) and additive (tagged `Demo · ` / `[demo]`, never disturbs seed_prod). PG16-validated (populates
-  present tables, skips absent, idempotent). *(The Demo Timer itself is owned by the parallel session's
-  server-backed demo mode — `components/demo/demo-timer.tsx` + `lib/demo/config.ts` + `useApp().demoExpiresAt`;
-  I removed my duplicate client-side timer to avoid the collision, same as the marketplace V2.)*
+  present tables, skips absent, idempotent). *(NOTE: superseded as the demo's data source by the
+  single-account rework at the top of this file — the one-click demo now seeds via `lib/demo/seed.ts` /
+  `resetDemoData()`, not this SQL file, which still targets the persistent Patel family. The demo UI is
+  the parallel session's `components/demo/demo-experience.tsx` + `lib/demo/config.ts` +
+  `useApp().demoExpiresAt`; the standalone `demo-timer.tsx` was removed in #292.)*
 
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
