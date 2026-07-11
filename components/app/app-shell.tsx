@@ -11,6 +11,7 @@ import { ROLE_LABELS, isManager } from '@/lib/constants/roles';
 import { tierLabelForLevel } from '@/lib/constants/plans';
 import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { cn } from '@/lib/utils/cn';
+import { DemoTimer } from '@/components/app/demo-timer';
 import { useApp } from './app-context';
 import { ThemeSwitch } from './theme-switch';
 import { SidebarAccount } from './sidebar-account';
@@ -366,6 +367,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/home" className="lg:hidden">
             <LogoMark className="h-8 w-14 sm:h-9 sm:w-16" variant="home" />
           </Link>
+          {/* Demo Timer — renders only for demo families (inert for real accounts) */}
+          <DemoTimer />
           <div className="flex-1" />
           <HeaderSearch />
           <Link href="/dashboard/notifications" className="hidden h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg md:inline-flex">
