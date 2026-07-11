@@ -162,8 +162,8 @@ function TryDemoButton() {
   );
 }
 
-/** The compact "Test Account" card that sits beside the billing toggle: one
- *  click → a fully-seeded Family+ demo for 5 minutes, no signup. */
+/** The compact "Demo Account" card that sits beside the billing toggle: one
+ *  click → a fully-seeded Family+ demo for 5 minutes. */
 function TestAccountCard() {
   return (
     <article className="relative w-full overflow-hidden rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-500/[0.12] to-white/[0.03] p-5 text-left ring-1 ring-emerald-400/20">
@@ -173,13 +173,13 @@ function TestAccountCard() {
         </span>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-black">Test Account</h2>
+            <h2 className="text-base font-black">Demo Account</h2>
             <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
               Free · 5-min demo
             </span>
           </div>
           <p className="mt-0.5 text-xs text-white/60">
-            No email, no card — logs you straight into full Family+.
+            No card needed — logs you straight into full Family+.
           </p>
         </div>
       </div>
