@@ -1,17 +1,19 @@
 import 'server-only';
 import { randomBytes } from 'node:crypto';
 import { createServiceClient } from '@/lib/supabase/server';
-import { DEMO_EMAIL_DOMAIN, demoExpiry } from './config';
+import { DEMO_EMAIL_DOMAIN } from './config';
 import { seedDemoFamily } from './seed';
 
-export type DemoCreds = { userId: string; email: string; password: string; expiresAt: string };
+export type DemoCreds = { userId: string; email: string; password: string };
 
 /**
  * Provision a fresh, throwaway Family+ demo: a new auth user under a synthetic
  * (never-emailed) address, a Family+ family (plan 'plus' → full capabilities),
- * seeded with a believable dataset, and a demo_sessions row that expires in 5
- * minutes. Returns credentials the caller uses to sign the visitor in. On any
- * failure the half-created user is deleted so nothing lingers.
+ * seeded with a believable dataset, and a demo_sessions row with NO expiry yet
+ * (the 5-minute clock only starts once the visitor enters their email behind the
+ * blur gate — see `startDemoClockAction`). Returns credentials the caller uses to
+ * sign the visitor in. On any failure the half-created user is deleted so nothing
+ * lingers.
  */
 export async function startDemoSession(): Promise<DemoCreds | null> {
   const admin = createServiceClient();
@@ -48,10 +50,10 @@ export async function startDemoSession(): Promise<DemoCreds | null> {
 
     await seedDemoFamily(admin, familyId, userId);
 
-    const expiresAt = demoExpiry().toISOString();
-    await admin.from('demo_sessions').upsert({ user_id: userId, family_id: familyId, expires_at: expiresAt }, { onConflict: 'user_id' });
+    // Clock deferred: no expires_at until the visitor enters their email.
+    await admin.from('demo_sessions').upsert({ user_id: userId, family_id: familyId, expires_at: null }, { onConflict: 'user_id' });
 
-    return { userId, email, password, expiresAt };
+    return { userId, email, password };
   } catch (e) {
     console.error('[demo] provisioning failed — cleaning up', e);
     if (familyId) await admin.from('families').delete().eq('id', familyId);
@@ -76,11 +78,22 @@ export async function endDemoSession(userId: string): Promise<void> {
   await admin.auth.admin.deleteUser(userId).catch(() => {});
 }
 
-/** Reap demo sessions past their expiry (the cron + a guard on each new start). */
+/**
+ * Reap demo sessions (the cron + a guard on each new start). Two cases:
+ *  1. Started demos whose 5-minute clock has run out (`expires_at` in the past).
+ *  2. Abandoned demos that never started — provisioned, but the visitor never
+ *     entered their email (`expires_at` null) and left the tab ~30 min ago.
+ */
 export async function cleanupExpiredDemoSessions(now: Date = new Date()): Promise<number> {
   const admin = createServiceClient();
-  const { data } = await admin.from('demo_sessions').select('user_id').lt('expires_at', now.toISOString()).limit(500);
-  let n = 0;
-  for (const r of data ?? []) { await endDemoSession(r.user_id); n++; }
-  return n;
+  const staleUnstarted = new Date(now.getTime() - 30 * 60_000).toISOString();
+
+  const [{ data: expired }, { data: abandoned }] = await Promise.all([
+    admin.from('demo_sessions').select('user_id').lt('expires_at', now.toISOString()).limit(500),
+    admin.from('demo_sessions').select('user_id').is('expires_at', null).lt('created_at', staleUnstarted).limit(500),
+  ]);
+
+  const ids = new Set<string>([...(expired ?? []), ...(abandoned ?? [])].map((r) => r.user_id));
+  for (const userId of ids) await endDemoSession(userId);
+  return ids.size;
 }
