@@ -1062,17 +1062,14 @@ missing-location events, colliding events for conflicts). Run it, then open
   `marketplace_stores` / listings (NO new schema). Nav entry (Following, `UserCheck`, additive).
   Verified: tsc · eslint · **vitest (5)** · `next build` (`/marketplace/following`).
 
-- [x] **Demo mode: session timer + curated demo dataset ✅ SHIPPED (2026-07-09).** A polished **Demo
-  Timer** now sits top-left in the app top-bar for the 5 seed demo families only (real accounts render
-  nothing): sparkle-badge pill, segmented `mm:ss` with min/sec labels, 5-minute countdown persisted in
-  sessionStorage (survives navigation), amber pulse in the final 30s, and a non-destructive Restart when
-  time's up. Pure `lib/constants/demo.ts` (`isDemoFamily`/`formatMMSS`/`remainingSeconds`, **4 tests**);
-  `components/app/demo-timer.tsx` self-gates via `useApp().familyId`; one additive mount in
-  `app-shell.tsx`. Plus **`seed_demo_account.sql`** — ~200 curated, tagged, idempotent rows across
-  calendar/finances/bills/reminders/goals/documents/maintenance/pantry/knowledge/meals+polls/marketplace
-  for the primary demo family (The Patel Family), **schema-drift safe** (each table guarded so an
-  unmigrated table is skipped, not fatal). Verified: tsc · eslint · **vitest (4)** · `next build`;
-  seed PG16-validated (populates present tables, skips absent, idempotent).
+- [x] **Curated demo dataset ✅ SHIPPED (2026-07-09).** **`seed_demo_account.sql`** — ~200 curated,
+  tagged, idempotent rows across calendar / finances / bills / reminders / goals / documents /
+  maintenance / pantry / knowledge / meals+polls / marketplace for the primary demo family (The Patel
+  Family, 1111…), **schema-drift safe** (each table guarded so an unmigrated table is skipped, not
+  fatal) and additive (tagged `Demo · ` / `[demo]`, never disturbs seed_prod). PG16-validated (populates
+  present tables, skips absent, idempotent). *(The Demo Timer itself is owned by the parallel session's
+  server-backed demo mode — `components/demo/demo-timer.tsx` + `lib/demo/config.ts` + `useApp().demoExpiresAt`;
+  I removed my duplicate client-side timer to avoid the collision, same as the marketplace V2.)*
 
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
