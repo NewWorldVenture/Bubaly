@@ -72,7 +72,7 @@ begin
     v_members[1 + (g.i % array_length(v_members,1))],
     r_titles[1 + (g.i % array_length(r_titles,1))],
     (5 + (g.i % 10) * 5)::bigint,
-    (array['pending','approved','fulfilled','rejected','cancelled'])[1 + (g.i % 5)]::redemption_status,
+    (enum_range(null::redemption_status))[1 + (g.i % array_length(enum_range(null::redemption_status),1))]::redemption_status,
     '[seed] redemption',
     now() - ((g.i % 120) || ' days')::interval
   from generate_series(1, 120) as g(i);

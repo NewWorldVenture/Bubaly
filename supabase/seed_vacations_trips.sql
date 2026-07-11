@@ -74,7 +74,7 @@ begin
       insert into public.trip_items (family_id, trip_id, kind, label, details, assignee_id, is_done, due_at, sort_order, created_by)
       select v_family,
         v_trips[1 + (g % array_length(v_trips,1))],
-        (array['packing','todo','reservation','document'])[1 + (g % 4)]::trip_item_kind,
+        (enum_range(null::trip_item_kind))[1 + (g % array_length(enum_range(null::trip_item_kind),1))]::trip_item_kind,
         (array['Sunscreen','Book rental car','Dinner reservation','Passports','Phone chargers','Confirm hotel',
                'Snacks for drive','Print boarding passes','Beach towels','Travel insurance'])[1 + (g % 10)] || ' #' || g,
         'Seeded checklist item.',
@@ -160,8 +160,8 @@ begin
       insert into public.vacation_itinerary_items
         (family_id, vacation_id, day_id, kind, day_part, title, location, start_time, end_time, duration_min, cost_cents, booked, notes, member_ids, sort_order, created_by)
       values (v_family, v_vid, v_did,
-        (array['activity','reservation','meal','travel','reminder','note','free_time'])[1 + (g % 7)]::vac_item_kind,
-        (array['morning','afternoon','evening','all_day'])[1 + (g % 4)]::vac_day_part,
+        (enum_range(null::vac_item_kind))[1 + (g % array_length(enum_range(null::vac_item_kind),1))]::vac_item_kind,
+        (enum_range(null::vac_day_part))[1 + (g % array_length(enum_range(null::vac_day_part),1))]::vac_day_part,
         (array['Breakfast','Museum visit','Pool time','City tour','Dinner out','Beach','Show','Park entry','Shopping','Rest'])[1 + (g % 10)] || ' #' || g,
         places[1 + (g % array_length(places,1))],
         (make_time(8 + (g % 10), (g % 4) * 15, 0)),
@@ -188,7 +188,7 @@ begin
   if to_regclass('public.vacation_transportation') is not null then
     insert into public.vacation_transportation (family_id, vacation_id, kind, provider, from_location, to_location, depart_at, arrive_at, confirmation_code, distance_miles, fuel_estimate_cents, booked, cost_cents, notes, created_by)
     select v_family, v_vacs[1 + (g % array_length(v_vacs,1))],
-      (array['car','train','bus','ferry','rideshare','shuttle','subway'])[1 + (g % 7)]::vac_transport_kind,
+      (enum_range(null::vac_transport_kind))[1 + (g % array_length(enum_range(null::vac_transport_kind),1))]::vac_transport_kind,
       (array['Hertz','Amtrak','Greyhound','Uber','Airport Shuttle'])[1 + (g % 5)],
       places[1 + (g % array_length(places,1))], places[1 + ((g+1) % array_length(places,1))],
       now() + ((g % 80) || ' days')::interval, now() + ((g % 80) || ' days')::interval + interval '3 hours',
@@ -200,7 +200,7 @@ begin
   if to_regclass('public.vacation_lodging') is not null then
     insert into public.vacation_lodging (family_id, vacation_id, kind, name, address, phone, check_in, check_out, confirmation_code, nightly_cents, total_cents, booked, url, notes, created_by)
     select v_family, v_vacs[1 + (g % array_length(v_vacs,1))],
-      (array['hotel','airbnb','resort','cabin','campground','rental'])[1 + (g % 6)]::vac_lodging_kind,
+      (enum_range(null::vac_lodging_kind))[1 + (g % array_length(enum_range(null::vac_lodging_kind),1))]::vac_lodging_kind,
       (array['Seaside Inn','Grand Resort','Cozy Cabin','Downtown Suites','Family Lodge'])[1 + (g % 5)] || ' #' || g,
       (100 + g) || ' Main St', '555-01' || lpad(g::text,2,'0'),
       current_date + (g % 60), current_date + (g % 60) + 4, 'LDG' || lpad(g::text,4,'0'),
@@ -258,7 +258,7 @@ begin
   if to_regclass('public.vacation_expenses') is not null then
     insert into public.vacation_expenses (family_id, vacation_id, category, description, amount_cents, spent_on, paid_by_member_id, notes, created_by)
     select v_family, v_vacs[1 + (g % array_length(v_vacs,1))],
-      (array['flights','lodging','transportation','activities','food','shopping','insurance','fees','misc'])[1 + (g % 9)]::vac_budget_category,
+      (enum_range(null::vac_budget_category))[1 + (g % array_length(enum_range(null::vac_budget_category),1))]::vac_budget_category,
       (array['Lunch','Souvenirs','Parking','Tickets','Taxi','Groceries','Coffee','Dinner','Gift shop','Tips'])[1 + (g % 10)] || ' #' || g,
       (500 + (g % 40) * 250)::bigint, (current_date - (g % 120)),
       case when v_members is null then null else v_members[1 + (g % v_mcount)] end,
@@ -287,7 +287,7 @@ begin
         insert into public.vacation_packing_items (family_id, vacation_id, list_id, name, category, quantity, packed, ai_suggested, notes, created_by)
         values (v_family, v_vid, v_lid,
           (array['T-shirts','Sunscreen','Toothbrush','Charger','Passport','Swimsuit','Sandals','Jacket','Snacks','First-aid kit'])[1 + (g % 10)] || ' #' || g,
-          (array['clothes','toiletries','electronics','medications','documents','sports','beach','snacks','other'])[1 + (g % 9)]::vac_pack_category,
+          (enum_range(null::vac_pack_category))[1 + (g % array_length(enum_range(null::vac_pack_category),1))]::vac_pack_category,
           1 + (g % 4), (g % 2 = 0), (g % 5 = 0), 'Seeded packing item.', v_uid);
       end loop;
     end if;
@@ -297,7 +297,7 @@ begin
   if to_regclass('public.vacation_documents') is not null then
     insert into public.vacation_documents (family_id, vacation_id, kind, title, member_id, number, issued_on, expires_on, notes, created_by)
     select v_family, v_vacs[1 + (g % array_length(v_vacs,1))],
-      (array['passport','id','visa','ticket','boarding_pass','hotel_confirmation','insurance','itinerary'])[1 + (g % 8)]::vac_doc_kind,
+      (enum_range(null::vac_doc_kind))[1 + (g % array_length(enum_range(null::vac_doc_kind),1))]::vac_doc_kind,
       (array['Passport','Driver ID','Travel Visa','Event Ticket','Boarding Pass','Hotel Confirmation','Insurance Card','Trip Itinerary'])[1 + (g % 8)] || ' #' || g,
       case when v_members is null then null else v_members[1 + (g % v_mcount)] end,
       'DOC' || lpad(g::text,6,'0'), current_date - (g % 800), current_date + (g % 800), 'Seeded document.', v_uid
@@ -358,8 +358,8 @@ begin
   if to_regclass('public.vacation_ai_recommendations') is not null then
     insert into public.vacation_ai_recommendations (family_id, vacation_id, kind, status, title, detail, severity, source, created_by)
     select v_family, v_vacs[1 + (g % array_length(v_vacs,1))],
-      (array['missing_reservation','packing','budget_warning','weather_warning','travel_conflict','activity_suggestion','restaurant','document_missing','suggestion'])[1 + (g % 9)]::vac_reco_kind,
-      (array['open','open','accepted','dismissed','done'])[1 + (g % 5)]::vac_reco_status,
+      (enum_range(null::vac_reco_kind))[1 + (g % array_length(enum_range(null::vac_reco_kind),1))]::vac_reco_kind,
+      (enum_range(null::vac_reco_status))[1 + (g % array_length(enum_range(null::vac_reco_status),1))]::vac_reco_status,
       (array['Add a dinner reservation','Pack rain gear','You are over budget','Storm expected','Overlapping plans','Try this tour','Book this restaurant','Missing passport scan','Consider travel insurance'])[1 + (g % 9)] || ' #' || g,
       'Seeded AI recommendation the planner can action.', 1 + (g % 3),
       (array['rules','ai'])[1 + (g % 2)], v_uid

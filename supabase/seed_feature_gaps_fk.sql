@@ -44,7 +44,7 @@ begin
       v_meds[1 + (g % array_length(v_meds,1))],
       case when v_members is null then null else v_members[1 + (g % array_length(v_members,1))] end,
       (now() - ((g % 90) || ' days')::interval - ((g % 3) * 8 || ' hours')::interval),
-      (array['taken','taken','taken','skipped','missed'])[1 + (g % 5)]::dose_status,
+      (enum_range(null::dose_status))[1 + (g % array_length(enum_range(null::dose_status),1))]::dose_status,
       case when g % 5 < 3 then (now() - ((g % 90) || ' days')::interval) else null end,
       '[seed] dose',
       now() - ((g % 90) || ' days')::interval
@@ -92,7 +92,7 @@ begin
       values (v_family, v_wid, v_aid,
         (case when g % 3 = 0 then 'sell' else 'buy' end)::invest_order_side,
         v_shares, v_price, (v_shares * v_price)::bigint,
-        (array['pending','filled','filled','rejected','cancelled'])[1 + (g % 5)]::invest_order_status,
+        (enum_range(null::invest_order_status))[1 + (g % array_length(enum_range(null::invest_order_status),1))]::invest_order_status,
         now() - ((g % 180) || ' days')::interval);
     end loop;
   end if;
