@@ -163,6 +163,22 @@ all the seed data for this single account."* Implemented (commits `f942a28`, `41
   pricing hero layout (`pricing-content.tsx`). If it lands it will likely conflict with `dc02676` on
   that file — reconcile carefully (keep the "Demo Account" copy + card-left-of-hero layout).
 
+**☑ NEW (2026-07-11) — Demo DEEP DIVE: seed expanded to ~350 rows + two silent-empty surfaces fixed
+(`claude/demo-deepdive`).** Turned over every rock in the Bubaly demo. Findings + fixes:
+- **BUG (fixed): Tasks + Groceries surfaces were silently EMPTY.** `todo_items`/`grocery_items` require
+  a parent list (`list_id NOT NULL`) that the seed never created, so every best-effort insert failed
+  silently → two empty modules for every demo visitor. Now seed a parent `todo_lists` / `grocery_lists`
+  first and stamp `list_id`; `todo_lists.created_by` correctly targets `family_members.id` (not
+  `auth.users`) via the owning member.
+- **Coverage went from ~30 → ~52 tables (~350 rows).** Added health (medications · appointments ·
+  health_visits · immunizations), kids/school (homework · classes · teams · wishlist · screen_time ·
+  journal), home (pets · vehicles · home_warranties), trips (vacations · trips), relationship_dates,
+  notes, reminder_lists, and family economy (currency + rewards). Every table/column verified against
+  `lib/database.types.ts`; enums validated on PG16 so no more silent drift.
+- `SEED_TABLES` (`lib/demo/session.ts`) rewritten in strict child-before-parent delete order so the
+  per-login reset wipes the new tables cleanly (items before lists, rewards before currency).
+- Now a demo visitor can exercise **the whole platform**, not a third of it. tsc clean.
+
 ---
 
 ## ★ NORTH STAR — The Family Operating Layer (category-defining, 2026-07-05)
