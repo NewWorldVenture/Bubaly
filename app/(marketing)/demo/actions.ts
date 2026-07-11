@@ -104,11 +104,12 @@ export async function choosePlanAfterDemoAction(formData: FormData): Promise<voi
   if (userId) await endDemoSession(userId).catch(() => {});
 
   // Free → the 5-day trial (signup → onboarding, no card). Paid → create the
-  // account, then land on billing to complete payment for the chosen plan
-  // (checkout needs a family, which requireUserContext auto-provisions, so the
-  // order must be signup → billing → Stripe).
+  // account, then land on billing which AUTO-OPENS Stripe Checkout for the plan
+  // they just picked (`&checkout=<plan>`), so payment is one tap, not a hunt.
+  // Checkout needs a family, which requireUserContext auto-provisions, so the
+  // order must be signup → billing → Stripe.
   const billing = (p: 'basic' | 'plus') =>
-    `/signup?plan=${p}&redirect=${encodeURIComponent('/dashboard/billing?view=manage')}`;
+    `/signup?plan=${p}&redirect=${encodeURIComponent(`/dashboard/billing?view=manage&checkout=${p}`)}`;
   const href = plan === 'basic' ? billing('basic')
     : plan === 'plus' ? billing('plus')
     : '/signup';

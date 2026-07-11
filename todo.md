@@ -179,6 +179,19 @@ all the seed data for this single account."* Implemented (commits `f942a28`, `41
   per-login reset wipes the new tables cleanly (items before lists, rewards before currency).
 - Now a demo visitor can exercise **the whole platform**, not a third of it. tsc clean.
 
+**☑ NEW (2026-07-11) — Payment is now ONE TAP from the demo (account creation + payment super easy).**
+The demo→upgrade→signup→billing path used to **drop the plan the visitor already chose**: picking
+"Family+" in the end-of-demo pop-up sent them to `/dashboard/billing?view=manage` where they had to
+re-find and click the plan. Now the choice is carried the whole way and checkout opens automatically:
+- `choosePlanAfterDemoAction` builds `redirect=/dashboard/billing?view=manage&checkout=<plan>` (was
+  just `view=manage`), so the plan survives signup (works across email · phone · Google · Apple — the
+  signup form + `/auth/callback` both honor `next`/`redirect` verbatim).
+- `BillingModule` reads `?checkout=basic|plus`: once the auto-provisioned family + subscription load and
+  the family is still on Free, it fires `changePlan(<tier>_monthly)` **once** (admin-only) → Stripe
+  Checkout opens straight away. New accounts get a family auto-provisioned by `requireUserContext`, so
+  the order signup→billing→Stripe just works. Falls back to a highlighted, scrolled-to plan card if
+  auto-checkout can't run (non-admin / already subscribed). tsc + eslint clean.
+
 ---
 
 ## ★ NORTH STAR — The Family Operating Layer (category-defining, 2026-07-05)
