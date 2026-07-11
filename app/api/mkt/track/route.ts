@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { getConsentState, canRecordAnalytics } from '@/lib/marketing/consent';
 
 export const runtime = 'nodejs';
 
@@ -16,6 +17,7 @@ type TrackBody = {
   deviceType?: string | null;
   country?: string | null;
   kind?: 'touch' | 'conversion';
+  gpc?: boolean;
 };
 
 function clean(v: unknown): string | null {
@@ -41,6 +43,13 @@ export async function POST(req: NextRequest) {
   const now = new Date().toISOString();
 
   const supabase = createServiceClient();
+
+  // Privacy gate: only record first-party analytics when the visitor permits it.
+  // Necessary-only / denied / GPC visitors are acknowledged but not profiled.
+  const consent = await getConsentState(supabase, anonymousId, { gpc: body.gpc === true });
+  if (!canRecordAnalytics(consent)) {
+    return NextResponse.json({ ok: true, recorded: false, reason: 'analytics_consent_absent' });
+  }
 
   // Upsert the visitor (CDP spine), bump last_seen + session_count.
   const { data: existing } = await supabase
@@ -75,5 +84,5 @@ export async function POST(req: NextRequest) {
     visitor_id: visitorId, source, medium, campaign, kind, occurred_at: now,
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, recorded: true });
 }

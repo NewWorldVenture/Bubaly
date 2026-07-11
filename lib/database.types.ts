@@ -1530,6 +1530,11 @@ export interface Database {
         { id?: string; visitor_id?: string | null; source?: string | null; medium?: string | null; campaign?: string | null; kind?: string; occurred_at?: string },
         Partial<{ source: string | null; medium: string | null; campaign: string | null; kind: string }>
       >;
+      mkt_consent_events: T<
+        { id: string; anonymous_id: string; contact_id: string | null; category: string; decision: string; policy_version: string; source: string | null; gpc: boolean; user_agent: string | null; metadata: Json; created_at: string },
+        { id?: string; anonymous_id: string; contact_id?: string | null; category: string; decision: string; policy_version?: string; source?: string | null; gpc?: boolean; user_agent?: string | null; metadata?: Json },
+        Partial<{ contact_id: string | null; category: string; decision: string; policy_version: string; source: string | null; gpc: boolean; user_agent: string | null; metadata: Json }>
+      >;
       testimonials: T<
         { id: string; author_name: string; author_role: string | null; company: string | null; quote: string; rating: number | null; avatar_url: string | null; is_published: boolean; sort_order: number; created_by: string | null } & Stamps,
         { id?: string; author_name: string; author_role?: string | null; company?: string | null; quote: string; rating?: number | null; avatar_url?: string | null; is_published?: boolean; sort_order?: number; created_by?: string | null },
