@@ -126,10 +126,15 @@ export async function startDemoSession(): Promise<DemoCreds | null> {
   // Clock deferred: expires_at stays null until the email gate is submitted, so
   // (1) the app opens behind the email-capture pop-up and (2) the 5-minute clock
   // is fair — it starts when the visitor actually begins, not at provisioning.
-  await admin.from('demo_sessions').upsert(
+  // If this fails (most likely: demo_sessions table missing because migrations
+  // 0138/0161 aren't applied), the gate + timer won't render — so surface it
+  // loudly instead of silently. Sign-in still proceeds (you land in the demo
+  // family), the demo chrome just won't appear until the table exists.
+  const { error: sErr } = await admin.from('demo_sessions').upsert(
     { user_id: userId, family_id: familyId, expires_at: null, email: null },
     { onConflict: 'user_id' },
   );
+  if (sErr) console.error('[demo] demo_sessions upsert failed — apply migrations 0138/0161 to enable the timer.', sErr);
 
   return { userId, email: DEMO_ACCOUNT_EMAIL, password };
 }
