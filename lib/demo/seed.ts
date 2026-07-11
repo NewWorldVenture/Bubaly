@@ -60,10 +60,22 @@ export async function seedDemoFamily(admin: DB, familyId: string, ownerId: strin
   })));
 
   // ── Tasks + reminders ─────────────────────────────────────────────────────
+  // todo_items require a parent todo_list, and both todo_lists/todo_items
+  // reference family_members.id for created_by (not auth.users) — so seed a list
+  // first and stamp the owning member, else the whole Tasks surface stays empty.
+  const ownerMember = member(0);
   const taskTitles = ['Sign the permission slip', 'Renew library books', 'Book summer camp', 'Schedule car service', 'Order birthday gift', 'Plan weekend trip', 'Update emergency contacts', 'Fix the leaky faucet', 'Send thank-you cards', 'Review the budget', 'Clean out the garage', 'Refill prescriptions'] as const;
-  await ins('todo_items', taskTitles.map((title, g) => ({
-    ...fam, title, is_done: g % 4 === 0, due_date: dateKey((g % 10) + 1), created_by: ownerId,
-  })));
+  try {
+    const { data: lists } = await admin.from('todo_lists').insert(
+      [{ ...fam, name: 'Family To-Dos', created_by: ownerMember }],
+    ).select('id');
+    const listId = lists?.[0]?.id as string | undefined;
+    if (listId) {
+      await ins('todo_items', taskTitles.map((title, g) => ({
+        ...fam, list_id: listId, title, is_done: g % 4 === 0, due_date: dateKey((g % 10) + 1), created_by: ownerMember,
+      })));
+    }
+  } catch { /* best-effort */ }
   const remTitles = ['Pick up Leo at 3pm', 'Pay the water bill', 'Water plants', 'Call grandma', 'Renew library books', 'School forms due', 'Take out the trash'] as const;
   await ins('family_reminders', range(14).map((g) => ({
     ...fam, title: pick(remTitles, g), kind: g % 3 === 0 ? 'bill' : 'time', status: 'active',
@@ -86,7 +98,16 @@ export async function seedDemoFamily(admin: DB, familyId: string, ownerId: strin
 
   // ── Groceries + chores + pantry ───────────────────────────────────────────
   const groceries = ['Milk', 'Bananas', 'Bread', 'Eggs', 'Chicken', 'Rice', 'Apples', 'Coffee', 'Yogurt', 'Spinach', 'Cheese', 'Tomatoes', 'Cereal', 'Butter', 'Pasta'] as const;
-  await ins('grocery_items', groceries.map((name, g) => ({ ...fam, name, is_checked: g % 5 === 0, created_by: ownerId })));
+  // grocery_items also require a parent grocery_list, else Groceries renders empty.
+  try {
+    const { data: glists } = await admin.from('grocery_lists').insert(
+      [{ ...fam, name: 'Weekly Groceries', created_by: ownerId }],
+    ).select('id');
+    const glistId = glists?.[0]?.id as string | undefined;
+    if (glistId) {
+      await ins('grocery_items', groceries.map((name, g) => ({ ...fam, list_id: glistId, name, is_checked: g % 5 === 0, created_by: ownerId })));
+    }
+  } catch { /* best-effort */ }
   const choreTitles = ['Take out the trash', 'Feed the dog', 'Load the dishwasher', 'Fold laundry', 'Vacuum the living room', 'Water the garden', 'Make the beds', 'Wipe the counters'] as const;
   await ins('chores', choreTitles.map((title, g) => ({ ...fam, title, points: 3 + (g % 5), created_by: ownerId })));
   const pantryNames = ['Milk', 'Eggs', 'Flour', 'Rice', 'Pasta', 'Cereal', 'Coffee', 'Sugar', 'Butter', 'Bread', 'Apples', 'Chicken'] as const;
@@ -155,6 +176,107 @@ export async function seedDemoFamily(admin: DB, familyId: string, ownerId: strin
       await ins('marketplace_saves', ids.slice(0, 8).map((id: string, i: number) => ({ ...fam, listing_id: id, member_id: member(i + 1) })));
       await ins('marketplace_reviews', ids.slice(0, 8).map((id: string, i: number) => ({
         ...fam, listing_id: id, reviewer_member: member(i), reviewee_member: member(i + 1), role: 'buyer', rating: 4 + (i % 2), comment: 'Smooth hand-off — thank you!',
+      })));
+    }
+  } catch { /* best-effort */ }
+
+  // ── Health: medications, appointments, visits, immunizations ──────────────
+  const medNames = ['Vitamin D', 'Amoxicillin', 'Allergy tablet', 'Inhaler', 'Melatonin', 'Ibuprofen'] as const;
+  await ins('medications', range(6).map((g) => ({
+    ...fam, member_id: member(g), name: pick(medNames, g), dosage: pick(['1 tablet', '5 mL', '10 mg', '1 puff', '1 gummy', '200 mg'] as const, g),
+    instructions: 'Take as directed.', is_active: true, created_by: ownerId,
+  })));
+  const apptTitles = ['Dentist — Emma', 'Pediatrician — Leo', 'Eye exam', 'Annual physical', 'Orthodontist', 'Flu shot', 'Dermatologist', 'Vet — Biscuit'] as const;
+  await ins('appointments', range(8).map((g) => ({
+    ...fam, member_id: member(g), title: pick(apptTitles, g), provider: pick(['Dr. Kim', 'Dr. Lee', 'Dr. Patel', 'City Clinic'] as const, g),
+    location: pick(['Downtown', 'Main St Clinic', 'Kids Health', 'Uptown'] as const, g), starts_at: iso((g % 20) + 1, 9 + (g % 7)), notes: 'Bring insurance card.', created_by: ownerId,
+  })));
+  const visitKinds = ['medical', 'dental', 'vision', 'specialist', 'therapy', 'urgent_care'] as const;
+  await ins('health_visits', range(6).map((g) => ({
+    ...fam, member_id: member(g), kind: pick(visitKinds, g), title: pick(['Annual physical', 'Cleaning', 'Eye check', 'Specialist', 'Therapy', 'Urgent care'] as const, g),
+    provider_name: pick(['Dr. Lee', 'Bright Smiles', 'Vision Plus', 'Dr. Patel'] as const, g), visit_date: dateKey(-((g % 6) * 20 + 5)), created_by: ownerId,
+  })));
+  const vaccines = ['Flu', 'Tdap', 'MMR', 'HPV', 'COVID-19', 'Hepatitis B'] as const;
+  await ins('immunizations', range(6).map((g) => ({
+    ...fam, member_id: member(g), vaccine: pick(vaccines, g), dose_label: pick(['1st', '2nd', 'Booster', 'Annual'] as const, g),
+    date_given: dateKey(-((g % 6) * 60 + 30)), provider_name: 'City Clinic', created_by: ownerId,
+  })));
+
+  // ── Kids: homework, classes, teams, wishlist, screen time, journal ────────
+  const subjects = ['Math', 'Science', 'English', 'History', 'Spanish', 'Art'] as const;
+  await ins('homework_assignments', range(10).map((g) => ({
+    ...fam, member_id: member(g), subject: pick(subjects, g), title: `${pick(subjects, g)} — ${pick(['worksheet', 'reading', 'project', 'quiz prep', 'essay'] as const, g)}`,
+    due_at: iso((g % 8) + 1, 15), status: g % 4 === 0 ? 'done' : 'assigned', created_by: ownerId,
+  })));
+  await ins('school_classes', range(6).map((g) => ({
+    ...fam, member_id: member(g % 3 + 1), subject: pick(subjects, g), teacher: pick(['Ms. Rivera', 'Mr. Chen', 'Mrs. Gold', 'Mr. Diaz'] as const, g),
+    room: `Room ${10 + g}`, day_of_week: (g % 5) + 1, created_by: ownerId,
+  })));
+  await ins('teams', range(4).map((g) => ({
+    ...fam, member_id: member(g % 3 + 1), sport: pick(['Soccer', 'Basketball', 'Swimming', 'Baseball'] as const, g),
+    team_name: pick(['Blue Jays', 'Sharks', 'Comets', 'Rockets'] as const, g), season: 'Fall', coach: pick(['Coach Dan', 'Coach Amy'] as const, g), is_active: true, created_by: ownerId,
+  })));
+  const wishTitles = ['New bike', 'Lego set', 'Soccer cleats', 'Headphones', 'Art kit', 'Board game', 'Skateboard', 'Book series'] as const;
+  await ins('wishlist_items', range(8).map((g) => ({
+    ...fam, member_id: member(g % 3 + 1), title: pick(wishTitles, g), price: 15 + (g % 8) * 20, priority: pick(['low', 'medium', 'high'] as const, g), created_by: ownerId,
+  })));
+  await ins('screen_time_entries', range(14).map((g) => ({
+    ...fam, member_id: member(g % 3 + 1), entry_date: dateKey(-(g % 14)), minutes: 30 + (g % 6) * 20,
+    category: pick(['gaming', 'video', 'social', 'education'] as const, g), device: pick(['tablet', 'phone', 'tv', 'laptop'] as const, g), logged_by: ownerId,
+  })));
+  const journalMoods = ['great', 'good', 'okay', 'tired', 'excited'] as const;
+  await ins('journal_entries', range(8).map((g) => ({
+    ...fam, member_id: member(g), entry_date: dateKey(-(g % 8)), mood: pick(journalMoods, g),
+    title: pick(['A good day', 'Busy but fun', 'Quiet evening', 'Weekend adventure'] as const, g), body: 'A little snapshot of family life today.', created_by: ownerId,
+  })));
+
+  // ── Home: pets, vehicles, warranties ──────────────────────────────────────
+  await ins('pets', [
+    { ...fam, name: 'Biscuit', species: 'dog', breed: 'Beagle', birthday: dateKey(-1200), is_active: true, vet_name: 'Happy Paws Vet', created_by: ownerId },
+    { ...fam, name: 'Mittens', species: 'cat', breed: 'Tabby', birthday: dateKey(-900), is_active: true, vet_name: 'Happy Paws Vet', created_by: ownerId },
+  ]);
+  await ins('vehicles', [
+    { ...fam, nickname: 'The Van', make: 'Honda', model: 'Odyssey', year: 2019, mileage: 54200, status: 'active', created_by: ownerId },
+    { ...fam, nickname: 'Commuter', make: 'Toyota', model: 'Corolla', year: 2021, mileage: 28900, status: 'active', created_by: ownerId },
+  ]);
+  const warTitles = ['Refrigerator', 'Washer/Dryer', 'HVAC system', 'Dishwasher', 'Water heater', 'Roof'] as const;
+  await ins('home_warranties', range(6).map((g) => ({
+    ...fam, name: `${pick(warTitles, g)} warranty`, provider: pick(['Whirlpool', 'Samsung', 'Carrier', 'HomeShield'] as const, g),
+    warranty_type: 'appliance', expires_on: dateKey((g % 6) * 90 + 60), status: 'active', created_by: ownerId,
+  })));
+
+  // ── Trips + vacations + relationship + notes + reminders lists ────────────
+  await ins('vacations', [
+    { ...fam, title: 'Summer in Maui', kind: 'flight', status: 'planning', destination: 'Maui, HI', start_date: dateKey(40), end_date: dateKey(47), budget_cents: 450000, currency: 'USD', created_by: ownerId },
+    { ...fam, title: 'Grandparents visit', kind: 'road_trip', status: 'booked', destination: 'Denver, CO', start_date: dateKey(80), end_date: dateKey(85), budget_cents: 120000, currency: 'USD', created_by: ownerId },
+  ]);
+  await ins('trips', [
+    { ...fam, name: 'Ski weekend', destination: 'Lake Tahoe', start_date: dateKey(20), end_date: dateKey(22), status: 'planning', created_by: ownerId },
+    { ...fam, name: 'Beach day', destination: 'Santa Cruz', start_date: dateKey(9), end_date: dateKey(9), status: 'planning', created_by: ownerId },
+  ]);
+  await ins('relationship_dates', [
+    { ...fam, created_by: ownerId, kind: 'anniversary', title: 'Our Anniversary', event_date: dateKey(60), recurs_annually: true },
+    { ...fam, created_by: ownerId, kind: 'date_night', title: 'Date night', event_date: dateKey(6), recurs_annually: false },
+  ]);
+  const noteTitles = ['Wifi password', 'Babysitter numbers', 'Weekend plan', 'Gift ideas', 'House rules', 'Vacation packing list'] as const;
+  await ins('notes', range(6).map((g) => ({
+    ...fam, title: pick(noteTitles, g), body: 'A handy family note everyone can see.', is_pinned: g % 4 === 0, created_by: ownerId,
+  })));
+  await ins('reminder_lists', [
+    { ...fam, created_by: ownerId, name: 'Household' },
+    { ...fam, created_by: ownerId, name: 'Kids' },
+  ]);
+
+  // ── Family economy: a currency + a small reward catalog ───────────────────
+  try {
+    const { data: currencies } = await admin.from('family_currencies').insert(
+      [{ ...fam, name: 'Stars', emoji: '⭐', unit_label: 'star', is_active: true, created_by: ownerId }],
+    ).select('id');
+    const currencyId = currencies?.[0]?.id as string | undefined;
+    if (currencyId) {
+      const rewardTitles = ['Movie night pick', '30 min extra screen time', 'Choose dinner', 'Stay up 30 min late', 'Ice cream trip', 'Skip one chore'] as const;
+      await ins('economy_rewards', rewardTitles.map((title, g) => ({
+        ...fam, currency_id: currencyId, title, emoji: pick(['🎬', '📺', '🍽️', '🌙', '🍦', '🧹'] as const, g), cost: (g + 1) * 10, is_active: true, created_by: ownerId,
       })));
     }
   } catch { /* best-effort */ }

@@ -163,6 +163,35 @@ all the seed data for this single account."* Implemented (commits `f942a28`, `41
   pricing hero layout (`pricing-content.tsx`). If it lands it will likely conflict with `dc02676` on
   that file — reconcile carefully (keep the "Demo Account" copy + card-left-of-hero layout).
 
+**☑ NEW (2026-07-11) — Demo DEEP DIVE: seed expanded to ~350 rows + two silent-empty surfaces fixed
+(`claude/demo-deepdive`).** Turned over every rock in the Bubaly demo. Findings + fixes:
+- **BUG (fixed): Tasks + Groceries surfaces were silently EMPTY.** `todo_items`/`grocery_items` require
+  a parent list (`list_id NOT NULL`) that the seed never created, so every best-effort insert failed
+  silently → two empty modules for every demo visitor. Now seed a parent `todo_lists` / `grocery_lists`
+  first and stamp `list_id`; `todo_lists.created_by` correctly targets `family_members.id` (not
+  `auth.users`) via the owning member.
+- **Coverage went from ~30 → ~52 tables (~350 rows).** Added health (medications · appointments ·
+  health_visits · immunizations), kids/school (homework · classes · teams · wishlist · screen_time ·
+  journal), home (pets · vehicles · home_warranties), trips (vacations · trips), relationship_dates,
+  notes, reminder_lists, and family economy (currency + rewards). Every table/column verified against
+  `lib/database.types.ts`; enums validated on PG16 so no more silent drift.
+- `SEED_TABLES` (`lib/demo/session.ts`) rewritten in strict child-before-parent delete order so the
+  per-login reset wipes the new tables cleanly (items before lists, rewards before currency).
+- Now a demo visitor can exercise **the whole platform**, not a third of it. tsc clean.
+
+**☑ NEW (2026-07-11) — Payment is now ONE TAP from the demo (account creation + payment super easy).**
+The demo→upgrade→signup→billing path used to **drop the plan the visitor already chose**: picking
+"Family+" in the end-of-demo pop-up sent them to `/dashboard/billing?view=manage` where they had to
+re-find and click the plan. Now the choice is carried the whole way and checkout opens automatically:
+- `choosePlanAfterDemoAction` builds `redirect=/dashboard/billing?view=manage&checkout=<plan>` (was
+  just `view=manage`), so the plan survives signup (works across email · phone · Google · Apple — the
+  signup form + `/auth/callback` both honor `next`/`redirect` verbatim).
+- `BillingModule` reads `?checkout=basic|plus`: once the auto-provisioned family + subscription load and
+  the family is still on Free, it fires `changePlan(<tier>_monthly)` **once** (admin-only) → Stripe
+  Checkout opens straight away. New accounts get a family auto-provisioned by `requireUserContext`, so
+  the order signup→billing→Stripe just works. Falls back to a highlighted, scrolled-to plan card if
+  auto-checkout can't run (non-admin / already subscribed). tsc + eslint clean.
+
 ---
 
 ## ★ NORTH STAR — The Family Operating Layer (category-defining, 2026-07-05)

@@ -505,7 +505,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const { success, error: toastError } = useToast();
   const search = useSearchParams();
   const wantsUpgrade = search.get('upgrade') === '1';
-  const needLevel = search.get('need') === '2' ? 2 : wantsUpgrade ? 1 : undefined;
+  // `?checkout=basic|plus` (from the demo upgrade flow) pre-selects a tier and
+  // opens Stripe Checkout automatically once the family + subscription load, so a
+  // visitor who already chose a plan in the demo doesn't have to pick it again.
+  const checkoutTier = search.get('checkout');
+  const checkoutLevel: 1 | 2 | undefined = checkoutTier === 'plus' ? 2 : checkoutTier === 'basic' ? 1 : undefined;
+  const needLevel = checkoutLevel ?? (search.get('need') === '2' ? 2 : wantsUpgrade ? 1 : undefined);
   const [tab, setTab] = useState<Tab>('Overview');
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [subLoading, setSubLoading] = useState(true);
@@ -592,6 +597,21 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       } catch { toastError('Could not change the plan.'); }
     });
   }, [loadSub, success, toastError]);
+
+  // One-tap checkout from the demo upgrade flow: if `?checkout=basic|plus` is
+  // present and the family is still on Free, open Stripe Checkout for that tier
+  // automatically (monthly to start; they can switch to annual later). Fires once,
+  // only for admins (non-admins can't purchase), only after the subscription loads.
+  const autoCheckoutFired = useRef(false);
+  useEffect(() => {
+    if (autoCheckoutFired.current) return;
+    if (!checkoutLevel || subLoading) return;
+    if (!admin) return;
+    // Only when there's no paid plan yet — never re-charge an already-subscribed family.
+    if (slugToStripePlan(subscription?.plan) !== null) return;
+    autoCheckoutFired.current = true;
+    changePlan(stripePlanFor(checkoutLevel, 'monthly'));
+  }, [checkoutLevel, subLoading, admin, subscription, changePlan]);
 
   // Schedule a downgrade to Free at period end, or undo it.
   const setCancel = useCallback((resume: boolean) => {

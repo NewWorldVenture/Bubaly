@@ -85,11 +85,25 @@ export async function ensureDemoAccount(admin: Admin): Promise<{ userId: string;
 // every reset so each visitor gets a pristine, fully-seeded family. The owning
 // member ("You") is preserved; only the seeded local members are removed.
 const SEED_TABLES = [
+  // Children strictly before their parents (FK / cascade safety).
   'marketplace_saves', 'marketplace_reviews', 'marketplace_listings',
   'meal_plans', 'meals', 'meal_votes',
-  'calendar_events', 'todo_items', 'family_reminders', 'grocery_items', 'chores', 'pantry_items',
+  'calendar_events', 'family_reminders', 'chores', 'pantry_items',
+  'todo_items', 'todo_lists', 'grocery_items', 'grocery_lists',
   'transactions', 'budgets', 'financial_accounts', 'bills',
   'goals', 'documents', 'maintenance_tasks', 'family_facts', 'family_polls',
+  // Health
+  'medications', 'appointments', 'health_visits', 'immunizations',
+  // Kids / school
+  'homework_assignments', 'school_classes', 'teams', 'wishlist_items',
+  'screen_time_entries', 'journal_entries',
+  // Home
+  'pets', 'vehicles', 'home_warranties',
+  // Trips / relationship / misc
+  'vacations', 'trips', 'relationship_dates', 'notes', 'reminder_lists',
+  // Economy (rewards reference the currency)
+  'economy_rewards', 'family_currencies',
+  // Assistant activity
   'autopilot_suggestions', 'approval_requests', 'agent_activity',
 ] as const;
 
