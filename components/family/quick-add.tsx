@@ -7,6 +7,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Loader2, Check, X } from 'lucide-react';
 import { createFamilyRecord } from '@/lib/family/actions';
+import { useJourney } from '@/lib/analytics/use-journey';
 import { cn } from '@/lib/utils/cn';
 
 export type FieldType = 'text' | 'textarea' | 'date' | 'number' | 'select' | 'checkbox' | 'member';
@@ -40,6 +41,12 @@ export function QuickAdd({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [pending, start] = useTransition();
+  // Journey telemetry (Experience Scorecard): the ubiquitous "quick add" flow,
+  // measured across every module that uses it. Fire-and-forget; never blocks UX.
+  const journey = useJourney('quick_add');
+
+  function openForm() { setOpen(true); journey.start(); }
+  function cancelForm() { setOpen(false); journey.abandon(); }
 
   function submit(formData: FormData) {
     setError(null);
@@ -55,6 +62,7 @@ export function QuickAdd({
     start(async () => {
       const res = await createFamilyRecord(table, values);
       if (res.ok) {
+        journey.complete();
         setDone(true);
         setTimeout(() => { setDone(false); setOpen(false); }, 800);
         router.refresh();
@@ -68,7 +76,7 @@ export function QuickAdd({
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openForm}
         className={cn(
           'inline-flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-white transition hover:opacity-90',
           buttonClassName,
@@ -86,7 +94,7 @@ export function QuickAdd({
     >
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <button type="button" onClick={() => setOpen(false)} aria-label="Cancel" className="text-muted hover:text-fg">
+        <button type="button" onClick={cancelForm} aria-label="Cancel" className="text-muted hover:text-fg">
           <X className="h-4 w-4" />
         </button>
       </div>

@@ -6,6 +6,8 @@ import {
 import { createServer } from '@/lib/supabase/server';
 import { isManager, ROLE_LABELS } from '@/lib/constants/roles';
 import { personalDashboardLabel } from '@/lib/constants/dashboards';
+import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
+import { dayPhase } from '@/lib/home/time-of-day';
 import type { UserContext } from '@/lib/supabase/auth';
 import { Avatar } from '@/components/ui/avatar';
 import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
@@ -121,8 +123,12 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
   const openCount = myOpenCount ?? 0;
   const doneCount = myDoneCount ?? 0;
 
-  const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening';
+  // Role-tailored greeting (Friction #8): parents get a formal line, adults a
+  // casual one, kids a warm emoji greeting — same treatment as Home, now on the
+  // personal dashboard too.
   const firstName = (me.display_name || 'there').split(' ')[0];
+  const greeting = roleGreeting(role, firstName, dayPhase(new Date()));
+  const showWave = roleSurface(role).tone !== 'kid'; // kid greetings already carry an emoji
 
   const statusTone: Record<string, string> = {
     todo: 'text-muted',
@@ -143,7 +149,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
           <Avatar name={me.display_name} color={me.color} size={48} />
           <div>
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-              {greeting}, {firstName}! <span>👋</span>
+              {greeting}{showWave && <span> 👋</span>}
             </h1>
             <p className="mt-0.5 text-sm text-muted">
               {personalDashboardLabel(role)} · <span className="capitalize">{ROLE_LABELS[role]}</span>

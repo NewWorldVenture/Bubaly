@@ -13,11 +13,16 @@ next*); this is *how good each journey is now*.
 - **Perceived perf** — optimistic UI / skeletons / instant feedback.
 - **Recovery** — undo / confirm-destructive / clear errors.
 
-> ⚠️ **Measurement status:** the *journey* table below is still **design-time
-> estimates** from reading the code. To make this a true scorecard, add
-> lightweight analytics (a `journey_started/completed` event with a step counter)
-> and a Playwright "taps to complete" harness per journey, then replace these
-> estimates with medians. Treat cells as a baseline to beat.
+> ⚠️ **Measurement status:** the step-counter analytics now exist and several flows
+> are instrumented — `useJourney()` emits `started/step/completed/abandoned` rows to
+> `journey_events`, and `/dashboard/journeys` shows the **real** per-family medians
+> (`summarizeJourneys`, no estimates) for the instrumented journeys: **Capture · Add
+> a memory · Voice command · Clear next actions · Quick add** (the app-wide QuickAdd
+> flow). The *journey table below* is still **design-time estimates** for the flows
+> not yet wired to `useJourney`; instrument a flow (one `useJourney('key')` call) to
+> replace its row with a measured median. **Residual (owner/infra):** a Playwright
+> "taps to complete" CI harness + a cross-family service-role aggregate — both need a
+> running app + auth. Treat estimate cells as a baseline to beat.
 
 ## ✅ Now measured: the live Experience Scorecard (T8)
 

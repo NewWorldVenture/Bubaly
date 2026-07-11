@@ -10,6 +10,7 @@ export const JOURNEY_LABELS: Record<string, string> = {
   add_memory: 'Add a memory',
   voice_command: 'Voice command',
   next_actions: 'Clear next actions',
+  quick_add: 'Quick add a record',
 };
 
 export function journeyLabel(key: string): string {

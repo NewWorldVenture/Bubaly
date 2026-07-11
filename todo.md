@@ -515,10 +515,18 @@ new standalone destinations. T10 is the missing half of the category metric (R11
 > 5. **Intelligence Network launch gate** — insights only surface at **≥100** consenting families.
 >
 > **OPEN — agent-doable follow-ups (small, no blocker; do when directed):**
-> - **Role density, broader rollout** — slices 1–3 shipped (trimmed focus set → nav
->   management-gating → Focus-strip chip density). Extend density/tone to more dashboards.
-> - **Instrument real journey medians** — Playwright "taps to complete" harness +
->   `journey_events` step counter, to replace the Experience Scorecard's design-time estimates.
+> - [x] **Role density/tone, broader rollout ✅ (2026-07-10)** — the role-tailored greeting
+>   (`roleGreeting`, tone-matched per role: parents formal · adults casual · kids a warm emoji line)
+>   now leads the **personal dashboard** too, not just Home — extending the Friction #8 treatment
+>   (Home focus strip density/`focusMax`/headline + greeting) to a second primary surface. Reuses the
+>   pure `lib/ui/role-surface.ts` (already 10 tests); tsc · eslint · build.
+> - [x] **Instrument real journey medians ✅ (2026-07-10, code side)** — the ubiquitous **QuickAdd**
+>   flow (`components/family/quick-add.tsx`, used across every module) now emits `journey_events` via
+>   `useJourney('quick_add')` (start on open · complete on save · abandon on cancel), so the
+>   already-live per-family medians at `/dashboard/journeys` (pure `summarizeJourneys`, real data — no
+>   estimates) now cover the app-wide add flow alongside capture / add-memory / voice / next-actions.
+>   **Residual (owner/infra, not agent-doable here):** the Playwright "taps to complete" CI harness +
+>   a cross-family service-role aggregate — both need a running app + auth this sandbox lacks.
 > - **Friction #6 travel buffer** — code-ready; needs the Maps/ETA key (owner item 3 above).
 > - [x] **Twin projector — care providers ✅ (2026-07-10).** The cross-domain projector now links
 >   **health providers** (doctors / dentists / specialists) from `health_providers` as `org` nodes the
@@ -1079,7 +1087,7 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   phaseGreeting / phaseBlurb / focusForPhase) + `components/home/time-of-day-focus.tsx` "Focus now" strip
   at the top of `/home` (morning: schedule/weather/school · night: tomorrow/get-ready/reflect). Additive —
   did not refactor the contended grid. Server-time based (no per-user tz yet).
-- [◐] #8 Role-tailored surfaces — **slices 1–3 shipped**: (1) pure `lib/ui/role-surface.ts` (10 tests) —
+- [x] #8 Role-tailored surfaces — **slices 1–4 shipped** (2026-07-10): (1) pure `lib/ui/role-surface.ts` (10 tests) —
   `roleSurface(role)` → { density, tone, canManage, focusMax } + `roleGreeting`/`focusHeadline` — applied
   to the Home "Focus now" strip (role-tailored heading + trimmed focus set for kids/guests). (2) **Nav
   management-affordance gating**: `NavItem.manage` + pure `isNavItemVisibleToRole` (4 tests) hide
@@ -1088,7 +1096,9 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   so the links were dead-ends. (3) **Density rollout**: pure `focusChipClasses(role)` (3 tests) maps
   `roleSurface().density` → chip sizing, wired into the Home "Focus now" strip — kids ('playful') get
   bigger, rounder, more-tappable chips; adults ('comfortable') keep compact ones; teens/guests ('cozy')
-  sit between. Finally consumes the `density` field. Broader dashboard density = further follow-up.
+  sit between. Finally consumes the `density` field. (4) **Broader rollout**: the role-tailored
+  `roleGreeting` now also leads the **personal dashboard** (parents formal · adults casual · kids a warm
+  emoji line), extending the treatment beyond Home to a second primary surface. tsc/eslint/build green.
 - [x] #10 Recurring-routine templates — **DONE**. Migration `0122_routine_templates.sql`
   (`routine_templates` + `routine_template_items`, weekday bitmask, family-scoped RLS) +
   pure `lib/routines/detect.ts` (13 tests: `detectRoutines` finds title+weekday+time repeating
