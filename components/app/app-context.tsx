@@ -25,6 +25,8 @@ export type AppContextValue = {
   featureTiers: Record<string, FeatureTier>;
   /** Unread family messages for this user (drives the sidebar Messages badge). */
   unreadMessages: number;
+  /** ISO expiry when this is a one-click demo session (drives the countdown), else null. */
+  demoExpiresAt: string | null;
   members: Tables<'family_members'>[];
   /** The current user's member row in the active family (if they have one). */
   selfMember: Tables<'family_members'> | null;
@@ -44,7 +46,7 @@ export function AppProvider({
   initialMembers,
   children,
 }: {
-  value: Omit<AppContextValue, 'members' | 'refreshMembers' | 'selfMember' | 'unreadMessages'> & { unreadMessages?: number };
+  value: Omit<AppContextValue, 'members' | 'refreshMembers' | 'selfMember' | 'unreadMessages' | 'demoExpiresAt'> & { unreadMessages?: number; demoExpiresAt?: string | null };
   initialMembers: Tables<'family_members'>[];
   children: React.ReactNode;
 }) {
@@ -78,7 +80,7 @@ export function AppProvider({
   const selfMember = members.find((m) => m.user_id === value.userId) ?? null;
 
   return (
-    <AppContext.Provider value={{ unreadMessages: 0, ...value, members, selfMember, refreshMembers }}>
+    <AppContext.Provider value={{ unreadMessages: 0, demoExpiresAt: null, ...value, members, selfMember, refreshMembers }}>
       {children}
     </AppContext.Provider>
   );

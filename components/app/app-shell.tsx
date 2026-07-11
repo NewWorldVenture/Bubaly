@@ -24,6 +24,7 @@ import { MarketplaceNav } from '@/components/marketplace/marketplace-nav';
 import { SkipLink } from '@/components/a11y/skip-link';
 import { AIOrb } from './ai-orb';
 import { CommandBar } from './command-bar';
+import { DemoTimer } from '@/components/demo/demo-timer';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
 
 /** Desktop top-bar search. Submitting hands the query to the AI Assistant via
@@ -317,7 +318,7 @@ function SidebarBody({ onLocked }: { onLocked: (item: NavItem) => void }) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { planLevel, isSuperAdmin, featureTiers, role } = useApp();
+  const { planLevel, isSuperAdmin, featureTiers, role, demoExpiresAt } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // On marketplace routes the left rail becomes the Marketplace rail (the design's
@@ -333,6 +334,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => { setMobileNavOpen(false); }, [pathname]);
 
   return (
+    <>
+      {demoExpiresAt && (
+        <div className="sticky top-0 z-[60]">
+          <DemoTimer expiresAt={demoExpiresAt} />
+        </div>
+      )}
     <div className="min-h-dvh bg-bg text-fg lg:flex">
       <SkipLink />
       {/* Desktop sidebar — global nav, or the Marketplace rail on /marketplace */}
@@ -462,6 +469,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         requiredLevel={upgradeLevel}
       />
     </div>
+    </>
   );
 }
 
