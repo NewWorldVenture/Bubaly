@@ -109,7 +109,7 @@ begin
     select v_family,
       case when v_members is null then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end,
       (current_date - (g.i % 365)),
-      (array['great','good','okay','low','stressed'])[1 + (g.i % 5)]::journal_mood,
+      (enum_range(null::journal_mood))[1 + (g.i % array_length(enum_range(null::journal_mood),1))]::journal_mood,
       'Journal #' || g.i, 'A little reflection #' || g.i, '[seed:core]', '{}'
     from generate_series(1, n) as g(i);
   end if;
@@ -122,7 +122,7 @@ begin
       case when v_members is null then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end,
       (array['Drink water','Read','Exercise','Meditate','Tidy up','Practice','Walk','Stretch'])[1 + (g.i % 8)] || ' #' || g.i,
       '[seed:core]', 'star', '#7c5dff',
-      (array['daily','weekly'])[1 + (g.i % 2)]::habit_cadence, 1, '{1,2,3,4,5}', true
+      (enum_range(null::habit_cadence))[1 + (g.i % array_length(enum_range(null::habit_cadence),1))]::habit_cadence, 1, '{1,2,3,4,5}', true
     from generate_series(1, n) as g(i);
   end if;
 
@@ -1462,7 +1462,7 @@ begin
     insert into public.pets (family_id, name, species, breed, color, notes, is_active)
     select v_family,
       (array['Bella','Max','Luna','Charlie','Lucy','Cooper','Daisy','Rocky'])[1+(g.i%8)] || ' #' || g.i,
-      (array['dog','cat','bird','fish','reptile','small_mammal','horse','other'])[1+(g.i%8)]::pet_species,
+      (enum_range(null::pet_species))[1 + (g.i % array_length(enum_range(null::pet_species),1))]::pet_species,
       (array['Labrador','Tabby','Parakeet','Goldfish','Gecko','Hamster'])[1+(g.i%6)],
       (array['Brown','Black','White','Golden','Grey'])[1+(g.i%5)], '[seed:matrix]', true
     from generate_series(1,n) g(i);
@@ -1502,7 +1502,7 @@ begin
     select v_family, v_members[1+(g.i%array_length(v_members,1))],
       (array['Lego set','Bike','Headphones','Book','Sneakers','Board game'])[1+(g.i%6)] || ' #' || g.i,
       'https://example.com/'||g.i, round((10+random()*200)::numeric,2),
-      (array['low','medium','high'])[1+(g.i%3)]::wish_priority, '[seed:matrix]', (g.i%9=0)
+      (enum_range(null::wish_priority))[1 + (g.i % array_length(enum_range(null::wish_priority),1))]::wish_priority, '[seed:matrix]', (g.i%9=0)
     from generate_series(1,n) g(i);
   end if;
 
@@ -1525,7 +1525,7 @@ begin
       (array['Math','Science','English','History','Art','PE'])[1+(g.i%6)],
       (array['Worksheet','Reading','Project','Essay','Lab report'])[1+(g.i%5)] || ' #' || g.i,
       '[seed:matrix]', now() + ((g.i%21) || ' days')::interval,
-      (array['assigned','in_progress','done','submitted'])[1+(g.i%4)]::homework_status
+      (enum_range(null::homework_status))[1 + (g.i % array_length(enum_range(null::homework_status),1))]::homework_status
     from generate_series(1,n) g(i);
   end if;
 
@@ -1534,10 +1534,10 @@ begin
     delete from public.family_insurance_policies where family_id = v_family and notes = '[seed:matrix]';
     insert into public.family_insurance_policies (family_id, policy_type, insurer, policy_number, premium_amount, premium_frequency, renewal_date, notes, is_active)
     select v_family,
-      (array['health','dental','vision','auto','home','life'])[1+(g.i%6)]::insurance_policy_type,
+      (enum_range(null::insurance_policy_type))[1 + (g.i % array_length(enum_range(null::insurance_policy_type),1))]::insurance_policy_type,
       (array['Aetna','Delta','VSP','Geico','StateFarm','Prudential'])[1+(g.i%6)],
       'POL-' || lpad(g.i::text,6,'0'), round((50+random()*400)::numeric,2),
-      (array['monthly','quarterly','semiannual','annual'])[1+(g.i%4)]::premium_frequency,
+      (enum_range(null::premium_frequency))[1 + (g.i % array_length(enum_range(null::premium_frequency),1))]::premium_frequency,
       (current_date + (g.i%365)), '[seed:matrix]', true
     from generate_series(1,n) g(i);
   end if;
@@ -1593,7 +1593,7 @@ begin
     delete from public.health_metrics where family_id = v_family and unit = 'seed';
     insert into public.health_metrics (family_id, member_id, type, value, unit, recorded_at)
     select v_family, v_members[1+(g.i%array_length(v_members,1))],
-      (array['steps','sleep_hours','heart_rate','calories','active_minutes','distance','weight','water_cups'])[1+(g.i%8)]::metric_type,
+      (enum_range(null::metric_type))[1 + (g.i % array_length(enum_range(null::metric_type),1))]::metric_type,
       round((10 + random()*9000)::numeric,1), 'seed', now() - ((g.i) || ' hours')::interval
     from generate_series(1,n) g(i);
   end if;
@@ -1993,7 +1993,7 @@ begin
     v_members[1 + (g.i % array_length(v_members,1))],
     r_titles[1 + (g.i % array_length(r_titles,1))],
     (5 + (g.i % 10) * 5)::bigint,
-    (array['pending','approved','fulfilled','rejected','cancelled'])[1 + (g.i % 5)]::redemption_status,
+    (enum_range(null::redemption_status))[1 + (g.i % array_length(enum_range(null::redemption_status),1))]::redemption_status,
     '[seed] redemption',
     now() - ((g.i % 120) || ' days')::interval
   from generate_series(1, 120) as g(i);
@@ -3133,7 +3133,7 @@ begin
       v_meds[1 + (g % array_length(v_meds,1))],
       case when v_members is null then null else v_members[1 + (g % array_length(v_members,1))] end,
       (now() - ((g % 90) || ' days')::interval - ((g % 3) * 8 || ' hours')::interval),
-      (array['taken','taken','taken','skipped','missed'])[1 + (g % 5)]::dose_status,
+      (enum_range(null::dose_status))[1 + (g % array_length(enum_range(null::dose_status),1))]::dose_status,
       case when g % 5 < 3 then (now() - ((g % 90) || ' days')::interval) else null end,
       '[seed] dose',
       now() - ((g % 90) || ' days')::interval
@@ -3181,7 +3181,7 @@ begin
       values (v_family, v_wid, v_aid,
         (case when g % 3 = 0 then 'sell' else 'buy' end)::invest_order_side,
         v_shares, v_price, (v_shares * v_price)::bigint,
-        (array['pending','filled','filled','rejected','cancelled'])[1 + (g % 5)]::invest_order_status,
+        (enum_range(null::invest_order_status))[1 + (g % array_length(enum_range(null::invest_order_status),1))]::invest_order_status,
         now() - ((g % 180) || ' days')::interval);
     end loop;
   end if;
@@ -3266,7 +3266,7 @@ begin
       insert into public.trip_items (family_id, trip_id, kind, label, details, assignee_id, is_done, due_at, sort_order, created_by)
       select v_family,
         v_trips[1 + (g % array_length(v_trips,1))],
-        (array['packing','todo','reservation','document'])[1 + (g % 4)]::trip_item_kind,
+        (enum_range(null::trip_item_kind))[1 + (g % array_length(enum_range(null::trip_item_kind),1))]::trip_item_kind,
         (array['Sunscreen','Book rental car','Dinner reservation','Passports','Phone chargers','Confirm hotel',
                'Snacks for drive','Print boarding passes','Beach towels','Travel insurance'])[1 + (g % 10)] || ' #' || g,
         'Seeded checklist item.',
@@ -3352,8 +3352,8 @@ begin
       insert into public.vacation_itinerary_items
         (family_id, vacation_id, day_id, kind, day_part, title, location, start_time, end_time, duration_min, cost_cents, booked, notes, member_ids, sort_order, created_by)
       values (v_family, v_vid, v_did,
-        (array['activity','reservation','meal','travel','reminder','note','free_time'])[1 + (g % 7)]::vac_item_kind,
-        (array['morning','afternoon','evening','all_day'])[1 + (g % 4)]::vac_day_part,
+        (enum_range(null::vac_item_kind))[1 + (g % array_length(enum_range(null::vac_item_kind),1))]::vac_item_kind,
+        (enum_range(null::vac_day_part))[1 + (g % array_length(enum_range(null::vac_day_part),1))]::vac_day_part,
         (array['Breakfast','Museum visit','Pool time','City tour','Dinner out','Beach','Show','Park entry','Shopping','Rest'])[1 + (g % 10)] || ' #' || g,
         places[1 + (g % array_length(places,1))],
         (make_time(8 + (g % 10), (g % 4) * 15, 0)),
@@ -3380,7 +3380,7 @@ begin
   if to_regclass('public.vacation_transportation') is not null then
     insert into public.vacation_transportation (family_id, vacation_id, kind, provider, from_location, to_location, depart_at, arrive_at, confirmation_code, distance_miles, fuel_estimate_cents, booked, cost_cents, notes, created_by)
     select v_family, v_vacs[1 + (g % array_length(v_vacs,1))],
-      (array['car','train','bus','ferry','rideshare','shuttle','subway'])[1 + (g % 7)]::vac_transport_kind,
+      (enum_range(null::vac_transport_kind))[1 + (g % array_length(enum_range(null::vac_transport_kind),1))]::vac_transport_kind,
       (array['Hertz','Amtrak','Greyhound','Uber','Airport Shuttle'])[1 + (g % 5)],
       places[1 + (g % array_length(places,1))], places[1 + ((g+1) % array_length(places,1))],
       now() + ((g % 80) || ' days')::interval, now() + ((g % 80) || ' days')::interval + interval '3 hours',
@@ -3392,7 +3392,7 @@ begin
   if to_regclass('public.vacation_lodging') is not null then
     insert into public.vacation_lodging (family_id, vacation_id, kind, name, address, phone, check_in, check_out, confirmation_code, nightly_cents, total_cents, booked, url, notes, created_by)
     select v_family, v_vacs[1 + (g % array_length(v_vacs,1))],
-      (array['hotel','airbnb','resort','cabin','campground','rental'])[1 + (g % 6)]::vac_lodging_kind,
+      (enum_range(null::vac_lodging_kind))[1 + (g % array_length(enum_range(null::vac_lodging_kind),1))]::vac_lodging_kind,
       (array['Seaside Inn','Grand Resort','Cozy Cabin','Downtown Suites','Family Lodge'])[1 + (g % 5)] || ' #' || g,
       (100 + g) || ' Main St', '555-01' || lpad(g::text,2,'0'),
       current_date + (g % 60), current_date + (g % 60) + 4, 'LDG' || lpad(g::text,4,'0'),
@@ -3450,7 +3450,7 @@ begin
   if to_regclass('public.vacation_expenses') is not null then
     insert into public.vacation_expenses (family_id, vacation_id, category, description, amount_cents, spent_on, paid_by_member_id, notes, created_by)
     select v_family, v_vacs[1 + (g % array_length(v_vacs,1))],
-      (array['flights','lodging','transportation','activities','food','shopping','insurance','fees','misc'])[1 + (g % 9)]::vac_budget_category,
+      (enum_range(null::vac_budget_category))[1 + (g % array_length(enum_range(null::vac_budget_category),1))]::vac_budget_category,
       (array['Lunch','Souvenirs','Parking','Tickets','Taxi','Groceries','Coffee','Dinner','Gift shop','Tips'])[1 + (g % 10)] || ' #' || g,
       (500 + (g % 40) * 250)::bigint, (current_date - (g % 120)),
       case when v_members is null then null else v_members[1 + (g % v_mcount)] end,
@@ -3479,7 +3479,7 @@ begin
         insert into public.vacation_packing_items (family_id, vacation_id, list_id, name, category, quantity, packed, ai_suggested, notes, created_by)
         values (v_family, v_vid, v_lid,
           (array['T-shirts','Sunscreen','Toothbrush','Charger','Passport','Swimsuit','Sandals','Jacket','Snacks','First-aid kit'])[1 + (g % 10)] || ' #' || g,
-          (array['clothes','toiletries','electronics','medications','documents','sports','beach','snacks','other'])[1 + (g % 9)]::vac_pack_category,
+          (enum_range(null::vac_pack_category))[1 + (g % array_length(enum_range(null::vac_pack_category),1))]::vac_pack_category,
           1 + (g % 4), (g % 2 = 0), (g % 5 = 0), 'Seeded packing item.', v_uid);
       end loop;
     end if;
@@ -3489,7 +3489,7 @@ begin
   if to_regclass('public.vacation_documents') is not null then
     insert into public.vacation_documents (family_id, vacation_id, kind, title, member_id, number, issued_on, expires_on, notes, created_by)
     select v_family, v_vacs[1 + (g % array_length(v_vacs,1))],
-      (array['passport','id','visa','ticket','boarding_pass','hotel_confirmation','insurance','itinerary'])[1 + (g % 8)]::vac_doc_kind,
+      (enum_range(null::vac_doc_kind))[1 + (g % array_length(enum_range(null::vac_doc_kind),1))]::vac_doc_kind,
       (array['Passport','Driver ID','Travel Visa','Event Ticket','Boarding Pass','Hotel Confirmation','Insurance Card','Trip Itinerary'])[1 + (g % 8)] || ' #' || g,
       case when v_members is null then null else v_members[1 + (g % v_mcount)] end,
       'DOC' || lpad(g::text,6,'0'), current_date - (g % 800), current_date + (g % 800), 'Seeded document.', v_uid
@@ -3550,8 +3550,8 @@ begin
   if to_regclass('public.vacation_ai_recommendations') is not null then
     insert into public.vacation_ai_recommendations (family_id, vacation_id, kind, status, title, detail, severity, source, created_by)
     select v_family, v_vacs[1 + (g % array_length(v_vacs,1))],
-      (array['missing_reservation','packing','budget_warning','weather_warning','travel_conflict','activity_suggestion','restaurant','document_missing','suggestion'])[1 + (g % 9)]::vac_reco_kind,
-      (array['open','open','accepted','dismissed','done'])[1 + (g % 5)]::vac_reco_status,
+      (enum_range(null::vac_reco_kind))[1 + (g % array_length(enum_range(null::vac_reco_kind),1))]::vac_reco_kind,
+      (enum_range(null::vac_reco_status))[1 + (g % array_length(enum_range(null::vac_reco_status),1))]::vac_reco_status,
       (array['Add a dinner reservation','Pack rain gear','You are over budget','Storm expected','Overlapping plans','Try this tour','Book this restaurant','Missing passport scan','Consider travel insurance'])[1 + (g % 9)] || ' #' || g,
       'Seeded AI recommendation the planner can action.', 1 + (g % 3),
       (array['rules','ai'])[1 + (g % 2)], v_uid

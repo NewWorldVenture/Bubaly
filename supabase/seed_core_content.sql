@@ -90,7 +90,7 @@ begin
     select v_family,
       case when v_members is null then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end,
       (current_date - (g.i % 365)),
-      (array['great','good','okay','low','stressed'])[1 + (g.i % 5)]::journal_mood,
+      (enum_range(null::journal_mood))[1 + (g.i % array_length(enum_range(null::journal_mood),1))]::journal_mood,
       'Journal #' || g.i, 'A little reflection #' || g.i, '[seed:core]', '{}'
     from generate_series(1, n) as g(i);
   else v_skipped := v_skipped || 'journal_entries '; end if;
@@ -103,7 +103,7 @@ begin
       case when v_members is null then null else v_members[1 + floor(random()*array_length(v_members,1))::int] end,
       (array['Drink water','Read','Exercise','Meditate','Tidy up','Practice','Walk','Stretch'])[1 + (g.i % 8)] || ' #' || g.i,
       '[seed:core]', 'star', '#7c5dff',
-      (array['daily','weekly'])[1 + (g.i % 2)]::habit_cadence, 1, '{1,2,3,4,5}', true
+      (enum_range(null::habit_cadence))[1 + (g.i % array_length(enum_range(null::habit_cadence),1))]::habit_cadence, 1, '{1,2,3,4,5}', true
     from generate_series(1, n) as g(i);
   else v_skipped := v_skipped || 'habits '; end if;
 

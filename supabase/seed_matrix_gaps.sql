@@ -27,7 +27,7 @@ begin
   insert into public.pets (family_id, name, species, breed, color, notes, is_active)
   select v_family,
     (array['Bella','Max','Luna','Charlie','Lucy','Cooper','Daisy','Rocky'])[1+(g.i%8)] || ' #' || g.i,
-    (array['dog','cat','bird','fish','reptile','small_mammal','horse','other'])[1+(g.i%8)]::pet_species,
+    (enum_range(null::pet_species))[1 + (g.i % array_length(enum_range(null::pet_species),1))]::pet_species,
     (array['Labrador','Tabby','Parakeet','Goldfish','Gecko','Hamster'])[1+(g.i%6)],
     (array['Brown','Black','White','Golden','Grey'])[1+(g.i%5)], '[seed:matrix]', true
   from generate_series(1,n) g(i);
@@ -62,7 +62,7 @@ begin
     select v_family, v_members[1+(g.i%array_length(v_members,1))],
       (array['Lego set','Bike','Headphones','Book','Sneakers','Board game'])[1+(g.i%6)] || ' #' || g.i,
       'https://example.com/'||g.i, round((10+random()*200)::numeric,2),
-      (array['low','medium','high'])[1+(g.i%3)]::wish_priority, '[seed:matrix]', (g.i%9=0)
+      (enum_range(null::wish_priority))[1 + (g.i % array_length(enum_range(null::wish_priority),1))]::wish_priority, '[seed:matrix]', (g.i%9=0)
     from generate_series(1,n) g(i);
   end if;
 
@@ -82,17 +82,17 @@ begin
     (array['Math','Science','English','History','Art','PE'])[1+(g.i%6)],
     (array['Worksheet','Reading','Project','Essay','Lab report'])[1+(g.i%5)] || ' #' || g.i,
     '[seed:matrix]', now() + ((g.i%21) || ' days')::interval,
-    (array['assigned','in_progress','done','submitted'])[1+(g.i%4)]::homework_status
+    (enum_range(null::homework_status))[1 + (g.i % array_length(enum_range(null::homework_status),1))]::homework_status
   from generate_series(1,n) g(i);
 
   -- ── Insurance policies (500) ────────────────────────────────────────────
   delete from public.family_insurance_policies where family_id = v_family and notes = '[seed:matrix]';
   insert into public.family_insurance_policies (family_id, policy_type, insurer, policy_number, premium_amount, premium_frequency, renewal_date, notes, is_active)
   select v_family,
-    (array['health','dental','vision','auto','home','life'])[1+(g.i%6)]::insurance_policy_type,
+    (enum_range(null::insurance_policy_type))[1 + (g.i % array_length(enum_range(null::insurance_policy_type),1))]::insurance_policy_type,
     (array['Aetna','Delta','VSP','Geico','StateFarm','Prudential'])[1+(g.i%6)],
     'POL-' || lpad(g.i::text,6,'0'), round((50+random()*400)::numeric,2),
-    (array['monthly','quarterly','semiannual','annual'])[1+(g.i%4)]::premium_frequency,
+    (enum_range(null::premium_frequency))[1 + (g.i % array_length(enum_range(null::premium_frequency),1))]::premium_frequency,
     (current_date + (g.i%365)), '[seed:matrix]', true
   from generate_series(1,n) g(i);
 
@@ -139,7 +139,7 @@ begin
     delete from public.health_metrics where family_id = v_family and unit = 'seed';
     insert into public.health_metrics (family_id, member_id, type, value, unit, recorded_at)
     select v_family, v_members[1+(g.i%array_length(v_members,1))],
-      (array['steps','sleep_hours','heart_rate','calories','active_minutes','distance','weight','water_cups'])[1+(g.i%8)]::metric_type,
+      (enum_range(null::metric_type))[1 + (g.i % array_length(enum_range(null::metric_type),1))]::metric_type,
       round((10 + random()*9000)::numeric,1), 'seed', now() - ((g.i) || ' hours')::interval
     from generate_series(1,n) g(i);
   end if;

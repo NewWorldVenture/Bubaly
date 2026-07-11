@@ -131,7 +131,7 @@ with ch as (
                 'Walk the dog','Make the beds','Vacuum the living room','Wipe kitchen counters','Feed the cat',
                 'Tidy the playroom','Sort the recycling'])[n],
          (array[5,10,5,5,10,15,5,20,10,5,10,5])[n],
-         (array['low','medium','high'])[1+(n%3)]::public.priority,
+         (enum_range(null::public.priority))[1 + (n % array_length(enum_range(null::public.priority),1))]::public.priority,
          'daily'::public.recurrence_freq,
          date_trunc('day', now()) + interval '18 hours',   -- due today
          'home_demo', true
