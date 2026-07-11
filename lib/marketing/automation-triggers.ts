@@ -11,6 +11,7 @@ export const EVENT_TRIGGERS = [
   'payment_completed',
   'checkout_abandoned',
   'onboarding_completed',
+  'demo_started',
 ] as const;
 export type EventTrigger = (typeof EVENT_TRIGGERS)[number];
 
@@ -45,6 +46,10 @@ export const EVENT_DEFAULT_COPY: Record<EventTrigger, Copy> = {
   onboarding_completed: {
     subject: 'Welcome to Bubaly — your family HQ is ready 🎉',
     body: "Your family is all set up! Here's how to get the most out of Bubaly in the first week: add your calendar, set up chores, and invite everyone in.",
+  },
+  demo_started: {
+    subject: 'How was your Bubaly demo? 👋',
+    body: "Thanks for trying the live demo! You saw a real Family+ workspace in action. Ready to make it yours? Start your free 5-day trial — no card needed — and we'll set your family up in minutes.",
   },
 };
 

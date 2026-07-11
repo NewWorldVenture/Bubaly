@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { startDemoSession, endDemoSession, cleanupExpiredDemoSessions, rotateDemoPassword } from '@/lib/demo/session';
 import { demoExpiry } from '@/lib/demo/config';
+import { captureDemoLead } from '@/lib/demo/lead';
 
 /**
  * One-click demo: refresh THE single shared "Bubaly Demo" account (reset its data
@@ -44,6 +45,12 @@ export async function startDemoClockAction(formData: FormData): Promise<void> {
     .from('demo_sessions')
     .update({ email: email || null, expires_at: demoExpiry().toISOString() })
     .eq('user_id', user.id);
+
+  // Feed the marketing engine: capture the email as a DURABLE crm_contacts lead
+  // (the demo_sessions.email above is a single shared row the next visitor
+  // overwrites) and enroll it in the "demo_started" follow-up campaign.
+  // Best-effort — never block the demo on marketing.
+  if (email) await captureDemoLead(admin, email);
 
   redirect('/home');
 }
