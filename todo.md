@@ -1255,7 +1255,7 @@ idempotent, stable across re-runs):
 - [x] Autopilot — `autopilot_suggestions` + `approval_requests` → `seed_autopilot.sql`
 - [x] Family Vault — `family_credentials` (all 9 categories, migration 0119 applied + validated) → `seed_vault.sql`
 
-**☑ One-paste master runner:** `supabase/SEED_ALL.sql` runs all 23 seeds in dependency order
+**☑ One-paste master runner:** `supabase/SEED_ALL.sql` runs all 46 seeds in dependency order
 (one paste → every surface at ≥500 rows). Idempotent; validated on PG16.
 
 **☑ Validated 500-row seeds (paste-ready in `supabase/`):**
@@ -1275,6 +1275,7 @@ idempotent, stable across re-runs):
 | Decision Engine | `family_decisions`, `decision_options` | `seed_decisions.sql` |
 | Prep Plans | `prep_plans`, `prep_plan_steps` | `seed_prep_plans.sql` |
 | Onboarding funnel | `onboarding_events` | `seed_onboarding_events.sql` |
+| Onboarding lifecycle + marketing signal | `onboarding_progress` (500 synthetic accounts) | `seed_onboarding_progress.sql` |
 | Intelligence Network aggregates | `network_aggregates` (+opts family in) | `seed_network_aggregates.sql` |
 | Calendar, To-Dos, Groceries, Notes, Photos, Journal, Habits | `calendar_events`, `todo_items`, `grocery_items`, `notes`, `family_photos`, `journal_entries`, `habits` | `seed_core_content.sql` |
 | #1 AI Orchestrator | `family_events`, `family_polls` | `seed_pillar1_orchestrator.sql` |
