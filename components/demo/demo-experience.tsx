@@ -1,26 +1,22 @@
 'use client';
 
-// The full demo experience, mounted in the app chrome during a demo session:
-//   1. `expiresAt === null`  → the app is blurred behind an email-capture pop-up.
-//      Submitting it starts the 5-minute clock.
-//   2. clock running          → a countdown banner pinned to the top; Exit resets.
-//   3. clock hit zero         → the app is blurred behind an "upgrade" pop-up that
-//      offers a Free 5-day trial, Family Basic, or Family+.
+// The demo experience, split across the app chrome during a demo session:
+//   • `DemoEmailGate`  — expiresAt === null: the app is blurred behind an email
+//     capture pop-up; submitting it starts the 5-minute clock.
+//   • `DemoClockPill`  — the live countdown, mounted TOP-LEFT in the app header.
+//     When it hits zero it swaps itself for the "upgrade" pop-up (Free 5-day
+//     trial · Family Basic · Family+).
+// The gate + upgrade pop-ups are portaled to <body> so they escape the header's
+// stacking context and sit above every app modal/drawer.
 import { useEffect, useState, useTransition } from 'react';
 import { Clock, LogOut, Mail, Sparkles, Crown, Zap, Loader2, ArrowRight } from 'lucide-react';
 import { createPortal, useFormStatus } from 'react-dom';
 import { demoSecondsLeft, formatCountdown, DEMO_TTL_MINUTES } from '@/lib/demo/config';
 import { endDemoAction, startDemoClockAction, choosePlanAfterDemoAction } from '@/app/(marketing)/demo/actions';
 
-export function DemoExperience({ expiresAt }: { expiresAt: string | null }) {
-  // No clock yet → the visitor still has to enter their email.
-  if (!expiresAt) return <EmailGate />;
-  return <DemoRun expiresAt={expiresAt} />;
-}
-
 // ── Shared blur backdrop ─────────────────────────────────────────────────────
-// Portaled to <body> so it escapes the sticky banner's stacking context and sits
-// above every app modal / drawer (which reach z-[200]).
+// Portaled to <body> so it escapes the header's stacking context and sits above
+// every app modal / drawer (which reach z-[200]).
 function BlurOverlay({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -53,7 +49,8 @@ function GateButton() {
   );
 }
 
-function EmailGate() {
+/** The email-capture pop-up shown before the demo clock starts. */
+export function DemoEmailGate() {
   return (
     <BlurOverlay>
       <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/15 ring-1 ring-emerald-400/30">
@@ -87,9 +84,17 @@ function EmailGate() {
   );
 }
 
-// ── 2 + 3. Running countdown / ended ─────────────────────────────────────────
-function DemoRun({ expiresAt }: { expiresAt: string }) {
+// ── 2. Running countdown — the TOP-LEFT header pill ──────────────────────────
+/**
+ * The live demo countdown, mounted at the top-left of the app header. Ticks every
+ * second; turns urgent (red, pulsing) in the final minute; and when the clock hits
+ * zero it swaps itself for the upgrade pop-up. Renders inline (no fixed
+ * positioning) so it sits naturally in the header's empty left slot.
+ */
+export function DemoClockPill({ expiresAt }: { expiresAt: string }) {
   const [left, setLeft] = useState(() => demoSecondsLeft(expiresAt));
+  const [pending, startTransition] = useTransition();
+  const [exiting, setExiting] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setLeft(demoSecondsLeft(expiresAt)), 1000);
@@ -97,14 +102,8 @@ function DemoRun({ expiresAt }: { expiresAt: string }) {
   }, [expiresAt]);
 
   if (left <= 0) return <DemoEnded />;
-  return <DemoBanner left={left} />;
-}
 
-function DemoBanner({ left }: { left: number }) {
-  const [pending, startTransition] = useTransition();
-  const [exiting, setExiting] = useState(false);
   const urgent = left <= 60;
-
   const exit = () => {
     if (exiting) return;
     setExiting(true);
@@ -113,28 +112,48 @@ function DemoBanner({ left }: { left: number }) {
 
   return (
     <div
+      role="timer"
+      aria-live="off"
+      aria-label={`Demo mode — ${formatCountdown(left)} remaining`}
       className={
-        'safe-x flex items-center justify-center gap-2 px-4 py-1.5 text-center text-xs font-semibold text-white sm:text-sm ' +
-        (urgent ? 'bg-danger' : 'bg-gradient-to-r from-brand to-violet-600')
+        'flex shrink-0 items-center gap-1.5 rounded-full border py-1 pl-1 pr-1.5 text-xs font-semibold shadow-sm backdrop-blur-sm transition-colors sm:gap-2 sm:pr-2 ' +
+        (urgent
+          ? 'border-danger/40 bg-danger/12 text-danger'
+          : 'border-brand/30 bg-brand/10 text-brand')
       }
-      role="status"
     >
-      <Clock className="h-4 w-4 shrink-0" />
-      <span>
-        Demo mode — <span className="tabular-nums">{formatCountdown(left)}</span> left · Family+ · everything resets when you leave
+      {/* DEMO badge */}
+      <span
+        className={
+          'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-white ' +
+          (urgent ? 'bg-danger' : 'bg-gradient-to-r from-brand to-violet-600')
+        }
+      >
+        <Sparkles className="h-3 w-3" /> Demo
       </span>
+
+      {/* Countdown */}
+      <span className={'inline-flex items-center gap-1 ' + (urgent ? 'animate-pulse' : '')}>
+        <Clock className="h-3.5 w-3.5 shrink-0" />
+        <span className="tabular-nums">{formatCountdown(left)}</span>
+        <span className="hidden text-fg/70 sm:inline">left</span>
+      </span>
+
+      {/* Exit */}
       <button
         type="button"
         onClick={exit}
         disabled={pending || exiting}
-        className="ml-2 inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-semibold transition hover:bg-white/30 disabled:opacity-60"
+        aria-label="Exit demo"
+        className="ml-0.5 inline-flex items-center gap-1 rounded-full bg-fg/10 px-2 py-0.5 text-[11px] font-semibold text-fg/80 transition hover:bg-fg/20 disabled:opacity-60"
       >
-        <LogOut className="h-3 w-3" /> {exiting ? 'Exiting…' : 'Exit'}
+        <LogOut className="h-3 w-3" /> <span className="hidden sm:inline">{exiting ? 'Exiting…' : 'Exit'}</span>
       </button>
     </div>
   );
 }
 
+// ── 3. Ended → upgrade pop-up ────────────────────────────────────────────────
 // The three plans offered when the clock runs out.
 const END_PLANS: { plan: string; title: string; blurb: string; icon: React.ReactNode; featured?: boolean }[] = [
   { plan: 'free', title: 'Free — 5-day trial', blurb: 'Everything, free for 5 days. No card required.', icon: <Zap className="h-5 w-5 text-emerald-400" /> },

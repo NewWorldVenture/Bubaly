@@ -24,7 +24,7 @@ import { MarketplaceNav } from '@/components/marketplace/marketplace-nav';
 import { SkipLink } from '@/components/a11y/skip-link';
 import { AIOrb } from './ai-orb';
 import { CommandBar } from './command-bar';
-import { DemoExperience } from '@/components/demo/demo-experience';
+import { DemoEmailGate, DemoClockPill } from '@/components/demo/demo-experience';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
 
 /** Desktop top-bar search. Submitting hands the query to the AI Assistant via
@@ -335,11 +335,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {demo && (
-        <div className="sticky top-0 z-[60]">
-          <DemoExperience expiresAt={demo.expiresAt} />
-        </div>
-      )}
+      {/* Demo mode: before the clock starts, blur the app behind the email gate.
+          Once running, the countdown lives top-left in the header (below). */}
+      {demo && demo.expiresAt === null && <DemoEmailGate />}
     <div className="min-h-dvh bg-bg text-fg lg:flex">
       <SkipLink />
       {/* Desktop sidebar — global nav, or the Marketplace rail on /marketplace */}
@@ -366,6 +364,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/home" className="lg:hidden">
             <LogoMark className="h-8 w-14 sm:h-9 sm:w-16" variant="home" />
           </Link>
+          {/* Demo countdown — pinned top-left of the header while a demo runs. */}
+          {demo?.expiresAt && <DemoClockPill expiresAt={demo.expiresAt} />}
           <div className="flex-1" />
           <HeaderSearch />
           <Link href="/dashboard/notifications" className="hidden h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg md:inline-flex">
