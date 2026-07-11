@@ -32,8 +32,10 @@ begin
   select v_family,
     -- ~1/3 targeted at the resolved parent, the rest family-wide (null recipient)
     case when g.i % 3 = 0 then v_user else null end,
-    (array['chore_due','medication_due','calendar_event','school_event','sports_event',
-           'maintenance_task','grocery_reminder','document_expiry','family_invite','system'])[1 + (g.i % 10)]::public.notification_type,
+    -- Pick from the enum's ACTUAL labels (drift-proof): the live DB's
+    -- notification_type may not carry every label this repo's migration defines,
+    -- so read enum_range instead of hard-coding values that could be missing.
+    (enum_range(null::public.notification_type))[1 + (g.i % array_length(enum_range(null::public.notification_type), 1))],
     titles[1 + (g.i % array_length(titles,1))],
     'Bubaly flagged this from your family''s schedule so nothing slips.',
     'seed',
