@@ -5,8 +5,12 @@ export const DEMO_TTL_MINUTES = 5;
 export const DEMO_EMAIL_DOMAIN = 'demo.bubaly.app';
 
 // The single, shared demo account everyone logs into (there is exactly one — no
-// throwaway per-visitor users). Its family is looked up by this exact name.
-export const DEMO_ACCOUNT_NAME = 'Bubaly Demo';
+// throwaway per-visitor users). Its family is looked up by this exact name, and
+// the name is shown on login ("Welcome Bubaly Demo Account").
+export const DEMO_ACCOUNT_NAME = 'Bubaly Demo Account';
+// The prior name — migrated to DEMO_ACCOUNT_NAME on the next demo login so the
+// existing shared account (and its data) carries over instead of being orphaned.
+export const DEMO_ACCOUNT_LEGACY_NAME = 'Bubaly Demo';
 export const DEMO_ACCOUNT_EMAIL = `demo@${DEMO_EMAIL_DOMAIN}`;
 
 /** When a demo session created `now` should expire. */

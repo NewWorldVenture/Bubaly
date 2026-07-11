@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
-import { DEMO_ACCOUNT_EMAIL, DEMO_ACCOUNT_NAME, demoExpiry } from './config';
+import { DEMO_ACCOUNT_EMAIL, DEMO_ACCOUNT_NAME, DEMO_ACCOUNT_LEGACY_NAME, demoExpiry } from './config';
 import { seedDemoFamily } from './seed';
 
 type Admin = SupabaseClient<Database>;
@@ -33,10 +33,17 @@ async function findUserIdByEmail(admin: Admin, email: string): Promise<string | 
  * Family+ subscription and active-family preference on first run only.
  */
 export async function ensureDemoAccount(admin: Admin): Promise<{ userId: string; familyId: string } | null> {
-  // Already provisioned? Reuse it.
+  // Already provisioned? Reuse it — matching the current name OR the legacy name,
+  // which we rename in place so the existing shared account + its data carry over.
   const { data: existing } = await admin
-    .from('families').select('id, created_by').eq('name', DEMO_ACCOUNT_NAME).order('created_at').limit(1).maybeSingle();
+    .from('families').select('id, created_by, name')
+    .in('name', [DEMO_ACCOUNT_NAME, DEMO_ACCOUNT_LEGACY_NAME])
+    .order('created_at').limit(1).maybeSingle();
   if (existing?.id) {
+    // Migrate a legacy-named family to the canonical "Bubaly Demo Account".
+    if (existing.name !== DEMO_ACCOUNT_NAME) {
+      await admin.from('families').update({ name: DEMO_ACCOUNT_NAME }).eq('id', existing.id);
+    }
     const userId = existing.created_by ?? (await findUserIdByEmail(admin, DEMO_ACCOUNT_EMAIL));
     if (userId) return { userId, familyId: existing.id };
   }

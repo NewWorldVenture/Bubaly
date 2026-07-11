@@ -21,6 +21,7 @@ import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
 import { loadTimeSaved } from '@/lib/metric/time-saved-server';
 import { dayPhase } from '@/lib/home/time-of-day';
 import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
+import { DEMO_ACCOUNT_NAME } from '@/lib/demo/config';
 import {
   summarizeMonthFinances, usd, memberTagline, weekStrip, isoDate, type HomeTxn,
 } from '@/lib/home/home-data';
@@ -177,6 +178,9 @@ export default async function HomePage() {
   const memberById = new Map(memberList.map((m) => [m.id, m]));
   const me = ctx.active.member;
   const firstName = (me.display_name ?? ctx.user.email?.split('@')[0] ?? 'there').split(' ')[0];
+  // The shared demo account greets by its account name ("Welcome Bubaly Demo
+  // Account") rather than the role greeting, so visitors know they're in the demo.
+  const isDemoAccount = ctx.active.family.name === DEMO_ACCOUNT_NAME;
 
   const score = familyScore({
     choresToday: choresToday ?? 0,
@@ -240,7 +244,7 @@ export default async function HomePage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-2xl font-black sm:text-3xl">
-            {roleGreeting(me.role, firstName, dayPhase(now))}
+            {isDemoAccount ? `Welcome ${DEMO_ACCOUNT_NAME}` : roleGreeting(me.role, firstName, dayPhase(now))}
             {roleSurface(me.role).tone !== 'kid' && <span aria-hidden> 👋</span>}
           </h1>
           <p className="mt-1 text-sm text-muted">Here&apos;s what&apos;s happening with your family today.</p>
