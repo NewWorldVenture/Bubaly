@@ -134,9 +134,9 @@ export interface Database {
         Partial<{ username: string; user_id: string; member_id: string }>
       >;
       demo_sessions: T<
-        { id: string; user_id: string; family_id: string; created_at: string; expires_at: string },
-        { id?: string; user_id: string; family_id: string; expires_at: string },
-        Partial<{ expires_at: string }>
+        { id: string; user_id: string; family_id: string; created_at: string; expires_at: string | null; email: string | null },
+        { id?: string; user_id: string; family_id: string; expires_at?: string | null; email?: string | null },
+        Partial<{ expires_at: string | null; email: string | null }>
       >;
       child_login_throttle: T<
         { username: string; fails: number; window_start: string; locked_until: string | null; updated_at: string },

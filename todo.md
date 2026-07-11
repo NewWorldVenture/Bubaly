@@ -117,6 +117,16 @@ visitors; `necessary` always on + non-revocable; `analytics` = first-party legit
 until denied/GPC); `personalization`+`marketing_*` strict opt-in; consent is append-only, timestamped,
 versioned, revocable (`mkt_consent_events`). **⚠️ Apply `0160_visitor_consent.sql` to prod with the deploy.**
 
+**☑ NEW (2026-07-11) — Demo email gate + upgrade exit (lead capture on the demo):** the one-click
+**Test Account** demo now opens behind a **blurred email-capture pop-up**; the 5-minute clock only
+starts once the visitor enters an email (stamped on `demo_sessions.email` — an identified-lead
+signal). When the clock runs out the app blurs again behind an **upgrade pop-up** (Free 5-day /
+Family Basic / Family+ → routes into signup). Files: `components/demo/demo-experience.tsx`,
+`app/(marketing)/demo/actions.ts` (`startDemoClockAction`, `choosePlanAfterDemoAction`),
+`lib/demo/session.ts` (deferred clock + abandoned-session reaping). **⚠️ Apply
+`0161_demo_session_email_gate.sql` to prod with the deploy** (nullable `expires_at` + `email`).
+Follow-up (◐): stitch the captured demo email into `crm_contacts` / `mkt_visitors` for real lead flow.
+
 ---
 
 ## ★ NORTH STAR — The Family Operating Layer (category-defining, 2026-07-05)

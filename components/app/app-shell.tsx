@@ -24,7 +24,7 @@ import { MarketplaceNav } from '@/components/marketplace/marketplace-nav';
 import { SkipLink } from '@/components/a11y/skip-link';
 import { AIOrb } from './ai-orb';
 import { CommandBar } from './command-bar';
-import { DemoTimer } from '@/components/demo/demo-timer';
+import { DemoExperience } from '@/components/demo/demo-experience';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
 
 /** Desktop top-bar search. Submitting hands the query to the AI Assistant via
@@ -318,7 +318,7 @@ function SidebarBody({ onLocked }: { onLocked: (item: NavItem) => void }) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { planLevel, isSuperAdmin, featureTiers, role, demoExpiresAt } = useApp();
+  const { planLevel, isSuperAdmin, featureTiers, role, demo } = useApp();
   const [upgradeFor, setUpgradeFor] = useState<NavItem | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // On marketplace routes the left rail becomes the Marketplace rail (the design's
@@ -335,9 +335,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {demoExpiresAt && (
+      {demo && (
         <div className="sticky top-0 z-[60]">
-          <DemoTimer expiresAt={demoExpiresAt} />
+          <DemoExperience expiresAt={demo.expiresAt} />
         </div>
       )}
     <div className="min-h-dvh bg-bg text-fg lg:flex">

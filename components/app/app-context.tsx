@@ -8,6 +8,10 @@ import type { FeatureTier } from '@/lib/constants/feature-catalog';
 
 export type FamilyOption = { familyId: string; name: string };
 
+/** Active demo session, if any. `expiresAt === null` means the clock hasn't been
+ *  started yet (the email gate is still up). Null = not a demo session. */
+export type DemoState = { expiresAt: string | null };
+
 export type AppContextValue = {
   userId: string;
   userEmail: string | null;
@@ -25,8 +29,8 @@ export type AppContextValue = {
   featureTiers: Record<string, FeatureTier>;
   /** Unread family messages for this user (drives the sidebar Messages badge). */
   unreadMessages: number;
-  /** ISO expiry when this is a one-click demo session (drives the countdown), else null. */
-  demoExpiresAt: string | null;
+  /** The active one-click demo session (drives the email gate + countdown), else null. */
+  demo: DemoState | null;
   members: Tables<'family_members'>[];
   /** The current user's member row in the active family (if they have one). */
   selfMember: Tables<'family_members'> | null;
@@ -46,7 +50,7 @@ export function AppProvider({
   initialMembers,
   children,
 }: {
-  value: Omit<AppContextValue, 'members' | 'refreshMembers' | 'selfMember' | 'unreadMessages' | 'demoExpiresAt'> & { unreadMessages?: number; demoExpiresAt?: string | null };
+  value: Omit<AppContextValue, 'members' | 'refreshMembers' | 'selfMember' | 'unreadMessages' | 'demo'> & { unreadMessages?: number; demo?: DemoState | null };
   initialMembers: Tables<'family_members'>[];
   children: React.ReactNode;
 }) {
@@ -80,7 +84,7 @@ export function AppProvider({
   const selfMember = members.find((m) => m.user_id === value.userId) ?? null;
 
   return (
-    <AppContext.Provider value={{ unreadMessages: 0, demoExpiresAt: null, ...value, members, selfMember, refreshMembers }}>
+    <AppContext.Provider value={{ unreadMessages: 0, demo: null, ...value, members, selfMember, refreshMembers }}>
       {children}
     </AppContext.Provider>
   );

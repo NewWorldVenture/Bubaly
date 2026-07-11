@@ -74,7 +74,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
         planLevel,
         featureTiers,
         unreadMessages: unreadMessages ?? 0,
-        demoExpiresAt: demo?.expires_at ?? null,
+        demo: demo ? { expiresAt: demo.expires_at } : null,
       }}
       initialMembers={members ?? []}
     >
