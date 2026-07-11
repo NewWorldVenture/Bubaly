@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Check, Zap, Crown, Sparkles } from 'lucide-react';
+import { Check, Zap, Crown, Sparkles, Lock, ArrowLeftRight, Archive } from 'lucide-react';
 import {
   Container,
   GradientText,
@@ -108,6 +108,41 @@ function WhySwitch() {
   );
 }
 
+// ── How the free trial works ────────────────────────────────────────────────
+const TRIAL_STEPS: { icon: React.ReactNode; title: string; desc: string }[] = [
+  { icon: <Sparkles className="h-5 w-5 text-violet-300" />, title: 'Start free',
+    desc: 'Full access to everything for 5 days — no credit card required.' },
+  { icon: <Lock className="h-5 w-5 text-violet-300" />, title: 'After 5 days',
+    desc: 'Your account locks. Log back in anytime and choose Family Basic or Family+ to unlock it all.' },
+  { icon: <ArrowLeftRight className="h-5 w-5 text-violet-300" />, title: 'Switch anytime',
+    desc: 'On Family+? Downgrade to Family Basic whenever you like — no need to start over.' },
+  { icon: <Archive className="h-5 w-5 text-violet-300" />, title: 'Yours to keep',
+    desc: 'Close your account anytime. We keep your data safe, so it’s all here if you come back.' },
+];
+
+function HowTrialWorks() {
+  return (
+    <section className="mt-10">
+      <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
+        <h2 className="text-center text-xl font-black sm:text-2xl">How your free trial works</h2>
+        <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">
+          Five days on the house — then pick the plan that fits your family. No surprises.
+        </p>
+        <ol className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {TRIAL_STEPS.map((s, i) => (
+            <li key={s.title} className="relative flex flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <span className="absolute right-3 top-3 text-xs font-black text-white/25">{i + 1}</span>
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-500/12 ring-1 ring-violet-400/25">{s.icon}</span>
+              <p className="mt-3 text-sm font-bold">{s.title}</p>
+              <p className="mt-1 text-xs leading-relaxed text-white/65">{s.desc}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
 // ── Plan card ──────────────────────────────────────────────────────────────
 function PlanCard({
   name, goal, icon, price, priceSub, cta, ctaHref, featured, featureSections, prelude, badge,
@@ -185,7 +220,7 @@ type MatrixTier = 'free' | 'basic' | 'plus';
 type FeatureMatrix = { section: string; items: { label: string; tier: MatrixTier }[] }[];
 
 const TIER_COL: { key: MatrixTier; label: string; dot: string }[] = [
-  { key: 'free', label: 'Free', dot: 'bg-emerald-400' },
+  { key: 'free', label: '5-Day Trial', dot: 'bg-emerald-400' },
   { key: 'basic', label: 'Family Basic', dot: 'bg-blue-400' },
   { key: 'plus', label: 'Family+', dot: 'bg-violet-400' },
 ];
@@ -193,8 +228,8 @@ const TIER_RANK: Record<MatrixTier, number> = { free: 0, basic: 1, plus: 2 };
 
 // Competitor-positioning callouts (how each tier stacks up vs the market).
 const TIER_POSITIONING: { key: MatrixTier; label: string; dot: string; line: string }[] = [
-  { key: 'free', label: 'Free', dot: 'bg-emerald-400',
-    line: 'Better than Cozi Free for modern families — AI requests, documents, contacts, recipes, photos, shopping, tasks, and messenger, all included.' },
+  { key: 'free', label: '5-Day Free Trial', dot: 'bg-emerald-400',
+    line: 'Unlock the full Bubaly experience free for 5 days — every feature, no credit card. After that, choose Family Basic or Family+ to keep going.' },
   { key: 'basic', label: 'Family Basic', dot: 'bg-blue-400',
     line: 'A direct replacement for Cozi Gold, FamilyWall Premium, OurHome, FamCal, and Skylight — at one family price.' },
   { key: 'plus', label: 'Family+', dot: 'bg-violet-400',
@@ -222,7 +257,7 @@ function FeatureMatrixTable({ matrix }: { matrix: FeatureMatrix }) {
     <section className="mt-12">
       <h2 className="text-center text-2xl font-black">Every feature, by plan</h2>
       <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">
-        A check means the feature is included on that plan (and every plan above it).
+        Your 5-day free trial includes everything. After that, a check means the feature is included on that plan (and every plan above it).
       </p>
       <PositioningCallouts />
       <div className="mt-7 overflow-x-auto rounded-2xl border border-white/10">
@@ -303,7 +338,7 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
             Bubaly Pricing
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-white/65">
-            Start free. Upgrade when your family is ready. Every plan gives you back time, attention, and peace of mind.
+            Try everything free for 5 days — no credit card required. After that, keep it all with Family Basic or Family+.
           </p>
 
           {/* Billing toggle */}
@@ -331,13 +366,14 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
         {/* Plan cards — 3 columns */}
         <section className="mt-12 grid gap-5 lg:grid-cols-3">
           <PlanCard
-            name="Bubaly Free"
-            goal="Become the default family organizer."
+            name="5-Day Free Trial"
+            goal="Experience all of Bubaly — free, no credit card."
             icon={<Zap className="h-7 w-7 text-white/60" />}
             price="Free"
-            priceSub="No credit card required"
-            cta="Get started free"
+            priceSub="for 5 days, then choose a plan"
+            cta="Start your free trial"
             ctaHref="/signup"
+            prelude="Your trial includes:"
             featureSections={FREE_FEATURES}
           />
 
@@ -351,7 +387,7 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
             ctaHref={`/signup?plan=basic&billing=${period}`}
             featured
             badge="MOST POPULAR"
-            prelude="Everything in Free, plus:"
+            prelude="Everything in your trial, plus:"
             featureSections={BASIC_FEATURES}
           />
 
@@ -367,6 +403,9 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
             featureSections={PLUS_FEATURES}
           />
         </section>
+
+        {/* How the 5-day free trial works — the model, in plain language. */}
+        <HowTrialWorks />
 
         {/* Differentiators — the highest-value features, placed below the plan
             cards so pricing details lead the page. */}
