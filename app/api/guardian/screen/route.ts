@@ -8,7 +8,7 @@ import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { screeningTurn, summarizeScreening, type ScreeningTurn } from '@/lib/guardian/ai-screen';
 import {
   wrapTwiml, twimlSay, twimlGather, twimlRecord, twimlHangup,
-  sendSms,
+  sendSms, validateTwilioSignature,
 } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
 import { detectScamFromText } from '@/lib/guardian/scam';
@@ -25,6 +25,17 @@ export async function POST(req: NextRequest) {
 
   const formData = await req.formData();
   const params = Object.fromEntries(formData.entries()) as Record<string, string>;
+
+  // Validate Twilio signature (skip in dev) — same guard as the inbound routes;
+  // Twilio signs the FULL URL including the query string.
+  if (process.env.NODE_ENV === 'production') {
+    const sig = req.headers.get('x-twilio-signature') ?? '';
+    const url = `${BASE_URL}${req.nextUrl.pathname}${req.nextUrl.search}`;
+    if (!validateTwilioSignature(sig, url, params)) {
+      return new NextResponse('Unauthorized', { status: 401 });
+    }
+  }
+
   const speechResult = params.SpeechResult ?? '';
   const callSid = params.CallSid ?? '';
 

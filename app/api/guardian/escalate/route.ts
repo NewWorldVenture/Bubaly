@@ -13,10 +13,12 @@ export const runtime = 'nodejs';
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
 export async function POST(req: NextRequest) {
-  // Internal only — verify with shared secret
+  // Internal only — verify with shared secret. Fail CLOSED: this endpoint can
+  // blast SMS + outbound calls to every parent, so an unset secret must mean
+  // "disabled", never "open". (CRON_SECRET is the deploy-wide fallback.)
   const authHeader = req.headers.get('authorization');
-  const secret = process.env.GUARDIAN_INTERNAL_SECRET;
-  if (secret && authHeader !== `Bearer ${secret}`) {
+  const secret = process.env.GUARDIAN_INTERNAL_SECRET || process.env.CRON_SECRET;
+  if (!secret || authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

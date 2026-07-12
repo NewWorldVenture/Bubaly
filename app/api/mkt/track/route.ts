@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getConsentState, canRecordAnalytics } from '@/lib/marketing/consent';
+import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -26,6 +27,11 @@ function clean(v: unknown): string | null {
 }
 
 export async function POST(req: NextRequest) {
+  // Public service-role ingest → must be rate-limited like the other trackers.
+  const ip = clientIp(req.headers);
+  const limited = rateLimit(`mkt:${ip}`, { limit: 60, windowMs: 60_000 });
+  if (!limited.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+
   let body: TrackBody;
   try {
     body = (await req.json()) as TrackBody;

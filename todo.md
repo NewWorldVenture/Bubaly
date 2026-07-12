@@ -1676,3 +1676,20 @@ Owner directive: upgrade every ★/★★ page. Every low-scoring page was manua
   (rebuilt earlier this session).
 - **Left ★★ by design** (verified, do NOT chrome-inject): `more` (menu mockup), binder/devices/
   focus/tax-vault (grouping/reveal/status-cycling already present), finance re-export routes.
+
+### 🪨 Full stone-turn pass (2026-07-12, late) — build + links + auth + scoping
+- `next build` production build: **PASS** (exit 0, all 136+ routes compile).
+- Dead-link sweep (172 distinct internal hrefs): 2 dead → fixed (`/dashboard/routines` →
+  `/dashboard/calendar` in moments/prep engines; `/dashboard/shopping` → `/dashboard/grocery`).
+- **API auth audit (95 routes): 4 real security fixes.** (1–2) `guardian/screen` +
+  `guardian/status/voicemail` Twilio callbacks accepted unsigned requests (inbound trio validated,
+  these didn't) → now validate `x-twilio-signature` in production, full-URL-with-query form.
+  (3) `guardian/escalate` **failed open** when `GUARDIAN_INTERNAL_SECRET` unset — could blast
+  emergency SMS/calls to every parent → fails closed (secret or CRON_SECRET required; no internal
+  callers broken — verified none exist yet). (4) `guardian/escalate/twiml` was an open
+  text-to-TwiML reflector → Twilio-signature-gated. Plus `mkt/track` (service-role public ingest)
+  had NO rate limit while every sibling tracker did → 60/min/IP.
+- Family-scoping audit (all client `.from().select()` chains): 11 flagged, all verified safe
+  (child-record lookups by parent id, RLS backstop). No fixes needed.
+- Stub sweep: no console.log leftovers; remaining TODO(keys) are documented key-gated integration
+  points (Google/Gmail adapters), by convention.

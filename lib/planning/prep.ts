@@ -62,7 +62,7 @@ const TEMPLATES: Record<SignalKind, StepTemplate[]> = {
     { label: 'Complete registration & forms', href: '/dashboard/school', leadDays: 21 },
     { label: 'Buy supplies & clothes', href: '/dashboard/grocery', leadDays: 14 },
     { label: 'Book physicals/checkups', href: '/dashboard/health', leadDays: 10 },
-    { label: 'Re-set the school-day routine', href: '/dashboard/routines', leadDays: 5 },
+    { label: 'Re-set the school-day routine', href: '/dashboard/calendar', leadDays: 5 },
   ],
   event: [
     { label: 'Confirm attendance & logistics', href: '/dashboard/calendar', leadDays: 7 },

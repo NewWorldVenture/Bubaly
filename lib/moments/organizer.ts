@@ -60,7 +60,7 @@ export const MOMENT_DEFS: Record<MomentKey, MomentDef> = {
   bedtime: {
     key: 'bedtime', label: 'Bedtime', blurb: 'Wind down and prep tomorrow.',
     capabilities: [
-      { label: 'Routines', href: '/dashboard/routines' },
+      { label: 'Routines', href: '/dashboard/calendar' },
       { label: 'Tomorrow’s plan', href: '/dashboard/calendar' },
       { label: 'Reminders', href: '/dashboard/reminders' },
     ],

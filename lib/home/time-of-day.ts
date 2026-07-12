@@ -48,7 +48,7 @@ const ITEMS: Record<string, FocusItem> = {
   school: { key: 'school', label: 'School & activities', href: '/dashboard/school', icon: 'GraduationCap' },
   tasks: { key: 'tasks', label: 'Open tasks', href: '/dashboard/todos', icon: 'ListChecks' },
   messages: { key: 'messages', label: 'Family messages', href: '/dashboard/messages', icon: 'MessageCircle' },
-  shopping: { key: 'shopping', label: 'Shopping list', href: '/dashboard/shopping', icon: 'ShoppingCart' },
+  shopping: { key: 'shopping', label: 'Shopping list', href: '/dashboard/grocery', icon: 'ShoppingCart' },
   meals: { key: 'meals', label: 'Dinner plan', href: '/dashboard/meals', icon: 'UtensilsCrossed' },
   moments: { key: 'moments', label: 'Get ready', href: '/dashboard/moments', icon: 'Sparkles' },
   journal: { key: 'journal', label: 'Reflect', href: '/dashboard/journal', icon: 'BookOpen' },
