@@ -63,6 +63,37 @@ export function focusHeadline(role: MemberRole | null | undefined): string {
   }
 }
 
+// ── App-wide density rollout (Friction #8) ───────────────────────────────────
+// The density above tailored individual chips; this scales the WHOLE app for a
+// role by setting the root font size (Tailwind's rem units cascade), applied by
+// <RoleDensity/>. Parents keep 100%; teens/guests get a touch more room; kids
+// get the largest, most tappable surface. A user can override the role default
+// from Settings → Display comfort.
+
+/** Root font-size (percent of the browser default) for each density. */
+export const DENSITY_FONT_PCT: Record<Density, number> = {
+  comfortable: 100, cozy: 104, playful: 110,
+};
+
+export const DENSITY_LABELS: Record<Density, string> = {
+  comfortable: 'Standard', cozy: 'Cozy', playful: 'Relaxed',
+};
+
+export const DENSITY_DESCRIPTIONS: Record<Density, string> = {
+  comfortable: 'The default text size and spacing.',
+  cozy: 'A little larger text and spacing.',
+  playful: 'The biggest text and roomiest tap targets.',
+};
+
+/** Densities a user can pick in Settings (in order), plus 'auto' = role default. */
+export const DENSITY_OPTIONS: Density[] = ['comfortable', 'cozy', 'playful'];
+
+/** Effective density: an explicit user override wins over the role default. */
+export function resolveDensity(role: MemberRole | null | undefined, override: string | null | undefined): Density {
+  if (override === 'comfortable' || override === 'cozy' || override === 'playful') return override;
+  return roleSurface(role).density;
+}
+
 /** Tailwind sizing for a "focus"/action chip at the reader's role density
  *  (Friction #8, density rollout). Kids ('playful') get larger, rounder, more
  *  tappable chips (easier for small fingers); adults ('comfortable') keep the
