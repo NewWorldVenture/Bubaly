@@ -95,7 +95,7 @@ it already exists**; the one central gap (consent) is now closed. Honest status 
 | Exit-intent | ☑ exists | `marketing_exit_intent`, `components/marketing/exit-intent.tsx`, `/api/exit-intent/*` |
 | Personalization rules | ☑ exists | `marketing_personalization_rules`, `lib/marketing/personalization.ts` |
 | A/B experiments | ☑ exists | `ab_experiments`, `ab_events`, `lib/marketing/ab.ts`, `/api/ab/track` |
-| Admin marketing intelligence page | ◐ partial | `/admin/marketing/intelligence` (no dedicated `/admin/visitor-intelligence/*` set) |
+| Admin marketing intelligence page | ☑ **NEW** | `/admin/marketing/intelligence` + a dedicated **`/admin/marketing/visitor-intelligence`** funnel dashboard (visitors → identified → profiled → scored → hot/qualified) with consent posture + lead-band distribution; `lib/marketing/visitor-funnel.ts` (6 tests) |
 | **Granular consent (necessary/analytics/personalization/marketing) + GPC + revocation** | ☑ **NEW** | `mkt_consent_events` (0160), `lib/marketing/consent.ts`, `/api/mkt/consent` |
 | **Consent-gated tracking** | ☑ **NEW** | `/api/mkt/track` gates on analytics consent |
 | Identity linking (anon → contact) | ☑ **NEW** | `lib/marketing/identity.ts` — on signup/login stitches `mkt_visitors.contact_id` → `crm_contacts` (dedup by email, non-downgrading), carries consent forward (`mkt_consent_events.contact_id`), forks on shared-device 2nd user (rotates anon id). Hooked from login/signup forms + `auth/callback`. 6 tests (`identity-stitch.test.ts`) |
@@ -116,7 +116,9 @@ it already exists**; the one central gap (consent) is now closed. Honest status 
   OAuth / magic-link / email-confirm). 6 tests.
 - ☑ **DONE (2026-07-12)** — Progressive-profiling capture, one field at a time (`crm_contact_profile`
   0171 + `progressive-profile.ts` engine + `ProfileNudge` on `/dashboard/settings`). ⚠️ apply `0171`.
-- ☐ Dedicated `/admin/visitor-intelligence/*` dashboards if the marketing intelligence page isn't enough.
+- ☑ **DONE (2026-07-12)** — Dedicated **`/admin/marketing/visitor-intelligence`** funnel dashboard
+  (acquisition funnel + consent posture + lead-score bands), `visitor-funnel.ts` engine (6 tests).
+  **The visitor-intelligence / lead-capture lane is now fully ☑.**
 
 **Privacy invariants (already enforced — keep them):** no fingerprinting; no PII from anonymous
 visitors; `necessary` always on + non-revocable; `analytics` = first-party legitimate interest (on
