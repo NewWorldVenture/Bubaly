@@ -74,9 +74,17 @@
 > filter (valid roles are parent/adult/teen/child/caregiver/guest) and an invalid `household_info.category`
 > `'utility'` (CHECK: wifi/emergency/shutoff/code/insurance/contact/instruction/account/other). Fixed +
 > re-verified: 0 errors, all 13 tables populated, idempotent. Appended to `SEED_ALL.sql`.
-> **Rounds 3+4 together closed 33 of the ~40 user-facing unseeded tables.** Remaining unseeded
-> family-scoped tables are infra/gated subsystems (social_* / sync_* / guardian_* / stripe_* / audit &
-> log tables / per-user config) — not empty-page risks, so intentionally left unseeded.
+> ### Round 5 — 2026-07-12 (`seed_feature_gaps_5.sql`, #301): the last 9 left-nav tables
+> Loyalty (account + transactions + redemptions) · Weather saved locations · wallet Pay handles ·
+> Assistant chat history (`ai_conversations` + `ai_messages`) · Concierge sessions · Opportunities.
+> PG16-validated — caught 3 more block-zeroing bugs (a broken `foreach` title expression + two invalid
+> `concierge_sessions` CHECK values: `kind` and `status`). Fixed + re-verified: 0 errors, all 9 tables
+> populated, idempotent.
+>
+> **Rounds 3+4+5 closed ~42 user-facing left-nav tables (11 real block-zeroing bugs caught by executing
+> on PG16).** The left nav is built + wired; every user-facing surface now has seed data. Remaining
+> unseeded family-scoped tables are infra/gated subsystems (social_* / sync_* / guardian_* / stripe_* /
+> audit & log tables / per-user config) — not empty-page risks, so intentionally left unseeded.
 
 > ## 🧠 REASONING/NETWORK LANE — 2026-07-06/07 (parallel to the onboarding/marketing sessions)
 >
