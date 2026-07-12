@@ -3,6 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
+import {
+  buildContactTimeline, contactHealth,
+  type LoggedInteraction, type CommunicationLike,
+} from '@/lib/contacts/timeline';
 
 /** Log a visit / call / gift / favor / note against a contact. */
 export async function logInteractionAction(formData: FormData): Promise<void> {
@@ -37,4 +42,90 @@ export async function deleteInteractionAction(input: { id: string; contactId: st
   await supabase.from('contact_interactions')
     .delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
   revalidatePath(`/dashboard/contacts/${input.contactId}`);
+}
+
+export type ReconnectResult = { ok: true; message: string; tone: string } | { ok: false; error: string };
+
+/**
+ * The "AI writes the reconnect message" lift for the Relationship Timeline: the
+ * health card can tell you it's time to reach out — this drafts the actual
+ * short, warm message to send. Key-gated (honest fallback with no AI key),
+ * grounded ONLY in what the family logged about this person (name, relationship,
+ * recent touches) — never invents shared history — with bracketed placeholders
+ * for anything it doesn't know. Stateless: returns the draft for one-tap copy;
+ * a fresh timeline yields a fresh message, so nothing to persist or stale.
+ */
+export async function draftReconnectMessageAction(
+  contactId: string,
+  tone: 'warm' | 'brief' | 'playful' = 'warm',
+): Promise<ReconnectResult> {
+  if (!contactId) return { ok: false, error: 'Invalid contact' };
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+  const familyId = ctx.active.familyId;
+
+  const { data: contact } = await supabase
+    .from('family_contacts').select('*')
+    .eq('id', contactId).eq('family_id', familyId).maybeSingle();
+  if (!contact) return { ok: false, error: 'Contact not found' };
+
+  if (!(await isAIConfigured())) {
+    return { ok: false, error: 'AI isn’t configured yet. Add an AI key in Admin → AI Engine to draft messages.' };
+  }
+
+  // Ground strictly in logged history + linked communications + birthday.
+  const { data: rawInts } = await supabase
+    .from('contact_interactions').select('*')
+    .eq('contact_id', contactId).eq('family_id', familyId)
+    .order('occurred_on', { ascending: false }).limit(12);
+
+  let comms: CommunicationLike[] = [];
+  try {
+    const { data } = await supabase
+      .from('family_communications')
+      .select('id, channel, direction, subject, summary, received_at')
+      .eq('contact_id', contactId).eq('family_id', familyId)
+      .order('received_at', { ascending: false }).limit(8);
+    comms = (data ?? []) as CommunicationLike[];
+  } catch { /* table not present in this env */ }
+
+  const timeline = buildContactTimeline({
+    interactions: (rawInts ?? []).map((i): LoggedInteraction => ({
+      id: i.id, kind: i.kind as LoggedInteraction['kind'], occurred_on: i.occurred_on,
+      title: i.title, note: i.note, amount: i.amount,
+    })),
+    communications: comms,
+    birthdayMonth: contact.birthday_month,
+    birthdayDay: contact.birthday_day,
+  });
+  const health = contactHealth(timeline, contact.name);
+
+  const historyLines = timeline.slice(0, 8)
+    .map((e) => `- ${e.date}: ${e.title}${e.detail ? ` (${e.detail})` : ''}`)
+    .join('\n') || '- (no logged history yet)';
+
+  const toneWord = tone === 'brief' ? 'short and low-key' : tone === 'playful' ? 'light and playful' : 'warm and genuine';
+  const system =
+    'You help a busy parent write a ready-to-send message to reconnect with someone in their life ' +
+    '(family, friend, coach, caregiver). Ground the message ONLY in the provided history — never invent ' +
+    'shared events, names, dates, plans, or feelings that aren’t there. If you need a detail the notes ' +
+    'don’t give, use one brief bracketed placeholder like [day that works]. Write it from the family to ' +
+    'the contact, first person. Keep it under 60 words, natural (like a real text), no subject line, no ' +
+    'sign-off block — just the message. Return ONLY the message text.';
+  const user =
+    `Contact: ${contact.name}${contact.relationship ? ` (${contact.relationship})` : ''}\n` +
+    `Time since last contact: ${health.daysSince == null ? 'no logged history' : `${health.daysSince} days`}\n` +
+    `Desired tone: ${toneWord}\n\n` +
+    `Recent history (most recent first):\n${historyLines}\n\n` +
+    'Write the reconnect message to send.';
+
+  try {
+    const provider = await resolveProvider();
+    const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 220 });
+    const message = (completion.text || '').trim();
+    if (!message) return { ok: false, error: 'Could not draft a message. Please try again.' };
+    return { ok: true, message, tone };
+  } catch (err) {
+    return { ok: false, error: describeAIError(err).message };
+  }
 }
