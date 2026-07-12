@@ -683,8 +683,7 @@ begin
     group by table_name
   loop
     execute format('drop trigger if exists trg_set_updated_at on public.%I', t);
-    execute format('drop trigger if exists trg_set_updated_at on public;
-create trigger trg_set_updated_at before update on public.%I for each row execute function public.set_updated_at()', t);
+    execute format('create trigger trg_set_updated_at before update on public.%I for each row execute function public.set_updated_at()', t);
   end loop;
 end $$;
 
@@ -2024,8 +2023,7 @@ BEGIN
     'marketing_aeo_questions'
   ] LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS trg_set_updated_at ON public.%I', t);
-    EXECUTE format('drop trigger if exists trg_set_updated_at on public;
-CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()', t);
+    EXECUTE format('CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()', t);
   END LOOP;
 END $$;
 
@@ -3013,8 +3011,7 @@ begin
     ])
   loop
     execute format('drop trigger if exists trg_set_updated_at on public.%I', t);
-    execute format('drop trigger if exists trg_set_updated_at on public;
-create trigger trg_set_updated_at before update on public.%I for each row execute function public.set_updated_at()', t);
+    execute format('create trigger trg_set_updated_at before update on public.%I for each row execute function public.set_updated_at()', t);
   end loop;
 end $$;
 
@@ -3324,8 +3321,7 @@ BEGIN
     'marketing_automation_workflows','marketing_funnels','marketing_landing_pages','marketing_forms'
   ] LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS trg_set_updated_at ON public.%I', t);
-    EXECUTE format('drop trigger if exists trg_set_updated_at on public;
-CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()', t);
+    EXECUTE format('CREATE TRIGGER trg_set_updated_at BEFORE UPDATE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()', t);
   END LOOP;
 END $$;
 
@@ -5034,8 +5030,7 @@ begin
     group by table_name
   loop
     execute format('drop trigger if exists trg_set_updated_at on public.%I', t);
-    execute format('drop trigger if exists trg_set_updated_at on public;
-create trigger trg_set_updated_at before update on public.%I for each row execute function public.set_updated_at()', t);
+    execute format('create trigger trg_set_updated_at before update on public.%I for each row execute function public.set_updated_at()', t);
   end loop;
 end $$;
 
@@ -5361,8 +5356,7 @@ declare tbls text[] := array['homes','home_contractors','home_warranties','home_
 begin
   foreach t in array tbls loop
     execute format('drop trigger if exists trg_set_updated_at on public.%I', t);
-    execute format('drop trigger if exists trg_set_updated_at on public;
-create trigger trg_set_updated_at before update on public.%I for each row execute function public.set_updated_at()', t);
+    execute format('create trigger trg_set_updated_at before update on public.%I for each row execute function public.set_updated_at()', t);
   end loop;
 end $$;
 
@@ -5623,8 +5617,7 @@ declare tbls text[] := array[
 begin
   foreach t in array tbls loop
     execute format('drop trigger if exists trg_set_updated_at on public.%I', t);
-    execute format('drop trigger if exists trg_set_updated_at on public;
-create trigger trg_set_updated_at before update on public.%I for each row execute function public.set_updated_at()', t);
+    execute format('create trigger trg_set_updated_at before update on public.%I for each row execute function public.set_updated_at()', t);
 
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists %1$s_select on public.%1$I', t);
@@ -13705,8 +13698,7 @@ begin
     if to_regclass('public.' || t) is not null then
       execute format('drop trigger if exists trg_mark_model_dirty on public.%I', t);
       execute format(
-        'drop trigger if exists trg_mark_model_dirty on public;
-create trigger trg_mark_model_dirty after insert or update or delete on public.%I '
+        'create trigger trg_mark_model_dirty after insert or update or delete on public.%I '
         'for each row execute function public.mark_model_dirty()', t);
     end if;
   end loop;
