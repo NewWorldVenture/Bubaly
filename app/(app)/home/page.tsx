@@ -17,7 +17,7 @@ import { HomeMomentCard } from '@/components/moments/home-moment-card';
 import { OnThisDayCard } from '@/components/memories/on-this-day-card';
 import { TimeOfDayFocus } from '@/components/home/time-of-day-focus';
 import { FrontDoorHero } from '@/components/home/front-door-hero';
-import { buildFrontDoor } from '@/lib/home/front-door';
+import { buildFrontDoor, mergeHandled } from '@/lib/home/front-door';
 import { AskBar } from '@/components/home/ask-bar';
 import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
 import { loadTimeSaved } from '@/lib/metric/time-saved-server';
@@ -219,20 +219,30 @@ export default async function HomePage() {
   // approvals). Best-effort: Supabase returns {data:null} for a missing table, so a
   // drifted DB degrades to a hidden hero rather than crashing Home.
   const since48h = new Date(now.getTime() - 2 * 86400000).toISOString();
-  const [doneRes, doneCountRes, pendingRes, pendingCountRes] = await Promise.all([
+  const [doneRes, doneCountRes, agentRes, agentCountRes, pendingRes, pendingCountRes] = await Promise.all([
     supabase.from('autopilot_suggestions').select('id, title, kind')
       .eq('family_id', familyId).eq('status', 'auto_executed').gte('created_at', since48h)
       .order('created_at', { ascending: false }).limit(5),
     supabase.from('autopilot_suggestions').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('status', 'auto_executed').gte('created_at', since48h),
+    // Specialist-agent actions completed in the same window — the Chief of Staff
+    // reports its whole staff's work, not just autopilot's.
+    supabase.from('agent_activity').select('id, title, agent')
+      .eq('family_id', familyId).eq('kind', 'action').eq('status', 'done').gte('created_at', since48h)
+      .order('created_at', { ascending: false }).limit(5),
+    supabase.from('agent_activity').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).eq('kind', 'action').eq('status', 'done').gte('created_at', since48h),
     supabase.from('approval_requests').select('id, title, agent, priority')
       .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
     supabase.from('approval_requests').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('status', 'pending'),
   ]);
   const frontDoor = buildFrontDoor({
-    done: (doneRes.data ?? []) as { id: string; title: string; kind?: string | null }[],
-    doneCount: doneCountRes.count ?? undefined,
+    done: mergeHandled(
+      (doneRes.data ?? []) as { id: string; title: string; kind?: string | null }[],
+      (agentRes.data ?? []) as { id: string; title: string; agent?: string | null }[],
+    ),
+    doneCount: (doneCountRes.count ?? 0) + (agentCountRes.count ?? 0) || undefined,
     pending: (pendingRes.data ?? []) as { id: string; title: string; agent?: string | null; priority?: string | null }[],
     pendingCount: pendingCountRes.count ?? undefined,
   });
@@ -306,7 +316,7 @@ export default async function HomePage() {
       <AskBar />
 
       {/* R5 — the proactive front door: "I already handled X · waiting on you: Y" */}
-      <FrontDoorHero frontDoor={frontDoor} />
+      <FrontDoorHero frontDoor={frontDoor} canDecide={isManager(me.role)} />
 
       {/* R11 — the category metric: "N hours saved this week" */}
       <TimeSavedBanner data={timeSaved} />

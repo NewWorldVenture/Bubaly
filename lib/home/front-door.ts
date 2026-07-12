@@ -6,8 +6,44 @@
 // is named + linkable) and reversible (done items link to Autopilot where they can
 // be undone). This module turns the raw rows into that summary; the page renders it.
 
-export type FrontDoorDone = { id: string; title: string; kind?: string | null };
+export type FrontDoorDone = {
+  id: string;
+  title: string;
+  kind?: string | null;
+  /** Where the handled item came from — autopilot (undoable) or a specialist agent. */
+  source?: 'autopilot' | 'agent';
+};
 export type FrontDoorPending = { id: string; title: string; agent?: string | null; priority?: string | null };
+
+/**
+ * Chief-of-Staff assembly: merge what autopilot auto-executed with what the
+ * specialist agents completed into ONE "done for you" list. Autopilot first
+ * (those are undoable), then agent actions; duplicate titles are collapsed so
+ * the same action surfaced by two systems reads once. Pure + deterministic.
+ */
+export function mergeHandled(
+  autopilot: { id: string; title: string; kind?: string | null }[],
+  agentActions: { id: string; title: string; agent?: string | null }[],
+  cap = 6,
+): FrontDoorDone[] {
+  const out: FrontDoorDone[] = [];
+  const seen = new Set<string>();
+  for (const a of autopilot) {
+    const key = a.title.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ id: `ap:${a.id}`, title: a.title, kind: a.kind ?? null, source: 'autopilot' });
+    if (out.length >= cap) return out;
+  }
+  for (const g of agentActions) {
+    const key = g.title.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ id: `ag:${g.id}`, title: g.title, kind: g.agent ?? null, source: 'agent' });
+    if (out.length >= cap) return out;
+  }
+  return out;
+}
 
 export interface FrontDoor {
   /** False when there's nothing to say — the hero hides entirely. */

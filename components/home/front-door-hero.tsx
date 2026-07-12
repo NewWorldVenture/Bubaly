@@ -1,11 +1,14 @@
-// R5 — the proactive front door on Home. Renders "I already handled X · pending
-// your OK: Y". Transparent (every item named + linked) and reversible (auto-handled
-// items link to Autopilot where they can be undone). Server-compatible (no hooks).
+// The Chief-of-Staff front door on Home — "I already handled X · pending your
+// OK: Y", now actionable in place: managers Approve/Decline each pending request
+// with one tap (PendingApprovals, client), and "done for you" merges autopilot
+// auto-executions (undoable → Autopilot) with specialist-agent actions. Server
+// component; only the decision list hydrates.
 import Link from 'next/link';
-import { Sparkles, Check, BellRing, ChevronRight, RotateCcw } from 'lucide-react';
+import { Sparkles, Check, BellRing, RotateCcw, Bot } from 'lucide-react';
 import type { FrontDoor } from '@/lib/home/front-door';
+import { PendingApprovals } from '@/components/home/pending-approvals';
 
-export function FrontDoorHero({ frontDoor }: { frontDoor: FrontDoor }) {
+export function FrontDoorHero({ frontDoor, canDecide = false }: { frontDoor: FrontDoor; canDecide?: boolean }) {
   if (!frontDoor.show) return null;
   const { headline, done, pending, doneCount, pendingCount } = frontDoor;
 
@@ -26,7 +29,14 @@ export function FrontDoorHero({ frontDoor }: { frontDoor: FrontDoor }) {
                 </div>
                 <ul className="space-y-1">
                   {done.slice(0, 3).map((d) => (
-                    <li key={d.id} className="truncate text-sm text-fg">{d.title}</li>
+                    <li key={d.id} className="flex items-center gap-1.5 text-sm text-fg">
+                      <span className="truncate">{d.title}</span>
+                      {d.source === 'agent' && (
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-fg/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-muted">
+                          <Bot className="h-2.5 w-2.5" /> {d.kind ?? 'agent'}
+                        </span>
+                      )}
+                    </li>
                   ))}
                 </ul>
                 <Link href="/dashboard/autopilot" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-muted transition hover:text-brand">
@@ -40,17 +50,7 @@ export function FrontDoorHero({ frontDoor }: { frontDoor: FrontDoor }) {
                 <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-500">
                   <BellRing className="h-3.5 w-3.5" /> Waiting on you
                 </div>
-                <ul className="space-y-1">
-                  {pending.slice(0, 3).map((p) => (
-                    <li key={p.id} className="truncate text-sm text-fg">
-                      {p.title}
-                      {p.agent && <span className="ml-1 text-xs text-muted">· {p.agent}</span>}
-                    </li>
-                  ))}
-                </ul>
-                <Link href="/dashboard/inbox" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline">
-                  Review &amp; approve{pendingCount > 3 ? ` (+${pendingCount - 3} more)` : ''} <ChevronRight className="h-3 w-3" />
-                </Link>
+                <PendingApprovals items={pending} totalCount={pendingCount} canDecide={canDecide} />
               </div>
             )}
           </div>

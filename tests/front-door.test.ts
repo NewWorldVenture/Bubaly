@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildFrontDoor, frontDoorHeadline } from '@/lib/home/front-door';
+import { buildFrontDoor, frontDoorHeadline, mergeHandled } from '@/lib/home/front-door';
 
 describe('frontDoorHeadline', () => {
   it('combines done + pending', () => {
@@ -42,5 +42,36 @@ describe('buildFrontDoor', () => {
       ],
     });
     expect(fd.pending.map((p) => p.priority)).toEqual(['urgent', 'normal', 'low']);
+  });
+});
+
+describe('mergeHandled', () => {
+  it('puts autopilot (undoable) first, then agent actions, with source tags', () => {
+    const merged = mergeHandled(
+      [{ id: '1', title: 'Reordered milk', kind: 'groceries' }],
+      [{ id: '9', title: 'Booked a checkup', agent: 'health_aide' }],
+    );
+    expect(merged).toEqual([
+      { id: 'ap:1', title: 'Reordered milk', kind: 'groceries', source: 'autopilot' },
+      { id: 'ag:9', title: 'Booked a checkup', kind: 'health_aide', source: 'agent' },
+    ]);
+  });
+  it('collapses duplicate titles across sources (autopilot wins)', () => {
+    const merged = mergeHandled(
+      [{ id: '1', title: 'Built this week’s dinner plan' }],
+      [{ id: '9', title: 'built this week’s dinner plan ', agent: 'meal_planner' }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].source).toBe('autopilot');
+  });
+  it('caps the merged list', () => {
+    const ap = Array.from({ length: 10 }, (_, i) => ({ id: `a${i}`, title: `Autopilot ${i}` }));
+    const ag = Array.from({ length: 10 }, (_, i) => ({ id: `g${i}`, title: `Agent ${i}` }));
+    expect(mergeHandled(ap, ag, 6)).toHaveLength(6);
+    expect(mergeHandled(ap.slice(0, 2), ag, 4)).toHaveLength(4);
+  });
+  it('handles empty inputs', () => {
+    expect(mergeHandled([], [])).toEqual([]);
+    expect(mergeHandled([], [{ id: '1', title: 'Solo agent action' }])[0].source).toBe('agent');
   });
 });
