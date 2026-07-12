@@ -100,10 +100,27 @@
 >   only the Stripe-Issuing-gated wallet cards (by design, key-gated).
 > - **Pricing:** hero sits on the same 3-col grid as the plan cards (Demo card aligns above card 1),
 >   fluid clamp() type; `?demo=error|ended` notices on the Demo card.
+> - **Messages deep dive (`0163_messages_audio_read_fix`):** found 3 live bugs. (1) Voice notes
+>   NEVER saved — recorder inserts `kind='audio'` but the 0014 CHECK didn't allow it (every insert
+>   failed into the error toast); 0163 widens the CHECK. (2) Read receipts wiped each other —
+>   mark-as-read did `update({read_by:[me]})`, *replacing* the array; 0163 adds a SECURITY-INVOKER
+>   `mark_conversation_read(uuid)` append RPC (client falls back to a per-row merge pre-migration).
+>   (3) Seeded `kind='voice'` rendered as empty bubbles — renderer now handles voice+audio.
+>   PG16-verified. GIF picker also verified end-to-end.
+> - **Calendar deep dive (no migration — client-side against existing schema):** found 3 bugs.
+>   (1) **Recurring events never recurred** — nothing expanded the recurrence rule; a weekly event
+>   showed once then vanished. New pure `lib/calendar/recurrence.ts` (`expandEvents`, 6 tests:
+>   base-date computation so months don't drift, short-month skip, `recurrence_until`, 500 cap);
+>   module fetches in-window + earlier recurring series and renders occurrences (view keys include
+>   the occurrence time). (2) **No edit/delete anywhere** — detail modal only did RSVPs; now has
+>   Edit (prefilled form → update) + Delete (two-tap confirm, warns series-delete for recurring).
+>   (3) demo seed calendar seeded ZERO events (`'personal'` isn't a valid `event_category` enum;
+>   one bad value failed all 24 rows under the best-effort catch) → `'holiday'`.
 > - **⚠️ Prod apply pending** (`docs/PENDING_PROD_MIGRATIONS.md`): `0159`, `0160`, `0161`, `0162`,
->   plus the `0138_demo_sessions` **number collision** with `0138_onboarding_imports` (SQL-editor
->   paste OK; `db push` needs a hand-apply). Env: `CRON_SECRET` (demo cleanup), optional
->   `GIPHY_API_KEY` (GIF picker).
+>   **`0163`** (Messages voice+receipts), plus the `0138_demo_sessions` **number collision** with
+>   `0138_onboarding_imports` (SQL-editor paste OK; `db push` needs a hand-apply). Env: `CRON_SECRET`
+>   (demo cleanup), optional `GIPHY_API_KEY` (GIF picker). NOTE: a parallel lane renumbered the demo
+>   email-gate to **`0164`** and added a monetization `0164` — verify the two 0164s don't collide.
 >
 > ### Seed-coverage gap-fill — 2026-07-12 (`seed_feature_gaps_3.sql`, branch `claude/seed-leftnav-gaps`)
 > Re-confirmed the left-nav-sweep finding: **the nav is fully built + Supabase-wired** (every page
