@@ -157,7 +157,7 @@ function TryDemoButton() {
     >
       {pending
         ? <><Loader2 className="h-4 w-4 animate-spin" /> Starting your demo…</>
-        : <><PlayCircle className="h-5 w-5" /> Login Now to Try Me</>}
+        : <><PlayCircle className="h-5 w-5" /> Click to Demo Now</>}
     </button>
   );
 }
