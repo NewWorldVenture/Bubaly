@@ -44,7 +44,10 @@ export async function seedDemoFamily(admin: DB, familyId: string, ownerId: strin
 
   // ── Calendar (24) — this fortnight, morning-to-evening ────────────────────
   const evTitles = ['Soccer practice', 'Dentist — Emma', 'Piano lesson', 'Book club', 'Team meeting', 'Swim class', 'Birthday party', 'Parent–teacher night', 'Dance recital', 'Doctor visit', 'Study group', 'Family movie night'] as const;
-  const evCats = ['sports', 'appointment', 'school', 'general', 'birthday', 'personal', 'maintenance', 'other'] as const;
+  // NOTE: must be valid public.event_category enum values — 'personal' is NOT
+  // one, and a single bad value fails the whole 24-row insert (best-effort catch
+  // hid it: the demo calendar seeded ZERO events).
+  const evCats = ['sports', 'appointment', 'school', 'general', 'birthday', 'holiday', 'maintenance', 'other'] as const;
   await ins('calendar_events', range(24).map((g) => ({
     ...fam,
     title: pick(evTitles, g),

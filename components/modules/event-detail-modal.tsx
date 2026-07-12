@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Check, X, HelpCircle, MapPin, Clock, CalendarDays } from 'lucide-react';
+import { Check, X, HelpCircle, MapPin, Clock, CalendarDays, Pencil, Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -30,12 +30,30 @@ function fmtRange(e: Event): string {
   return `${date} · ${time}`;
 }
 
-export function EventDetailModal({ event, members, selfMemberId, familyId, onClose }: {
+export function EventDetailModal({ event, members, selfMemberId, familyId, onClose, onEdit, onDeleted }: {
   event: Event; members: Member[]; selfMemberId: string | null; familyId: string; onClose: () => void;
+  onEdit?: (event: Event) => void; onDeleted?: () => void;
 }) {
   const { error: toastError } = useToast();
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function deleteEvent() {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from('calendar_events').delete().eq('id', event.id);
+      if (error) { toastError(describeDbError(error)); return; }
+      onDeleted?.();
+    } catch (err) {
+      toastError(describeDbError(err));
+    } finally {
+      setDeleting(false);
+    }
+  }
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
   useEffect(() => {
@@ -126,6 +144,43 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
           })}
           {rsvps.length === 0 && <p className="text-sm text-muted">No RSVPs yet — be the first to respond.</p>}
         </div>
+
+        {/* Edit / delete — any family member (family-scoped RLS governs). Delete
+            uses a two-tap confirm; for a recurring event it removes the SERIES. */}
+        {(onEdit || onDeleted) && (
+          <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
+            {confirmDelete ? (
+              <>
+                <span className="mr-auto text-xs text-danger">
+                  {event.recurrence !== 'none' ? 'Delete the whole recurring series?' : 'Delete this event?'}
+                </span>
+                <button type="button" onClick={() => setConfirmDelete(false)} disabled={deleting}
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:bg-elevated">
+                  Keep
+                </button>
+                <button type="button" onClick={() => void deleteEvent()} disabled={deleting}
+                  className="rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-60">
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </button>
+              </>
+            ) : (
+              <>
+                {onDeleted && (
+                  <button type="button" onClick={() => setConfirmDelete(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-danger/50 hover:text-danger">
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </button>
+                )}
+                {onEdit && (
+                  <button type="button" onClick={() => onEdit(event)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-elevated">
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </Modal>
   );

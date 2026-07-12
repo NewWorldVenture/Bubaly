@@ -4,6 +4,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles, Eye, EyeOff, Users } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { expandEvents } from '@/lib/calendar/recurrence';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -160,7 +161,7 @@ function MonthGrid({ gridDays, monthAnchor, eventsByDay, todayStr, onSelect }: {
               <div className={cn('mb-1 flex h-6 w-6 items-center justify-center rounded-full text-xs', isToday ? 'bg-brand font-bold text-white' : inMonth ? 'text-fg' : 'text-muted')}>{d.getDate()}</div>
               <div className="space-y-0.5">
                 {evs.slice(0, 3).map((e) => (
-                  <button key={e.id} onClick={() => onSelect(e)}
+                  <button key={`${e.id}-${e.starts_at}`} onClick={() => onSelect(e)}
                     className={cn('flex w-full items-center gap-1 truncate rounded border px-1 py-0.5 text-left text-[10px]', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                     <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', CATEGORY_DOT[e.category] ?? 'bg-muted')} />
                     <span className="truncate">{e.title}</span>
@@ -181,6 +182,7 @@ export function CalendarModule() {
   const [open, setOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [selected, setSelected] = useState<Event | null>(null);
+  const [editing, setEditing] = useState<Event | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [catMenu, setCatMenu] = useState(false);
@@ -228,13 +230,24 @@ export function CalendarModule() {
     if (gridRef.current) gridRef.current.scrollTop = HOUR_HEIGHT * 1;
   }, []);
 
-  const { data, loading, error, refresh } = useRealtimeQuery<Event>({
+  const { data: rawData, loading, error, refresh } = useRealtimeQuery<Event>({
     table: 'calendar_events', familyId, deps: [familyId, monthGridStart.toISOString()],
+    // In-window events PLUS every recurring series that started before the
+    // window's end — expandEvents below turns those into the occurrences that
+    // actually fall inside the grid (a weekly event created in June must show
+    // on every July Monday, not vanish after its first week).
     fetcher: (supabase) =>
       supabase.from('calendar_events').select('*').eq('family_id', familyId)
-        .gte('starts_at', monthGridStart.toISOString()).lt('starts_at', fetchEnd.toISOString())
+        .lt('starts_at', fetchEnd.toISOString())
+        .or(`starts_at.gte.${monthGridStart.toISOString()},recurrence.neq.none`)
         .order('starts_at'),
   });
+
+  // Recurring rules → concrete occurrences inside the visible window.
+  const data = useMemo(
+    () => expandEvents(rawData, monthGridStart, fetchEnd),
+    [rawData, monthGridStart, fetchEnd],
+  );
 
   const memberById = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
 
@@ -499,7 +512,7 @@ export function CalendarModule() {
           <div className="flex-1 space-y-1 p-4">
             {/* All-day events */}
             {mobileDayAllDay.map(e => (
-              <div key={e.id} onClick={() => setSelected(e)} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+              <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                 <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">All Day</div>
                 <div className="text-sm font-semibold">{e.title}</div>
                 {e.assignee_id && memberById.get(e.assignee_id) && (
@@ -518,7 +531,7 @@ export function CalendarModule() {
             {mobileDayTimed.map(e => {
               const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
               return (
-                <div key={e.id} onClick={() => setSelected(e)} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold">
                       {new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
@@ -560,7 +573,7 @@ export function CalendarModule() {
                       {/* All-day events */}
                       <div className="mt-1 w-full space-y-0.5 px-1">
                         {(allDayByDay.get(dStr) ?? []).map(e => (
-                          <div key={e.id} onClick={() => setSelected(e)} className={cn('cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                          <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                             {e.title}
                           </div>
                         ))}
@@ -608,7 +621,7 @@ export function CalendarModule() {
                         const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
                         if (top < 0 || top > HOURS.length * HOUR_HEIGHT) return null;
                         return (
-                          <div key={e.id} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)}
+                          <div key={`${e.id}-${e.starts_at}`} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)}
                             className={cn('absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}
                             title={e.title}>
                             <div className="flex items-start justify-between gap-1">
@@ -686,7 +699,7 @@ export function CalendarModule() {
                   {label} &bull; {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </div>
                 {events.map(e => (
-                  <div key={e.id} onClick={() => setSelected(e)} className="mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
+                  <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className="mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
                     <div className={cn('mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full', CATEGORY_DOT[e.category] ?? 'bg-muted')} />
                     <div className="min-w-0">
                       {!e.all_day && (
@@ -759,13 +772,32 @@ export function CalendarModule() {
       </div>
 
       {open && <NewEventModal familyId={familyId} userId={userId} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); void refresh(); }} />}
+      {editing && <NewEventModal familyId={familyId} userId={userId} existing={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void refresh(); }} />}
       {findOpen && <FindTimeModal members={members} selfMemberId={selfMember?.id ?? null} onClose={() => setFindOpen(false)} onScheduled={() => { setFindOpen(false); void refresh(); }} />}
-      {selected && <EventDetailModal event={selected} members={members} selfMemberId={selfMember?.id ?? null} familyId={familyId} onClose={() => setSelected(null)} />}
+      {selected && (
+        <EventDetailModal
+          event={selected} members={members} selfMemberId={selfMember?.id ?? null} familyId={familyId}
+          onClose={() => setSelected(null)}
+          onEdit={(e) => { setSelected(null); setEditing(e); }}
+          onDeleted={() => { setSelected(null); void refresh(); }}
+        />
+      )}
     </div>
   );
 }
 
-function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: string; userId: string; onClose: () => void; onSaved: () => void }) {
+/** ISO → the local `datetime-local` input format (YYYY-MM-DDTHH:mm). */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function NewEventModal({ familyId, userId, existing, onClose, onSaved }: {
+  familyId: string; userId: string; existing?: Event | null; onClose: () => void; onSaved: () => void;
+}) {
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -793,7 +825,11 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
     try {
       const supabase = createClient();
       const recurrence = String(form.get('recurrence') ?? 'none') as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
-      const { error } = await supabase.from('calendar_events').insert({ ...parsed.data, family_id: familyId, created_by: userId, all_day: false, recurrence });
+      const { error } = existing
+        ? await supabase.from('calendar_events')
+            .update({ ...parsed.data, recurrence, ends_at: parsed.data.ends_at ?? null, location: parsed.data.location ?? null, description: parsed.data.description ?? null })
+            .eq('id', existing.id)
+        : await supabase.from('calendar_events').insert({ ...parsed.data, family_id: familyId, created_by: userId, all_day: false, recurrence });
       if (error) { toastError(describeDbError(error)); return; }
       onSaved();
     } catch (err) {
@@ -804,14 +840,14 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
   }
 
   return (
-    <Modal open title="Add Event" onClose={onClose}>
+    <Modal open title={existing ? 'Edit Event' : 'Add Event'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Title" error={errors.title} required>
-          {(id) => <Input id={id} name="title" autoFocus placeholder="Team dinner" />}
+          {(id) => <Input id={id} name="title" autoFocus placeholder="Team dinner" defaultValue={existing?.title ?? ''} />}
         </Field>
         <Field label="Category">
           {(id) => (
-            <Select id={id} name="category">
+            <Select id={id} name="category" defaultValue={existing?.category ?? 'general'}>
               {['general','school','sports','appointment','birthday','holiday','other'].map(c => (
                 <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
               ))}
@@ -820,18 +856,18 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Starts" error={errors.starts_at} required>
-            {(id) => <Input id={id} name="starts_at" type="datetime-local" />}
+            {(id) => <Input id={id} name="starts_at" type="datetime-local" defaultValue={toLocalInput(existing?.starts_at ?? null)} />}
           </Field>
           <Field label="Ends" error={errors.ends_at}>
-            {(id) => <Input id={id} name="ends_at" type="datetime-local" />}
+            {(id) => <Input id={id} name="ends_at" type="datetime-local" defaultValue={toLocalInput(existing?.ends_at ?? null)} />}
           </Field>
         </div>
         <Field label="Location">
-          {(id) => <Input id={id} name="location" placeholder="Home, School..." />}
+          {(id) => <Input id={id} name="location" placeholder="Home, School..." defaultValue={existing?.location ?? ''} />}
         </Field>
         <Field label="Repeat">
           {(id) => (
-            <Select id={id} name="recurrence">
+            <Select id={id} name="recurrence" defaultValue={existing?.recurrence ?? 'none'}>
               <option value="none">No repeat</option>
               <option value="daily">Every day</option>
               <option value="weekly">Every week</option>
@@ -841,12 +877,12 @@ function NewEventModal({ familyId, userId, onClose, onSaved }: { familyId: strin
           )}
         </Field>
         <Field label="Notes">
-          {(id) => <Textarea id={id} name="description" placeholder="Optional details..." />}
+          {(id) => <Textarea id={id} name="description" placeholder="Optional details..." defaultValue={existing?.description ?? ''} />}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
           <Button type="submit" size="sm" loading={loading}>
-            {loading ? 'Saving...' : 'Add Event'}
+            {loading ? 'Saving...' : existing ? 'Save Changes' : 'Add Event'}
           </Button>
         </div>
       </form>
