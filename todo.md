@@ -98,7 +98,7 @@ it already exists**; the one central gap (consent) is now closed. Honest status 
 | Admin marketing intelligence page | ◐ partial | `/admin/marketing/intelligence` (no dedicated `/admin/visitor-intelligence/*` set) |
 | **Granular consent (necessary/analytics/personalization/marketing) + GPC + revocation** | ☑ **NEW** | `mkt_consent_events` (0160), `lib/marketing/consent.ts`, `/api/mkt/consent` |
 | **Consent-gated tracking** | ☑ **NEW** | `/api/mkt/track` gates on analytics consent |
-| Identity linking (anon → contact) | ◐ partial | `mkt_visitors.contact_id` FK exists; server-side stitch-on-signup not wired |
+| Identity linking (anon → contact) | ☑ **NEW** | `lib/marketing/identity.ts` — on signup/login stitches `mkt_visitors.contact_id` → `crm_contacts` (dedup by email, non-downgrading), carries consent forward (`mkt_consent_events.contact_id`), forks on shared-device 2nd user (rotates anon id). Hooked from login/signup forms + `auth/callback`. 6 tests (`identity-stitch.test.ts`) |
 | Progressive profiling UI | ☐ open | fields exist on contacts; no staged-capture UI |
 | Consent banner / preference-center UI | ☑ **NEW** | `components/marketing/consent-manager.tsx` — banner (Accept all / Reject / Manage) + granular preference center wired to `/api/mkt/consent`; anon-id + GPC + local cache in `lib/marketing/visitor.ts`; fires the analytics touch to `/api/mkt/track`; re-openable from the footer |
 | **Client visitor spine (anon-id + first-party touch)** | ☑ **NEW** | `lib/marketing/visitor.ts` — durable `bubaly_vid` cookie/localStorage; GPC detect; one consent-gated `/api/mkt/track` touch per session (was: endpoints had no client caller) |
@@ -109,8 +109,11 @@ it already exists**; the one central gap (consent) is now closed. Honest status 
 - ☑ **DONE (2026-07-12)** — Client **consent banner + preference center** (`consent-manager.tsx` +
   `visitor.ts`) calling `/api/mkt/consent`, feeding the resolved analytics flag + GPC to
   `/api/mkt/track`. Marketing never pre-checked; GPC honored silently; 6 tests (`consent-ui.test.ts`).
-- ☐ **Identity stitch on signup/login**: server-side, set `mkt_visitors.contact_id` and copy the
-  visitor's consent forward to the contact; dedupe; don't merge unrelated users on a shared device.
+- ☑ **DONE (2026-07-12)** — Identity stitch on signup/login (`lib/marketing/identity.ts`): sets
+  `mkt_visitors.contact_id`, carries consent forward (`mkt_consent_events.contact_id`), dedupes the
+  contact by email (non-downgrading), and **forks** (rotates the anon id) rather than merge a second
+  person on a shared device. Hooked from the login/signup forms + `auth/callback` (covers password /
+  OAuth / magic-link / email-confirm). 6 tests.
 - ☐ Progressive-profiling capture (email first → name/role/interests later), one field at a time.
 - ☐ Dedicated `/admin/visitor-intelligence/*` dashboards if the marketing intelligence page isn't enough.
 

@@ -12,7 +12,7 @@ import { Smartphone } from 'lucide-react';
 import { OAuthButtons, authButtonClass } from '@/components/auth/oauth-buttons';
 import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
-import { resolveLandingPathAction } from '@/app/(auth)/actions';
+import { resolveLandingPathAction, stitchIdentityAction } from '@/app/(auth)/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 
 export function LoginForm() {
@@ -44,6 +44,8 @@ export function LoginForm() {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword(parsed.data);
       if (error) throw error;
+      // Attribute the anonymous visitor spine to this now-known user (best-effort).
+      void stitchIdentityAction();
       const redirectParam = params.get('redirect');
       // Resolve server-side so super admins (DB seed OR env/code allowlist)
       // land on the admin console even before migration 0008 is applied.
