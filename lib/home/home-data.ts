@@ -14,13 +14,12 @@ export type MonthFinances = { income: number; expenses: number; remaining: numbe
  * an unparseable date, or outside the current month, are ignored.
  */
 export function summarizeMonthFinances(txns: HomeTxn[], now: Date): MonthFinances {
-  const y = now.getFullYear();
-  const m = now.getMonth();
+  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   let income = 0;
   let expenses = 0;
   for (const t of txns ?? []) {
-    const d = new Date(t.date);
-    if (Number.isNaN(d.getTime()) || d.getFullYear() !== y || d.getMonth() !== m) continue;
+    const dateKey = /^(\d{4}-\d{2})-\d{2}(?:$|T)/.exec(t.date)?.[1];
+    if (dateKey !== monthKey) continue;
     const amt = Number(t.amount);
     if (!Number.isFinite(amt)) continue;
     if (t.type === 'income') income += Math.abs(amt);

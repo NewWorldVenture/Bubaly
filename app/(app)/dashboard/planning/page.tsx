@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
 import {
   Calendar as CalendarIcon, CheckSquare, BellRing, StickyNote, FolderLock,
@@ -192,8 +193,8 @@ export default async function PlanningPage() {
                 {(photos as Ph[]).map((p) => {
                   const src = p.thumbnail_url || p.url;
                   return (
-                    <span key={p.id} className="aspect-square overflow-hidden rounded-lg bg-elevated">
-                      {src ? <img src={src} alt="Family moment" className="h-full w-full object-cover" /> : <span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-4 w-4" /></span>}
+                    <span key={p.id} className="relative aspect-square overflow-hidden rounded-lg bg-elevated">
+                      {src ? <Image src={src} alt="Family moment" fill sizes="96px" className="object-cover" /> : <span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-4 w-4" /></span>}
                     </span>
                   );
                 })}

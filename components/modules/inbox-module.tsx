@@ -310,9 +310,7 @@ export function InboxModule() {
               <div className="space-y-1.5">
                 {contacts.slice(0, 8).map(c => (
                   <div key={c.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-surface/60 transition">
-                    {c.photo_url
-                      ? <img src={c.photo_url} alt={c.name} className="h-7 w-7 rounded-full object-cover flex-shrink-0" />
-                      : <Avatar name={c.name} size={28} />}
+                    <Avatar name={c.name} src={c.photo_url} size={28} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-xs font-medium">{c.name}</div>
                       <div className="text-[10px] text-muted capitalize">{c.category}</div>
@@ -573,9 +571,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-2">Contact</p>
             <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface/60 px-3 py-2.5">
-              {comm.contact.photo_url
-                ? <img src={comm.contact.photo_url} alt={comm.contact.name} className="h-9 w-9 rounded-full object-cover" />
-                : <Avatar name={comm.contact.name} size={36} />}
+              <Avatar name={comm.contact.name} src={comm.contact.photo_url} size={36} />
               <div>
                 <div className="text-sm font-semibold">{comm.contact.name}</div>
                 <div className="text-[11px] text-muted capitalize">{comm.contact.category}</div>

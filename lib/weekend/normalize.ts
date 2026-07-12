@@ -29,9 +29,9 @@ export type NormalizedEvent = {
 export function discoveryWindow(days: number, now: Date = new Date()): { startISO: string; endISO: string } {
   const start = new Date(now);
   const end = new Date(now);
-  end.setDate(end.getDate() + Math.max(1, days));
-  end.setHours(23, 59, 59, 0);
-  return { startISO: start.toISOString().slice(0, 19) + 'Z', endISO: end.toISOString().slice(0, 19) + 'Z' };
+  end.setUTCDate(end.getUTCDate() + Math.max(1, days));
+  end.setUTCHours(23, 59, 59, 0);
+  return { startISO: start.toISOString(), endISO: end.toISOString() };
 }
 
 const toCents = (n: unknown): number | null => {

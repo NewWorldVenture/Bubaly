@@ -36,7 +36,7 @@ export function SubscriptionsModule() {
   });
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
-  const all = subs ?? [];
+  const all = useMemo(() => subs ?? [], [subs]);
   const stats = useMemo(() => summarizeSubscriptions(all as SubLike[]), [all]);
   const wasted = useMemo(() => wastedMonthlyCents(all as SubLike[]), [all]);
 

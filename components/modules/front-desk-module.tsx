@@ -523,9 +523,7 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-2">Contact</p>
             <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface/60 px-3 py-2.5">
-              {call.contact.photo_url
-                ? <img src={call.contact.photo_url} alt={call.contact.name} className="h-9 w-9 rounded-full object-cover" />
-                : <Avatar name={call.contact.name} size={36} />}
+              <Avatar name={call.contact.name} src={call.contact.photo_url} size={36} />
               <div>
                 <div className="text-sm font-semibold">{call.contact.name}</div>
                 <div className="text-[11px] text-muted capitalize">{call.contact.category}</div>

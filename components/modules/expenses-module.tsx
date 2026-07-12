@@ -46,8 +46,8 @@ export function ExpensesModule() {
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
 
-  const allSplits = splits ?? [];
-  const allShares = shares ?? [];
+  const allSplits = useMemo(() => splits ?? [], [splits]);
+  const allShares = useMemo(() => shares ?? [], [shares]);
   const sharesBySplit = useMemo(() => {
     const m = new Map<string, Share[]>();
     for (const s of allShares) { const a = m.get(s.split_id) ?? []; a.push(s); m.set(s.split_id, a); }
