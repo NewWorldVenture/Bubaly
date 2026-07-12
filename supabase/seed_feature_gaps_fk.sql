@@ -54,8 +54,9 @@ begin
   -- ── Kid investing: asset catalog + wallets + holdings + 500 orders ────────
   if to_regclass('public.invest_orders') is not null and v_members is not null then
     -- Educational asset catalog (global, unique by symbol; ZSEED* namespace).
-    insert into public.invest_assets (symbol, kind, emoji, description, price_cents, risk_level, sort_order)
+    insert into public.invest_assets (symbol, name, kind, emoji, description, price_cents, risk_level, sort_order)
     select 'ZSEED' || lpad(g::text, 2, '0'),
+      'Seed ' || (array['Fund','Stocks','Bonds','Basket'])[1 + (g % 4)] || ' ' || g,
       (array['fund','stocks','bonds','basket'])[1 + (g % 4)],
       (array['📈','💻','🏦','🧺','🌎','⚡'])[1 + (g % 6)],
       'Seeded educational asset.',
