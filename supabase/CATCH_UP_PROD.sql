@@ -1644,6 +1644,40 @@ create table if not exists public.support_tickets (
   closed_at        timestamptz
 );
 
+-- ── RECONCILE a pre-existing, older-shaped support_tickets ──────────────────
+-- A drifted prod DB may already have support_tickets in migration 0012's
+-- CONTACT-FORM shape (name/email/message/source, no ticket_number). CREATE TABLE
+-- IF NOT EXISTS above then skips, so the seed INSERT + the app's inserts (which
+-- use the 0010 admin shape: ticket_number/requester_email/description/…) fail on
+-- the missing columns. Bring any existing table UP to the 0010 shape, additively.
+alter table public.support_tickets add column if not exists ticket_number     text;
+alter table public.support_tickets add column if not exists description        text;
+alter table public.support_tickets add column if not exists category          text not null default 'general';
+alter table public.support_tickets add column if not exists priority          text not null default 'medium';
+alter table public.support_tickets add column if not exists status            text not null default 'open';
+alter table public.support_tickets add column if not exists requester_id      uuid;
+alter table public.support_tickets add column if not exists requester_name    text;
+alter table public.support_tickets add column if not exists requester_email   text;
+alter table public.support_tickets add column if not exists assigned_agent_id uuid;
+alter table public.support_tickets add column if not exists assigned_agent_name text;
+alter table public.support_tickets add column if not exists family_id         uuid;
+alter table public.support_tickets add column if not exists tags              text[] not null default '{}';
+alter table public.support_tickets add column if not exists resolution_note   text;
+alter table public.support_tickets add column if not exists resolved_at       timestamptz;
+alter table public.support_tickets add column if not exists closed_at         timestamptz;
+-- The 0012 shape's `email` is NOT NULL with no default and the app no longer sets
+-- it (uses requester_email) — relax it so the new inserts don't null-violate. Only
+-- if the legacy column is actually present.
+do $$ begin
+  if exists (select 1 from information_schema.columns
+             where table_schema='public' and table_name='support_tickets' and column_name='email') then
+    execute 'alter table public.support_tickets alter column email drop not null';
+  end if;
+end $$;
+-- ON CONFLICT (ticket_number) needs a unique index; the fresh-DB path gets it via
+-- the column's UNIQUE constraint (same name → IF NOT EXISTS skips the dup).
+create unique index if not exists support_tickets_ticket_number_key on public.support_tickets (ticket_number);
+
 -- auto-update updated_at
 create or replace function public.set_support_ticket_updated_at()
 returns trigger language plpgsql as $$
