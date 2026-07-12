@@ -15876,3 +15876,183 @@ drop policy if exists onboarding_progress_update on public.onboarding_progress;
 drop policy if exists onboarding_progress_update on public.onboarding_progress;
 create policy onboarding_progress_update on public.onboarding_progress
   for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+
+-- ══════════ 0138_demo_sessions.sql ══════════
+-- FamilyOS :: 0138 — Ephemeral "Try it free" demo sessions
+--
+-- Powers the pricing-page "Test Account → Login Now to Try Me" flow: one click
+-- provisions a throwaway Family+ family (seeded with data), signs the visitor
+-- straight in, and runs a 5-minute countdown. On logout / expiry / the cron, the
+-- whole thing is deleted (auth user + family cascade), so it fully resets for the
+-- next person. This table just tracks each live demo + when it expires.
+
+create table if not exists public.demo_sessions (
+  id          uuid        primary key default gen_random_uuid(),
+  user_id     uuid        not null references auth.users(id) on delete cascade,
+  family_id   uuid        not null references public.families(id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  expires_at  timestamptz not null,
+  unique (user_id)
+);
+
+create index if not exists idx_demo_sessions_expires on public.demo_sessions (expires_at);
+
+alter table public.demo_sessions enable row level security;
+
+-- A demo visitor may read only their OWN session row (to drive the countdown).
+-- All writes/cleanup run through the service-role client in server actions + cron.
+drop policy if exists demo_sessions_select_own on public.demo_sessions;
+create policy demo_sessions_select_own on public.demo_sessions
+  for select to authenticated
+  using (user_id = auth.uid());
+
+
+-- ══════════ 0160_visitor_consent.sql ══════════
+-- ============================================================================
+-- 0160 · Visitor consent layer (privacy-first).
+--
+-- The visitor-intelligence spine (mkt_visitors / mkt_sessions / mkt_touchpoints,
+-- 0058) records first-party analytics keyed by an anonymous id, but had NO
+-- consent model — so /api/mkt/track wrote regardless of the visitor's choice.
+-- This adds an APPEND-ONLY consent ledger: every grant/revoke is one immutable,
+-- timestamped, versioned row keyed by the anonymous id (and the CRM contact once
+-- identified). Current state = the latest row per (anonymous_id, category), so a
+-- later 'denied' revokes and the full history is auditable.
+--
+-- Categories: necessary (always on) · analytics · personalization ·
+-- marketing_email · marketing_sms. GPC/Do-Not-Sell is honored at read time.
+--
+-- Service-role only (RLS ENABLED, NO policies) — mirrors the mkt_ convention;
+-- written by /api/mkt/consent and read by /api/mkt/track. Additive + idempotent.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.mkt_consent_events (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  anonymous_id  text NOT NULL,
+  contact_id    uuid REFERENCES public.crm_contacts(id) ON DELETE SET NULL,
+  category      text NOT NULL CHECK (category IN
+                  ('necessary','analytics','personalization','marketing_email','marketing_sms')),
+  decision      text NOT NULL CHECK (decision IN ('granted','denied')),
+  policy_version text NOT NULL DEFAULT 'v1',
+  source        text,          -- banner | preference_center | signup | api | gpc
+  gpc           boolean NOT NULL DEFAULT false,
+  user_agent    text,
+  metadata      jsonb NOT NULL DEFAULT '{}',
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+-- Latest-per-category lookups by visitor, and contact rollups.
+CREATE INDEX IF NOT EXISTS idx_mkt_consent_anon
+  ON public.mkt_consent_events (anonymous_id, category, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mkt_consent_contact
+  ON public.mkt_consent_events (contact_id, created_at DESC);
+
+ALTER TABLE public.mkt_consent_events ENABLE ROW LEVEL SECURITY;
+-- No policies: service-role only (like mkt_visitors / mkt_sessions / mkt_touchpoints).
+
+
+-- ══════════ 0161_demo_session_email_gate.sql ══════════
+-- FamilyOS :: 0161 — Email-gate the demo + defer the countdown
+--
+-- The "Test Account" demo now opens behind a blurred email-capture pop-up: one
+-- click provisions the demo and signs the visitor in, but the 5-minute clock does
+-- NOT start until they enter an email. So `expires_at` becomes nullable (null =
+-- provisioned, clock not started yet) and we capture the address in `email`.
+
+alter table public.demo_sessions
+  alter column expires_at drop not null;
+
+alter table public.demo_sessions
+  add column if not exists email text;
+
+-- Reaping abandoned, never-started demos (email never entered) is by created_at,
+-- so keep that queryable.
+create index if not exists idx_demo_sessions_created on public.demo_sessions (created_at);
+
+
+-- ══════════ 0162_demo_email_uses.sql ══════════
+-- FamilyOS :: 0162 — One demo per email (durable per-email demo usage ledger)
+--
+-- The demo is a SINGLE shared account, so demo_sessions.email is one row the next
+-- visitor overwrites — useless for "this email already used its demo". This table
+-- is the durable, per-email record: when an email starts a demo we stamp it here
+-- with that demo's 5-minute expiry. Once expired, that email can't start another
+-- demo — the email gate routes it to the upgrade/plan-choice page instead.
+--
+-- Service-role only (writes + the gate check run through the service client in the
+-- demo server actions); RLS enabled with no policies so it's never client-readable.
+-- Additive + idempotent.
+
+create table if not exists public.demo_email_uses (
+  email         text        primary key,
+  first_used_at timestamptz not null default now(),
+  last_used_at  timestamptz not null default now(),
+  -- the 5-minute expiry of this email's most recent demo; once now() passes it,
+  -- the email is "used up" and can't demo again.
+  expires_at    timestamptz not null,
+  uses          integer     not null default 1,
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists idx_demo_email_uses_expires on public.demo_email_uses (expires_at);
+
+alter table public.demo_email_uses enable row level security;
+-- No policies: only the service-role client (demo actions) reads/writes this.
+
+
+-- ══════════ 0163_messages_audio_read_fix.sql ══════════
+-- FamilyOS :: 0163 — Messages: allow audio kind + non-destructive read receipts
+--
+-- Two live Messages bugs:
+--   1. Voice notes NEVER saved: the module inserts family_messages.kind='audio'
+--      (and renders kind==='audio'), but the 0014 CHECK only allows
+--      ('text','image','file','voice','poll','announcement') — every voice
+--      message insert violated the constraint and failed. Widen it to include
+--      'audio' (keeping every existing value, so no data rewrite).
+--   2. Read receipts wiped each other: mark-as-read did
+--      update({ read_by: [me] }) — REPLACING the array and erasing every other
+--      reader (the family-member RLS policy allows the update, so it succeeded).
+--      Add a proper append RPC the client calls instead.
+--
+-- Additive + idempotent. RLS unchanged; the RPC is SECURITY INVOKER, so the
+-- 0014 family-member policy still governs which rows it may touch.
+
+-- 1. Widen family_messages.kind to include 'audio'.
+do $$
+declare
+  c_name text;
+begin
+  select con.conname into c_name
+  from pg_constraint con
+  join pg_class rel on rel.oid = con.conrelid
+  join pg_namespace nsp on nsp.oid = rel.relnamespace
+  where nsp.nspname = 'public'
+    and rel.relname = 'family_messages'
+    and con.contype = 'c'
+    and pg_get_constraintdef(con.oid) ilike '%kind%';
+  if c_name is not null then
+    execute format('alter table public.family_messages drop constraint %I', c_name);
+  end if;
+end $$;
+
+alter table public.family_messages
+  add constraint family_messages_kind_check
+  check (kind in ('text','image','file','voice','audio','poll','announcement'));
+
+-- 2. Append-only mark-as-read: adds the caller to read_by on every unread,
+--    non-deleted message in the conversation WITHOUT touching other readers.
+create or replace function public.mark_conversation_read(p_conversation_id uuid)
+returns void
+language sql
+security invoker
+set search_path = public
+as $$
+  update public.family_messages
+     set read_by = array_append(read_by, auth.uid())
+   where conversation_id = p_conversation_id
+     and deleted_at is null
+     and auth.uid() is not null
+     and not (read_by @> array[auth.uid()]);
+$$;
+
+grant execute on function public.mark_conversation_read(uuid) to authenticated;
