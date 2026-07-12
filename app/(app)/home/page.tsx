@@ -3,10 +3,12 @@ import Link from 'next/link';
 import {
   Plus, Calendar as CalendarIcon, CheckSquare, UtensilsCrossed, MoreHorizontal,
   ChevronRight, Clock, ListChecks, CalendarDays, ChefHat, ClipboardCheck,
-  DollarSign, Image as ImageIcon, MessageCircle, Check, Sparkles,
+  DollarSign, Image as ImageIcon, MessageCircle, Check, Sparkles, Rocket, ArrowRight,
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { getOnboardingProgress, resolveCompleteness } from '@/lib/server/onboarding-progress';
+import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
@@ -238,6 +240,23 @@ export default async function HomePage() {
   // R11 — the category metric: how much family admin the system removed this week.
   const timeSaved = await loadTimeSaved(supabase, familyId, now);
 
+  // Setup nudge — the ONLY route into /dashboard/setup (the re-onboarding
+  // surface was otherwise unreachable). Managers only, never for the demo
+  // account, and gated cheaply: one indexed read of the lifecycle row skips
+  // everything for completed accounts; the full completeness resolve runs only
+  // for the needs-setup / reset cohort. Degrades to "no nudge" pre-migration.
+  let setupNudge: { score: number; headline: string } | null = null;
+  if (!isDemoAccount && isManager(me.role)) {
+    try {
+      const adminClient = createServiceClient();
+      const progress = await getOnboardingProgress(adminClient, ctx.user.id);
+      if (progress?.status !== 'completed') {
+        const { result } = await resolveCompleteness(adminClient, ctx.user.id, familyId);
+        if (!result.isComplete) setupNudge = { score: result.score, headline: result.headline };
+      }
+    } catch { /* onboarding_progress not migrated yet → no nudge */ }
+  }
+
   return (
     <div className="space-y-6 pb-28">
       {/* Header: greeting + quick actions */}
@@ -261,6 +280,26 @@ export default async function HomePage() {
           ))}
         </div>
       </div>
+
+      {/* Finish-setup nudge → /dashboard/setup (needs-setup / reset cohort). */}
+      {setupNudge && (
+        <Link
+          href="/dashboard/setup"
+          className="flex items-center gap-3 rounded-2xl border border-brand/30 bg-brand/5 px-4 py-3 transition hover:border-brand/50 hover:bg-brand/10"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand">
+            <Rocket className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">{setupNudge.headline}</span>
+            <span className="block text-xs text-muted">A couple of quick questions tailor Bubaly to your family.</span>
+          </span>
+          <span className="hidden shrink-0 items-center gap-2 sm:flex">
+            <span className="rounded-full bg-brand/15 px-2.5 py-1 text-xs font-bold text-brand tabular-nums">{setupNudge.score}% set up</span>
+            <ArrowRight className="h-4 w-4 text-muted" />
+          </span>
+        </Link>
+      )}
 
       {/* R6 — intent-based entry, made primary: one NL bar routes to the reasoning
           engine ("plan Emma's party"), a page, or the assistant. */}

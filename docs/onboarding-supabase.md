@@ -3,22 +3,45 @@
 End-to-end audit + hardening of the bubaly.com onboarding flow.
 
 ## The flow (post sign-up)
-`auth/callback` → brand-new accounts (no family) → **`/onboarding`** →
-`OnboardingWizard`:
-1. **Create your profile** — avatar, name, age, colour.
-2. **Create a PIN** — 4-digit (seeds the App Lock, stored disabled).
-3. **You're all set** → `/home`.
+Signup (password or OAuth, incl. the email-confirmation callback) routes to
+**`/onboarding`** → the six-step `OnboardingWizard` (resumable via a
+sessionStorage draft; nothing is written until Finish):
+1. **Profile** — avatar, name, age, colour.
+2. **Family** — name your shared space (timezone auto-detected).
+3. **Value** — paste a calendar (.ics) or try the sample week → the instant
+   "first brief" payoff (today's timeline, clashes, dinner ideas, time saved).
+4. **About** — household makeup, goals, referral source (skippable).
+5. **Members** — add people / invite by email (skippable).
+6. **PIN** — optional App Lock seed (skippable) → celebratory Done screen.
 
-One atomic action, `completeProfileOnboardingAction`, runs it all:
-- Saves the profile (`profiles.full_name`/`display_name` via service role).
-- **`ensureActiveFamily`** provisions the family space and makes the signed-in
-  user the **`parent`** member (correct role at the start) + a trial subscription.
-- Persists colour + age + a hashed PIN + `onboardingComplete` in
-  `user_preferences.notification_prefs`.
+One atomic action, **`finalizeOnboardingAction`**, writes it all: profile →
+family (service-role insert; explicit owner-member upsert — never trusts the
+`handle_new_family` trigger) → trial subscription → active family →
+questionnaire (`family_onboarding`) → local members + email invites → imported
+calendar events + the durable `onboarding_imports` TTFV record → age/PIN/flag in
+`user_preferences.notification_prefs` → audit → marketing. It is **replay-safe**:
+if the caller already belongs to a family, an auto-provisioned space is
+*adopted* (renamed to the wizard's name) and anything else short-circuits as an
+idempotent re-submit — a double-click or replayed request can never mint a
+second family. Both completion paths also send the branded **welcome email**
+(`lib/emails/welcome.tsx`, best-effort).
 
-The fuller `finalizeOnboardingAction` / `saveFamilyDetailsAction` (household size,
-goals, referral source, invites) remain available and are now wired to marketing
-too.
+The lightweight `completeProfileOnboardingAction` (profile + PIN only) and
+`saveFamilyDetailsAction` (used by `/dashboard/setup`) remain available and are
+wired to the same marketing + lifecycle plumbing.
+
+## Lifecycle + re-onboarding (migration 0159)
+Every completion records a durable **`onboarding_progress`** row (one per
+account): status (`in_progress`/`completed`/`reset`), source
+(`wizard`/`auto_provision`), value-step engagement, goals/referral/household,
+and a 0–100 completeness score (`lib/onboarding/completeness.ts`, pure +
+tested). This makes the previously-invisible **auto-provisioned cohort** (users
+`ensureActiveFamily` gave a space to without the wizard) queryable and drives:
+- **`/dashboard/setup`** — the re-onboarding surface (live score, what's-left
+  checklist, questionnaire against the EXISTING family) + `resetOnboardingAction`.
+- The **home "finish setting up" nudge** — managers with an incomplete account
+  see a banner on `/home` linking to `/dashboard/setup` (gated by one indexed
+  read of the lifecycle row, so completed accounts pay ~nothing).
 
 ## Marketing engine wiring (new)
 Every completed onboarding now **feeds the marketing engine**:
@@ -86,7 +109,9 @@ to it — so once signed in they ARE their member (chores, rewards, `/kids`).
 - Reset the PIN from the management page → old PIN fails, new one works.
 
 ## Known limitations
-- Child sign-in relies on Supabase Auth's own rate limiting; consider an app-level
-  throttle if abuse is seen.
-- The active lightweight wizard doesn't collect goals/referral (the fuller flow
-  does); those enrich the CRM contact when that flow is used.
+- Child sign-in is throttled app-side per username (`child_login_throttle`,
+  migration 0137 — lockout after repeated failures) on top of Supabase Auth's
+  own rate limiting.
+- The lightweight `completeProfileOnboardingAction` path doesn't collect
+  goals/referral; those accounts show the home "finish setting up" nudge and can
+  complete the questionnaire at `/dashboard/setup`.

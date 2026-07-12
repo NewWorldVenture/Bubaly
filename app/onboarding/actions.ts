@@ -13,7 +13,10 @@ import { cleanGoals, cleanReferralSource } from '@/lib/onboarding/family';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { upsertOnboardingContact } from '@/lib/marketing/onboarding-contact';
-import { recordOnboardingProgress } from '@/lib/server/onboarding-progress';
+import { recordOnboardingProgress, getOnboardingProgress } from '@/lib/server/onboarding-progress';
+import { sendReactEmail } from '@/lib/email';
+import { WelcomeEmail } from '@/lib/emails/welcome';
+import * as React from 'react';
 import { computeCompleteness } from '@/lib/onboarding/completeness';
 import { parseIcs, toBriefEvents, demoBriefEvents } from '@/lib/onboarding/ics';
 import { buildFirstBrief, briefSummary, type BriefEvent, type FirstBrief } from '@/lib/onboarding/first-brief';
@@ -346,6 +349,19 @@ export async function completeProfileOnboardingAction(input: {
     }).score,
   });
 
+  // Branded welcome email (best-effort; previously never sent from any path).
+  try {
+    if (auth.user.email) {
+      await sendReactEmail({
+        to: auth.user.email,
+        subject: 'Welcome to Bubaly 🎉',
+        react: React.createElement(WelcomeEmail, { name: firstName || 'there' }),
+      });
+    }
+  } catch (e) {
+    console.error('[onboarding] welcome email failed', e);
+  }
+
   try {
     const email = auth.user.email ?? null;
     await upsertOnboardingContact(admin, {
@@ -509,21 +525,47 @@ export async function finalizeOnboardingAction(input: {
   });
   if (!profileRes.ok) return profileRes;
 
-  // 2. Create the family — DB trigger creates parent member + trial subscription.
-  //    Use the service-role client for the insert: the families_select RLS policy
-  //    (is_family_member, STABLE) would otherwise filter the RETURNING row before
-  //    the trigger's membership is visible to the statement snapshot, so the
-  //    insert would come back empty. See lib/server/ensure-family.ts for the full
-  //    explanation of this trigger + RLS + RETURNING race.
   const admin = createServiceClient();
-  const { data: familyRow, error: famErr } = await admin
-    .from('families')
-    .insert({ name: family.name, timezone: family.timezone, created_by: auth.user.id })
-    .select()
-    .single();
-  if (famErr || !familyRow) return { ok: false, error: famErr?.message ?? 'Could not create family' };
 
-  const familyId = familyRow.id;
+  // 2. Resolve the family this onboarding writes to. Guard against minting a
+  //    SECOND family: the wizard UI is unreachable once you're in a family (the
+  //    layout redirects), but the action itself can be replayed (double-submit,
+  //    a retried request, a crafted call). If the caller already has an active
+  //    membership:
+  //      • their space was auto-provisioned (ensureActiveFamily, e.g. they hit a
+  //        protected page before the wizard) → ADOPT it: apply the wizard's name
+  //        + timezone and run the rest of the pipeline against it;
+  //      • anything else (a completed wizard run, an accepted invite) → treat as
+  //        an idempotent re-submit and return that family untouched.
+  let familyId: string;
+  const { data: existingMembership } = await admin
+    .from('family_members').select('family_id')
+    .eq('user_id', auth.user.id).eq('is_active', true)
+    .order('created_at').limit(1).maybeSingle();
+  if (existingMembership?.family_id) {
+    const progress = await getOnboardingProgress(admin, auth.user.id);
+    if (progress?.source !== 'auto_provision') {
+      return { ok: true, data: { familyId: existingMembership.family_id } };
+    }
+    familyId = existingMembership.family_id;
+    const { error: adoptErr } = await admin.from('families')
+      .update({ name: family.name, timezone: family.timezone }).eq('id', familyId);
+    if (adoptErr) console.error('[onboarding] auto-provisioned family adopt failed', adoptErr);
+  } else {
+    // Create the family — DB trigger creates parent member + trial subscription.
+    // Use the service-role client for the insert: the families_select RLS policy
+    // (is_family_member, STABLE) would otherwise filter the RETURNING row before
+    // the trigger's membership is visible to the statement snapshot, so the
+    // insert would come back empty. See lib/server/ensure-family.ts for the full
+    // explanation of this trigger + RLS + RETURNING race.
+    const { data: familyRow, error: famErr } = await admin
+      .from('families')
+      .insert({ name: family.name, timezone: family.timezone, created_by: auth.user.id })
+      .select()
+      .single();
+    if (famErr || !familyRow) return { ok: false, error: famErr?.message ?? 'Could not create family' };
+    familyId = familyRow.id;
+  }
 
   // 2b. Explicitly create (or reconcile) the owner's parent membership — do NOT
   //     rely on the `handle_new_family` trigger, which isn't guaranteed to be
@@ -747,6 +789,21 @@ export async function finalizeOnboardingAction(input: {
     hasPin: !!(appearance.pin && isValidPin(appearance.pin)),
     completeness,
   });
+
+  // 8b. Send the branded welcome email (best-effort — the template existed but
+  //     was never wired to a completion path, so no one ever received it).
+  try {
+    const to = profile.email || auth.user.email;
+    if (to) {
+      await sendReactEmail({
+        to,
+        subject: 'Welcome to Bubaly 🎉',
+        react: React.createElement(WelcomeEmail, { name: profile.firstName.trim() || 'there' }),
+      });
+    }
+  } catch (e) {
+    console.error('[onboarding] welcome email failed', e);
+  }
 
   try {
     const { data: prof } = await supabase
