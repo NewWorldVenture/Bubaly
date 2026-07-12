@@ -64,6 +64,19 @@
 > re-verified: applies with 0 errors, seeds all 20 tables, re-runs keep counts stable. **Lesson
 > re-confirmed:** these best-effort/guarded seeds MUST be executed on PG16, not just column-checked —
 > a single statement error silently zeroes every table in the block.
+>
+> ### Round 4 — 2026-07-12 (`seed_feature_gaps_4.sql`, #299): 13 more left-nav tables
+> Continued the sweep to cover the Auto / Home / Trips / Sync / Nutrition / Signups / wallet-gifts /
+> approvals surfaces: **event RSVPs · meal nutrition · trip plans · departure plans · calendar feeds ·
+> driver licenses · rental cars · vehicle inspections · homes · household info · home security events ·
+> gift links · parent approvals**. PG16-validated on the full harness — again caught **2 real bugs**
+> that would have zeroed their block: an invalid `member_role` `'guardian'` in the driver-license
+> filter (valid roles are parent/adult/teen/child/caregiver/guest) and an invalid `household_info.category`
+> `'utility'` (CHECK: wifi/emergency/shutoff/code/insurance/contact/instruction/account/other). Fixed +
+> re-verified: 0 errors, all 13 tables populated, idempotent. Appended to `SEED_ALL.sql`.
+> **Rounds 3+4 together closed 33 of the ~40 user-facing unseeded tables.** Remaining unseeded
+> family-scoped tables are infra/gated subsystems (social_* / sync_* / guardian_* / stripe_* / audit &
+> log tables / per-user config) — not empty-page risks, so intentionally left unseeded.
 
 > ## 🧠 REASONING/NETWORK LANE — 2026-07-06/07 (parallel to the onboarding/marketing sessions)
 >
