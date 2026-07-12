@@ -1,0 +1,115 @@
+// lib/marketing/progressive-profile.ts — the progressive-profiling brain (pure,
+// unit-tested). Progressive profiling asks ONE question at a time across visits
+// instead of a wall of fields: given what's already known (and what the person
+// skipped), it picks the next thing to ask and tracks completeness. No browser
+// or DB deps.
+
+export type ProfileField = 'role' | 'top_priority' | 'household_size' | 'child_ages' | 'interests';
+
+export type ProfileQuestion = {
+  field: ProfileField;
+  kind: 'choice' | 'multi';
+  prompt: string;
+  help?: string;
+  options: { value: string; label: string }[];
+};
+
+// Ordered — earlier questions are the highest-signal for tailoring the product.
+export const PROFILE_QUESTIONS: ProfileQuestion[] = [
+  {
+    field: 'role', kind: 'choice',
+    prompt: 'Who are you organizing for?',
+    options: [
+      { value: 'parent', label: 'Parent' },
+      { value: 'grandparent', label: 'Grandparent' },
+      { value: 'caregiver', label: 'Caregiver' },
+      { value: 'other', label: 'Someone else' },
+    ],
+  },
+  {
+    field: 'top_priority', kind: 'choice',
+    prompt: 'What would help your family most right now?',
+    options: [
+      { value: 'calendar', label: 'Calendar & schedules' },
+      { value: 'meals', label: 'Meals & groceries' },
+      { value: 'chores', label: 'Chores & kids' },
+      { value: 'money', label: 'Money & allowance' },
+      { value: 'paperwork', label: 'Paperwork & forms' },
+      { value: 'other', label: 'Something else' },
+    ],
+  },
+  {
+    field: 'household_size', kind: 'choice',
+    prompt: 'How big is your household?',
+    options: [
+      { value: '2', label: 'Just 2' }, { value: '3', label: '3' },
+      { value: '4', label: '4' }, { value: '5', label: '5' }, { value: '6', label: '6+' },
+    ],
+  },
+  {
+    field: 'child_ages', kind: 'choice',
+    prompt: 'Any kids at home?',
+    help: 'Helps us tailor tips and reminders.',
+    options: [
+      { value: 'none', label: 'No kids' },
+      { value: 'little', label: 'Little ones' },
+      { value: 'school', label: 'School-age' },
+      { value: 'teen', label: 'Teens' },
+      { value: 'mixed', label: 'A mix' },
+    ],
+  },
+  {
+    field: 'interests', kind: 'multi',
+    prompt: 'Which should Bubaly focus on for you?',
+    help: 'Pick any that fit.',
+    options: [
+      { value: 'calendar', label: 'Calendar' }, { value: 'meals', label: 'Meals' },
+      { value: 'chores', label: 'Chores' }, { value: 'money', label: 'Money' },
+      { value: 'paperwork', label: 'Paperwork' }, { value: 'health', label: 'Health' },
+      { value: 'activities', label: 'Activities' },
+    ],
+  },
+];
+
+export type KnownProfile = Partial<Record<ProfileField, string | number | string[] | null>>;
+
+/** A field counts as answered when it has a real value (non-empty). */
+export function isAnswered(value: KnownProfile[ProfileField]): boolean {
+  if (value == null) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'string') return value.trim().length > 0;
+  return true; // number
+}
+
+/** The next question to ask: first field that's neither answered nor skipped. */
+export function nextQuestion(known: KnownProfile, skipped: string[] = []): ProfileQuestion | null {
+  const skip = new Set(skipped);
+  for (const q of PROFILE_QUESTIONS) {
+    if (skip.has(q.field)) continue;
+    if (!isAnswered(known[q.field])) return q;
+  }
+  return null;
+}
+
+/** 0..1 share of profile questions answered (skips don't count as answered). */
+export function profileCompleteness(known: KnownProfile): number {
+  const answered = PROFILE_QUESTIONS.filter((q) => isAnswered(known[q.field])).length;
+  return Math.round((answered / PROFILE_QUESTIONS.length) * 100) / 100;
+}
+
+/** Validate/normalize an answer for a field; returns null if invalid. */
+export function normalizeAnswer(field: ProfileField, raw: unknown): string | number | string[] | null {
+  const q = PROFILE_QUESTIONS.find((x) => x.field === field);
+  if (!q) return null;
+  const allowed = new Set(q.options.map((o) => o.value));
+
+  if (q.kind === 'multi') {
+    const arr = Array.isArray(raw) ? raw : [];
+    const clean = [...new Set(arr.map(String).filter((v) => allowed.has(v)))];
+    return clean.length ? clean : null;
+  }
+  const v = String(raw);
+  if (!allowed.has(v)) return null;
+  if (field === 'household_size') { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; }
+  return v;
+}

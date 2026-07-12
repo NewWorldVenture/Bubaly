@@ -2033,6 +2033,13 @@ export interface Database {
         Partial<{ chore_minutes: number; chore_count: number; task_count: number; event_count: number; invisible_count: number; load_score: number; share_pct: number; note: string | null }>
       >;
 
+      // ---- Progressive-profiling store (migration 0171) ----
+      crm_contact_profile: T<
+        { contact_id: string; role: string | null; top_priority: string | null; household_size: number | null; child_ages: string | null; interests: string[]; extra: Json; updated_at: string },
+        { contact_id: string; role?: string | null; top_priority?: string | null; household_size?: number | null; child_ages?: string | null; interests?: string[]; extra?: Json },
+        Partial<{ role: string | null; top_priority: string | null; household_size: number | null; child_ages: string | null; interests: string[]; extra: Json }>
+      >;
+
       // ---- Relationship CRM: per-contact interactions (migration 0170) ----
       contact_interactions: T<
         { id: string; family_id: string; contact_id: string; kind: string; occurred_on: string; title: string; note: string | null; amount: number | null; meta: Json; created_by: string | null } & Stamps,
