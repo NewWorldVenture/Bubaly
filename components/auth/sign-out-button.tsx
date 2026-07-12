@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { LogOut } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
+import { clearAllCache } from '@/lib/offline/cache';
 
 export function SignOutButton({
   className,
@@ -34,7 +35,7 @@ export function SignOutButton({
         <form
           action="/auth/signout"
           method="post"
-          onSubmit={() => setSigningOut(true)}
+          onSubmit={() => { setSigningOut(true); clearAllCache(); }}
           className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
         >
           <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={signingOut}>

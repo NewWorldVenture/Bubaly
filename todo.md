@@ -1344,9 +1344,14 @@ several "No" rows were already built here.
   per-child progress; 500-row seed; linked from Chores + Behavior.
 
 **Remaining gaps (logged, not silently built):**
-- [ ] **#13 Offline mode** (FamilyWall) — local caching + auto-resync. Infrastructural (service-worker /
-  Capacitor storage layer + conflict resolution), touches every module; needs an owner decision on scope
-  (read-only cache vs. write-behind queue). Agent-doable as a dedicated session.
+- [x] **#13 Offline mode — v1 (read-side) SHIPPED** (FamilyWall's headline behavior: "local caching
+  with automatic synchronization when connectivity returns"). `lib/offline/cache.ts` (localStorage,
+  per-family+table+query keys, 7-day TTL, 200-row cap, quota-safe, 4 tests) wired into
+  `useRealtimeQuery` (every realtime module): instant paint from last-known rows, quiet offline
+  (no error banner), auto-refetch on the `online` event; global `OfflineBanner` in the app shell
+  (offline amber / "back online — syncing" flash); **cache wiped on sign-out** (privacy).
+  - [ ] v2 (owner decision still): write-behind queue for offline MUTATIONS + conflict resolution —
+    genuinely infrastructural, per-module opt-in.
 - [ ] **#28 Family operating system API** — same as opportunity-table #10 (open developer platform):
   strategic + human-owned (public API surface, OAuth app registration, partner security review).
 

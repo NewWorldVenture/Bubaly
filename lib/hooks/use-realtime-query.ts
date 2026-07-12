@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { isMissingTableError } from '@/lib/supabase/errors';
+import { cacheKey, readCache, writeCache } from '@/lib/offline/cache';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 
 type Fetcher<T> = (supabase: SupabaseBrowser) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
@@ -10,6 +11,10 @@ type Fetcher<T> = (supabase: SupabaseBrowser) => PromiseLike<{ data: T[] | null;
 /**
  * Fetches a family-scoped list and keeps it live via Supabase Realtime.
  * Re-runs the fetcher whenever the watched table changes for this family.
+ *
+ * Offline-first reads (gap #13 v1): the last successful result is cached in
+ * localStorage, hydrated on mount for instant paint, served when the network
+ * is down (no scary error), and re-synced automatically on reconnect.
  */
 export function useRealtimeQuery<T>({
   table,
@@ -27,6 +32,8 @@ export function useRealtimeQuery<T>({
   const [error, setError] = useState<string | null>(null);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
+  const key = cacheKey(table, familyId, deps);
+  const hydratedRef = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     const supabase = createClient();
@@ -38,20 +45,42 @@ export function useRealtimeQuery<T>({
       if (isMissingTableError(err)) {
         setData([]);
         setError(null);
+      } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        // Offline: keep showing the cached rows quietly; reconnect re-syncs.
+        setError(null);
       } else {
         setError(err.message);
       }
     } else {
       setData(rows ?? []);
       setError(null);
+      writeCache(key, rows ?? []);
     }
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
   useEffect(() => {
-    setLoading(true);
+    // Instant paint from the last-known rows (once per key).
+    if (hydratedRef.current !== key) {
+      hydratedRef.current = key;
+      const cached = readCache<T>(key);
+      if (cached && cached.rows.length > 0) {
+        setData(cached.rows);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+    }
     void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh, key]);
+
+  // Re-sync the moment connectivity returns.
+  useEffect(() => {
+    const onOnline = () => { void refresh(); };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
   }, [refresh]);
 
   useEffect(() => {

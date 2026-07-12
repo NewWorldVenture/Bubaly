@@ -256,6 +256,21 @@
 > depth, surfaces without a 500-row seed, and any remaining "coming soon" that isn't a deliberate
 > key-gate. Keep each slice small + verified; **update this file again before the session ends.**
 >
+> ## 📴 OFFLINE MODE v1 + 🪨 STONE-TURN — 2026-07-12 latest (same lane) — READ FIRST
+>
+> - **Offline mode v1 (competitor gap #13, read-side) SHIPPED**: `lib/offline/cache.ts`
+>   (localStorage, per-family+table+query keys, 7-day TTL, 200-row cap, quota-safe; 4 tests) is
+>   wired into `useRealtimeQuery`, so EVERY realtime module now paints instantly from last-known
+>   rows, stays quiet offline (no error banner), and auto-resyncs on the `online` event. Global
+>   `OfflineBanner` in the app shell; **cache wiped on sign-out** (`clearAllCache`) — keep that
+>   call if sign-out is ever refactored. v2 (offline WRITES + conflict resolution) is logged in
+>   todo.md as an owner-scoped decision — don't build it casually.
+> - **Stone-turn security pass** (commit `3b078ce`): Twilio signature validation added to
+>   `guardian/screen` + `guardian/status/voicemail` + `guardian/escalate/twiml`;
+>   `guardian/escalate` now **fails closed** (GUARDIAN_INTERNAL_SECRET or CRON_SECRET required);
+>   `mkt/track` rate-limited 60/min/IP; 2 dead engine links fixed. Production `next build` PASSES.
+>   Full findings in todo.md ("Full stone-turn pass").
+
 > ## 🎨 UI/UX DESIGNER PASS — 2026-07-12 late (same lane, after the competitor gaps)
 >
 > Owner asked for a page-by-page designer audit of the whole site. **All 136 dashboard pages

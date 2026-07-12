@@ -19,6 +19,7 @@ import { FreeTierSidebar } from './free-tier-sidebar';
 import { NotificationBell } from './notification-bell';
 import { UpgradeModal } from './upgrade-modal';
 import { QuickCapture } from './quick-capture';
+import { OfflineBanner } from './offline-banner';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { MarketplaceNav } from '@/components/marketplace/marketplace-nav';
 import { SkipLink } from '@/components/a11y/skip-link';
@@ -350,6 +351,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
+        <OfflineBanner />
         {/* Top bar — .app-topbar bakes in safe-area top + horizontal insets so
             it never sits under the Dynamic Island / notch (black-translucent). */}
         <header className="app-topbar sticky top-0 z-30 flex items-center gap-3 border-b border-border/60 bg-bg/85 backdrop-blur-xl sm:gap-5">
