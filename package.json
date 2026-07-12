@@ -27,7 +27,7 @@
     "seed:food": "psql \"$DATABASE_URL\" -f supabase/seed.sql -f supabase/seed_home.sql -f supabase/seed_food.sql",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/run-e2e.mjs",
     "icons": "node scripts/generate-icons.mjs",
     "cap:add:ios": "cap add ios",
     "cap:add:android": "cap add android",

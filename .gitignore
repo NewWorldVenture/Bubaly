@@ -11,6 +11,8 @@ supabase/.temp
 client_secret*.json
 .env_DH.txt
 *.tsbuildinfo
+/test-results/
+/playwright-report/
 
 # Capacitor native projects (generated per-machine via `npx cap add ios|android`)
 /ios
