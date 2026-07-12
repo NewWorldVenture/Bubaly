@@ -630,3 +630,12 @@ body::before {
   40%, 80% { transform: translateX(7px); }
 }
 .animate-shake { animation: applock-shake 0.5s ease-in-out; }
+
+/* ── Role-tailored density (Friction #8) ─────────────────────────────────────
+   <RoleDensity/> stamps data-density on <html> from the member's role (or the
+   user's Settings override). Tailwind's sizes are rem-based, so scaling the root
+   font size roomily rescales the whole app — text, padding, and gaps together.
+   'comfortable' is the 100% default (no rule). Inputs stay ≥16px on mobile via
+   the rule above, so this never reintroduces iOS focus-zoom. */
+:root[data-density='cozy']    { font-size: 104%; }
+:root[data-density='playful'] { font-size: 110%; }

@@ -1387,6 +1387,12 @@ several "No" rows were already built here.
   sit between. Finally consumes the `density` field. (4) **Broader rollout**: the role-tailored
   `roleGreeting` now also leads the **personal dashboard** (parents formal · adults casual · kids a warm
   emoji line), extending the treatment beyond Home to a second primary surface. tsc/eslint/build green.
+  **Slice 5 — APP-WIDE density (2026-07-12):** density was per-chip only; now it scales the *whole app*.
+  `<RoleDensity/>` (mounted in AppShell) stamps `data-density` on `<html>` from the member's role, and
+  a globals.css block scales the root font size (Tailwind rem cascades → text + padding + gaps together):
+  parents 100% · teens/guests 104% · kids 110%. Added `resolveDensity` + `DENSITY_FONT_PCT`/labels to
+  `lib/ui/role-surface.ts` (+7 tests) and a **Settings → Display comfort** control (`display-comfort.tsx`,
+  Auto/Standard/Cozy/Relaxed override, localStorage, instant apply). No migration — client pref + CSS.
 - [x] #10 Recurring-routine templates — **DONE**. Migration `0122_routine_templates.sql`
   (`routine_templates` + `routine_template_items`, weekday bitmask, family-scoped RLS) +
   pure `lib/routines/detect.ts` (13 tests: `detectRoutines` finds title+weekday+time repeating

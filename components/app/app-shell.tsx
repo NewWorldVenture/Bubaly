@@ -26,6 +26,7 @@ import { SkipLink } from '@/components/a11y/skip-link';
 import { AIOrb } from './ai-orb';
 import { CommandBar } from './command-bar';
 import { DemoEmailGate, DemoClockPill } from '@/components/demo/demo-experience';
+import { RoleDensity } from './role-density';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
 
 /** Desktop top-bar search. Submitting hands the query to the AI Assistant via
@@ -336,6 +337,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      {/* Role-tailored display density (kids bigger/roomier, parents default). */}
+      <RoleDensity />
       {/* Demo mode: before the clock starts, blur the app behind the email gate.
           Once running, the countdown lives top-left in the header (below). */}
       {demo && demo.expiresAt === null && <DemoEmailGate />}
