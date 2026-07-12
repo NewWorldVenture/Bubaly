@@ -80,6 +80,44 @@
 > depth, surfaces without a 500-row seed, and any remaining "coming soon" that isn't a deliberate
 > key-gate. Keep each slice small + verified; **update this file again before the session ends.**
 >
+> ## ⏱️ SESSION END STATE — 2026-07-12 evening (competitor-gap lane) — READ FIRST
+>
+> Owner supplied two competitor tables (10 "largest opportunities" + 28 "missing competitor
+> features", Cozi/Skylight/FamilyWall/TimeTree/Hearth/Maple/Ohai benchmark). Full audits are in
+> `todo.md` (search "Largest opportunities" and "Missing Competitor Features") — most rows were
+> already built; each verdict cites the actual route/lib. This lane BUILT the four genuine gaps,
+> all pushed to `main`, every commit tsc/eslint/vitest green (2338+ tests):
+>
+> - **AI Concierge Calls (outbound — "Bubaly calls for you")** `6f97ce6`: `/dashboard/concierge-calls`,
+>   `0165_concierge_calls` (RLS ×4, PG16 ×2), pure `lib/concierge-calls/brief.ts` (7 tests),
+>   request/cancel/requeue actions, provider-gated `/api/concierge-calls/place` (CRON_SECRET;
+>   parks as `action_needed` honestly until `TWILIO_*` configured), `seed_concierge_calls.sql`
+>   (500), linked from AI Front Desk (inbound ↔ outbound).
+> - **Workload Balance (mental load, Hearth #3/#4)** `2d28cd9`: `/dashboard/workload`, pure
+>   `lib/workload/balance.ts` (9 tests — est_minutes-weighted chores + todos + organized events
+>   as invisible labor, fairness index, role-safe rebalance suggestions), one-tap "Move it"
+>   reassignment (audited), `0166_workload_snapshots` weekly trend history (PG16 ×2),
+>   `seed_workload.sql` (500), linked from Chores header.
+> - **Child Independence ladder (Hearth #19)** `c758d69`: `/dashboard/independence`, 90 curated
+>   age-banded milestones (6 domains × 5 bands) in pure `lib/independence/progression.ts`
+>   (6 tests), `0167_independence_milestones` (PG16 ×2), start/achieve/skip actions, progress-ring
+>   level card + suggestions + badge wall, `seed_independence.sql` (500), linked from Behavior.
+> - **Calendar busy-week heat map (TimeTree #16)** `2df8c06`: pure `lib/calendar/heatmap.ts`
+>   (4 tests), collapsible `BusynessHeatmap` strip in Calendar (self-fetches 8 weeks of history,
+>   recurrence-expanded). No new table.
+>
+> **Open items from the competitor matrix** (logged in `todo.md`, deliberately NOT built):
+> **#13 Offline mode** (infrastructural: service-worker/Capacitor cache + resync — needs an owner
+> scope decision, then it's agent-doable as its own session) and **#28 Family OS API / open
+> platform** (human-owned: public API surface + partner security). Everything else on both owner
+> tables exists — do not rebuild; check the todo.md matrices first.
+>
+> **⚠️ Prod apply now pending adds `0165`, `0166`, `0167`** (all additive/idempotent, PG16 ×2,
+> details in `docs/PENDING_PROD_MIGRATIONS.md`) and three new seeds appended to `SEED_ALL.sql`
+> (`seed_concierge_calls`, `seed_workload`, `seed_independence` — 500 rows each, idempotent ×2).
+> Standing rules honored: no global left-nav changes (new pages link from sibling modules);
+> parallel-lane pushes to `main` are frequent — always `git fetch && rebase` before push.
+
 > ## ⏱️ SESSION END STATE — 2026-07-12 (demo + onboarding + nav-sweep lane) — READ FIRST
 >
 > This session shipped, all on `main`, each commit tsc/eslint/vitest green:
