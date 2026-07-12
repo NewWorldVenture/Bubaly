@@ -2033,6 +2033,13 @@ export interface Database {
         Partial<{ chore_minutes: number; chore_count: number; task_count: number; event_count: number; invisible_count: number; load_score: number; share_pct: number; note: string | null }>
       >;
 
+      // ---- Relationship CRM: per-contact interactions (migration 0170) ----
+      contact_interactions: T<
+        { id: string; family_id: string; contact_id: string; kind: string; occurred_on: string; title: string; note: string | null; amount: number | null; meta: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; contact_id: string; kind?: string; occurred_on?: string; title: string; note?: string | null; amount?: number | null; meta?: Json; created_by?: string | null },
+        Partial<{ kind: string; occurred_on: string; title: string; note: string | null; amount: number | null; meta: Json }>
+      >;
+
       // ---- Paperwork Inbox (migration 0169) ----
       paperwork_items: T<
         { id: string; family_id: string; kind: string; title: string; summary: string | null; raw_text: string | null; sender: string | null; due_on: string | null; amount: number | null; urgency: string; status: string; actions: Json; meta: Json; created_by: string | null } & Stamps,
