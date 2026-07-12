@@ -6,6 +6,56 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ⏱️ SESSION END STATE — 2026-07-12 (Autonomous Execution Loop, Fable lane) — READ FIRST
+>
+> Shipped the LAST big ◐ partial from the deepen-the-partials directive: **#1/#3 — the autonomous
+> execution loop**. When a family ACCEPTS a concierge plan (status → booked/confirmed), Bubaly now
+> executes the plan's write-backs (calendar event · reminder · prep task) **by itself**, governed by
+> a family-controlled trust dial, with every autonomous run audited. All on `main`,
+> tsc/eslint/vitest/build green (**2396 tests**, 6 new). **NO new migration** — the loop
+> deliberately rides existing schema: `family_automation_runs` (0022), `trust_policies` +
+> `approval_requests` + `trust_audit_logs` (0093), `concierge_plan_actions` (0158). Nothing new to
+> apply to prod for this feature.
+>
+> **How the loop works (files):**
+> - **Brain:** `lib/autonomy/loop.ts` (pure, **6 tests** incl. a real `evaluateAction` integration
+>   test): `isAcceptance(prev,next)` fires only on the transition INTO booked/confirmed;
+>   `autonomyMode(decision)` maps trust effects → auto/ask/off; `dialEffect`/`dialLevel` round-trip
+>   the family dial through a trust_policies row (`'Concierge autopilot'`, domain `scheduling` ×
+>   capability `automate` × subject `ai`; allow=auto · require_approval=ask · deny=off, priority 10);
+>   `runSummary()` writes the human "Bubaly put it on the calendar…" audit line; `autopilotStats()`.
+> - **Loop actions:** `app/(app)/dashboard/concierge/actions.ts` — the old apply loop is refactored
+>   into a shared `materializePlan()` (concierge_plan_actions stays the idempotence ledger; manual
+>   buttons unchanged). `planAcceptedAction(planId, prev, next)` → `evaluateTrust()` (0093 server —
+>   it also opens the `approval_requests` row and writes `trust_audit_logs` itself) → **auto**:
+>   materialize + `family_automation_runs` row (trigger_type `plan_accepted`, status executed,
+>   result.steps, metadata.basis/reason) · **ask**: pending runs row + approval (metadata.approval_id)
+>   · **off**: nothing. `executeQueuedRunAction` / `dismissQueuedRunAction` (manager-only) resolve
+>   the queue and stamp BOTH audits. `setConciergeAutopilotAction` (manager-only) upserts the dial
+>   policy. No-op acceptances (all write-backs already applied) never open approvals.
+> - **UI:** `components/concierge/autopilot-panel.tsx` — collapsible panel: dial (3 segments,
+>   manager-gated), "Waiting for your OK" queue (Do it / Dismiss), "Done for you" feed, weekly
+>   stat. Mounted TWICE in `concierge-module.tsx`: sidebar (desktop) + `lg:hidden` in the main
+>   column (mobile-first). `PlanDetail.updateStatus` now fires `planAcceptedAction` best-effort
+>   after a successful status save and toasts the outcome.
+> - **Seed:** `seed_autonomy_runs.sql` — **500** loop runs (70% executed w/ step mixes + approval
+>   stamps, 15% pending, 15% dismissed, spread over 60 days) + ensures the dial policy exists
+>   (ask-first default). Tagged `metadata->>'seed'='autonomy'`, idempotent; appended to
+>   `SEED_ALL.sql` (**49 seeds**). PG16-verified (500 ×2; policy created exactly once).
+> - Existing surfaces get the loop for free: the runs feed also appears on
+>   `/dashboard/autonomous-family-management` (it already lists `family_automation_runs`), and
+>   ask-mode approvals appear wherever `approval_requests` is surfaced.
+>
+> **▶ NEXT (the ◐-partials directive is now fully drained — #1/#3/#4/#5/#8 all shipped):**
+> 1. Extend the loop beyond concierge: fire the same trust-governed execution on **paperwork
+>    acceptance** (auto-materialize extracted actions on capture when the dial says auto) and
+>    **decision resolution** (`family_decisions` → chosen option's follow-ups) — reuse
+>    `materializePlan`-style ledgers per surface.
+> 2. A cron that reaps stale pending loop runs (>7 days) into dismissed, so the queue never rots.
+> 3. Or pick fresh from `todo.md`'s open items / owner directives.
+> **Before starting anything, `git fetch` + re-read the newest blocks — parallel lanes ship the
+> same ideas within hours.** **Update this file again before the session ends.**
+
 > ## ⏱️ SESSION END STATE — 2026-07-12 (coordination note, Fable lane) — READ FIRST
 >
 > A second session independently built the SAME Paperwork Inbox (#4) in parallel and hit the

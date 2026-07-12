@@ -18,6 +18,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { PlanWriteBacks } from '@/components/concierge/plan-write-backs';
+import { AutopilotPanel } from '@/components/concierge/autopilot-panel';
+import { planAcceptedAction } from '@/app/(app)/dashboard/concierge/actions';
 import type { Tables } from '@/lib/database.types';
 
 type Plan = Tables<'concierge_plans'>;
@@ -332,6 +334,9 @@ export function ConciergeModule() {
                   </div>
                 </div>
               )}
+
+              {/* Autopilot — mobile mount (the desktop mount lives in the sidebar). */}
+              <AutopilotPanel className="lg:hidden" />
             </>
           )}
         </div>
@@ -343,6 +348,7 @@ export function ConciergeModule() {
           <PlanDetail plan={selectedPlan} familyId={familyId} userId={userId} onClose={() => setSelectedPlan(null)} onDelete={deletePlan} onRefresh={refreshPlans} />
         ) : (
           <>
+            <AutopilotPanel />
             <div className="sidebar-card">
               <p className="mb-3 text-sm font-semibold">Your Plans</p>
               <div className="space-y-1.5">
@@ -401,16 +407,26 @@ export function ConciergeModule() {
 function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
   plan: Plan; familyId: string; userId: string; onClose: () => void; onDelete: (p: Plan) => void; onRefresh: () => void;
 }) {
-  const { error: toastError } = useToast();
+  const { success, error: toastError } = useToast();
   const [editStatus, setEditStatus] = useState(plan.status);
   const cfg = KIND_CONFIG[plan.kind] ?? KIND_CONFIG.general;
 
   async function updateStatus(status: string) {
+    const prev = editStatus;
     setEditStatus(status);
     const supabase = createClient();
     const { error } = await supabase.from('concierge_plans').update({ status }).eq('id', plan.id);
-    if (error) toastError(describeDbError(error));
-    else onRefresh();
+    if (error) { toastError(describeDbError(error)); return; }
+    onRefresh();
+    // The autonomous execution loop: accepting a plan (→ booked/confirmed) lets
+    // Bubaly execute its write-backs per the family's autopilot dial — done
+    // instantly, queued for approval, or left manual. Audited either way.
+    try {
+      const res = await planAcceptedAction(plan.id, prev, status);
+      if (res.ok && res.summary) {
+        success(res.mode === 'auto' ? res.summary : `Queued for approval — check the Autopilot panel`);
+      }
+    } catch { /* the loop is best-effort; the status change already saved */ }
   }
 
   return (
