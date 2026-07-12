@@ -42,6 +42,23 @@
 >   plus the `0138_demo_sessions` **number collision** with `0138_onboarding_imports` (SQL-editor
 >   paste OK; `db push` needs a hand-apply). Env: `CRON_SECRET` (demo cleanup), optional
 >   `GIPHY_API_KEY` (GIF picker).
+>
+> ### Seed-coverage gap-fill — 2026-07-12 (`seed_feature_gaps_3.sql`, branch `claude/seed-leftnav-gaps`)
+> Re-confirmed the left-nav-sweep finding: **the nav is fully built + Supabase-wired** (every page
+> loads real data via `.from()` or a `lib/*` server helper; the only "coming soon" copy left is the
+> Stripe-Issuing-gated wallet *cards*, which is a real, fully-built feature awaiting owner keys —
+> **not a stub**). The remaining gap was *seed* coverage, not code: audited all **339 family-scoped
+> tables** vs. seeded tables — **141 had no seed rows**. Filtered out infra (audit/logs/tokens/config/
+> Stripe) and added idempotent, parent-guarded seed blocks for the **20 user-facing tables that back a
+> left-nav page** and rendered empty in testing: Care Log · habit logs · health goals/providers/
+> symptoms · Insurance Hub · expense split shares · reward redemptions · pet care · auto
+> (registrations + service) · home (contractors + service) · relationship (profile + gift ideas) ·
+> allowance rules · member badges · screen-time limits · leftovers · kid progress (~500 rows).
+> Follows the `seed_feature_gaps_fk.sql` pattern (family-by-email, `to_regclass` + parent guards,
+> `enum_range` drift-safety, `[seed]`/`ON CONFLICT` idempotency); columns verified against each
+> `CREATE TABLE`; appended to `SEED_ALL.sql`. **Caveat:** the PG16 validation harness was reclaimed
+> on container reset, so this round is column-verified but not PG16-executed — run `SEED_ALL.sql` in
+> the SQL editor to confirm (guards make any drift skip, not abort).
 
 > ## 🧠 REASONING/NETWORK LANE — 2026-07-06/07 (parallel to the onboarding/marketing sessions)
 >
