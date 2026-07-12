@@ -1993,7 +1993,10 @@ begin
     v_members[1 + (g.i % array_length(v_members,1))],
     r_titles[1 + (g.i % array_length(r_titles,1))],
     (5 + (g.i % 10) * 5)::bigint,
-    (enum_range(null::redemption_status))[1 + (g.i % array_length(enum_range(null::redemption_status),1))]::redemption_status,
+    -- economy redemptions never use the 'requested' state (that's a
+    -- reward_redemptions value); some prod DBs carry a status CHECK that rejects
+    -- it, so seed only the economy-valid lifecycle statuses.
+    (array['pending','approved','fulfilled','rejected'])[1 + (g.i % 4)]::redemption_status,
     '[seed] redemption',
     now() - ((g.i % 120) || ' days')::interval
   from generate_series(1, 120) as g(i);
