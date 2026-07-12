@@ -1,7 +1,9 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { stitchVisitorIdentity } from '@/lib/marketing/identity';
 import { isValidPin } from '@/lib/onboarding/pin';
 import { normalizeUsername, isValidUsername, syntheticChildEmail } from '@/lib/onboarding/child-login';
 import { deriveChildPassword } from '@/lib/onboarding/child-password';
@@ -14,6 +16,38 @@ import {
  *  the env/code super-admin allowlist (not just the DB) is honored. */
 export async function resolveLandingPathAction(): Promise<string> {
   return (await isSuperAdmin()) ? '/admin' : '/home';
+}
+
+const VID_COOKIE = 'bubaly_vid';
+const VID_MAX_AGE = 400 * 24 * 60 * 60;
+
+/**
+ * Stitch the just-authenticated user to their anonymous marketing spine: link
+ * `mkt_visitors` → `crm_contacts` and carry consent forward (see
+ * `stitchVisitorIdentity`). Fire-and-forget from the login/signup forms — fully
+ * best-effort, so it can never block or fail a sign-in. On a shared-device
+ * `fork`, rotate this browser's anonymous id so the new person starts clean.
+ */
+export async function stitchIdentityAction(): Promise<void> {
+  try {
+    const supabase = await createServer();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) return;
+
+    const jar = await cookies();
+    const anonymousId = jar.get(VID_COOKIE)?.value?.trim();
+    if (!anonymousId) return;
+
+    const admin = createServiceClient();
+    const { decision } = await stitchVisitorIdentity(admin, { anonymousId, email: user.email, userId: user.id });
+
+    if (decision === 'fork') {
+      // A different person already owns this device's visitor spine — hand the
+      // new user a fresh anonymous id so their history never merges with the last.
+      const fresh = (globalThis.crypto?.randomUUID?.() ?? `v-${Date.now().toString(36)}`);
+      jar.set(VID_COOKIE, fresh, { path: '/', maxAge: VID_MAX_AGE, sameSite: 'lax' });
+    }
+  } catch { /* best-effort — never block auth */ }
 }
 
 /**

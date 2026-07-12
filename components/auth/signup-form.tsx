@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { signUpSchema, fieldErrors } from '@/lib/validation';
 import { OAuthButtons, authButtonClass } from '@/components/auth/oauth-buttons';
+import { stitchIdentityAction } from '@/app/(auth)/actions';
 import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -53,9 +54,13 @@ export function SignupForm() {
       });
       if (error) throw error;
       if (!data.session) {
+        // Email confirmation required — the stitch runs in the auth callback
+        // once the session is established.
         setCheckEmail(true);
         return;
       }
+      // Auto-confirmed: attribute the anonymous visitor spine now (best-effort).
+      void stitchIdentityAction();
       router.push(next);
       router.refresh();
     } catch (err) {
