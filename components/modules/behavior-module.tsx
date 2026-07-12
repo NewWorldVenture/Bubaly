@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Smile, Frown, Minus, Plus, Trash2, Sparkles, TrendingUp, Flame } from 'lucide-react';
+import { Smile, Frown, Minus, Plus, Trash2, Sparkles, TrendingUp, Flame, Award } from 'lucide-react';
+import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -107,6 +108,10 @@ export function BehaviorModule() {
             </Select>
           )}
           <AiInsight kind="behavior" iconOnly />
+          <Link href="/dashboard/independence"
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-sm font-semibold text-muted transition hover:text-fg hover:bg-elevated">
+            <Award className="h-4 w-4" /> Independence
+          </Link>
           <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Log behavior</Button>
         </div>
       </div>
