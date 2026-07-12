@@ -6,6 +6,39 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ⏱️ SESSION END STATE — 2026-07-12 (Quick-Post 60s, Fable lane) — READ FIRST
+>
+> Shipped **backlog #10 — Marketplace "Post in under 60 seconds with AI"** (the next open
+> agent item after the other lanes cleared #2–#6/#8/#9/#13–#15/#23; backlog #7 was already shipped
+> 2026-07-04 as "Autopilot self-completes moment prep"). All on `main`, tsc/eslint/vitest/build
+> green (**2477 tests**, 9 new). **NO new migration** (writes the existing 0120
+> `marketplace_listings`).
+> - **Brain:** `lib/marketplace/quick-post.ts` (pure, 9 tests) — `draftListing(oneLiner)` extracts
+>   kind (7 kinds via intent phrases), category (10-cat keyword map), condition (hyphen-tolerant
+>   signals), price ($/bucks/asking → cents), pickup spot, a cleaned title (intent/price/condition
+>   noise stripped, 70-char cap) + a friendly description; `suggestPriceCents(cat, cond, comps)` =
+>   median of same-category sell comps normalized to a 'good' baseline (new 1.25 · like_new 1.1 ·
+>   good 1.0 · fair 0.8 · worn 0.6), re-adjusted to the item, ≥2 comps required. Deterministic, no
+>   model key; an LLM can enrich descriptions later without changing the contract.
+> - **UI:** `components/marketplace/quick-post.tsx` — "Post in 60 seconds" composer on the
+>   marketplace V2 home (`app/(app)/marketplace/page.tsx`, mounted under the hero): one sentence →
+>   instant client-side draft → "AI filled: type/category/condition/price/pickup" chips → compact
+>   editable review (kind/category/condition/price selects) → "AI suggests $X from your family's
+>   comparable listings" chip (comps fetched lazily, best-effort) → Post now (inserts
+>   `marketplace_listings`, same fields as the browse modal). A live stopwatch badge keeps the
+>   60-second promise honest ("Posted in 34s ⚡"). Mobile-first; the old multi-field modal at
+>   `/marketplace/browse?post=1` is untouched.
+> - **Seed:** `seed_marketplace_quickpost.sql` — **500** priced sell comparables (10 categories ×
+>   5 conditions, per-category price bands, deterministic spread — no `random()`), tagged
+>   `[seed:quickpost]` in the description, idempotent; appended to `SEED_ALL.sql`. Also corrected
+>   the SEED_ALL header count to the real **61** sections (it had drifted). PG16-verified (500 ×2;
+>   10 cats / 5 conds; $4–$200).
+> - **▶ NEXT open backlog items:** #11 marketplace real-LLM rail assistant (needs an LLM key to be
+>   real — otherwise it stays prompt-routing), #21 cross-family community marketplace + #22 open
+>   developer platform (both large, design-level — get owner sign-off on scope first). Owner-owned
+>   key/prod items: #12/#16/#17/#18/#19/#20/#24. **`git fetch` + re-read the newest blocks before
+>   starting — lanes cleared ELEVEN backlog items today alone.**
+
 > ## ⏱️ SESSION END STATE — 2026-07-12 (Autonomous Execution Loop, Fable lane) — READ FIRST
 >
 > Shipped the LAST big ◐ partial from the deepen-the-partials directive: **#1/#3 — the autonomous

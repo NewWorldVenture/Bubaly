@@ -10,6 +10,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { SaveButton } from '@/components/marketplace/save-button';
 import { FollowButton } from '@/components/marketplace/follow-button';
+import { QuickPost } from '@/components/marketplace/quick-post';
 import {
   aiPicks, activityFeed, rankCreators,
   type PickListing, type ActivityOrder, type ActivityReview, type CreatorStore,
@@ -197,6 +198,9 @@ export default async function MarketplaceHomePage() {
             )}
           </div>
         </section>
+
+        {/* ── Post in 60 seconds — the one-sentence AI listing composer ────── */}
+        <QuickPost />
 
         {/* ── What would you like to do? ───────────────────────────────────── */}
         <section className="rounded-2xl border border-border bg-surface/60 p-4">
