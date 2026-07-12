@@ -102,6 +102,13 @@
 > - **UI:** `components/modules/contact-timeline-module.tsx` — mobile-first: health card + nudge,
 >   log-a-touch composer (kind chips, date, amount, note), railed timeline with per-entry delete
 >   (logged touches only). Page fetches best-effort (degrades pre-migration).
+> - **AI lift (2026-07-12):** `draftReconnectMessageAction` — the health card can say it's time to
+>   reach out; this **writes the actual message**. Key-gated (`isAIConfigured` → honest fallback),
+>   grounded ONLY in logged history (name, relationship, recent touches — no invented events;
+>   bracketed placeholders for unknowns), family-scoped, **stateless** (no schema/seed change — a
+>   fresh timeline yields a fresh draft). UI: "✨ Draft a message with AI" in the health card →
+>   tone chips (Warm/Brief/Playful), Regenerate, one-tap Copy. Mirrors the Paperwork Inbox
+>   `draftPaperworkReplyAction` pattern.
 > - **Entry point:** a "🕰️ Relationship timeline" chip on the selected-contact panel in
 >   `contacts-module.tsx` — **no global-nav change** (standing rule).
 > - **Seed:** `seed_contact_interactions.sql` — 500 rows across ≤25 contacts (auto-creates 8

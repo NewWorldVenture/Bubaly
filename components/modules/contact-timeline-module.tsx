@@ -7,13 +7,20 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft, Phone, MessageSquare, Gift, HandHeart, StickyNote, Users,
-  Cake, Mail, HeartPulse, Plus, Loader2, Trash2, X,
+  Cake, Mail, HeartPulse, Plus, Loader2, Trash2, X, Sparkles, Copy, Check as CheckIcon, RefreshCw,
 } from 'lucide-react';
 import type { Tables } from '@/lib/database.types';
 import type { TimelineEntry, ContactHealth, InteractionKind } from '@/lib/contacts/timeline';
 import { INTERACTION_LABEL } from '@/lib/contacts/timeline';
-import { logInteractionAction, deleteInteractionAction } from '@/app/(app)/dashboard/contacts/[id]/actions';
+import {
+  logInteractionAction, deleteInteractionAction, draftReconnectMessageAction,
+} from '@/app/(app)/dashboard/contacts/[id]/actions';
 import { cn } from '@/lib/utils/cn';
+
+type Tone = 'warm' | 'brief' | 'playful';
+const TONES: { key: Tone; label: string }[] = [
+  { key: 'warm', label: 'Warm' }, { key: 'brief', label: 'Brief' }, { key: 'playful', label: 'Playful' },
+];
 
 const ENTRY_ICON: Record<string, typeof Phone> = {
   visit: Users, call: Phone, message: MessageSquare, gift: Gift,
@@ -91,6 +98,7 @@ export function ContactTimelineModule({
           )}
         </div>
         <p className="mt-2 text-sm leading-relaxed text-fg">{health.suggestion}</p>
+        <ReconnectDrafter contactId={contact.id} name={contact.name} />
       </section>
 
       {/* Composer */}
@@ -176,6 +184,93 @@ export function ContactTimelineModule({
           </ol>
         )}
       </section>
+    </div>
+  );
+}
+
+/**
+ * The "AI writes the message" lift: one tap drafts a short, ready-to-send
+ * reconnect message grounded only in this contact's logged history, with tone
+ * options, regenerate, and one-tap Copy. Honest inline error if no AI key.
+ */
+function ReconnectDrafter({ contactId, name }: { contactId: string; name: string }) {
+  const [open, setOpen] = useState(false);
+  const [tone, setTone] = useState<Tone>('warm');
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const draft = (t: Tone) => {
+    setError(null);
+    startTransition(async () => {
+      const res = await draftReconnectMessageAction(contactId, t);
+      if (res.ok) { setMessage(res.message); setOpen(true); }
+      else { setError(res.error); setOpen(true); }
+    });
+  };
+
+  const copy = async () => {
+    if (!message) return;
+    try { await navigator.clipboard.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard blocked */ }
+  };
+
+  return (
+    <div className="mt-3">
+      {!open ? (
+        <button
+          onClick={() => draft(tone)}
+          disabled={pending}
+          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-brand/12 px-3 text-xs font-bold text-brand ring-1 ring-brand/25 transition hover:bg-brand/20 disabled:opacity-60"
+        >
+          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+          Draft a message with AI
+        </button>
+      ) : (
+        <div className="rounded-xl border border-brand/25 bg-brand/[0.05] p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand">
+              <Sparkles className="h-3.5 w-3.5" /> AI draft for {name}
+            </div>
+            <div className="flex items-center gap-1">
+              {TONES.map((t) => (
+                <button key={t.key}
+                  onClick={() => { setTone(t.key); draft(t.key); }}
+                  disabled={pending}
+                  className={cn('h-7 rounded-full px-2.5 text-[11px] font-semibold transition disabled:opacity-60',
+                    tone === t.key ? 'bg-brand/20 text-brand' : 'text-muted hover:bg-elevated')}
+                >
+                  {t.label}
+                </button>
+              ))}
+              <button onClick={() => setOpen(false)} aria-label="Close draft" className="rounded-lg p-1 text-muted hover:bg-elevated">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {error ? (
+            <p className="mt-2 text-xs text-rose-300">{error}</p>
+          ) : pending && !message ? (
+            <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Writing…</p>
+          ) : message ? (
+            <>
+              <p className={cn('mt-2 whitespace-pre-wrap text-sm leading-relaxed text-fg', pending && 'opacity-50')}>{message}</p>
+              <div className="mt-2.5 flex items-center gap-2">
+                <button onClick={copy}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-bold text-brand-fg transition hover:opacity-90">
+                  {copied ? <CheckIcon className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy'}
+                </button>
+                <button onClick={() => draft(tone)} disabled={pending}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition hover:bg-elevated disabled:opacity-60">
+                  <RefreshCw className={cn('h-3.5 w-3.5', pending && 'animate-spin')} /> Regenerate
+                </button>
+              </div>
+              <p className="mt-2 text-[10px] text-muted">AI draft — grounded in your logged history. Review before sending.</p>
+            </>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
