@@ -13,6 +13,7 @@ import { Clock, LogOut, Mail, Sparkles, Crown, Zap, Loader2, ArrowRight } from '
 import { createPortal, useFormStatus } from 'react-dom';
 import { demoSecondsLeft, formatCountdown, DEMO_TTL_MINUTES } from '@/lib/demo/config';
 import { endDemoAction, startDemoClockAction, choosePlanAfterDemoAction } from '@/app/(marketing)/demo/actions';
+import { OAuthButtons } from '@/components/auth/oauth-buttons';
 
 // ── Shared blur backdrop ─────────────────────────────────────────────────────
 // Portaled to <body> so it escapes the header's stacking context and sits above
@@ -76,6 +77,14 @@ export function DemoEmailGate() {
         />
         <GateButton />
       </form>
+
+      {/* Or sign in for real (Google · Apple) instead of the ephemeral demo. */}
+      <div className="my-4 flex items-center gap-3 text-xs font-medium text-white/35">
+        <span className="h-px flex-1 bg-border" aria-hidden />
+        or
+        <span className="h-px flex-1 bg-border" aria-hidden />
+      </div>
+      <OAuthButtons next="/dashboard" />
 
       <p className="mt-3 text-center text-xs text-white/45">
         No spam, no card. Your {DEMO_TTL_MINUTES}-minute clock starts the moment you continue.
