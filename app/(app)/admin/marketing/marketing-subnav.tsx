@@ -32,6 +32,7 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
     title: 'Audience & Intelligence',
     items: [
       ['/admin/marketing/intelligence', 'Intelligence'],
+      ['/admin/marketing/lead-scores', 'Lead Scores'],
       ['/admin/marketing/segments', 'Segments'],
       ['/admin/marketing/personalization', 'Personalization'],
       ['/admin/marketing/competitive', 'Competitive'],

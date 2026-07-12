@@ -102,7 +102,7 @@ it already exists**; the one central gap (consent) is now closed. Honest status 
 | Progressive profiling UI | ☑ **NEW** | `crm_contact_profile` (0171) + `lib/marketing/progressive-profile.ts` (one-question-at-a-time engine, 10 tests) + `ProfileNudge` card on `/dashboard/settings`; saves role/priority/household/kids/interests, remembers skips |
 | Consent banner / preference-center UI | ☑ **NEW** | `components/marketing/consent-manager.tsx` — banner (Accept all / Reject / Manage) + granular preference center wired to `/api/mkt/consent`; anon-id + GPC + local cache in `lib/marketing/visitor.ts`; fires the analytics touch to `/api/mkt/track`; re-openable from the footer |
 | **Client visitor spine (anon-id + first-party touch)** | ☑ **NEW** | `lib/marketing/visitor.ts` — durable `bubaly_vid` cookie/localStorage; GPC detect; one consent-gated `/api/mkt/track` touch per session (was: endpoints had no client caller) |
-| Lead scoring | ◐ partial | signals exist; no transparent score ledger |
+| Lead scoring | ☑ **NEW** | `crm_lead_scores` (0172) + `lib/marketing/contact-score.ts` (0–100 score + itemized ledger, 7 tests) + `contact-score-compute.ts` (gathers sessions/recency/conversions/demo/consent/profile/lifecycle); admin `/admin/marketing/lead-scores` — ranked, expandable "why" ledger, Recompute |
 | Abandoned-journey recovery (identified users only) | ◐ partial | `checkout_sessions` + `/api/cron/checkout-abandoned`; other journeys not covered |
 
 **☐ Next (privacy-safe, priority order)**
