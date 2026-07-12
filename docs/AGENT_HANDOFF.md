@@ -56,9 +56,14 @@
 > allowance rules · member badges · screen-time limits · leftovers · kid progress (~500 rows).
 > Follows the `seed_feature_gaps_fk.sql` pattern (family-by-email, `to_regclass` + parent guards,
 > `enum_range` drift-safety, `[seed]`/`ON CONFLICT` idempotency); columns verified against each
-> `CREATE TABLE`; appended to `SEED_ALL.sql`. **Caveat:** the PG16 validation harness was reclaimed
-> on container reset, so this round is column-verified but not PG16-executed — run `SEED_ALL.sql` in
-> the SQL editor to confirm (guards make any drift skip, not abort).
+> `CREATE TABLE`; appended to `SEED_ALL.sql`. **PG16-validated (#297):** rebuilt the harness (all 181
+> migrations + Supabase stubs + a fixture family) and executed it — which caught **3 real bugs** that
+> made the whole `do`-block abort (0 rows across all 20 tables): an ambiguous `g` in the
+> reward_redemptions subquery, `date - bigint` from `row_number()` in date math / array subscripts, and
+> two non-idempotent blocks (`ON CONFLICT DO NOTHING` with no matching unique constraint). Fixed +
+> re-verified: applies with 0 errors, seeds all 20 tables, re-runs keep counts stable. **Lesson
+> re-confirmed:** these best-effort/guarded seeds MUST be executed on PG16, not just column-checked —
+> a single statement error silently zeroes every table in the block.
 
 > ## 🧠 REASONING/NETWORK LANE — 2026-07-06/07 (parallel to the onboarding/marketing sessions)
 >
