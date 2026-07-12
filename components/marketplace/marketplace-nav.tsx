@@ -15,7 +15,7 @@ import { Suspense } from 'react';
 import {
   Store, Home, Sparkles, Search, HelpCircle, Clock, Package, ShoppingBag,
   Gift, Repeat, FolderHeart, Users, Building2, ListChecks, MessageCircle,
-  Receipt, Star, Heart, ShieldCheck, Plus, BellRing, Activity, MessageSquare, UserCheck,
+  Receipt, Star, Heart, ShieldCheck, Plus, BellRing, Activity, MessageSquare, UserCheck, HeartHandshake,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { SidebarTrustScore } from './sidebar-trust-score';
@@ -35,6 +35,7 @@ const ITEMS: Item[] = [
   { href: `${BASE}/browse?kind=sell`, label: 'Buy & Sell', icon: ShoppingBag, kind: 'sell' },
   { href: `${BASE}/browse?kind=donate`, label: 'Donate', icon: Gift, kind: 'donate' },
   { href: `${BASE}/browse?kind=swap`, label: 'Swap', icon: Repeat, kind: 'swap' },
+  { href: `${BASE}/community`, label: 'Community', icon: HeartHandshake },
   { href: `${BASE}/collections`, label: 'Collections', icon: FolderHeart },
   { href: `${BASE}/creators`, label: 'Creators', icon: Users },
   { href: `${BASE}/following`, label: 'Following', icon: UserCheck },

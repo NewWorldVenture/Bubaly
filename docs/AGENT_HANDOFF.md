@@ -6,6 +6,38 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ⏱️ SESSION END STATE — 2026-07-12 (Community Circles #21, Fable lane) — READ FIRST
+>
+> Shipped **backlog #21 — Community Marketplace v1 ("Circles")**, the first of the two big
+> design-level items. All on `main`, tsc/eslint/vitest/build green (**2491 tests**, 5 new).
+> **Migration `0173`** (row added to `docs/PENDING_PROD_MIGRATIONS.md`).
+> - **Model:** families form opt-in circles via an 8-char invite code (`ABCD-EFGH`) and explicitly
+>   share individual listings into them; circle members see exactly those shared listings across
+>   family boundaries — nothing else.
+> - **Security design (the crux — keep it this way):** base marketplace RLS is UNTOUCHED. The only
+>   cross-family read is ONE additive SELECT policy on `marketplace_listings`
+>   (`marketplace_listings_circle_read`), scoped to explicit shares in circles the viewer's family
+>   belongs to. All writes stay family-scoped. Circle lifecycle = ownership-checked SECURITY
+>   DEFINER RPCs (`marketplace_create_circle`/`_join_circle`/`_leave_circle` — join must work
+>   pre-SELECT; owner leaving dissolves the circle). `marketplace_circle_members.family_name` is a
+>   denormalized snapshot so the feed attributes items without exposing the families table.
+>   **Offers/orders stay within-family — cross-family transactions are v2** (the feed says
+>   "message them to arrange it"); don't bolt them on without payment/trust design.
+> - **Files:** `lib/marketplace/community.ts` (pure, 5 tests: code hygiene, shareable set, feed
+>   assembly/attribution/hiding-completed, stats); `app/(app)/marketplace/community/{page,actions}`
+>   (page degrades pre-migration with an honest note); `components/marketplace/community-module.tsx`
+>   (mobile-first: create/join, circle chips, copyable invite code, share picker, cross-family
+>   feed with unshare); rail nav entry "Community" (`HeartHandshake`).
+> - **Seed:** `seed_marketplace_circles.sql` — **500 rows exactly** (4 fixed-id partner families
+>   create-if-missing + 6 circles w/ friendly codes + 30 memberships + 120 partner listings +
+>   344 shares) so the feed is genuinely cross-family at volume; in `SEED_ALL.sql` (**62** — the
+>   header count is now computed from the real section count, not hand-bumped). PG16: 0173 ×2,
+>   seed ×2 exact counts, RPC guards fire (non-member rejected; member+code joins).
+> - **▶ NEXT:** #22 open developer platform is the last backlog item (large greenfield — owner
+>   scope sign-off recommended). Circles v2 candidates: cross-family interest/offers (needs
+>   payment+trust design), circle chat, per-circle notifications via saved-search alerts.
+>   Owner-owned: keys/prod applies per `docs/PENDING_PROD_MIGRATIONS.md` (now through `0173`).
+
 > ## ⏱️ SESSION END STATE — 2026-07-12 (Quick-Post 60s + Market Assistant, Fable lane) — READ FIRST
 >
 > **Second slice — backlog #11, Marketplace real assistant in the rail (SHIPPED, same lane):**

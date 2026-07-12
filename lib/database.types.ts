@@ -2054,6 +2054,23 @@ export interface Database {
         Partial<{ kind: string; occurred_on: string; title: string; note: string | null; amount: number | null; meta: Json }>
       >;
 
+      // ---- Community Marketplace circles (migration 0173) ----
+      marketplace_circles: T<
+        { id: string; name: string; emoji: string; join_code: string; created_by_family: string; created_by: string | null } & Stamps,
+        { id?: string; name: string; emoji?: string; join_code: string; created_by_family: string; created_by?: string | null },
+        Partial<{ name: string; emoji: string }>
+      >;
+      marketplace_circle_members: T<
+        { id: string; circle_id: string; family_id: string; family_name: string; role: string } & Stamps,
+        { id?: string; circle_id: string; family_id: string; family_name: string; role?: string },
+        Partial<{ family_name: string; role: string }>
+      >;
+      marketplace_listing_shares: T<
+        { id: string; listing_id: string; circle_id: string; family_id: string; created_by: string | null } & Stamps,
+        { id?: string; listing_id: string; circle_id: string; family_id: string; created_by?: string | null },
+        Partial<Record<string, never>>
+      >;
+
       // ---- Paperwork Inbox (migration 0169) ----
       paperwork_items: T<
         { id: string; family_id: string; kind: string; title: string; summary: string | null; raw_text: string | null; sender: string | null; due_on: string | null; amount: number | null; urgency: string; status: string; actions: Json; meta: Json; created_by: string | null } & Stamps,
@@ -2256,6 +2273,9 @@ export interface Database {
       rate_limit_hit: { Args: { p_key: string; p_limit: number; p_window_seconds: number }; Returns: { allowed: boolean; retry_after: number }[] };
       rate_limit_prune: { Args: Record<string, never>; Returns: undefined };
       mark_conversation_read: { Args: { p_conversation_id: string }; Returns: undefined };
+      marketplace_create_circle: { Args: { p_family: string; p_name: string; p_emoji?: string }; Returns: string };
+      marketplace_join_circle: { Args: { p_family: string; p_code: string }; Returns: string };
+      marketplace_leave_circle: { Args: { p_family: string; p_circle: string }; Returns: undefined };
     };
     Enums: {
       member_role: MemberRole;
