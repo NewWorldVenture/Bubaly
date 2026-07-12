@@ -256,6 +256,23 @@
 > depth, surfaces without a 500-row seed, and any remaining "coming soon" that isn't a deliberate
 > key-gate. Keep each slice small + verified; **update this file again before the session ends.**
 >
+> ## 🎨 UI/UX DESIGNER PASS — 2026-07-12 late (same lane, after the competitor gaps)
+>
+> Owner asked for a page-by-page designer audit of the whole site. **All 136 dashboard pages
+> graded** — full tier table in `todo.md` (search "SITE-WIDE UI/UX AUDIT"): signal scan of every
+> page + its rendered components (states/header/stat-tiles/AI/realtime/mobile/interactivity) with
+> manual review of the bottom cohort. Verdict: the vast majority are world-class or
+> solid-production; **three high-traffic surfaces were genuinely thin and were rebuilt premium**
+> (commit `41ceafb`, suite 2396 green):
+> - **Profile** — added a real "my month" stats strip (points/chores/week/milestones) fetched
+>   server-side; hero + menu preserved.
+> - **Security** — stat tiles, all/open/resolved tabs, 14-day activity strip w/ critical flags.
+> - **Dining Out** — static → interactive: favorite toggle, Add-place + Log-visit modals (server
+>   actions), 30-day stat tiles, **`seed_dining_out.sql` (500: 100 restaurants + 400 visits,
+>   PG16 ×2)**, appended to `SEED_ALL.sql`.
+> Deliberate non-changes: `more` (simple menu by mockup design), binder/devices/focus/tax-vault
+> (verified solid — don't chrome-inject them), the 3 redirect routes (de-dup by design).
+
 > ## ⏱️ SESSION END STATE — 2026-07-12 evening (competitor-gap lane) — READ FIRST
 >
 > Owner supplied two competitor tables (10 "largest opportunities" + 28 "missing competitor
