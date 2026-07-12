@@ -6,6 +6,52 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ⏱️ SESSION END STATE — 2026-07-12 (Financial Copilot lane) — READ FIRST
+>
+> Continued the App-Store lane's directive: **deepen the ◐ industry-first partials**. This session
+> shipped the first of them — **#8 schedule↔money↔life-event linkage → the Financial Copilot**.
+> Everything is on `main`, tsc/eslint/vitest/next-build green (**2373 tests**), and **PG16-verified**
+> (a real local PG16 cluster, since docker's daemon is unavailable in-sandbox — `initdb` as an
+> unprivileged user under `/tmp`). CI stays red org-wide (GitHub Actions runner outage — verify locally).
+>
+> **Financial Copilot — `/dashboard/money-timeline` (migration `0168`):**
+> - **Brain:** `lib/finance/timeline.ts` — pure `buildCashflowTimeline()` fuses bills (recurring
+>   expanded across a 12-week horizon) + savings-goal target dates + recurring costs + calendar
+>   events + liquid account balances into ONE forward, week-bucketed cash-flow timeline: running
+>   projected balance, "heavy week" detection (≥1.5× the avg non-zero week, needs a ≥2-week
+>   baseline), goals-at-risk, recurring-creep, set-aside smoothing, and ranked plain-language
+>   insights. **8 tests** (`tests/finance-timeline.test.ts`). Amounts are dollars (numeric).
+> - **Loader:** `lib/finance/timeline-load.ts` — `loadMoneyTimeline(supabase, familyId)` (shared by
+>   the page + the sync action); liquid balance = checking/savings/cash accounts (credit excluded).
+> - **Persistence:** `0168_money_timeline_insights` — the copilot's generated insights with
+>   acknowledge/dismiss. The timeline is computed **live**; this table only persists insight status,
+>   keyed by a stable `dedupe_key` (`kind:week_start|general`) so re-syncing refreshes CONTENT but
+>   **never resurrects a dismissed insight** (PG16-confirmed: dismissed row survived an upsert that
+>   omitted `status`; `updated_at` trigger fired; 4 RLS policies via `is_family_member`).
+> - **Page/module:** `app/(app)/dashboard/money-timeline/{page,actions}.tsx` +
+>   `components/modules/money-timeline-module.tsx` — mobile-first: stat row (liquid / projected low /
+>   due-12wk / recurring-mo), ranked insight cards (Got it / Dismiss, optimistic), and a collapsible
+>   12-week timeline with outflow bars, heavy-week + calendar-event chips, and running balance.
+>   Actions: `setMoneyInsightStatusAction`, `syncMoneyInsightsAction`.
+> - **Entry point:** a "Financial Copilot" CTA in the **Finances hub** (`finances-module.tsx`) —
+>   **no global-nav change** (standing rule); owner can add `/dashboard/money-timeline` to the sidebar.
+> - **Seed:** `seed_money_timeline.sql` — 500 rows (4 week-bearing kinds × 125 weeks), realistic
+>   status mix, idempotent; appended to `SEED_ALL.sql`. PG16: 500 ×2, unique keys hold.
+> - **⚠️ Prod-apply pending:** add **`0168`** to the apply list (already in `docs/PENDING_PROD_MIGRATIONS.md`).
+>
+> **▶ NEXT (same directive — deepen the remaining ◐ partials), in priority order:**
+> 1. **#4 Paperwork inbox** — forms + Smart Imports exist; give them a single triage inbox (AI
+>    reads → extracts action items → one-tap to calendar/reminder/prep-plan). Highest user value.
+> 2. **#5 Relationship-CRM per-entity timelines** — `family_connections`/contacts exist; add a
+>    per-person timeline aggregating interactions, dates, gifts, notes (deepen, don't rebuild).
+> 3. **#1/#3 Autonomous execution loop** — agents/concierge/decisions exist; close the loop so an
+>    accepted plan auto-executes across surfaces with an audit trail (build on `concierge_plan_actions`).
+> Method that's working: pure lib (+tests) → migration (family-scoped RLS via `is_family_member`,
+> additive/idempotent) → live-computed page + persistence for user state → 500-row seed in
+> `SEED_ALL.sql` → PG16-verify locally (`/tmp` cluster as an unprivileged user) → tsc/eslint/vitest/
+> build → ship. Link new pages from a sibling hub, never the global nav. **Update this file again
+> before the session ends.**
+
 > ## ⏱️ SESSION END STATE — 2026-07-12 (monetization + audits + marketplace lane) — READ FIRST
 >
 > A separate session (this one) ran in parallel to the demo/onboarding lane below. Everything

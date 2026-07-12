@@ -6,7 +6,7 @@ import {
   Plus, Link2, MoreHorizontal, Wallet, PiggyBank, CreditCard, TrendingUp, Landmark,
   ArrowDownToLine, ArrowUpRight, Check, ChevronLeft, ChevronRight, Lightbulb,
   Home, ShoppingCart, Car, UtensilsCrossed, Zap, Baby, Film, ShoppingBag, Tv,
-  HeartPulse, Shield, GraduationCap, DollarSign, Repeat, type LucideIcon,
+  HeartPulse, Shield, GraduationCap, DollarSign, Repeat, Sparkles, ArrowRight, type LucideIcon,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -196,6 +196,21 @@ export function FinancesModule() {
             </div>
           }
         />
+
+        {/* Financial Copilot — the schedule↔money timeline (deepens the linkage). */}
+        <Link
+          href="/dashboard/money-timeline"
+          className="mb-4 flex items-center gap-3 rounded-2xl border border-brand/30 bg-gradient-to-r from-brand/[0.12] to-transparent p-4 transition hover:border-brand/50"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 ring-1 ring-brand/30">
+            <Sparkles className="h-5 w-5 text-brand" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold">Financial Copilot</span>
+            <span className="block text-xs text-muted">See bills, goals &amp; your calendar on one money timeline — get ahead of heavy weeks.</span>
+          </span>
+          <ArrowRight className="h-4 w-4 shrink-0 text-brand" />
+        </Link>
 
         {/* Overview stat tiles */}
         <div className="rounded-2xl border border-border bg-surface/30 p-4">
