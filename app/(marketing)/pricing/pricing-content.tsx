@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Check, Zap, Crown, Sparkles, Lock, ArrowLeftRight, Archive, PlayCircle, Loader2 } from 'lucide-react';
 import { startDemoAction } from '@/app/(marketing)/demo/actions';
@@ -163,8 +163,10 @@ function TryDemoButton() {
 }
 
 /** The compact "Demo Account" card that floats to the left of the hero title:
- *  one click → a fully-seeded Family+ demo for 5 minutes. */
+ *  one click → a fully-seeded Family+ demo for 5 minutes. Surfaces the
+ *  ?demo=error|ended round-trip params so a failed/finished demo isn't silent. */
 function TestAccountCard() {
+  const demoStatus = useSearchParams().get('demo');
   return (
     <article className="relative w-full overflow-hidden rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-500/[0.12] to-white/[0.03] p-5 text-left ring-1 ring-emerald-400/20">
       <div className="flex items-center gap-3">
@@ -183,6 +185,17 @@ function TestAccountCard() {
           </p>
         </div>
       </div>
+
+      {demoStatus === 'error' && (
+        <p role="alert" className="mt-3 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-xs font-medium text-danger">
+          We couldn’t start the demo just now — please try again in a moment.
+        </p>
+      )}
+      {demoStatus === 'ended' && (
+        <p role="status" className="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-300">
+          Thanks for trying Bubaly! Ready to keep going? Pick a plan below.
+        </p>
+      )}
 
       <form action={startDemoAction}>
         <TryDemoButton />

@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { startDemoSession, endDemoSession, cleanupExpiredDemoSessions, rotateDemoPassword } from '@/lib/demo/session';
-import { demoExpiry } from '@/lib/demo/config';
+import { demoExpiry, isLikelyEmail, isDemoEmailUsedUp } from '@/lib/demo/config';
 import { captureDemoLead } from '@/lib/demo/lead';
 
 /**
@@ -42,19 +42,34 @@ export async function startDemoClockAction(formData: FormData): Promise<void> {
 
   const admin = createServiceClient();
 
-  // One demo per email: if this email already used a demo that has since expired,
-  // don't let it run another. End the just-provisioned session and route them to
+  // Only a live demo session may start the clock. Server actions are callable by
+  // ANY signed-in user — without this check a non-demo user invoking the action
+  // could be signed out (blocked path below) or have an email harvested.
+  let inDemo = false;
+  try {
+    const { data: sess } = await admin
+      .from('demo_sessions').select('user_id').eq('user_id', user.id).maybeSingle();
+    inDemo = !!sess;
+  } catch { /* table missing pre-migration → treat as not a demo */ }
+  if (!inDemo) redirect('/home');
+
+  // The email is REQUIRED to start the clock. The form enforces this client-side
+  // (`required`, `type=email`), but a crafted POST could skip it — and an empty
+  // email would both dodge the capture and slip past the one-per-email gate. An
+  // invalid address just re-renders the gate (the clock stays unstarted).
+  if (!isLikelyEmail(email)) redirect('/home');
+
+  // One demo per email: if this email already used a demo whose window has
+  // passed, don't start another. End the just-provisioned session and route to
   // the plan-choice page instead. (Checked out-of-band so a missing table pre-
   // migration simply doesn't gate — the redirect stays OUTSIDE the try so Next's
   // redirect signal isn't swallowed.)
   let blocked = false;
-  if (email) {
-    try {
-      const { data: prior } = await admin
-        .from('demo_email_uses').select('expires_at').eq('email', email).maybeSingle();
-      blocked = !!(prior?.expires_at && new Date(prior.expires_at).getTime() <= Date.now());
-    } catch { /* table missing (migration not applied) → don't gate */ }
-  }
+  try {
+    const { data: prior } = await admin
+      .from('demo_email_uses').select('expires_at').eq('email', email).maybeSingle();
+    blocked = isDemoEmailUsedUp(prior?.expires_at);
+  } catch { /* table missing (migration not applied) → don't gate */ }
   if (blocked) {
     await supabase.auth.signOut();
     await endDemoSession(user.id).catch(() => {});
@@ -64,26 +79,25 @@ export async function startDemoClockAction(formData: FormData): Promise<void> {
   const expiresAt = demoExpiry();
   await admin
     .from('demo_sessions')
-    .update({ email: email || null, expires_at: expiresAt.toISOString() })
+    .update({ email, expires_at: expiresAt.toISOString() })
     .eq('user_id', user.id);
 
-  // Record this email's demo window durably so a repeat after expiry is blocked
-  // above. Best-effort. (uses stays at its default 1 on first insert; a within-
-  // window re-entry just refreshes the timestamps.)
-  if (email) {
-    try {
-      await admin.from('demo_email_uses').upsert(
-        { email, expires_at: expiresAt.toISOString(), last_used_at: new Date().toISOString() },
-        { onConflict: 'email' },
-      );
-    } catch (e) { console.error('[demo] demo_email_uses upsert failed (migration 0162 applied?)', e); }
-  }
+  // Record this email's demo allowance durably. INSERT-ONLY (ignoreDuplicates):
+  // the email's allowance is fixed at its FIRST demo's window. Overwriting on
+  // re-entry was an infinite-demo loophole — re-entering within your own window
+  // kept pushing expires_at into the future, so the block above never fired.
+  try {
+    await admin.from('demo_email_uses').upsert(
+      { email, expires_at: expiresAt.toISOString(), last_used_at: new Date().toISOString() },
+      { onConflict: 'email', ignoreDuplicates: true },
+    );
+  } catch (e) { console.error('[demo] demo_email_uses upsert failed (migration 0162 applied?)', e); }
 
   // Feed the marketing engine: capture the email as a DURABLE crm_contacts lead
   // (the demo_sessions.email above is a single shared row the next visitor
   // overwrites) and enroll it in the "demo_started" follow-up campaign.
   // Best-effort — never block the demo on marketing.
-  if (email) await captureDemoLead(admin, email);
+  await captureDemoLead(admin, email);
 
   redirect('/home');
 }

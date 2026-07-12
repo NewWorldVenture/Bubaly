@@ -31,3 +31,22 @@ export function formatCountdown(seconds: number): string {
   const m = Math.floor(s / 60);
   return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
+
+/** Pragmatic "looks like an email" check for the demo gate (server-side — the
+ *  form's `required`/`type=email` are client-only and bypassable). */
+export function isLikelyEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s ?? '').trim());
+}
+
+/**
+ * One demo per email: true when the email's recorded demo window (its FIRST
+ * demo's expiry, from demo_email_uses) has already passed — meaning the email
+ * has used up its allowance and must be routed to the upgrade page. A missing /
+ * unparsable record means "not used up" (fail open: the gate must never lock out
+ * a first-time visitor over bad data).
+ */
+export function isDemoEmailUsedUp(priorExpiresAt: string | null | undefined, now: Date = new Date()): boolean {
+  if (!priorExpiresAt) return false;
+  const t = new Date(priorExpiresAt).getTime();
+  return !Number.isNaN(t) && t <= now.getTime();
+}

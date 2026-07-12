@@ -26,38 +26,57 @@ async function findUserIdByEmail(admin: Admin, email: string): Promise<string | 
 }
 
 /**
- * Get-or-create THE single shared demo account ("Bubaly Demo"). Idempotent: the
- * family is found by its stable name (only the demo ever creates a family with
- * this name), so repeat calls reuse the same user + family instead of spawning a
- * new throwaway user per visitor. Creates the auth user, family, owning member,
- * Family+ subscription and active-family preference on first run only.
+ * Get-or-create THE single shared demo account ("Bubaly Demo Account").
+ * Idempotent, and resolved by the STABLE key first — the auth user's email — not
+ * the family name: the demo visitor has full parent rights and can rename the
+ * family in Settings, and a name-only lookup then minted a brand-new demo family
+ * on every rename (orphaning the old one). The family is the demo user's oldest
+ * membership; the display name is self-healed back to the canonical one. Name
+ * lookup (current + legacy) remains a fallback; the create path runs first-run
+ * only (auth user, family, owning member, Family+ subscription, active-family).
  */
 export async function ensureDemoAccount(admin: Admin): Promise<{ userId: string; familyId: string } | null> {
-  // Already provisioned? Reuse it — matching the current name OR the legacy name,
-  // which we rename in place so the existing shared account + its data carry over.
+  // 1. Stable path: demo auth user by email → their oldest family membership.
+  const userByEmail = await findUserIdByEmail(admin, DEMO_ACCOUNT_EMAIL);
+  if (userByEmail) {
+    const { data: memberships } = await admin
+      .from('family_members').select('family_id')
+      .eq('user_id', userByEmail).eq('is_active', true)
+      .order('created_at').limit(1);
+    const familyId = memberships?.[0]?.family_id;
+    if (familyId) {
+      // Self-heal: a visitor may have renamed the family — rename it back so the
+      // "Welcome Bubaly Demo Account" greeting and fallback lookup stay correct.
+      await admin.from('families')
+        .update({ name: DEMO_ACCOUNT_NAME }).eq('id', familyId).neq('name', DEMO_ACCOUNT_NAME);
+      return { userId: userByEmail, familyId };
+    }
+  }
+
+  // 2. Fallback: family by canonical/legacy name (covers a drifted auth email).
   const { data: existing } = await admin
     .from('families').select('id, created_by, name')
     .in('name', [DEMO_ACCOUNT_NAME, DEMO_ACCOUNT_LEGACY_NAME])
     .order('created_at').limit(1).maybeSingle();
   if (existing?.id) {
-    // Migrate a legacy-named family to the canonical "Bubaly Demo Account".
     if (existing.name !== DEMO_ACCOUNT_NAME) {
       await admin.from('families').update({ name: DEMO_ACCOUNT_NAME }).eq('id', existing.id);
     }
-    const userId = existing.created_by ?? (await findUserIdByEmail(admin, DEMO_ACCOUNT_EMAIL));
+    const userId = existing.created_by ?? userByEmail;
     if (userId) return { userId, familyId: existing.id };
   }
 
-  // First run — create the account. If the auth user already exists (a prior
-  // partial run), reuse it rather than failing on the duplicate email.
-  let userId: string | null = null;
-  const { data: created, error: cErr } = await admin.auth.admin.createUser({
-    email: DEMO_ACCOUNT_EMAIL, password: newPassword(), email_confirm: true,
-    user_metadata: { demo: true, full_name: DEMO_ACCOUNT_NAME },
-  });
-  if (created?.user) userId = created.user.id;
-  else userId = await findUserIdByEmail(admin, DEMO_ACCOUNT_EMAIL);
-  if (!userId) { console.error('[demo] could not create/find demo user', cErr); return null; }
+  // 3. First run (or the family was deleted) — create what's missing. Reuse the
+  // existing auth user rather than failing on the duplicate email.
+  let userId: string | null = userByEmail;
+  if (!userId) {
+    const { data: created, error: cErr } = await admin.auth.admin.createUser({
+      email: DEMO_ACCOUNT_EMAIL, password: newPassword(), email_confirm: true,
+      user_metadata: { demo: true, full_name: DEMO_ACCOUNT_NAME },
+    });
+    userId = created?.user?.id ?? (await findUserIdByEmail(admin, DEMO_ACCOUNT_EMAIL));
+    if (!userId) { console.error('[demo] could not create/find demo user', cErr); return null; }
+  }
 
   const { data: family, error: fErr } = await admin
     .from('families').insert({ name: DEMO_ACCOUNT_NAME, timezone: 'UTC', created_by: userId })
@@ -180,8 +199,14 @@ export async function endDemoSession(userId: string): Promise<void> {
   }
 }
 
-/** Reap expired demo clocks: clear the session row so it resets for the next
- *  visitor. The shared account and its data are left intact. */
+/** Reap expired demo clocks: RESET the session row to the gated state
+ *  (expires_at/email → null) rather than deleting it. Deleting would be wrong:
+ *  with the single shared account there is exactly ONE row (unique user_id), and
+ *  a visitor camped on the expired-overlay still holds a valid auth session — a
+ *  deleted row makes `demo` read as null and drops the blur entirely, granting
+ *  unrestricted access. Null-ing keeps them behind the email gate, where the
+ *  per-email ledger (demo_email_uses) blocks a repeat of a used-up address.
+ *  Abandoned never-started gates need no reaping for the same one-row reason. */
 export async function cleanupExpiredDemoSessions(now: Date = new Date()): Promise<number> {
   const admin = createServiceClient();
   const { data } = await admin
