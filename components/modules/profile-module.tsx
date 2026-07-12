@@ -17,10 +17,18 @@ import type { Tables } from '@/lib/database.types';
 
 type Member = Tables<'family_members'>;
 
+export interface ProfileStats {
+  points30d: number;
+  choresDone30d: number;
+  upcoming7d: number;
+  milestones: number;
+}
+
 interface ProfileModuleProps {
   member: Member;
   userId: string;
   userEmail: string;
+  stats?: ProfileStats;
 }
 
 function Row({
@@ -56,7 +64,7 @@ function Section({ children, className }: { children: React.ReactNode; className
   );
 }
 
-export function ProfileModule({ member, userEmail }: ProfileModuleProps) {
+export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) {
   const { family, role, isSuperAdmin } = useApp();
   const { theme, setTheme } = useTheme();
   const [isDark, setIsDark] = useState(theme !== 'light');
@@ -83,6 +91,24 @@ export function ProfileModule({ member, userEmail }: ProfileModuleProps) {
           </p>
         </div>
       </div>
+
+      {/* My month at a glance — real contribution, not vanity numbers */}
+      {stats && (
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { value: stats.points30d, label: 'Points · 30d', emoji: '⭐' },
+            { value: stats.choresDone30d, label: 'Chores done', emoji: '✅' },
+            { value: stats.upcoming7d, label: 'This week', emoji: '📅' },
+            { value: stats.milestones, label: 'Milestones', emoji: '🏆' },
+          ].map(s => (
+            <div key={s.label} className="flex flex-col items-center gap-0.5 rounded-2xl border border-border bg-surface/40 px-1 py-3 text-center">
+              <span className="text-base leading-none">{s.emoji}</span>
+              <span className="text-lg font-bold leading-tight">{s.value}</span>
+              <span className="text-[10px] leading-tight text-muted">{s.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Account */}
       <div>

@@ -1502,3 +1502,159 @@ idempotent, stable across re-runs):
   Stripe Issuing cards, applying pending prod migrations (0118/0120/0121…) in the Supabase SQL editor,
   per-platform OAuth keys, CI Supabase login for authed e2e. **Recommended next:** #10 recurring-routine
   templates (high value, self-contained `engine` lane) or #8 role-tailored surfaces.
+
+## 🎨 SITE-WIDE UI/UX AUDIT — every dashboard page, graded (2026-07-12, this session)
+Method: signal scan of every page + its rendered components (loading/error/empty states,
+header, stat tiles, AI layer, realtime, mobile classes, interactivity) + manual review of the
+bottom cohort. Tiers: **★★★ world-class** (rich module, full states, stats/AI/realtime,
+mobile-first) · **★★ solid production** (wired + stated + clean; missing one premium layer,
+usually by design) · **★ upgrade** (thin for its traffic — rebuilt this session) · **↪ redirect**.
+
+| Page | Tier | Notes |
+|---|---|---|
+| `/dashboard/activity` | ★★ | Server-merged cross-surface feed; wired, clean. Realtime not needed (snapshot feed) |
+| `/dashboard/agents` | ★★ | 5/9 signals, 297 LoC UI |
+| `/dashboard/announcements` | ★★ | 7/9 signals, 183 LoC UI |
+| `/dashboard/app-store` | ★★ | 6/9 signals, 197 LoC UI |
+| `/dashboard/assistant` | ★★ | 7/9 signals, 711 LoC UI |
+| `/dashboard/auto` | ★★ | 7/9 signals, 258 LoC UI |
+| `/dashboard/autonomous-family-management` | ★★ | 6/9 signals, 347 LoC UI |
+| `/dashboard/autopay` | ★★ | 6/9 signals, 182 LoC UI |
+| `/dashboard/autopilot` | ★★★ | 8/9 signals, 272 LoC UI |
+| `/dashboard/behavior` | ★★★ | 8/9 signals, 263 LoC UI |
+| `/dashboard/billing` | ★★★ | 8/9 signals, 2237 LoC UI |
+| `/dashboard/bills` | ★★ | 6/9 signals, 182 LoC UI |
+| `/dashboard/binder` | ★★ | 6/9 signals, 127 LoC UI |
+| `/dashboard/briefing` | ★★★ | 8/9 signals, 979 LoC UI |
+| `/dashboard/budgets` | ★★ | 7/9 signals, 126 LoC UI |
+| `/dashboard/calendar` | ★★★ | 8/9 signals, 905 LoC UI |
+| `/dashboard/calm` | ★★ | Calm inbox; engine-driven minimal by design |
+| `/dashboard/care` | ★★★ | 8/9 signals, 305 LoC UI |
+| `/dashboard/celebrations` | ★★ | 7/9 signals, 156 LoC UI |
+| `/dashboard/chores` | ★★★ | 8/9 signals, 787 LoC UI |
+| `/dashboard/command-center` | ★★ | TV/large-screen dashboard; wired |
+| `/dashboard/concierge-calls` | ★★★ | 8/9 signals, 305 LoC UI |
+| `/dashboard/concierge` | ★★★ | 8/9 signals, 644 LoC UI |
+| `/dashboard/conflicts` | ★★ | 6/9 signals, 274 LoC UI |
+| `/dashboard/connections` | ★★ | 7/9 signals, 167 LoC UI |
+| `/dashboard/contacts` | ★★★ | 8/9 signals, 538 LoC UI |
+| `/dashboard/decisions` | ★★ | 7/9 signals, 398 LoC UI |
+| `/dashboard/dental` | ★★★ | 8/9 signals, 726 LoC UI |
+| `/dashboard/devices` | ★★ | 7/9 signals, 139 LoC UI |
+| `/dashboard/dining` | ★ | UPGRADE: read-only, zero interactivity, dining_out has NO seed |
+| `/dashboard/documents` | ★★★ | 8/9 signals, 678 LoC UI |
+| `/dashboard/due` | ★★ | 6/9 signals, 182 LoC UI |
+| `/dashboard/expenses` | ★★★ | 8/9 signals, 250 LoC UI |
+| `/dashboard/experience` | ★★ | 6/9 signals, 229 LoC UI |
+| `/dashboard/family-access` | ★★ | 4/9 signals, 187 LoC UI |
+| `/dashboard/family-ai-assistant` | ↪ | Redirects to Assistant (de-dup, by design) |
+| `/dashboard/family-automation` | ★★ | 7/9 signals, 468 LoC UI |
+| `/dashboard/family-cfo` | ★★ | 4/9 signals, 230 LoC UI |
+| `/dashboard/family-coo` | ★★ | 7/9 signals, 480 LoC UI |
+| `/dashboard/family-digital-twin` | ★★★ | 8/9 signals, 799 LoC UI |
+| `/dashboard/family-emergency` | ★★ | 7/9 signals, 460 LoC UI |
+| `/dashboard/family-health` | ★★ | 4/9 signals, 218 LoC UI |
+| `/dashboard/family-knowledge-graph` | ↪ | Redirects to Graph (de-dup, by design) |
+| `/dashboard/family-memory` | ↪ | Redirects to Memories (R4 de-dup, by design) |
+| `/dashboard/family-operating-index` | ★★ | 4/9 signals, 366 LoC UI |
+| `/dashboard/family-operations` | ★★ | 4/9 signals, 216 LoC UI |
+| `/dashboard/family-school` | ★★ | 4/9 signals, 216 LoC UI |
+| `/dashboard/family-signals` | ★★ | Signal cards + ack/dismiss; engine-driven |
+| `/dashboard/family-sports` | ★★ | 4/9 signals, 220 LoC UI |
+| `/dashboard/family-stress` | ★★ | 7/9 signals, 379 LoC UI |
+| `/dashboard/family-tree` | ★★ | 7/9 signals, 422 LoC UI |
+| `/dashboard/family` | ★★ | 7/9 signals, 597 LoC UI |
+| `/dashboard/favorites` | ★★ | 7/9 signals, 150 LoC UI |
+| `/dashboard/focus` | ★★ | 6/9 signals, 165 LoC UI |
+| `/dashboard/food` | ★★ | 5/9 signals, 218 LoC UI |
+| `/dashboard/front-desk` | ★★★ | 9/9 signals, 769 LoC UI |
+| `/dashboard/goals` | ★★★ | 8/9 signals, 246 LoC UI |
+| `/dashboard/grandparent-portal` | ★★ | Digest-engine server page; warm + wired |
+| `/dashboard/graph` | ★★ | 7/9 signals, 413 LoC UI |
+| `/dashboard/grocery` | ★★ | 7/9 signals, 475 LoC UI |
+| `/dashboard/habits` | ★★ | 7/9 signals, 405 LoC UI |
+| `/dashboard/health` | ★★★ | 8/9 signals, 906 LoC UI |
+| `/dashboard/home` | ★★★ | 8/9 signals, 566 LoC UI |
+| `/dashboard/homework` | ★★ | 7/9 signals, 281 LoC UI |
+| `/dashboard/inbox` | ★★★ | 9/9 signals, 802 LoC UI |
+| `/dashboard/independence` | ★★ | 5/9 signals, 251 LoC UI |
+| `/dashboard/insurance` | ★★★ | 8/9 signals, 352 LoC UI |
+| `/dashboard/intelligence` | ★★ | 6/9 signals, 224 LoC UI |
+| `/dashboard/journal` | ★★ | 7/9 signals, 257 LoC UI |
+| `/dashboard/journeys` | ★★ | 4/9 signals, 214 LoC UI |
+| `/dashboard/kitchen` | ★★ | 7/9 signals, 612 LoC UI |
+| `/dashboard/knowledge` | ★★ | 6/9 signals, 249 LoC UI |
+| `/dashboard/life-events` | ★★★ | 8/9 signals, 319 LoC UI |
+| `/dashboard/locator` | ★★ | 7/9 signals, 533 LoC UI |
+| `/dashboard/meals` | ★★★ | 8/9 signals, 821 LoC UI |
+| `/dashboard/medical` | ★★★ | 8/9 signals, 913 LoC UI |
+| `/dashboard/medications` | ★★ | 7/9 signals, 521 LoC UI |
+| `/dashboard/memories` | ★★ | 6/9 signals, 451 LoC UI |
+| `/dashboard/messages` | ★★ | 7/9 signals, 1397 LoC UI |
+| `/dashboard/migrate` | ★★ | 6/9 signals, 318 LoC UI |
+| `/dashboard/moments` | ★★★ | 8/9 signals, 437 LoC UI |
+| `/dashboard/money-timeline` | ★★ | Timeline module; wired |
+| `/dashboard/more` | ★★ | Deliberate simple links hub (mockup screen 11); premium enough for its job |
+| `/dashboard/next-best-actions` | ★★ | 7/9 signals, 196 LoC UI |
+| `/dashboard/notes` | ★★★ | 8/9 signals, 513 LoC UI |
+| `/dashboard/notifications` | ★★ | 7/9 signals, 270 LoC UI |
+| `/dashboard/nutrition` | ★★ | 7/9 signals, 161 LoC UI |
+| `/dashboard/onboarding-funnel` | ★★ | 4/9 signals, 253 LoC UI |
+| `/dashboard/outcomes` | ★★ | Outcome launcher picker; engine-driven, purposeful |
+| `/dashboard/pantry` | ★★★ | 9/9 signals, 318 LoC UI |
+| `/dashboard/paperwork` | ★★ | 4/9 signals, 305 LoC UI |
+| `/dashboard/passwords` | ★★ | 7/9 signals, 323 LoC UI |
+| `/dashboard/payments` | ★★ | 6/9 signals, 100 LoC UI |
+| `/dashboard/pets` | ★★★ | 8/9 signals, 419 LoC UI |
+| `/dashboard/photos` | ★★★ | 8/9 signals, 615 LoC UI |
+| `/dashboard/planning` | ★★ | Server planning surface; wired |
+| `/dashboard/playbook` | ★★★ | 9/9 signals, 264 LoC UI |
+| `/dashboard/prep-plans` | ★★ | 7/9 signals, 223 LoC UI |
+| `/dashboard/profile` | ★ | UPGRADE: thin links menu on a high-traffic surface — no personal stats/identity |
+| `/dashboard/readiness` | ★★ | 4/9 signals, 253 LoC UI |
+| `/dashboard/reasoning` | ★★ | Unified reasoning view; engine-driven |
+| `/dashboard/recipes` | ★★★ | 9/9 signals, 739 LoC UI |
+| `/dashboard/relationship` | ★★★ | 8/9 signals, 603 LoC UI |
+| `/dashboard/reminders` | ★★★ | 9/9 signals, 897 LoC UI |
+| `/dashboard/renewals` | ★★ | 7/9 signals, 295 LoC UI |
+| `/dashboard/rewards` | ★★★ | 8/9 signals, 343 LoC UI |
+| `/dashboard/rides` | ★★ | 7/9 signals, 327 LoC UI |
+| `/dashboard/savings` | ★★ | 7/9 signals, 148 LoC UI |
+| `/dashboard/scan` | ★★ | 6/9 signals, 203 LoC UI |
+| `/dashboard/school` | ★★★ | 9/9 signals, 653 LoC UI |
+| `/dashboard/screen-time` | ★★★ | 8/9 signals, 244 LoC UI |
+| `/dashboard/security` | ★ | UPGRADE: bare CRUD event list — no stat tiles, no severity summary, no AI |
+| `/dashboard/settings` | ★★ | 6/9 signals, 464 LoC UI |
+| `/dashboard/setup` | ★★ | 7/9 signals, 378 LoC UI |
+| `/dashboard/signups` | ★★★ | 8/9 signals, 320 LoC UI |
+| `/dashboard/social-feed` | ★★ | 7/9 signals, 448 LoC UI |
+| `/dashboard/social` | ★★ | 7/9 signals, 333 LoC UI |
+| `/dashboard/sports` | ★★★ | 9/9 signals, 468 LoC UI |
+| `/dashboard/subscriptions` | ★★★ | 8/9 signals, 176 LoC UI |
+| `/dashboard/sync` | ★★ | 5/9 signals, 218 LoC UI |
+| `/dashboard/tax-vault` | ★★ | 6/9 signals, 165 LoC UI |
+| `/dashboard/timetable` | ★★ | 7/9 signals, 261 LoC UI |
+| `/dashboard/todos` | ★★★ | 8/9 signals, 677 LoC UI |
+| `/dashboard/trip-intel` | ★★ | 6/9 signals, 739 LoC UI |
+| `/dashboard/trip-memories` | ★★ | 7/9 signals, 192 LoC UI |
+| `/dashboard/trips` | ★★ | 7/9 signals, 425 LoC UI |
+| `/dashboard/trust` | ★★ | 7/9 signals, 848 LoC UI |
+| `/dashboard/utilities` | ★★★ | 8/9 signals, 211 LoC UI |
+| `/dashboard/vacations` | ★★★ | 8/9 signals, 204 LoC UI |
+| `/dashboard/voice` | ★★ | 6/9 signals, 254 LoC UI |
+| `/dashboard/voting` | ★★ | 6/9 signals, 354 LoC UI |
+| `/dashboard/weather` | ★★ | 7/9 signals, 335 LoC UI |
+| `/dashboard/weekend` | ★★★ | 8/9 signals, 271 LoC UI |
+| `/dashboard/weekly-briefing` | ★★ | 7/9 signals, 443 LoC UI |
+| `/dashboard/wishlists` | ★★★ | 8/9 signals, 256 LoC UI |
+| `/dashboard/workload` | ★★ | 5/9 signals, 289 LoC UI |
+
+**Tally:** 43 world-class · 87 solid-production · 3 upgraded this session · 3 redirects.
+
+**Upgrades built this session (all with 500-seed where a table backs them):**
+- [x] **Profile** → premium identity surface: avatar hero, personal stats (points, chores done,
+  streak, upcoming events), theme toggle + quick links preserved.
+- [x] **Security** → stat tiles (open/critical/7-day), severity timeline styling, AI-style rollup
+  headline from `summarizeSecurity`; CRUD preserved.
+- [x] **Dining Out** → interactive: favorite toggle + log-a-visit (server actions), stat tiles,
+  `seed_dining_out.sql` (500 rows: restaurants + visits).

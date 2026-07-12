@@ -28,9 +28,37 @@ export function SecurityModule() {
   });
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
+  const [tab, setTab] = useState<'all' | 'open' | 'resolved'>('all');
   const all = useMemo(() => events ?? [], [events]);
   const sorted = useMemo(() => sortEvents(all as (Event & EventLike)[]), [all]);
   const stats = useMemo(() => summarizeSecurity(all as EventLike[]), [all]);
+
+  const visible = useMemo(() => {
+    if (tab === 'open') return sorted.filter(e => !e.resolved);
+    if (tab === 'resolved') return sorted.filter(e => e.resolved);
+    return sorted;
+  }, [sorted, tab]);
+
+  const weekCount = useMemo(() => {
+    const cutoff = Date.now() - 7 * 86400_000;
+    return all.filter(e => new Date(e.occurred_at).getTime() >= cutoff).length;
+  }, [all]);
+
+  // 14-day activity strip (today rightmost).
+  const strip = useMemo(() => {
+    const days = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(Date.now() - (13 - i) * 86400_000);
+      return { key: d.toISOString().slice(0, 10), count: 0, critical: false };
+    });
+    const byKey = new Map(days.map(d => [d.key, d]));
+    for (const e of all) {
+      const k = new Date(e.occurred_at).toISOString().slice(0, 10);
+      const d = byKey.get(k);
+      if (d) { d.count += 1; if (e.severity === 'critical' && !e.resolved) d.critical = true; }
+    }
+    return days;
+  }, [all]);
+  const stripMax = Math.max(1, ...strip.map(d => d.count));
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -61,17 +89,53 @@ export function SecurityModule() {
 
       <div className={`flex items-center gap-3 rounded-2xl border p-4 ${stats.allClear ? 'border-success/30 bg-success/5' : 'border-amber-500/30 bg-amber-500/5'}`}>
         {stats.allClear ? <ShieldCheck className="h-6 w-6 text-success" /> : <ShieldAlert className="h-6 w-6 text-amber-500" />}
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="font-semibold">{stats.allClear ? 'All clear' : `${stats.open} open alert${stats.open === 1 ? '' : 's'}`}</p>
           <p className="text-xs text-muted">{stats.openCritical} critical · {stats.openWarning} warning · {stats.total} total logged</p>
         </div>
+        {/* 14-day activity strip */}
+        <div className="hidden items-end gap-0.5 sm:flex" aria-hidden>
+          {strip.map(d => (
+            <span key={d.key} title={`${d.key}: ${d.count}`}
+              className={`w-1.5 rounded-t ${d.critical ? 'bg-danger' : d.count > 0 ? 'bg-brand/70' : 'bg-border'}`}
+              style={{ height: `${6 + (d.count / stripMax) * 22}px` }} />
+          ))}
+        </div>
       </div>
 
-      {sorted.length === 0 ? (
+      {/* Stats */}
+      <div className="grid-stats">
+        {[
+          { label: 'Open', value: stats.open, icon: '🚨', color: stats.open ? 'text-amber-400' : 'text-success' },
+          { label: 'Critical', value: stats.openCritical, icon: '🔴', color: stats.openCritical ? 'text-danger' : 'text-muted' },
+          { label: 'This week', value: weekCount, icon: '🗓️', color: 'text-brand' },
+          { label: 'Resolved', value: stats.total - stats.open, icon: '✅', color: 'text-success' },
+        ].map(s => (
+          <div key={s.label} className="stat-card">
+            <span className="text-2xl">{s.icon}</span>
+            <div>
+              <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+              <div className="text-[11px] text-muted">{s.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filter tabs */}
+      <div className="tab-bar">
+        {(['all', 'open', 'resolved'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`tab-item capitalize ${tab === t ? 'tab-item-active' : 'tab-item-inactive'}`}>
+            {t}{t === 'open' && stats.open > 0 ? ` (${stats.open})` : ''}
+          </button>
+        ))}
+      </div>
+
+      {visible.length === 0 ? (
         <EmptyState icon={ShieldCheck} title="No security events" description="Log alarm triggers, camera events, sensor alerts and tests to keep a clear safety record." />
       ) : (
         <div className="space-y-2">
-          {sorted.map((ev) => {
+          {visible.map((ev) => {
             const meta = severityMeta(ev.severity);
             return (
               <div key={ev.id} className={`flex items-start gap-3 rounded-xl border bg-surface/40 p-3 ${ev.resolved ? 'border-border opacity-60' : meta.tone === 'danger' ? 'border-danger/40' : meta.tone === 'warning' ? 'border-amber-500/40' : 'border-border'}`}>
