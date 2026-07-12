@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0161 · 5-day free trial + soft account closure on families.
+-- 0164 · 5-day free trial + soft account closure on families.
 --
 -- New monetization model: a NEW family gets 5 days of full Family Basic access,
 -- then the account locks until they buy Family Basic or Family+ (no permanent

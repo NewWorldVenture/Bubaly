@@ -6,6 +6,68 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ⏱️ SESSION END STATE — 2026-07-12 (monetization + audits + marketplace lane) — READ FIRST
+>
+> A separate session (this one) ran in parallel to the demo/onboarding lane below. Everything
+> here is on `main`, each slice tsc/eslint/vitest/next-build green + PG16-verified where a
+> migration was involved. **Delivery note:** the GitHub write API was rate-limited for stretches,
+> so several of these landed via **direct git merge to `main`** (user-authorized) rather than the
+> PR button — the PRs still auto-closed as merged. CI checks show red org-wide due to a **GitHub
+> Actions runner outage** (no runner assigned; `main` is red too) — NOT the code; verify locally.
+>
+> **Monetization model change — 5-day trial → paywall + soft account close (migration `0164`):**
+> - `families.trial_ends_at` + `closed_at`. Grandfather-safe: column added with NO default first
+>   (existing rows NULL = grandfathered, never locked), THEN a `now()+5d` default so only NEW
+>   families get a trial clock. PG16-verified (existing NULL, new = 5 days, idempotent).
+> - `lib/server/entitlement.ts` — pure `computeEntitlement` (super-admin > closed > paid >
+>   grandfathered-free > in-trial(**Family Basic**) > expired-locked) + resolver that FAILS OPEN.
+>   8 tests. Wired into `resolveFamilyPlanLevel` so trial grants level 1 across all gates.
+> - `(app)/layout.tsx` billing gate: closed → `AccountClosedGate`; expired-unpaid new family →
+>   `TrialPaywallGate` (choose Basic/Plus, see pricing, log out, close account). Super-admins +
+>   grandfathered pass; fail-open. Soft close = `families.closed_at` (NOTHING deleted, reversible)
+>   via `app/(app)/account/actions.ts` (parent-only); `CloseAccountCard` on the billing page.
+> - **Decisions from owner:** existing free users **grandfathered**; trial grants **Family Basic**.
+> - **No downgrade to Free**: `change-plan` already rejects non-paid plans; only Family+ → Family
+>   Basic remains a real downgrade. Pricing `/pricing` reframed to "5-Day Free Trial" (Family Basic).
+> - ⚠️ **`0164` is a coupled deploy** — apply with this code or owner accept/withdraw and the
+>   trial gate misbehave. (Note: I renumbered from 0161 → **0164** to avoid the parallel session's
+>   `0161_demo_session_email_gate` collision.)
+>
+> **Security audits (2 rounds) — all fixed & merged** (see the `🔒 SECURITY AUDIT` block in `todo.md`):
+> - Marketplace object-level authz (`0154`): per-member RLS + ownership-checked RPCs
+>   (`marketplace_accept_offer`/`_decline_offer`/`_set_listing_status`) + offer→pending trigger +
+>   unique open-offer index. Payments: **PAY-1** atomic card-auth holds (`0155`
+>   `wallet_reserve_card_auth`, per-child lock, no concurrent overspend), **PAY-2** replay-safe
+>   money webhook (500-on-error so Stripe retries; no dropped captures). Round 2 (parallel bot):
+>   AUTH-1 Google-OAuth CSRF, PAY-3 checkout admin gate, AI-1 guardian prompt-injection, `0156`
+>   durable rate-limit.
+> - **Visitor-intelligence consent layer (`0160`)** — `mkt_consent_events` (append-only, versioned,
+>   revocable, GPC), pure resolver + tests, `/api/mkt/track` now consent-gated, `/api/mkt/consent`.
+>   The rest of the "visitor intelligence" brief already existed (see the coverage matrix in `todo.md`).
+>
+> **Marketplace world-class buildout (all merged):** listing photos (`#277`), item detail
+> `/marketplace/item/[id]` w/ seller trust + inline offer inbox (`#278`/`#283`), storefronts
+> `/marketplace/creators/[id]` (`#280`), deep-links from every listing surface (`#282`).
+>
+> **Marketing polish:** world-class **BackToTop** on every marketing page (`components/marketing/
+> back-to-top.tsx`, mounted in the marketing layout; lifts above the cookie notice); pricing
+> "Why families switch" moved below the plan cards.
+>
+> **⚠️ Prod-apply pending (add to `docs/PENDING_PROD_MIGRATIONS.md`):** `0154`, `0155`, `0156`,
+> `0160`, **`0164`** (coupled with their code). All additive + idempotent; PG16-verified.
+>
+> **▶ ACTIVE DIRECTIVE for the next session (user, 2026-07-12):** "Go through the CORE functionality
+> **page by page** and fully build each out to be **world class**, **100% wired to Supabase**, **100%
+> production-ready. No stubs.** Use **real seeded data (500 records)** to test all functionality. Make
+> all decisions yourself, don't stop." Method that's been working this session: pick one page/surface →
+> verify it's Supabase-wired (real `.from()` or `lib/*` server helper, no mock) → close any stub →
+> ensure a 500-row seed exists in `SEED_ALL.sql` (see the seed tracker in `todo.md`) → PG16-verify the
+> seed → tsc/eslint/vitest/next build → ship (branch → merge to `main`; direct git-merge is fine while
+> the GitHub write API is flaky). Start from the left-nav pages the sweep below already inventoried;
+> the demo/onboarding sweep found the nav production-wired, so hunt for: thin pages that render but lack
+> depth, surfaces without a 500-row seed, and any remaining "coming soon" that isn't a deliberate
+> key-gate. Keep each slice small + verified; **update this file again before the session ends.**
+>
 > ## ⏱️ SESSION END STATE — 2026-07-12 (demo + onboarding + nav-sweep lane) — READ FIRST
 >
 > This session shipped, all on `main`, each commit tsc/eslint/vitest green:
