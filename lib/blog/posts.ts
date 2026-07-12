@@ -27,6 +27,14 @@ export type BlogPost = {
 
 type Row = Database['public']['Tables']['blog_posts']['Row'];
 
+export function isSyntheticBlogSeedSlug(slug: string): boolean {
+  return /^seed-blog_posts-\d+$/i.test(slug)
+    || /^Seed(?: data \d+)? [0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(slug);
+}
+
+const publicRows = (rows: Row[] | null): Row[] =>
+  (rows ?? []).filter((row) => !isSyntheticBlogSeedSlug(row.slug));
+
 function anonClient() {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -92,7 +100,7 @@ export async function getAllPosts(): Promise<BlogPost[]> {
       .select('*')
       .eq('published', true)
       .order('published_at', { ascending: false });
-    return (data ?? []).map(toPost);
+    return publicRows(data).map(toPost);
   } catch {
     return [];
   }
@@ -106,13 +114,14 @@ export async function getPostsByCategory(category: BlogCategory): Promise<BlogPo
       .eq('published', true)
       .eq('category', category)
       .order('published_at', { ascending: false });
-    return (data ?? []).map(toPost);
+    return publicRows(data).map(toPost);
   } catch {
     return [];
   }
 }
 
 export async function getPost(slug: string): Promise<BlogPost | undefined> {
+  if (isSyntheticBlogSeedSlug(slug)) return undefined;
   try {
     const { data } = await anonClient()
       .from('blog_posts')
@@ -134,9 +143,9 @@ export async function getFeaturedPost(): Promise<BlogPost | undefined> {
       .eq('published', true)
       .eq('featured', true)
       .order('published_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (data) return toPost(data);
+      .limit(20);
+    const featured = publicRows(data)[0];
+    if (featured) return toPost(featured);
   } catch {
     /* fall through to first post */
   }
@@ -153,8 +162,8 @@ export async function getRelatedPosts(slug: string, category: BlogCategory, limi
       .eq('category', category)
       .neq('slug', slug)
       .order('published_at', { ascending: false })
-      .limit(limit);
-    return (data ?? []).map(toPost);
+      .limit(Math.max(limit * 10, 50));
+    return publicRows(data).map(toPost).slice(0, limit);
   } catch {
     return [];
   }
@@ -170,20 +179,20 @@ export async function getAdjacentPosts(date: string): Promise<{ prev: BlogPost |
         .eq('published', true)
         .lt('published_at', date)
         .order('published_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .limit(20),
       client
         .from('blog_posts')
         .select('*')
         .eq('published', true)
         .gt('published_at', date)
         .order('published_at', { ascending: true })
-        .limit(1)
-        .maybeSingle(),
+        .limit(20),
     ]);
+    const previous = publicRows(older)[0];
+    const following = publicRows(newer)[0];
     return {
-      prev: older ? toPost(older) : null,
-      next: newer ? toPost(newer) : null,
+      prev: previous ? toPost(previous) : null,
+      next: following ? toPost(following) : null,
     };
   } catch {
     return { prev: null, next: null };

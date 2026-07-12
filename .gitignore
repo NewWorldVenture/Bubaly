@@ -16,3 +16,6 @@ client_secret*.json
 /ios
 /android
 .capacitor/
+
+# Local agent settings are machine-specific and may contain private paths.
+/.claude/
