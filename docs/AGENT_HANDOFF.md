@@ -58,12 +58,15 @@
 >
 > **▶ ACTIVE DIRECTIVE #2 (user, 2026-07-12) — INDUSTRY-FIRST FEATURES:** owner shared 10 "features no
 > competitor offers" and asked to capture + gap-audit + build the missing ones. **Done: full matrix in
-> `todo.md` → `🚀 INDUSTRY-FIRST CAPABILITIES`.** Result: **9 of 10 already have a real surface**
-> (marketplace #6 shipped world-class this session); depth varies (◐ deepen targets noted). **The one
-> true greenfield gap = #10 "Family App Store"** (no app-store/extensions/plugin surface). **START HERE:**
-> build spec is in `todo.md` under #10 — `family_apps` catalog + `family_app_installs` (family-scoped RLS),
-> `lib/appstore/*` + tests, `/dashboard/app-store` (mobile-first, install/uninstall, "recommended for your
-> family" rail), `seed_family_apps.sql` (**500** rows → `SEED_ALL.sql`), PG16-verify, ship. Then deepen ◐.
+> `todo.md` → `🚀 INDUSTRY-FIRST CAPABILITIES`.** Result: **9 of 10 already had a real surface**; the one
+> greenfield gap **#10 "Family App Store" is now BUILT + shipped** (`5c30d6d`): `/dashboard/app-store`,
+> migration **`0165`** (`family_apps` catalog + `family_app_installs` RLS), `lib/appstore/catalog.ts` (+8
+> tests), install/uninstall/toggle actions, mobile-first grid + "Recommended for your family" rail,
+> `seed_family_apps.sql` (**500** apps, 12 categories → `SEED_ALL.sql`). PG16-verified (184 migrations,
+> 500 rows, RLS on, idempotent). **Nav NOT touched** (standing rule) — owner adds `/dashboard/app-store`
+> to the sidebar if wanted. **▶ NEXT for the App-Store lane: deepen the ◐ partials** in the matrix (autonomous
+> execution loop for #1/#3, a paperwork inbox for #4, relationship-CRM timelines for #5, schedule↔money↔
+> life-event linkage for #8) — each is a real surface today that can be pushed to world-class + AI-driven.
 >
 > **▶ ACTIVE DIRECTIVE #1 (user, 2026-07-12):** "Go through the CORE functionality
 > **page by page** and fully build each out to be **world class**, **100% wired to Supabase**, **100%
