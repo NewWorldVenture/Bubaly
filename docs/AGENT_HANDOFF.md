@@ -6,10 +6,38 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
-> ## ⏱️ SESSION END STATE — 2026-07-12 (Financial Copilot lane) — READ FIRST
+> ## ⏱️ SESSION END STATE — 2026-07-12 (Financial Copilot + Paperwork Inbox lane) — READ FIRST
 >
 > Continued the App-Store lane's directive: **deepen the ◐ industry-first partials**. This session
-> shipped the first of them — **#8 schedule↔money↔life-event linkage → the Financial Copilot**.
+> shipped TWO of them — **#8 schedule↔money → Financial Copilot** and **#4 forms/paperwork →
+> Paperwork Inbox**.
+>
+> **Paperwork Inbox — `/dashboard/paperwork` (migration `0169`):**
+> - **Brain:** `lib/paperwork/triage.ts` — pure, deterministic `triagePaperwork(text)`: classifies
+>   the kind (permission_slip / school_notice / medical_form / sports / bill_or_payment /
+>   event_flyer / other), extracts the ACTION ITEMS a parent must do (sign/pay/rsvp/schedule/
+>   provide) with due dates ("March 3rd", "3/20", forward-rolled years) + dollar amounts pulled
+>   from prose, and ranks urgency (urgent ≤2d / soon ≤7d). **9 tests.** No model call needed — an
+>   AI provider can only ADD on top later.
+> - **Table:** `0169_paperwork_items` — kind/title/summary/raw_text/sender/due_on/amount/urgency/
+>   status (needs_action → in_progress → done / archived) + `actions` jsonb carrying each extracted
+>   action's materialization state. Family-scoped RLS via `is_family_member`; `updated_at` trigger.
+> - **One-tap materialization:** `materializePaperworkActionAction` turns an action into a REAL
+>   `calendar_events` row (schedule/rsvp → category school/sports/appointment) or `family_reminders`
+>   row (sign/pay/provide/review, ai_suggested). Stamped back onto the jsonb (tap-twice-safe);
+>   when every action is materialized the item auto-completes.
+> - **UI:** `components/modules/paperwork-module.tsx` — mobile-first: paste-to-triage composer,
+>   status filter chips with counts, urgency-ranked cards (urgent = rose ring), per-action
+>   "Add to calendar" / "Remind me" buttons that flip to "On calendar / Reminder set".
+> - **Entry point:** "📄 Paperwork Inbox" button in the **Communications Hub** header
+>   (`inbox-module.tsx`) — **no global-nav change** (standing rule).
+> - **Seed:** `seed_paperwork.sql` — 500 rows (7 kinds × 4 statuses, actions jsonb in the exact
+>   module shape, some pre-materialized); appended to `SEED_ALL.sql`. PG16: 500 ×2 idempotent.
+> - **⚠️ Prod-apply pending:** **`0169`** (row added to `docs/PENDING_PROD_MIGRATIONS.md`).
+> - Verified: tsc/eslint green, **2382 tests**, next build green (`/dashboard/paperwork` present),
+>   PG16 idempotent ×2 + 4 RLS policies + trigger.
+>
+> **Financial Copilot (shipped earlier this session, on `main` at `5b96e58`):**
 > Everything is on `main`, tsc/eslint/vitest/next-build green (**2373 tests**), and **PG16-verified**
 > (a real local PG16 cluster, since docker's daemon is unavailable in-sandbox — `initdb` as an
 > unprivileged user under `/tmp`). CI stays red org-wide (GitHub Actions runner outage — verify locally).
@@ -40,12 +68,14 @@
 > - **⚠️ Prod-apply pending:** add **`0168`** to the apply list (already in `docs/PENDING_PROD_MIGRATIONS.md`).
 >
 > **▶ NEXT (same directive — deepen the remaining ◐ partials), in priority order:**
-> 1. **#4 Paperwork inbox** — forms + Smart Imports exist; give them a single triage inbox (AI
->    reads → extracts action items → one-tap to calendar/reminder/prep-plan). Highest user value.
+> 1. ~~#4 Paperwork inbox~~ — **DONE this session** (see above).
 > 2. **#5 Relationship-CRM per-entity timelines** — `family_connections`/contacts exist; add a
 >    per-person timeline aggregating interactions, dates, gifts, notes (deepen, don't rebuild).
 > 3. **#1/#3 Autonomous execution loop** — agents/concierge/decisions exist; close the loop so an
 >    accepted plan auto-executes across surfaces with an audit trail (build on `concierge_plan_actions`).
+> 4. Possible Paperwork-Inbox follow-ups: OCR/image capture into the composer (photo → text),
+>    AI-provider summary enrichment (provider-gated like concierge-calls), and a Smart-Imports
+>    hand-off so onboarding imports land in the inbox too.
 > Method that's working: pure lib (+tests) → migration (family-scoped RLS via `is_family_member`,
 > additive/idempotent) → live-computed page + persistence for user state → 500-row seed in
 > `SEED_ALL.sql` → PG16-verify locally (`/tmp` cluster as an unprivileged user) → tsc/eslint/vitest/
