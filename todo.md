@@ -100,13 +100,15 @@ it already exists**; the one central gap (consent) is now closed. Honest status 
 | **Consent-gated tracking** | ☑ **NEW** | `/api/mkt/track` gates on analytics consent |
 | Identity linking (anon → contact) | ◐ partial | `mkt_visitors.contact_id` FK exists; server-side stitch-on-signup not wired |
 | Progressive profiling UI | ☐ open | fields exist on contacts; no staged-capture UI |
-| Consent banner / preference-center UI | ☐ open | API is ready (`/api/mkt/consent` GET/POST); client banner not built |
+| Consent banner / preference-center UI | ☑ **NEW** | `components/marketing/consent-manager.tsx` — banner (Accept all / Reject / Manage) + granular preference center wired to `/api/mkt/consent`; anon-id + GPC + local cache in `lib/marketing/visitor.ts`; fires the analytics touch to `/api/mkt/track`; re-openable from the footer |
+| **Client visitor spine (anon-id + first-party touch)** | ☑ **NEW** | `lib/marketing/visitor.ts` — durable `bubaly_vid` cookie/localStorage; GPC detect; one consent-gated `/api/mkt/track` touch per session (was: endpoints had no client caller) |
 | Lead scoring | ◐ partial | signals exist; no transparent score ledger |
 | Abandoned-journey recovery (identified users only) | ◐ partial | `checkout_sessions` + `/api/cron/checkout-abandoned`; other journeys not covered |
 
 **☐ Next (privacy-safe, priority order)**
-- ☐ Client **consent banner + preference center** calling `/api/mkt/consent` (GET to hydrate, POST to
-  save); pass the resolved analytics flag + GPC to `/api/mkt/track`. **Never** pre-checked marketing.
+- ☑ **DONE (2026-07-12)** — Client **consent banner + preference center** (`consent-manager.tsx` +
+  `visitor.ts`) calling `/api/mkt/consent`, feeding the resolved analytics flag + GPC to
+  `/api/mkt/track`. Marketing never pre-checked; GPC honored silently; 6 tests (`consent-ui.test.ts`).
 - ☐ **Identity stitch on signup/login**: server-side, set `mkt_visitors.contact_id` and copy the
   visitor's consent forward to the contact; dedupe; don't merge unrelated users on a shared device.
 - ☐ Progressive-profiling capture (email first → name/role/interests later), one field at a time.
