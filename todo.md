@@ -103,7 +103,7 @@ it already exists**; the one central gap (consent) is now closed. Honest status 
 | Consent banner / preference-center UI | ☑ **NEW** | `components/marketing/consent-manager.tsx` — banner (Accept all / Reject / Manage) + granular preference center wired to `/api/mkt/consent`; anon-id + GPC + local cache in `lib/marketing/visitor.ts`; fires the analytics touch to `/api/mkt/track`; re-openable from the footer |
 | **Client visitor spine (anon-id + first-party touch)** | ☑ **NEW** | `lib/marketing/visitor.ts` — durable `bubaly_vid` cookie/localStorage; GPC detect; one consent-gated `/api/mkt/track` touch per session (was: endpoints had no client caller) |
 | Lead scoring | ☑ **NEW** | `crm_lead_scores` (0172) + `lib/marketing/contact-score.ts` (0–100 score + itemized ledger, 7 tests) + `contact-score-compute.ts` (gathers sessions/recency/conversions/demo/consent/profile/lifecycle); admin `/admin/marketing/lead-scores` — ranked, expandable "why" ledger, Recompute |
-| Abandoned-journey recovery (identified users only) | ◐ partial | `checkout_sessions` + `/api/cron/checkout-abandoned`; other journeys not covered |
+| Abandoned-journey recovery | ☑ **NEW** | beyond checkout: `/api/cron/journey-recovery` sweeps stalled onboarding (`onboarding_abandoned`) + non-converting demo leads (`demo_abandoned`) and fires the follow-up workflow; `lib/marketing/journey-recovery.ts` (windowed selection, 8 tests) + 2 new automation triggers/copy |
 
 **☐ Next (privacy-safe, priority order)**
 - ☑ **DONE (2026-07-12)** — Client **consent banner + preference center** (`consent-manager.tsx` +
