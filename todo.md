@@ -207,6 +207,44 @@ against migrations + `database.types.ts`; FK targets checked so nothing silently
 
 ---
 
+## 🚀 INDUSTRY-FIRST CAPABILITIES — gap matrix vs. the codebase (owner directive, 2026-07-12)
+
+Owner shared 10 "features no competitor offers" and asked: capture them, gap-audit each against the
+project, and build what's missing (Supabase-wired, 500-row seed, world-class, AI-driven, mobile-first).
+Audited the routes — **9 of 10 already have a real surface**; depth varies. **The one true greenfield
+gap is #10 (Family App Store).** Build order below; keep each slice small + verified (PG16 seed + tsc/
+eslint/vitest/next build), ship to `main`.
+
+| # | Industry-first capability | Status | Where it lives / gap |
+|---|---|---|---|
+| 1 | AI **completes** life administration (not just reminds) | ◐ partial | `/dashboard/agents`, `/dashboard/concierge`, `/dashboard/decisions`, `/dashboard/prep-plans`, `agent_activity`. Autonomous *execution* (vs. surfacing) is the deepen target. |
+| 2 | **One phone # + one family email** managed by AI | ☑ exists | `/dashboard/front-desk`, `app/api/concierge-calls`, guardian inbound SMS/voice/WhatsApp (Twilio-verified), `/dashboard/inbox`. |
+| 3 | AI **negotiates** appointments / bookings / schedule changes | ◐ partial | Concierge surface exists; true agentic negotiation loop is the deepen target (needs the outbound-call/agent tooling). |
+| 4 | AI handles **forms / paperwork / insurance / school packets / registrations** | ◐ partial | `app/api/forms`, Smart Imports (onboarding), front-desk. A durable "paperwork inbox → AI fills → track" flow is the deepen target. |
+| 5 | Unified **household CRM** for every relationship (schools, doctors, contractors, clubs) | ◐ partial | `/dashboard/connections` (`family_connections`), `family_contacts`, `/dashboard/relationship`. Not yet a first-class relationship-CRM with per-entity timelines. |
+| 6 | **Verified buy/sell/borrow/rent marketplace** in family workflows | ☑ **DONE** | `/marketplace` — hardened + world-class this session (photos, item detail, storefronts, trust, offers, RLS ownership). |
+| 7 | **AI family chief of staff** coordinating specialized AI agents | ☑ exists | `/dashboard/agents`, chief-of-staff via `/dashboard/graph` + reasoning, `agent_activity` orchestration. |
+| 8 | **Household financial copilot** integrated with scheduling + life events | ◐ partial | Wallet/Finances (`/dashboard/billing?view=manage`), `app/api/ai/wallet`, `life_event_plans`. Tighter schedule↔money↔life-event linkage is the deepen target. |
+| 9 | **Predictive family planning** — identify problems before they occur | ☑ exists | `/dashboard/family-signals`, `daily_insights`, `/dashboard/family-digital-twin`, `/dashboard/prep-plans`. |
+| 10 | Open **"Family App Store"** for AI-powered extensions | ☐ **MISSING — build first** | No app-store / extensions / plugin surface exists. Greenfield. |
+
+**▶ #10 Family App Store — build spec (start here, next session):**
+- **Schema** (new migration, additive/idempotent, family-scoped RLS via `is_family_member`):
+  `family_apps` (catalog: slug, name, tagline, description, category, icon/emoji, publisher, capabilities[],
+  is_official, status) + `family_app_installs` (family_id, app_id, installed_by, enabled, config jsonb, Stamps).
+  Catalog readable by any signed-in user; installs family-scoped.
+- **Types** in `lib/database.types.ts`; **pure lib** `lib/appstore/*` (catalog filter/rank, install-state) + tests.
+- **Route** `/dashboard/app-store` (browse catalog, categories, install/uninstall, "installed" tab) — mobile-first,
+  AI-driven (each app declares AI capabilities; feature a "recommended for your family" rail off signals).
+  Server actions `installApp`/`uninstallApp`/`toggleApp`. Wire installed apps into a launcher/nav rail.
+- **Seed** `seed_family_apps.sql` — **500** catalog entries across categories (calendar, meals, chores, school,
+  sports, health, finance, travel, safety, AI-agents…), each with real metadata so the store renders at volume;
+  add to `SEED_ALL.sql`. PG16-verify.
+- Verify gate + ship. Then loop back to deepen the ◐ partials (execution loop for #1/#3, paperwork inbox #4,
+  relationship-CRM timelines #5, schedule↔money linkage #8).
+
+---
+
 ## ★ NORTH STAR — The Family Operating Layer (category-defining, 2026-07-05)
 
 > **Thesis:** today's products (ours included, so far) are **systems of record** — they

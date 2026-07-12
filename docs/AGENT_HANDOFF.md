@@ -56,7 +56,16 @@
 > **⚠️ Prod-apply pending (add to `docs/PENDING_PROD_MIGRATIONS.md`):** `0154`, `0155`, `0156`,
 > `0160`, **`0164`** (coupled with their code). All additive + idempotent; PG16-verified.
 >
-> **▶ ACTIVE DIRECTIVE for the next session (user, 2026-07-12):** "Go through the CORE functionality
+> **▶ ACTIVE DIRECTIVE #2 (user, 2026-07-12) — INDUSTRY-FIRST FEATURES:** owner shared 10 "features no
+> competitor offers" and asked to capture + gap-audit + build the missing ones. **Done: full matrix in
+> `todo.md` → `🚀 INDUSTRY-FIRST CAPABILITIES`.** Result: **9 of 10 already have a real surface**
+> (marketplace #6 shipped world-class this session); depth varies (◐ deepen targets noted). **The one
+> true greenfield gap = #10 "Family App Store"** (no app-store/extensions/plugin surface). **START HERE:**
+> build spec is in `todo.md` under #10 — `family_apps` catalog + `family_app_installs` (family-scoped RLS),
+> `lib/appstore/*` + tests, `/dashboard/app-store` (mobile-first, install/uninstall, "recommended for your
+> family" rail), `seed_family_apps.sql` (**500** rows → `SEED_ALL.sql`), PG16-verify, ship. Then deepen ◐.
+>
+> **▶ ACTIVE DIRECTIVE #1 (user, 2026-07-12):** "Go through the CORE functionality
 > **page by page** and fully build each out to be **world class**, **100% wired to Supabase**, **100%
 > production-ready. No stubs.** Use **real seeded data (500 records)** to test all functionality. Make
 > all decisions yourself, don't stop." Method that's been working this session: pick one page/surface →
