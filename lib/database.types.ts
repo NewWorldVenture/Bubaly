@@ -1540,6 +1540,16 @@ export interface Database {
         { id?: string; anonymous_id: string; contact_id?: string | null; category: string; decision: string; policy_version?: string; source?: string | null; gpc?: boolean; user_agent?: string | null; metadata?: Json },
         Partial<{ contact_id: string | null; category: string; decision: string; policy_version: string; source: string | null; gpc: boolean; user_agent: string | null; metadata: Json }>
       >;
+      family_apps: T<
+        { id: string; slug: string; name: string; tagline: string | null; description: string | null; category: string; emoji: string | null; publisher: string; capabilities: string[]; is_official: boolean; is_ai: boolean; rating: number | null; install_count: number; status: string; sort_order: number; created_at: string; updated_at: string },
+        { id?: string; slug: string; name: string; tagline?: string | null; description?: string | null; category?: string; emoji?: string | null; publisher?: string; capabilities?: string[]; is_official?: boolean; is_ai?: boolean; rating?: number | null; install_count?: number; status?: string; sort_order?: number },
+        Partial<{ name: string; tagline: string | null; description: string | null; category: string; emoji: string | null; publisher: string; capabilities: string[]; is_official: boolean; is_ai: boolean; rating: number | null; install_count: number; status: string; sort_order: number }>
+      >;
+      family_app_installs: T<
+        { id: string; family_id: string; app_id: string; installed_by: string | null; enabled: boolean; config: Json; created_by: string | null; created_at: string; updated_at: string },
+        { id?: string; family_id: string; app_id: string; installed_by?: string | null; enabled?: boolean; config?: Json; created_by?: string | null },
+        Partial<{ installed_by: string | null; enabled: boolean; config: Json }>
+      >;
       testimonials: T<
         { id: string; author_name: string; author_role: string | null; company: string | null; quote: string; rating: number | null; avatar_url: string | null; is_published: boolean; sort_order: number; created_by: string | null } & Stamps,
         { id?: string; author_name: string; author_role?: string | null; company?: string | null; quote: string; rating?: number | null; avatar_url?: string | null; is_published?: boolean; sort_order?: number; created_by?: string | null },

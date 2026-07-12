@@ -226,7 +226,7 @@ eslint/vitest/next build), ship to `main`.
 | 7 | **AI family chief of staff** coordinating specialized AI agents | ☑ exists | `/dashboard/agents`, chief-of-staff via `/dashboard/graph` + reasoning, `agent_activity` orchestration. |
 | 8 | **Household financial copilot** integrated with scheduling + life events | ◐ partial | Wallet/Finances (`/dashboard/billing?view=manage`), `app/api/ai/wallet`, `life_event_plans`. Tighter schedule↔money↔life-event linkage is the deepen target. |
 | 9 | **Predictive family planning** — identify problems before they occur | ☑ exists | `/dashboard/family-signals`, `daily_insights`, `/dashboard/family-digital-twin`, `/dashboard/prep-plans`. |
-| 10 | Open **"Family App Store"** for AI-powered extensions | ☐ **MISSING — build first** | No app-store / extensions / plugin surface exists. Greenfield. |
+| 10 | Open **"Family App Store"** for AI-powered extensions | ☑ **DONE** (2026-07-12) | `/dashboard/app-store` — catalog (`family_apps`) + `family_app_installs` (RLS), `lib/appstore/catalog.ts` (+8 tests), install/uninstall/toggle actions, mobile-first grid + "Recommended for your family" rail + Installed section. Migration `0165`, seed `seed_family_apps.sql` (500 apps, 12 categories) in `SEED_ALL.sql`. PG16-verified. **Nav:** not added to the global sidebar (standing rule — owner to add `/dashboard/app-store` if desired). |
 
 **▶ #10 Family App Store — build spec (start here, next session):**
 - **Schema** (new migration, additive/idempotent, family-scoped RLS via `is_family_member`):
