@@ -171,11 +171,21 @@ export function MessagesModule() {
     setMessages(data ?? []);
     setLoadingMsgs(false);
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-    // mark as read (best-effort via update)
-    void supabase.from('family_messages')
-      .update({ read_by: [userId] })
-      .eq('conversation_id', convId)
-      .not('read_by', 'cs', `{${userId}}`);
+    // Mark as read — APPEND me to read_by, never replace it. The old
+    // update({ read_by: [me] }) overwrote the array and erased every other
+    // reader's receipt. Preferred path is the 0163 RPC (single set-based
+    // append); pre-migration we fall back to a correct per-row merge over the
+    // rows just loaded.
+    void (async () => {
+      const { error: rpcErr } = await supabase.rpc('mark_conversation_read', { p_conversation_id: convId });
+      if (!rpcErr) return;
+      const unread = (data ?? []).filter((m) => !(m.read_by ?? []).includes(userId)).slice(-100);
+      for (const m of unread) {
+        await supabase.from('family_messages')
+          .update({ read_by: [...(m.read_by ?? []), userId] })
+          .eq('id', m.id);
+      }
+    })();
   }, [userId]);
 
   useEffect(() => {
@@ -765,8 +775,9 @@ export function MessagesModule() {
                                     <Download className="h-4 w-4 shrink-0 opacity-70" />
                                   </a>
                                 )}
-                                {/* Voice message — inline audio player */}
-                                {msg.kind === 'audio' && msg.attachment_url && (
+                                {/* Voice message — inline audio player ('voice' is the
+                                    legacy/seed kind; 'audio' is what the recorder sends). */}
+                                {(msg.kind === 'audio' || msg.kind === 'voice') && msg.attachment_url && (
                                   <audio controls preload="none" src={msg.attachment_url}
                                     className="mb-1 h-10 w-56 max-w-full" aria-label="Voice message" />
                                 )}

@@ -2191,6 +2191,7 @@ export interface Database {
       wallet_reserve_card_auth: { Args: { p_family: string; p_child_wallet: string; p_amount: number; p_auth_id: string; p_description: string }; Returns: boolean };
       rate_limit_hit: { Args: { p_key: string; p_limit: number; p_window_seconds: number }; Returns: { allowed: boolean; retry_after: number }[] };
       rate_limit_prune: { Args: Record<string, never>; Returns: undefined };
+      mark_conversation_read: { Args: { p_conversation_id: string }; Returns: undefined };
     };
     Enums: {
       member_role: MemberRole;
