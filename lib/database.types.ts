@@ -221,7 +221,7 @@ export interface Database {
       chore_assignments: T<
         { id: string; family_id: string; chore_id: string; member_id: string; status: TaskStatus; due_at: string | null; submitted_at: string | null; approved_at: string | null; approved_by: string | null; points_awarded: number | null; ai_score: number | null; cash_awarded_cents: number | null; disputed: boolean } & Stamps,
         { id?: string; family_id: string; chore_id: string; member_id: string; status?: TaskStatus; due_at?: string | null },
-        Partial<{ status: TaskStatus; due_at: string | null; submitted_at: string | null; approved_at: string | null; approved_by: string | null; points_awarded: number | null; ai_score: number | null; cash_awarded_cents: number | null; disputed: boolean }>
+        Partial<{ member_id: string; status: TaskStatus; due_at: string | null; submitted_at: string | null; approved_at: string | null; approved_by: string | null; points_awarded: number | null; ai_score: number | null; cash_awarded_cents: number | null; disputed: boolean }>
       >;
       rewards: T<
         { id: string; family_id: string; title: string; description: string | null; cost_points: number; redeemed_by: string | null; redeemed_at: string | null; created_by: string | null } & Stamps,
@@ -2024,6 +2024,20 @@ export interface Database {
         { id: string; family_id: string; requested_by: string | null; task_kind: string; callee_name: string; callee_phone: string | null; callee_category: string; goal: string; details: Json; brief: Json; status: string; priority: string; scheduled_for: string | null; outcome: string | null; transcript_summary: string | null; duration_seconds: number | null; attempts: number; provider_ref: string | null; completed_at: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; requested_by?: string | null; task_kind?: string; callee_name: string; callee_phone?: string | null; callee_category?: string; goal: string; details?: Json; brief?: Json; status?: string; priority?: string; scheduled_for?: string | null; outcome?: string | null; transcript_summary?: string | null; duration_seconds?: number | null; attempts?: number; provider_ref?: string | null; completed_at?: string | null; created_by?: string | null },
         Partial<{ requested_by: string | null; task_kind: string; callee_name: string; callee_phone: string | null; callee_category: string; goal: string; details: Json; brief: Json; status: string; priority: string; scheduled_for: string | null; outcome: string | null; transcript_summary: string | null; duration_seconds: number | null; attempts: number; provider_ref: string | null; completed_at: string | null }>
+      >;
+
+      // ---- Workload balancing (migration 0166) ----
+      workload_snapshots: T<
+        { id: string; family_id: string; member_id: string; week_start: string; chore_minutes: number; chore_count: number; task_count: number; event_count: number; invisible_count: number; load_score: number; share_pct: number; note: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; week_start: string; chore_minutes?: number; chore_count?: number; task_count?: number; event_count?: number; invisible_count?: number; load_score?: number; share_pct?: number; note?: string | null },
+        Partial<{ chore_minutes: number; chore_count: number; task_count: number; event_count: number; invisible_count: number; load_score: number; share_pct: number; note: string | null }>
+      >;
+
+      // ---- Child independence progression (migration 0167) ----
+      independence_milestones: T<
+        { id: string; family_id: string; member_id: string; domain: string; title: string; description: string | null; age_band: string; status: string; points: number; evidence: string | null; achieved_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; member_id: string; domain: string; title: string; description?: string | null; age_band: string; status?: string; points?: number; evidence?: string | null; achieved_at?: string | null; created_by?: string | null },
+        Partial<{ domain: string; title: string; description: string | null; age_band: string; status: string; points: number; evidence: string | null; achieved_at: string | null }>
       >;
 
       // ---- Vacation Planner (migration 0070) ----

@@ -1299,6 +1299,57 @@ approvals · unified identity — plus AI-drafted replies via inbox `generateRep
   decision (API surface, partner program, security review) rather than a single agent-buildable slice —
   surfaced here, not silently built. All the internal engines it would expose are already Supabase-wired.
 
+## ★ "Missing Competitor Features" matrix (owner screenshot, 2026-07-12) — full 28-row audit
+Compared every row against the codebase (Cozi/Skylight/FamilyWall/TimeTree/Hearth/Maple/Ohai/
+Family Assistant/OurHome benchmark). Verdicts grounded in actual routes/libs, not the table's guesses —
+several "No" rows were already built here.
+
+**Already built (table said Partial/No — verified in code):**
+| # | Feature | Where it lives |
+|---|---|---|
+| 1 | Natural-language family planning | ⌘K command bar + `lib/capture` parser + Voice + assistant (create events/reminders/items from one sentence) |
+| 2 | Automatic conflict detection | `/dashboard/conflicts` + conflict surfacing in Home/insights |
+| 5 | Smart recurring routines | `lib/routines` + habits engine (streaks, adaptive) |
+| 6 | School calendar sync | `/dashboard/family-school` + `lib/school` + `lib/sync` providers |
+| 7 | Sports league integration | `/dashboard/family-sports` + `lib/sync` (provider adapters) |
+| 8 | **Photo-to-calendar** (table said No) | `/dashboard/scan` + `/api/ai/flyer` — AI extracts events from a photographed flyer |
+| 9 | Recipe import | `lib/recipes` + `/api/ai/import` |
+| 10 | Shared family timeline | Activity feed + memory timeline + social-feed |
+| 11 | Widgets | Capacitor + `lib/native` (mobile shell); per-role Home tiles |
+| 12 | Large-screen family dashboard | `/dashboard/command-center` (TV/tablet Command Center) |
+| 14 | Location arrival/departure automation | `/dashboard/locator` + `lib/location` (geofence triggers) |
+| 15 | Smart shopping suggestions | grocery/pantry predictive suggestions (`lib/grocery`, `lib/pantry`) |
+| 17 | Travel-time optimization | leave-by engine (`lib/opportunities/deadlines`); ETA API key = open item #6 |
+| 18 | Multi-family collaboration | grandparent portal + family-access roles/permissions |
+| 20 | Achievements & gamification | goals + streaks + rewards + economy (family-wide milestones live in goals/memory) |
+| 21 | Apple/Google deep integration | `lib/google.ts` + `lib/sync/providers/*` + connections hub |
+| 22 | Voice-first assistant | `/dashboard/voice` (full conversational, executes actions) |
+| 23 | Personalized AI per member | per-member AI profiles/tone (`lib/tone`, agents) + role-aware surfaces |
+| 24 | **Household operating metrics** (table said No) | `/dashboard/family-operating-index` (FOI weekly health score) |
+| 25 | AI weekly family briefing | `/dashboard/weekly-briefing` + `home_briefs` (0140s) daily brief |
+| 26 | **Automatic memory capture** (table said No) | `/dashboard/family-memory` + knowledge graph + on-this-day |
+| 27 | **Household digital twin** (table said No) | `/dashboard/family-digital-twin` + `lib/twin` simulation |
+
+**Genuine gaps → BUILT THIS SESSION (2026-07-12):**
+- [x] **#3+#4 Household workload balancing + family workload analytics** (Hearth) — `/dashboard/workload`:
+  pure engine `lib/workload/balance.ts` (per-member load from chore assignments (est_minutes) + todos +
+  events, fairness index, overload flags, human-reason rebalance suggestions), one-tap "Move it" applies the
+  reassignment; `workload_snapshots` table (0166) for week-over-week analytics; 500-row seed; linked from Chores.
+- [x] **#16 Calendar heat maps** (TimeTree) — `lib/calendar/heatmap.ts` (pure busyness engine over the
+  recurrence-expanded events, 0–4 levels, overload detection + advice) + Busyness card in Calendar. No new
+  table — rides the already-seeded 500 events.
+- [x] **#19 Child independence progression** (Hearth) — `/dashboard/independence`: age-banded milestone
+  ladder across 6 domains (chores/money/safety/self-care/school/social), `independence_milestones` (0167),
+  pure engine `lib/independence/progression.ts` (suggest-by-age, level compute), accept/achieve actions,
+  per-child progress; 500-row seed; linked from Chores + Behavior.
+
+**Remaining gaps (logged, not silently built):**
+- [ ] **#13 Offline mode** (FamilyWall) — local caching + auto-resync. Infrastructural (service-worker /
+  Capacitor storage layer + conflict resolution), touches every module; needs an owner decision on scope
+  (read-only cache vs. write-behind queue). Agent-doable as a dedicated session.
+- [ ] **#28 Family operating system API** — same as opportunity-table #10 (open developer platform):
+  strategic + human-owned (public API surface, OAuth app registration, partner security review).
+
 ## Other open features (carried from the Friction Backlog / Scorecard)
 - [x] #2 Universal ⌘K natural-language command bar — DONE. `lib/command-bar/route.ts` (pure, 8 tests) +
   `components/app/command-bar.tsx` (global palette in app-shell, ⌘K / "/" open, navigate/capture/assistant,

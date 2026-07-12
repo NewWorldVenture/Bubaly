@@ -4,8 +4,9 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, LayoutTemplate, Trophy, Flame, Gift, Star, MoreVertical,
-  CheckCircle2, Circle, Clock, Trash2, ChevronRight, Users, ChevronDown, Sparkles,
+  CheckCircle2, Circle, Clock, Trash2, ChevronRight, Users, ChevronDown, Sparkles, Scale,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -219,6 +220,10 @@ export function ChoresModule() {
               <>
                 <Button onClick={() => { setPrefill(null); setAddOpen(true); }}><Plus className="h-4 w-4" /> Add Chore</Button>
                 <Button variant="outline" onClick={() => setTemplatesOpen(true)}><LayoutTemplate className="h-4 w-4" /> Chore Templates</Button>
+                <Link href="/dashboard/workload"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-muted transition hover:text-fg hover:bg-elevated">
+                  <Scale className="h-4 w-4" /> Workload Balance
+                </Link>
               </>
             ) : undefined}
           />
