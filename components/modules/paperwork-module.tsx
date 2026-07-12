@@ -7,15 +7,23 @@ import { useMemo, useState, useTransition } from 'react';
 import {
   Inbox, FileSignature, School, Stethoscope, Trophy, Receipt, PartyPopper,
   FileText, Plus, Check, CalendarPlus, BellPlus, Archive, RotateCcw,
-  AlertTriangle, Clock, Loader2, X,
+  AlertTriangle, Clock, Loader2, X, Sparkles, Copy,
 } from 'lucide-react';
 import type { Tables, Json } from '@/lib/database.types';
 import type { PaperworkAction, PaperworkKind } from '@/lib/paperwork/triage';
 import { kindLabel } from '@/lib/paperwork/triage';
 import {
   addPaperworkAction, materializePaperworkActionAction, setPaperworkStatusAction,
+  draftPaperworkReplyAction,
 } from '@/app/(app)/dashboard/paperwork/actions';
+import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+
+function draftFromMeta(meta: Json): string | null {
+  return meta && typeof meta === 'object' && !Array.isArray(meta)
+    ? (typeof (meta as Record<string, unknown>).draft_reply === 'string' ? (meta as Record<string, string>).draft_reply : null)
+    : null;
+}
 
 type Item = Tables<'paperwork_items'>;
 type StoredAction = PaperworkAction & { materialized_as: string | null; materialized_id: string | null };
@@ -48,6 +56,22 @@ export function PaperworkModule({ items }: { items: Item[] }) {
   const [composerOpen, setComposerOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [openDraft, setOpenDraft] = useState<string | null>(null);
+  const { success, error: toastError } = useToast();
+
+  const draftReply = (itemId: string) => {
+    setBusyKey(`draft:${itemId}`);
+    startTransition(async () => {
+      const res = await draftPaperworkReplyAction(itemId);
+      setBusyKey(null);
+      if (res.ok) { setDrafts((d) => ({ ...d, [itemId]: res.draft })); setOpenDraft(itemId); success('AI drafted a reply'); }
+      else toastError(res.error);
+    });
+  };
+  const copyDraft = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); success('Copied'); } catch { toastError('Could not copy'); }
+  };
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -203,6 +227,33 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                       })}
                     </div>
                   )}
+
+                  {/* AI-drafted reply — "fill it out for me" */}
+                  {it.status !== 'archived' && (() => {
+                    const draft = drafts[it.id] ?? draftFromMeta(it.meta);
+                    const drafting = busyKey === `draft:${it.id}`;
+                    return (
+                      <div className="mt-3">
+                        <button
+                          onClick={() => (draft && openDraft !== it.id ? setOpenDraft(it.id) : draft ? setOpenDraft(null) : draftReply(it.id))}
+                          disabled={drafting}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 text-xs font-bold text-violet-300 transition hover:bg-violet-500/20 disabled:opacity-60"
+                        >
+                          {drafting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                          {drafting ? 'Drafting…' : draft ? (openDraft === it.id ? 'Hide AI reply' : 'View AI reply') : 'Draft reply with AI'}
+                        </button>
+                        {draft && openDraft === it.id && (
+                          <div className="mt-2 rounded-xl border border-violet-400/20 bg-violet-500/[0.04] p-3">
+                            <p className="whitespace-pre-wrap text-xs leading-relaxed text-fg/90">{draft}</p>
+                            <button onClick={() => copyDraft(draft)}
+                              className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-violet-300 hover:underline">
+                              <Copy className="h-3 w-3" /> Copy reply
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Row actions */}
                   <div className="mt-3 flex items-center gap-2">

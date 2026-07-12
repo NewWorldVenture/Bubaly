@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { triagePaperwork, type PaperworkAction } from '@/lib/paperwork/triage';
+import { triagePaperwork, type PaperworkAction, kindLabel, type PaperworkKind } from '@/lib/paperwork/triage';
+import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
 
 const PATH = '/dashboard/paperwork';
 
@@ -103,6 +104,59 @@ export async function materializePaperworkActionAction(input: {
       .eq('id', item.id);
   }
   revalidatePath(PATH);
+}
+
+type DraftResult = { ok: true; draft: string } | { ok: false; error: string };
+
+/**
+ * "AI fills it out for you": draft a short, ready-to-send reply for a piece of
+ * paperwork (confirm the permission slip, RSVP, acknowledge the notice, ask a
+ * clarifying question). Grounded ONLY in the captured text so it can't invent
+ * facts; the draft is stored on the item (meta.draft_reply) and returned so a
+ * parent can copy/edit/send. Key-gated — an honest message when AI isn't set up.
+ */
+export async function draftPaperworkReplyAction(itemId: string): Promise<DraftResult> {
+  if (!itemId) return { ok: false, error: 'Invalid item' };
+  const ctx = await requireUserContext();
+  const supabase = await createServer();
+
+  const { data: item } = await supabase
+    .from('paperwork_items').select('*')
+    .eq('id', itemId).eq('family_id', ctx.active.familyId).maybeSingle();
+  if (!item) return { ok: false, error: 'Paperwork not found' };
+
+  if (!(await isAIConfigured())) {
+    return { ok: false, error: 'AI isn’t configured yet. Add an AI key in Admin → AI Engine to draft replies.' };
+  }
+
+  const source = (item.raw_text || item.summary || item.title || '').slice(0, 6000);
+  const system =
+    'You are a family assistant that drafts a short, warm, ready-to-send reply a parent can send for a ' +
+    'piece of family paperwork. Ground the reply ONLY in the provided text — never invent names, dates, ' +
+    'or amounts. If a required detail is missing, add one brief bracketed placeholder like [child’s name]. ' +
+    'Keep it under 120 words, polite and specific. Return ONLY the message body — no subject line, no preamble.';
+  const user =
+    `Paperwork type: ${kindLabel(item.kind as PaperworkKind)}\n` +
+    `${item.sender ? `From: ${item.sender}\n` : ''}` +
+    `${item.due_on ? `Due: ${item.due_on}\n` : ''}` +
+    `${item.amount != null ? `Amount: $${item.amount}\n` : ''}` +
+    `\nCaptured text:\n"""${source}"""\n\n` +
+    'Draft the reply the parent should send back (confirming/acknowledging the required action).';
+
+  let draft = '';
+  try {
+    const provider = await resolveProvider();
+    const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 400 });
+    draft = (completion.text || '').trim();
+  } catch (err) {
+    return { ok: false, error: describeAIError(err).message };
+  }
+  if (!draft) return { ok: false, error: 'Could not draft a reply. Please try again.' };
+
+  const meta = { ...(item.meta && typeof item.meta === 'object' ? item.meta as Record<string, unknown> : {}), draft_reply: draft, draft_at: new Date().toISOString() };
+  await supabase.from('paperwork_items').update({ meta: meta as never }).eq('id', item.id);
+  revalidatePath(PATH);
+  return { ok: true, draft };
 }
 
 /** Move a paperwork item between statuses (done / archived / reopen). */
