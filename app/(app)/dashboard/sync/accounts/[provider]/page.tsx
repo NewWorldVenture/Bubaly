@@ -10,6 +10,9 @@ import {
   CAPABILITIES, PROVIDER_LABELS, type SyncProvider, type SyncItemKind,
 } from '@/lib/sync/capabilities';
 import { GoogleControls } from '@/components/sync/google-controls';
+import { ProviderControls } from '@/components/sync/provider-controls';
+import { isProviderConfigured, getAdapter } from '@/lib/sync/registry';
+import type { SyncProviderEnum } from '@/lib/database.types';
 
 export const metadata: Metadata = { title: 'Sync provider' };
 export const dynamic = 'force-dynamic';
@@ -37,11 +40,13 @@ const SETUP: Record<SyncProvider, { steps: string[]; connectHref?: string; docsH
   },
   microsoft: {
     authKind: 'OAuth 2.0 (Microsoft Graph)',
+    connectHref: '/api/sync/microsoft/auth',
     docsHref: 'https://learn.microsoft.com/graph/api/resources/calendar',
     steps: [
-      'Connect your Microsoft account to grant Calendars, Tasks (To Do), and OneNote access.',
-      'Outlook Calendar, Microsoft To Do, and OneNote all support full two-way sync with delta queries.',
-      'Requires the Microsoft Graph app credentials to be configured by an admin.',
+      'Click Connect Microsoft to grant Outlook Calendar + Microsoft To Do access (offline, two-way).',
+      'Your default Outlook calendar and To Do list sync both directions, with delta queries.',
+      'Use “Sync now” to run a sync; a scheduled background sync also runs every few hours.',
+      'Notes: OneNote sync stays internal for now.',
     ],
   },
   apple: {
@@ -69,7 +74,7 @@ const SETUP: Record<SyncProvider, { steps: string[]; connectHref?: string; docsH
 const STATUS_MSG: Record<string, { tone: 'success' | 'danger'; text: string }> = {
   'connected=1': { tone: 'success', text: 'Account connected. Run “Sync now” to pull and push your data.' },
   'disconnected=1': { tone: 'success', text: 'Account disconnected and access revoked.' },
-  'error=not_configured': { tone: 'danger', text: 'Google OAuth is not configured on the server (missing client credentials).' },
+  'error=not_configured': { tone: 'danger', text: 'This provider’s OAuth is not configured on the server (missing client credentials).' },
   'error=no_encryption_key': { tone: 'danger', text: 'SYNC_TOKEN_KEY is not set, so tokens cannot be stored securely. Connection blocked.' },
   'error=state_mismatch': { tone: 'danger', text: 'Security check failed (state mismatch). Please try connecting again.' },
   'error=denied': { tone: 'danger', text: 'Authorization was cancelled or denied.' },
@@ -125,13 +130,17 @@ export default async function SyncProviderPage({
         </div>
       )}
 
-      {provider === 'google' && account && (
+      {account && getAdapter(provider as SyncProviderEnum) && (
         <Card>
           <h2 className="mb-3 text-base font-semibold">Sync</h2>
           {account.last_synced_at && (
             <p className="mb-3 text-xs text-muted">Last synced {new Date(account.last_synced_at).toLocaleString()}</p>
           )}
-          <GoogleControls />
+          {provider === 'google' ? <GoogleControls /> : <ProviderControls provider={provider} />}
+          <p className="mt-3 text-xs text-muted">
+            A background sync also runs automatically every few hours — “Sync now” is only for when
+            you can’t wait.
+          </p>
         </Card>
       )}
 
@@ -170,8 +179,17 @@ export default async function SyncProviderPage({
             </li>
           ))}
         </ol>
+        {/* Honest key-gating: only show Connect when the flow will actually work.
+            The registry knows whether this provider's OAuth keys are set. */}
+        {setup.connectHref && getAdapter(provider as SyncProviderEnum) && !isProviderConfigured(provider as SyncProviderEnum) && (
+          <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-sm text-amber-500">
+            {PROVIDER_LABELS[provider]} sync is fully built but waiting on server credentials
+            {provider === 'google' ? ' (GOOGLE_SYNC_CLIENT_ID / SECRET)' : provider === 'microsoft' ? ' (MICROSOFT_SYNC_CLIENT_ID / SECRET)' : ''}.
+            Once an admin adds them, Connect appears here — no code changes needed.
+          </div>
+        )}
         <div className="mt-4 flex flex-wrap gap-2">
-          {setup.connectHref && (
+          {setup.connectHref && (!getAdapter(provider as SyncProviderEnum) || isProviderConfigured(provider as SyncProviderEnum)) && (
             <Link href={setup.connectHref} className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg shadow-glow transition hover:opacity-90">
               Connect {PROVIDER_LABELS[provider]}
             </Link>

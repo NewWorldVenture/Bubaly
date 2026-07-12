@@ -1698,3 +1698,26 @@ Owner directive: upgrade every ★/★★ page. Every low-scoring page was manua
   (child-record lookups by parent id, RLS backstop). No fixes needed.
 - Stub sweep: no console.log leftovers; remaining TODO(keys) are documented key-gated integration
   points (Google/Gmail adapters), by convention.
+
+### 🔗 Open-item #3 build-out — provider calendar two-way sync (2026-07-12, latest)
+Everything up to the OAuth keys is now COMPLETE — adding keys lights it up with zero code changes:
+- [x] **Provider-generic OAuth routes** `/api/sync/[provider]/auth|callback|disconnect` — registry-
+  driven (R9), so **Microsoft connects end-to-end today** (its adapter pointed at a callback that
+  didn't exist) and future adapters need zero route work. State bound to the live session; tokens
+  AES-256-GCM via `connectAccount`; fails closed without `SYNC_TOKEN_KEY`; disconnect revokes at the
+  provider (best-effort) + 303 redirect. Google's original static routes untouched.
+- [x] **Scheduled background sync** `/api/cron/provider-sync` (CRON_SECRET, every 4h in vercel.json):
+  oldest-synced accounts first, bounded batch of 25, per-account audit rows — manual "Sync now"
+  becomes real continuous two-way sync.
+- [x] **UI** — Microsoft Connect button (was missing); generic `ProviderControls` (Sync now via
+  provider-agnostic `/api/sync/run` + Disconnect) for any adapter provider; **honest key-gating**:
+  when keys are missing the Connect button is replaced by an amber "fully built, waiting on
+  MICROSOFT_SYNC_CLIENT_ID/SECRET" notice (registry `isProviderConfigured`).
+- [x] **Env-doc bug fixed**: `.env.example` documented `MICROSOFT_CLIENT_ID/SECRET/TENANT_ID` +
+  `/api/microsoft/callback` — variables NOTHING reads and a route that doesn't exist. Now documents
+  the real `MICROSOFT_SYNC_*` vars + exact callback path; `*_SYNC_REDIRECT_URI` env override
+  honored on both OAuth legs (proxy/custom-domain safe).
+- Verified: 71 sync tests + full suite 2400 green; tsc/eslint clean; production build passes.
+- **Owner keys to flip it live**: `SYNC_TOKEN_KEY`, `GOOGLE_SYNC_CLIENT_ID/SECRET`,
+  `MICROSOFT_SYNC_CLIENT_ID/SECRET` (+ register the exact callback URIs), `CRON_SECRET`.
+  Apple stays honestly CalDAV/ICS-guided; Alexa stays ICS one-way (documented in capabilities).

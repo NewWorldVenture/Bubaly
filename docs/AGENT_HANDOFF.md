@@ -256,6 +256,19 @@
 > depth, surfaces without a 500-row seed, and any remaining "coming soon" that isn't a deliberate
 > key-gate. Keep each slice small + verified; **update this file again before the session ends.**
 >
+> ## 🔗 PROVIDER SYNC (#3) COMPLETE — 2026-07-12 final (same lane) — READ FIRST
+>
+> Open-item **#3 (provider OAuth → live calendar two-way sync)** is now fully built to the key
+> boundary: generic `/api/sync/[provider]/auth|callback|disconnect` routes (registry-driven —
+> **Microsoft now connects end-to-end**; its adapter previously pointed at a callback that didn't
+> exist), scheduled background sync `/api/cron/provider-sync` (every 4h, vercel.json), generic
+> `ProviderControls` UI + honest key-gating on `/dashboard/sync/accounts/[provider]`, and a FIXED
+> `.env.example` (it documented `MICROSOFT_CLIENT_ID` etc. — variables nothing reads; the adapter
+> reads `MICROSOFT_SYNC_*`). Owner flips it live with: `SYNC_TOKEN_KEY`,
+> `GOOGLE_SYNC_CLIENT_ID/SECRET`, `MICROSOFT_SYNC_CLIENT_ID/SECRET`, `CRON_SECRET` + exact
+> callback URIs registered. Details in todo.md ("Open-item #3 build-out"). Do NOT rebuild the
+> engine/adapters — they were already R9-complete; only the routes/cron/UI/docs were missing.
+
 > ## 📴 OFFLINE MODE v1 + 🪨 STONE-TURN — 2026-07-12 latest (same lane) — READ FIRST
 >
 > - **Offline mode v1 (competitor gap #13, read-side) SHIPPED**: `lib/offline/cache.ts`
