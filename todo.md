@@ -99,7 +99,7 @@ it already exists**; the one central gap (consent) is now closed. Honest status 
 | **Granular consent (necessary/analytics/personalization/marketing) + GPC + revocation** | ☑ **NEW** | `mkt_consent_events` (0160), `lib/marketing/consent.ts`, `/api/mkt/consent` |
 | **Consent-gated tracking** | ☑ **NEW** | `/api/mkt/track` gates on analytics consent |
 | Identity linking (anon → contact) | ☑ **NEW** | `lib/marketing/identity.ts` — on signup/login stitches `mkt_visitors.contact_id` → `crm_contacts` (dedup by email, non-downgrading), carries consent forward (`mkt_consent_events.contact_id`), forks on shared-device 2nd user (rotates anon id). Hooked from login/signup forms + `auth/callback`. 6 tests (`identity-stitch.test.ts`) |
-| Progressive profiling UI | ☐ open | fields exist on contacts; no staged-capture UI |
+| Progressive profiling UI | ☑ **NEW** | `crm_contact_profile` (0171) + `lib/marketing/progressive-profile.ts` (one-question-at-a-time engine, 10 tests) + `ProfileNudge` card on `/dashboard/settings`; saves role/priority/household/kids/interests, remembers skips |
 | Consent banner / preference-center UI | ☑ **NEW** | `components/marketing/consent-manager.tsx` — banner (Accept all / Reject / Manage) + granular preference center wired to `/api/mkt/consent`; anon-id + GPC + local cache in `lib/marketing/visitor.ts`; fires the analytics touch to `/api/mkt/track`; re-openable from the footer |
 | **Client visitor spine (anon-id + first-party touch)** | ☑ **NEW** | `lib/marketing/visitor.ts` — durable `bubaly_vid` cookie/localStorage; GPC detect; one consent-gated `/api/mkt/track` touch per session (was: endpoints had no client caller) |
 | Lead scoring | ◐ partial | signals exist; no transparent score ledger |
@@ -114,7 +114,8 @@ it already exists**; the one central gap (consent) is now closed. Honest status 
   contact by email (non-downgrading), and **forks** (rotates the anon id) rather than merge a second
   person on a shared device. Hooked from the login/signup forms + `auth/callback` (covers password /
   OAuth / magic-link / email-confirm). 6 tests.
-- ☐ Progressive-profiling capture (email first → name/role/interests later), one field at a time.
+- ☑ **DONE (2026-07-12)** — Progressive-profiling capture, one field at a time (`crm_contact_profile`
+  0171 + `progressive-profile.ts` engine + `ProfileNudge` on `/dashboard/settings`). ⚠️ apply `0171`.
 - ☐ Dedicated `/admin/visitor-intelligence/*` dashboards if the marketing intelligence page isn't enough.
 
 **Privacy invariants (already enforced — keep them):** no fingerprinting; no PII from anonymous
