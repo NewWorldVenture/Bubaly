@@ -218,6 +218,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/content', label: 'Content Management', icon: FolderKanban },
   { href: '/admin/security', label: 'Security', icon: ShieldCheck },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
+  { href: '/admin/onboarding', label: 'Onboarding Audit', icon: Rocket },
   { href: '/admin/billing', label: 'Billing & Payments', icon: DollarSign },
   { href: '/admin/wallet', label: 'Family Wallet', icon: Wallet },
   { href: '/admin/stripe', label: 'Money (Stripe)', icon: CreditCard },

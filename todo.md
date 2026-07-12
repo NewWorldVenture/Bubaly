@@ -538,6 +538,14 @@ before asking the user to build anything.**
 
 ### ▶ THE TTFV BACKLOG (priority order — most is *wiring existing engines into the first run*)
 
+**MEASUREMENT (2026-07-12): Onboarding time-to-value audit ✅ (backlog #9).** `lib/onboarding/ttv-audit.ts`
+(pure `analyzeOnboarding` — step funnel, completion + activation rates, TTV median/p90, **% reaching value
+≤ 90s**, and where incomplete runs stall; **11 tests**) rendered at **`/admin/onboarding`** (super-admin, in
+`ADMIN_NAV`): TTV stat tiles, an on/below-target callout, the step-completion funnel with per-step drop-off,
+and a "where runs stall" chart — so the first-run funnel is measurable and the friction is visible to trim.
+Reads the existing `onboarding_progress` table; no migration/seed (read-only audit over auth-linked
+operational data). tsc/eslint/build green.
+
 **P0 — The "magic first session" (the single biggest conversion/retention bet).**
 - [x] **T1. Value-first onboarding re-sequence.** ✅ SHIPPED (2026-07-07). New flow order
   `profile → family → value → about → members → pin → done` — the `value` step comes right after the
