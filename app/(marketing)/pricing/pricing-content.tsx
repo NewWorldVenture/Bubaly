@@ -111,7 +111,7 @@ function WhySwitch() {
 // ── How the free trial works ────────────────────────────────────────────────
 const TRIAL_STEPS: { icon: React.ReactNode; title: string; desc: string }[] = [
   { icon: <Sparkles className="h-5 w-5 text-violet-300" />, title: 'Start free',
-    desc: 'Full access to everything for 5 days — no credit card required.' },
+    desc: 'Full Family Basic access for 5 days — no credit card required.' },
   { icon: <Lock className="h-5 w-5 text-violet-300" />, title: 'After 5 days',
     desc: 'Your account locks. Log back in anytime and choose Family Basic or Family+ to unlock it all.' },
   { icon: <ArrowLeftRight className="h-5 w-5 text-violet-300" />, title: 'Switch anytime',
@@ -229,7 +229,7 @@ const TIER_RANK: Record<MatrixTier, number> = { free: 0, basic: 1, plus: 2 };
 // Competitor-positioning callouts (how each tier stacks up vs the market).
 const TIER_POSITIONING: { key: MatrixTier; label: string; dot: string; line: string }[] = [
   { key: 'free', label: '5-Day Free Trial', dot: 'bg-emerald-400',
-    line: 'Unlock the full Bubaly experience free for 5 days — every feature, no credit card. After that, choose Family Basic or Family+ to keep going.' },
+    line: 'Get full Family Basic free for 5 days — no credit card. After that, keep Family Basic or upgrade to Family+.' },
   { key: 'basic', label: 'Family Basic', dot: 'bg-blue-400',
     line: 'A direct replacement for Cozi Gold, FamilyWall Premium, OurHome, FamCal, and Skylight — at one family price.' },
   { key: 'plus', label: 'Family+', dot: 'bg-violet-400',
@@ -257,7 +257,7 @@ function FeatureMatrixTable({ matrix }: { matrix: FeatureMatrix }) {
     <section className="mt-12">
       <h2 className="text-center text-2xl font-black">Every feature, by plan</h2>
       <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">
-        Your 5-day free trial includes everything. After that, a check means the feature is included on that plan (and every plan above it).
+        Your 5-day free trial includes full Family Basic. After that, a check means the feature is included on that plan (and every plan above it).
       </p>
       <PositioningCallouts />
       <div className="mt-7 overflow-x-auto rounded-2xl border border-white/10">
@@ -338,7 +338,7 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
             Bubaly Pricing
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-white/65">
-            Try everything free for 5 days — no credit card required. After that, keep it all with Family Basic or Family+.
+            Get full Family Basic access free for 5 days — no credit card. After that, keep Family Basic or go Family+.
           </p>
 
           {/* Billing toggle */}
@@ -367,13 +367,13 @@ export function PricingContent({ familiesCount = 0, featureMatrix = [] }: { fami
         <section className="mt-12 grid gap-5 lg:grid-cols-3">
           <PlanCard
             name="5-Day Free Trial"
-            goal="Experience all of Bubaly — free, no credit card."
+            goal="Full Family Basic access — free, no credit card."
             icon={<Zap className="h-7 w-7 text-white/60" />}
             price="Free"
-            priceSub="for 5 days, then choose a plan"
+            priceSub="Family Basic for 5 days, then choose a plan"
             cta="Start your free trial"
             ctaHref="/signup"
-            prelude="Your trial includes:"
+            prelude="Your free trial includes Family Basic:"
             featureSections={FREE_FEATURES}
           />
 

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { BillingModule } from '@/components/modules/billing-module';
 import { FinancesModule } from '@/components/modules/finances-module';
+import { CloseAccountCard } from '@/components/app/close-account-card';
 import { createServiceClient } from '@/lib/supabase/server';
 import { serviceFeeEnabled, resolveServiceFeeCents, formatServiceFee } from '@/lib/stripe/service-fee';
 
@@ -36,6 +37,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   return (
     <Suspense fallback={null}>
       <BillingModule serviceFeeNotice={serviceFeeNotice} />
+      <CloseAccountCard />
     </Suspense>
   );
 }

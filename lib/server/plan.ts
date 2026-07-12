@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase/server';
 import { planLevel } from '@/lib/constants/plans';
+import { computeEntitlement } from '@/lib/server/entitlement';
 
 /**
  * The family's effective subscription level (0 Free / 1 Basic / 2 Plus),
@@ -31,10 +32,16 @@ export async function resolveFamilyPlanLevel(
   familyId: string,
 ): Promise<number> {
   const admin = createServiceClient();
-  const { data } = await admin
-    .from('subscriptions')
-    .select('plan, status')
-    .eq('family_id', familyId)
-    .in('status', ['active', 'trialing']);
-  return (data ?? []).reduce((max, s) => Math.max(max, planLevel(s.plan)), 0);
+  const [{ data: subs }, { data: fam }] = await Promise.all([
+    admin.from('subscriptions').select('plan, status').eq('family_id', familyId).in('status', ['active', 'trialing']),
+    admin.from('families').select('trial_ends_at, closed_at').eq('id', familyId).maybeSingle(),
+  ]);
+  const paidLevel = (subs ?? []).reduce((max, s) => Math.max(max, planLevel(s.plan)), 0);
+  // During the 5-day free trial a family gets Family Basic (level 1); existing
+  // grandfathered free families (trial_ends_at NULL) stay at their paid level.
+  return computeEntitlement({
+    paidLevel,
+    trialEndsAt: fam?.trial_ends_at ?? null,
+    closedAt: fam?.closed_at ?? null,
+  }).effectiveLevel;
 }

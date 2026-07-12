@@ -149,9 +149,9 @@ export interface Database {
         Partial<{ email: string | null; full_name: string | null; display_name: string | null; avatar_url: string | null; date_of_birth: string | null; phone: string | null }>
       >;
       families: T<
-        { id: string; name: string; avatar_url: string | null; cover_url: string | null; address: string | null; family_code: string | null; timezone: string; created_by: string | null } & Stamps,
-        { id?: string; name: string; avatar_url?: string | null; cover_url?: string | null; address?: string | null; family_code?: string | null; timezone?: string; created_by?: string | null },
-        Partial<{ name: string; avatar_url: string | null; cover_url: string | null; address: string | null; family_code: string | null; timezone: string }>
+        { id: string; name: string; avatar_url: string | null; cover_url: string | null; address: string | null; family_code: string | null; timezone: string; trial_ends_at: string | null; closed_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; name: string; avatar_url?: string | null; cover_url?: string | null; address?: string | null; family_code?: string | null; timezone?: string; trial_ends_at?: string | null; closed_at?: string | null; created_by?: string | null },
+        Partial<{ name: string; avatar_url: string | null; cover_url: string | null; address: string | null; family_code: string | null; timezone: string; trial_ends_at: string | null; closed_at: string | null }>
       >;
       family_members: T<
         { id: string; family_id: string; user_id: string | null; role: MemberRole; display_name: string; color: string | null; birthday: string | null; email: string | null; phone: string | null; avatar_url: string | null; is_active: boolean } & Stamps,

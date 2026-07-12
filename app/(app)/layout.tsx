@@ -1,6 +1,10 @@
 import { createServer } from '@/lib/supabase/server';
 import { AppLockGate } from '@/components/app/app-lock-gate';
 import { isAppLockConfig } from '@/lib/security/app-lock';
+import { resolveEntitlement } from '@/lib/server/entitlement';
+import { isSuperAdmin } from '@/lib/supabase/auth';
+import { TrialPaywallGate } from '@/components/app/trial-paywall-gate';
+import { AccountClosedGate } from '@/components/app/account-closed-gate';
 
 // Shared layout for ALL authenticated (app) routes — dashboard, wallet, economy,
 // admin, family, missions, etc. Its only job is the opt-in App Lock: when the
@@ -13,6 +17,16 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
   const { data: auth } = await supabase.auth.getUser();
   const user = auth.user;
   if (!user) return <>{children}</>;
+
+  // Billing gate: a soft-closed account, or a NEW family whose 5-day free trial
+  // has ended without subscribing, is locked behind an overlay (super-admins and
+  // grandfathered existing free families pass; resolveEntitlement fails open).
+  const superAdmin = await isSuperAdmin();
+  if (!superAdmin) {
+    const ent = await resolveEntitlement(supabase, user.id, { isSuperAdmin: false });
+    if (ent.closed) return <AccountClosedGate />;
+    if (ent.locked) return <TrialPaywallGate trialEndsAt={ent.trialEndsAt} />;
+  }
 
   const { data: prefs } = await supabase
     .from('user_preferences')
