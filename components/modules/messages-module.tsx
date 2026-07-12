@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
+import { GifPicker } from '@/components/messages/gif-picker';
 import { Avatar } from '@/components/ui/avatar';
 import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { ROLE_LABELS } from '@/lib/constants/roles';
@@ -88,6 +89,7 @@ export function MessagesModule() {
   const [sending, setSending] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
   const [newConvOpen, setNewConvOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [mobileShowThread, setMobileShowThread] = useState(false);
@@ -306,6 +308,32 @@ export function MessagesModule() {
       toastError(describeDbError(err));
       setText(content);
       setReplyTo(prevReplyTo);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  // ── Send a GIF (picked from the GIF popover) as an image message ───────────
+  // GIFs reuse the image render path: a family_messages row with kind 'image'
+  // and the (remote, Giphy-hosted) attachment_url — no storage upload needed.
+  async function sendGif(url: string, title: string) {
+    if (!activeConv || sending) return;
+    setShowGifPicker(false);
+    setSending(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from('family_messages').insert({
+        conversation_id: activeConv.id,
+        family_id: familyId,
+        sender_id: userId,
+        sender_name: myName,
+        content: title || 'GIF',
+        kind: 'image',
+        attachment_url: url,
+      });
+      if (error) toastError(describeDbError(error));
+    } catch (err) {
+      toastError(describeDbError(err));
     } finally {
       setSending(false);
     }
@@ -873,10 +901,13 @@ export function MessagesModule() {
                     </div>
                   )}
                 </div>
-                <button type="button" onClick={() => toastError('GIF picker is coming soon.')} aria-label="GIF"
-                  className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-[11px] font-bold text-muted transition hover:bg-surface hover:text-fg">
-                  GIF
-                </button>
+                <div className="relative">
+                  <button type="button" onClick={() => { setShowGifPicker((v) => !v); setShowPicker(false); }} aria-label="GIF"
+                    className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-[11px] font-bold text-muted transition hover:bg-surface hover:text-fg">
+                    GIF
+                  </button>
+                  {showGifPicker && <GifPicker onPick={(url, title) => void sendGif(url, title)} onClose={() => setShowGifPicker(false)} />}
+                </div>
               </div>
 
               {/* Send when typing · recording controls while recording · mic when empty */}

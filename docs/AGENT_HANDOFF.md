@@ -6,6 +6,43 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ⏱️ SESSION END STATE — 2026-07-12 (demo + onboarding + nav-sweep lane) — READ FIRST
+>
+> This session shipped, all on `main`, each commit tsc/eslint/vitest green:
+>
+> - **Onboarding lifecycle + marketing layer** (`0159_onboarding_progress`): durable one-row-per-
+>   account lifecycle (status/source/value-engagement/goals/completeness), pure
+>   `lib/onboarding/completeness.ts`, `/dashboard/setup` re-onboarding surface + reset, home
+>   "finish setting up" nudge (managers, gated by one indexed read), auto-provision cohort stamped
+>   by `ensureActiveFamily`. Seed `seed_onboarding_progress.sql` (500). **Onboarding audit fixes:**
+>   `finalizeOnboardingAction` is replay-safe (adopts an auto-provisioned family, short-circuits
+>   any other re-submit — can no longer mint duplicate families); the branded welcome email
+>   (`lib/emails/welcome.tsx`) now actually sends from both completion paths (was dead code);
+>   `docs/onboarding-supabase.md` rewritten to the six-step value-first wizard.
+> - **Live demo, fully hardened** (`0138_demo_sessions` + `0161` + `0162_demo_email_uses`; see
+>   `docs/demo-mode.md`, rewritten): single shared "**Bubaly Demo Account**" (demo@demo.bubaly.app),
+>   ~200-row reseed per login, email gate → 5-min top-left `DemoClockPill` → upgrade pop-up,
+>   **one demo per email** (`/demo/upgrade` for repeats; paid plan → signup → billing
+>   `?checkout=` auto-opens Stripe). Audit closed: rename-proof account resolution (email-first +
+>   name self-heal), infinite-demo ledger loophole (insert-only), empty-email gate bypass,
+>   non-demo caller sign-out exposure, silent `?demo=` params. Home greets
+>   "Welcome Bubaly Demo Account".
+> - **Marketing:** demo-gate emails become durable `crm_contacts` leads (`lead_source='demo'`) +
+>   new `demo_started` automation trigger w/ default copy (`lib/demo/lead.ts`).
+> - **Left-nav sweep (2026-07-12):** audited every nav page for stubs/mock data/missing wiring —
+>   the nav is production-wired (pages without `.from()` load via `lib/*` server helpers; the
+>   seed tracker in `todo.md` covers every user-facing surface, 46 seeds in `SEED_ALL.sql`).
+>   Last genuine stub closed: **Messages GIF picker** now code-complete + key-gated
+>   (`/api/gif/search` proxy + `components/messages/gif-picker.tsx`; honest "not configured"
+>   without `GIPHY_API_KEY`; sends as a `kind:'image'` message). Remaining "coming soon" copy is
+>   only the Stripe-Issuing-gated wallet cards (by design, key-gated).
+> - **Pricing:** hero sits on the same 3-col grid as the plan cards (Demo card aligns above card 1),
+>   fluid clamp() type; `?demo=error|ended` notices on the Demo card.
+> - **⚠️ Prod apply pending** (`docs/PENDING_PROD_MIGRATIONS.md`): `0159`, `0160`, `0161`, `0162`,
+>   plus the `0138_demo_sessions` **number collision** with `0138_onboarding_imports` (SQL-editor
+>   paste OK; `db push` needs a hand-apply). Env: `CRON_SECRET` (demo cleanup), optional
+>   `GIPHY_API_KEY` (GIF picker).
+
 > ## 🧠 REASONING/NETWORK LANE — 2026-07-06/07 (parallel to the onboarding/marketing sessions)
 >
 > A separate session owned the **reasoning + data layer** (graph, twin, decisions, prep, readiness,
