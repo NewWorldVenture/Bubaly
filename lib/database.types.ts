@@ -2010,6 +2010,11 @@ export interface Database {
         { email: string; first_used_at?: string; last_used_at?: string; expires_at: string; uses?: number; created_at?: string },
         Partial<{ last_used_at: string; expires_at: string; uses: number }>
       >;
+      concierge_calls: T<
+        { id: string; family_id: string; requested_by: string | null; task_kind: string; callee_name: string; callee_phone: string | null; callee_category: string; goal: string; details: Json; brief: Json; status: string; priority: string; scheduled_for: string | null; outcome: string | null; transcript_summary: string | null; duration_seconds: number | null; attempts: number; provider_ref: string | null; completed_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; requested_by?: string | null; task_kind?: string; callee_name: string; callee_phone?: string | null; callee_category?: string; goal: string; details?: Json; brief?: Json; status?: string; priority?: string; scheduled_for?: string | null; outcome?: string | null; transcript_summary?: string | null; duration_seconds?: number | null; attempts?: number; provider_ref?: string | null; completed_at?: string | null; created_by?: string | null },
+        Partial<{ requested_by: string | null; task_kind: string; callee_name: string; callee_phone: string | null; callee_category: string; goal: string; details: Json; brief: Json; status: string; priority: string; scheduled_for: string | null; outcome: string | null; transcript_summary: string | null; duration_seconds: number | null; attempts: number; provider_ref: string | null; completed_at: string | null }>
+      >;
 
       // ---- Vacation Planner (migration 0070) ----
       vacations: T<
