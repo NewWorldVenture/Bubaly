@@ -6,11 +6,31 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
-> ## ⏱️ SESSION END STATE — 2026-07-12 (Financial Copilot + Paperwork Inbox lane) — READ FIRST
+> ## ⏱️ SESSION END STATE — 2026-07-12 (Financial Copilot + Paperwork Inbox + Relationship Timeline lane) — READ FIRST
 >
 > Continued the App-Store lane's directive: **deepen the ◐ industry-first partials**. This session
-> shipped TWO of them — **#8 schedule↔money → Financial Copilot** and **#4 forms/paperwork →
-> Paperwork Inbox**.
+> shipped THREE of them — **#8 schedule↔money → Financial Copilot**, **#4 forms/paperwork →
+> Paperwork Inbox**, and **#5 relationship CRM → per-contact Relationship Timeline**.
+>
+> **Relationship Timeline — `/dashboard/contacts/[id]` (migration `0170`):**
+> - **Brain:** `lib/contacts/timeline.ts` — pure `buildContactTimeline()` merges logged touches
+>   (visit/call/message/gift/favor/note) + inbox `family_communications` (contact_id-linked) +
+>   this year's birthday into one reverse-chron timeline; `contactHealth()` computes last touch vs.
+>   the relationship's natural cadence (median gap, ≥3 touches; gentle 30/90d defaults otherwise)
+>   → fresh / due / overdue + a plain-language reconnect nudge. **8 tests.**
+> - **Table:** `0170_contact_interactions` — family-scoped touches with kind CHECK, `occurred_on`,
+>   optional gift `amount`. RLS via `is_family_member`; `updated_at` trigger.
+> - **UI:** `components/modules/contact-timeline-module.tsx` — mobile-first: health card + nudge,
+>   log-a-touch composer (kind chips, date, amount, note), railed timeline with per-entry delete
+>   (logged touches only). Page fetches best-effort (degrades pre-migration).
+> - **Entry point:** a "🕰️ Relationship timeline" chip on the selected-contact panel in
+>   `contacts-module.tsx` — **no global-nav change** (standing rule).
+> - **Seed:** `seed_contact_interactions.sql` — 500 rows across ≤25 contacts (auto-creates 8
+>   starter contacts if the family has none), varied per-contact cadences so all health states
+>   show; appended to `SEED_ALL.sql`. PG16: 500 ×2 idempotent, 8 contacts / 6 kinds.
+> - **⚠️ Prod-apply pending:** **`0170`** (row added to `docs/PENDING_PROD_MIGRATIONS.md`).
+> - Verified: tsc/eslint green, **2390 tests**, next build green (`/dashboard/contacts/[id]`),
+>   PG16 idempotent ×2 + 4 RLS policies + trigger.
 >
 > **Paperwork Inbox — `/dashboard/paperwork` (migration `0169`):**
 > - **Brain:** `lib/paperwork/triage.ts` — pure, deterministic `triagePaperwork(text)`: classifies
@@ -69,13 +89,14 @@
 >
 > **▶ NEXT (same directive — deepen the remaining ◐ partials), in priority order:**
 > 1. ~~#4 Paperwork inbox~~ — **DONE this session** (see above).
-> 2. **#5 Relationship-CRM per-entity timelines** — `family_connections`/contacts exist; add a
->    per-person timeline aggregating interactions, dates, gifts, notes (deepen, don't rebuild).
+> 2. ~~#5 Relationship-CRM timelines~~ — **DONE this session** (see above).
 > 3. **#1/#3 Autonomous execution loop** — agents/concierge/decisions exist; close the loop so an
 >    accepted plan auto-executes across surfaces with an audit trail (build on `concierge_plan_actions`).
-> 4. Possible Paperwork-Inbox follow-ups: OCR/image capture into the composer (photo → text),
->    AI-provider summary enrichment (provider-gated like concierge-calls), and a Smart-Imports
->    hand-off so onboarding imports land in the inbox too.
+>    This is the last big ◐ partial from the industry-first matrix.
+> 4. Follow-up polish on the new lanes: Paperwork OCR/image capture (photo → text) + AI-provider
+>    summary enrichment (provider-gated like concierge-calls); Smart-Imports hand-off into the
+>    Paperwork Inbox; contact-timeline "overdue" contacts surfaced as a rail on `/dashboard/contacts`;
+>    Financial Copilot income modeling.
 > Method that's working: pure lib (+tests) → migration (family-scoped RLS via `is_family_member`,
 > additive/idempotent) → live-computed page + persistence for user state → 500-row seed in
 > `SEED_ALL.sql` → PG16-verify locally (`/tmp` cluster as an unprivileged user) → tsc/eslint/vitest/

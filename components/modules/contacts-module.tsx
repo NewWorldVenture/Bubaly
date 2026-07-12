@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import {
   Users, Plus, Phone, Mail, MapPin, Star, Trash2, Edit2,
@@ -271,6 +272,10 @@ export function ContactsModule() {
                     <cat.icon className="h-3.5 w-3.5" /> {cat.label}
                   </span>
                 ); })()}
+                <Link href={`/dashboard/contacts/${selected.id}`}
+                  className="flex items-center gap-1 rounded-lg bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand/20 transition">
+                  🕰️ Relationship timeline
+                </Link>
                 {selected.is_emergency && (
                   <span className="flex items-center gap-1 rounded-lg bg-danger/10 px-2.5 py-1 text-xs font-medium text-danger">
                     <AlertTriangle className="h-3.5 w-3.5" /> Emergency
