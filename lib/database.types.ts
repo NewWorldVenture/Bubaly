@@ -2033,6 +2033,13 @@ export interface Database {
         Partial<{ chore_minutes: number; chore_count: number; task_count: number; event_count: number; invisible_count: number; load_score: number; share_pct: number; note: string | null }>
       >;
 
+      // ---- Transparent lead scores (migration 0172) ----
+      crm_lead_scores: T<
+        { contact_id: string; score: number; band: string; factors: Json; computed_at: string },
+        { contact_id: string; score?: number; band?: string; factors?: Json; computed_at?: string },
+        Partial<{ score: number; band: string; factors: Json; computed_at: string }>
+      >;
+
       // ---- Progressive-profiling store (migration 0171) ----
       crm_contact_profile: T<
         { contact_id: string; role: string | null; top_priority: string | null; household_size: number | null; child_ages: string | null; interests: string[]; extra: Json; updated_at: string },
