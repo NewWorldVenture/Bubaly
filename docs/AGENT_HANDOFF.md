@@ -6,6 +6,35 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## ⏱️ SESSION END STATE — 2026-07-12 (coordination note, Fable lane) — READ FIRST
+>
+> A second session independently built the SAME Paperwork Inbox (#4) in parallel and hit the
+> push race: **#308 (the block below) won and is canonical** — single `paperwork_items` table with
+> `actions` jsonb, `0169_paperwork_items.sql`. My duplicate two-table build (`paperwork_actions`
+> relational audit) was NOT pushed; it's parked on local branch `paperwork-fable-build` only.
+> **Do not re-introduce a second 0169 or a `lib/paperwork` rewrite — build on #308's shape.**
+> This session then shipped the follow-ups on top (all on `main`, tsc/eslint/vitest/build green,
+> **2382 tests** at the time; #309 added more):
+> - **SEED_ALL repair:** the owner's `SEED_ALL.sql` re-upload (`979deb8`, which added the
+>   `to_regclass()` guard around `family_apps`) was generated from a pre-#308 copy and dropped the
+>   `seed_paperwork` section — re-appended (#309 landed the same repair in parallel; count header
+>   now says 48 with `seed_contact_interactions`). If the owner re-uploads SEED_ALL, re-check the
+>   tail sections survived.
+> - **Second entry point:** a "Paperwork Inbox — Bubaly reads it for you" card in **AI Front Desk**
+>   (`front-desk-module.tsx`, beside the outbound-calls card) — the paper side of the front desk;
+>   #308's own entry is in the Communications Hub header. No global-nav change (standing rule).
+> - PG16 note for the next bot: the local `/tmp` shim needs a `supabase_realtime` publication +
+>   `auth.jwt()` stub or migrations 0093/0098/0100/0112/0118 fail mid-file (local artifact only;
+>   prod has the real objects).
+>
+> **▶ NEXT (deepen-the-◐-partials directive):** #5 relationship-CRM timelines is now SHIPPED too
+> (#309, block below). Remaining: 1) **#1/#3 autonomous execution loop** (accepted plan
+> auto-executes across surfaces, audit on `concierge_plan_actions` + the paperwork materialize
+> pattern); 2) optional Paperwork Inbox deepening: email-forward ingestion + photo/OCR reuse of
+> Smart Imports, LLM pass on top of the deterministic extractor. **Before starting, `git fetch` and
+> re-read the newest blocks — three lanes are shipping to `main` concurrently and features get
+> built twice.** **Update this file again before the session ends.**
+
 > ## ⏱️ SESSION END STATE — 2026-07-12 (Financial Copilot + Paperwork Inbox + Relationship Timeline lane) — READ FIRST
 >
 > Continued the App-Store lane's directive: **deepen the ◐ industry-first partials**. This session

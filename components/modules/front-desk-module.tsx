@@ -5,7 +5,7 @@ import {
   Phone, PhoneIncoming, PhoneOff, PhoneForwarded, Voicemail, ShieldCheck,
   ShieldAlert, Ban, Clock, Search, X, ArrowLeft, Settings as SettingsIcon,
   Sparkles, CheckCircle2, PhoneCall, UserCheck, Trash2, Bell, Check, Loader2, CalendarPlus,
-  PhoneOutgoing, ArrowRight,
+  PhoneOutgoing, ArrowRight, FileText,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
@@ -218,6 +218,21 @@ export function FrontDeskModule() {
               <p className="text-sm font-bold">Have Bubaly make a call for you</p>
               <p className="text-xs text-muted">
                 Book, reschedule, confirm or chase — the AI dials out with a ready call plan.
+              </p>
+            </div>
+            <ArrowRight className="h-4 w-4 flex-shrink-0 text-brand" />
+          </Link>
+
+          {/* The paper side of the front desk: slips, forms, flyers, bills. */}
+          <Link href="/dashboard/paperwork"
+            className="mb-4 flex items-center gap-3 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-transparent p-4 transition hover:border-brand/40">
+            <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-brand/15">
+              <FileText className="h-5 w-5 text-brand" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold">Paperwork Inbox — Bubaly reads it for you</p>
+              <p className="text-xs text-muted">
+                Slips, forms, flyers and bills → what to sign, pay and return, with the dates on your calendar.
               </p>
             </div>
             <ArrowRight className="h-4 w-4 flex-shrink-0 text-brand" />

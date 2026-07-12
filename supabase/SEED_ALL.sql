@@ -13,7 +13,7 @@
 -- ============================================================================
 -- FamilyOS :: SEED_ALL — one paste populates EVERY surface with 500-row test data.
 -- ============================================================================
--- Runs all 46 paste-ready, idempotent seeds in dependency order (core content
+-- Runs all 48 paste-ready, idempotent seeds in dependency order (core content
 -- first — it creates the to-do/grocery lists later seeds reuse). Each resolves
 -- the family by email (newworldventurellc@gmail.com, falls back to the oldest
 -- family) and clears its own sentinel rows first, so re-running never dupes.
