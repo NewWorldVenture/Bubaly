@@ -7,6 +7,19 @@
 
 
 
+-- ── PRE-RECONCILE: RLS helper-function parameter-name drift ─────────────────
+-- Some prod DBs carry these SECURITY-DEFINER helpers with OLDER parameter names
+-- than the current migrations use (e.g. is_family_member(fid) vs (p_family_id)).
+-- CREATE OR REPLACE FUNCTION cannot rename a parameter, so drop them CASCADE up
+-- front; the migrations below recreate the functions AND every RLS policy that
+-- depends on them, restoring full row-level security. Safe to re-run.
+drop function if exists public.is_family_member(uuid) cascade;
+drop function if exists public.family_role(uuid) cascade;
+drop function if exists public.can_manage_family(uuid) cascade;
+drop function if exists public.is_family_admin(uuid) cascade;
+-- ────────────────────────────────────────────────────────────────────────────
+
+
 -- ══════════ 0001_extensions_enums.sql ══════════
 -- FamilyOS :: 0001 extensions + enums
 -- Supabase ships pgcrypto/uuid; gen_random_uuid() is available by default.
