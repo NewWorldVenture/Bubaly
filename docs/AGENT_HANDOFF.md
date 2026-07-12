@@ -6,9 +6,31 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
-> ## ⏱️ SESSION END STATE — 2026-07-12 (Quick-Post 60s, Fable lane) — READ FIRST
+> ## ⏱️ SESSION END STATE — 2026-07-12 (Quick-Post 60s + Market Assistant, Fable lane) — READ FIRST
 >
-> Shipped **backlog #10 — Marketplace "Post in under 60 seconds with AI"** (the next open
+> **Second slice — backlog #11, Marketplace real assistant in the rail (SHIPPED, same lane):**
+> the rail card that prompt-routed to the generic assistant is now a REAL in-rail specialist.
+> All on `main`, tsc/eslint/vitest/build green (**2486 tests**, 9 new). NO new migration.
+> - **Brain:** `lib/marketplace/assistant.ts` (pure, 9 tests) — `routeMarketIntent` (8 intents:
+>   price/find/mine/demand/sell/fees/safety/general), `answerMarketQuestion(q, snapshot)` composes
+>   grounded replies from the LIVE board: price = quick-post comps engine over the family's own
+>   listings (with comp counts in the copy); find = term+budget filter with `/marketplace/item/…`
+>   links (zero-hit → saved-search alert); mine = my listings + open offers; demand = open `wanted`
+>   by category; fees = honest no-commission policy (mirrors `fee-policy.ts`); plus
+>   `marketSystemPrompt(snapshot)` — the grounded digest for the LLM tier ("never invent",
+>   80-word cap, category medians + open requests embedded).
+> - **Key boundary:** `app/(app)/marketplace/assistant-actions.ts` — loads the snapshot, then
+>   `isAIConfigured()` → `resolveProvider().complete()` with the grounded system prompt (history
+>   passed through, 8-turn cap); ANY model failure falls back to the deterministic engine, so the
+>   panel is fully functional with no key and upgrades automatically when the admin AI engine is
+>   configured (`lib/ai/provider.ts`).
+> - **UI:** `components/marketplace/market-assistant.tsx` — in-rail chat (suggestion chips,
+>   bubbles, per-reply deep-link chips, mobile-safe max-height scroll), replacing the old stub card
+>   in `app/(app)/marketplace/page.tsx` (dead `ASSISTANT_PROMPTS` removed).
+> - Seed: none needed — grounded in `marketplace_listings`/`marketplace_offers`, already seeded at
+>   volume (incl. the 500 quick-post comps below).
+>
+> **First slice — backlog #10 — Marketplace "Post in under 60 seconds with AI"** (the next open
 > agent item after the other lanes cleared #2–#6/#8/#9/#13–#15/#23; backlog #7 was already shipped
 > 2026-07-04 as "Autopilot self-completes moment prep"). All on `main`, tsc/eslint/vitest/build
 > green (**2477 tests**, 9 new). **NO new migration** (writes the existing 0120
@@ -33,11 +55,13 @@
 >   `[seed:quickpost]` in the description, idempotent; appended to `SEED_ALL.sql`. Also corrected
 >   the SEED_ALL header count to the real **61** sections (it had drifted). PG16-verified (500 ×2;
 >   10 cats / 5 conds; $4–$200).
-> - **▶ NEXT open backlog items:** #11 marketplace real-LLM rail assistant (needs an LLM key to be
->   real — otherwise it stays prompt-routing), #21 cross-family community marketplace + #22 open
->   developer platform (both large, design-level — get owner sign-off on scope first). Owner-owned
->   key/prod items: #12/#16/#17/#18/#19/#20/#24. **`git fetch` + re-read the newest blocks before
->   starting — lanes cleared ELEVEN backlog items today alone.**
+> - **▶ NEXT open backlog items:** the 24-item backlog's agent lanes are now DRAINED except the two
+>   big ones — #21 cross-family community marketplace + #22 open developer platform (both large,
+>   design-level — **get owner sign-off on scope before starting either**). Owner-owned key/prod
+>   items: #12/#16/#17/#18/#19/#20/#24 (+ the pending migrations in
+>   `docs/PENDING_PROD_MIGRATIONS.md`). Otherwise pick from `todo.md` or deepen shipped surfaces.
+>   **`git fetch` + re-read the newest blocks before starting — lanes cleared 13 backlog items
+>   today alone.**
 
 > ## ⏱️ SESSION END STATE — 2026-07-12 (Autonomous Execution Loop, Fable lane) — READ FIRST
 >

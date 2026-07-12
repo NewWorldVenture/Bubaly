@@ -11,6 +11,7 @@ import { createServer } from '@/lib/supabase/server';
 import { SaveButton } from '@/components/marketplace/save-button';
 import { FollowButton } from '@/components/marketplace/follow-button';
 import { QuickPost } from '@/components/marketplace/quick-post';
+import { MarketAssistant } from '@/components/marketplace/market-assistant';
 import {
   aiPicks, activityFeed, rankCreators,
   type PickListing, type ActivityOrder, type ActivityReview, type CreatorStore,
@@ -52,12 +53,6 @@ const BADGE_STYLE: Record<string, string> = {
   'New Today': 'bg-sky-500/15 text-sky-600 dark:text-sky-400',
 };
 
-const ASSISTANT_PROMPTS = [
-  'Find a stroller to borrow this weekend',
-  'Is this a fair price for this camera?',
-  'Best camping gear to rent near me',
-  'Find trusted sellers near me',
-];
 
 export default async function MarketplaceHomePage() {
   const ctx = await requireUserContext();
@@ -325,24 +320,9 @@ export default async function MarketplaceHomePage() {
 
       {/* ── Right rail ───────────────────────────────────────────────────── */}
       <aside className="min-w-0 space-y-4">
-        {/* AI Marketplace Assistant */}
-        <section className="rounded-2xl border border-brand/25 bg-brand/[0.04] p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold">
-            <Sparkles className="h-4 w-4 text-brand" /> AI Marketplace Assistant
-            <span className="rounded-full bg-brand/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-brand">Beta</span>
-          </p>
-          <p className="mt-1.5 text-xs text-muted">Hi {ctx.active.member.display_name?.split(' ')[0] ?? 'there'}! How can I help you today?</p>
-          <div className="mt-2 space-y-1.5">
-            {ASSISTANT_PROMPTS.map((p) => (
-              <Link key={p} href={`/dashboard/assistant?q=${encodeURIComponent(p)}`} className="block rounded-lg border border-border bg-surface/70 px-2.5 py-1.5 text-xs text-muted transition hover:border-brand/40 hover:text-fg">
-                {p}
-              </Link>
-            ))}
-          </div>
-          <Link href="/dashboard/assistant" className="mt-2.5 flex items-center justify-between rounded-xl bg-brand px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90">
-            Ask anything… <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </section>
+        {/* AI Marketplace Assistant — the real in-rail specialist (backlog #11):
+            answers from the live board; upgrades to the configured LLM. */}
+        <MarketAssistant firstName={ctx.active.member.display_name?.split(' ')[0] ?? 'there'} />
 
         {/* Nearby Activity */}
         <section className="rounded-2xl border border-border bg-surface/60 p-4">
