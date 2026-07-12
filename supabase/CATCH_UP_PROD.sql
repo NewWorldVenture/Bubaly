@@ -3209,8 +3209,14 @@ on conflict (provider) do update set
 -- connectAccount() upserts a single connection row per provider account, so the
 -- account_id needs a unique constraint to back the ON CONFLICT target.
 
-create unique index if not exists sync_connections_account_ukey
+do $dd$ begin
+  create unique index if not exists sync_connections_account_ukey
   on public.sync_connections(account_id);
+exception when unique_violation then
+  delete from public.sync_connections a using public.sync_connections b where a.ctid<b.ctid and a.account_id=b.account_id;
+  create unique index if not exists sync_connections_account_ukey
+  on public.sync_connections(account_id);
+end $dd$;
 
 
 
@@ -3970,9 +3976,16 @@ CREATE INDEX IF NOT EXISTS idx_med_doses_family ON public.medication_doses(famil
 CREATE INDEX IF NOT EXISTS idx_med_doses_med ON public.medication_doses(medication_id);
 CREATE INDEX IF NOT EXISTS idx_med_doses_scheduled ON public.medication_doses(family_id, scheduled_for);
 -- One row per scheduled slot so "mark taken/skip" is an idempotent upsert.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_med_doses_slot
+do $dd$ begin
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_med_doses_slot
   ON public.medication_doses(schedule_id, scheduled_for)
   WHERE schedule_id IS NOT NULL;
+exception when unique_violation then
+  delete from public.medication_doses a using public.medication_doses b where a.ctid<b.ctid and a.schedule_id=b.schedule_id and a.scheduled_for=b.scheduled_for;
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_med_doses_slot
+  ON public.medication_doses(schedule_id, scheduled_for)
+  WHERE schedule_id IS NOT NULL;
+end $dd$;
 
 DROP TRIGGER IF EXISTS trg_set_updated_at ON public.medication_doses;
 drop trigger if exists trg_set_updated_at on public.medication_doses;
@@ -6575,9 +6588,16 @@ ALTER TABLE public.calendar_events
   ADD COLUMN IF NOT EXISTS external_uid text;
 
 -- One row per (feed, source UID): the upsert conflict target for idempotent sync.
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_calendar_events_feed_uid
+do $dd$ begin
+  CREATE UNIQUE INDEX IF NOT EXISTS uniq_calendar_events_feed_uid
   ON public.calendar_events(feed_id, external_uid)
   WHERE feed_id IS NOT NULL AND external_uid IS NOT NULL;
+exception when unique_violation then
+  delete from public.calendar_events a using public.calendar_events b where a.ctid<b.ctid and a.feed_id=b.feed_id and a.external_uid=b.external_uid;
+  CREATE UNIQUE INDEX IF NOT EXISTS uniq_calendar_events_feed_uid
+  ON public.calendar_events(feed_id, external_uid)
+  WHERE feed_id IS NOT NULL AND external_uid IS NOT NULL;
+end $dd$;
 
 -- ── RLS ────────────────────────────────────────────────────
 ALTER TABLE public.calendar_feeds ENABLE ROW LEVEL SECURITY;
@@ -6792,9 +6812,16 @@ CREATE TABLE IF NOT EXISTS public.ab_events (
 );
 CREATE INDEX IF NOT EXISTS idx_ab_events_experiment ON public.ab_events (experiment_key, kind);
 -- One exposure / one conversion per visitor per experiment (dedupes double-fires).
-CREATE UNIQUE INDEX IF NOT EXISTS uq_ab_events_visitor
+do $dd$ begin
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_ab_events_visitor
   ON public.ab_events (experiment_key, visitor_id, kind)
   WHERE visitor_id IS NOT NULL;
+exception when unique_violation then
+  delete from public.ab_events a using public.ab_events b where a.ctid<b.ctid and a.experiment_key=b.experiment_key and a.visitor_id=b.visitor_id and a.kind=b.kind;
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_ab_events_visitor
+  ON public.ab_events (experiment_key, visitor_id, kind)
+  WHERE visitor_id IS NOT NULL;
+end $dd$;
 
 ALTER TABLE public.ab_experiments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ab_events ENABLE ROW LEVEL SECURITY;
@@ -6820,9 +6847,16 @@ ALTER TABLE public.ab_events ENABLE ROW LEVEL SECURITY;
 -- by subject_key (= familyId); the index makes that race-proof too.
 -- ============================================================
 
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_mkt_runs_workflow_subject
+do $dd$ begin
+  CREATE UNIQUE INDEX IF NOT EXISTS uniq_mkt_runs_workflow_subject
   ON public.marketing_automation_runs (workflow_id, subject_key)
   WHERE subject_key IS NOT NULL;
+exception when unique_violation then
+  delete from public.marketing_automation_runs a using public.marketing_automation_runs b where a.ctid<b.ctid and a.workflow_id=b.workflow_id and a.subject_key=b.subject_key;
+  CREATE UNIQUE INDEX IF NOT EXISTS uniq_mkt_runs_workflow_subject
+  ON public.marketing_automation_runs (workflow_id, subject_key)
+  WHERE subject_key IS NOT NULL;
+end $dd$;
 
 
 
@@ -9921,8 +9955,18 @@ CREATE TABLE IF NOT EXISTS public.dashboard_layouts (
   deleted_at     timestamptz
 );
 -- one user layout per (user, device) and one family default per (family, device)
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dashboard_layout_user ON public.dashboard_layouts (family_id, user_id, device_context) WHERE scope = 'user' AND deleted_at IS NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dashboard_layout_family ON public.dashboard_layouts (family_id, device_context) WHERE scope = 'family' AND deleted_at IS NULL;
+do $dd$ begin
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_dashboard_layout_user ON public.dashboard_layouts (family_id, user_id, device_context) WHERE scope = 'user' AND deleted_at IS NULL;
+exception when unique_violation then
+  delete from public.dashboard_layouts a using public.dashboard_layouts b where a.ctid<b.ctid and a.family_id=b.family_id and a.user_id=b.user_id and a.device_context=b.device_context and a.scope='user' and b.scope='user' and a.deleted_at is null and b.deleted_at is null;
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_dashboard_layout_user ON public.dashboard_layouts (family_id, user_id, device_context) WHERE scope = 'user' AND deleted_at IS NULL;
+end $dd$;
+do $dd$ begin
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_dashboard_layout_family ON public.dashboard_layouts (family_id, device_context) WHERE scope = 'family' AND deleted_at IS NULL;
+exception when unique_violation then
+  delete from public.dashboard_layouts a using public.dashboard_layouts b where a.ctid<b.ctid and a.family_id=b.family_id and a.device_context=b.device_context and a.scope='family' and b.scope='family' and a.deleted_at is null and b.deleted_at is null;
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_dashboard_layout_family ON public.dashboard_layouts (family_id, device_context) WHERE scope = 'family' AND deleted_at IS NULL;
+end $dd$;
 CREATE INDEX IF NOT EXISTS idx_dashboard_layouts_family ON public.dashboard_layouts (family_id, scope);
 
 CREATE TABLE IF NOT EXISTS public.dashboard_layout_events (
@@ -10780,7 +10824,12 @@ CREATE TABLE IF NOT EXISTS public.pay_handles (
 );
 
 -- Globally unique handle (the whole point of a Pay-ID).
-CREATE UNIQUE INDEX IF NOT EXISTS idx_pay_handles_handle ON public.pay_handles (handle);
+do $dd$ begin
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_pay_handles_handle ON public.pay_handles (handle);
+exception when unique_violation then
+  delete from public.pay_handles a using public.pay_handles b where a.ctid<b.ctid and a.handle=b.handle;
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_pay_handles_handle ON public.pay_handles (handle);
+end $dd$;
 CREATE INDEX IF NOT EXISTS idx_pay_handles_family ON public.pay_handles (family_id, is_active);
 
 ALTER TABLE public.pay_handles ENABLE ROW LEVEL SECURITY;
@@ -11426,7 +11475,12 @@ CREATE TABLE IF NOT EXISTS public.social_reader_items (
 CREATE INDEX IF NOT EXISTS idx_social_reader_items_family ON public.social_reader_items (family_id, posted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_social_reader_items_source ON public.social_reader_items (source_id);
 -- Idempotent ingestion: one row per platform item per family.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_social_reader_items_external ON public.social_reader_items (family_id, platform, external_id) WHERE external_id IS NOT NULL;
+do $dd$ begin
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_social_reader_items_external ON public.social_reader_items (family_id, platform, external_id) WHERE external_id IS NOT NULL;
+exception when unique_violation then
+  delete from public.social_reader_items a using public.social_reader_items b where a.ctid<b.ctid and a.family_id=b.family_id and a.platform=b.platform and a.external_id=b.external_id;
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_social_reader_items_external ON public.social_reader_items (family_id, platform, external_id) WHERE external_id IS NOT NULL;
+end $dd$;
 
 -- ============================================================================
 -- Family-scoped RLS + updated_at triggers.
@@ -11715,7 +11769,12 @@ create table if not exists public.child_logins (
 );
 
 -- Case-insensitive unique username (the public login handle).
-create unique index if not exists idx_child_logins_username_lower on public.child_logins (lower(username));
+do $dd$ begin
+  create unique index if not exists idx_child_logins_username_lower on public.child_logins (lower(username));
+exception when unique_violation then
+  delete from public.child_logins a using public.child_logins b where a.ctid<b.ctid and lower(a.username)=lower(b.username);
+  create unique index if not exists idx_child_logins_username_lower on public.child_logins (lower(username));
+end $dd$;
 create index if not exists idx_child_logins_family on public.child_logins (family_id);
 
 drop trigger if exists trg_set_updated_at on public.child_logins;
@@ -12064,7 +12123,12 @@ update public.families f
   from dupes
  where dupes.id = f.id and dupes.rn > 1;
 
-create unique index if not exists idx_families_family_code on public.families (family_code);
+do $dd$ begin
+  create unique index if not exists idx_families_family_code on public.families (family_code);
+exception when unique_violation then
+  delete from public.families a using public.families b where a.ctid<b.ctid and a.family_code=b.family_code;
+  create unique index if not exists idx_families_family_code on public.families (family_code);
+end $dd$;
 
 -- ── family_members: contact fields ──────────────────────────────────────────
 alter table public.family_members add column if not exists email      text;
@@ -13378,8 +13442,14 @@ create index if not exists idx_graph_entities_ref on public.graph_entities(famil
 -- (a family_member/vehicle/team is mirrored exactly once). Plain (non-partial) so
 -- PostgREST .upsert(onConflict) can target it; NULL ref rows (manual/seeded nodes)
 -- are treated as distinct by Postgres, so they're unconstrained.
-create unique index if not exists uq_graph_entities_ref
+do $dd$ begin
+  create unique index if not exists uq_graph_entities_ref
   on public.graph_entities(family_id, ref_table, ref_id);
+exception when unique_violation then
+  delete from public.graph_entities a using public.graph_entities b where a.ctid<b.ctid and a.family_id=b.family_id and a.ref_table=b.ref_table and a.ref_id=b.ref_id;
+  create unique index if not exists uq_graph_entities_ref
+  on public.graph_entities(family_id, ref_table, ref_id);
+end $dd$;
 
 create table if not exists public.graph_edges (
   id          uuid primary key default gen_random_uuid(),
@@ -13993,8 +14063,14 @@ CREATE TRIGGER trg_guardian_contacts_updated_at
 
 CREATE INDEX IF NOT EXISTS guardian_contacts_family_phone ON public.guardian_contacts(family_id, phone);
 CREATE INDEX IF NOT EXISTS guardian_contacts_family_email ON public.guardian_contacts(family_id, email);
-CREATE UNIQUE INDEX IF NOT EXISTS guardian_contacts_family_phone_unique
+do $dd$ begin
+  CREATE UNIQUE INDEX IF NOT EXISTS guardian_contacts_family_phone_unique
   ON public.guardian_contacts(family_id, phone) WHERE phone IS NOT NULL;
+exception when unique_violation then
+  delete from public.guardian_contacts a using public.guardian_contacts b where a.ctid<b.ctid and a.family_id=b.family_id and a.phone=b.phone;
+  CREATE UNIQUE INDEX IF NOT EXISTS guardian_contacts_family_phone_unique
+  ON public.guardian_contacts(family_id, phone) WHERE phone IS NOT NULL;
+end $dd$;
 
 -- ─────────────────────────────────────────────────
 -- GUARDIAN MEMBER PROFILES
@@ -15233,8 +15309,14 @@ create table if not exists public.marketplace_reviews (
 create index if not exists idx_marketplace_reviews_family on public.marketplace_reviews(family_id, created_at desc);
 create index if not exists idx_marketplace_reviews_reviewee on public.marketplace_reviews(family_id, reviewee_member);
 -- one review per side of an order
-create unique index if not exists uq_marketplace_reviews_order_side
+do $dd$ begin
+  create unique index if not exists uq_marketplace_reviews_order_side
   on public.marketplace_reviews(order_id, reviewer_member) where order_id is not null;
+exception when unique_violation then
+  delete from public.marketplace_reviews a using public.marketplace_reviews b where a.ctid<b.ctid and a.order_id=b.order_id and a.reviewer_member=b.reviewer_member;
+  create unique index if not exists uq_marketplace_reviews_order_side
+  on public.marketplace_reviews(order_id, reviewer_member) where order_id is not null;
+end $dd$;
 
 -- ── updated_at triggers ─────────────────────────────────────────────────────
 do $$
@@ -15409,9 +15491,16 @@ update public.marketplace_offers o
        and o2.id < o.id
    );
 
-create unique index if not exists uq_marketplace_offers_open
+do $dd$ begin
+  create unique index if not exists uq_marketplace_offers_open
   on public.marketplace_offers(listing_id, member_id)
   where status = 'open';
+exception when unique_violation then
+  delete from public.marketplace_offers a using public.marketplace_offers b where a.ctid<b.ctid and a.listing_id=b.listing_id and a.member_id=b.member_id and a.status='open' and b.status='open';
+  create unique index if not exists uq_marketplace_offers_open
+  on public.marketplace_offers(listing_id, member_id)
+  where status = 'open';
+end $dd$;
 
 -- ── Flip an available listing to 'pending' when its first offer lands ────────
 -- Runs as the table owner (definer), so the interested member needs no UPDATE
