@@ -1668,11 +1668,26 @@ alter table public.support_tickets add column if not exists closed_at         ti
 -- The 0012 shape's `email` is NOT NULL with no default and the app no longer sets
 -- it (uses requester_email) — relax it so the new inserts don't null-violate. Only
 -- if the legacy column is actually present.
-do $$ begin
+do $$
+declare c record;
+begin
   if exists (select 1 from information_schema.columns
              where table_schema='public' and table_name='support_tickets' and column_name='email') then
     execute 'alter table public.support_tickets alter column email drop not null';
   end if;
+  -- The 0012 shape adds CHECK constraints (e.g. status IN ('open','pending',
+  -- 'resolved','closed')) that reject the 0010 seed's values ('in_progress', …).
+  -- The 0010 admin shape puts NO CHECKs on these columns, so drop every CHECK on
+  -- support_tickets — a no-op on a fresh DB, drift-clearing on prod.
+  for c in
+    select con.conname
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+    where nsp.nspname = 'public' and rel.relname = 'support_tickets' and con.contype = 'c'
+  loop
+    execute format('alter table public.support_tickets drop constraint %I', c.conname);
+  end loop;
 end $$;
 -- ON CONFLICT (ticket_number) needs a unique index; the fresh-DB path gets it via
 -- the column's UNIQUE constraint (same name → IF NOT EXISTS skips the dup).
