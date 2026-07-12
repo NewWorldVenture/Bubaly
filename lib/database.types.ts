@@ -2033,6 +2033,13 @@ export interface Database {
         Partial<{ chore_minutes: number; chore_count: number; task_count: number; event_count: number; invisible_count: number; load_score: number; share_pct: number; note: string | null }>
       >;
 
+      // ---- Paperwork Inbox (migration 0169) ----
+      paperwork_items: T<
+        { id: string; family_id: string; kind: string; title: string; summary: string | null; raw_text: string | null; sender: string | null; due_on: string | null; amount: number | null; urgency: string; status: string; actions: Json; meta: Json; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; kind?: string; title: string; summary?: string | null; raw_text?: string | null; sender?: string | null; due_on?: string | null; amount?: number | null; urgency?: string; status?: string; actions?: Json; meta?: Json; created_by?: string | null },
+        Partial<{ kind: string; title: string; summary: string | null; sender: string | null; due_on: string | null; amount: number | null; urgency: string; status: string; actions: Json; meta: Json }>
+      >;
+
       // ---- Financial Copilot: money-timeline insights (migration 0168) ----
       money_timeline_insights: T<
         { id: string; family_id: string; kind: string; title: string; detail: string; severity: string; week_start: string | null; amount: number | null; status: string; dedupe_key: string; meta: Json } & Stamps,

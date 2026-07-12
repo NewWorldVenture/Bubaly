@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useMemo } from 'react';
 import {
   Phone, MessageSquare, Mail, Instagram, BookOpen, Trophy,
@@ -157,6 +158,10 @@ export function InboxModule() {
             description="All your family messages, calls, and school updates in one place."
             action={
               <div className="flex items-center gap-2">
+                <Link href="/dashboard/paperwork"
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted hover:bg-elevated transition">
+                  📄 Paperwork Inbox
+                </Link>
                 <button onClick={() => setShowAiImport(true)}
                   className="flex items-center gap-1.5 rounded-lg bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand hover:bg-brand/20 transition">
                   <Sparkles className="h-3.5 w-3.5" /> AI Import
