@@ -76,6 +76,33 @@ export function FamilySignalsModule({ active, hidden }: { active: SignalView[]; 
         </Button>
       </div>
 
+      {/* At a glance */}
+      {active.length > 0 && (
+        <div className="grid-stats">
+          {(() => {
+            const avg = Math.round(active.reduce((s, x) => s + x.score, 0) / active.length);
+            const kindCounts = new Map<string, number>();
+            for (const s of active) kindCounts.set(s.kind, (kindCounts.get(s.kind) ?? 0) + 1);
+            const top = [...kindCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+            const topLabel = top ? (KIND_META[top[0]]?.label ?? 'Pattern') : '—';
+            return [
+              { label: 'Active patterns', value: active.length, icon: '🧠', small: false },
+              { label: 'Avg confidence', value: avg, icon: '🎯', small: false },
+              { label: 'Most common', value: topLabel, icon: '🔁', small: true },
+              { label: 'Handled', value: hidden.length, icon: '✅', small: false },
+            ].map(s => (
+              <div key={s.label} className="stat-card">
+                <span className="text-2xl">{s.icon}</span>
+                <div className="min-w-0">
+                  <div className={cn('truncate font-bold', s.small ? 'text-sm leading-tight' : 'text-2xl')}>{s.value}</div>
+                  <div className="text-[11px] text-muted">{s.label}</div>
+                </div>
+              </div>
+            ));
+          })()}
+        </div>
+      )}
+
       {active.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface/40 py-12 text-center">
           <div className="grid h-14 w-14 place-items-center rounded-full bg-brand/10"><Brain className="h-7 w-7 text-brand" /></div>

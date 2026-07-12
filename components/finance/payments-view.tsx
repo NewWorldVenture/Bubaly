@@ -42,9 +42,44 @@ export function PaymentsView() {
     return [...m.entries()];
   }, [filtered]);
 
+  // This-month summary from ALL transactions (not the filtered view), so the
+  // tiles stay stable while searching.
+  const summary = useMemo(() => {
+    const key = new Date().toISOString().slice(0, 7);
+    let income = 0, expense = 0, count = 0;
+    for (const t of txns) {
+      if (!t.date.startsWith(key)) continue;
+      count++;
+      const amt = Math.abs(Number(t.amount));
+      if (t.type === 'income') income += amt; else if (t.type === 'expense') expense += amt;
+    }
+    return { income, expense, net: income - expense, count };
+  }, [txns]);
+
+  const monthTotal = (items: Txn[]) =>
+    items.reduce((s, t) => s + (t.type === 'income' ? 1 : -1) * Math.abs(Number(t.amount)), 0);
+
   return (
     <div className="module-page">
       <PageHeader title="Payment History" description="Every transaction across your family's accounts." />
+
+      {/* This month at a glance */}
+      <div className="grid-stats">
+        {[
+          { label: 'In · this month', value: `+${usd(summary.income)}`, icon: '📥', color: 'text-emerald-400' },
+          { label: 'Out · this month', value: `-${usd(summary.expense)}`, icon: '📤', color: 'text-fg' },
+          { label: 'Net', value: `${summary.net < 0 ? '-' : '+'}${usd(Math.abs(summary.net))}`, icon: '⚖️', color: summary.net < 0 ? 'text-rose-400' : 'text-emerald-400' },
+          { label: 'Transactions', value: summary.count, icon: '🧾', color: 'text-brand' },
+        ].map((s) => (
+          <div key={s.label} className="stat-card">
+            <span className="text-2xl">{s.icon}</span>
+            <div>
+              <div className={cn('text-xl font-bold tabular-nums', s.color)}>{s.value}</div>
+              <div className="text-[11px] text-muted">{s.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-1">
@@ -66,8 +101,11 @@ export function PaymentsView() {
         <div className="space-y-5">
           {byMonth.map(([month, items]) => (
             <section key={month}>
-              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">
-                {new Date(`${month}-01T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              <h2 className="mb-2 flex items-baseline justify-between text-sm font-bold uppercase tracking-wide text-muted">
+                <span>{new Date(`${month}-01T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+                <span className={cn('text-xs font-bold normal-case tabular-nums', monthTotal(items) < 0 ? 'text-muted' : 'text-emerald-400')}>
+                  {monthTotal(items) < 0 ? '-' : '+'}{usd(Math.abs(monthTotal(items)))}
+                </span>
               </h2>
               <div className="space-y-1.5">
                 {items.map((t) => {

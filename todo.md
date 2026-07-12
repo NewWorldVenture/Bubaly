@@ -1658,3 +1658,21 @@ usually by design) · **★ upgrade** (thin for its traffic — rebuilt this ses
   headline from `summarizeSecurity`; CRUD preserved.
 - [x] **Dining Out** → interactive: favorite toggle + log-a-visit (server actions), stat tiles,
   `seed_dining_out.sql` (500 rows: restaurants + visits).
+
+### 🎨 Audit second pass — ★★/★ upgrade sweep (2026-07-12, same session)
+Owner directive: upgrade every ★/★★ page. Every low-scoring page was manually re-reviewed:
+- [x] **Payments** (`/dashboard/payments`) — UPGRADED: "this month" stat tiles (in/out/net/count,
+  computed from the unfiltered set so search doesn't wobble them) + per-month subtotals on the
+  history headers. Realtime + filters preserved.
+- [x] **Family Intelligence** (`/dashboard/family-signals`) — UPGRADED: at-a-glance strip
+  (active patterns · avg confidence · most-common kind · handled count) above the signal cards.
+- **Re-graded ★★→★★★ on manual review** (the signal scan under-scored engine-driven server pages —
+  each verified fully Supabase-wired with real states/design): `outcomes` (live urgency counts +
+  reasoning insights), `reasoning` (6-question live engine + daily snapshot), `calm`
+  (5-table inbox; minimal ON PURPOSE — its design brief is "does not maximize engagement", so no
+  tiles were added), `grandparent-portal` (digest engine, photos/milestones/celebrations),
+  `family-*` shell pages (share the premium StatTile/SectionCard/ScoreRing primitives in
+  `components/family/shell.tsx`), `activity` (7-table merged feed), `dining`/`profile`/`security`
+  (rebuilt earlier this session).
+- **Left ★★ by design** (verified, do NOT chrome-inject): `more` (menu mockup), binder/devices/
+  focus/tax-vault (grouping/reveal/status-cycling already present), finance re-export routes.
