@@ -4089,8 +4089,10 @@ begin
     from generate_series(1, 6) g;
   end if;
 
-  -- ── Expense split shares (guarded on expense_splits) ─────────────────────
-  if to_regclass('public.expense_split_shares') is not null and to_regclass('public.expense_splits') is not null then
+  -- ── Expense split shares (guarded on expense_splits; no marker col, so seed
+  --    once — re-running never dupes because we skip when shares already exist) ─
+  if to_regclass('public.expense_split_shares') is not null and to_regclass('public.expense_splits') is not null
+     and not exists (select 1 from public.expense_split_shares where family_id = v_family) then
     insert into public.expense_split_shares (family_id, split_id, member_id, share_cents, settled, settled_at)
     select v_family, s.id,
       v_members[1 + (rn % array_length(v_members,1))],
@@ -4098,7 +4100,7 @@ begin
       (rn % 2 = 0),
       case when rn % 2 = 0 then now() - ((rn % 20) || ' days')::interval else null end
     from (
-      select id, row_number() over (order by created_at) as rn
+      select id, (row_number() over (order by created_at))::int as rn
       from public.expense_splits where family_id = v_family limit 40
     ) s
     on conflict do nothing;
@@ -4109,14 +4111,14 @@ begin
     delete from public.reward_redemptions where family_id = v_family and note like '[seed]%';
     insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status, note, decided_by, decided_at, created_at)
     select v_family, r.id,
-      v_kids[1 + (g % array_length(v_kids,1))],
+      v_kids[1 + (n % array_length(v_kids,1))],
       r.title, coalesce(r.cost_points, 50),
-      (enum_range(null::redemption_status))[1 + (g % array_length(enum_range(null::redemption_status),1))]::redemption_status,
+      (enum_range(null::redemption_status))[1 + (n % array_length(enum_range(null::redemption_status),1))]::redemption_status,
       '[seed] redemption',
-      v_members[1], now() - ((g % 30) || ' days')::interval,
-      now() - ((g % 30) || ' days')::interval
-    from (select id, title, cost_points, row_number() over (order by created_at) g from public.rewards where family_id = v_family limit 20) r,
-         generate_series(1, 2) as gs(g)
+      v_members[1], now() - ((n % 30) || ' days')::interval,
+      now() - ((n % 30) || ' days')::interval
+    from (select id, title, cost_points from public.rewards where family_id = v_family limit 20) r
+    cross join generate_series(1, 2) as n
     limit 40;
   end if;
 
@@ -4143,7 +4145,7 @@ begin
     insert into public.vehicle_registrations (family_id, vehicle_id, plate, state, registered_on, expires_on, fee, status, notes, created_by)
     select v_family, v.id,
       upper(substr(md5(v.id::text), 1, 3)) || '-' || lpad((1000 + (row_number() over ()))::text, 4, '0'),
-      (array['CA','TX','NY','WA','CO'])[1 + (row_number() over () % 5)],
+      (array['CA','TX','NY','WA','CO'])[1 + ((row_number() over ())::int % 5)],
       current_date - interval '10 months', current_date + interval '2 months',
       85 + (row_number() over () % 4) * 15, 'active', '[seed] registration', v_owner
     from public.vehicles v where v.family_id = v_family;
@@ -4218,12 +4220,13 @@ begin
     from generate_series(1, 12) g;
   end if;
 
-  -- ── Allowance rules (guarded on child_wallets) ───────────────────────────
-  if to_regclass('public.allowance_rules') is not null and to_regclass('public.child_wallets') is not null then
+  -- ── Allowance rules (guarded on child_wallets; seed once so re-runs don't dupe) ─
+  if to_regclass('public.allowance_rules') is not null and to_regclass('public.child_wallets') is not null
+     and not exists (select 1 from public.allowance_rules where family_id = v_family) then
     insert into public.allowance_rules (family_id, child_wallet_id, amount_cents, cadence, is_active, next_run_on, created_by)
     select v_family, w.id,
       (500 + (row_number() over () % 4) * 250)::bigint,
-      (enum_range(null::allowance_cadence))[1 + ((row_number() over ()) % array_length(enum_range(null::allowance_cadence),1))]::allowance_cadence,
+      (enum_range(null::allowance_cadence))[1 + ((row_number() over ())::int % array_length(enum_range(null::allowance_cadence),1))]::allowance_cadence,
       true, current_date + interval '7 days', v_owner
     from public.child_wallets w where w.family_id = v_family
     on conflict do nothing;
@@ -4246,7 +4249,7 @@ begin
       1 + (row_number() over () % 5)::int,
       (row_number() over () % 8)::int,
       5 + (row_number() over () % 12)::int,
-      current_date - ((row_number() over () % 3))
+      current_date - ((row_number() over ())::int % 3)
     from unnest(v_kids) m
     on conflict (member_id) do update set xp = excluded.xp, level = excluded.level;
   end if;
