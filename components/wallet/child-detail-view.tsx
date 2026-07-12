@@ -162,7 +162,9 @@ function VirtualCardPlaceholder({ child }: { child: Child }) {
       <div className="relative mt-4 flex items-end justify-between">
         <div>
           <p className="text-[10px] uppercase tracking-widest text-white/40">Spending card</p>
-          <p className="text-xs font-semibold text-white/60">Coming soon · real-time balance check</p>
+          <Link href="/wallet/cards" className="text-xs font-semibold text-white/60 underline-offset-2 transition hover:text-white hover:underline">
+            Manage cards → every swipe checks this balance
+          </Link>
         </div>
         <p className="text-xl font-black italic tracking-wider text-white/80">VISA</p>
       </div>

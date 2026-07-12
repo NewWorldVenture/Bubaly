@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CreditCard, ShieldCheck, Snowflake, Sparkles, Loader2, SlidersHorizontal,
-  CheckCircle2, Circle, ChevronRight, Plus, Package, Zap, Lock,
+  CheckCircle2, Circle, ChevronRight, Plus, Package, Zap, Lock, Eye,
 } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ import {
 import {
   startConnectOnboardingAction, issueCardAction, setCardFrozenAction, updateCardControlsAction,
 } from '@/app/(app)/money/actions';
+import { CardRevealModal } from '@/components/wallet/card-reveal-modal';
 
 export type CardChild = { id: string; name: string; color: string | null };
 export type IssuedCard = {
@@ -48,6 +49,7 @@ export function MoneyCardsView({
   const [busy, setBusy] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [orderingCard, setOrderingCard] = useState<CardChild | null>(null);
+  const [revealing, setRevealing] = useState<{ cardId: string; childName: string } | null>(null);
   const [issueType, setIssueType] = useState<'virtual' | 'physical'>('virtual');
 
   // Show success banner briefly when returning from Stripe onboarding.
@@ -258,6 +260,7 @@ export function MoneyCardsView({
                         key={card.id} card={card} canManage={canManage}
                         busy={busy} expanded={expanded}
                         onFreeze={() => toggleFreeze(card)}
+                        onReveal={() => setRevealing({ cardId: card.id, childName: child.name })}
                         onToggleControls={() => setExpanded(expanded === card.id ? null : card.id)}
                         onSaved={() => { setExpanded(null); router.refresh(); }}
                       />
@@ -276,6 +279,15 @@ export function MoneyCardsView({
           child={orderingCard}
           onClose={() => setOrderingCard(null)}
           onIssued={() => { setOrderingCard(null); router.refresh(); }}
+        />
+      )}
+
+      {/* Secure PAN reveal (Stripe Issuing Elements) */}
+      {revealing && (
+        <CardRevealModal
+          cardId={revealing.cardId}
+          childName={revealing.childName}
+          onClose={() => setRevealing(null)}
         />
       )}
     </div>
@@ -312,9 +324,9 @@ function SetupSteps({ current }: { current: number }) {
 
 // ─── Card Row ─────────────────────────────────────────────────────────────────
 
-function CardRow({ card, canManage, busy, expanded, onFreeze, onToggleControls, onSaved }: {
+function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggleControls, onSaved }: {
   card: IssuedCard; canManage: boolean; busy: string | null; expanded: string | null;
-  onFreeze: () => void; onToggleControls: () => void; onSaved: () => void;
+  onFreeze: () => void; onReveal: () => void; onToggleControls: () => void; onSaved: () => void;
 }) {
   return (
     <div className="px-4 py-3">
@@ -344,6 +356,10 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onToggleControls, 
 
         {canManage && (
           <div className="flex items-center gap-1">
+            <button type="button" onClick={onReveal}
+              className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated transition">
+              <Eye className="h-3.5 w-3.5" /> Reveal
+            </button>
             <button type="button" onClick={onToggleControls}
               className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated transition">
               <SlidersHorizontal className="h-3.5 w-3.5" /> Controls

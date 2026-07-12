@@ -256,6 +256,18 @@
 > depth, surfaces without a 500-row seed, and any remaining "coming soon" that isn't a deliberate
 > key-gate. Keep each slice small + verified; **update this file again before the session ends.**
 >
+> ## 💳 STRIPE ISSUING (#5) COMPLETE — 2026-07-12 final+ (same lane) — READ FIRST
+>
+> Open-item **#5 (Issuing → wallet spending cards + real-time balances)** is now complete to the
+> key boundary. The pipeline was already deep (real-time auth gate w/ atomic reserve, capture/
+> release, idempotent money webhook, capability resolver, 3-mode Cards UI) — this pass added the
+> genuinely missing pieces: **auth-decision unit tests** (were claimed but absent — 7 tests),
+> **secure PAN reveal** (prepare+reveal actions, audited, + Stripe.js v9 Issuing-Elements modal;
+> Reveal button per card), the stale "coming soon" copy on the child card art fixed, and
+> `STRIPE_MONEY_WEBHOOK_SECRET` documented in .env.example. Owner flips live by enabling Issuing +
+> the stripe_issuing/connect feature flags + a second webhook at /api/webhooks/money. Details in
+> todo.md ("Open-item #5 build-out"). Do NOT rebuild the webhook/ledger — they were audited sound.
+
 > ## 🔗 PROVIDER SYNC (#3) COMPLETE — 2026-07-12 final (same lane) — READ FIRST
 >
 > Open-item **#3 (provider OAuth → live calendar two-way sync)** is now fully built to the key

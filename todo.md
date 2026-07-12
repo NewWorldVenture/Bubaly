@@ -1721,3 +1721,28 @@ Everything up to the OAuth keys is now COMPLETE — adding keys lights it up wit
 - **Owner keys to flip it live**: `SYNC_TOKEN_KEY`, `GOOGLE_SYNC_CLIENT_ID/SECRET`,
   `MICROSOFT_SYNC_CLIENT_ID/SECRET` (+ register the exact callback URIs), `CRON_SECRET`.
   Apple stays honestly CalDAV/ICS-guided; Alexa stays ICS one-way (documented in capabilities).
+
+### 💳 Open-item #5 build-out — Stripe Issuing cards + real-time balances (2026-07-12, latest)
+Deep audit verdict: the pipeline was already MUCH deeper than the table said — real-time
+authorization gate (atomic reserve against the child's Spend bucket), capture/release handlers,
+idempotent webhook route, capability resolver, and a 3-mode honest Cards UI all shipped. Genuine
+stones found + fixed this pass:
+- [x] **Auth-decision unit tests were MISSING** (code claimed "unit-tested separately" — no test
+  existed): `tests/stripe-issuing-auth.test.ts` (7 tests — approve within balance, decline on
+  inactive/frozen/blocked-category/insufficient, exact-balance edge, status-outranks-balance,
+  unknown-merchant-category safety; plus the precheck's short-circuit parity).
+- [x] **PAN reveal was promised but not built** (issuing.ts header: "parents reveal full details
+  via an ephemeral Stripe.js session" — nothing existed): `prepareCardRevealAction` +
+  `createCardRevealAction` (manager-gated, family-scoped, capability-gated, audited to
+  wallet_audit_logs) + `CardRevealModal` (Stripe.js v9 Issuing display Elements — nonce →
+  ephemeral key → number/expiry/CVC render in Stripe-hosted iframes; the PAN never touches our
+  servers) + a Reveal button on every card row.
+- [x] **Stale "Coming soon · real-time balance check"** on the child virtual card → now links to
+  /wallet/cards with honest live-gate copy (the Spend balance shown IS what authorizations check).
+- [x] **`STRIPE_MONEY_WEBHOOK_SECRET` was undocumented** in .env.example (the money webhook reads
+  it; falls back to STRIPE_WEBHOOK_SECRET) → documented with the /api/webhooks/money endpoint note.
+- Verified: 2411 tests green (7 new), tsc/eslint clean. Wallet balances already realtime
+  (useRealtimeQuery on accounts/txns/cards).
+- **Owner to flip live**: enable Issuing on the platform account, switch the
+  stripe_issuing_enabled / stripe_connect_enabled feature flags, point a second webhook at
+  /api/webhooks/money (secret above). Everything else is done.

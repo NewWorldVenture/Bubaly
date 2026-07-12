@@ -17,6 +17,8 @@ import { ensureFinancialAccount } from '@/lib/stripe/treasury';
 import { ensureCardholder, issueCard, setCardFrozen, updateCardControls } from '@/lib/stripe/issuing';
 import { clampSpendLimitCents, normalizeSpendWindow, normalizeBlockedCategories } from '@/lib/wallet/card-controls';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
+import { getStripe } from '@/lib/stripe';
+import { effectivePublishableKey } from '@/lib/stripe/settings';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -203,4 +205,83 @@ export async function updateCardControlsAction(input: {
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not update controls.' };
   }
+}
+
+/**
+ * Create an ephemeral key so the parent can REVEAL a card's full number/CVC in
+ * the browser via Stripe.js Issuing Elements — the PAN never touches our
+ * servers or database (PCI stays with Stripe). The client first calls
+ * stripe.createEphemeralKeyNonce({ issuingCard }) and passes the nonce here;
+ * the returned secret is single-use and short-lived.
+ */
+export async function createCardRevealAction(input: {
+  cardId: string; nonce: string;
+}): Promise<Result<{ ephemeralKeySecret: string; stripeCardId: string; publishableKey: string; stripeAccount: string }>> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can reveal card details.' };
+  const svc = createServiceClient();
+  const caps = await getMoneyCapabilities(svc);
+  if (!caps.issuing) return { ok: false, error: 'Cards are not available yet.' };
+  if (!input.nonce?.trim()) return { ok: false, error: 'Missing reveal session.' };
+
+  const [{ data: card }, { data: acct }] = await Promise.all([
+    svc.from('stripe_issuing_cards').select('id, stripe_card_id')
+      .eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle(),
+    svc.from('stripe_connected_accounts').select('stripe_account_id')
+      .eq('family_id', ctx.active.familyId).maybeSingle(),
+  ]);
+  if (!card) return { ok: false, error: 'Card not found.' };
+  if (!acct) return { ok: false, error: 'No account configured.' };
+
+  const publishableKey = effectivePublishableKey(null);
+  if (!publishableKey) return { ok: false, error: 'Card reveal is not configured (missing publishable key).' };
+
+  try {
+    const key = await getStripe().ephemeralKeys.create(
+      { issuing_card: card.stripe_card_id, nonce: input.nonce },
+      { apiVersion: '2026-05-27.dahlia', stripeAccount: acct.stripe_account_id },
+    );
+    await svc.from('wallet_audit_logs').insert({
+      family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_revealed',
+      entity_type: 'stripe_issuing_cards', entity_id: card.id,
+    });
+    return {
+      ok: true,
+      data: {
+        ephemeralKeySecret: key.secret ?? '',
+        stripeCardId: card.stripe_card_id,
+        publishableKey,
+        stripeAccount: acct.stripe_account_id,
+      },
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not start the reveal session.' };
+  }
+}
+
+/**
+ * Step 1 of the reveal flow: the client needs the Stripe card id + publishable
+ * key + connected account BEFORE it can mint the ephemeral-key nonce. No Stripe
+ * call happens here — just family-scoped, manager-gated lookups.
+ */
+export async function prepareCardRevealAction(cardId: string):
+  Promise<Result<{ stripeCardId: string; publishableKey: string; stripeAccount: string }>> {
+  const ctx = await requireUserContext();
+  if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can reveal card details.' };
+  const svc = createServiceClient();
+  const caps = await getMoneyCapabilities(svc);
+  if (!caps.issuing) return { ok: false, error: 'Cards are not available yet.' };
+
+  const [{ data: card }, { data: acct }] = await Promise.all([
+    svc.from('stripe_issuing_cards').select('stripe_card_id')
+      .eq('family_id', ctx.active.familyId).eq('id', cardId).maybeSingle(),
+    svc.from('stripe_connected_accounts').select('stripe_account_id')
+      .eq('family_id', ctx.active.familyId).maybeSingle(),
+  ]);
+  if (!card) return { ok: false, error: 'Card not found.' };
+  if (!acct) return { ok: false, error: 'No account configured.' };
+  const publishableKey = effectivePublishableKey(null);
+  if (!publishableKey) return { ok: false, error: 'Card reveal is not configured (missing publishable key).' };
+
+  return { ok: true, data: { stripeCardId: card.stripe_card_id, publishableKey, stripeAccount: acct.stripe_account_id } };
 }
