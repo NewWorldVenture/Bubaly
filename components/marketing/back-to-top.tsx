@@ -12,17 +12,16 @@
 import { useEffect, useState } from 'react';
 import { ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-
-const COOKIE_KEY = 'bubaly-cookie-consent';
+import { readLocalConsent, detectGPC } from '@/lib/marketing/visitor';
+import { shouldShowBanner } from '@/lib/marketing/consent-ui';
 
 export function BackToTop({ threshold = 400 }: { threshold?: number }) {
   const [visible, setVisible] = useState(false);
   const [raised, setRaised] = useState(false); // lift above the cookie banner
 
   useEffect(() => {
-    const cookiePending = () => {
-      try { return !localStorage.getItem(COOKIE_KEY); } catch { return false; }
-    };
+    // The consent banner shows only while undecided and without a GPC signal.
+    const cookiePending = () => shouldShowBanner({ decided: !!readLocalConsent()?.decided, gpc: detectGPC() });
     const onScroll = () => {
       setVisible(window.scrollY > threshold);
       setRaised(cookiePending());

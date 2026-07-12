@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Logo } from '@/components/brand/logo';
+import { ConsentReopenLink } from '@/components/marketing/consent-manager';
 
 const GROUPS = [
   {
@@ -77,6 +78,7 @@ export function SiteFooter() {
             <Link href="/terms" className="transition hover:text-fg">Terms</Link>
             <Link href="/acceptable-use" className="transition hover:text-fg">Acceptable Use</Link>
             <Link href="/cookies" className="transition hover:text-fg">Cookies</Link>
+            <ConsentReopenLink />
           </nav>
         </div>
       </div>
