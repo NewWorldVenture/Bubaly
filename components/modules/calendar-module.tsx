@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Spar
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { expandEvents } from '@/lib/calendar/recurrence';
+import { BusynessHeatmap } from '@/components/calendar/busyness-heatmap';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -669,6 +670,11 @@ export function CalendarModule() {
             </div>
             <a href="/dashboard/sync" className="ml-auto font-medium text-brand hover:underline">Manage Connections →</a>
           </div>
+        </div>
+
+        {/* Busy-week heat map (last 8 weeks) */}
+        <div className="mt-4">
+          <BusynessHeatmap familyId={familyId} />
         </div>
       </div>
 
