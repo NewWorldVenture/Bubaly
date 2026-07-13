@@ -15,6 +15,7 @@ import { ListingImage } from '@/components/marketplace/listing-image';
 import { OfferInbox } from '@/components/marketplace/offer-inbox';
 import { AuctionPanel } from '@/components/marketplace/auction-panel';
 import { NegotiationPanel, type Thread } from '@/components/marketplace/negotiation-panel';
+import { priceDropBadge, isAtLowest, historyLine, type PriceChange } from '@/lib/marketplace/price-history';
 import { computeTrustScore, ratingSummary, TRUST_BAND_LABELS } from '@/lib/marketplace/trust';
 import {
   KIND_LABELS, CATEGORY_LABELS, CONDITION_LABELS, priceLabel, formatCents,
@@ -101,6 +102,19 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const sentLabel = kind === 'sell' || kind === 'rent' ? 'Interest sent' : 'Claim sent';
   const open = listing.status === 'available' || listing.status === 'pending';
 
+  // Price history + drop watch (fixed-price listings with a real price).
+  const tracksPrice = !isAuctionListing && listing.price_cents > 0;
+  const { data: priceRows } = tracksPrice
+    ? await sb.from('marketplace_price_history')
+        .select('old_cents, new_cents, changed_at').eq('listing_id', id)
+        .order('changed_at', { ascending: false }).limit(8)
+    : { data: [] };
+  const priceHistory: PriceChange[] = (priceRows ?? []).map((r) => ({
+    oldCents: r.old_cents, newCents: r.new_cents, changedAt: r.changed_at,
+  }));
+  const dropBadge = priceDropBadge(priceHistory, listing.price_cents);
+  const atLowest = isAtLowest(priceHistory, listing.price_cents);
+
   // "Make an Offer" negotiation threads (fixed-price sale listings only).
   const negotiable = !isAuctionListing && kind === 'sell' && listing.price_cents > 0;
   let negThreads: Thread[] = [];
@@ -162,7 +176,34 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           </div>
 
           <h1 className="mt-2 text-2xl font-semibold text-fg">{listing.title}</h1>
-          {!isAuctionListing && price && <div className="mt-1 text-xl font-bold text-fg">{price}</div>}
+          {!isAuctionListing && price && (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="text-xl font-bold text-fg">{price}</span>
+              {dropBadge && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-xs font-bold text-rose-600 dark:text-rose-400">
+                  ↓ {dropBadge}
+                </span>
+              )}
+              {atLowest && priceHistory.length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  Lowest ever
+                </span>
+              )}
+            </div>
+          )}
+          {tracksPrice && priceHistory.length > 0 && (
+            <details className="mt-2 text-xs text-muted">
+              <summary className="cursor-pointer select-none hover:text-fg">Price history ({priceHistory.length})</summary>
+              <ul className="mt-1.5 space-y-0.5">
+                {priceHistory.map((h, i) => (
+                  <li key={i} className="flex items-center justify-between gap-3">
+                    <span className={h.newCents < h.oldCents ? 'text-rose-500 dark:text-rose-400' : 'text-muted'}>{historyLine(h)}</span>
+                    <span className="tabular-nums">{new Date(h.changedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
 
           {/* Live auction box (replaces the fixed price when this is an auction) */}
           {isAuctionListing && (

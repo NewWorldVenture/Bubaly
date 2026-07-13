@@ -413,6 +413,11 @@ export interface Database {
         { id?: string; family_id: string; listing_id: string; member_id: string },
         Partial<{ listing_id: string; member_id: string }>
       >;
+      marketplace_price_history: T<
+        { id: string; listing_id: string; family_id: string; old_cents: number; new_cents: number; changed_at: string },
+        { id?: string; listing_id: string; family_id: string; old_cents: number; new_cents: number; changed_at?: string },
+        Partial<{ old_cents: number; new_cents: number }>
+      >;
       marketplace_saved_searches: T<
         { id: string; family_id: string; member_id: string; label: string | null; query: string | null; kind: string | null; category: string | null; max_price_cents: number | null; is_active: boolean; last_seen_at: string; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; label?: string | null; query?: string | null; kind?: string | null; category?: string | null; max_price_cents?: number | null; is_active?: boolean; last_seen_at?: string; created_by?: string | null },

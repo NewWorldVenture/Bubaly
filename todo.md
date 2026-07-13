@@ -1302,6 +1302,27 @@ missing-location events, colliding events for conflicts). Run it, then open
   - ⚠️ apply **`0190`** to prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe before apply: the Orders
     page reads best-effort and shows no pickup panel until the table exists.
 
+- [x] **Price History + Drop Watch ✅ SHIPPED (2026-07-13). eBay's "price reduced on an item you're
+  watching".** The Saved (♥) heart was static — a buyer who hearts an item never heard when the seller
+  cut the price. Now:
+  - Migration **`0191_marketplace_price_history.sql`** — `marketplace_price_history` (append-only
+    old→new log) + an **`AFTER UPDATE OF price_cents` trigger** (`SECURITY DEFINER`) that fires on ANY
+    edit path (quick-post, module edit, seed, admin): logs the change, and on a **drop** to a still-live
+    listing inserts a notification for **every family watching it** (♥ via `marketplace_saves`).
+    Family-scoped RLS. PG16-verified idempotent ×2 + trigger behavior (logs every change; notifies
+    exactly on drops — a raise is logged but not notified; message formats `$100.00 → $75.00`).
+  - Pure engine **`lib/marketplace/price-history.ts`** (drop % · total drop · lowest-ever + `isAtLowest`
+    · recent-drop window · `priceDropBadge` · history lines, **8 tests**). Type added to
+    `lib/database.types.ts`.
+  - Item page now shows a **"↓ Price dropped X%"** badge + **"Lowest ever"** flag next to the price and
+    an expandable **Price history** list (drops in red).
+  - Seed **`seed_marketplace_price_history.sql`** (130 fixed-price listings + declining 2–4 step ladders
+    ≈ 390 history rows + 65 watcher saves ≈ 585 rows; throwaway "Price Watchers" family; in
+    `SEED_ALL.sql`). PG16-validated ×2 (ladders end at current price, all latest changes are drops).
+    Verified: tsc · eslint · **vitest (8 price + 11 handoff + 14 negotiation + 11 auction)** · `next build`.
+  - ⚠️ apply **`0191`** to prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe before apply: the item page
+    reads best-effort and shows no badge/history until the table exists.
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:
