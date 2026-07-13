@@ -3293,3 +3293,19 @@ roadmap entries and user worktree changes are preserved.
   and public Playwright/axe E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0235 - Legacy seed writes could continue after insert failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Production data safety / seed tooling
+- Feature: Service-role seed execution
+- File or files: `scripts/seed*.mjs`, `tests/seed-failure-safety.test.ts`
+- Description: Several legacy seed scripts logged Supabase insert failures and continued, which could
+  leave a partially seeded environment while the command appeared to finish.
+- Resolution: Insert and unexpected family-scoped cleanup failures now throw, causing a non-zero command
+  result and preventing later seed sections from running against incomplete data.
+- Tests performed: `node --check` for every seed script, focused seed safety contracts, full Vitest,
+  typecheck, lint, production build, and public E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

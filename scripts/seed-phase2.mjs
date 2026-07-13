@@ -30,7 +30,7 @@ const dateStr  = (n) => daysFrom(n).slice(0, 10);
 async function ins(table, rows) {
   if (!rows.length) { console.log(`  – ${table}: 0 rows`); return []; }
   const { data, error } = await sb.from(table).insert(rows).select('id');
-  if (error) { console.error(`❌ ${table}:`, error.message); return []; }
+  if (error) throw new Error(`Seed insert failed for ${table}: ${error.message}`);
   console.log(`  ✓ ${table}: +${rows.length}`);
   return data ?? [];
 }
@@ -94,7 +94,7 @@ for (let i = 0; i < 90; i++) {
 for (let i = 0; i < transactions.length; i += 100) {
   const chunk = transactions.slice(i, i + 100);
   const { error } = await sb.from('transactions').insert(chunk);
-  if (error) { console.error('❌ transactions batch:', error.message); break; }
+  if (error) throw new Error(`Seed insert failed for transactions batch: ${error.message}`);
 }
 console.log(`  ✓ transactions: +${transactions.length}`);
 

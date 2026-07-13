@@ -368,7 +368,19 @@ Legacy service-role seed scripts were hardened after the initial report: fixed f
 and stale member fallbacks were removed. Every `scripts/seed*.mjs` script now requires an explicit
 non-production environment, confirmed family UUID, and creator UUID through `scripts/seed-client.mjs`.
 The focused scope and credential safety tests pass. This does not clear the external Supabase key
-rotation, pending migration, Auth Admin 500, local Docker, or dependency advisory blockers.
+rotation, pending migration, Auth Admin 500, or local Docker blockers.
+
+## Audit Update - 2026-07-13 (seed write failure boundaries)
+
+- All six legacy service-role seed scripts now throw on insert failures instead of logging the error and
+  continuing with a partial dataset. The medical seed also fails closed on family-scoped cleanup errors.
+- `node --check` passed for every `scripts/seed*.mjs` file.
+- `npm.cmd exec vitest run tests/seed-failure-safety.test.ts tests/seed-scope-safety.test.ts tests/seed-credentials-safety.test.ts tests/seed-tls-safety-contract.test.ts`:
+  4 files, 5 tests passed.
+- Full Vitest passed: 344 files and 2,725 tests. Typecheck, lint, audit (0 vulnerabilities), build (235
+  pages), and public Playwright/axe/overflow E2E (51 passed, 1 intentional auth skip) also passed.
+- `npm.cmd run db:audit:schema`: 11 required live schema checks passed. `npm.cmd run db:audit:auth` still
+  fails only on the live Admin users endpoint with HTTP 500 (`019f5ddc-1628-7f7d-8012-88d97b82321b`).
 
 The public gift capability flow was also hardened: inactive or revoked gift URLs no longer perform
 service-role lookups or disclose child/family names. A regression contract covers the privacy boundary.

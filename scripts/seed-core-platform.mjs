@@ -57,7 +57,7 @@ const minsAgo  = (n) => new Date(today.getTime() - n * 60000).toISOString();
 async function ins(table, rows) {
   if (!rows.length) { console.log(`  – ${table}: 0 rows, skip`); return []; }
   const { data, error } = await sb.from(table).insert(rows).select('id');
-  if (error) { console.error(`❌ ${table}:`, error.message); return []; }
+  if (error) throw new Error(`Seed insert failed for ${table}: ${error.message}`);
   console.log(`  ✓ ${table}: +${rows.length}`);
   return data ?? [];
 }

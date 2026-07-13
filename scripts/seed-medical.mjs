@@ -16,7 +16,7 @@ const DANIEL = memberId('Daniel'), SARAH = memberId('Sarah'), EMMA = memberId('E
 
 async function ins(table, rows) {
   const { data, error } = await sb.from(table).insert(rows).select('id');
-  if (error) { console.error(`❌ ${table}:`, error.message); return null; }
+  if (error) throw new Error(`Seed insert failed for ${table}: ${error.message}`);
   console.log(`  ✓ ${table}: +${rows.length}`);
   return data;
 }
@@ -24,7 +24,9 @@ async function ins(table, rows) {
 // Wipe prior medical/dental seed for idempotency
 for (const t of ['health_providers', 'insurance_policies', 'medical_profiles']) {
   const { error } = await sb.from(t).delete().eq('family_id', FAMILY_ID);
-  if (error && !/does not exist/i.test(error.message)) console.error(`  (cleanup ${t}: ${error.message})`);
+  if (error && !/does not exist/i.test(error.message)) {
+    throw new Error(`Seed cleanup failed for ${t}: ${error.message}`);
+  }
 }
 
 // ── Providers ──────────────────────────────────────────────

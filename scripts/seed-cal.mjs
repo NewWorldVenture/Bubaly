@@ -102,5 +102,5 @@ for (const e of fixed) {
 }
 
 const { data, error } = await sb.from('calendar_events').insert(rows).select('id');
-if (error) console.error('❌', error.message);
+if (error) throw new Error(`Seed insert failed for calendar_events: ${error.message}`);
 else console.log(`✓ calendar_events: +${data.length}`);

@@ -28,7 +28,7 @@ const rows=[
   {id:uuid(),family_id:FAMILY_ID,user_id:USER_ID,type:'system',  title:'Budget Alert',              body:'Dining Out budget is 87% used with 11 days left',     is_read:false,send_at:d(2)},
 ];
 const {data,error}=await sb.from('notifications').insert(rows).select('id');
-if(error)console.error('❌',error.message);
+if(error)throw new Error(`Seed insert failed for notifications: ${error.message}`);
 else console.log('✓ notifications: +'+data.length);
 
 // Final count

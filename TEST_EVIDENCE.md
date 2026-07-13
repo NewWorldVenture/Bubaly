@@ -65,7 +65,7 @@ Audit date: 2026-07-13
 - Local limiter buckets now have bounded capacity, expired-bucket pruning, normalized parameters, and validated IP-derived keys.
 - `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
 - `npm.cmd run db:audit:auth`: public Auth health passed; Admin users still returned HTTP 500
-  (`019f5dd2-5416-7dd8-8e8d-003cf3accb14`).
+  (`019f5ddc-1628-7f7d-8012-88d97b82321b`).
 
 ## Audit Update - 2026-07-13 (dependency advisory remediation)
 
@@ -73,6 +73,18 @@ Audit date: 2026-07-13
 - `npm.cmd install --package-lock-only --ignore-scripts`: passed; lockfile reconciled.
 - `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
 - Full Vitest, typecheck, lint, production build, and public Playwright/axe/overflow E2E all passed after the override.
+
+## Audit Update - 2026-07-13 (seed write failure boundaries)
+
+- All six legacy service-role seed scripts now throw on insert failures instead of continuing after a
+  partial write. The medical cleanup path also throws on unexpected delete failures.
+- `node --check` passed for every `scripts/seed*.mjs` file.
+- `npm.cmd exec vitest run tests/seed-failure-safety.test.ts tests/seed-scope-safety.test.ts tests/seed-credentials-safety.test.ts tests/seed-tls-safety-contract.test.ts`:
+  4 files, 5 tests passed.
+- Full Vitest: 344 files, 2,725 tests passed. Typecheck, lint, build (235 pages), and public E2E (51
+  passed, 1 intentional authenticated skip) passed. npm audit remains at 0 vulnerabilities.
+- Live schema audit passed all 11 required checks. Auth Admin still returns HTTP 500, latest error ID
+  `019f5ddc-1628-7f7d-8012-88d97b82321b`.
 
 ## Browser Coverage
 
