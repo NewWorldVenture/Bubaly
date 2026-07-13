@@ -1,4 +1,4 @@
--- FamilyOS :: 0167 — Child independence progression (Hearth gap #19)
+-- FamilyOS :: 0175 — Child independence progression (renumbered from 0167)
 --
 -- "AI increases responsibilities as children mature": an age-banded milestone
 -- ladder across six life domains (chores, money, safety, self-care, school,

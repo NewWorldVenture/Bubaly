@@ -425,11 +425,11 @@
 > - **Workload Balance (mental load, Hearth #3/#4)** `2d28cd9`: `/dashboard/workload`, pure
 >   `lib/workload/balance.ts` (9 tests — est_minutes-weighted chores + todos + organized events
 >   as invisible labor, fairness index, role-safe rebalance suggestions), one-tap "Move it"
->   reassignment (audited), `0166_workload_snapshots` weekly trend history (PG16 ×2),
+>   reassignment (audited), `0174_workload_snapshots` weekly trend history (PG16 ×2),
 >   `seed_workload.sql` (500), linked from Chores header.
 > - **Child Independence ladder (Hearth #19)** `c758d69`: `/dashboard/independence`, 90 curated
 >   age-banded milestones (6 domains × 5 bands) in pure `lib/independence/progression.ts`
->   (6 tests), `0167_independence_milestones` (PG16 ×2), start/achieve/skip actions, progress-ring
+>   (6 tests), `0175_independence_milestones` (PG16 ×2), start/achieve/skip actions, progress-ring
 >   level card + suggestions + badge wall, `seed_independence.sql` (500), linked from Behavior.
 > - **Calendar busy-week heat map (TimeTree #16)** `2df8c06`: pure `lib/calendar/heatmap.ts`
 >   (4 tests), collapsible `BusynessHeatmap` strip in Calendar (self-fetches 8 weeks of history,

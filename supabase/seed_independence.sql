@@ -6,7 +6,7 @@
 -- dates, in_progress, suggested, skipped). Unique (family,member,domain,title)
 -- is satisfied by suffixing generated titles.
 -- Idempotent: clears its own '[seed:indep]' rows first. Resolves family by email.
--- Where: Supabase → SQL Editor → paste → Run.  (Needs migration 0167 applied.)
+-- Where: Supabase → SQL Editor → paste → Run.  (Needs migration 0175 applied.)
 -- ============================================================================
 do $$
 declare
@@ -29,7 +29,7 @@ declare
   st text; di int; bi int;
 begin
   if to_regclass('public.independence_milestones') is null then
-    raise notice 'independence_milestones not present — apply migration 0167 first. Skipping.';
+    raise notice 'independence_milestones not present — apply migration 0175 first. Skipping.';
     return;
   end if;
 

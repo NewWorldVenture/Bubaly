@@ -38,7 +38,7 @@ export async function moveAssignmentAction(assignmentId: string, toMemberId: str
 /**
  * Persist this week's computed loads as snapshots (upsert on member+week) so
  * the analytics trend survives source-row churn. Called from the module after
- * it computes the live report. Degrades safely before migration 0166.
+ * it computes the live report. Degrades safely before migration 0174.
  */
 export async function saveWorkloadSnapshotAction(rows: {
   memberId: string; weekStart: string; choreMinutes: number; choreCount: number;

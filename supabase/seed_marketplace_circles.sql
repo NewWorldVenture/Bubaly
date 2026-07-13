@@ -44,7 +44,7 @@ declare
   price      int;
 begin
   if to_regclass('public.marketplace_circles') is null then
-    raise notice 'marketplace_circles not present — apply migration 0173 first. Skipping.';
+    raise notice 'marketplace_circles not present — apply migration 0176 first. Skipping.';
     return;
   end if;
 

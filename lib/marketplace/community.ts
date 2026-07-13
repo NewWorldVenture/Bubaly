@@ -2,7 +2,7 @@
 //
 // Backlog #21 v1: families form opt-in CIRCLES via an invite code and share
 // individual listings into them; circle members see exactly what was shared,
-// nothing more (see migration 0173 for the RLS model). This module is the
+// nothing more (see migration 0176 for the RLS model). This module is the
 // DOM/DB-free logic: join-code hygiene, feed assembly + attribution, what a
 // family is allowed to share, and roster/feed stats for the page header.
 

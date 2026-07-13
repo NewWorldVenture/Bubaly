@@ -2026,7 +2026,7 @@ export interface Database {
         Partial<{ requested_by: string | null; task_kind: string; callee_name: string; callee_phone: string | null; callee_category: string; goal: string; details: Json; brief: Json; status: string; priority: string; scheduled_for: string | null; outcome: string | null; transcript_summary: string | null; duration_seconds: number | null; attempts: number; provider_ref: string | null; completed_at: string | null }>
       >;
 
-      // ---- Workload balancing (migration 0166) ----
+      // ---- Workload balancing (migration 0174) ----
       workload_snapshots: T<
         { id: string; family_id: string; member_id: string; week_start: string; chore_minutes: number; chore_count: number; task_count: number; event_count: number; invisible_count: number; load_score: number; share_pct: number; note: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; week_start: string; chore_minutes?: number; chore_count?: number; task_count?: number; event_count?: number; invisible_count?: number; load_score?: number; share_pct?: number; note?: string | null },
@@ -2054,7 +2054,7 @@ export interface Database {
         Partial<{ kind: string; occurred_on: string; title: string; note: string | null; amount: number | null; meta: Json }>
       >;
 
-      // ---- Community Marketplace circles (migration 0173) ----
+      // ---- Community Marketplace circles (migration 0176) ----
       marketplace_circles: T<
         { id: string; name: string; emoji: string; join_code: string; created_by_family: string; created_by: string | null } & Stamps,
         { id?: string; name: string; emoji?: string; join_code: string; created_by_family: string; created_by?: string | null },
@@ -2085,7 +2085,7 @@ export interface Database {
         Partial<{ kind: string; title: string; detail: string; severity: string; week_start: string | null; amount: number | null; status: string; dedupe_key: string; meta: Json }>
       >;
 
-      // ---- Child independence progression (migration 0167) ----
+      // ---- Child independence progression (migration 0175) ----
       independence_milestones: T<
         { id: string; family_id: string; member_id: string; domain: string; title: string; description: string | null; age_band: string; status: string; points: number; evidence: string | null; achieved_at: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; domain: string; title: string; description?: string | null; age_band: string; status?: string; points?: number; evidence?: string | null; achieved_at?: string | null; created_by?: string | null },

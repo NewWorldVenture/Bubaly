@@ -1,4 +1,4 @@
--- FamilyOS :: 0173 — Community Marketplace v1: Circles (backlog #21)
+-- FamilyOS :: 0176 — Community Marketplace v1: Circles (renumbered from 0173)
 --
 -- Cross-family marketplace, done conservatively. Families form opt-in CIRCLES
 -- (neighbors, the school class, the team) via an invite code, then explicitly

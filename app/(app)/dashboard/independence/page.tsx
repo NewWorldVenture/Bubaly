@@ -17,7 +17,7 @@ export default async function IndependencePage() {
     .eq('family_id', ctx.active.familyId).eq('is_active', true)
     .in('role', ['child', 'teen']);
 
-  // Degrades safely before migration 0167 is applied.
+  // Degrades safely before migration 0175 is applied.
   let rows: Tables<'independence_milestones'>[] = [];
   try {
     const { data } = await supabase.from('independence_milestones').select('*')

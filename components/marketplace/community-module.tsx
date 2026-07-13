@@ -74,7 +74,7 @@ export function CommunityModule({
 
       {!migrated && (
         <p className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-500/[0.06] p-4 text-xs text-amber-300">
-          Circles aren&apos;t enabled on this database yet — apply migration <code>0173_marketplace_circles.sql</code> and refresh.
+          Circles aren&apos;t enabled on this database yet — apply migration <code>0176_marketplace_circles.sql</code> and refresh.
         </p>
       )}
 

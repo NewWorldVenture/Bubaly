@@ -5,7 +5,7 @@
 -- (one member consistently heavier, slowly rebalancing toward fair).
 -- Idempotent: upserts on (family_id, member_id, week_start) with note tag
 -- '[seed:workload]' and clears its own rows first. Resolves family by email.
--- Where: Supabase → SQL Editor → paste → Run.  (Needs migration 0166 applied.)
+-- Where: Supabase → SQL Editor → paste → Run.  (Needs migration 0174 applied.)
 -- ============================================================================
 do $$
 declare
@@ -23,7 +23,7 @@ declare
   mins      int;
 begin
   if to_regclass('public.workload_snapshots') is null then
-    raise notice 'workload_snapshots not present — apply migration 0166 first. Skipping.';
+    raise notice 'workload_snapshots not present — apply migration 0174 first. Skipping.';
     return;
   end if;
 

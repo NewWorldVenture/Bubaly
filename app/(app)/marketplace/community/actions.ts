@@ -2,7 +2,7 @@
 
 // Community Marketplace circles — server actions (backlog #21 v1). Lifecycle
 // (create/join/leave) goes through the ownership-checked SECURITY DEFINER RPCs
-// from migration 0173; share/unshare ride plain RLS (a family may only share
+// from migration 0176; share/unshare ride plain RLS (a family may only share
 // its OWN listings into circles it belongs to). All family-scoped via ctx.
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';

@@ -4825,7 +4825,7 @@ end $$;
 -- (one member consistently heavier, slowly rebalancing toward fair).
 -- Idempotent: upserts on (family_id, member_id, week_start) with note tag
 -- '[seed:workload]' and clears its own rows first. Resolves family by email.
--- Where: Supabase → SQL Editor → paste → Run.  (Needs migration 0166 applied.)
+-- Where: Supabase → SQL Editor → paste → Run.  (Needs migration 0174 applied.)
 -- ============================================================================
 do $$
 declare
@@ -4843,7 +4843,7 @@ declare
   mins      int;
 begin
   if to_regclass('public.workload_snapshots') is null then
-    raise notice 'workload_snapshots not present — apply migration 0166 first. Skipping.';
+    raise notice 'workload_snapshots not present — apply migration 0174 first. Skipping.';
     return;
   end if;
 
@@ -4917,7 +4917,7 @@ end $$;
 -- dates, in_progress, suggested, skipped). Unique (family,member,domain,title)
 -- is satisfied by suffixing generated titles.
 -- Idempotent: clears its own '[seed:indep]' rows first. Resolves family by email.
--- Where: Supabase → SQL Editor → paste → Run.  (Needs migration 0167 applied.)
+-- Where: Supabase → SQL Editor → paste → Run.  (Needs migration 0175 applied.)
 -- ============================================================================
 do $$
 declare
@@ -4940,7 +4940,7 @@ declare
   st text; di int; bi int;
 begin
   if to_regclass('public.independence_milestones') is null then
-    raise notice 'independence_milestones not present — apply migration 0167 first. Skipping.';
+    raise notice 'independence_milestones not present — apply migration 0175 first. Skipping.';
     return;
   end if;
 
@@ -5725,7 +5725,7 @@ declare
   price      int;
 begin
   if to_regclass('public.marketplace_circles') is null then
-    raise notice 'marketplace_circles not present — apply migration 0173 first. Skipping.';
+    raise notice 'marketplace_circles not present — apply migration 0176 first. Skipping.';
     return;
   end if;
 

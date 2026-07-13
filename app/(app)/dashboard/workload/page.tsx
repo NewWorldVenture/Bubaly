@@ -26,7 +26,7 @@ export default async function WorkloadPage() {
       .eq('family_id', familyId).gte('starts_at', weekAgo).limit(1000),
   ]);
 
-  // Snapshot history for trends — degrades safely before migration 0166.
+  // Snapshot history for trends — degrades safely before migration 0174.
   let snapshots: Tables<'workload_snapshots'>[] = [];
   try {
     const { data } = await supabase.from('workload_snapshots').select('*')
