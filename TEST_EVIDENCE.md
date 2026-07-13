@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 323 files, 2,632 tests |
+| `npm.cmd test` | PASS: 324 files, 2,633 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -134,6 +134,13 @@ Audit date: 2026-07-13
 - Every `app/api` route that accepts JSON now uses the shared streaming bounded reader; the contract
   sweep found no direct `req.json()` or `request.json()` calls. Provider-backed bodies are capped at
   256 KiB, small control bodies at 16 KiB, and flyer uploads at 8 MiB.
+
+## Audit Update - 2026-07-13 (Weekend Planner feed SSRF boundary)
+
+- `npm.cmd exec vitest run tests/weekend-feed-security.test.ts tests/public-calendar-fetch.test.ts tests/provider-request-body-boundaries.test.ts`: 3 files, 6 tests passed.
+- `npm.cmd exec vitest run`: 324 files, 2,633 tests passed.
+- Family-curated RSS/ICS feeds now use `fetchPublicCalendarText`, which rejects private or metadata
+  targets, validates redirects, applies a 15-second timeout, and caps response bodies at 1 MiB.
 
 ## Audit Update - 2026-07-13 (model/provider request budgets)
 

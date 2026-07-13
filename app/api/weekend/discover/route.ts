@@ -5,6 +5,7 @@ import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { discoveryWindow, normalizeTicketmasterResponse, type NormalizedEvent } from '@/lib/weekend/normalize';
 import { normalizeSeatGeekResponse, parseICS, parseRSS, withinWindow, dedupeEvents } from '@/lib/weekend/sources';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
 import { isValidZip, RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS } from '@/lib/weekend/meta';
 
 export const runtime = 'nodejs';
@@ -74,10 +75,10 @@ export async function POST(req: NextRequest) {
     await Promise.allSettled(feeds.map(async (feed) => {
       let status = 'ok'; let count = 0;
       try {
-        const res = await fetchWithTimeout(feed.url);
-        if (!res.ok) { status = `HTTP ${res.status}`; }
+        const fetched = await fetchPublicCalendarText(feed.url);
+        if (!fetched.ok) { status = `${fetched.status}: ${fetched.error}`; }
         else {
-          const text = await res.text();
+          const text = fetched.text;
           const parsed = feed.kind === 'rss' ? parseRSS(text, `feed:${feed.label}`) : parseICS(text, `feed:${feed.label}`);
           const windowed = withinWindow(parsed, windowDays);
           count = windowed.length;

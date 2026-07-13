@@ -2780,3 +2780,23 @@ roadmap entries and user worktree changes are preserved.
 - Tests performed: Focused request-boundary contracts, full suite, typecheck, lint, build, and public E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0216 - Weekend Planner feed fetch bypassed SSRF and response bounds
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: SSRF / server-side network access / response memory bounds
+- Feature: Weekend Planner family RSS and ICS feeds
+- File or files: `app/api/weekend/discover/route.ts`, `lib/server/public-calendar-fetch.ts`,
+  `tests/weekend-feed-security.test.ts`, `tests/public-calendar-fetch.test.ts`
+- Description: Family-curated feed URLs were fetched directly with automatic redirects and
+  `response.text()`, bypassing the existing public-host validation and response-size limit.
+- User impact: A family member who could save a feed URL could cause server-side requests to private
+  network targets or make the route buffer an unexpectedly large feed.
+- Root cause: Weekend discovery predated the shared public calendar fetch boundary and duplicated a
+  simpler timeout-only fetch helper.
+- Resolution: Reused the SSRF-safe calendar fetcher for every family feed, preserving feed parsing while
+  enforcing public DNS targets, redirect validation, a 15-second timeout, and a 1 MiB response cap.
+- Tests performed: Focused SSRF/feed contracts, full suite, typecheck, lint, build, and public E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13
