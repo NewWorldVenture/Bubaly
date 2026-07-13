@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 325 files, 2,639 tests |
+| `npm.cmd test` | PASS: 326 files, 2,642 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -87,6 +87,15 @@ Audit date: 2026-07-13
 - Twilio callback requests are capped at 64 KiB; transcription requests are capped at 26 MiB while the
   existing 25 MiB audio-file limit remains enforced.
 - No direct `req.formData()` calls remain in the audited Guardian or voice-transcription routes.
+
+## Audit Update - 2026-07-13 (Social Feed unfurl SSRF and response bounds)
+
+- `npm.cmd exec vitest run tests/social-feed-fetch-security.test.ts tests/public-calendar-fetch.test.ts tests/weekend-feed-security.test.ts`:
+  3 files, 8 tests passed.
+- `npm.cmd test`: 326 files and 2,642 tests passed.
+- Social Feed URL unfurling now uses public DNS validation, manual redirect revalidation, a 600 KiB
+  streamed response cap, and bounded HTML parsing.
+- Redirects to loopback/private addresses and oversized streamed HTML are covered by regression tests.
 - Added `marketplace_close_auction()` in migration `0185` and moved the close-auctions cron to the
   service-role RPC. Listing, order, and bid settlement now commit together; failed order creation
   leaves the listing retryable.

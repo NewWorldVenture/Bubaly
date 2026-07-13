@@ -2846,3 +2846,27 @@ roadmap entries and user worktree changes are preserved.
   and static route coverage with no direct `req.formData()` calls.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0219 - Social Feed unfurl followed redirects and buffered full HTML
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: SSRF / server-side fetch / response memory bounds
+- Feature: Social Feed paste-a-link unfurling
+- Route: `/dashboard/social-feed`
+- File or files: `app/(app)/dashboard/social-feed/actions.ts`,
+  `lib/server/public-calendar-fetch.ts`, `tests/social-feed-fetch-security.test.ts`
+- Description: The server action accepted a family member's URL, validated only basic hostname syntax,
+  followed redirects automatically, and called `res.text()` before slicing the HTML.
+- User impact: A crafted public URL could redirect server-side requests toward private or metadata targets
+  and could make the action buffer an unexpectedly large response.
+- Root cause: Social Feed used a local fetch path instead of the shared DNS, redirect, timeout, and response
+  boundary used by calendar ingestion.
+- Resolution: Added a generic bounded public-text fetcher and routed Social Feed unfurling through it with
+  a 600 KiB cap, manual redirect revalidation, public DNS checks, and bounded HTML parsing.
+- Tests performed: Social Feed redirect/response-boundary contracts, full suite, typecheck, lint, build,
+  and public E2E.
+- Evidence: `tests/social-feed-fetch-security.test.ts` rejects private redirects and oversized streamed
+  HTML and statically verifies the action no longer uses automatic redirects or post-read slicing.
+- Verified by: Codex
+- Date completed: 2026-07-13

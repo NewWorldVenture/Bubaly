@@ -112,12 +112,12 @@ export async function validatePublicCalendarUrl(raw: string, lookupImpl: PublicU
   return normalized;
 }
 
-async function readBoundedText(response: Response): Promise<string | null> {
+async function readBoundedText(response: Response, maxBytes: number): Promise<string | null> {
   const declared = Number(response.headers.get('content-length') ?? '');
-  if (Number.isFinite(declared) && declared > MAX_CALENDAR_RESPONSE_BYTES) return null;
+  if (Number.isFinite(declared) && declared > maxBytes) return null;
   if (!response.body) {
     const text = await response.text();
-    return Buffer.byteLength(text, 'utf8') <= MAX_CALENDAR_RESPONSE_BYTES ? text : null;
+    return Buffer.byteLength(text, 'utf8') <= maxBytes ? text : null;
   }
 
   const reader = response.body.getReader();
@@ -127,7 +127,7 @@ async function readBoundedText(response: Response): Promise<string | null> {
     const part = await reader.read();
     if (part.done) break;
     total += part.value.byteLength;
-    if (total > MAX_CALENDAR_RESPONSE_BYTES) {
+    if (total > maxBytes) {
       await reader.cancel();
       return null;
     }
@@ -143,35 +143,60 @@ export type CalendarFetchResult =
   | { ok: true; url: string; text: string }
   | { ok: false; error: string; status: 400 | 413 | 422 };
 
+export type PublicTextFetchResult = CalendarFetchResult & { contentType?: string | null };
+
+export type PublicTextFetchOptions = {
+  maxBytes: number;
+  headers: Record<string, string>;
+  label: string;
+};
+
+/** Validate a public URL, revalidate redirects, and read a bounded text response. */
+export async function fetchPublicText(
+  raw: string,
+  options: PublicTextFetchOptions,
+  fetchImpl: typeof fetch = fetch,
+  lookupImpl: PublicUrlLookup = lookupAll,
+): Promise<PublicTextFetchResult> {
+  const label = options.label || 'Public resource';
+  let url = await validatePublicCalendarUrl(raw, lookupImpl);
+  if (!url) return { ok: false, error: `${label} URL must resolve to a public HTTP(S) host.`, status: 400 };
+  try {
+    let response: Response | null = null;
+    for (let redirect = 0; redirect <= 3; redirect += 1) {
+      response = await fetchImpl(url, {
+        redirect: 'manual',
+        headers: options.headers,
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (response.status < 300 || response.status >= 400) break;
+      const location = response.headers.get('location');
+      if (!location) return { ok: false, error: `${label} provider returned an invalid redirect.`, status: 422 };
+      const next = await validatePublicCalendarUrl(new URL(location, url).toString(), lookupImpl);
+      if (!next) return { ok: false, error: `${label} redirect points to a private or unreachable host.`, status: 400 };
+      url = next;
+      if (redirect === 3) return { ok: false, error: `Too many ${label.toLowerCase()} redirects.`, status: 422 };
+    }
+    if (!response || !response.ok) return { ok: false, error: `${label} provider could not be reached.`, status: 422 };
+    const text = await readBoundedText(response, options.maxBytes);
+    if (text === null) return { ok: false, error: `${label} response is too large.`, status: 413 };
+    return { ok: true, url, text, contentType: response.headers.get('content-type') };
+  } catch {
+    return { ok: false, error: `Could not reach the ${label.toLowerCase()} URL.`, status: 422 };
+  }
+}
+
 /** Validates a public URL, limits response memory, and returns calendar text. */
 export async function fetchPublicCalendarText(
   raw: string,
   fetchImpl: typeof fetch = fetch,
   lookupImpl: PublicUrlLookup = lookupAll,
 ): Promise<CalendarFetchResult> {
-  let url = await validatePublicCalendarUrl(raw, lookupImpl);
-  if (!url) return { ok: false, error: 'Calendar URL must resolve to a public HTTP(S) host.', status: 400 };
-  try {
-    let response: Response | null = null;
-    for (let redirect = 0; redirect <= 3; redirect += 1) {
-      response = await fetchImpl(url, {
-        redirect: 'manual',
-        headers: { 'User-Agent': 'Bubaly-Calendar-Sync/1.0', Accept: 'text/calendar, text/plain, */*' },
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (response.status < 300 || response.status >= 400) break;
-      const location = response.headers.get('location');
-      if (!location) return { ok: false, error: 'Calendar provider returned an invalid redirect.', status: 422 };
-      const next = await validatePublicCalendarUrl(new URL(location, url).toString(), lookupImpl);
-      if (!next) return { ok: false, error: 'Calendar redirect points to a private or unreachable host.', status: 400 };
-      url = next;
-      if (redirect === 3) return { ok: false, error: 'Too many calendar redirects.', status: 422 };
-    }
-    if (!response || !response.ok) return { ok: false, error: 'Calendar provider could not be reached.', status: 422 };
-    const text = await readBoundedText(response);
-    if (text === null) return { ok: false, error: 'Calendar response is too large.', status: 413 };
-    return { ok: true, url, text };
-  } catch {
-    return { ok: false, error: 'Could not reach the calendar URL.', status: 422 };
-  }
+  const result = await fetchPublicText(raw, {
+    maxBytes: MAX_CALENDAR_RESPONSE_BYTES,
+    headers: { 'User-Agent': 'Bubaly-Calendar-Sync/1.0', Accept: 'text/calendar, text/plain, */*' },
+    label: 'Calendar',
+  }, fetchImpl, lookupImpl);
+  if (!result.ok) return result;
+  return { ok: true, url: result.url, text: result.text };
 }

@@ -9,6 +9,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isPlatform, platformLabel, type Platform } from '@/lib/social/feed';
 import { buildItemFromHtml, isSafePublicUrl } from '@/lib/social/unfurl';
+import { fetchPublicText } from '@/lib/server/public-calendar-fetch';
 
 type Result = { ok: boolean; error?: string };
 type Category = 'family' | 'friends' | 'groups' | 'other';
@@ -98,14 +99,27 @@ export async function addByUrlAction(input: { url: string; category?: string; so
 
   let html: string;
   try {
-    const res = await fetch(url, {
+    const boundedFetch = async (target: string, _init: RequestInit): Promise<Response> => {
+      const fetched = await fetchPublicText(target, {
+        maxBytes: 600_000,
+        label: 'Web page',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; Bubaly-SocialFeed/1.0; +https://www.bubaly.com)',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+      });
+      if (!fetched.ok) return new Response(null, { status: fetched.status });
+      return new Response(fetched.text, {
+        status: 200,
+        headers: fetched.contentType ? { 'content-type': fetched.contentType } : undefined,
+      });
+    };
+    const res = await boundedFetch(url, {
       headers: {
         // A real UA + HTML Accept so sites return their OpenGraph <head>.
         'User-Agent': 'Mozilla/5.0 (compatible; Bubaly-SocialFeed/1.0; +https://www.bubaly.com)',
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(12_000),
     });
     if (!res.ok) return { ok: false, error: `Couldn’t fetch that link (HTTP ${res.status}).` };
     const type = res.headers.get('content-type') ?? '';
@@ -113,7 +127,7 @@ export async function addByUrlAction(input: { url: string; category?: string; so
       return { ok: false, error: 'That link isn’t a web page we can preview.' };
     }
     // Cap the body we parse — the <head> is all we need.
-    html = (await res.text()).slice(0, 600_000);
+    html = await res.text();
   } catch {
     return { ok: false, error: 'Couldn’t reach that link. Check it and try again.' };
   }
