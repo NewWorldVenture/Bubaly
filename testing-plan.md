@@ -1,24 +1,39 @@
 # Testing Plan
 
 ## Current automated coverage
-- **Vitest**: 275 files / 2400+ tests over pure engines (wallet ledger/auth decisions, sync
-  adapters/conflict/crypto/ICS, calendar recurrence/heatmap, workload, independence, calm,
-  reasoning, marketplace, onboarding completeness, offline cache, a11y helpers, …).
-  Run: `npx vitest run`.
-- **Type/lint/build**: `npx tsc --noEmit` · `npx eslint .` · `npx next build` — all enforced
-  before every push this session.
-- **Database**: throwaway PG16 cluster validation for every migration (idempotent ×2) and seed
-  (row counts + spreads). RLS behavior smoke-tested with `request.jwt.claim.sub` switching.
 
-## Manual/scripted checks in the repo
-- Route inventory + dead-link scan (172 internal hrefs) — scripted, re-runnable.
-- API auth audit (95 routes) — scripted classifier + manual review of flagged routes.
-- 136-page UX signal scan + manual bottom-cohort review (todo.md matrix).
+- **Vitest:** 292 files / 2,530 tests covering pure engines, auth decisions,
+  sync/conflict/crypto, calendar logic, workload, independence, reasoning,
+  marketplace, onboarding, offline behavior, and contract checks. Run with
+  `npm test`.
+- **Browser E2E:** 52 Playwright tests. The always-on suite covers 12 public
+  routes, four responsive widths, anonymous route protection, and serious or
+  critical WCAG findings in dark and light themes. CI also enables the isolated
+  authenticated journey described below. Run with `npm run test:e2e`.
+- **Authenticated first-value journey:** CI boots local Supabase, creates a
+  disposable confirmed user, signs in through the real UI, completes onboarding,
+  saves a task through Quick Capture and RLS, verifies the row with the service
+  client, and deletes the temporary family and auth user.
+- **Type/lint/build:** `npm run typecheck`, `npm run lint`, and `npm run build`.
+- **Supabase:** `npm run db:audit:schema` checks required production tables;
+  `npm run db:audit:auth` checks public Auth health and the Admin Users endpoint.
+  CI starts a clean local Supabase stack, applying migrations and seed data before
+  the authenticated browser test.
 
-## Known gaps (next investments, in order)
-1. **E2E (Playwright)**: auth → onboarding → first-value journey on mobile/desktop viewports.
-   Chromium is preinstalled in CI sandboxes; needs a seeded Supabase login (open item #24 in the
-   opportunities table: "CI Supabase login for authed E2E").
-2. **RLS test matrix as CI suite**: promote the PG16 role-switch smoke tests into a committed
-   pgTAP/vitest-pg suite covering owner/member/non-member/anonymous per table family.
-3. **Visual regression**: core pages × light/dark × mobile/desktop (tooling not yet chosen).
+## Guardrails
+
+- Authenticated E2E is disabled unless `E2E_AUTHENTICATED=1` and all disposable
+  account credentials are present.
+- The test refuses a non-loopback Supabase host unless
+  `E2E_ALLOW_REMOTE_SUPABASE=1` is explicitly supplied for a controlled run.
+- The Admin Auth audit never prints credentials or user records.
+- Axe automation catches only machine-detectable failures; manual keyboard,
+  screen-reader, zoom, and cognitive-accessibility review remains required.
+
+## Next investments
+
+1. Add owner/member/non-member/anonymous RLS behavior tests for every table family.
+2. Add deterministic visual regression for core public and authenticated pages in
+   light/dark and mobile/desktop modes.
+3. Add authenticated multi-member invitation, child login, billing, and account
+   recovery journeys using isolated local accounts.

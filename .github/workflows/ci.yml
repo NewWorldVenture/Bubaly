@@ -46,8 +46,9 @@ jobs:
           NEXT_PUBLIC_APP_URL: https://example.com
 
   e2e:
-    name: E2E smoke (public routes)
+    name: E2E (public, accessibility, and authenticated journey)
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
@@ -59,14 +60,42 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+
+      - name: Start isolated Supabase
+        run: supabase start
+
+      - name: Export local Supabase credentials
+        shell: bash
+        run: |
+          set -a
+          source <(supabase status -o env \
+            --override-name api.url=NEXT_PUBLIC_SUPABASE_URL \
+            --override-name auth.anon_key=NEXT_PUBLIC_SUPABASE_ANON_KEY \
+            --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY)
+          set +a
+          echo "::add-mask::$SUPABASE_SERVICE_ROLE_KEY"
+          echo "NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_APP_URL=http://localhost:3107" >> "$GITHUB_ENV"
+
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
+
+      - name: Verify isolated Auth APIs
+        run: npm run db:audit:auth
 
       - name: Run E2E smoke tests
         run: npm run test:e2e
         env:
-          # Playwright's webServer builds + starts the app with these (it also
-          # falls back to the same dummies in playwright.config.ts).
-          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key
-          SUPABASE_SERVICE_ROLE_KEY: dummy-service-role-key
+          E2E_AUTHENTICATED: '1'
+          E2E_AUTH_EMAIL: familyos-e2e-${{ github.run_id }}-${{ github.run_attempt }}@example.test
+          E2E_AUTH_PASSWORD: Bubaly-E2E-2026!
+
+      - name: Stop isolated Supabase
+        if: always()
+        run: supabase stop --no-backup
