@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 317 files, 2,604 tests |
+| `npm.cmd test` | PASS: 317 files, 2,605 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -81,6 +81,17 @@ Audit date: 2026-07-13
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
 - Generic `/api/sync/run` requests now use a streaming 4 KiB body bound, JSON validation, and bounded
   provider strings before adapter lookup or service-role work. No migration is required.
+
+## Audit Update - 2026-07-13 (production-readiness seed scope)
+
+- `npm.cmd exec vitest run tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts tests/seed-credentials-safety.test.ts`: 3 files, 6 tests passed.
+- The 600-record idempotent seed now fails closed when `newworldventurellc@gmail.com` cannot resolve
+  to a family; it cannot silently select the first available household.
+- `npm.cmd exec vitest run`: 317 files, 2,605 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 234 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
 - Public service-role ingestion contract now covers contact, forms, exit-intent, landing-page,
   visitor-intelligence, and A/B routes using the shared durable request guard.
 

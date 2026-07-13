@@ -180,3 +180,7 @@ the auction code before enabling the feature in production.
 Generic provider sync now reads a bounded 4 KiB request body and validates the provider field before
 adapter lookup or service-role database work. This is an application request-boundary repair and does
 not require a database migration.
+
+The 600-record production-readiness seed now requires the configured anchored account to resolve to a
+family. It no longer falls back to the first family in the database, preventing accidental fixture writes
+to an unrelated household. The seed remains idempotent and does not write Auth users.

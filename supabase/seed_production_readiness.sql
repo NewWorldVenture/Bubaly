@@ -55,10 +55,7 @@ begin
   limit 1;
 
   if v_family is null then
-    select id into v_family from public.families order by created_at limit 1;
-  end if;
-  if v_family is null then
-    raise exception 'No family exists for production-readiness seed.';
+    raise exception 'Production-readiness seed requires the anchored account %.', v_email;
   end if;
 
   select array_agg(id order by created_at) into v_members

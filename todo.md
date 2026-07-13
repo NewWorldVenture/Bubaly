@@ -2633,3 +2633,23 @@ roadmap entries and user worktree changes are preserved.
   lint, full suite, build, and public E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0210 - Production-readiness seed could target an arbitrary family
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Production data safety / seed scope
+- Feature: Production-readiness fixture pack
+- File or files: `supabase/seed_production_readiness.sql`,
+  `tests/production-readiness-seed.test.ts`
+- Description: When the anchored account was absent, the 600-record seed selected the first family
+  by creation time and wrote fixtures there.
+- User impact: Running the seed against a valid database without the expected account could contaminate
+  an unrelated household with realistic-looking independence records.
+- Root cause: The fallback favored convenience over an explicit target boundary.
+- Resolution: The seed now raises an exception unless `newworldventurellc@gmail.com` resolves to a family.
+  The deterministic 600-row upsert and non-destructive behavior remain intact.
+- Tests performed: Production-readiness seed, seed safety, credential safety, full suite, typecheck,
+  lint, build, and public E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

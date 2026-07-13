@@ -20,4 +20,9 @@ describe('production-readiness seed pack', () => {
     expect(seed).not.toMatch(/\bdelete\s+from\b/i);
     expect(seed).not.toMatch(/\b(?:insert|update|delete)\s+into?\s+auth\.users\b/i);
   });
+
+  it('fails closed instead of falling back to an arbitrary family', () => {
+    expect(seed).toContain('requires the anchored account');
+    expect(seed).not.toContain('select id into v_family from public.families order by created_at');
+  });
 });
