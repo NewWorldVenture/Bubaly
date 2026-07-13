@@ -3,12 +3,12 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { sendReactEmail } from '@/lib/email';
 import { WeeklyDigestEmail } from '@/lib/emails/weekly-digest';
 import * as React from 'react';
+import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
 // Runs every Monday at 08:00 UTC via Vercel Cron.
 // Sends each family a summary of the week ahead: events, due chores, meal count.
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!hasCronAuthorization(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

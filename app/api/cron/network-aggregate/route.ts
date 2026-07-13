@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runNetworkAggregation } from '@/lib/network/aggregate-server';
+import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -9,8 +10,7 @@ export const maxDuration = 60;
 // contribution and republishes the k-anonymized, DP-noised cross-family aggregates.
 // Nothing is published until >= 100 families contribute (launch gate). Scheduled daily.
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!hasCronAuthorization(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {

@@ -5,6 +5,9 @@ import { getStripe, STRIPE_PLANS } from '@/lib/stripe';
 import { isAdmin } from '@/lib/constants/roles';
 import { isStripePlan, slugToStripePlan } from '@/lib/billing/plans';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+
+const MAX_BILLING_REQUEST_BYTES = 4_096;
 
 export const runtime = 'nodejs';
 
@@ -25,7 +28,14 @@ export async function POST(req: NextRequest) {
     }
     const familyId = ctx.active.familyId;
 
-    const { plan } = (await req.json()) as { plan?: string };
+    const body = await readBoundedRequestJson(req, MAX_BILLING_REQUEST_BYTES);
+    if (!body.ok) {
+      return NextResponse.json(
+        { error: body.reason === 'too_large' ? 'Request body too large.' : 'Invalid request body.' },
+        { status: body.reason === 'too_large' ? 413 : 400 },
+      );
+    }
+    const { plan } = (body.value && typeof body.value === 'object' ? body.value : {}) as { plan?: string };
     if (!plan || !isStripePlan(plan)) {
       return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
     }

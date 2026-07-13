@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,607 unit tests, builds all 234 Next.js build
+tree compiles, passes lint and type checking, passes 2,614 unit tests, builds all 234 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -18,7 +18,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 - 100 API route handlers.
 - 193 migrations at audit start; additive repair migrations `0178` through `0182` added.
 - 315 SQL files under `supabase`.
-- 318 unit-test files and 2,607 passing tests.
+- 320 unit-test files and 2,614 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -42,6 +42,10 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   instead of selecting an arbitrary family for the 600-record fixture pack.
 - Added a master-scope preflight to `supabase/SEED_ALL.sql`, preventing any of its service-role seed
   sections from running when the anchored account is absent.
+- Added a shared bounded JSON reader to financial, public service-role ingestion, and internal email
+  routes; oversized request bodies now fail before parsing or database/provider work.
+- Replaced fail-open scheduled-callback comparisons with a shared fail-closed secret guard across all
+  cron routes and concierge placement; missing secrets can no longer authorize `Bearer undefined`.
 - Hardened the public unsubscribe endpoint with shared request limits, bounded token input, escaped
   HTML output, and production fail-closed secret handling.
 - Preserved active family membership checks and tightened listing-share deletion to the owning family
@@ -71,6 +75,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   is present but awaits migration application and RLS allow/deny testing.
 - `npm audit --omit=dev --audit-level=high` reports two moderate PostCSS advisories through Next.js,
   with no available fix in the installed dependency graph.
+- Scheduled jobs now fail closed when `CRON_SECRET` is missing; internal welcome email delivery also
+  requires a configured `INTERNAL_SECRET`.
 
 ## Validation Results
 
@@ -78,7 +84,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,607 tests / 318 files | `npm.cmd test` |
+| Unit tests | PASS, 2,614 tests / 320 files | `npm.cmd test` |
 | Production build | PASS, 234 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |

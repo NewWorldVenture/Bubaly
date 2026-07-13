@@ -4,6 +4,9 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe';
 import { isAdmin } from '@/lib/constants/roles';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+
+const MAX_BILLING_REQUEST_BYTES = 4_096;
 
 export const runtime = 'nodejs';
 
@@ -20,7 +23,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Only a parent can change the plan.' }, { status: 403 });
     }
     const familyId = ctx.active.familyId;
-    const { resume } = (await req.json().catch(() => ({}))) as { resume?: boolean };
+    const body = await readBoundedRequestJson(req, MAX_BILLING_REQUEST_BYTES);
+    if (!body.ok) {
+      return NextResponse.json(
+        { error: body.reason === 'too_large' ? 'Request body too large.' : 'Invalid request body.' },
+        { status: body.reason === 'too_large' ? 413 : 400 },
+      );
+    }
+    const { resume } = (body.value && typeof body.value === 'object' ? body.value : {}) as { resume?: boolean };
 
     const supabase = await createServer();
     const { data: sub } = await supabase

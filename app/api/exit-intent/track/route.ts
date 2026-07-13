@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
@@ -17,8 +18,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { id?: string; kind?: string };
-  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }); }
+  const parsedBody = await readBoundedRequestJson(req, 2_048);
+  if (!parsedBody.ok) {
+    return NextResponse.json(
+      { error: parsedBody.reason === 'too_large' ? 'Request body too large.' : 'Invalid body' },
+      { status: parsedBody.reason === 'too_large' ? 413 : 400 },
+    );
+  }
+  const body = (parsedBody.value && typeof parsedBody.value === 'object' ? parsedBody.value : {}) as {
+    id?: string; kind?: string;
+  };
 
   const id = (body.id ?? '').trim();
   const metric = body.kind === 'conversion' ? 'conversion' : 'impression';

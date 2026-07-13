@@ -6,8 +6,10 @@ import { sendEmail } from '@/lib/server/email';
 import { createServiceClient } from '@/lib/supabase/server';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
+const MAX_CONTACT_REQUEST_BYTES = 16_384;
 
 export async function POST(req: Request) {
   const ip = clientIp(req.headers);
@@ -20,14 +22,15 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  const body = await readBoundedRequestJson(req, MAX_CONTACT_REQUEST_BYTES);
+  if (!body.ok) {
+    return NextResponse.json(
+      { error: body.reason === 'too_large' ? 'Request body too large.' : 'Invalid request body' },
+      { status: body.reason === 'too_large' ? 413 : 400 },
+    );
   }
 
-  const parsed = contactSchema.safeParse(body);
+  const parsed = contactSchema.safeParse(body.value);
   if (!parsed.success) {
     return NextResponse.json({ error: 'Validation failed', fields: fieldErrors(parsed.error) }, { status: 422 });
   }

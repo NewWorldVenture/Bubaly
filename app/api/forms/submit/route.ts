@@ -5,8 +5,10 @@ import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { parseFormFields, validateSubmission, submissionEmail, submissionName } from '@/lib/marketing/forms';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
+const MAX_FORM_REQUEST_BYTES = 65_536;
 
 /**
  * Public marketing-form submission endpoint. Marketing tables have no client RLS
@@ -25,8 +27,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { formId?: unknown; values?: unknown };
-  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid request body' }, { status: 400 }); }
+  const parsedBody = await readBoundedRequestJson(req, MAX_FORM_REQUEST_BYTES);
+  if (!parsedBody.ok) {
+    return NextResponse.json(
+      { error: parsedBody.reason === 'too_large' ? 'Request body too large.' : 'Invalid request body' },
+      { status: parsedBody.reason === 'too_large' ? 413 : 400 },
+    );
+  }
+  const body = parsedBody.value && typeof parsedBody.value === 'object'
+    ? parsedBody.value as { formId?: unknown; values?: unknown }
+    : {};
 
   const formId = typeof body.formId === 'string' ? body.formId.trim() : '';
   const values = (body.values && typeof body.values === 'object') ? body.values as Record<string, unknown> : {};

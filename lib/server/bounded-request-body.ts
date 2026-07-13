@@ -3,6 +3,10 @@ export type BoundedBodyResult =
   | { ok: true; text: string }
   | { ok: false; reason: 'too_large' | 'unreadable' };
 
+export type BoundedJsonResult =
+  | { ok: true; value: unknown }
+  | { ok: false; reason: 'too_large' | 'unreadable' | 'invalid_json' };
+
 export async function readBoundedRequestText(req: Request, maxBytes: number): Promise<BoundedBodyResult> {
   const declared = Number(req.headers.get('content-length') ?? '');
   if (Number.isFinite(declared) && declared > maxBytes) {
@@ -37,4 +41,15 @@ export async function readBoundedRequestText(req: Request, maxBytes: number): Pr
     offset += chunk.byteLength;
   }
   return { ok: true, text: new TextDecoder().decode(bytes) };
+}
+
+/** Read and parse JSON without allowing the platform to buffer an unbounded body. */
+export async function readBoundedRequestJson(req: Request, maxBytes: number): Promise<BoundedJsonResult> {
+  const raw = await readBoundedRequestText(req, maxBytes);
+  if (!raw.ok) return raw;
+  try {
+    return { ok: true, value: JSON.parse(raw.text) };
+  } catch {
+    return { ok: false, reason: 'invalid_json' };
+  }
 }

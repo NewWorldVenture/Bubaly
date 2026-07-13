@@ -6,6 +6,7 @@ import { planLevel } from '@/lib/constants/plans';
 import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import type { Split } from '@/lib/wallet/ledger';
+import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -15,7 +16,7 @@ export const maxDuration = 60;
 // Allowances are a Basic+ feature, so families on the Free plan are skipped.
 // Scheduled via Vercel Cron.
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!hasCronAuthorization(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {

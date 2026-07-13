@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runAutopilotScan } from '@/lib/autopilot/scan';
+import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -9,8 +10,7 @@ export const maxDuration = 60;
 // for every family on a schedule so predictions and reversible auto-actions
 // happen WITHOUT anyone opening the app. Scheduled via Vercel Cron.
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!hasCronAuthorization(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {

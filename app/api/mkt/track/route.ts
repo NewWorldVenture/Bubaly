@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { getConsentState, canRecordAnalytics } from '@/lib/marketing/consent';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
@@ -22,6 +23,8 @@ type TrackBody = {
   gpc?: boolean;
 };
 
+const MAX_TRACK_REQUEST_BYTES = 8_192;
+
 function clean(v: unknown): string | null {
   const s = typeof v === 'string' ? v.trim() : '';
   return s ? s.slice(0, 200) : null;
@@ -39,12 +42,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: TrackBody;
-  try {
-    body = (await req.json()) as TrackBody;
-  } catch {
-    return NextResponse.json({ error: 'Bad payload' }, { status: 400 });
+  const parsedBody = await readBoundedRequestJson(req, MAX_TRACK_REQUEST_BYTES);
+  if (!parsedBody.ok) {
+    return NextResponse.json(
+      { error: parsedBody.reason === 'too_large' ? 'Request body too large.' : 'Bad payload' },
+      { status: parsedBody.reason === 'too_large' ? 413 : 400 },
+    );
   }
+  const body = (parsedBody.value && typeof parsedBody.value === 'object' ? parsedBody.value : {}) as TrackBody;
 
   const anonymousId = clean(body.anonymousId);
   if (!anonymousId) return NextResponse.json({ error: 'anonymousId required' }, { status: 400 });

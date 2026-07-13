@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { getAdapter } from '@/lib/sync/registry';
 import { runProviderSync } from '@/lib/sync/engine/generic';
 import type { Json, SyncProviderEnum } from '@/lib/database.types';
+import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -15,7 +16,7 @@ export const maxDuration = 300;
 const BATCH = 25;
 
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!hasCronAuthorization(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

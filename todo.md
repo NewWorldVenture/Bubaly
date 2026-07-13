@@ -2671,3 +2671,42 @@ roadmap entries and user worktree changes are preserved.
   build, and public E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0212 - Financial and public ingestion routes parsed unbounded JSON bodies
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Request bounds / service-role ingestion / billing
+- Feature: Billing, public forms, marketing trackers, and internal email callbacks
+- File or files: `lib/server/bounded-request-body.ts`, audited API routes,
+  `tests/request-body-boundaries.test.ts`
+- Description: Several routes called `req.json()` before validating a small enum or bounded field,
+  allowing a caller to make the runtime buffer an arbitrarily large JSON payload.
+- User impact: A public or authenticated caller could consume request memory and trigger unnecessary
+  service-role, database, email, or Stripe work with oversized input.
+- Root cause: Field-level validation did not establish a transport-level body boundary.
+- Resolution: Added a shared streaming JSON reader and explicit limits for billing, contact, forms,
+  public analytics/marketing ingestion, and internal email routes.
+- Tests performed: Request-boundary contracts, full suite, typecheck, lint, build, and public E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0213 - Scheduled callbacks authorized the literal Bearer undefined
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P0
+- Category: Scheduled job authorization / secret configuration
+- Feature: Cron jobs, concierge placement, and internal welcome email
+- File or files: `lib/server/cron-auth.ts`, all `app/api/cron/**/route.ts` files,
+  `app/api/concierge-calls/place/route.ts`, `app/api/email/welcome/route.ts`,
+  `tests/cron-auth.test.ts`
+- Description: Comparing a request header with ``Bearer ${process.env.CRON_SECRET}`` made a missing
+  secret equal the attacker-supplied string `Bearer undefined`.
+- User impact: A misconfigured deployment could expose service-role scheduled jobs and provider actions
+  without a real secret.
+- Root cause: Secret presence was not checked before string comparison, and the pattern was duplicated.
+- Resolution: Centralized fail-closed cron and internal-secret guards; every scheduled route now rejects
+  missing secrets before any service-role work.
+- Tests performed: Cron authorization contracts, full suite, typecheck, lint, build, and public E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

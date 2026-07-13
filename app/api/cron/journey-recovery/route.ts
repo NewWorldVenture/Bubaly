@@ -6,6 +6,7 @@ import {
   selectAbandonedOnboarding, selectAbandonedDemoLeads,
   type OnboardingJourney, type DemoLead,
 } from '@/lib/marketing/journey-recovery';
+import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
 export const runtime = 'nodejs';
 
@@ -19,7 +20,7 @@ export const runtime = 'nodejs';
 // before it ages out — no schema change / marker column needed. If no workflow
 // is active for a trigger, firing is a cheap no-op. Runs a few times a day.
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!hasCronAuthorization(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
+const MAX_LANDING_TRACK_REQUEST_BYTES = 4_096;
 
 /**
  * Public landing-page metric ingestion. Increments views/conversions for a
@@ -22,8 +24,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { slug?: string; kind?: string };
-  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }); }
+  const parsedBody = await readBoundedRequestJson(req, MAX_LANDING_TRACK_REQUEST_BYTES);
+  if (!parsedBody.ok) {
+    return NextResponse.json(
+      { error: parsedBody.reason === 'too_large' ? 'Request body too large.' : 'Invalid body' },
+      { status: parsedBody.reason === 'too_large' ? 413 : 400 },
+    );
+  }
+  const body = (parsedBody.value && typeof parsedBody.value === 'object' ? parsedBody.value : {}) as {
+    slug?: string; kind?: string;
+  };
 
   const slug = (body.slug ?? '').trim().toLowerCase();
   const metric = body.kind === 'conversion' ? 'conversion' : 'view';

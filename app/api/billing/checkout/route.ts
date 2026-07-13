@@ -6,6 +6,9 @@ import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { serviceFeeAddInvoiceItems } from '@/lib/stripe/service-fee';
 import { isAdmin } from '@/lib/constants/roles';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+
+const MAX_BILLING_REQUEST_BYTES = 4_096;
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,8 +23,15 @@ export async function POST(req: NextRequest) {
     const stripeSettings = await getStripeSettings();
     const stripe = stripeFromKey(effectiveSecretKey(stripeSettings));
 
-    const { plan } = await req.json() as { plan: StripePlan };
-    const priceId = STRIPE_PLANS[plan];
+    const body = await readBoundedRequestJson(req, MAX_BILLING_REQUEST_BYTES);
+    if (!body.ok) {
+      return NextResponse.json(
+        { error: body.reason === 'too_large' ? 'Request body too large.' : 'Invalid request body.' },
+        { status: body.reason === 'too_large' ? 413 : 400 },
+      );
+    }
+    const { plan } = (body.value && typeof body.value === 'object' ? body.value : {}) as { plan?: StripePlan };
+    const priceId = plan ? STRIPE_PLANS[plan] : undefined;
     if (!priceId) return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
 
     const limited = await enforceRequestRateLimit(supabase, `billing:checkout:${familyId}:${ctx.user.id}`, { limit: 10 });

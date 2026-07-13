@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { selectAbandonedSessions } from '@/lib/billing/checkout-abandonment';
+import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
 export const runtime = 'nodejs';
 
@@ -11,8 +12,7 @@ export const runtime = 'nodejs';
 // automation workflow for each (deduped by session id) and mark the row so it
 // never fires twice. Runs a few times a day so the nudge is timely.
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!hasCronAuthorization(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

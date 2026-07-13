@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cleanupExpiredDemoSessions } from '@/lib/demo/session';
+import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -8,7 +9,7 @@ export const maxDuration = 60;
 // visitors who close the tab without exiting. The timer + Exit button handle the
 // common cases; this catches the rest. Scheduled via Vercel Cron.
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!hasCronAuthorization(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {

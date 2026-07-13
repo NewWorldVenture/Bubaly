@@ -4,6 +4,7 @@ import { runTwinProjection } from '@/lib/twin/project-server';
 import { runPrepGeneration } from '@/lib/planning/prep-server';
 import { runSignalDetection } from '@/lib/intelligence/hard-signals-server';
 import { needsRefresh, summarizeSweep, type RefreshOutcome } from '@/lib/planning/refresh';
+import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -12,8 +13,7 @@ export const maxDuration = 60;
 // updated for every family WITHOUT anyone opening the app. Reuses the exact same
 // service-callable cores the on-demand buttons call. Scheduled via Vercel Cron.
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!hasCronAuthorization(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {

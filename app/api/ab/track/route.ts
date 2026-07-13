@@ -3,8 +3,10 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { hasConfiguredVariant } from '@/lib/marketing/ab';
+import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
+const MAX_AB_REQUEST_BYTES = 4_096;
 
 /**
  * Public A/B event ingestion. Records an exposure or conversion for a running
@@ -22,8 +24,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { experiment?: string; variant?: string; kind?: string; visitorId?: string };
-  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }); }
+  const parsedBody = await readBoundedRequestJson(req, MAX_AB_REQUEST_BYTES);
+  if (!parsedBody.ok) {
+    return NextResponse.json(
+      { error: parsedBody.reason === 'too_large' ? 'Request body too large.' : 'Invalid body' },
+      { status: parsedBody.reason === 'too_large' ? 413 : 400 },
+    );
+  }
+  const body = (parsedBody.value && typeof parsedBody.value === 'object' ? parsedBody.value : {}) as {
+    experiment?: string; variant?: string; kind?: string; visitorId?: string;
+  };
 
   const experiment = (body.experiment ?? '').trim();
   const variant = (body.variant ?? '').trim();

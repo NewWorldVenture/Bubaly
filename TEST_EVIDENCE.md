@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 318 files, 2,607 tests |
+| `npm.cmd test` | PASS: 320 files, 2,614 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -105,6 +105,19 @@ Audit date: 2026-07-13
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
 - `supabase/SEED_ALL.sql` now checks the anchored account before its first section, so a missing target
   aborts the full one-paste workflow before any service-role seed write.
+
+## Audit Update - 2026-07-13 (request and scheduled-callback boundaries)
+
+- `npm.cmd exec vitest run tests/cron-auth.test.ts tests/request-body-boundaries.test.ts tests/sync-request-body.test.ts`: 3 files, 10 tests passed.
+- `npm.cmd exec vitest run`: 320 files, 2,614 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 234 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- Billing, contact, marketing-form, public tracker, and internal email JSON bodies now use explicit
+  streaming byte bounds before parsing.
+- All 16 cron routes plus concierge placement use a shared fail-closed secret guard; missing
+  `CRON_SECRET` and `INTERNAL_SECRET` values cannot authorize a request.
 
 ## Audit Update - 2026-07-13 (model/provider request budgets)
 
