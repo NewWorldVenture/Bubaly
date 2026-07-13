@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 313 files, 2,583 tests |
+| `npm.cmd test` | PASS: 314 files, 2,587 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 233 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -201,3 +201,12 @@ Audit date: 2026-07-13
 - Calendar URL fetches now reject private/loopback/link-local/metadata DNS targets and unsafe redirects,
   cap response bodies at 1 MiB, and return generic provider-safe errors. Import request bodies are capped
   at 16 KiB and malformed JSON returns HTTP 400.
+
+## Audit Update - 2026-07-13 (push registration boundary)
+
+- `npm.cmd exec vitest run tests/push-request.test.ts`: 1 file, 4 tests passed.
+- Push subscription registration now enforces a 16 KiB JSON bound, strict HTTPS web endpoints, native
+  APNs/FCM token validation, platform/provider matching, bounded fields, and generic database errors.
+- Registration and removal use per-user local plus durable request budgets before Supabase writes.
+- No migration was added; the existing `push_devices` table and all current web/native payloads remain
+  supported.

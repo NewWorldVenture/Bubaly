@@ -2507,3 +2507,26 @@ roadmap entries and user worktree changes are preserved.
 - Tests performed: Focused calendar-fetch tests, full suite, typecheck, lint, build, and public E2E passed.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0206 - Push registration accepted unbounded and mismatched device data
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Authenticated device registration / request bounds / notification integrity
+- Feature: Web Push, APNs, and FCM device registration
+- File or files: `app/api/push/subscribe/route.ts`, `app/api/push/unsubscribe/route.ts`,
+  `lib/server/push-request.ts`, `tests/push-request.test.ts`
+- Database objects: `push_devices` (existing schema and RLS preserved)
+- Description: Authenticated push registration accepted arbitrary endpoint, token, cryptographic-key,
+  and user-agent strings without a request-size boundary or strict platform/provider contract. Removal
+  accepted the same unbounded key shape.
+- User impact: A compromised session could create noisy or oversized device rows and repeatedly trigger
+  registration/removal database work.
+- Root cause: The routes trusted the browser payload and relied on database errors instead of a shared
+  input contract and request budget.
+- Resolution: Added a 16 KiB body cap, strict HTTPS endpoint and native token validation, APNs/FCM/web
+  matching, bounded key/user-agent fields, generic persistence errors, and per-user local plus durable
+  rate limits before writes.
+- Tests performed: Push request contract, typecheck, lint, full suite, build, and public E2E passed.
+- Verified by: Codex
+- Date completed: 2026-07-13

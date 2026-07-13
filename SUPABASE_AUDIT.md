@@ -156,3 +156,8 @@ Calendar feed URLs are now treated as untrusted server-side fetch targets. Both 
 feed syncs validate DNS answers against public address ranges, reject credentials and unsafe hostnames,
 manually revalidate up to three redirects, and cap calendar response bodies at 1 MiB. This is an application
 fetch-boundary repair and does not require a database migration.
+
+Push device registration now validates web endpoint URLs, native provider/platform pairs, token and key
+lengths, and user-agent bounds before writing `push_devices`. Registration/removal requests also use the
+shared per-user limiter. The existing `push_devices` RLS and schema remain the authorization boundary;
+no migration is required.

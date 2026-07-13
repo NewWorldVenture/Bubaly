@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,583 unit tests, builds all 233 Next.js build
+tree compiles, passes lint and type checking, passes 2,587 unit tests, builds all 233 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -18,7 +18,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 - 100 API route handlers.
 - 193 migrations at audit start; additive repair migrations `0178` through `0182` added.
 - 315 SQL files under `supabase`.
-- 313 unit-test files and 2,583 passing tests.
+- 314 unit-test files and 2,587 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -70,7 +70,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,583 tests / 313 files | `npm.cmd test` |
+| Unit tests | PASS, 2,587 tests / 314 files | `npm.cmd test` |
 | Production build | PASS, 233 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
@@ -149,6 +149,15 @@ response-read boundary shared by legacy imports and scheduled feed syncs.
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
 - `lib/server/public-calendar-fetch.ts` now provides the shared public-host, redirect, timeout, and
   bounded-body boundary used by both calendar ingestion paths.
+
+## Audit Update - 2026-07-13 (push registration boundary)
+
+- `npm.cmd exec vitest run tests/push-request.test.ts`: 1 file, 4 tests passed.
+- Push registration and removal now cap request bodies, validate HTTPS web endpoints, validate native
+  provider/platform pairs and token characters, bound user-agent and key lengths, and apply per-user
+  local plus durable request budgets before Supabase writes.
+- Database schema is unchanged; the repair uses the existing `push_devices` contract and remains
+  compatible with web push, APNs, and FCM clients.
 ## Audit Update - 2026-07-13
 
 Legacy service-role seed scripts were hardened after the initial report: fixed family/user scopes

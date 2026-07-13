@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getUser } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { MAX_PUSH_REQUEST_BYTES, parsePushRegistration } from '@/lib/server/push-request';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,15 +11,28 @@ export async function POST(req: Request) {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await req.json().catch(() => ({}));
-  const platform = ['web', 'ios', 'android'].includes(body.platform) ? body.platform : 'web';
-  const provider = ['webpush', 'fcm', 'apns'].includes(body.provider) ? body.provider : 'webpush';
-  const endpoint = typeof body.endpoint === 'string' ? body.endpoint : null;
-  const token = typeof body.token === 'string' ? body.token : null;
-  const deviceKey = endpoint ?? token;
-  if (!deviceKey) return NextResponse.json({ error: 'Missing endpoint or token' }, { status: 400 });
+  const contentLength = Number(req.headers.get('content-length') ?? '');
+  if (Number.isFinite(contentLength) && contentLength > MAX_PUSH_REQUEST_BYTES) {
+    return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
+  }
+  const rawBody = await req.text();
+  if (new TextEncoder().encode(rawBody).byteLength > MAX_PUSH_REQUEST_BYTES) {
+    return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
+  }
+  let body: unknown;
+  try { body = JSON.parse(rawBody); } catch { return NextResponse.json({ error: 'Invalid request body' }, { status: 400 }); }
+  const parsed = parsePushRegistration(body);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const supabase = await createServer();
+  const limited = await enforceRequestRateLimit(supabase, `push-subscribe:${user.id}`, { limit: 20 });
+  if (!limited.ok) {
+    return NextResponse.json({ error: 'Too many push registration attempts' }, {
+      status: 429,
+      headers: { 'Retry-After': String(limited.retryAfter) },
+    });
+  }
+  const { platform, provider, endpoint, p256dh, auth, token, deviceKey, userAgent } = parsed.value;
   // Best-effort family association (nullable) for routing/scoping.
   const { data: member } = await supabase
     .from('family_members')
@@ -34,11 +49,11 @@ export async function POST(req: Request) {
       platform,
       provider,
       endpoint,
-      p256dh: typeof body.p256dh === 'string' ? body.p256dh : null,
-      auth: typeof body.auth === 'string' ? body.auth : null,
+      p256dh,
+      auth,
       token,
       device_key: deviceKey,
-      user_agent: typeof body.userAgent === 'string' ? body.userAgent.slice(0, 400) : null,
+      user_agent: userAgent,
       enabled: true,
       last_seen_at: new Date().toISOString(),
       created_by: user.id,
@@ -46,6 +61,6 @@ export async function POST(req: Request) {
     },
     { onConflict: 'user_id,device_key' },
   );
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: 'Could not save push subscription' }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
