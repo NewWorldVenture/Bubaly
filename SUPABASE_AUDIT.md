@@ -92,7 +92,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 - `npm.cmd run db:audit:schema` passed all 11 required live schema checks, including the
   `stripe_webhook_events` claim columns previously missing from the live response.
 - `npm.cmd run db:audit:auth` still passes public Auth health but returns HTTP 500 from the Admin users
-  endpoint (`Database error finding users`, error id `019f5dbf-8c64-7fc2-ae04-75197364e067`).
+  endpoint (`Database error finding users`, error id `019f5dd2-5416-7dd8-8e8d-003cf3accb14`).
 - The schema result confirms object availability only; migration-history verification and authenticated
   RLS allow/deny tests still require an authorized isolated environment.
 ## Audit Update - 2026-07-13

@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 342 files, 2,721 tests |
+| `npm.cmd exec vitest run` | PASS: 343 files, 2,724 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 235 generated pages |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line` | PASS: 51 of 52 tests; 1 intentional auth skip |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
@@ -53,6 +53,19 @@ Audit date: 2026-07-13
 - `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional authenticated test skipped.
 - This validation ran after rebasing onto the current `origin/main`, which includes marketplace trust/reporting,
   Price Coach, migration `0193`, and their seed/test coverage.
+
+## Audit Update - 2026-07-13 (local limiter resource boundary)
+
+- `npm.cmd exec vitest run`: 343 files and 2,724 tests passed.
+- `npm.cmd exec vitest run tests/rate-limit.test.ts tests/rate-limit-db.test.ts tests/ai-rate-limit.test.ts tests/public-side-effect-rate-limit.test.ts`: 4 files, 12 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 235 pages generated.
+- `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional authenticated test skipped.
+- Local limiter buckets now have bounded capacity, expired-bucket pruning, normalized parameters, and validated IP-derived keys.
+- `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
+- `npm.cmd run db:audit:auth`: public Auth health passed; Admin users still returned HTTP 500
+  (`019f5dd2-5416-7dd8-8e8d-003cf3accb14`).
 
 ## Browser Coverage
 

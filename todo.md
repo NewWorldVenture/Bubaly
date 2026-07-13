@@ -3272,3 +3272,20 @@ roadmap entries and user worktree changes are preserved.
   lint, production build, and public Playwright/axe E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0234 - Local rate-limit buckets could grow from untrusted proxy values
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Abuse resistance / resource exhaustion
+- Feature: In-memory request limiter and client-IP keying
+- File or files: `lib/server/rate-limit.ts`, `tests/rate-limit.test.ts`
+- Description: The local bucket map had no capacity bound, and raw forwarded-header values could be
+  arbitrarily long or malformed before entering local and durable limiter keys.
+- Resolution: Proxy values are now accepted only when they are valid IPv4/IPv6 addresses, limiter
+  parameters are normalized, expired buckets are pruned, and the in-memory map evicts the oldest key
+  at a fixed maximum capacity.
+- Tests performed: Local and durable limiter suites, full Vitest, typecheck, lint, production build,
+  and public Playwright/axe E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13
