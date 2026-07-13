@@ -3,6 +3,7 @@ import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { prepareSpeechText, normalizeTtsVoice } from '@/lib/ai/voice';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -12,8 +13,13 @@ export const maxDuration = 60;
 // Honest 503 when OpenAI isn't configured — never synthesizes a fake/silent clip.
 export async function POST(req: NextRequest) {
   try {
-    await requireUserContext();
+    const ctx = await requireUserContext();
     const supabase = await createServer();
+    const limited = await enforceAIRateLimit(supabase, `ai-voice-speak:${ctx.user.id}`, { limit: 30 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many voice requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
     const apiKey = await getOpenAIKey(supabase);
     if (!apiKey) {
       return NextResponse.json(

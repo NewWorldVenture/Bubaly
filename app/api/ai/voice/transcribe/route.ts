@@ -3,6 +3,7 @@ import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { cleanTranscript, isValidAudioUpload } from '@/lib/ai/voice';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -14,8 +15,13 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   try {
     // Auth: only signed-in family members may transcribe.
-    await requireUserContext();
+    const ctx = await requireUserContext();
     const supabase = await createServer();
+    const limited = await enforceAIRateLimit(supabase, `ai-voice-transcribe:${ctx.user.id}`, { limit: 10 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many voice requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
     const apiKey = await getOpenAIKey(supabase);
     if (!apiKey) {
       return NextResponse.json(

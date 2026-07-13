@@ -1843,7 +1843,7 @@ roadmap entries and user worktree changes are preserved.
 
 - 348 `page.tsx` route files.
 - 193 Supabase migration files and 309 SQL files under `supabase`.
-- 303 test files after the audit's regression contracts.
+- 304 test files after the audit's regression contracts.
 - 2,054 repository files returned by the initial source inventory (excluding node_modules, dist, and build).
 - Detailed route, database, feature, architecture, security, testing, and journey inventories already
   exist in the root documentation and will be reconciled with this session's command evidence.
@@ -1896,7 +1896,7 @@ roadmap entries and user worktree changes are preserved.
 
 - [x] Typecheck: `npm.cmd run typecheck` passed.
 - [x] Lint: `npm.cmd run lint` passed with only the known Next.js `next lint` deprecation notice.
-- [x] Unit tests: `npm.cmd test` passed, 303 files and 2,549 tests.
+- [x] Unit tests: `npm.cmd test` passed, 304 files and 2,552 tests.
 - [x] Credential-safety regression: all seed scripts load access only from environment; no literal
   `sb_secret_*` credential remains in runtime/source SQL.
 - [x] Production build: `npm.cmd run build` passed; 233 static pages generated.
@@ -2143,5 +2143,26 @@ roadmap entries and user worktree changes are preserved.
   valid UUID validation, trimmed non-empty messages, and an 8,000-character maximum before model work.
 - Tests performed: `npm.cmd test -- tests/ai-chat-request.test.ts` passed with 3 tests; typecheck and lint
   passed. Durable enforcement remains dependent on migration `0156` being applied in production.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0190 - Authenticated voice AI routes lacked request budgets
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: AI cost control / provider abuse resistance
+- Feature: Voice transcription and speech synthesis
+- Routes: `/api/ai/voice/transcribe`, `/api/ai/voice/speak`
+- File or files: `app/api/ai/voice/transcribe/route.ts`, `app/api/ai/voice/speak/route.ts`,
+  `lib/server/ai-rate-limit.ts`, `tests/ai-rate-limit.test.ts`
+- Database objects: `rate_limits`, `rate_limit_hit`
+- Description: Authenticated voice routes validated payloads but could make unlimited paid OpenAI
+  transcription or speech requests per user.
+- User impact: A runaway or compromised session could exhaust AI provider capacity or incur unexpected cost.
+- Root cause: Voice routes predated the shared durable AI limiter used by the gift assistant and agentic chat.
+- Resolution: Added a shared local plus durable limiter: 10 transcription requests and 30 speech requests
+  per user per minute, with `Retry-After` responses before provider keys or calls are used.
+- Tests performed: `npm.cmd test -- tests/ai-rate-limit.test.ts tests/ai-voice.test.ts` passed with 22 tests;
+  typecheck and lint passed. Durable enforcement remains dependent on migration `0156` in production.
 - Verified by: Codex
 - Date completed: 2026-07-13

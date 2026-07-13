@@ -88,3 +88,7 @@ append-only rows to `mkt_consent_events`.
 The authenticated agentic chat path now uses the shared `rate_limit_hit` RPC (with its in-memory
 fallback) per user before invoking model tools; its conversation and message inputs are bounded in
 application code. Durable enforcement still depends on migration `0156` being applied in production.
+
+Voice transcription and speech synthesis use the same per-user durable limiter before paid provider
+calls. The limiter intentionally falls back to the local guard when `0156` is unavailable, so deployment
+must apply that migration before relying on cross-instance enforcement.
