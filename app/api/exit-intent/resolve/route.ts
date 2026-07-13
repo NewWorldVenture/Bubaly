@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { resolveActiveExitIntent } from '@/lib/marketing/exit-intent-server';
 import type { VisitorContext } from '@/lib/marketing/personalization';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
@@ -12,8 +13,9 @@ export async function POST(req: NextRequest) {
   const limit = rateLimit(`ei-resolve:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
   if (!limit.ok) return NextResponse.json({ offer: null }, { status: 429 });
 
-  let body: Record<string, unknown> = {};
-  try { body = await req.json(); } catch { /* empty ctx is fine */ }
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const body = (boundedBody.value ?? {}) as Record<string, unknown>;
 
   const ctx: VisitorContext = {
     source: str(body.source) ?? null,

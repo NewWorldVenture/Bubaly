@@ -3,6 +3,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,7 +23,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'The AI engine isn’t configured. Set an API key in Admin → AI Engine.' }, { status: 503 });
   }
 
-  const body = await req.json().catch(() => ({}));
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const question = String(body.question ?? '').slice(0, 2000).trim();
   const memberId = typeof body.memberId === 'string' && body.memberId ? body.memberId : null;
   if (!question) return NextResponse.json({ error: 'Ask a question first.' }, { status: 400 });

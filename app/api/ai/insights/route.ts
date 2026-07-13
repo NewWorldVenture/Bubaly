@@ -5,6 +5,7 @@ import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provi
 import { INSIGHTS, isInsightKind, type InsightData, type InsightKind } from '@/lib/ai/insights';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,7 +26,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'The AI engine isn’t configured. Add an API key in Admin → AI Engine.' }, { status: 503 });
   }
 
-  const body = await req.json().catch(() => ({}));
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const kind = body.kind as string;
   if (!isInsightKind(kind)) return NextResponse.json({ error: 'Unknown insight kind' }, { status: 400 });
 

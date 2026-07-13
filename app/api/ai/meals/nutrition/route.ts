@@ -6,6 +6,7 @@ import { coerceNutrition, parseModelJSON, type Nutrition } from '@/lib/meals/nut
 import { weekDates } from '@/lib/meals/planner';
 import type { NutritionSubject } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,9 @@ export async function POST(req: Request) {
   }
 
   const familyId = ctx.active.familyId;
-  const body = await req.json().catch(() => ({}));
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const subjectType = String(body.subjectType ?? '') as NutritionSubject;
   const subjectId = String(body.subjectId ?? '').slice(0, 64);
   const refresh = body.refresh === true;

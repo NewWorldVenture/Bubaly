@@ -4,6 +4,7 @@ import { createServer } from '@/lib/supabase/server';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { resolveProvider } from '@/lib/ai/provider';
 import { summarizeBudget } from '@/lib/vacations/budget';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
 import { tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
 import { suggestPacking } from '@/lib/vacations/packing';
@@ -24,7 +25,9 @@ export async function POST(req: NextRequest) {
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
-  const body = await req.json().catch(() => ({})) as Body;
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const body = (boundedBody.value ?? {}) as Body;
   const { action, vacationId } = body;
   if (!vacationId) return NextResponse.json({ error: 'Missing vacationId' }, { status: 400 });
 

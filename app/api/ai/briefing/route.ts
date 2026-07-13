@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,7 +17,9 @@ export async function POST(req: NextRequest) {
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
-    const { type = 'morning' } = (await req.json()) as { type?: string };
+    const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+    if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+    const { type = 'morning' } = (boundedBody.value ?? {}) as { type?: string };
 
     const now = new Date();
     const today = now.toISOString().slice(0, 10);

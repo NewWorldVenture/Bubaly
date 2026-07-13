@@ -4,6 +4,7 @@ import { createServer } from '@/lib/supabase/server';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { discoveryWindow, normalizeTicketmasterResponse, type NormalizedEvent } from '@/lib/weekend/normalize';
 import { normalizeSeatGeekResponse, parseICS, parseRSS, withinWindow, dedupeEvents } from '@/lib/weekend/sources';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { isValidZip, RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS } from '@/lib/weekend/meta';
 
 export const runtime = 'nodejs';
@@ -30,7 +31,9 @@ export async function POST(req: NextRequest) {
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
-  const { zip, radius, days } = await req.json().catch(() => ({})) as { zip?: string; radius?: number; days?: number };
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const { zip, radius, days } = (boundedBody.value ?? {}) as { zip?: string; radius?: number; days?: number };
   if (!zip || !isValidZip(zip)) return NextResponse.json({ error: 'Enter a valid 5-digit ZIP code.' }, { status: 400 });
   const radiusMiles = RADIUS_OPTIONS.includes(radius as never) ? radius! : DEFAULT_RADIUS;
   const windowDays = Number.isInteger(days) && days! >= 1 && days! <= 30 ? days! : DEFAULT_DAYS;

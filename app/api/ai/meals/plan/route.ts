@@ -9,6 +9,7 @@ import {
 import { expiringSoon } from '@/lib/pantry/logic';
 import type { MealType } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,7 +30,9 @@ export async function POST(req: Request) {
 
   const familyId = ctx.active.familyId;
   const userId = ctx.user.id;
-  const body = await req.json().catch(() => ({}));
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const weekStart = String(body.weekStart ?? '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
     return NextResponse.json({ error: 'A valid weekStart (YYYY-MM-DD) is required.' }, { status: 400 });

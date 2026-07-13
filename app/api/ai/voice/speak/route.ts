@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { prepareSpeechText, normalizeTtsVoice } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -28,7 +29,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { text, voice } = (await req.json()) as { text?: string; voice?: string };
+    const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
+    if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
+    const { text, voice } = (boundedBody.value ?? {}) as { text?: string; voice?: string };
     const speech = prepareSpeechText(text ?? '');
     if (!speech) return NextResponse.json({ error: 'Nothing to say' }, { status: 400 });
 

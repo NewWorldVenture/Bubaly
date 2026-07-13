@@ -7,6 +7,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { sendSms, initiateCall, isTwilioConfigured } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
@@ -31,11 +32,9 @@ export async function POST(req: NextRequest) {
     callerNumber?: string;
   };
 
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
+  const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid JSON' }, { status: 400 });
+  body = boundedBody.value as typeof body;
 
   const { familyId, commId, escalationType, severity, description, callerNumber } = body;
   const supabase = createServiceClient();

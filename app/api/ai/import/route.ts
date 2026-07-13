@@ -5,6 +5,7 @@ import { resolveProvider } from '@/lib/ai/provider';
 import { AI_TOOLS, runAction } from '@/lib/ai/actions';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
+import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 // Map a Magic-Import action to a Trust Engine domain so the governance layer can
 // allow / block / require-approval before the AI writes anything.
@@ -58,7 +59,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = (await req.json()) as { text?: string; confirm?: Item[] };
+    const boundedBody = await readBoundedRequestJson(req, MAX_PROVIDER_JSON_BYTES);
+    if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
+    const body = (boundedBody.value ?? {}) as { text?: string; confirm?: Item[] };
 
     // ── Phase 2: execute the items the user confirmed ──────────────────────
     // Every confirmed action is first evaluated by the Trust & Permissions Engine.
@@ -66,7 +69,7 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(body.confirm)) {
       const actorRole = roleOf(ctx.active.role);
       const results = await Promise.all(
-        body.confirm.map(async (item) => {
+        body.confirm.slice(0, 50).map(async (item) => {
           const domain = ACTION_DOMAIN[item.name] ?? 'tasks';
           const { decision } = await evaluateTrust(supabase, familyId, {
             actor: { kind: 'ai_agent', id: 'magic_import', role: actorRole },

@@ -4,6 +4,7 @@ import { createServer } from '@/lib/supabase/server';
 import { getSocialAccess } from '@/lib/social/access';
 import { generate, AI_GENERATION_KINDS, type AiGenerationKind } from '@/lib/social/ai';
 import { isPlatform } from '@/lib/social/capabilities';
+import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +22,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'You do not have permission to generate AI content.' }, { status: 403 });
   }
 
-  const body = await req.json().catch(() => ({}));
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const kind = String(body.kind ?? '') as AiGenerationKind;
   if (!AI_GENERATION_KINDS.includes(kind)) {
     return NextResponse.json({ error: 'Unknown generation kind' }, { status: 400 });

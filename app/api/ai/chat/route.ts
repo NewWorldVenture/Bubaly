@@ -8,6 +8,7 @@ import type { Database } from '@/lib/database.types';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { rateLimit } from '@/lib/server/rate-limit';
 import { parseAIChatRequest } from '@/lib/ai/chat-request';
+import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -32,9 +33,11 @@ export async function POST(req: NextRequest) {
     const durable = await rateLimitDb(supabase, key, { limit: 20, windowMs: 60_000 });
     if (!durable.ok) return rejected(durable.retryAfter);
 
-    let rawBody: unknown;
-    try { rawBody = await req.json(); }
-    catch { return NextResponse.json({ error: 'Invalid request body' }, { status: 400 }); }
+    const boundedBody = await readBoundedRequestJson(req, MAX_PROVIDER_JSON_BYTES);
+    if (!boundedBody.ok) {
+      return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
+    }
+    const rawBody = boundedBody.value;
     const parsed = parseAIChatRequest(rawBody);
     if (!parsed.ok) {
       const messageByError = {

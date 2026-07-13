@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { sendEmailCampaign, resolveRecipients } from '@/lib/marketing/send';
 
 export const runtime = 'nodejs';
@@ -22,7 +23,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-    const { id } = (await req.json()) as { id?: string };
+    const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
+    if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
+    const { id } = (boundedBody.value ?? {}) as { id?: string };
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
     const { sent } = await sendEmailCampaign(supabase, id);

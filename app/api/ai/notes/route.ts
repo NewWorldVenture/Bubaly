@@ -4,6 +4,7 @@ import { createServer } from '@/lib/supabase/server';
 import { resolveProvider } from '@/lib/ai/provider';
 import { buildNotesPrompt, parseNotesResponse } from '@/lib/notes/ai';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 // AI Assist for the Notes module: turns a free-form family note into a short
 // summary, concrete action items, and topic tags. Auth-gated to the active
@@ -19,7 +20,9 @@ export async function POST(req: NextRequest) {
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
-    const { content } = (await req.json()) as { content?: string };
+    const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
+    if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
+    const { content } = (boundedBody.value ?? {}) as { content?: string };
     const text = (content ?? '').trim();
     if (!text) {
       return NextResponse.json({ error: 'Note content is required' }, { status: 400 });

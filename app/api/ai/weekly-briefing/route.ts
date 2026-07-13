@@ -5,6 +5,7 @@ import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { weekWindow, weekRangeLabel, choreCompletionRate, bucketByDay, dayLoad } from '@/lib/ai/weekly';
 import { resolveProvider } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 /**
  * Plus-tier Weekly AI Briefing. Distinct from the daily briefing: it reads a
@@ -28,7 +29,8 @@ export async function POST(req: NextRequest) {
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
-    void (await req.json().catch(() => ({}))); // tolerate empty body
+    const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+    if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
 
     const now = new Date();
     const w = weekWindow(now);

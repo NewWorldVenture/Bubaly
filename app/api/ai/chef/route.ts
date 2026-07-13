@@ -4,6 +4,7 @@ import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { expiringSoon } from '@/lib/pantry/logic';
 import {
   buildChefSystem, buildChefUser, parseChefReply, fallbackChefReply, type ChefContext,
@@ -23,7 +24,9 @@ export async function POST(req: Request) {
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
 
   const familyId = ctx.active.familyId;
-  const body = await req.json().catch(() => ({}));
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const request = String(body.request ?? '').slice(0, 500).trim();
   if (!request) return NextResponse.json({ error: 'Tell the chef what you need (e.g. "plan quick dinners under $150").' }, { status: 400 });
 

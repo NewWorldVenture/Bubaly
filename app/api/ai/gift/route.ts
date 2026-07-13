@@ -4,6 +4,7 @@ import { resolveProvider } from '@/lib/ai/provider';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { buildGiftAssistPrompt, parseGiftSuggestions } from '@/lib/wallet/gift-ai';
+import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 // POST /api/ai/gift — PUBLIC AI Gift Assistant for the gift-link page.
 // Givers aren't signed in, so this is unauthenticated: it's rate-limited per IP
@@ -27,8 +28,9 @@ export async function POST(req: NextRequest) {
   const durable = await rateLimitDb(supabase, `ai-gift:${ip}`, { limit: 5, windowMs: 60_000 });
   if (!durable.ok) return rejected(durable.retryAfter);
 
-  let body: { token?: string; relationship?: string };
-  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Bad request' }, { status: 400 }); }
+  const boundedBody = await readBoundedRequestJson(req, MAX_PROVIDER_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Bad request' }, { status: 400 });
+  const body = (boundedBody.value ?? {}) as { token?: string; relationship?: string };
   const token = typeof body.token === 'string' ? body.token : '';
   if (!token) return NextResponse.json({ error: 'Missing gift link.' }, { status: 400 });
   const relationship = typeof body.relationship === 'string' ? body.relationship.slice(0, 40).trim() || null : null;

@@ -4,6 +4,7 @@ import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { TRADE_FOR_CATEGORY, TRADES } from '@/lib/home/maintenance';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'AI is not configured (OpenAI API key missing).' }, { status: 503 });
   }
 
-  const body = await req.json().catch(() => ({}));
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const body = (boundedBody.value ?? {}) as Record<string, unknown>;
   const assetName = String(body.assetName ?? '').slice(0, 120);
   const category = String(body.category ?? '').slice(0, 40);
   const brand = String(body.brand ?? '').slice(0, 60);

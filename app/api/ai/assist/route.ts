@@ -3,6 +3,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -38,7 +39,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = (await req.json()) as Body;
+    const boundedBody = await readBoundedRequestJson(req, MAX_PROVIDER_JSON_BYTES);
+    if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
+    const body = (boundedBody.value ?? {}) as Body;
     const incoming = Array.isArray(body.messages) ? body.messages : [];
     if (incoming.length === 0) return NextResponse.json({ error: 'No messages provided.' }, { status: 400 });
 

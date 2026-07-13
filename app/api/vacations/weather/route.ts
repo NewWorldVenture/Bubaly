@@ -3,6 +3,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { geocode, fetchForecast } from '@/lib/vacations/weather-fetch';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
@@ -19,7 +20,9 @@ export async function POST(req: NextRequest) {
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
-  const { vacationId, location } = await req.json().catch(() => ({})) as { vacationId?: string; location?: string };
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const { vacationId, location } = (boundedBody.value ?? {}) as { vacationId?: string; location?: string };
   if (!vacationId || !location?.trim()) return NextResponse.json({ error: 'Missing vacationId or location' }, { status: 400 });
 
   // Verify the trip belongs to the caller's family (RLS-enforced read).

@@ -7,6 +7,26 @@ export type BoundedJsonResult =
   | { ok: true; value: unknown }
   | { ok: false; reason: 'too_large' | 'unreadable' | 'invalid_json' };
 
+export type BoundedJsonOrEmptyResult =
+  | { ok: true; value: unknown }
+  | { ok: false; reason: 'too_large' | 'unreadable' };
+
+export const MAX_PROVIDER_JSON_BYTES = 256 * 1024;
+export const MAX_SMALL_JSON_BYTES = 16 * 1024;
+export const MAX_FLYER_JSON_BYTES = 8 * 1024 * 1024;
+
+/** Read optional JSON bodies while preserving the existing empty-body behavior. */
+export async function readBoundedRequestJsonOrEmpty(req: Request, maxBytes: number): Promise<BoundedJsonOrEmptyResult> {
+  const raw = await readBoundedRequestText(req, maxBytes);
+  if (!raw.ok) return raw;
+  if (!raw.text.trim()) return { ok: true, value: {} };
+  try {
+    return { ok: true, value: JSON.parse(raw.text) };
+  } catch {
+    return { ok: true, value: {} };
+  }
+}
+
 export async function readBoundedRequestText(req: Request, maxBytes: number): Promise<BoundedBodyResult> {
   const declared = Number(req.headers.get('content-length') ?? '');
   if (Number.isFinite(declared) && declared > maxBytes) {

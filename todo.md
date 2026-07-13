@@ -2760,3 +2760,23 @@ roadmap entries and user worktree changes are preserved.
 - Tests performed: Focused negotiation/seed contracts, full suite, typecheck, lint, build, and public E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0215 - Provider-backed routes parsed JSON bodies without transport bounds
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1; P0 for the internal guardian escalation path because it can fan out alerts.
+- Category: Request bounds / AI spend / provider and notification side effects
+- Feature: AI, recipes, vacations, social generation, consent, marketing admin, and Guardian
+- File or files: `lib/server/bounded-request-body.ts`, audited `app/api` routes,
+  `tests/provider-request-body-boundaries.test.ts`
+- Description: Provider-backed and side-effecting routes validated individual fields only after
+  `req.json()` had already allowed the runtime to buffer an arbitrary request body.
+- User impact: An authenticated or internal caller could consume request memory or amplify paid model,
+  network, SMS, or outbound-call work with oversized JSON input.
+- Root cause: The shared bounded reader was applied to the first audited set of public and billing
+  routes, but the remaining provider routes retained direct JSON parsing.
+- Resolution: Added streaming byte limits to every JSON-accepting `app/api` route, with 256 KiB provider
+  bounds, 16 KiB control bounds, an 8 MiB flyer-upload bound, and a contract test preventing regressions.
+- Tests performed: Focused request-boundary contracts, full suite, typecheck, lint, build, and public E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

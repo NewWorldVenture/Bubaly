@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 322 files, 2,630 tests |
+| `npm.cmd test` | PASS: 323 files, 2,632 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -126,6 +126,14 @@ Audit date: 2026-07-13
 - Negotiation migration `0187` adds database-enforced family separation, amount/message bounds, and
   below-ask round validation. The standalone and consolidated negotiation seeds now fail closed when
   `newworldventurellc@gmail.com` cannot resolve to an anchored family.
+
+## Audit Update - 2026-07-13 (provider request boundaries)
+
+- `npm.cmd exec vitest run tests/provider-request-body-boundaries.test.ts tests/request-body-boundaries.test.ts`: 2 files, 5 tests passed.
+- `npm.cmd exec vitest run`: 323 files, 2,632 tests passed.
+- Every `app/api` route that accepts JSON now uses the shared streaming bounded reader; the contract
+  sweep found no direct `req.json()` or `request.json()` calls. Provider-backed bodies are capped at
+  256 KiB, small control bodies at 16 KiB, and flyer uploads at 8 MiB.
 
 ## Audit Update - 2026-07-13 (model/provider request budgets)
 

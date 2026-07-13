@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { readBoundedRequestJson, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 const routeFiles = [
   'app/api/billing/checkout/route.ts',
@@ -42,5 +42,13 @@ describe('bounded JSON request bodies', () => {
       expect(source, file).toContain('readBoundedRequestJson');
       expect(source, file).not.toContain('req.json()');
     }
+  });
+
+  it('preserves optional empty-body behavior without allowing oversized input', async () => {
+    const empty = new Request('https://example.test', { method: 'POST' });
+    await expect(readBoundedRequestJsonOrEmpty(empty, 4096)).resolves.toEqual({ ok: true, value: {} });
+
+    const oversized = new Request('https://example.test', { method: 'POST', body: 'x'.repeat(4097) });
+    await expect(readBoundedRequestJsonOrEmpty(oversized, 4096)).resolves.toEqual({ ok: false, reason: 'too_large' });
   });
 });

@@ -4,6 +4,7 @@ import { createServer } from '@/lib/supabase/server';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { resolveProvider } from '@/lib/ai/provider';
 import { buildSuggestPrompt, parseSuggestions, type VaultRecipeLite } from '@/lib/recipes/suggest';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
@@ -20,7 +21,9 @@ export async function POST(req: NextRequest) {
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
-  const { constraint } = await req.json().catch(() => ({})) as { constraint?: string };
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const { constraint } = (boundedBody.value ?? {}) as { constraint?: string };
   const { data: recipes } = await supabase
     .from('family_recipes')
     .select('id, name, cuisine, category, tags, ingredients, photo_url')

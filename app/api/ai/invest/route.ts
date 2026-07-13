@@ -7,6 +7,7 @@ import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/li
 import { portfolioValue, type Holding, type PriceMap } from '@/lib/invest/portfolio';
 import { buildInvestCoachPrompt, parseInvestCoach } from '@/lib/invest/coach';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 // POST /api/ai/invest — the kids' EDUCATIONAL Money Mentor. Same tier gating +
 // per-day metering as the wallet coach. Explains an investing concept; never
@@ -37,8 +38,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    let body: { childWalletId?: string; assetId?: string };
-    try { body = await req.json(); } catch { body = {}; }
+    const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
+    if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+    const body = (boundedBody.value ?? {}) as { childWalletId?: string; assetId?: string };
 
     // Resolve the child's name + (optional) selected asset + portfolio value.
     let childName = 'your child';

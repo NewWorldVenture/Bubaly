@@ -3,6 +3,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { getAIConfig } from '@/lib/ai/settings';
+import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
@@ -52,7 +53,9 @@ export async function POST(req: NextRequest) {
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
-    const body = (await req.json()) as {
+    const boundedBody = await readBoundedRequestJson(req, MAX_FLYER_JSON_BYTES);
+    if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Flyer upload is too large.' : 'Invalid request body' }, { status: 400 });
+    const body = (boundedBody.value ?? {}) as {
       data?: string; mediaType?: string; confirm?: ProposedEvent[];
     };
 

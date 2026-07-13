@@ -4,6 +4,7 @@ import { resolveProvider } from '@/lib/ai/provider';
 import { getMarketingCustomers, summarizeCustomers } from '@/lib/marketing/customers';
 import { fmtMoney } from '@/lib/utils/format';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
@@ -38,7 +39,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Request is too large.' }, { status: 413 });
     }
 
-    const body = await req.json().catch(() => null) as { task?: unknown; input?: unknown } | null;
+    const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);
+    if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+    const body = (boundedBody.value ?? null) as { task?: unknown; input?: unknown } | null;
     const task = body?.task;
     if (typeof task !== 'string' || !Object.prototype.hasOwnProperty.call(TASKS, task)) {
       return NextResponse.json({ error: 'Unknown task' }, { status: 400 });

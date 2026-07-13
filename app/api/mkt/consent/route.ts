@@ -5,6 +5,7 @@ import {
   isValidConsentMap, type ConsentCategory, type ConsentDecision,
 } from '@/lib/marketing/consent';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
@@ -27,9 +28,9 @@ export async function POST(req: NextRequest) {
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
-  let body: ConsentBody;
-  try { body = (await req.json()) as ConsentBody; }
-  catch { return NextResponse.json({ error: 'Bad payload' }, { status: 400 }); }
+  const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Bad payload' }, { status: 400 });
+  const body = boundedBody.value as ConsentBody;
 
   const anonymousId = typeof body.anonymousId === 'string' ? body.anonymousId.trim().slice(0, 200) : '';
   if (!anonymousId) return NextResponse.json({ error: 'anonymousId required' }, { status: 400 });

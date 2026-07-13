@@ -4,6 +4,7 @@ import { createServer } from '@/lib/supabase/server';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { resolveProvider } from '@/lib/ai/provider';
 import { buildTransformPrompt, parseTransformResult, getRecipeAiAction, type RecipeAiActionId } from '@/lib/recipes/ai-actions';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import type { Database } from '@/lib/database.types';
 
 export const runtime = 'nodejs';
@@ -23,7 +24,9 @@ export async function POST(req: NextRequest) {
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
-  const { recipeId, actionId } = await req.json().catch(() => ({})) as { recipeId?: string; actionId?: string };
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const { recipeId, actionId } = (boundedBody.value ?? {}) as { recipeId?: string; actionId?: string };
   if (!recipeId || !actionId || !getRecipeAiAction(actionId)) {
     return NextResponse.json({ error: 'recipeId and a valid actionId are required' }, { status: 422 });
   }

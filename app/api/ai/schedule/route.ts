@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { findFreeSlots, isCalendarContext, type BusyEvent, type CalendarContext } from '@/lib/calendar/scheduling';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 // AI scheduling: read the selected family members' calendars (events + school +
 // sports) over a window and return time slots where everyone is free. This is the
@@ -11,7 +12,9 @@ export async function POST(req: NextRequest) {
   try {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
-    const body = (await req.json()) as {
+    const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
+    if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
+    const body = (boundedBody.value ?? {}) as {
       memberIds?: string[];
       windowStartISO?: string;
       windowEndISO?: string;

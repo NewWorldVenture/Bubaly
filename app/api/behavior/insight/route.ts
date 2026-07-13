@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { summarizeMember, type BehaviorLogLike } from '@/lib/behavior/insights';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
@@ -22,8 +23,9 @@ export async function POST(req: NextRequest) {
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
-  let body: { memberId?: string } = {};
-  try { body = await req.json(); } catch { /* optional */ }
+  const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: 'Request body is too large.' }, { status: 400 });
+  const body = (boundedBody.value ?? {}) as { memberId?: string };
 
   const since = new Date(Date.now() - 60 * 86_400_000).toISOString();
   let q = supabase
