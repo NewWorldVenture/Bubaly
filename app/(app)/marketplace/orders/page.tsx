@@ -4,6 +4,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { OrderControls, ReviewForm } from '@/components/marketplace/order-controls';
+import { HandoffPanel, type HandoffData } from '@/components/marketplace/handoff-panel';
+import type { HandoffStatus, HandoffRole, LocationKind } from '@/lib/marketplace/handoff';
 import { formatCents } from '@/lib/marketplace/listings';
 import { marketplaceServiceFeeCents, orderFeeBreakdown } from '@/lib/marketplace/fee-policy';
 import { cn } from '@/lib/utils/cn';
@@ -63,6 +65,24 @@ export default async function MarketplaceOrdersPage() {
     .eq('reviewer_member', selfId);
   const reviewed = new Set((myReviews ?? []).map((r) => r.order_id));
 
+  // Pickup & hand-off coordination, one per order.
+  const orderIds = mine.map((o) => o.id);
+  const { data: handoffs } = orderIds.length
+    ? await sb.from('marketplace_handoffs')
+        .select('order_id, proposer_role, meet_at, location_label, location_kind, status, confirm_code, calendar_event_id, notes')
+        .in('order_id', orderIds)
+    : { data: [] };
+  const handoffByOrder = new Map((handoffs ?? []).map((h) => [h.order_id, h]));
+  const handoffFor = (orderId: string): HandoffData => {
+    const h = handoffByOrder.get(orderId);
+    if (!h) return null;
+    return {
+      status: h.status as HandoffStatus, proposerRole: h.proposer_role as HandoffRole,
+      meetAt: h.meet_at, locationLabel: h.location_label, locationKind: h.location_kind as LocationKind,
+      confirmCode: h.confirm_code, notes: h.notes, hasCalendar: !!h.calendar_event_id,
+    };
+  };
+
   return (
     <div>
       <PageHeader title="Orders" description="Every exchange you’re part of — confirm, hand off, complete, and review." />
@@ -111,6 +131,13 @@ export default async function MarketplaceOrdersPage() {
                     <p className="text-xs text-muted">You reviewed this exchange ✓</p>
                   )}
                 </div>
+                {/* Pickup coordination for physical exchanges still in flight. */}
+                {['confirmed', 'active'].includes(o.status) && o.kind !== 'donate' && (
+                  <HandoffPanel orderId={o.id} viewerRole={role === 'buyer' ? 'buyer' : 'seller'} handoff={handoffFor(o.id)} />
+                )}
+                {handoffFor(o.id)?.status === 'completed' && !['confirmed', 'active'].includes(o.status) && (
+                  <HandoffPanel orderId={o.id} viewerRole={role === 'buyer' ? 'buyer' : 'seller'} handoff={handoffFor(o.id)} />
+                )}
               </li>
             );
           })}

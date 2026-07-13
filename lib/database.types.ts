@@ -438,6 +438,11 @@ export interface Database {
         { id?: string; family_id: string; listing_id: string; buyer_member?: string | null; seller_member?: string | null; kind?: string; status?: string; amount_cents?: number; starts_on?: string | null; ends_on?: string | null; notes?: string | null; created_by?: string | null },
         Partial<{ buyer_member: string | null; seller_member: string | null; kind: string; status: string; amount_cents: number; starts_on: string | null; ends_on: string | null; notes: string | null }>
       >;
+      marketplace_handoffs: T<
+        { id: string; order_id: string; family_id: string; listing_id: string | null; proposed_by: string | null; proposer_role: string; meet_at: string | null; location_label: string | null; location_kind: string; status: string; confirm_code: string | null; confirmed_at: string | null; completed_at: string | null; calendar_event_id: string | null; notes: string | null } & Stamps,
+        { id?: string; order_id: string; family_id: string; listing_id?: string | null; proposed_by?: string | null; proposer_role?: string; meet_at?: string | null; location_label?: string | null; location_kind?: string; status?: string; confirm_code?: string | null; confirmed_at?: string | null; completed_at?: string | null; calendar_event_id?: string | null; notes?: string | null },
+        Partial<{ proposed_by: string | null; proposer_role: string; meet_at: string | null; location_label: string | null; location_kind: string; status: string; confirm_code: string | null; confirmed_at: string | null; completed_at: string | null; calendar_event_id: string | null; notes: string | null }>
+      >;
       marketplace_reviews: T<
         { id: string; family_id: string; order_id: string | null; listing_id: string | null; reviewer_member: string | null; reviewee_member: string | null; role: string; rating: number; comment: string | null; created_by: string | null } & Stamps,
         { id?: string; family_id: string; order_id?: string | null; listing_id?: string | null; reviewer_member?: string | null; reviewee_member?: string | null; role?: string; rating?: number; comment?: string | null; created_by?: string | null },

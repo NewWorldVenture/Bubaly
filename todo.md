@@ -1278,6 +1278,30 @@ missing-location events, colliding events for conflicts). Run it, then open
   - ⚠️ apply **`0186`** to prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe before apply: the panel +
     inbox read best-effort and show nothing until the tables exist.
 
+- [x] **Pickup & Hand-off Coordinator ✅ SHIPPED (2026-07-13). Closes the transaction loop.** After a
+  deal is struck (accepted offer / won auction / claimed listing → order), nothing coordinated the
+  actual exchange — eBay leans on shipping labels, Craigslist on "text me". Now `/marketplace/orders`
+  walks it through:
+  - Migration **`0190_marketplace_handoffs.sql`** — `marketplace_handoffs` (one per order: proposer +
+    role · meet_at · safe-spot label/kind · status proposed/confirmed/completed/cancelled · confirm_code
+    · calendar_event link). Family-scoped RLS (4 policies via `is_family_member`), 3 indexes,
+    `set_updated_at` trigger, `on delete cascade` from both order and listing. PG16-verified idempotent ×2.
+  - Pure engine **`lib/marketplace/handoff.ts`** (curated SAFE meetup spots [police safe-exchange zone,
+    grocery entrance, library…] · sensible meet-time slots · hand-off code gen/normalize/match ·
+    turn/action gating, **11 tests**). Types added to `lib/database.types.ts`.
+  - Server actions `proposeHandoffAction`/`confirmHandoffAction`/`cancelHandoffAction`/
+    `completeHandoffAction`: one side proposes time + safe spot; the OTHER **confirms** (drops it on the
+    **family calendar** + mints a short **hand-off code**); the exchange **completes in person by entering
+    the code**, which advances the order to `completed` atomically. **HandoffPanel** on the Orders page
+    (propose form with time chips + safe-spot picker; confirmed card with calendar note + code + complete
+    input) — both buyer & seller members drive it from their side. Safety copy nudges to public spots.
+  - Seed **`seed_marketplace_handoffs.sql`** (160 orders + 160 hand-offs across all four statuses + 40
+    backing calendar events ≈ 520 rows; second family member as buyer; in `SEED_ALL.sql`). PG16-validated
+    ×2 (40 per status). Verified: tsc · eslint · **vitest (11 handoff + 14 negotiation + 11 auction)** ·
+    `next build`.
+  - ⚠️ apply **`0190`** to prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe before apply: the Orders
+    page reads best-effort and shows no pickup panel until the table exists.
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:
