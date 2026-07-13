@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +14,12 @@ export async function GET(req: NextRequest) {
   const supabase = await createServer();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
+
+  const limited = await enforceRequestRateLimit(supabase, `gif-search:${auth.user.id}`, { limit: 60 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many GIF searches. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
 
   const key = process.env.GIPHY_API_KEY;
   if (!key) return NextResponse.json({ error: 'GIF search isn’t configured yet.' }, { status: 503 });

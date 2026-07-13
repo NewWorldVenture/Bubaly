@@ -2322,3 +2322,25 @@ roadmap entries and user worktree changes are preserved.
   passed. Durable enforcement depends on migration `0156` in production.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0198 - Provider inventory found unbudgeted marketing, behavior, and GIF routes
+
+- Status: [x] Completed in code and covered by `tests/ai-route-rate-limit-contract.test.ts`.
+- Severity: P1
+- Category: AI/provider abuse resistance / prompt and external API cost control
+- Feature: Marketing AI assistant, behavior coaching, and Messages GIF search
+- Routes: `/api/admin/marketing/ai`, `/api/behavior/insight`, `/api/gif/search`
+- File or files: the three route handlers, `lib/server/ai-rate-limit.ts`,
+  `lib/server/request-rate-limit.ts`, `tests/ai-route-rate-limit-contract.test.ts`
+- Database objects: `rate_limits`, `rate_limit_hit`, marketing and family-scoped source tables
+- Description: A provider inventory found model-backed and external-proxy routes that had no shared
+  request budget before expensive context reads or third-party calls.
+- User impact: Repeated requests could consume model/Giphy quota, increase cost, and add avoidable
+  latency for other users.
+- Root cause: These routes were implemented outside the earlier `/api/ai` and public-ingestion audits.
+- Resolution: Added durable per-actor request limits, `Retry-After` responses, and a 4,000-character
+  marketing prompt bound; expanded the route contract to prevent regression.
+- Tests performed: Focused contract/limiter tests, full suite, typecheck, lint, build, and public E2E
+  passed. Durable enforcement depends on migration `0156` in production.
+- Verified by: Codex
+- Date completed: 2026-07-13

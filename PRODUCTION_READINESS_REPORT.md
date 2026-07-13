@@ -92,6 +92,11 @@ before provider calls or broad context reads. This covers the model-backed `/api
 vacation AI/weather, recipe AI, and weekend discovery routes, while preserving existing plan/day caps.
 Rejected requests return `Retry-After`; durable enforcement still depends on migration `0156` being
 applied in the target environment.
+
+The follow-up provider inventory also covers marketing-admin AI, behavior coaching, and the authenticated
+Giphy proxy. These routes now budget paid/provider work before loading broad context or calling an
+external service; marketing prompts are capped at 4,000 characters and rejected requests return
+`Retry-After`.
 ## Audit Update - 2026-07-13
 
 Legacy service-role seed scripts were hardened after the initial report: fixed family/user scopes

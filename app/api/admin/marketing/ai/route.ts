@@ -3,6 +3,7 @@ import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin'
 import { resolveProvider } from '@/lib/ai/provider';
 import { getMarketingCustomers, summarizeCustomers } from '@/lib/marketing/customers';
 import { fmtMoney } from '@/lib/utils/format';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -26,8 +27,24 @@ const TASKS: Record<Task, string> = {
 export async function POST(req: NextRequest) {
   try {
     const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-    const { task, input } = (await req.json()) as { task: Task; input?: string };
-    if (!task || !TASKS[task]) return NextResponse.json({ error: 'Unknown task' }, { status: 400 });
+    const limited = await enforceAIRateLimit(supabase, `marketing-ai:${actorId}`, { limit: 20 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many marketing AI requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
+
+    const contentLength = Number(req.headers.get('content-length') ?? 0);
+    if (Number.isFinite(contentLength) && contentLength > 16_000) {
+      return NextResponse.json({ error: 'Request is too large.' }, { status: 413 });
+    }
+
+    const body = await req.json().catch(() => null) as { task?: unknown; input?: unknown } | null;
+    const task = body?.task;
+    if (typeof task !== 'string' || !Object.prototype.hasOwnProperty.call(TASKS, task)) {
+      return NextResponse.json({ error: 'Unknown task' }, { status: 400 });
+    }
+    const taskKey = task as Task;
+    const input = typeof body?.input === 'string' ? body.input.trim().slice(0, 4_000) || undefined : undefined;
 
     // Grounding context — real marketing data only.
     const customers = await getMarketingCustomers(supabase);
@@ -47,7 +64,7 @@ export async function POST(req: NextRequest) {
       `Existing campaigns: ${(campaigns ?? []).map((c) => `${c.name} (${c.channel}/${c.status})`).join(', ') || 'none'}.`,
     ].join('\n');
 
-    const system = `You are a world-class marketing strategist embedded in the Bubaly admin. ${TASKS[task]}
+    const system = `You are a world-class marketing strategist embedded in the Bubaly admin. ${TASKS[taskKey]}
 
 Use ONLY the real data provided as grounding. Never fabricate metrics, rankings, testimonials, or press. When you suggest keywords or audience sizes you cannot verify, label them clearly as estimates/suggestions. Respond in clean Markdown, concise and immediately usable.`;
 
@@ -55,7 +72,7 @@ Use ONLY the real data provided as grounding. Never fabricate metrics, rankings,
 
     const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
 
-    await logMarketingAudit(supabase, { actorId, actorEmail, action: `ai:${task}`, resource: 'marketing_ai', metadata: { input: input?.slice(0, 200) ?? null } });
+    await logMarketingAudit(supabase, { actorId, actorEmail, action: `ai:${taskKey}`, resource: 'marketing_ai', metadata: { input: input?.slice(0, 200) ?? null } });
 
     return NextResponse.json({ text: completion.text });
   } catch (err) {

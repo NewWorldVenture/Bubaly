@@ -119,3 +119,7 @@ The audited model-backed and external-provider routes now use shared per-user du
 before provider calls or broad context reads. This includes the `/api/ai` route inventory plus vacation
 AI/weather, recipe AI, and weekend discovery. The guards preserve feature-specific plan/day caps and
 return `Retry-After`; durable enforcement depends on migration `0156` being applied in production.
+
+The follow-up provider inventory added the same durable guards to marketing-admin AI, behavior coaching,
+and the authenticated Giphy proxy. Marketing AI input is bounded before prompt construction; the
+route contract now includes all three paths and requires a `Retry-After` response on rejection.

@@ -3,6 +3,7 @@ import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { summarizeMember, type BehaviorLogLike } from '@/lib/behavior/insights';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -13,8 +14,13 @@ export const runtime = 'nodejs';
  * 3 concrete, age-appropriate tips. Degrades gracefully if AI is unconfigured.
  */
 export async function POST(req: NextRequest) {
-  await requireUserContext();
+  const ctx = await requireUserContext();
   const supabase = await createServer();
+  const limited = await enforceAIRateLimit(supabase, `ai-behavior-insight:${ctx.user.id}`, { limit: 15 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many behavior insight requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
 
   let body: { memberId?: string } = {};
   try { body = await req.json(); } catch { /* optional */ }

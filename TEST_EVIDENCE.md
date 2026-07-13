@@ -70,6 +70,15 @@ Audit date: 2026-07-13
 - The audited model-backed and external-provider routes now use shared durable per-user request
   budgets before paid provider calls or broad context reads. Durable enforcement depends on migration
   `0156` being applied in the target environment.
+
+## Audit Update - 2026-07-13 (provider inventory follow-up)
+
+- `npm.cmd test`: 307 files and 2,557 tests passed.
+- `npm.cmd test -- tests/ai-route-rate-limit-contract.test.ts tests/ai-rate-limit.test.ts`: 2 files,
+  4 tests passed.
+- The route contract now covers marketing-admin AI, behavior coaching, and the authenticated Giphy
+  proxy in addition to the prior model/provider inventory.
+- Marketing AI request text is trimmed and capped at 4,000 characters before prompt construction.
 ## Audit Update - 2026-07-13
 
 - `node --check scripts/seed*.mjs`: passed for all six legacy seed scripts plus the shared client.

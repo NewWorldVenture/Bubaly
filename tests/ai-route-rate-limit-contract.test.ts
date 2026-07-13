@@ -9,6 +9,9 @@ const roots = [
   resolve(process.cwd(), 'app/api/recipes/transform'),
   resolve(process.cwd(), 'app/api/vacations/weather'),
   resolve(process.cwd(), 'app/api/weekend/discover'),
+  resolve(process.cwd(), 'app/api/admin/marketing/ai'),
+  resolve(process.cwd(), 'app/api/behavior/insight'),
+  resolve(process.cwd(), 'app/api/gif/search'),
 ];
 
 function routeFiles(root: string): string[] {
@@ -30,5 +33,9 @@ describe('model and external side-effect route limits', () => {
       expect(source, name).toMatch(/enforceAIRateLimit|enforceRequestRateLimit|rateLimitDb/);
       expect(source, name).toContain("'Retry-After'");
     }
+
+    const marketing = readFileSync(resolve(process.cwd(), 'app/api/admin/marketing/ai/route.ts'), 'utf8');
+    expect(marketing).toContain('4_000');
+    expect(marketing).toContain('16_000');
   });
 });
