@@ -1250,6 +1250,34 @@ missing-location events, colliding events for conflicts). Run it, then open
   - ⚠️ apply **`0183`** + set **`CRON_SECRET`** in prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe
     before apply: the board + panel read best-effort and show nothing until the table exists.
 
+- [x] **Make an Offer — Best Offer negotiation ✅ SHIPPED (2026-07-13). The eBay "Best Offer" gap.**
+  Today a buyer could send ONE offer and the seller could only accept/decline — no counters, no
+  thread (Craigslist has none of this). Now it's a real two-sided negotiation. Full slice, realtime,
+  atomic, 100% Supabase:
+  - Migration **`0186_marketplace_negotiations.sql`** — `marketplace_negotiations` (one thread per
+    listing+buyer) + `marketplace_negotiation_rounds` (the offer/counter/… history) + two
+    `SECURITY DEFINER` RPCs that lock the listing `FOR UPDATE`: **`marketplace_negotiation_offer`**
+    (buyer opens or counters) and **`marketplace_negotiation_respond`** (either party counters / accepts /
+    declines / withdraws, strict turn model). **Accept is atomic** — claims the listing, writes a
+    confirmed `marketplace_orders` row at the agreed price, and closes every competing thread + open
+    offer. RLS: readable by the buyer's OR seller's family; writes only via the RPCs. PG16-verified
+    idempotent ×2 + full offer→counter→counter→accept flow with own-listing / turn / competing-thread /
+    claimed / buyer-only-withdraw / seller-only-decline guards all enforced.
+  - Pure engine **`lib/marketplace/negotiation.ts`** (`whoseTurn`/`availableActions`/`validateOfferAmount`/
+    `suggested*`/`savingsPercent`/`statusLine`/`roundLine`, **14 tests**). Types added to
+    `lib/database.types.ts` (both tables + both RPCs in the typed Functions registry).
+  - Server actions `makeOfferAction`/`respondToOfferAction`; realtime **NegotiationPanel** on the item
+    page (buyer "make an offer" + counter; seller inbox with counter/accept/decline; live thread
+    timeline via a `marketplace_negotiation_rounds` Realtime channel) for fixed-price sale listings.
+    Inbox page **`/marketplace/negotiations`** (Your move / Waiting / Settled) + nav entry (Offers,
+    `Handshake`, additive).
+  - Seed **`seed_marketplace_negotiations.sql`** (100 sale listings + 100 threads across every status
+    + ~320 rounds + 20 orders ≈ 540 rows; throwaway "Offer Makers" buyer family; in `SEED_ALL.sql`).
+    PG16-validated ×2 (status distribution + last-round-kind integrity confirmed). Verified: tsc ·
+    eslint · **vitest (14 negotiation + 11 auction)** · `next build` (`/marketplace/negotiations`).
+  - ⚠️ apply **`0186`** to prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe before apply: the panel +
+    inbox read best-effort and show nothing until the tables exist.
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:

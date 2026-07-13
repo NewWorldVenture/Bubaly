@@ -383,6 +383,16 @@ export interface Database {
         { id?: string; family_id: string; listing_id: string; member_id?: string | null; kind?: string; amount_cents?: number | null; message?: string | null; status?: string; created_by?: string | null },
         Partial<{ member_id: string | null; kind: string; amount_cents: number | null; message: string | null; status: string }>
       >;
+      marketplace_negotiations: T<
+        { id: string; family_id: string; listing_id: string; buyer_member_id: string; buyer_family_id: string; status: string; current_amount_cents: number; last_actor: string; rounds_count: number; agreed_amount_cents: number | null; order_id: string | null } & Stamps,
+        { id?: string; family_id: string; listing_id: string; buyer_member_id: string; buyer_family_id: string; status?: string; current_amount_cents: number; last_actor: string; rounds_count?: number; agreed_amount_cents?: number | null; order_id?: string | null },
+        Partial<{ status: string; current_amount_cents: number; last_actor: string; rounds_count: number; agreed_amount_cents: number | null; order_id: string | null }>
+      >;
+      marketplace_negotiation_rounds: T<
+        { id: string; negotiation_id: string; listing_id: string; actor_member_id: string | null; actor_role: string; kind: string; amount_cents: number | null; message: string | null; created_at: string },
+        { id?: string; negotiation_id: string; listing_id: string; actor_member_id?: string | null; actor_role: string; kind: string; amount_cents?: number | null; message?: string | null },
+        Partial<{ actor_role: string; kind: string; amount_cents: number | null; message: string | null }>
+      >;
       marketplace_matches: T<
         { id: string; family_id: string; wanted_id: string; supply_id: string; score: number; reason: string | null; status: string; created_by: string | null } & Stamps,
         { id?: string; family_id: string; wanted_id: string; supply_id: string; score?: number; reason?: string | null; status?: string; created_by?: string | null },
@@ -2294,6 +2304,8 @@ export interface Database {
       marketplace_place_bid: { Args: { p_listing_id: string; p_bidder_member_id: string; p_bidder_family_id: string; p_max_cents: number }; Returns: Json };
       marketplace_buy_now: { Args: { p_listing_id: string; p_buyer_member_id: string; p_buyer_family_id: string }; Returns: Json };
       marketplace_close_auction: { Args: { p_listing_id: string; p_now?: string }; Returns: Json };
+      marketplace_negotiation_offer: { Args: { p_listing: string; p_buyer_member: string; p_buyer_family: string; p_amount: number; p_message?: string | null }; Returns: Json };
+      marketplace_negotiation_respond: { Args: { p_negotiation: string; p_action: string; p_amount?: number | null; p_message?: string | null }; Returns: Json };
     };
     Enums: {
       member_role: MemberRole;
