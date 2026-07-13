@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { getAdapter } from '@/lib/sync/registry';
 import { connectAccount } from '@/lib/sync/accounts';
 import { hasEncryptionKey } from '@/lib/sync/crypto';
+import { syncOAuthStateCookie, syncOAuthStatePath, verifySyncOAuthState } from '@/lib/sync/oauth-state';
 import type { SyncProviderEnum } from '@/lib/database.types';
 
 // Provider-generic OAuth callback (R9): exchanges the code via the registry
@@ -19,16 +20,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
   const code = url.searchParams.get('code');
   const stateRaw = url.searchParams.get('state');
   const oauthError = url.searchParams.get('error');
+  const stateCookie = syncOAuthStateCookie(raw);
+  const cookieState = req.cookies.get(stateCookie)?.value ?? null;
 
   const adapter = getAdapter(provider);
-  if (!adapter || !adapter.isConfigured()) return back('error=not_configured');
-  if (oauthError || !code || !stateRaw) return back('error=denied');
-  if (!hasEncryptionKey()) return back('error=no_encryption_key');
+  const redirect = (q: string) => {
+    const response = back(q);
+    response.cookies.set(stateCookie, '', { path: syncOAuthStatePath(raw), maxAge: 0 });
+    return response;
+  };
+
+  if (!adapter || !adapter.isConfigured()) return redirect('error=not_configured');
+  if (oauthError || !code || !verifySyncOAuthState(stateRaw, cookieState)) return redirect('error=state_mismatch');
+  if (!hasEncryptionKey()) return redirect('error=no_encryption_key');
 
   try {
     const ctx = await requireUserContext();
-    const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { userId: string; familyId: string };
-    if (state.userId !== ctx.user.id) return back('error=state_mismatch');
 
     // Must match the auth leg exactly: same env override, same origin fallback.
     const redirectUri = process.env[`${provider.toUpperCase()}_SYNC_REDIRECT_URI`]
@@ -51,9 +58,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
       detail: { identity },
     });
 
-    return back('connected=1');
+    return redirect('connected=1');
   } catch (err) {
     console.error(`${provider} sync callback error:`, err);
-    return back('error=connect_failed');
+    return redirect('error=connect_failed');
   }
 }

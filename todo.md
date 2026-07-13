@@ -2416,7 +2416,8 @@ roadmap entries and user worktree changes are preserved.
 
 ### TODO-0202 - Signed Guardian callbacks could replay side effects before unique inserts
 
-- Status: [x] Completed in code; production enforcement requires migration `0181` to be applied.
+- Status: [x] Completed in code; live schema probe confirms migration `0181` is present; isolated RLS
+  allow/deny testing remains pending.
 - Severity: P1
 - Category: Twilio webhook replay protection / AI and notification idempotency
 - Feature: Guardian SMS, WhatsApp, inbound voice, screening, and voicemail callbacks
@@ -2434,7 +2435,8 @@ roadmap entries and user worktree changes are preserved.
 - Resolution: Added bounded body/field checks and an atomic service-only callback claim ledger. Duplicate
   callbacks short-circuit; stale claims can be reclaimed after ten minutes if a worker crashes.
 - Tests performed: Guardian callback contract, screening-turn contract, full suite, typecheck, lint,
-  build, and public E2E passed. Live migration application remains pending.
+  build, and public E2E passed. Live schema probe confirms the replay ledger is present; isolated RLS
+  allow/deny testing remains pending.
 - Verified by: Codex
 - Date completed: 2026-07-13
 
@@ -2457,5 +2459,29 @@ roadmap entries and user worktree changes are preserved.
   timestamp. Completion/error updates are restricted to the worker that owns the claim.
 - Tests performed: Stripe replay contract, migration contract, issuing authorization tests, full suite,
   typecheck, lint, build, and public E2E passed. Live migration application remains pending.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0204 - Provider sync OAuth state was not browser-bound
+
+- Status: [x] Completed and verified in code; no migration required.
+- Severity: P1
+- Category: OAuth CSRF / external account linking
+- Feature: Google and generic provider sync account connection
+- File or files: `app/api/sync/google/auth/route.ts`, `app/api/sync/google/callback/route.ts`,
+  `app/api/sync/[provider]/auth/route.ts`, `app/api/sync/[provider]/callback/route.ts`,
+  `lib/sync/oauth-state.ts`, `tests/sync-oauth-csrf.test.ts`
+- Database objects: None; callback identity comes from the authenticated session.
+- Description: Sync OAuth state encoded user and family identifiers in a base64 query parameter but was
+  not tied to the browser that initiated the flow. A forged callback could attempt to attach an external
+  account during a victim's signed-in session.
+- User impact: External calendar or task accounts could be linked without the user initiating that OAuth
+  flow.
+- Resolution: Added random provider-scoped httpOnly state cookies, constant-time state comparison,
+  session-derived identity, ten-minute expiry, and state-cookie cleanup on every callback exit path.
+- Tests performed: 3 focused sync files / 32 tests, full suite (312 files / 2,579 tests), typecheck,
+  lint, build, and public E2E passed.
+- Evidence: `lib/sync/oauth-state.ts` and the four sync OAuth routes; no `JSON.stringify({ userId:`
+  state remains in the provider-sync flows.
 - Verified by: Codex
 - Date completed: 2026-07-13

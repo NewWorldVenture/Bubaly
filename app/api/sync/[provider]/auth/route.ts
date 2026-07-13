@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getAdapter } from '@/lib/sync/registry';
+import { createSyncOAuthState, syncOAuthStateCookie, syncOAuthStatePath } from '@/lib/sync/oauth-state';
 import type { SyncProviderEnum } from '@/lib/database.types';
 
 // Provider-generic OAuth start (R9): resolves the adapter from the registry and
@@ -9,7 +10,7 @@ import type { SyncProviderEnum } from '@/lib/database.types';
 // prefers static segments, so /api/sync/google/auth is unaffected.)
 // Register "<origin>/api/sync/<provider>/callback" in the provider's console.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ provider: string }> }) {
-  const ctx = await requireUserContext();
+  await requireUserContext();
   const origin = req.nextUrl.origin;
   const { provider: raw } = await params;
   const provider = raw as SyncProviderEnum;
@@ -26,8 +27,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
   // sits behind a proxy/custom domain; otherwise derive from the request origin.
   const redirectUri = process.env[`${provider.toUpperCase()}_SYNC_REDIRECT_URI`]
     || `${origin}/api/sync/${provider}/callback`;
-  // State binds the flow to the signed-in user; the callback re-checks it against
-  // the live session, so a pasted/forged state can't attach tokens to someone else.
-  const state = Buffer.from(JSON.stringify({ userId: ctx.user.id, familyId: ctx.active.familyId })).toString('base64url');
-  return NextResponse.redirect(adapter.authUrl(redirectUri, state));
+  // State is opaque and browser-bound; identity is always derived from the
+  // callback session rather than from a caller-controlled query parameter.
+  const state = createSyncOAuthState();
+  const response = NextResponse.redirect(adapter.authUrl(redirectUri, state));
+  response.cookies.set(syncOAuthStateCookie(provider), state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: syncOAuthStatePath(provider),
+    maxAge: 600,
+  });
+  return response;
 }

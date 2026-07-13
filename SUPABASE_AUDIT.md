@@ -41,11 +41,10 @@ not delete or rewrite application data.
 
 ## Live Probe Results
 
-- Required schema probes passed for the earlier required tables.
+- Required schema probes passed for all live tables and replay ledgers introduced through `0181`.
 - `marketplace_circles` failed before `0178` with the recursion error above.
 - Public Supabase Auth health passed.
-- Supabase Auth Admin user listing failed with HTTP 500 `Database error finding users` and error id
-  `019f5b84-d42e-7354-9db9-89b9460d2921`.
+- Supabase Auth Admin user listing still fails with HTTP 500 `Database error finding users`.
 
 ## Storage, Functions, Triggers, and Realtime
 
@@ -57,7 +56,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
- 2. Apply the full migration chain through `0182` and run `npm run db:audit:schema` and
+ 2. Apply the remaining migration `0182` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
@@ -112,10 +111,10 @@ two-way/import work, reducing duplicate provider calls while preserving authenti
 Notification generation and test-push dispatch use family/user buckets before service-role device reads
 and push delivery, limiting repeated fan-out work.
 
-- Current live schema audit: all 8 pre-0180 table probes pass; `resend_webhook_events` and
-  `guardian_callback_events` and `stripe_webhook_events.processing_started_at` are missing until
-  migrations 0180 through 0182 are applied. The live Auth Admin users probe still returns HTTP 500 and
-  remains a launch blocker.
+- Current live schema audit: all 10 table/ledger probes through `0181` pass; only
+  `stripe_webhook_events.processing_started_at` (and its `claim_token` companion) is missing until
+  migration `0182` is applied. The live Auth Admin users probe still returns HTTP 500 and remains a
+  launch blocker.
 
 Public service-role ingestion now uses `rate_limit_hit` through the shared request guard for contact,
 marketing forms, exit-intent, landing-page, visitor-intelligence, and A/B writes. Durable enforcement
@@ -148,3 +147,7 @@ Stripe webhook claims now distinguish active concurrent deliveries from failed o
 Migration `0182_stripe_webhook_claims.sql` adds the processing timestamp and index required for that
 conditional recovery. Each worker also carries an ownership token so an older worker cannot overwrite a
 newer reclaimed claim; payload and configuration boundaries are enforced before signature processing.
+
+Provider-sync OAuth callbacks now use provider-scoped, opaque, httpOnly state cookies with constant-time
+comparison and session-derived identity. This closes the CSRF gap in both static Google and generic
+provider sync routes without adding any database dependency.

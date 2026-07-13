@@ -174,3 +174,17 @@ Audit date: 2026-07-13
   ownership tokens prevent older workers from overwriting a reclaimed event.
 - Live schema audit reports the expected missing `processing_started_at` column until migration `0182`
   is applied.
+
+## Audit Update - 2026-07-13 (sync OAuth CSRF protection)
+
+- `npm.cmd test -- tests/sync-oauth-csrf.test.ts tests/sync-adapter.test.ts tests/connections-adapter.test.ts`:
+  3 files, 32 tests passed.
+- `npm.cmd test`: 312 files and 2,579 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 233 routes generated.
+- `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e`: 51 passed, 1 intentional auth test skipped.
+- Google and generic provider-sync OAuth flows now use opaque provider-scoped state cookies, constant-time
+  comparison, session-derived identity, and callback cleanup. No new migration is required.
+- Live schema audit: migrations `0180` and `0181` are now present; `0182` remains pending. Auth Admin
+  users probe still returns HTTP 500.

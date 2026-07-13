@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { exchangeCode, getGoogleUserEmail, googleSyncRedirectUri } from '@/lib/sync/providers/google';
 import { connectAccount } from '@/lib/sync/accounts';
 import { hasEncryptionKey } from '@/lib/sync/crypto';
+import { syncOAuthStateCookie, syncOAuthStatePath, verifySyncOAuthState } from '@/lib/sync/oauth-state';
 
 // Google redirects here after consent. Exchanges the code for tokens, fetches the
 // account email, and stores everything (tokens AES-256-GCM encrypted) via
@@ -14,15 +15,20 @@ export async function GET(req: NextRequest) {
   const code = url.searchParams.get('code');
   const stateRaw = url.searchParams.get('state');
   const oauthError = url.searchParams.get('error');
+  const stateCookie = syncOAuthStateCookie('google');
+  const cookieState = req.cookies.get(stateCookie)?.value ?? null;
   const back = (q: string) => NextResponse.redirect(new URL(`/dashboard/sync/accounts/google?${q}`, origin));
+  const redirect = (q: string) => {
+    const response = back(q);
+    response.cookies.set(stateCookie, '', { path: syncOAuthStatePath('google'), maxAge: 0 });
+    return response;
+  };
 
-  if (oauthError || !code || !stateRaw) return back('error=denied');
-  if (!hasEncryptionKey()) return back('error=no_encryption_key');
+  if (oauthError || !code || !verifySyncOAuthState(stateRaw, cookieState)) return redirect('error=state_mismatch');
+  if (!hasEncryptionKey()) return redirect('error=no_encryption_key');
 
   try {
     const ctx = await requireUserContext();
-    const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { userId: string; familyId: string };
-    if (state.userId !== ctx.user.id) return back('error=state_mismatch');
 
     const redirectUri = googleSyncRedirectUri(origin);
     const tokens = await exchangeCode(code, redirectUri);
@@ -43,9 +49,9 @@ export async function GET(req: NextRequest) {
       detail: { email },
     });
 
-    return back('connected=1');
+    return redirect('connected=1');
   } catch (err) {
     console.error('Google sync callback error:', err);
-    return back('error=connect_failed');
+    return redirect('error=connect_failed');
   }
 }

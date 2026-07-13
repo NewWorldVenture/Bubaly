@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { googleAuthUrl, googleSyncRedirectUri, isGoogleSyncConfigured } from '@/lib/sync/providers/google';
+import { createSyncOAuthState, syncOAuthStateCookie, syncOAuthStatePath } from '@/lib/sync/oauth-state';
 
 // Starts the app-level Google OAuth flow for two-way sync (calendar + tasks,
 // offline access). Distinct from Supabase login: this obtains a persistent
@@ -8,7 +9,7 @@ import { googleAuthUrl, googleSyncRedirectUri, isGoogleSyncConfigured } from '@/
 // from the request origin so it stays consistent through the token exchange —
 // register exactly "<origin>/api/sync/google/callback" in the Google console.
 export async function GET(req: NextRequest) {
-  const ctx = await requireUserContext();
+  await requireUserContext();
   const origin = req.nextUrl.origin;
 
   if (!isGoogleSyncConfigured()) {
@@ -16,6 +17,14 @@ export async function GET(req: NextRequest) {
   }
 
   const redirectUri = googleSyncRedirectUri(origin);
-  const state = Buffer.from(JSON.stringify({ userId: ctx.user.id, familyId: ctx.active.familyId })).toString('base64url');
-  return NextResponse.redirect(googleAuthUrl(redirectUri, state));
+  const state = createSyncOAuthState();
+  const response = NextResponse.redirect(googleAuthUrl(redirectUri, state));
+  response.cookies.set(syncOAuthStateCookie('google'), state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: syncOAuthStatePath('google'),
+    maxAge: 600,
+  });
+  return response;
 }
