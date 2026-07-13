@@ -1,6 +1,6 @@
 'use server';
 
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { stitchVisitorIdentity } from '@/lib/marketing/identity';
@@ -10,6 +10,8 @@ import { deriveChildPassword } from '@/lib/onboarding/child-password';
 import {
   evaluateThrottle, registerFailure, clearedState, retryAfterLabel, type ThrottleRow,
 } from '@/lib/auth/child-throttle';
+import { clientIp } from '@/lib/server/rate-limit';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 /** Where a just-signed-in user should land: the admin console for super
  *  admins, otherwise the family Home dashboard (/home). Resolved server-side so
@@ -60,20 +62,28 @@ export async function childSignInAction(input: { username: string; pin: string }
   const sec = process.env.CHILD_LOGIN_SECRET || null;
   if (!sec) return { ok: false, error: 'Kid sign-in isn’t available right now.' };
 
-  const username = normalizeUsername(input.username);
-  if (!isValidUsername(username) || !isValidPin(input.pin)) {
+  const payload = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  const username = normalizeUsername(typeof payload.username === 'string' ? payload.username : '');
+  const pin = typeof payload.pin === 'string' ? payload.pin : '';
+  const admin = createServiceClient();
+  const limited = await enforceRequestRateLimit(admin, `child-login:${clientIp(await headers())}`, { limit: 30 });
+  if (!limited.ok) return { ok: false, error: 'Too many sign-in attempts. Try again shortly.' };
+
+  if (!isValidUsername(username) || !isValidPin(pin)) {
     return { ok: false, error: 'Check the username and PIN and try again.' };
   }
-
-  const admin = createServiceClient();
 
   // Brute-force guard: reject flooded attempts BEFORE touching the password, so a
   // 4-digit PIN on a guessable username can't be enumerated. Keyed by username
   // (durable + cross-instance via the child_login_throttle table). Note we check
   // the lock even for unknown usernames so the throttle isn't a lookup oracle.
   const now = new Date();
-  const { data: tRow } = await admin.from('child_login_throttle')
+  const { data: tRow, error: throttleReadError } = await admin.from('child_login_throttle')
     .select('fails, window_start, locked_until').eq('username', username).maybeSingle();
+  if (throttleReadError) {
+    console.error('[child-login] throttle lookup failed', throttleReadError);
+    return { ok: false, error: 'Kid sign-in is temporarily unavailable. Try again shortly.' };
+  }
   const gate = evaluateThrottle(tRow as ThrottleRow | null, now);
   if (gate.locked) {
     return { ok: false, error: `Too many tries. Try again in ${retryAfterLabel(gate.retryAfterSec)}.` };
@@ -85,14 +95,18 @@ export async function childSignInAction(input: { username: string; pin: string }
       { username, ...next }, { onConflict: 'username' });
   };
 
-  const { data: rows } = await admin.from('child_logins').select('username').ilike('username', username).limit(1);
+  const { data: rows, error: loginLookupError } = await admin.from('child_logins').select('username').ilike('username', username).limit(1);
+  if (loginLookupError) {
+    console.error('[child-login] login lookup failed', loginLookupError);
+    return { ok: false, error: 'Kid sign-in is temporarily unavailable. Try again shortly.' };
+  }
   const row = rows?.[0];
   if (!row) { await recordFailure(); return { ok: false, error: 'That username or PIN isn’t right.' }; }
 
   const supabase = await createServer(); // cookie-bound → sets the session on success
   const { error } = await supabase.auth.signInWithPassword({
     email: syntheticChildEmail(row.username),
-    password: deriveChildPassword(sec, row.username, input.pin),
+    password: deriveChildPassword(sec, row.username, pin),
   });
   if (error) { await recordFailure(); return { ok: false, error: 'That username or PIN isn’t right.' }; }
 

@@ -225,6 +225,10 @@ Public review, survey, and gift server actions now call the shared `rate_limit_h
 `enforceRequestRateLimit` before their service-role writes. Runtime payload extraction accepts only
 expected string/number shapes, so server-action calls cannot trigger unchecked `.trim()` failures.
 
+The public child username/PIN action now uses the same durable IP guard before reading
+`child_login_throttle` or `child_logins`; either lookup error returns a generic temporary-unavailable
+result rather than treating the missing data as an authentication miss.
+
 ## Audit Update - 2026-07-13 (marketplace returns seed safety)
 
 The new returns fixture pack now fails closed when migration `0192` or the required `returned_at`

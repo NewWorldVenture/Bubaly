@@ -3203,3 +3203,20 @@ roadmap entries and user worktree changes are preserved.
   typecheck, lint, production build, and public Playwright/axe E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0232 - Child username/PIN sign-in lacked an IP-wide guard and failed open on lookup errors
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Authentication / brute-force resistance / failure handling
+- Feature: Public child username and PIN sign-in
+- File or files: `app/(auth)/actions.ts`, `tests/child-login-action-security.test.ts`
+- Description: The custom per-username throttle did not limit an attacker rotating across usernames,
+  and throttle or child-login lookup errors were treated like empty results. Runtime payloads could also
+  throw before the generic sign-in response.
+- Resolution: Added a durable IP-wide limit before lookups, normalized untrusted username/PIN values,
+  and fail closed with a generic temporary-unavailable response when either lookup fails.
+- Tests performed: Child-login action/security contracts, child-login and throttle unit tests, full Vitest
+  suite, typecheck, lint, production build, and public Playwright/axe E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13
