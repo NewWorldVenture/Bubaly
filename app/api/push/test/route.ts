@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getUser } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { sendPushToUser, pushConfigured } from '@/lib/server/push';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,13 @@ export async function POST() {
 
   // Service client so dispatch can read this user's device rows + prune stale ones.
   const supabase = createServiceClient();
+  const limited = await enforceRequestRateLimit(supabase, `push:test:${user.id}`, { limit: 5 });
+  if (!limited.ok) {
+    return NextResponse.json(
+      { error: 'Too many test pushes. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
+  }
   const result = await sendPushToUser(supabase, user.id, {
     title: 'Bubaly test 🔔',
     body: 'If you can read this, push notifications are working on this device.',

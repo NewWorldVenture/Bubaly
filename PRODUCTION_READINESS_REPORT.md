@@ -123,3 +123,6 @@ durable request limits after parent authorization and before Stripe side effects
 
 Generic provider sync, Google sync, and the legacy Google Calendar import now apply per-family/user
 request limits before token refreshes or external calendar API work.
+
+Notification refresh and test-push routes now apply family/user request limits before notification
+generation or device fan-out side effects.

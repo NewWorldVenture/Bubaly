@@ -1892,6 +1892,27 @@ roadmap entries and user worktree changes are preserved.
 - Verified by: Codex
 - Date completed: 2026-07-13
 
+### TODO-0195 - Notification and test-push routes lacked request budgets
+
+- Status: [x] Completed in code and covered by the shared limiter regression tests.
+- Severity: P1
+- Category: Notification delivery abuse resistance / external side effects
+- Feature: Family notification refresh and push testing
+- Routes: `/api/notifications/generate`, `/api/push/test`
+- File or files: the two route handlers, `lib/server/request-rate-limit.ts`,
+  `tests/ai-rate-limit.test.ts`
+- Database objects: `rate_limits`, `rate_limit_hit`, `notifications`, `push_devices`
+- Description: Authenticated notification refresh could generate and dispatch up to 200 pending rows
+  repeatedly, while test push could fan out to every registered device without request limits.
+- User impact: Runaway clients could spam devices, repeat provider calls, and create avoidable database work.
+- Root cause: The routes relied on authentication but predated the shared side-effect limiter.
+- Resolution: Added family-scoped 10-request-per-minute notification refresh limits and user-scoped
+  5-request-per-minute test-push limits, with `Retry-After` responses before fan-out.
+- Tests performed: Shared limiter regression passed; full suite, typecheck, lint, build, and public E2E remain
+  release gates. Durable enforcement depends on migration `0156` in production.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
 ### Audit Closeout Evidence (2026-07-13)
 
 - [x] Typecheck: `npm.cmd run typecheck` passed.

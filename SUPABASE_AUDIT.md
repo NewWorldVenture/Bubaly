@@ -104,3 +104,9 @@ the parent-role authorization remains the primary access control.
 
 Calendar sync entry points use provider-specific family/user buckets before external token refresh or
 two-way/import work, reducing duplicate provider calls while preserving authenticated sync behavior.
+
+Notification generation and test-push dispatch use family/user buckets before service-role device reads
+and push delivery, limiting repeated fan-out work.
+
+- Current live schema audit: all 8 required table probes pass; the live Auth Admin users probe still
+  returns HTTP 500 and remains a launch blocker.
