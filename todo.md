@@ -1054,6 +1054,24 @@ missing-location events, colliding events for conflicts). Run it, then open
 ## Roadmap features (from the product roadmap)
 
 ### 1. Marketplace — "Buy, sell, rent, borrow within the platform"  ☑ DONE
+
+> **▶▶ World-class buildout (2026-07-13) — 8 vertical slices shipped this session, full lifecycle
+> beyond eBay/Craigslist.** Each is migration (where needed) + pure engine + tests + realtime/SSR UI +
+> ≥500-row seed (where stateful) + docs, PG16-validated, pushed to `main`. Lifecycle now:
+> **discover → price-check → watch/price-track → bid/offer → agree → hand off → return → review**, with
+> a seller cockpit + a safety/moderation layer. The slices (details in the checklist items below):
+> 1. **Live Auctions** (`0183`, +`0184`/`0185` hardening) — proxy bidding, reserve, Buy-It-Now,
+>    anti-snipe, `close-auctions` cron.
+> 2. **Make an Offer** (`0186`, +`0187` hardening) — Best-Offer negotiation, atomic accept.
+> 3. **Pickup & Hand-off** (`0190`) — safe-meetup scheduling, family calendar, in-person code.
+> 4. **Price History + Drop Watch** (`0191`) — trigger-driven change log + watcher alerts.
+> 5. **Returns + Overdue** (`0192`) — rent/borrow due reminders + `return-reminders` cron.
+> 6. **Seller Cockpit** (`/selling`, no migration) — ranked "what needs you" view.
+> 7. **Trust & Safety** (`0193`) — report a listing + super-admin moderation queue.
+> 8. **Price Coach** (no migration) — comp-band "is this a fair price?" for buyers.
+> **Prod:** apply `0183`–`0193` + set `CRON_SECRET` (see `docs/PENDING_PROD_MIGRATIONS.md`); all safe
+> pre-apply (best-effort reads, dormant until tables exist). Test coverage: 77 marketplace unit tests.
+
 - [x] Migration `0120_marketplace.sql`: `marketplace_listings` (kind sell/rent/borrow/free/wanted, price_cents, rent_period, category, condition, status, claimed_by), `marketplace_offers` (interest/claim/offer), family-scoped RLS. Validated: all 120 migrations apply on PG16, idempotent re-run clean, RLS+trigger+FK verified.
 - [x] Types for both tables in `lib/database.types.ts`.
 - [x] `lib/marketplace/listings.ts` — labels, money math, filter/rank, offer/claim state machine (pure). Tests `tests/marketplace-listings.test.ts` (10 tests).
@@ -1392,6 +1410,14 @@ missing-location events, colliding events for conflicts). Run it, then open
     comparable listings"** line, from reachable same-category `sell` comps (RLS/circles). Owners and
     auctions don't show it. Verified: tsc · eslint · **vitest (9 coach + …77 marketplace total)** ·
     `next build`. No prod migration — lights up on existing marketplace data.
+
+- [x] **Deals feed — `/marketplace/deals` ✅ SHIPPED (2026-07-13).** Turns the Price Coach from a
+  per-item check into a **discovery surface**: reachable available `sell` listings priced at/below their
+  category's comp band, ranked by how far under the median they sit. **No migration** (reuses the
+  price-coach engine + existing listings). Added `discountVsMedianPercent` + `isDeal` (at/below median
+  only) to `lib/marketplace/price-coach.ts` (**+2 tests → 11**). Grid with a **"N% under"** flame badge,
+  the verdict, and the "Similar: $X–$Y" range; nav entry (Deals, `Tag`). Verified: tsc · eslint ·
+  **vitest (11 coach)** · `next build` (`/marketplace/deals`).
 
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the

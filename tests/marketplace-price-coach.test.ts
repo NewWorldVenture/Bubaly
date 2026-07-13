@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  percentile, priceBand, assessPrice, dealLabel, bandSummary, type Comp,
+  percentile, priceBand, assessPrice, dealLabel, bandSummary,
+  discountVsMedianPercent, isDeal, type Comp,
 } from '@/lib/marketplace/price-coach';
 
 const comp = (priceCents: number, condition = 'good'): Comp => ({ category: 'sports', condition, priceCents, kind: 'sell' });
@@ -54,6 +55,23 @@ describe('assessPrice', () => {
   it('is unknown without a band or price', () => {
     expect(assessPrice(4000, null)).toBe('unknown');
     expect(assessPrice(0, band)).toBe('unknown');
+  });
+});
+
+describe('deal ranking helpers', () => {
+  const band = { lowCents: 3000, medianCents: 4000, highCents: 5000, sampleSize: 8 };
+  it('discountVsMedianPercent measures depth below median only', () => {
+    expect(discountVsMedianPercent(3000, band)).toBe(25); // $30 vs $40 median
+    expect(discountVsMedianPercent(4000, band)).toBe(0);  // at median
+    expect(discountVsMedianPercent(4500, band)).toBe(0);  // above median
+    expect(discountVsMedianPercent(3000, null)).toBe(0);
+  });
+  it('isDeal is true at/below median only', () => {
+    expect(isDeal(2500, band)).toBe(true);   // great
+    expect(isDeal(3800, band)).toBe(true);   // good
+    expect(isDeal(4500, band)).toBe(false);  // fair — not a deal
+    expect(isDeal(6000, band)).toBe(false);  // above market
+    expect(isDeal(3000, null)).toBe(false);
   });
 });
 

@@ -84,6 +84,19 @@ export function dealLabel(deal: Deal): { text: string; tone: 'ok' | 'good' | 'mu
   }
 }
 
+/** How far below the band's median a price sits, as a whole percent (0 when
+ *  at/above median). Used to rank the Deals feed by discount depth. */
+export function discountVsMedianPercent(priceCents: number, band: PriceBand | null): number {
+  if (!band || priceCents <= 0 || band.medianCents <= 0 || priceCents >= band.medianCents) return 0;
+  return Math.round(((band.medianCents - priceCents) / band.medianCents) * 100);
+}
+
+/** Is this price a genuine deal (at/below the band's median)? */
+export function isDeal(priceCents: number, band: PriceBand | null): boolean {
+  const d = assessPrice(priceCents, band);
+  return d === 'great_deal' || d === 'good_deal';
+}
+
 const money = (c: number) => `$${Math.round(c / 100)}`;
 
 /** "Similar items: $20–$45" — the range shown under the verdict. */
