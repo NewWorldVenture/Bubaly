@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { buildCoachPrompt, parseCoachResponse, type HabitStat } from '@/lib/habits/ai';
 import {
   currentStreak, longestStreak, completionRate, isDoneToday, toISODate, type HabitLike,
@@ -15,6 +16,11 @@ export async function POST() {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
     const supabase = await createServer();
+    const limited = await enforceAIRateLimit(supabase, `ai-habits:${ctx.user.id}`, { limit: 15 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many habit-coach requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
     const today = toISODate(new Date());
     const since = toISODate(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
 

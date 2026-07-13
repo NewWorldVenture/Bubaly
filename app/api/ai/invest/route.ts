@@ -6,6 +6,7 @@ import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
 import { portfolioValue, type Holding, type PriceMap } from '@/lib/invest/portfolio';
 import { buildInvestCoachPrompt, parseInvestCoach } from '@/lib/invest/coach';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 // POST /api/ai/invest — the kids' EDUCATIONAL Money Mentor. Same tier gating +
 // per-day metering as the wallet coach. Explains an investing concept; never
@@ -20,6 +21,11 @@ export async function POST(req: NextRequest) {
     if (aiCoachLevel(tier) === 'none') {
       return NextResponse.json({ error: 'The Money Mentor is available on the Basic and Plus plans.' }, { status: 403 });
     }
+    const limited = await enforceAIRateLimit(supabase, `ai-invest:${ctx.user.id}`, { limit: 10 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many Money Mentor requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
     const dailyLimit = AI_COACH_DAILY_LIMIT[tier];
     if (Number.isFinite(dailyLimit)) {
       const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);

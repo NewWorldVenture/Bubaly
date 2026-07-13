@@ -57,6 +57,19 @@ Audit date: 2026-07-13
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
 - Public service-role ingestion contract now covers contact, forms, exit-intent, landing-page,
   visitor-intelligence, and A/B routes using the shared durable request guard.
+
+## Audit Update - 2026-07-13 (model/provider request budgets)
+
+- `npm.cmd test`: 307 files and 2,557 tests passed.
+- `npm.cmd test -- tests/ai-route-rate-limit-contract.test.ts tests/ai-rate-limit.test.ts tests/public-side-effect-rate-limit.test.ts`:
+  3 files, 6 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 233 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- The audited model-backed and external-provider routes now use shared durable per-user request
+  budgets before paid provider calls or broad context reads. Durable enforcement depends on migration
+  `0156` being applied in the target environment.
 ## Audit Update - 2026-07-13
 
 - `node --check scripts/seed*.mjs`: passed for all six legacy seed scripts plus the shared client.

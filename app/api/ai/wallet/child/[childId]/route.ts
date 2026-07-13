@@ -6,6 +6,7 @@ import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { buildChildCoachPrompt, parseWalletCoach } from '@/lib/wallet/coach';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 // POST /api/ai/wallet/child/[childId] — child-specific AI Money Coach.
 // Same tier gate + daily limit as the family-wide coach, but the prompt is
@@ -16,6 +17,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
+    const limited = await enforceAIRateLimit(supabase, `ai-wallet-child:${ctx.user.id}:${childId}`, { limit: 10 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many child Money Coach requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
 
     // Verify the child wallet belongs to this family (RLS also enforces this)
     const { data: cw } = await supabase

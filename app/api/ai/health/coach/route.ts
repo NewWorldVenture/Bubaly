@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, describeAIError } from '@/lib/ai/provider';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,11 @@ export async function POST(req: Request) {
   if (!question) return NextResponse.json({ error: 'Ask a question first.' }, { status: 400 });
 
   const supabase = await createServer();
+  const limited = await enforceAIRateLimit(supabase, `ai-health-coach:${ctx.user.id}`, { limit: 10 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many health-coach requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
   const familyId = ctx.active.familyId;
 
   // Ground the answer in this family's own health data.

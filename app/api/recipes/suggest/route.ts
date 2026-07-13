@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { resolveProvider } from '@/lib/ai/provider';
 import { buildSuggestPrompt, parseSuggestions, type VaultRecipeLite } from '@/lib/recipes/suggest';
 
@@ -13,12 +13,14 @@ export async function POST(req: NextRequest) {
   let ctx;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
 
-  const limit = rateLimit(`recipe-suggest:${ctx.user.id || clientIp(req.headers)}`, { limit: 15, windowMs: 60_000 });
-  if (!limit.ok) return NextResponse.json({ error: 'Slow down a moment and try again.' }, { status: 429 });
+  const supabase = await createServer();
+  const limited = await enforceAIRateLimit(supabase, `ai-recipe-suggest:${ctx.user.id}`, { limit: 15 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many recipe suggestions. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
 
   const { constraint } = await req.json().catch(() => ({})) as { constraint?: string };
-
-  const supabase = await createServer();
   const { data: recipes } = await supabase
     .from('family_recipes')
     .select('id, name, cuisine, category, tags, ingredients, photo_url')

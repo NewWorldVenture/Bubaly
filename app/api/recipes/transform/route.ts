@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { resolveProvider } from '@/lib/ai/provider';
 import { buildTransformPrompt, parseTransformResult, getRecipeAiAction, type RecipeAiActionId } from '@/lib/recipes/ai-actions';
 import type { Database } from '@/lib/database.types';
@@ -16,15 +16,18 @@ export async function POST(req: NextRequest) {
   let ctx;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
 
-  const limit = rateLimit(`recipe-ai:${ctx.user.id || clientIp(req.headers)}`, { limit: 12, windowMs: 60_000 });
-  if (!limit.ok) return NextResponse.json({ error: 'Slow down a moment and try again.' }, { status: 429 });
+  const supabase = await createServer();
+  const limited = await enforceAIRateLimit(supabase, `ai-recipe-transform:${ctx.user.id}`, { limit: 12 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many recipe transformations. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
 
   const { recipeId, actionId } = await req.json().catch(() => ({})) as { recipeId?: string; actionId?: string };
   if (!recipeId || !actionId || !getRecipeAiAction(actionId)) {
     return NextResponse.json({ error: 'recipeId and a valid actionId are required' }, { status: 422 });
   }
 
-  const supabase = await createServer();
   const { data: recipe } = await supabase
     .from('family_recipes')
     .select('id, family_id, name, cuisine, servings, ingredients, instructions, allergy_flags, category, photo_url')

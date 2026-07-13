@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
-import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -23,10 +24,12 @@ export async function POST(req: NextRequest) {
   try {
     const ctx = await requireUserContext();
     const userId = ctx.user.id;
-
-    const ip = clientIp(req.headers);
-    const limit = rateLimit(`assist:${userId || ip}`, { limit: 30, windowMs: 60_000 });
-    if (!limit.ok) return NextResponse.json({ error: 'Slow down a moment and try again.' }, { status: 429 });
+    const supabase = await createServer();
+    const limited = await enforceAIRateLimit(supabase, `ai-assist:${userId}`, { limit: 30 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many AI requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
 
     if (!(await isAIConfigured())) {
       return NextResponse.json(

@@ -6,6 +6,7 @@ import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { buildWalletCoachPrompt, parseWalletCoach, type CoachChild, type CoachGoal } from '@/lib/wallet/coach';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 // POST /api/ai/wallet — the AI Family Financial Coach. Gated by wallet tier
 // (Free has no coach; Basic limited; Plus unlimited). Computes balances + goal
@@ -20,6 +21,11 @@ export async function POST() {
     if (aiCoachLevel(tier) === 'none') {
       return NextResponse.json({ error: 'The AI Money Coach is available on the Basic and Plus plans.' }, { status: 403 });
     }
+    const limited = await enforceAIRateLimit(supabase, `ai-wallet:${ctx.user.id}`, { limit: 10 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many AI Money Coach requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
 
     // Per-day metering: the limited (Basic) tier is capped at AI_COACH_DAILY_LIMIT
     // calls/day. We count today's `ai_coach_call` audit rows for this family.

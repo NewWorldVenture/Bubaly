@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { getAIConfig } from '@/lib/ai/settings';
 
 export const runtime = 'nodejs';
@@ -46,9 +46,11 @@ export async function POST(req: NextRequest) {
     const userId = ctx.user.id;
     const supabase = await createServer();
 
-    const ip = clientIp(req.headers);
-    const limit = rateLimit(`flyer:${userId || ip}`, { limit: 15, windowMs: 60_000 });
-    if (!limit.ok) return NextResponse.json({ error: 'Slow down a moment and try again.' }, { status: 429 });
+    const limited = await enforceAIRateLimit(supabase, `ai-flyer:${userId}`, { limit: 15 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many flyer scans. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
 
     const body = (await req.json()) as {
       data?: string; mediaType?: string; confirm?: ProposedEvent[];

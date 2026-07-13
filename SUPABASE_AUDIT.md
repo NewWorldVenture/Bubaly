@@ -114,3 +114,8 @@ and push delivery, limiting repeated fan-out work.
 Public service-role ingestion now uses `rate_limit_hit` through the shared request guard for contact,
 marketing forms, exit-intent, landing-page, visitor-intelligence, and A/B writes. Durable enforcement
 still depends on migration `0156` being applied in the target environment.
+
+The audited model-backed and external-provider routes now use shared per-user durable request budgets
+before provider calls or broad context reads. This includes the `/api/ai` route inventory plus vacation
+AI/weather, recipe AI, and weekend discovery. The guards preserve feature-specific plan/day caps and
+return `Retry-After`; durable enforcement depends on migration `0156` being applied in production.

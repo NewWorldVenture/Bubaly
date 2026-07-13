@@ -8,6 +8,7 @@ import {
 } from '@/lib/meals/planner';
 import { expiringSoon } from '@/lib/pantry/logic';
 import type { MealType } from '@/lib/database.types';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,11 @@ export async function POST(req: Request) {
   const write = body.write === true;
 
   const supabase = await createServer();
+  const limited = await enforceAIRateLimit(supabase, `ai-meals-plan:${userId}`, { limit: 10 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many meal-plan requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
 
   // Candidate dishes ------------------------------------------------------
   const [{ data: meals }, { data: recipes }] = await Promise.all([

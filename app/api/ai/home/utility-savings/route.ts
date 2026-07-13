@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import {
   summarizeUtilities, deterministicSavingsFindings, utilityLabel, usd,
   type BillLike,
@@ -23,6 +24,11 @@ export async function POST() {
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
 
   const supabase = await createServer();
+  const limited = await enforceAIRateLimit(supabase, `ai-home-utility-savings:${ctx.user.id}`, { limit: 10 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many utility-savings requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
   const { data: rows } = await supabase
     .from('utility_bills')
     .select('kind, period_month, amount_cents')

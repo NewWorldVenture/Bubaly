@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,12 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   let ctx;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  const supabase = await createServer();
+  const limited = await enforceAIRateLimit(supabase, `ai-home-forecast:${ctx.user.id}`, { limit: 10 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many maintenance-forecast requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
   if (!(await isAIConfigured())) {
     return NextResponse.json({ error: 'AI is not configured (OpenAI API key missing).' }, { status: 503 });
   }
@@ -48,7 +55,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'AI request failed' }, { status: 503 });
   }
 
-  const supabase = await createServer();
   await supabase.from('home_ai_logs').insert({
     family_id: ctx.active.familyId, user_id: ctx.user.id, kind: 'forecast',
     input: { count: assets.length }, output: { text }, created_by: ctx.user.id,

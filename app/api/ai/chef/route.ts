@@ -3,6 +3,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { isMissingTableError } from '@/lib/supabase/errors';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { expiringSoon } from '@/lib/pantry/logic';
 import {
   buildChefSystem, buildChefUser, parseChefReply, fallbackChefReply, type ChefContext,
@@ -30,6 +31,11 @@ export async function POST(req: Request) {
   const weeklyBudget = typeof body.weeklyBudget === 'number' && body.weeklyBudget > 0 ? Math.round(body.weeklyBudget) : null;
 
   const supabase = await createServer();
+  const limited = await enforceAIRateLimit(supabase, `ai-chef:${ctx.user.id}`, { limit: 15 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many chef requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
   const now = new Date();
   const weekAhead = new Date(now.getTime() + 7 * 86400000).toISOString();
 

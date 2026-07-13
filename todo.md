@@ -2299,3 +2299,26 @@ roadmap entries and user worktree changes are preserved.
   passed. Durable enforcement depends on migration `0156` in production.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0197 - Model-backed and external-provider routes lacked durable request budgets
+
+- Status: [x] Completed in code and covered by `tests/ai-route-rate-limit-contract.test.ts`.
+- Severity: P1
+- Category: AI/provider abuse resistance / distributed external side effects
+- Feature: Family AI tools, recipe AI, trip/weather research, and weekend discovery
+- Routes: model-backed routes under `/api/ai`, plus `/api/vacations/ai`, `/api/recipes/suggest`,
+  `/api/recipes/transform`, `/api/vacations/weather`, `/api/weekend/discover`
+- File or files: affected route handlers, `lib/server/ai-rate-limit.ts`,
+  `lib/server/request-rate-limit.ts`, `tests/ai-route-rate-limit-contract.test.ts`
+- Database objects: `rate_limits`, `rate_limit_hit`, AI audit/cache tables, family-scoped feature tables
+- Description: Several authenticated routes could invoke model or external provider work with only
+  instance-local or no request budget, allowing repeated provider calls across app instances.
+- User impact: Runaway clients could consume model/provider capacity, duplicate AI-generated writes,
+  and increase latency or cost.
+- Root cause: Older provider routes predated the shared durable limiter; some had only plan/day caps.
+- Resolution: Added per-user shared local-plus-durable limits before provider calls or broad context
+  reads, preserving existing plan/day caps and returning `Retry-After` on rejection.
+- Tests performed: AI route contract, limiter tests, full suite, typecheck, lint, build, and public E2E
+  passed. Durable enforcement depends on migration `0156` in production.
+- Verified by: Codex
+- Date completed: 2026-07-13

@@ -5,6 +5,7 @@ import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { coerceNutrition, parseModelJSON, type Nutrition } from '@/lib/meals/nutrition';
 import { weekDates } from '@/lib/meals/planner';
 import type { NutritionSubject } from '@/lib/database.types';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,6 +49,11 @@ export async function POST(req: Request) {
   }
 
   const supabase = await createServer();
+  const limited = await enforceAIRateLimit(supabase, `ai-meals-nutrition:${ctx.user.id}`, { limit: 15 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many nutrition requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
 
   // Cache hit -------------------------------------------------------------
   if (!refresh) {

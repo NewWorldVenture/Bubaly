@@ -3,6 +3,7 @@ import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { buildJournalPrompt, parseJournalPrompt, promptOfTheDay } from '@/lib/journal/prompts';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 // POST /api/ai/journal — returns one personalized reflection prompt for the
 // signed-in member, informed by their recent entries. Falls back to the
@@ -12,6 +13,11 @@ export async function POST() {
     const ctx = await requireUserContext();
     const memberId = ctx.active.member?.id ?? null;
     const supabase = await createServer();
+    const limited = await enforceAIRateLimit(supabase, `ai-journal:${ctx.user.id}`, { limit: 20 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many journal requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
 
     const { data: recent } = await supabase
       .from('journal_entries')

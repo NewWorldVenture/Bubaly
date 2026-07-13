@@ -3,12 +3,18 @@ import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { buildConciergeDigest, digestToPromptLines, type ConciergeSnapshot } from '@/lib/concierge/digest';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export async function POST(req: NextRequest) {
   try {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
     const supabase = await createServer();
+    const limited = await enforceAIRateLimit(supabase, `ai-briefing:${ctx.user.id}`, { limit: 10 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many briefing requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
 
     const { type = 'morning' } = (await req.json()) as { type?: string };
 

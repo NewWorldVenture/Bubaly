@@ -3,7 +3,7 @@ import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { AI_TOOLS, runAction } from '@/lib/ai/actions';
-import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
 
 // Map a Magic-Import action to a Trust Engine domain so the governance layer can
@@ -50,10 +50,12 @@ export async function POST(req: NextRequest) {
     const userId = ctx.user.id;
     const supabase = await createServer();
 
-    const ip = clientIp(req.headers);
-    const limit = rateLimit(`import:${userId || ip}`, { limit: 20, windowMs: 60_000 });
-    if (!limit.ok) {
-      return NextResponse.json({ error: 'Slow down a moment and try again.' }, { status: 429 });
+    const limited = await enforceAIRateLimit(supabase, `ai-import:${userId}`, { limit: 20 });
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: 'Too many imports. Please try again shortly.' },
+        { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+      );
     }
 
     const body = (await req.json()) as { text?: string; confirm?: Item[] };

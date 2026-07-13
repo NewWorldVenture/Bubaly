@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { resolveProvider } from '@/lib/ai/provider';
 import { summarizeBudget } from '@/lib/vacations/budget';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
@@ -17,14 +17,17 @@ export async function POST(req: NextRequest) {
   let ctx;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
 
-  const limit = rateLimit(`vac-ai:${ctx.user.id || clientIp(req.headers)}`, { limit: 20, windowMs: 60_000 });
-  if (!limit.ok) return NextResponse.json({ error: 'Slow down a moment and try again.' }, { status: 429 });
+  const supabase = await createServer();
+  const limited = await enforceAIRateLimit(supabase, `ai-vacations:${ctx.user.id}`, { limit: 20 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many trip AI requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
 
   const body = await req.json().catch(() => ({})) as Body;
   const { action, vacationId } = body;
   if (!vacationId) return NextResponse.json({ error: 'Missing vacationId' }, { status: 400 });
 
-  const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const { data: trip } = await supabase.from('vacations').select('*').eq('id', vacationId).maybeSingle();
   if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });

@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { logAudit } from '@/lib/server/audit';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { upcomingDates, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
 import {
   buildRelationshipDigestPrompt, parseRelationshipDigest, suggestGiftsFromWishlist,
@@ -23,6 +24,11 @@ export async function POST() {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
+    const limited = await enforceAIRateLimit(supabase, `ai-relationship:${ctx.user.id}`, { limit: 10 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many relationship-helper requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
 
     // Per-day metering (per family), counted from the family audit log.
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);

@@ -3,6 +3,7 @@ import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { summarizeSubscriptions, wastedMonthlyCents, isStale, monthlyCostCents, type SubLike } from '@/lib/finance/subscriptions';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -19,6 +20,11 @@ export async function POST() {
   const ctx = await requireUserContext();
   const { familyId } = ctx.active;
   const supabase = await createServer();
+  const limited = await enforceAIRateLimit(supabase, `ai-savings:${ctx.user.id}`, { limit: 10 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many savings requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
 
   const monthStart = new Date().toISOString().slice(0, 8) + '01';
   const [{ data: txns }, { data: budgets }, { data: bills }, { data: subs }] = await Promise.all([

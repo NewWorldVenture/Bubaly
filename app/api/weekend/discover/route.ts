@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { discoveryWindow, normalizeTicketmasterResponse, type NormalizedEvent } from '@/lib/weekend/normalize';
 import { normalizeSeatGeekResponse, parseICS, parseRSS, withinWindow, dedupeEvents } from '@/lib/weekend/sources';
 import { isValidZip, RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS } from '@/lib/weekend/meta';
@@ -23,8 +23,12 @@ export async function POST(req: NextRequest) {
   let ctx;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
 
-  const limit = rateLimit(`weekend:${ctx.user.id || clientIp(req.headers)}`, { limit: 12, windowMs: 60_000 });
-  if (!limit.ok) return NextResponse.json({ error: 'Slow down a moment and try again.' }, { status: 429 });
+  const supabase = await createServer();
+  const limited = await enforceRequestRateLimit(supabase, `weekend:${ctx.user.id}`, { limit: 12 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many event searches. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
 
   const { zip, radius, days } = await req.json().catch(() => ({})) as { zip?: string; radius?: number; days?: number };
   if (!zip || !isValidZip(zip)) return NextResponse.json({ error: 'Enter a valid 5-digit ZIP code.' }, { status: 400 });
@@ -32,7 +36,6 @@ export async function POST(req: NextRequest) {
   const windowDays = Number.isInteger(days) && days! >= 1 && days! <= 30 ? days! : DEFAULT_DAYS;
   const { startISO, endISO } = discoveryWindow(windowDays);
 
-  const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const sourcesUsed: string[] = [];
   const sourceErrors: Record<string, string> = {};

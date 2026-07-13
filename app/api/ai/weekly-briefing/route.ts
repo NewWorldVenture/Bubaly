@@ -4,6 +4,7 @@ import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { weekWindow, weekRangeLabel, choreCompletionRate, bucketByDay, dayLoad } from '@/lib/ai/weekly';
 import { resolveProvider } from '@/lib/ai/provider';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 /**
  * Plus-tier Weekly AI Briefing. Distinct from the daily briefing: it reads a
@@ -21,6 +22,11 @@ export async function POST(req: NextRequest) {
     if ((await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId))) < 2) {
       return NextResponse.json({ error: 'Weekly AI Briefing is a Family+ feature.' }, { status: 402 });
     }
+    const limited = await enforceAIRateLimit(supabase, `ai-weekly-briefing:${ctx.user.id}`, { limit: 5 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many weekly briefing requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
 
     void (await req.json().catch(() => ({}))); // tolerate empty body
 

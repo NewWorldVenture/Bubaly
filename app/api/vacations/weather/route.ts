@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { geocode, fetchForecast } from '@/lib/vacations/weather-fetch';
 
 export const runtime = 'nodejs';
@@ -12,13 +12,16 @@ export async function POST(req: NextRequest) {
   let ctx;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
 
-  const limit = rateLimit(`vac-weather:${ctx.user.id || clientIp(req.headers)}`, { limit: 20, windowMs: 60_000 });
-  if (!limit.ok) return NextResponse.json({ error: 'Slow down a moment and try again.' }, { status: 429 });
+  const supabase = await createServer();
+  const limited = await enforceRequestRateLimit(supabase, `vac-weather:${ctx.user.id}`, { limit: 20 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many weather requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
 
   const { vacationId, location } = await req.json().catch(() => ({})) as { vacationId?: string; location?: string };
   if (!vacationId || !location?.trim()) return NextResponse.json({ error: 'Missing vacationId or location' }, { status: 400 });
 
-  const supabase = await createServer();
   // Verify the trip belongs to the caller's family (RLS-enforced read).
   const { data: trip } = await supabase.from('vacations').select('id, start_date, end_date').eq('id', vacationId).maybeSingle();
   if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });

@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,556 unit tests, builds all 233 Next.js build
+tree compiles, passes lint and type checking, passes 2,557 unit tests, builds all 233 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -18,7 +18,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 - 100 API route handlers.
 - 193 migrations at audit start; new additive repair migration `0178` added.
 - 309 SQL files under `supabase`.
-- 306 unit-test files and 2,556 passing tests.
+- 307 unit-test files and 2,557 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -60,7 +60,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,556 tests / 306 files | `npm.cmd test` |
+| Unit tests | PASS, 2,557 tests / 307 files | `npm.cmd test` |
 | Production build | PASS, 233 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
@@ -86,6 +86,12 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 **NO-GO.** The local application quality gates are green, but live database migration state, Auth Admin
 health, and RLS attack tests are not fully proven. No production data was changed during this audit.
+
+The audited model-backed and external-provider routes now use shared per-user durable request budgets
+before provider calls or broad context reads. This covers the model-backed `/api/ai` inventory plus
+vacation AI/weather, recipe AI, and weekend discovery routes, while preserving existing plan/day caps.
+Rejected requests return `Retry-After`; durable enforcement still depends on migration `0156` being
+applied in the target environment.
 ## Audit Update - 2026-07-13
 
 Legacy service-role seed scripts were hardened after the initial report: fixed family/user scopes

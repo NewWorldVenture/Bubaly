@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import {
   buildTripResearchPrompt, parseTripResearch, fallbackTripResearch, type TripResearchInput,
 } from '@/lib/trips/research';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 // POST /api/ai/trip — AI Family Travel Concierge. Given a destination, who's
 // going, the family's interests and a weather summary, returns structured
@@ -11,7 +13,13 @@ import {
 // never-fabricated guidance when AI is unconfigured or returns junk.
 export async function POST(req: NextRequest) {
   try {
-    await requireUserContext(); // auth gate (family-scoped session)
+    const ctx = await requireUserContext(); // auth gate (family-scoped session)
+    const supabase = await createServer();
+    const limited = await enforceAIRateLimit(supabase, `ai-trip:${ctx.user.id}`, { limit: 15 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many trip-research requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
 
     const body = (await req.json()) as Partial<TripResearchInput>;
     const destination = (body.destination ?? '').toString().trim();
