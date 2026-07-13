@@ -40,7 +40,15 @@ export async function GET(req: NextRequest) {
     try {
       const result = await runProviderSync(admin, account, adapter);
       if (result.error) failed++; else synced++;
-      details.push({ account: account.id, provider: account.provider, ...result });
+      details.push({
+        account: account.id,
+        provider: account.provider,
+        imported: result.imported,
+        exported: result.exported,
+        skipped: result.skipped,
+        conflicts: result.conflicts,
+        ...(result.error ? { error: 'Provider synchronization failed.' } : {}),
+      });
       await admin.from('sync_audit_logs').insert({
         user_id: account.user_id, family_id: account.family_id,
         provider: account.provider, action: 'sync',
@@ -48,7 +56,8 @@ export async function GET(req: NextRequest) {
       });
     } catch (e) {
       failed++;
-      details.push({ account: account.id, provider: account.provider, error: e instanceof Error ? e.message : 'unknown' });
+      console.error(`Provider sync failed for account ${account.id}:`, e);
+      details.push({ account: account.id, provider: account.provider, error: 'Provider synchronization failed.' });
     }
   }
 

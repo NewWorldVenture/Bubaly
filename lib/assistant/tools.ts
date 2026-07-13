@@ -27,6 +27,11 @@ const EVENT_CATEGORIES = ['general', 'school', 'sports', 'appointment', 'medicat
 function str(v: unknown): string { return typeof v === 'string' ? v.trim() : ''; }
 function optStr(v: unknown): string | null { const s = str(v); return s || null; }
 
+function toolFailure(operation: string, error: unknown): { ok: false; error: string } {
+  console.error(`[assistant] ${operation} failed:`, error);
+  return { ok: false, error: `Could not ${operation}.` };
+}
+
 /** Resolve a member name (case-insensitive, prefix-friendly) to its id. */
 function resolveMember(ctx: AssistantCtx, name: unknown): string | null {
   const q = str(name).toLowerCase();
@@ -87,7 +92,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           location: optStr(a.location), description: optStr(a.description),
           assignee_id: resolveMember(ctx, a.assignee), created_by: ctx.userId,
         }).select('id').single();
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('add the calendar event', error);
         return { ok: true, id: data.id, summary: `Added “${title}” to the calendar.` };
       },
     },
@@ -111,7 +116,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const { data: chore, error } = await supabase.from('chores').insert({
           family_id: ctx.familyId, title, points, due_at: optStr(a.due_at), created_by: ctx.userId,
         }).select('id').single();
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('create the chore', error);
         const memberId = resolveMember(ctx, a.assignee);
         if (memberId) {
           await supabase.from('chore_assignments').insert({ family_id: ctx.familyId, chore_id: chore.id, member_id: memberId, due_at: optStr(a.due_at) });
@@ -135,7 +140,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const { error } = await supabase.from('grocery_items').insert({
           family_id: ctx.familyId, list_id: listId, name, quantity: optStr(a.quantity), created_by: ctx.userId,
         });
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('add the grocery item', error);
         return { ok: true, summary: `Added ${name} to the grocery list.` };
       },
     },
@@ -160,7 +165,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           family_id: ctx.familyId, list_id: listId, title, notes: optStr(a.notes),
           due_date: optStr(a.due_date), assigned_to_id: resolveMember(ctx, a.assignee), created_by: ctx.userId,
         });
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('add the task', error);
         return { ok: true, summary: `Added “${title}” to the to-do list.` };
       },
     },
@@ -192,7 +197,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           kind: recurrence === 'none' ? 'time' : 'recurring', priority, recurrence,
           member_id: memberId, ai_suggested: true,
         });
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('set the reminder', error);
         const forWhom = memberId ? ` for ${str(a.assignee)}` : '';
         const repeats = recurrence !== 'none' ? ` (repeats ${recurrence})` : '';
         return { ok: true, summary: `Reminder set${forWhom}: “${title}”${repeats}.` };
@@ -217,7 +222,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
         const { error } = await supabase.from('family_reminders')
           .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', r.id);
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('complete the reminder', error);
         // Recurring → schedule the next occurrence (core columns only, so it's
         // safe regardless of the 0100 detail-columns migration state).
         const next = r.remind_at && r.recurrence !== 'none' ? nextRemindAt(r.remind_at, r.recurrence) : null;
@@ -251,7 +256,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
         const { error } = await supabase.from('family_reminders').update({ remind_at }).eq('id', r.id);
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('reschedule the reminder', error);
         return { ok: true, summary: `Moved “${r.title}” to a new time.` };
       },
     },
@@ -269,7 +274,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const { error } = await supabase.from('notes').insert({
           family_id: ctx.familyId, title: optStr(a.title), body, created_by: ctx.userId,
         });
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('save the family note', error);
         return { ok: true, summary: 'Saved a family note.' };
       },
     },
@@ -290,7 +295,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const { error } = await supabase.from('goals').insert({
           family_id: ctx.familyId, title, description: optStr(a.description), target_date: optStr(a.target_date), created_by: ctx.userId,
         });
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('create the family goal', error);
         return { ok: true, summary: `Created the goal “${title}”.` };
       },
     },
@@ -311,7 +316,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           .select('title, starts_at, ends_at, all_day, location, assignee_id')
           .eq('family_id', ctx.familyId).gte('starts_at', now.toISOString()).lte('starts_at', until)
           .order('starts_at').limit(50);
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('load upcoming events', error);
         const byId = new Map(ctx.members.map((m) => [m.id, m.display_name]));
         return { ok: true, events: (data ?? []).map((e) => ({ title: e.title, starts_at: e.starts_at, all_day: e.all_day, location: e.location, who: e.assignee_id ? byId.get(e.assignee_id) ?? null : null })) };
       },
@@ -330,7 +335,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           .eq('family_id', ctx.familyId).in('status', ['todo', 'in_progress', 'submitted', 'rejected']).limit(50);
         if (memberId) q = q.eq('member_id', memberId);
         const { data: assigns, error } = await q;
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('load open chores', error);
         const choreIds = [...new Set((assigns ?? []).map((x) => x.chore_id))];
         const { data: chores } = choreIds.length
           ? await supabase.from('chores').select('id, title, points').in('id', choreIds)
@@ -349,7 +354,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (!listId) return { ok: true, items: [] };
         const { data, error } = await supabase.from('grocery_items')
           .select('name, quantity').eq('list_id', listId).eq('is_checked', false).order('created_at').limit(100);
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('load the grocery list', error);
         return { ok: true, items: (data ?? []).map((i) => ({ name: i.name, quantity: i.quantity })) };
       },
     },
@@ -418,7 +423,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           .order('starts_at').limit(50);
         if (memberId) q = q.eq('assignee_id', memberId);
         const { data, error } = await q;
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('find free time', error);
         const tz = ctx.tz || 'America/New_York';
         const fmt = (iso: string | null) => {
           if (!iso) return null;
@@ -491,7 +496,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           { event_id: events[0].id, family_id: ctx.familyId, member_id: selfMember.id, status: status as 'accepted' | 'maybe' | 'declined' },
           { onConflict: 'event_id,member_id' },
         );
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('save the RSVP', error);
         const labels: Record<string, string> = { accepted: 'Going', maybe: 'Maybe', declined: "Can't make it" };
         return { ok: true, summary: `RSVP'd "${labels[status]}" to "${events[0].title}".` };
       },
@@ -522,7 +527,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           is_pinned: Boolean(a.pinned),
           author_member_id: selfMember.id,
         });
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('post the announcement', error);
         return { ok: true, summary: `Posted announcement: "${title}".` };
       },
     },
@@ -541,7 +546,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           .order('is_pinned', { ascending: false })
           .order('created_at', { ascending: false })
           .limit(lim);
-        if (error) return { ok: false, error: error.message };
+        if (error) return toolFailure('load announcements', error);
         const byId = new Map(ctx.members.map((m) => [m.id, m.display_name]));
         return {
           ok: true,

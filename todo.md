@@ -3116,3 +3116,20 @@ roadmap entries and user worktree changes are preserved.
   suite, typecheck, lint, production build, and public Playwright/axe E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0228 - Remaining API and assistant paths exposed raw provider or database errors
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P2
+- Category: API error disclosure / model safety
+- Feature: AI routes, Weekend Planner, marketing email, cron responses, and assistant tools
+- File or files: affected `app/api` route handlers, `lib/assistant/tools.ts`,
+  `tests/database-error-boundaries.test.ts`, `tests/assistant-tool-error-contract.test.ts`
+- Description: Several authenticated AI and provider paths returned raw exception text, while assistant
+  tools passed raw Supabase messages into the model's tool context.
+- Resolution: Client and model-visible failures now use stable generic or classified safe messages;
+  server logs retain the original exception for diagnosis.
+- Tests performed: Focused error-boundary contracts, full Vitest suite, typecheck, lint, production build,
+  and public Playwright/axe E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

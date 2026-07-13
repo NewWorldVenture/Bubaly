@@ -51,7 +51,8 @@ export async function POST(req: Request) {
   try {
     rows = await fetchRows(kind, supabase, familyId, params);
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to load data' }, { status: 500 });
+    console.error('AI insights data load failed:', err);
+    return NextResponse.json({ error: 'Could not load data for this insight.' }, { status: 500 });
   }
 
   const now = (() => {
@@ -81,8 +82,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ text });
   } catch (err) {
     console.error('AI insights error:', err);
-    const { message, detail } = describeAIError(err);
-    return NextResponse.json({ error: message, detail }, { status: 503 });
+    return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }
 }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import {
   buildCandidates, buildPlannerSystem, buildPlannerUser, parsePlan, refParts,
   PLAN_MEAL_TYPES, type PlannerRequest, type PlanAssignment,
@@ -83,7 +83,8 @@ export async function POST(req: Request) {
     });
     text = completion.text;
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'AI request failed' }, { status: 503 });
+    console.error('Meal plan generation error:', err);
+    return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }
 
   const assignments = parsePlan(text, request);

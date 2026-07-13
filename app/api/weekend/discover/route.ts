@@ -54,8 +54,14 @@ export async function POST(req: NextRequest) {
       const p = new URLSearchParams({ apikey: tmKey, postalCode: zip.trim(), radius: String(radiusMiles), unit: 'miles', startDateTime: startISO, endDateTime: endISO, size: '100', sort: 'date,asc' });
       const res = await fetchWithTimeout(`https://app.ticketmaster.com/discovery/v2/events.json?${p}`);
       if (res.ok) lists.push(normalizeTicketmasterResponse(await readBoundedResponseJson<unknown>(res, 2 * 1024 * 1024)));
-      else sourceErrors.ticketmaster = `HTTP ${res.status}`;
-    } catch (e) { sourceErrors.ticketmaster = e instanceof Error ? e.message : 'failed'; }
+      else {
+        sourceErrors.ticketmaster = `HTTP ${res.status}`;
+        console.warn('Ticketmaster discovery failed:', res.status);
+      }
+    } catch (e) {
+      console.warn('Ticketmaster discovery request failed:', e);
+      sourceErrors.ticketmaster = 'Request failed.';
+    }
   }
 
   // --- SeatGeek (keyed) ---
@@ -66,8 +72,14 @@ export async function POST(req: NextRequest) {
       const p = new URLSearchParams({ client_id: sgKey, postal_code: zip.trim(), range: `${radiusMiles}mi`, 'datetime_utc.gte': startISO, 'datetime_utc.lte': endISO, per_page: '100', sort: 'datetime_utc.asc' });
       const res = await fetchWithTimeout(`https://api.seatgeek.com/2/events?${p}`);
       if (res.ok) lists.push(normalizeSeatGeekResponse(await readBoundedResponseJson<unknown>(res, 2 * 1024 * 1024)));
-      else sourceErrors.seatgeek = `HTTP ${res.status}`;
-    } catch (e) { sourceErrors.seatgeek = e instanceof Error ? e.message : 'failed'; }
+      else {
+        sourceErrors.seatgeek = `HTTP ${res.status}`;
+        console.warn('SeatGeek discovery failed:', res.status);
+      }
+    } catch (e) {
+      console.warn('SeatGeek discovery request failed:', e);
+      sourceErrors.seatgeek = 'Request failed.';
+    }
   }
 
   // --- Family-curated local feeds (ICS / RSS) ---
@@ -77,7 +89,10 @@ export async function POST(req: NextRequest) {
       let status = 'ok'; let count = 0;
       try {
         const fetched = await fetchPublicCalendarText(feed.url);
-        if (!fetched.ok) { status = `${fetched.status}: ${fetched.error}`; }
+        if (!fetched.ok) {
+          status = fetched.status ? `HTTP ${fetched.status}` : 'Feed unavailable.';
+          console.warn(`Weekend feed ${feed.id} failed:`, fetched.error);
+        }
         else {
           const text = fetched.text;
           const parsed = feed.kind === 'rss' ? parseRSS(text, `feed:${feed.label}`) : parseICS(text, `feed:${feed.label}`);
@@ -86,7 +101,10 @@ export async function POST(req: NextRequest) {
           lists.push(windowed);
           sourcesUsed.push(`feed:${feed.label}`);
         }
-      } catch (e) { status = e instanceof Error ? e.message.slice(0, 120) : 'failed'; }
+      } catch (e) {
+        console.warn(`Weekend feed ${feed.id} request failed:`, e);
+        status = 'Request failed.';
+      }
       await supabase.from('weekend_feeds').update({ last_fetched_at: new Date().toISOString(), last_status: status, last_count: count }).eq('id', feed.id);
     }));
   }

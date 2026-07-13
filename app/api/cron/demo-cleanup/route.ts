@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     const reaped = await cleanupExpiredDemoSessions();
     return NextResponse.json({ ok: true, reaped });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
+    console.error('Demo cleanup cron failed:', e);
+    return NextResponse.json({ ok: false, error: 'Demo cleanup failed.' }, { status: 500 });
   }
 }

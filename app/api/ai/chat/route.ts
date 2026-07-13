@@ -143,8 +143,7 @@ export async function POST(req: NextRequest) {
               if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
             } catch (fallbackErr) {
               console.error('AI fallback error:', fallbackErr);
-              const { message, detail } = describeAIError(fallbackErr);
-              send({ type: 'error', error: message, detail });
+              send({ type: 'error', error: describeAIError(fallbackErr).message });
               controller.close();
               return;
             }
@@ -184,8 +183,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('AI chat error:', err);
-    const { message, detail } = describeAIError(err);
-    return NextResponse.json({ error: message, detail }, { status: 500 });
+    return NextResponse.json({ error: describeAIError(err).message }, { status: 500 });
   }
 }
 

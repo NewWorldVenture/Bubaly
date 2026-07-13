@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
@@ -55,7 +55,8 @@ export async function POST(req: Request) {
     const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: `Home assets:\n${lines}` }], tools: [] });
     text = completion.text.trim();
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'AI request failed' }, { status: 503 });
+    console.error('Home maintenance forecast error:', err);
+    return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }
 
   await supabase.from('home_ai_logs').insert({

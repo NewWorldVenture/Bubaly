@@ -32,8 +32,8 @@ export async function POST(req: NextRequest) {
     await logMarketingAudit(supabase, { actorId, actorEmail, action: 'send', resource: 'marketing_email_campaign', resourceId: id, metadata: { sent } });
     return NextResponse.json({ sent });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Send failed';
-    const status = msg.includes('Forbidden') ? 403 : 400;
-    return NextResponse.json({ error: msg }, { status });
+    console.error('Marketing email send failed:', err);
+    const forbidden = err instanceof Error && err.message.includes('Forbidden');
+    return NextResponse.json({ error: forbidden ? 'Forbidden' : 'Could not send campaign.' }, { status: forbidden ? 403 : 400 });
   }
 }

@@ -58,11 +58,11 @@ export async function GET(req: NextRequest) {
         outcomes.push({
           familyId: fam.id, ok,
           entities: twin.entities, edges: twin.edges, plans: prep.plans,
-          error: twin.error ?? prep.error,
+          ...(twin.error || prep.error ? { error: 'Model refresh failed.' } : {}),
         });
       } catch (err) {
-        outcomes.push({ familyId: fam.id, ok: false, error: String(err) });
         console.error(`Model-refresh cron failed for family ${fam.id}:`, err);
+        outcomes.push({ familyId: fam.id, ok: false, error: 'Model refresh failed.' });
       }
     }
 

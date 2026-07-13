@@ -86,7 +86,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ text });
   } catch (err) {
     console.error('AI health coach error:', err);
-    const { message, detail } = describeAIError(err);
-    return NextResponse.json({ error: message, detail }, { status: 503 });
+    return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }
 }

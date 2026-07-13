@@ -80,7 +80,10 @@ export async function POST(req: NextRequest) {
     })
     .select('id')
     .single();
-  if (error || !saved) return NextResponse.json({ error: error?.message ?? 'Could not save variant' }, { status: 500 });
+  if (error || !saved) {
+    console.error('Recipe variant save failed:', error);
+    return NextResponse.json({ error: 'Could not save variant.' }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true, id: saved.id });
 }

@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ recommendations, source });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Could not research this trip.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('Trip research error:', err);
+    return NextResponse.json({ error: 'Could not research this trip.' }, { status: 500 });
   }
 }

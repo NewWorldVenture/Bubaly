@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 333 files, 2,678 tests |
+| `npm.cmd exec vitest run` | PASS: 334 files, 2,679 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line` | PASS: 51 of 52 tests; 1 intentional auth skip |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
@@ -68,6 +68,17 @@ Audit date: 2026-07-13
 - `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
 - `npm.cmd run build`: passed; 234 pages generated.
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+
+## Audit Update - 2026-07-13 (remaining API and assistant error boundaries)
+
+- `npm.cmd exec vitest run tests/database-error-boundaries.test.ts tests/public-error-contract.test.ts tests/assistant-tool-error-contract.test.ts tests/ai-error.test.ts`: 4 files, 12 tests passed.
+- `npm.cmd exec vitest run`: 334 files and 2,679 tests passed.
+- `npm.cmd run typecheck`: PASS.
+- `npm.cmd run lint`: PASS with the known Next.js `next lint` deprecation notice.
+- `npm.cmd run build`: PASS with 234 generated pages.
+- `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line`: 51 of 52 tests passed; 1 intentional authenticated skip.
+- Remaining AI, provider, cron, Weekend Planner, marketing-email, and assistant-tool failures now use
+  safe client/model-visible messages while retaining server-side diagnostics.
 - OpenAI, Twilio, email, marketing, voice, and flyer provider error reads now use a 64 KiB streaming
   response cap. Google and Microsoft Graph text responses use a 2 MiB cap before JSON parsing.
 - `tests/response-body-boundaries.test.ts` covers exact text preservation, oversized streamed response

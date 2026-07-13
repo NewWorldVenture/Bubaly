@@ -115,6 +115,10 @@ reclaimed.
 The public A/B event path now validates `variant_key` against `ab_experiments.variants` before writing
 to `ab_events` with the service-role client.
 
+API and assistant error responses now keep provider and database exception details in server logs rather
+than exposing them to authenticated callers or passing them into model-visible tool results. This is an
+application-layer repair and does not change the live migration requirements below.
+
 The public consent path now bounds requests and accepts only known boolean categories before writing
 append-only rows to `mkt_consent_events`.
 
