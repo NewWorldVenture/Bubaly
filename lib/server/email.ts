@@ -4,6 +4,7 @@
 // No-ops gracefully (logs) when RESEND_API_KEY is unset, so local/dev flows
 // never break — production just adds the key.
 import { FROM_EMAIL, emailEnabled } from '@/lib/email';
+import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 type SendArgs = { to: string; subject: string; html: string; replyTo?: string };
 
@@ -18,7 +19,8 @@ export async function sendEmail({ to, subject, html, replyTo }: SendArgs): Promi
     body: JSON.stringify({ from: FROM_EMAIL, to, subject, html, reply_to: replyTo }),
   });
   if (!res.ok) {
-    console.error('[email failed]', res.status, await res.text());
+    const bounded = await readBoundedResponseText(res, 64 * 1024);
+    console.error('[email failed]', res.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');
     return { ok: false };
   }
   return { ok: true };

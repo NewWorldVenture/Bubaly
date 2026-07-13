@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { getAIConfig } from '@/lib/ai/settings';
 import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 export const runtime = 'nodejs';
 
@@ -122,7 +123,8 @@ Rules:
       }),
     });
     if (!aiRes.ok) {
-      console.error('Flyer OpenAI error', aiRes.status, await aiRes.text().catch(() => ''));
+      const bounded = await readBoundedResponseText(aiRes, 64 * 1024);
+      console.error('Flyer OpenAI error', aiRes.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');
       return NextResponse.json({ error: 'Could not read that flyer. Try a clearer photo or a different file.' }, { status: 502 });
     }
     const aiJson = await aiRes.json();

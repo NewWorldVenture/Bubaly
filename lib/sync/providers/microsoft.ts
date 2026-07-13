@@ -18,6 +18,7 @@ import type {
 } from '@/lib/sync/adapter';
 import { SyncApiError } from '@/lib/sync/adapter';
 import { eventContentHash, reminderContentHash } from '@/lib/sync/hash';
+import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 const TENANT = process.env.MICROSOFT_SYNC_TENANT || 'common';
 const AUTHORITY = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0`;
@@ -100,7 +101,9 @@ async function gfetch<T>(url: string, accessToken: string, init?: RequestInit): 
     },
   });
   if (res.status === 204) return undefined as T;
-  const text = await res.text();
+  const bounded = await readBoundedResponseText(res, 2 * 1024 * 1024);
+  if (!bounded.ok) throw new SyncApiError(res.status, `Microsoft Graph ${res.status} response too large`, '[provider response exceeded 2 MiB]');
+  const text = bounded.text;
   if (!res.ok) throw new SyncApiError(res.status, `Microsoft Graph ${res.status} for ${url}`, text.slice(0, 500));
   return text ? (JSON.parse(text) as T) : (undefined as T);
 }

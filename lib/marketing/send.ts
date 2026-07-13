@@ -4,6 +4,7 @@ import type { Database } from '@/lib/database.types';
 import { FROM_EMAIL, emailEnabled, APP_URL } from '@/lib/email';
 import { getMarketingCustomers, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
 import { unsubUrl } from '@/lib/marketing/unsubscribe';
+import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 type DB = SupabaseClient<Database>;
 
@@ -89,7 +90,8 @@ export async function sendEmailCampaign(supabase: DB, campaignId: string, appUrl
     });
 
     if (!res.ok) {
-      console.error('[marketing send failed]', res.status, await res.text());
+      const bounded = await readBoundedResponseText(res, 64 * 1024);
+      console.error('[marketing send failed]', res.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');
       await supabase.from('marketing_email_campaigns').update({ status: 'failed' }).eq('id', campaignId);
       throw new Error('Provider rejected the send');
     }

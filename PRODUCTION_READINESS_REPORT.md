@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,642 unit tests, builds all 234 Next.js build
+tree compiles, passes lint and type checking, passes 2,645 unit tests, builds all 234 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -18,7 +18,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 - 100 API route handlers.
 - 193 migrations at audit start; additive repair migrations through `0187` are now present.
 - 315 SQL files under `supabase`.
-- 326 unit-test files and 2,642 passing tests.
+- 327 unit-test files and 2,645 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -61,6 +61,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   remain intact.
 - Replaced Social Feed URL unfurling's automatic redirects and post-read HTML slicing with public DNS
   validation, redirect revalidation, a 600 KiB response cap, and bounded text parsing.
+- Added a shared bounded response reader for audited provider error and Graph API text responses;
+  provider failures now stop at 64 KiB and Graph sync responses stop at 2 MiB before parsing or logging.
 - Hardened the public unsubscribe endpoint with shared request limits, bounded token input, escaped
   HTML output, and production fail-closed secret handling.
 - Preserved active family membership checks and tightened listing-share deletion to the owning family
@@ -101,7 +103,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,642 tests / 326 files | `npm.cmd test` |
+| Unit tests | PASS, 2,645 tests / 327 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 234 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
@@ -177,6 +179,11 @@ Social Feed URL unfurling now uses the same public DNS validation and manual red
 fetches. Its HTML response is bounded at 600 KiB before metadata parsing, preventing a family member's
 pasted URL from reaching private redirect targets or causing an unbounded server-side response read.
 
+Audited provider error paths now use a shared streaming response reader before diagnostics are parsed or
+logged. OpenAI, Twilio, email, marketing, voice, and flyer provider errors are capped at 64 KiB; Google
+and Microsoft Graph sync response text is capped at 2 MiB. Deliberately streamed success responses
+remain unchanged.
+
 ## Audit Update - 2026-07-13 (Social Feed unfurl SSRF and response bounds)
 
 - `npm.cmd exec vitest run tests/social-feed-fetch-security.test.ts tests/public-calendar-fetch.test.ts tests/weekend-feed-security.test.ts`:
@@ -186,6 +193,18 @@ pasted URL from reaching private redirect targets or causing an unbounded server
 - `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
 - Social Feed unfurling now rejects unsafe redirect targets and oversized streamed HTML before metadata
   parsing; no database migration was required.
+
+## Audit Update - 2026-07-13 (provider response bounds)
+
+- `npm.cmd exec vitest run tests/response-body-boundaries.test.ts tests/ai-error.test.ts tests/ai-voice.test.ts tests/sync-adapter.test.ts`:
+  4 files, 39 tests passed.
+- `npm.cmd exec vitest run`: 327 files and 2,645 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 234 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- Audited provider error and Graph response text reads now stop at bounded byte limits before parsing or
+  logging; no database migration was required.
 
 ## Audit Update - 2026-07-13 (raw webhook and upload body bounds)
 

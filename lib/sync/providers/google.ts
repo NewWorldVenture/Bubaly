@@ -8,6 +8,7 @@
 // SERVER ONLY.
 
 import { createHash } from 'node:crypto';
+import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -148,7 +149,9 @@ async function gfetch<T>(url: string, accessToken: string, init?: RequestInit): 
     },
   });
   if (res.status === 204) return undefined as T;
-  const text = await res.text();
+  const bounded = await readBoundedResponseText(res, 2 * 1024 * 1024);
+  if (!bounded.ok) throw new GoogleApiError(res.status, `Google API ${res.status} response too large`, '[provider response exceeded 2 MiB]');
+  const text = bounded.text;
   if (!res.ok) {
     throw new GoogleApiError(res.status, `Google API ${res.status} for ${url}`, text.slice(0, 500));
   }

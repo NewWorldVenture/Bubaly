@@ -1,5 +1,6 @@
 // lib/ai/provider.ts — provider-agnostic LLM interface.
 // Swap Anthropic / OpenAI / Gemini / local by implementing AIProvider.
+import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 export type AITool = {
   name: string;
@@ -78,7 +79,10 @@ export interface AIProvider {
 /** Build a concise Error from a non-OK OpenAI response (parses the JSON error message). */
 async function openAIError(res: Response): Promise<Error> {
   let body = '';
-  try { body = await res.text(); } catch { /* ignore */ }
+  try {
+    const bounded = await readBoundedResponseText(res, 64 * 1024);
+    body = bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]';
+  } catch { /* ignore */ }
   let detail = body;
   try {
     const j = JSON.parse(body);

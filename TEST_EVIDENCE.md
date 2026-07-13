@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 326 files, 2,642 tests |
+| `npm.cmd exec vitest run` | PASS: 327 files, 2,645 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -55,6 +55,20 @@ Audit date: 2026-07-13
 - `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
 - `npm.cmd run build`: passed; 233 pages generated.
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+
+## Audit Update - 2026-07-13 (provider response bounds)
+
+- `npm.cmd exec vitest run tests/response-body-boundaries.test.ts tests/ai-error.test.ts tests/ai-voice.test.ts tests/sync-adapter.test.ts`:
+  4 files, 39 tests passed.
+- `npm.cmd exec vitest run`: 327 files and 2,645 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 234 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- OpenAI, Twilio, email, marketing, voice, and flyer provider error reads now use a 64 KiB streaming
+  response cap. Google and Microsoft Graph text responses use a 2 MiB cap before JSON parsing.
+- `tests/response-body-boundaries.test.ts` covers exact text preservation, oversized streamed response
+  cancellation, and static coverage for every audited provider path.
 
 ## Audit Update - 2026-07-13 (atomic expired auction settlement)
 

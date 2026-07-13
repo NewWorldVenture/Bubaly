@@ -2870,3 +2870,30 @@ roadmap entries and user worktree changes are preserved.
   HTML and statically verifies the action no longer uses automatic redirects or post-read slicing.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0220 - Provider error responses were buffered without bounds
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Provider response memory bounds / failure handling
+- Feature: OpenAI, Twilio, email, marketing, voice, flyer, Google Graph, and Microsoft Graph integrations
+- File or files: `lib/server/bounded-response-body.ts`, `lib/ai/provider.ts`, `lib/guardian/twilio.ts`,
+  `lib/server/email.ts`, `lib/marketing/send.ts`, `app/api/ai/flyer/route.ts`,
+  `app/api/ai/voice/transcribe/route.ts`, `app/api/ai/voice/speak/route.ts`,
+  `lib/sync/providers/google.ts`, `lib/sync/providers/microsoft.ts`,
+  `tests/response-body-boundaries.test.ts`
+- Description: Audited provider failure paths called `response.text()` and then sliced or logged the
+  result, allowing an oversized third-party error body to be buffered before application limits ran.
+- User impact: Provider failures could increase server memory use and obscure the concise diagnostics
+  needed for safe retry or error classification.
+- Root cause: External response reads had no shared streaming boundary; existing post-read slices did not
+  prevent allocation of the full response.
+- Resolution: Added `readBoundedResponseText`; audited provider error paths cap response text at 64 KiB,
+  while Google and Microsoft Graph text responses cap at 2 MiB before JSON parsing. Intentionally streamed
+  success responses remain unchanged.
+- Tests performed: Focused response-boundary, AI error, voice, and sync adapter tests; full Vitest suite;
+  typecheck; lint; production build; public Playwright/axe E2E.
+- Evidence: `tests/response-body-boundaries.test.ts` preserves exact text, cancels oversized streams, and
+  statically verifies the audited paths use the helper without direct unbounded text reads.
+- Verified by: Codex
+- Date completed: 2026-07-13

@@ -5,6 +5,7 @@ import { getOpenAIKey } from '@/lib/ai/settings';
 import { prepareSpeechText, normalizeTtsVoice } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -48,7 +49,8 @@ export async function POST(req: NextRequest) {
     });
 
     if (!res.ok || !res.body) {
-      const detail = await res.text().catch(() => '');
+      const bounded = await readBoundedResponseText(res, 64 * 1024);
+      const detail = bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]';
       console.error('OpenAI TTS error', res.status, detail);
       const msg = res.status === 429
         ? 'The AI engine is busy. Please try again in a moment.'
