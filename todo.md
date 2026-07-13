@@ -2017,10 +2017,10 @@ roadmap entries and user worktree changes are preserved.
 - Severity: P1
 - Category: Deployment / database
 - Feature: Latest schema and RLS
-- Description: The repository contains migrations through `0177` plus the new `0178`, `0179`, and `0180` repairs, while the
-  configured live schema probe failed on the latest required object. The repository cannot safely claim
+- Description: The repository contains additive repairs through `0185`, while the configured live schema
+  probe still fails on the required `0182` object. The repository cannot safely claim
   that production has every migration applied without running the migration deployment process.
-- Required remediation: Apply pending migrations through `0180` in the intended deployment environment,
+- Required remediation: Apply pending migrations through `0185` in the intended deployment environment,
   run the schema/auth probes, then run isolated RLS allow/deny tests. No destructive production operation
   was performed by this audit.
 
