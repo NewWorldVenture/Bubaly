@@ -84,3 +84,7 @@ to `ab_events` with the service-role client.
 
 The public consent path now bounds requests and accepts only known boolean categories before writing
 append-only rows to `mkt_consent_events`.
+
+The authenticated agentic chat path now uses the shared `rate_limit_hit` RPC (with its in-memory
+fallback) per user before invoking model tools; its conversation and message inputs are bounded in
+application code. Durable enforcement still depends on migration `0156` being applied in production.

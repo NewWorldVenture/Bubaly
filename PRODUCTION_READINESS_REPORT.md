@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,546 unit tests, builds all 233 Next.js build
+tree compiles, passes lint and type checking, passes 2,549 unit tests, builds all 233 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -18,7 +18,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 - 100 API route handlers.
 - 193 migrations at audit start; new additive repair migration `0178` added.
 - 309 SQL files under `supabase`.
-- 302 unit-test files and 2,546 passing tests.
+- 303 unit-test files and 2,549 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -60,7 +60,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,537 tests / 296 files | `npm.cmd test` |
+| Unit tests | PASS, 2,549 tests / 303 files | `npm.cmd test` |
 | Production build | PASS, 233 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
@@ -105,3 +105,6 @@ and bounds identifiers before writing service-role events, preventing fabricated
 
 Public consent ingestion now rate-limits both reads and writes and rejects unknown, non-boolean, or
 oversized consent maps before appending service-role events.
+
+The authenticated agentic AI chat route now enforces per-user in-memory and durable request limits,
+validates conversation UUIDs, and rejects oversized or empty messages before model/tool execution.

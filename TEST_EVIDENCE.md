@@ -8,10 +8,11 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 302 files, 2,546 tests |
+| `npm.cmd test` | PASS: 303 files, 2,549 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 233 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
+| `npm.cmd test -- tests/ai-chat-request.test.ts tests/marketing-consent-safety.test.ts` | PASS: 2 files, 4 tests |
 | `npm.cmd test -- tests/seed-credentials-safety.test.ts ...` | PASS: all seed credential/TLS/safety contracts |
 | `git diff --check` | PASS |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` | PASS: 51, skipped 1 |
@@ -47,7 +48,7 @@ Audit date: 2026-07-13
 - `node --check scripts/seed*.mjs`: passed for all six legacy seed scripts plus the shared client.
 - `npm.cmd test -- tests/seed-credentials-safety.test.ts tests/seed-scope-safety.test.ts`: 2 files,
   3 tests passed.
-- `npm.cmd test`: 302 files and 2,546 tests passed.
+- `npm.cmd test`: 303 files and 2,549 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
 - Static scope scan: no legacy fixed family, creator, or member UUIDs remain in `scripts/seed*.mjs`.
@@ -65,3 +66,5 @@ Audit date: 2026-07-13
 - `npm.cmd test -- tests/marketing-consent-safety.test.ts tests/marketing-ab.test.ts`: 2 files,
   10 tests passed.
 - Consent ingestion regression covers unknown, non-boolean, oversized, and null payloads.
+- `npm.cmd test -- tests/ai-chat-request.test.ts`: 1 file, 3 tests passed.
+- Agentic chat input regression covers malformed UUIDs, blank messages, trimming, and the 8,000-character bound.

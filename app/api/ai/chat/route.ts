@@ -5,6 +5,9 @@ import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from
 import { buildAssistantTools } from '@/lib/assistant/tools';
 import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import type { Database } from '@/lib/database.types';
+import { rateLimitDb } from '@/lib/server/rate-limit-db';
+import { rateLimit } from '@/lib/server/rate-limit';
+import { parseAIChatRequest } from '@/lib/ai/chat-request';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -16,9 +19,34 @@ export async function POST(req: NextRequest) {
     const tz = ctx.active.family.timezone || 'America/New_York';
     const supabase = await createServer();
 
-    const { conversationId, message } = (await req.json()) as { conversationId: string; message: string };
-    if (!message?.trim()) return NextResponse.json({ error: 'Message is required' }, { status: 400 });
-    if (!conversationId) return NextResponse.json({ error: 'conversationId is required' }, { status: 400 });
+    // Agentic chat can execute family tools, so bound both request volume and
+    // input size before reading family context or invoking the model.
+    const key = `ai-chat:${ctx.user.id}`;
+    const limited = rateLimit(key, { limit: 20, windowMs: 60_000 });
+    const rejected = (retryAfter: number) => NextResponse.json(
+      { error: 'Too many AI chat requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+    );
+    if (!limited.ok) return rejected(limited.retryAfter);
+
+    const durable = await rateLimitDb(supabase, key, { limit: 20, windowMs: 60_000 });
+    if (!durable.ok) return rejected(durable.retryAfter);
+
+    let rawBody: unknown;
+    try { rawBody = await req.json(); }
+    catch { return NextResponse.json({ error: 'Invalid request body' }, { status: 400 }); }
+    const parsed = parseAIChatRequest(rawBody);
+    if (!parsed.ok) {
+      const messageByError = {
+        invalid_body: 'Invalid request body',
+        conversation_required: 'conversationId is required',
+        conversation_invalid: 'conversationId must be a valid UUID',
+        message_required: 'Message is required',
+        message_too_long: 'Message is too long',
+      } as const;
+      return NextResponse.json({ error: messageByError[parsed.error] }, { status: 400 });
+    }
+    const { conversationId, message } = parsed.value;
 
     if (!(await isAIConfigured())) {
       return NextResponse.json({ error: 'The AI engine isn’t set up yet. Add an OpenAI API key in Admin → AI Engine.' }, { status: 503 });

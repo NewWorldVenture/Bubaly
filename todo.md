@@ -1843,7 +1843,7 @@ roadmap entries and user worktree changes are preserved.
 
 - 348 `page.tsx` route files.
 - 193 Supabase migration files and 309 SQL files under `supabase`.
-- 302 test files after the audit's regression contracts.
+- 303 test files after the audit's regression contracts.
 - 2,054 repository files returned by the initial source inventory (excluding node_modules, dist, and build).
 - Detailed route, database, feature, architecture, security, testing, and journey inventories already
   exist in the root documentation and will be reconciled with this session's command evidence.
@@ -1896,7 +1896,7 @@ roadmap entries and user worktree changes are preserved.
 
 - [x] Typecheck: `npm.cmd run typecheck` passed.
 - [x] Lint: `npm.cmd run lint` passed with only the known Next.js `next lint` deprecation notice.
-- [x] Unit tests: `npm.cmd test` passed, 302 files and 2,546 tests.
+- [x] Unit tests: `npm.cmd test` passed, 303 files and 2,549 tests.
 - [x] Credential-safety regression: all seed scripts load access only from environment; no literal
   `sb_secret_*` credential remains in runtime/source SQL.
 - [x] Production build: `npm.cmd run build` passed; 233 static pages generated.
@@ -2121,5 +2121,27 @@ roadmap entries and user worktree changes are preserved.
 - Tests performed: Focused consent/A-B tests passed with 10 tests; typecheck and lint passed.
 - Evidence: `tests/marketing-consent-safety.test.ts` rejects unknown categories, non-boolean values,
   oversized maps, and null payloads.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0189 - Agentic AI chat lacked request budget and input bounds
+
+- Status: [x] Completed in code and covered by regression test.
+- Severity: P1
+- Category: AI cost control / public application abuse resistance
+- Feature: Agentic AI chat
+- Route: `/api/ai/chat`
+- File or files: `app/api/ai/chat/route.ts`, `lib/ai/chat-request.ts`, `tests/ai-chat-request.test.ts`
+- Database objects: `rate_limits`, `rate_limit_hit`, `ai_conversations`, `ai_messages`
+- Description: The authenticated agentic chat route could invoke streaming and fallback model runs with
+  no per-user request budget and accepted unbounded message/conversation input before tool execution.
+- User impact: A compromised or runaway session could consume disproportionate AI capacity and request
+  processing resources.
+- Security impact: The model-backed, tool-capable path had weaker abuse controls than adjacent AI routes.
+- Root cause: The route relied on authentication and RLS but had no request limiter or shared input contract.
+- Resolution: Added a 20-request-per-user-per-minute in-memory limit plus the durable `rate_limit_hit` guard,
+  valid UUID validation, trimmed non-empty messages, and an 8,000-character maximum before model work.
+- Tests performed: `npm.cmd test -- tests/ai-chat-request.test.ts` passed with 3 tests; typecheck and lint
+  passed. Durable enforcement remains dependent on migration `0156` being applied in production.
 - Verified by: Codex
 - Date completed: 2026-07-13
