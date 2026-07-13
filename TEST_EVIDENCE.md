@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 332 files, 2,670 tests |
+| `npm.cmd exec vitest run` | PASS: 333 files, 2,678 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line` | PASS: 51 of 52 tests; 1 intentional auth skip |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
@@ -149,7 +149,7 @@ Audit date: 2026-07-13
 
 - `npm.cmd exec vitest run tests/seed-data-safety-contract.test.ts tests/production-readiness-seed.test.ts tests/marketplace-handoff.test.ts`:
   3 files, 17 tests passed.
-- `npm.cmd exec vitest run`: 332 files and 2,670 tests passed.
+- `npm.cmd exec vitest run`: 333 files and 2,678 tests passed.
 - `npm.cmd run typecheck`: PASS.
 - `npm.cmd run lint`: PASS with the known Next.js `next lint` deprecation notice.
 - `npm.cmd run build`: PASS with 234 generated pages.

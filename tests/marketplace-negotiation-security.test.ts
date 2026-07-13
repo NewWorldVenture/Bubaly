@@ -17,7 +17,11 @@ describe('marketplace negotiation integrity', () => {
   });
 
   it('fails closed when the anchored seed account is absent', () => {
-    const negotiationSection = masterSeed.slice(masterSeed.indexOf('seed_marketplace_negotiations.sql'));
+    const start = masterSeed.indexOf('seed_marketplace_negotiations.sql');
+    const end = masterSeed.indexOf('seed_marketplace_handoffs.sql', start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const negotiationSection = masterSeed.slice(start, end);
     for (const seed of [standaloneSeed, negotiationSection]) {
       expect(seed).toContain('Marketplace negotiation seed requires the anchored account');
       expect(seed).not.toContain('select id into v_family from public.families order by created_at');

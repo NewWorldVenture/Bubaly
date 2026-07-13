@@ -55,8 +55,10 @@ describe('seed data safety', () => {
     const master = readFileSync(resolve(supabaseDir, 'SEED_ALL.sql'), 'utf8');
     const marker = 'seed_marketplace_handoffs.sql';
     const start = master.indexOf(marker);
+    const end = master.indexOf('seed_marketplace_price_history.sql', start);
     expect(start).toBeGreaterThanOrEqual(0);
-    const masterSection = master.slice(start);
+    expect(end).toBeGreaterThan(start);
+    const masterSection = master.slice(start, end);
     for (const sql of [seed, masterSection]) {
       expect(sql).toContain('requires the anchored account');
       expect(sql).not.toMatch(/delete\s+from\s+public\.marketplace_(?:handoffs|orders|listings)/i);
