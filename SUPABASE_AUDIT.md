@@ -98,3 +98,6 @@ call, using a distinct per-user bucket.
 
 The public calendar feed now validates the URL-safe capability shape and rate-limits by client IP before
 the service-role `sync_calendars` and `sync_calendar_events` reads. Durable enforcement depends on `0156`.
+
+Billing side-effect routes use the generic shared rate-limit guard keyed by family before Stripe calls;
+the parent-role authorization remains the primary access control.

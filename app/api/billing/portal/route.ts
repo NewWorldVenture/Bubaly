@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,6 +20,12 @@ export async function POST(req: NextRequest) {
     if (!data?.customer_ref) {
       return NextResponse.json({ error: 'No billing account found' }, { status: 404 });
     }
+
+    const limited = await enforceRequestRateLimit(supabase, `billing:portal:${familyId}`, { limit: 10 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many billing requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
 
     // PAY-5: trusted configured base first, not the caller-controlled Origin header.
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? req.headers.get('origin') ?? 'http://localhost:3000';

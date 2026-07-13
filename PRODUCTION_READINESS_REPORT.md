@@ -117,3 +117,6 @@ invoking a model, protecting its broad multi-module data reader from runaway req
 
 The public calendar capability feed now validates compact URL-safe tokens and applies local plus durable
 IP limits before service-role calendar reads, while keeping anonymous iCalendar subscriptions supported.
+
+Billing checkout, plan-change, cancellation, and portal-session routes now apply per-family local plus
+durable request limits after parent authorization and before Stripe side effects.

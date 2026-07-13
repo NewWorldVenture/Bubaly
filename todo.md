@@ -2210,3 +2210,25 @@ roadmap entries and user worktree changes are preserved.
   typecheck, lint, build, and public E2E remain the release gates. Durable enforcement depends on `0156`.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0193 - Billing side-effect routes lacked request budgets
+
+- Status: [x] Completed in code and covered by the shared limiter regression tests.
+- Severity: P1
+- Category: Billing provider abuse resistance / duplicate side effects
+- Feature: Subscription checkout and self-serve billing
+- Routes: `/api/billing/checkout`, `/api/billing/change-plan`, `/api/billing/cancel`, `/api/billing/portal`
+- File or files: the four billing route handlers, `lib/server/request-rate-limit.ts`,
+  `lib/server/ai-rate-limit.ts`, `tests/ai-rate-limit.test.ts`
+- Database objects: `rate_limits`, `rate_limit_hit`, `billing_customers`, `subscriptions`, `checkout_sessions`
+- Description: Parent-only billing routes had authorization but no per-family request budget before Stripe
+  customer, checkout-session, subscription-update, or portal-session calls.
+- User impact: Double-clicks, runaway clients, or compromised parent sessions could create avoidable
+  provider calls and duplicate checkout sessions.
+- Root cause: Rate limiting existed only in selected public and AI routes, not billing side effects.
+- Resolution: Added a generic local plus durable limiter keyed by family at 10 requests per route per minute,
+  after input/role checks and before Stripe work, with `Retry-After` responses.
+- Tests performed: Shared limiter regression passed; full suite, typecheck, lint, build, and public E2E remain
+  release gates. Durable enforcement depends on migration `0156` in production.
+- Verified by: Codex
+- Date completed: 2026-07-13

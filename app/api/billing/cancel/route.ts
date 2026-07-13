@@ -3,6 +3,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe';
 import { isAdmin } from '@/lib/constants/roles';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -33,6 +34,11 @@ export async function POST(req: NextRequest) {
     }
 
     const cancelAtPeriodEnd = !resume;
+    const limited = await enforceRequestRateLimit(supabase, `billing:cancel:${familyId}`, { limit: 10 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many billing requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
     await getStripe().subscriptions.update(sub.provider_ref, { cancel_at_period_end: cancelAtPeriodEnd });
 
     await createServiceClient()

@@ -5,6 +5,7 @@ import { stripeFromKey, STRIPE_PLANS, type StripePlan } from '@/lib/stripe';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { serviceFeeAddInvoiceItems } from '@/lib/stripe/service-fee';
 import { isAdmin } from '@/lib/constants/roles';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,6 +23,12 @@ export async function POST(req: NextRequest) {
     const { plan } = await req.json() as { plan: StripePlan };
     const priceId = STRIPE_PLANS[plan];
     if (!priceId) return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
+
+    const limited = await enforceRequestRateLimit(supabase, `billing:checkout:${familyId}`, { limit: 10 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many billing requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
 
     // Get or create Stripe customer
     const { data: existing } = await supabase

@@ -4,6 +4,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getStripe, STRIPE_PLANS } from '@/lib/stripe';
 import { isAdmin } from '@/lib/constants/roles';
 import { isStripePlan, slugToStripePlan } from '@/lib/billing/plans';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -32,6 +33,11 @@ export async function POST(req: NextRequest) {
     if (!priceId) return NextResponse.json({ error: 'That plan is not configured.' }, { status: 400 });
 
     const supabase = await createServer();
+    const limited = await enforceRequestRateLimit(supabase, `billing:change-plan:${familyId}`, { limit: 10 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many billing requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
     const stripe = getStripe();
 
     const { data: sub } = await supabase
