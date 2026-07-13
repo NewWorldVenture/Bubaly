@@ -1359,6 +1359,27 @@ missing-location events, colliding events for conflicts). Run it, then open
     selling + 8 returns + 8 price + 11 handoff + 14 negotiation + 11 auction)** · `next build`
     (`/marketplace/selling`). No prod migration needed — works the moment the underlying tables exist.
 
+- [x] **Trust & Safety — report a listing ✅ SHIPPED (2026-07-13). Safer than Craigslist.** Members can
+  flag a listing; the platform super-admin moderates. Pairs with the safe-meetup hand-off to make safety
+  a real differentiator:
+  - Migration **`0193_marketplace_reports.sql`** — `marketplace_reports` (reason prohibited/scam/
+    miscategorized/offensive/spam/duplicate/other · details · status open/reviewing/actioned/dismissed ·
+    resolution + reviewer stamp). Reporter-family RLS for read/insert; resolutions are **service-role
+    only** (no public UPDATE). Partial unique index blocks stacking open reports. `set_updated_at`
+    trigger. PG16-verified idempotent ×2.
+  - Pure engine **`lib/marketplace/reports.ts`** (reason/status vocab · `canReport` [not your own] ·
+    `summarizeReports` queue roll-up, **7 tests**). Type added to `lib/database.types.ts`.
+  - `reportListingAction` (family-scoped, dedupe-aware) + **ReportButton** dialog on the item page
+    (non-owners only). Super-admin queue **`/admin/marketplace/reports`** (open-first, stat tiles) with
+    **ReportModeration** controls: start-review · action (optionally withdrawing the listing) · dismiss
+    with a note — gated by the `/admin` layout + `isSuperAdmin`, service-role writes.
+  - Seed **`seed_marketplace_reports.sql`** (500 reports across all 7 reasons × 4 statuses, one per
+    listing; throwaway "Safety Reporters" family; in `SEED_ALL.sql`). PG16-validated ×2 (125 per status).
+    Verified: tsc · eslint · **vitest (7 reports + …68 marketplace total)** · `next build`
+    (`/admin/marketplace/reports`, `/marketplace/item/[id]`).
+  - ⚠️ apply **`0193`** to prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe before apply: the Report
+    button + queue read best-effort and stay dormant until the table exists.
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:

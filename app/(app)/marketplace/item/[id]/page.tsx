@@ -16,6 +16,7 @@ import { OfferInbox } from '@/components/marketplace/offer-inbox';
 import { AuctionPanel } from '@/components/marketplace/auction-panel';
 import { NegotiationPanel, type Thread } from '@/components/marketplace/negotiation-panel';
 import { priceDropBadge, isAtLowest, historyLine, type PriceChange } from '@/lib/marketplace/price-history';
+import { ReportButton } from '@/components/marketplace/report-button';
 import { computeTrustScore, ratingSummary, TRUST_BAND_LABELS } from '@/lib/marketplace/trust';
 import {
   KIND_LABELS, CATEGORY_LABELS, CONDITION_LABELS, priceLabel, formatCents,
@@ -274,6 +275,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
             )}
             <SaveButton listingId={listing.id} saved={alreadySaved}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-muted hover:text-fg" />
+            {!isOwner && <ReportButton listingId={listing.id} />}
           </div>
 
           {/* Owner: accept / decline the offers on this listing */}

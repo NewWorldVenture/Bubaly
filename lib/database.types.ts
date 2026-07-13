@@ -418,6 +418,11 @@ export interface Database {
         { id?: string; listing_id: string; family_id: string; old_cents: number; new_cents: number; changed_at?: string },
         Partial<{ old_cents: number; new_cents: number }>
       >;
+      marketplace_reports: T<
+        { id: string; family_id: string; listing_id: string; reporter_member: string | null; reason: string; details: string | null; status: string; resolution: string | null; reviewed_by: string | null; reviewed_at: string | null } & Stamps,
+        { id?: string; family_id: string; listing_id: string; reporter_member?: string | null; reason?: string; details?: string | null; status?: string; resolution?: string | null; reviewed_by?: string | null; reviewed_at?: string | null },
+        Partial<{ reason: string; details: string | null; status: string; resolution: string | null; reviewed_by: string | null; reviewed_at: string | null }>
+      >;
       marketplace_saved_searches: T<
         { id: string; family_id: string; member_id: string; label: string | null; query: string | null; kind: string | null; category: string | null; max_price_cents: number | null; is_active: boolean; last_seen_at: string; created_by: string | null } & Stamps,
         { id?: string; family_id: string; member_id: string; label?: string | null; query?: string | null; kind?: string | null; category?: string | null; max_price_cents?: number | null; is_active?: boolean; last_seen_at?: string; created_by?: string | null },
