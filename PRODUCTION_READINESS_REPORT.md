@@ -94,6 +94,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   and invalid retry windows; availability-first behavior now requires an explicit opt-in.
 - Bounded the local limiter's in-memory bucket map, normalized invalid limiter parameters, and accepted
   only validated IPv4/IPv6 proxy identities before constructing local or durable rate-limit keys.
+- Added a scoped npm override for Next's nested PostCSS dependency, moving it to patched `8.5.10`
+  without downgrading or replacing the supported Next.js 15 runtime.
 - Repaired the remote marketplace hand-off seed to be fail-closed and additive: it now requires the
   anchored account and two existing members, uses deterministic IDs, and never deletes or creates users.
 - Repaired the marketplace returns seed in both standalone and `SEED_ALL.sql` forms: it now requires
@@ -128,8 +130,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   is present but awaits migration application and RLS allow/deny testing.
 - Marketplace negotiations now reject same-family self-deals and malformed or above-ask rounds at the
   database boundary; migration `0187` still requires live application and verification.
-- `npm audit --omit=dev --audit-level=high` reports two moderate PostCSS advisories through Next.js,
-  with no available fix in the installed dependency graph.
+- `npm audit --omit=dev --audit-level=moderate` reports zero vulnerabilities after the scoped PostCSS
+  override; the supported Next.js 15 runtime remains in place.
 - Scheduled jobs now fail closed when `CRON_SECRET` is missing; internal welcome email delivery also
   requires a configured `INTERNAL_SECRET`.
 
@@ -148,7 +150,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 | Schema probe | PASS | 11 required live table/ledger probes available, including Stripe claim columns |
 | Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
-| Dependency audit | FAIL/PENDING | 2 moderate PostCSS advisories, no fix available |
+| Dependency audit | PASS | 0 vulnerabilities after the scoped PostCSS override |
 | Live RLS attack tests | NOT RUN | requires isolated Supabase with migration applied |
 
 ## Remaining Launch Blockers
@@ -156,9 +158,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 1. Confirm migration history through `0193_marketplace_reports.sql` in the intended environment and
    rerun cross-family RLS and negotiation allow/deny probes.
 2. Diagnose the live Supabase Auth Admin 500 in Supabase/GoTrue/Postgres logs and rerun the Auth audit.
-3. Resolve or formally accept the PostCSS advisory after reviewing the next compatible Next.js release.
-4. Run authenticated E2E and database RLS tests against an isolated local Supabase instance.
-5. Confirm production environment variables and third-party provider configuration using the updated
+3. Run authenticated E2E and database RLS tests against an isolated local Supabase instance.
+4. Confirm production environment variables and third-party provider configuration using the updated
    `.env.example` and deployment checklist.
 
 ## Recommended Launch Decision

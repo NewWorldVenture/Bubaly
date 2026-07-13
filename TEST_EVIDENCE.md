@@ -19,7 +19,7 @@ Audit date: 2026-07-13
 | `npm.cmd test -- tests/seed-credentials-safety.test.ts ...` | PASS: all seed credential/TLS/safety contracts |
 | `git diff --check` | PASS |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` | PASS: 51, skipped 1 |
-| `npm.cmd audit --omit=dev --audit-level=high` | Reports 2 moderate advisories, no fix available |
+| `npm.cmd audit --omit=dev --audit-level=moderate` | PASS: 0 vulnerabilities after the scoped PostCSS override |
 
 ## Audit Update - 2026-07-13 (post-rebase seller cockpit baseline)
 
@@ -66,6 +66,13 @@ Audit date: 2026-07-13
 - `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
 - `npm.cmd run db:audit:auth`: public Auth health passed; Admin users still returned HTTP 500
   (`019f5dd2-5416-7dd8-8e8d-003cf3accb14`).
+
+## Audit Update - 2026-07-13 (dependency advisory remediation)
+
+- Added a package-manager override for Next.js's nested PostCSS dependency, pinning it to patched `8.5.10`.
+- `npm.cmd install --package-lock-only --ignore-scripts`: passed; lockfile reconciled.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- Full Vitest, typecheck, lint, production build, and public Playwright/axe/overflow E2E all passed after the override.
 
 ## Browser Coverage
 

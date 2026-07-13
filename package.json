@@ -2,6 +2,11 @@
   "name": "bubaly",
   "version": "0.1.0",
   "private": true,
+  "overrides": {
+    "next": {
+      "postcss": "8.5.10"
+    }
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

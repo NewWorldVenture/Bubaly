@@ -2169,14 +2169,18 @@ roadmap entries and user worktree changes are preserved.
 
 ### TODO-0181 - Dependency audit reports unresolved PostCSS advisory
 
-- Status: [!] No fix available from `npm audit`.
+- Status: [x] Completed with a scoped dependency override.
 - Severity: P2
 - Category: Dependency security
 - Feature: Build dependency chain
-- Description: `npm audit --omit=dev --audit-level=high` reports two moderate PostCSS vulnerabilities
-  (`GHSA-qx2v-qp2m-jg93`) through Next.js with no available fix in the installed dependency graph.
-- Required remediation: Track the Next.js/PostCSS release that removes the advisory, then upgrade and
-  rerun build, lint, typecheck, and tests. Do not force an unreviewed breaking dependency change.
+- Description: Next.js 15.5.19 pins a vulnerable nested PostCSS 8.4.31 package, while npm's suggested
+  downgrade to Next 9.3.3 is an unacceptable breaking change.
+- Resolution: Added a scoped `package.json` override and lockfile entry for nested PostCSS `8.5.10`;
+  the supported Next.js 15 runtime remains unchanged.
+- Tests performed: npm lockfile reconciliation, `npm audit --omit=dev --audit-level=moderate`, full
+  Vitest, typecheck, lint, production build, and public Playwright/axe E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13
 
 ### TODO-0182 - Seed scripts disabled TLS verification
 
