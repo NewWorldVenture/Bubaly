@@ -1276,7 +1276,7 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
 ### 7. Phone Concierge — "AI receptionist for families"  ◐ (already wired)
 `/dashboard/front-desk`; module has 8 `.from()` + realtime. Wired.
 - [x] **OUTBOUND counterpart — "Bubaly calls FOR you" (closes opportunity-table gap #2: AI makes phone calls on behalf of families).** Full vertical slice, mobile-first, realtime, 100% Supabase:
-  - Schema `0165_concierge_calls.sql` — `concierge_calls` (task_kind · callee · goal · details/brief jsonb · full lifecycle status · outcome/transcript/duration/attempts/provider_ref). Family-scoped RLS (4 policies via `is_family_member`), 3 indexes, `set_updated_at`. PG16-verified idempotent ×2.
+  - Schema `0173_concierge_calls.sql` — `concierge_calls` (task_kind · callee · goal · details/brief jsonb · full lifecycle status · outcome/transcript/duration/attempts/provider_ref). Family-scoped RLS (4 policies via `is_family_member`), 3 indexes, `set_updated_at`. PG16-verified idempotent ×2.
   - Engine `lib/concierge-calls/brief.ts` — pure `buildCallBrief()` → opening · key points · per-task-kind questions · success criteria · fallback (never throws). **7 tests pass.** Types/labels/tones exported.
   - Types added to `lib/database.types.ts`; server actions `requestCallAction`/`cancelCallAction`/`requeueCallAction` (validated, audited); page `/dashboard/concierge-calls`; module `concierge-calls-module.tsx` (composer + stat tiles + status pills + expandable AI plan + outcomes).
   - Telephony **provider-gated** (`TWILIO_*`): `/api/concierge-calls/place` (CRON_SECRET) places queued calls when a provider is configured, else honestly flips to `action_needed` — usable end-to-end without a phone provider, lights up when one is added.

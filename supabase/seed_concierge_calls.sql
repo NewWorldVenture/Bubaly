@@ -6,7 +6,7 @@
 -- AI-generated brief on every row, and outcomes/transcripts on completed calls.
 -- Idempotent: clears its own '[seed:call]' rows first, then inserts. Resolves
 -- the family by email (falls back to the oldest family).
--- Where: Supabase → SQL Editor → paste → Run.  (Needs migration 0165 applied.)
+-- Where: Supabase → SQL Editor → paste → Run.  (Needs migration 0173 applied.)
 -- ============================================================================
 do $$
 declare
@@ -52,7 +52,7 @@ declare
   is_done boolean;
 begin
   if to_regclass('public.concierge_calls') is null then
-    raise notice 'concierge_calls not present — apply migration 0165 first. Skipping.';
+    raise notice 'concierge_calls not present — apply migration 0173 first. Skipping.';
     return;
   end if;
 
