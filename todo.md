@@ -2485,3 +2485,25 @@ roadmap entries and user worktree changes are preserved.
   state remains in the provider-sync flows.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0205 - Calendar feed URLs allowed SSRF and unbounded response reads
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Server-side request forgery / external feed ingestion / resource bounds
+- Feature: Legacy calendar import and scheduled calendar-feed sync
+- File or files: `lib/server/public-calendar-fetch.ts`, `lib/server/calendar-feeds.ts`,
+  `app/api/calendar/sync/route.ts`, `tests/public-calendar-fetch.test.ts`
+- Database objects: None; stored feed URLs remain user data but are validated at every fetch boundary.
+- Description: Calendar ingestion fetched user-controlled HTTP(S) and webcal URLs directly, allowing
+  loopback, private-network, link-local, metadata, or unsafe redirect targets; response bodies were also
+  read without a bounded size.
+- User impact: A malicious feed URL could probe internal services or consume excessive server memory.
+- Root cause: URL normalization handled scheme conversion but did not enforce public network reachability,
+  redirect safety, or response-size limits.
+- Resolution: Added public DNS/IP validation for IPv4 and IPv6, blocked unsafe hostnames and credentials,
+  manual redirect revalidation with a three-hop cap, a 1 MiB calendar response limit, a 16 KiB import-body
+  limit, and generic error responses. Both direct imports and scheduled stored-feed syncs use the helper.
+- Tests performed: Focused calendar-fetch tests, full suite, typecheck, lint, build, and public E2E passed.
+- Verified by: Codex
+- Date completed: 2026-07-13

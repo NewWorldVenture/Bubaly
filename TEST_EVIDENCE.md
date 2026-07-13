@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 305 files, 2,554 tests |
+| `npm.cmd test` | PASS: 313 files, 2,583 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 233 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -188,3 +188,16 @@ Audit date: 2026-07-13
   comparison, session-derived identity, and callback cleanup. No new migration is required.
 - Live schema audit: migrations `0180` and `0181` are now present; `0182` remains pending. Auth Admin
   users probe still returns HTTP 500.
+
+## Audit Update - 2026-07-13 (calendar fetch SSRF and response bounds)
+
+- `npm.cmd exec vitest run tests/public-calendar-fetch.test.ts tests/calendar-feeds.test.ts`: 2 files,
+  14 tests passed.
+- `npm.cmd test`: 313 files and 2,583 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 233 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- Calendar URL fetches now reject private/loopback/link-local/metadata DNS targets and unsafe redirects,
+  cap response bodies at 1 MiB, and return generic provider-safe errors. Import request bodies are capped
+  at 16 KiB and malformed JSON returns HTTP 400.

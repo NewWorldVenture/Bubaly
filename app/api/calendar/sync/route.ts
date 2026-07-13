@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
 
 // ICS parser — no external dep, pure hand-rolled RFC 5545 parser
 function parseIcs(text: string): IcsEvent[] {
@@ -80,22 +81,30 @@ export async function POST(req: NextRequest) {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
     const supabase = await createServer();
-    const body = await req.json() as { icsUrl: string; label?: string };
-    const { icsUrl, label } = body;
+    const contentLength = Number(req.headers.get('content-length') ?? '');
+    if (Number.isFinite(contentLength) && contentLength > 16_384) {
+      return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
+    }
+    const rawBody = await req.text();
+    if (Buffer.byteLength(rawBody, 'utf8') > 16_384) {
+      return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
+    }
+    let body: { icsUrl?: unknown; label?: unknown };
+    try {
+      body = JSON.parse(rawBody) as { icsUrl?: unknown; label?: unknown };
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
+    const icsUrl = typeof body.icsUrl === 'string' ? body.icsUrl : '';
+    const label = typeof body.label === 'string' ? body.label : undefined;
 
     if (!icsUrl || typeof icsUrl !== 'string') {
       return NextResponse.json({ error: 'icsUrl is required' }, { status: 400 });
     }
 
-    // Fetch the ICS file
-    const icsRes = await fetch(icsUrl, {
-      headers: { 'User-Agent': 'Bubaly-Calendar-Sync/1.0' },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!icsRes.ok) {
-      return NextResponse.json({ error: `Failed to fetch ICS: ${icsRes.status}` }, { status: 422 });
-    }
-    const icsText = await icsRes.text();
+    const fetched = await fetchPublicCalendarText(icsUrl);
+    if (!fetched.ok) return NextResponse.json({ error: fetched.error }, { status: fetched.status });
+    const icsText = fetched.text;
     if (!icsText.includes('BEGIN:VCALENDAR')) {
       return NextResponse.json({ error: 'URL does not appear to be a valid ICS calendar' }, { status: 422 });
     }
@@ -129,6 +138,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ imported, total: events.length });
   } catch (err: unknown) {
     console.error('ICS sync error:', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: 'Could not import the calendar.' }, { status: 500 });
   }
 }

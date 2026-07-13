@@ -7,7 +7,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseICS } from '@/lib/sync/ics';
-import { buildFeedRows, normalizeFeedUrl } from '@/lib/calendar/feeds';
+import { buildFeedRows } from '@/lib/calendar/feeds';
+import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
 
 export type FeedSyncResult = { ok: true; imported: number } | { ok: false; error: string };
 
@@ -20,29 +21,13 @@ export async function syncFeed(
   supabase: SupabaseClient,
   feed: { id: string; family_id: string; url: string },
 ): Promise<FeedSyncResult> {
-  const url = normalizeFeedUrl(feed.url);
-  if (!url) {
-    await stampFeed(supabase, feed.id, { last_status: 'error', last_error: 'Invalid calendar URL' });
-    return { ok: false, error: 'Invalid calendar URL' };
-  }
-
   let icsText: string;
-  try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Bubaly-Calendar-Sync/1.0', Accept: 'text/calendar, text/plain, */*' },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) {
-      const msg = `Feed returned HTTP ${res.status}`;
-      await stampFeed(supabase, feed.id, { last_status: 'error', last_error: msg });
-      return { ok: false, error: msg };
-    }
-    icsText = await res.text();
-  } catch {
-    const msg = 'Could not reach the calendar URL';
-    await stampFeed(supabase, feed.id, { last_status: 'error', last_error: msg });
-    return { ok: false, error: msg };
+  const fetched = await fetchPublicCalendarText(feed.url);
+  if (!fetched.ok) {
+    await stampFeed(supabase, feed.id, { last_status: 'error', last_error: fetched.error });
+    return { ok: false, error: fetched.error };
   }
+  icsText = fetched.text;
 
   if (!icsText.includes('BEGIN:VCALENDAR')) {
     const msg = 'URL is not a valid ICS calendar';

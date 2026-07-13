@@ -151,3 +151,8 @@ newer reclaimed claim; payload and configuration boundaries are enforced before 
 Provider-sync OAuth callbacks now use provider-scoped, opaque, httpOnly state cookies with constant-time
 comparison and session-derived identity. This closes the CSRF gap in both static Google and generic
 provider sync routes without adding any database dependency.
+
+Calendar feed URLs are now treated as untrusted server-side fetch targets. Both legacy imports and stored
+feed syncs validate DNS answers against public address ranges, reject credentials and unsafe hostnames,
+manually revalidate up to three redirects, and cap calendar response bodies at 1 MiB. This is an application
+fetch-boundary repair and does not require a database migration.
