@@ -11,17 +11,7 @@ export function formatFamilies(n: number): string {
   return n.toLocaleString('en-US');
 }
 
-/** e.g. "Loved by 1,000+ families" — falls back to a number-free line when there are none yet. */
-export function familiesHeadline(n: number): string {
-  return n <= 0 ? 'Loved by families everywhere' : `Loved by ${formatFamilies(n)} families`;
-}
-
-/** e.g. "1,000+ families and growing" */
+/** A factual public account-count line with an honest pre-launch fallback. */
 export function familiesNote(n: number): string {
-  return n <= 0 ? 'A growing community of families' : `${formatFamilies(n)} families and growing`;
-}
-
-/** e.g. "1,000+ families love Bubaly" */
-export function familiesLoveLine(n: number): string {
-  return n <= 0 ? 'Families love Bubaly' : `${formatFamilies(n)} families love Bubaly`;
+  return n <= 0 ? 'Built for modern family life' : `${formatFamilies(n)} registered families`;
 }

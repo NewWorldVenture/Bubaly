@@ -18,10 +18,8 @@ import {
   PlayCircle,
   Shield,
   Sparkles,
-  Star,
   Tablet,
   TriangleAlert,
-  Tv,
   UtensilsCrossed,
   type LucideIcon,
 } from 'lucide-react';
@@ -132,49 +130,16 @@ function FaceAvatar({ index, className }: { index: number; className?: string })
   );
 }
 
-function Rating({ className }: { className?: string }) {
-  return (
-    <div className={cn('flex items-center gap-0.5 text-amber-400', className)} aria-label="5 out of 5 stars">
-      {Array.from({ length: 5 }).map((_, index) => (
-        <Star key={index} className="h-3.5 w-3.5 fill-current" />
-      ))}
-    </div>
-  );
-}
-
-export function AvatarStack() {
-  return (
-    <div className="flex -space-x-2">
-      {FACE_POSITIONS.map((_, index) => (
-        <FaceAvatar key={index} index={index} className="h-9 w-9 border-2 border-[#07101a]" />
-      ))}
-    </div>
-  );
-}
-
-export function SocialProofLine({ text = 'Loved by families everywhere' }: { text?: string }) {
-  return (
-    <div className="dark inline-flex items-center gap-3 rounded-sm border border-white/[0.035] bg-[#07111b]/90 px-3 py-2.5 text-white shadow-[0_12px_30px_rgba(0,0,0,0.22)]">
-      <AvatarStack />
-      <div>
-        <Rating />
-        <p className="mt-1 text-[11px] text-white/60">{text}</p>
-      </div>
-    </div>
-  );
-}
-
 export function PlatformBadges() {
   const platforms = [
     { icon: Apple, label: 'iOS' },
     { icon: Bot, label: 'Android' },
     { icon: Monitor, label: 'Web' },
     { icon: Tablet, label: 'Tablet' },
-    { icon: Tv, label: 'TV' },
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-      <span className="w-full text-[10px] text-white/40">Available on</span>
+      <span className="w-full text-[10px] text-white/40">Designed for</span>
       {platforms.map(({ icon: Icon, label }) => (
         <span key={label} className="flex items-center gap-1.5 text-[10px] text-white/55">
           <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -477,25 +442,24 @@ export function FamilyAiPanel() {
   );
 }
 
-export function TestimonialBand({ compact = false }: { compact?: boolean }) {
-  const testimonials = [
-    ['Jessica M.', 'Mom of 3', 'Bubaly has simplified our chaos. We are more organized and actually enjoy family time again!'],
-    ['David T.', 'Dad of 2', 'The AI assistant is a game changer. It knows what we need before we even think about it.'],
-    ['Amanda R.', 'Mom of 4', 'Finally, one place for everything our family needs. Beautiful, easy, and so helpful.'],
+export function FamilyMomentsBand({ compact = false }: { compact?: boolean }) {
+  const moments = [
+    ['Morning handoffs', 'See schedules, tasks, reminders, and what each person needs before the day starts.'],
+    ['After-school logistics', 'Keep pickups, activities, homework, forms, and dinner plans in one shared flow.'],
+    ['Weekend planning', 'Turn everyone\'s ideas and commitments into a plan the whole family can follow.'],
   ];
   return (
     <section className={cn('showcase-panel p-6 sm:p-8 lg:p-9', compact && 'p-6 lg:p-8')}>
       <div className="grid gap-7 lg:grid-cols-[270px_1fr]">
         <h2 className="text-3xl font-bold leading-tight sm:text-[2rem]">
-          Trusted by thousands of <GradientText>happy families</GradientText>
+          Built for the moments that keep <GradientText>family life moving</GradientText>
         </h2>
         <div className="grid gap-4 md:grid-cols-3">
-          {testimonials.map(([name, role, quote]) => (
-            <article key={name} className="showcase-card rounded-xl p-5">
-              <Rating />
-              <p className="mt-3 text-xs leading-5 text-white/78">&ldquo;{quote}&rdquo;</p>
-              <p className="mt-4 text-xs font-semibold text-white/90">— {name}</p>
-              <p className="mt-0.5 text-[10px] text-white/45">{role}</p>
+          {moments.map(([title, body]) => (
+            <article key={title} className="showcase-card rounded-xl p-5">
+              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+              <h3 className="mt-3 text-sm font-semibold text-white/90">{title}</h3>
+              <p className="mt-2 text-xs leading-5 text-white/68">{body}</p>
             </article>
           ))}
         </div>
@@ -505,7 +469,7 @@ export function TestimonialBand({ compact = false }: { compact?: boolean }) {
 }
 
 export function DeviceShowcase() {
-  const devices = ['iPhone', 'Android', 'iPad', 'Web App', 'Apple Watch', 'Smart Display'] as const;
+  const devices = ['iPhone', 'Android', 'iPad', 'Web App'] as const;
 
   return (
     <section className="py-10 sm:py-12">
@@ -513,7 +477,7 @@ export function DeviceShowcase() {
         One seamless experience across all your devices
       </h2>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 lg:gap-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-5">
         {devices.map((device) => (
           <div key={device} className="device-card group flex flex-col items-center gap-3">
             <DeviceArtwork device={device} />
@@ -524,8 +488,8 @@ export function DeviceShowcase() {
 
       <div className="mt-10 grid gap-5 pt-2 sm:grid-cols-3">
         {[
-          { icon: Shield, text: 'Bank-level security' },
-          { icon: Shield, text: 'End-to-end encrypted' },
+          { icon: Shield, text: 'Encrypted in transit and at rest' },
+          { icon: Shield, text: 'Family-scoped access controls' },
           { icon: Heart, text: 'Your data, your family' },
         ].map(({ icon: Icon, text }) => (
           <div key={text} className="flex items-center justify-center gap-2 text-sm text-[rgb(var(--canvas-fg)/0.65)]">
@@ -535,16 +499,6 @@ export function DeviceShowcase() {
         ))}
       </div>
 
-      <div className="mt-8 rounded-xl border border-[rgba(var(--showcase-border))] bg-[rgb(var(--showcase-bg)/var(--showcase-alpha))] px-5 py-6">
-        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-lg font-black text-[rgb(var(--canvas-fg)/0.62)] sm:gap-x-14 sm:text-xl">
-          <span className="font-serif">Forbes</span>
-          <span><span className="mr-1 text-emerald-400">TC</span>TechCrunch</span>
-          <span className="text-sm leading-none">GOOD<br />MORNING<br />AMERICA</span>
-          <span className="font-serif">Parents</span>
-          <span>yahoo!</span>
-          <span className="text-base">● USA TODAY</span>
-        </div>
-      </div>
     </section>
   );
 }
@@ -782,12 +736,12 @@ function DeviceArtwork({ device }: { device: DeviceName }) {
   );
 }
 
-export function TrustStrip({ familiesNote = 'A growing community of families' }: { familiesNote?: string }) {
+export function TrustStrip({ familiesNote = 'Built for modern family life' }: { familiesNote?: string }) {
   const items = [
-    [Shield, 'Secure & Private', 'Your data is always protected'],
-    [Home, 'Works Everywhere', 'Web, iOS, Android, and more'],
-    [Sparkles, 'Real-time Sync', 'Changes sync instantly across devices'],
-    [Heart, 'Loved by Families', familiesNote],
+    [Shield, 'Private by Design', 'Family-scoped access controls'],
+    [Home, 'Responsive by Design', 'Web, iOS, and Android layouts'],
+    [Sparkles, 'Shared Updates', 'Family changes stay in sync'],
+    [Heart, 'Family Community', familiesNote],
   ] as const;
   return (
     <div className="grid gap-6 border-t border-white/8 py-9 sm:grid-cols-2 lg:grid-cols-4">

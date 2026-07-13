@@ -6,7 +6,6 @@ import {
   Check,
   CheckCircle2,
   CheckSquare2,
-  ChevronLeft,
   ChevronRight,
   Circle,
   Cloud,
@@ -33,7 +32,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { getPublicStats } from '@/lib/marketing/stats';
-import { familiesNote, familiesLoveLine } from '@/lib/marketing/format';
+import { familiesNote } from '@/lib/marketing/format';
 
 const tones = {
   violet: 'border-violet-500/20 bg-violet-500/10 text-violet-400',
@@ -372,10 +371,10 @@ function AssistantChat() {
 async function TrustStrip() {
   const { families } = await getPublicStats();
   const items = [
-    [ShieldCheck, 'Secure & Private', 'Your data is always\nprotected'],
-    [Smartphone, 'Works Everywhere', 'Web, iOS, Android,\nand more'],
-    [Cloud, 'Real-time Sync', 'Changes sync instantly\nacross all devices'],
-    [Heart, 'Loved by Families', familiesNote(families)],
+    [ShieldCheck, 'Private by Design', 'Family-scoped access\ncontrols'],
+    [Smartphone, 'Responsive by Design', 'Web, iOS, and Android\nlayouts'],
+    [Cloud, 'Shared Updates', 'Family changes stay\nin sync'],
+    [Heart, 'Family Community', familiesNote(families)],
   ] as const;
   return (
     <section className="mx-0 mt-[18px] grid gap-6 border-t border-white/[0.06] px-7 py-6 sm:mx-[14px] sm:grid-cols-2 lg:grid-cols-4">
@@ -448,7 +447,7 @@ export function HowItWorksReferencePage() {
 
         <StepsPanel />
         <MagicPanel />
-        <TestimonialsPanel />
+        <FamilyWorkflowPanel />
       </div>
     </ReferencePage>
   );
@@ -457,9 +456,9 @@ export function HowItWorksReferencePage() {
 async function SocialProof() {
   const { families } = await getPublicStats();
   return (
-    <div className="mt-[19px] flex items-center gap-3">
-      <div className="flex -space-x-2">{[0, 1, 2, 3, 4].map((index) => <TinyAvatar key={index} index={index} className="h-9 w-9 border-2 border-[#07101a]" />)}</div>
-      <div><div className="flex gap-1 text-amber-400">{Array.from({ length: 5 }).map((_, i) => <Star key={i} className="h-3 w-3 fill-current" />)}</div><p className="mt-1 text-[11px] text-white/70">{familiesLoveLine(families)}</p></div>
+    <div className="mt-[19px] inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] text-white/70">
+      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+      {familiesNote(families)}
     </div>
   );
 }
@@ -504,7 +503,7 @@ function StepsPanel() {
       </div>
       <div className="mt-[13px] border-t border-white/[0.06] pt-[13px]">
         <div className="flex min-h-[66px] flex-col gap-4 rounded-[12px] border border-white/[0.08] bg-white/[0.035] px-7 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4"><ShieldCheck className="h-9 w-9 text-violet-400" /><div><h3 className="text-[13px] font-semibold">Secure. Private. Built for Families.</h3><p className="mt-1 text-[11px] text-white/60">Your data is always protected and only shared with your family.</p></div></div>
+          <div className="flex items-center gap-4"><ShieldCheck className="h-9 w-9 text-violet-400" /><div><h3 className="text-[13px] font-semibold">Private by Design. Built for Families.</h3><p className="mt-1 text-[11px] text-white/60">Family-scoped access controls keep household data within your family account.</p></div></div>
           <Link href="/security" className="flex items-center gap-3 text-[11px] text-violet-400">Learn more about security <ArrowRight className="h-4 w-4" /></Link>
         </div>
       </div>
@@ -555,20 +554,18 @@ function MagicCalendar() {
   return <div><p className="mb-2 whitespace-nowrap text-center text-[11px] font-semibold">3. It&apos;s organized for your family</p><div className="h-[271px] rounded-[12px] border border-white/[0.10] bg-white/[0.035] p-3"><div className="flex justify-between text-[9px] font-semibold"><span>May 2024</span><ChevronRight className="h-3 w-3" /></div><div className="mt-3 grid grid-cols-7 gap-y-1 text-center text-[5px] text-white/50">{['SUN','MON','TUE','WED','THU','FRI','SAT','12','13','14','15','16','17','18'].map((d,i) => <span key={`${d}-${i}`} className={cn(d === '18' && 'mx-auto grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white')}>{d}</span>)}</div><div className="mt-3 rounded-lg bg-violet-600/25 p-3"><p className="text-[9px] font-semibold">Spring Soccer Tournament</p><p className="mt-2 text-[7px] leading-[10px] text-white/58">May 18 – May 19<br />8:30 AM – 12:00 PM<br />Riverside Park</p></div><div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[8px] font-semibold">Tasks Created</p>{['Pack soccer gear','Bring snacks','Team jersey'].map(item => <p key={item} className="mt-1.5 flex items-center gap-1.5 text-[7px]"><CheckCircle2 className="h-2.5 w-2.5 text-violet-400" />{item}</p>)}<div className="mt-2 flex -space-x-1">{[0,1,2].map(i => <TinyAvatar key={i} index={i} className="h-5 w-5" />)}</div></div></div></div>;
 }
 
-function TestimonialsPanel() {
-  const testimonials = [
-    ["Bubaly has completely\nchanged how we stay organized.\nI don't know how we lived\nwithout it!", 'Jessica M.', 'Mom of 3'],
-    ['The AI saves me so much time.\nIt catches things I would\nnormally miss.', 'David T.', 'Dad of 2'],
-    ['Finally, an app that actually\nbrings everything together in\none place.', 'Amanda R.', 'Mom of 4'],
-    ['Our whole family is on the same\npage now. Less stress and more\ntime together.', 'Chris & Maria', 'Parents of 3'],
-    ["The school email scanner\nfeature is pure genius. It's like\nhaving an assistant.", 'Priya K.', 'Mom of 2'],
+function FamilyWorkflowPanel() {
+  const workflows = [
+    ['Morning ready', 'Schedules, reminders, and handoffs in one calm view.'],
+    ['School paperwork', 'Turn forms and messages into clear next actions.'],
+    ['Dinner planned', 'Coordinate meals, groceries, and family preferences.'],
+    ['Everyone aligned', 'Keep shared plans current without extra group texts.'],
+    ['Weekends protected', 'See commitments early and make room for family time.'],
   ];
   return (
     <section className="dark relative mt-[21px] rounded-[15px] border border-white/[0.08] bg-[#06101a]/[0.78] px-12 pb-3 pt-[6px] text-white">
-      <h2 className="text-center text-[23px] font-bold tracking-[-0.025em]"><GradientText>Loved</GradientText> by families everywhere</h2>
-      <button type="button" aria-label="Previous testimonial" className="absolute left-1 top-[98px] grid h-8 w-8 place-items-center rounded-full bg-violet-500/10 text-white/65"><ChevronLeft className="h-4 w-4" /></button>
-      <button type="button" aria-label="Next testimonial" className="absolute right-1 top-[98px] grid h-8 w-8 place-items-center rounded-full bg-violet-500/10 text-white/65"><ChevronRight className="h-4 w-4" /></button>
-      <div className="mt-1.5 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">{testimonials.map(([quote,name,role]) => <article key={name} className="min-h-[142px] rounded-[10px] border border-white/[0.07] bg-white/[0.035] p-3"><div className="flex gap-0.5 text-amber-400">{Array.from({length:5}).map((_,i)=><Star key={i} className="h-2.5 w-2.5 fill-current" />)}</div><p className="mt-2 whitespace-pre-line text-[8.5px] leading-[13px] text-white/80">&quot;{quote}&quot;</p><p className="mt-4 text-[8px] font-semibold">{name}</p><p className="mt-0.5 text-[7px] text-white/50">{role}</p></article>)}</div>
+      <h2 className="text-center text-[23px] font-bold tracking-[-0.025em]">One place for <GradientText>real family workflows</GradientText></h2>
+      <div className="mt-3 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">{workflows.map(([title,body]) => <article key={title} className="min-h-[142px] rounded-[10px] border border-white/[0.07] bg-white/[0.035] p-3"><CheckCircle2 className="h-4 w-4 text-emerald-400" /><h3 className="mt-3 text-[9px] font-semibold">{title}</h3><p className="mt-2 text-[8.5px] leading-[13px] text-white/70">{body}</p></article>)}</div>
     </section>
   );
 }

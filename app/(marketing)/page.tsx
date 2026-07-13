@@ -10,6 +10,7 @@ import {
 import {
   Container,
   DeviceShowcase,
+  FamilyMomentsBand,
   FEATURE_RAIL,
   FamilyAiPanel,
   GradientText,
@@ -20,7 +21,6 @@ import {
   Pill,
   PlatformBadges,
   PrimaryLink,
-  TestimonialBand,
   WatchDemoLink,
 } from '@/components/marketing/visual-mocks';
 import { SiteStructuredData } from '@/components/marketing/structured-data';
@@ -88,9 +88,9 @@ export default async function HomePage() {
         <FamilyAiPanel />
       </Container>
 
-      {/* ── Testimonials ── */}
+      {/* ── Family workflows ── */}
       <Container className="max-w-[1440px] px-5 pb-3 pt-4 sm:px-8 lg:px-10">
-        <TestimonialBand />
+        <FamilyMomentsBand />
       </Container>
 
       {/* ── Brand manifesto ── */}

@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatFamilies,
-  familiesHeadline,
   familiesNote,
-  familiesLoveLine,
 } from '@/lib/marketing/format';
 
 // These guard the public marketing copy: counts must reflect real data and must
@@ -25,15 +23,11 @@ describe('marketing family-count formatters', () => {
     expect(formatFamilies(12_345)).toBe('12,000+');
   });
 
-  it('uses number-free, non-fabricated copy when count is zero', () => {
-    expect(familiesHeadline(0)).toBe('Loved by families everywhere');
-    expect(familiesNote(0)).toBe('A growing community of families');
-    expect(familiesLoveLine(0)).toBe('Families love Bubaly');
+  it('uses honest fallback copy when count is zero', () => {
+    expect(familiesNote(0)).toBe('Built for modern family life');
   });
 
-  it('uses the real count when families exist', () => {
-    expect(familiesHeadline(2500)).toBe('Loved by 2,000+ families');
-    expect(familiesNote(42)).toBe('42 families and growing');
-    expect(familiesLoveLine(42)).toBe('42 families love Bubaly');
+  it('uses the real registered-family count when families exist', () => {
+    expect(familiesNote(42)).toBe('42 registered families');
   });
 });
