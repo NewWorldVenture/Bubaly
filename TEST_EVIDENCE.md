@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 316 files, 2,600 tests |
+| `npm.cmd test` | PASS: 316 files, 2,601 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -55,6 +55,21 @@ Audit date: 2026-07-13
 - `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
 - `npm.cmd run build`: passed; 233 pages generated.
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+
+## Audit Update - 2026-07-13 (atomic expired auction settlement)
+
+- `npm.cmd exec vitest run tests/marketplace-auction.test.ts tests/marketplace-auction-security.test.ts tests/production-migration-contract.test.ts`: 3 files, 24 tests passed.
+- `npm.cmd exec vitest run`: 316 files, 2,601 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 234 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- Added `marketplace_close_auction()` in migration `0185` and moved the close-auctions cron to the
+  service-role RPC. Listing, order, and bid settlement now commit together; failed order creation
+  leaves the listing retryable.
+- Added the auction security contract covering service-role execution and the cron/RPC boundary.
+- Production still requires migrations `0184` and `0185` to be applied before auction enforcement is
+  complete.
 - Public service-role ingestion contract now covers contact, forms, exit-intent, landing-page,
   visitor-intelligence, and A/B routes using the shared durable request guard.
 

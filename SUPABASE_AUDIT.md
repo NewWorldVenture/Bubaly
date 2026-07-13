@@ -7,7 +7,8 @@
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
   `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
-  `0183_marketplace_auctions.sql`, and `0184_marketplace_auction_authorization.sql`.
+  `0183_marketplace_auctions.sql`, `0184_marketplace_auction_authorization.sql`, and
+  `0185_marketplace_auction_close_transaction.sql`.
 - SQL files: 315.
 - Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
@@ -77,6 +78,13 @@ pending migration is applied in an authorized Supabase environment.
 
 Public gift-link reads now guard child and family lookups with `gift_links.is_active`; revoked
 capabilities do not disclose identifying names through service-role reads.
+
+### Audit Update - 2026-07-13 (expired auction settlement)
+
+Expired auction settlement now calls the service-role-only `marketplace_close_auction()` RPC.
+The RPC locks the listing and commits the listing transition, winner order, and bid status updates
+together; order failures leave the auction available for a later retry. Notifications remain
+best-effort after the transaction commits. Migration `0185` is still pending in production.
 
 Guardian callbacks now enforce bounded provider input and durable event claims before mutating
 `guardian_screening_sessions`, `guardian_communications`, or `notifications`. The service-only

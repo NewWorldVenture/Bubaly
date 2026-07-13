@@ -2590,3 +2590,26 @@ roadmap entries and user worktree changes are preserved.
 - Tests performed: Auction engine/security contracts, full suite, typecheck, lint, build, and public E2E passed.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0208 - Expired auction close could strand a claimed listing without an order
+
+- Status: [x] Completed in code; production enforcement requires migration `0185` to be applied.
+- Severity: P1
+- Category: Marketplace transaction integrity / retry safety
+- Feature: Expired auction settlement
+- File or files: `supabase/migrations/0185_marketplace_auction_close_transaction.sql`,
+  `app/api/cron/close-auctions/route.ts`, `lib/database.types.ts`,
+  `tests/marketplace-auction-security.test.ts`
+- Database objects: `marketplace_listings`, `marketplace_orders`, `marketplace_bids`,
+  `marketplace_close_auction`
+- Description: The cron changed an expired listing to `claimed` before inserting the winner order.
+  An order failure left the listing closed without a durable transaction record, and later retries
+  could not repair it.
+- User impact: A successful auction could disappear from active listings while the winner had no order
+  to coordinate pickup or completion.
+- Root cause: Listing state and order creation were separate service-role writes.
+- Resolution: Added a locked service-role settlement RPC that commits listing, order, and bid updates
+  together. The cron now retries failed RPCs and sends notifications only after settlement succeeds.
+- Tests performed: Auction security contract, full suite, typecheck, lint, build, and public E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13
