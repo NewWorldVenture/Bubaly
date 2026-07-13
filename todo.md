@@ -1343,6 +1343,22 @@ missing-location events, colliding events for conflicts). Run it, then open
   - ⚠️ apply **`0192`** + ensure **`CRON_SECRET`** in prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe
     before apply: the badge/cron no-op until the columns exist (the Orders page still renders).
 
+- [x] **Seller Cockpit — "Selling" ✅ SHIPPED (2026-07-13). eBay's Seller Hub.** One command center for
+  everything you're selling, **ranked by what needs you** — the capstone that surfaces the depth built
+  this session. **No migration / no new seed** (reads existing signals; the marketplace seeds already
+  populate them). `/marketplace/selling`:
+  - Pure engine **`lib/marketplace/selling.ts`** (`attentionItems` → tone-coded chips · `attentionScore`
+    ranking [overdue ≫ questions ≫ offers-to-reply ≫ pickups ≫ ending-soon ≫ interest] · `needsAttention`
+    · `sellerTotals` roll-up, **9 tests**).
+  - Page aggregates per listing (batched, keyed by listing_id): **watchers** (saves), **open offers +
+    negotiations** (with a distinct "needs your reply" count for threads where `last_actor='buyer'`),
+    **unanswered questions**, **auction bids + ending-soon**, **pickups to confirm** (proposed handoffs),
+    and **overdue returns** — then ranks the board and shows stat tiles (active · needs-attention ·
+    watchers · offers · questions). Each row deep-links to the item. Nav entry (Selling, `LayoutDashboard`).
+  - Family-scoped + member-scoped (your listings only) via RLS. Verified: tsc · eslint · **vitest (9
+    selling + 8 returns + 8 price + 11 handoff + 14 negotiation + 11 auction)** · `next build`
+    (`/marketplace/selling`). No prod migration needed — works the moment the underlying tables exist.
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:
