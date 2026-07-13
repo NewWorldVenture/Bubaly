@@ -3,6 +3,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runGoogleSync } from '@/lib/sync/engine/google';
 import type { Json } from '@/lib/database.types';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 // Runs a two-way Google sync for the current user's connected account.
 export async function POST() {
@@ -18,6 +19,12 @@ export async function POST() {
     .maybeSingle();
 
   if (!account) return NextResponse.json({ error: 'Google is not connected for this account.' }, { status: 400 });
+
+  const limited = await enforceRequestRateLimit(admin, `sync:${ctx.active.familyId}:${ctx.user.id}:google`, { limit: 10 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many sync requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
 
   const result = await runGoogleSync(admin, account);
 

@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { getAdapter } from '@/lib/sync/registry';
 import { runProviderSync } from '@/lib/sync/engine/generic';
 import type { Json, SyncProviderEnum } from '@/lib/database.types';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 // Provider-agnostic two-way sync (R9). Runs a sync for the current user's connected
 // account of ANY registered provider by resolving the adapter from the registry and
@@ -31,6 +32,12 @@ export async function POST(req: Request) {
     .maybeSingle();
 
   if (!account) return NextResponse.json({ error: `${adapter.label} is not connected for this account.` }, { status: 400 });
+
+  const limited = await enforceRequestRateLimit(admin, `sync:${ctx.active.familyId}:${ctx.user.id}:${provider}`, { limit: 10 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many sync requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
 
   const result = await runProviderSync(admin, account, adapter);
 

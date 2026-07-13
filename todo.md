@@ -2232,3 +2232,25 @@ roadmap entries and user worktree changes are preserved.
   release gates. Durable enforcement depends on migration `0156` in production.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0194 - Calendar sync routes lacked request budgets
+
+- Status: [x] Completed in code and covered by the shared limiter regression tests.
+- Severity: P1
+- Category: External integration abuse resistance / duplicate provider work
+- Feature: Google and provider-agnostic calendar synchronization
+- Routes: `/api/sync/run`, `/api/sync/google/sync`, `/api/google/calendar/sync`
+- File or files: the three sync route handlers, `lib/server/request-rate-limit.ts`,
+  `tests/ai-rate-limit.test.ts`
+- Database objects: `rate_limits`, `rate_limit_hit`, `sync_accounts`, `calendar_events`
+- Description: Authenticated sync entry points could refresh tokens and call external calendar providers
+  repeatedly without a per-family/user request budget.
+- User impact: Repeated clicks or a runaway client could cause duplicate imports, provider throttling, or
+  unnecessary external API work.
+- Root cause: Authentication and account scoping existed, but sync routes predated the shared side-effect guard.
+- Resolution: Added provider-specific 10-request-per-family/user-per-minute limits before sync engines,
+  token refreshes, or Google imports, with `Retry-After` responses.
+- Tests performed: Shared limiter regression passed; full suite, typecheck, lint, build, and public E2E remain
+  release gates. Durable enforcement depends on migration `0156` in production.
+- Verified by: Codex
+- Date completed: 2026-07-13

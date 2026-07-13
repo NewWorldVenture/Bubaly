@@ -120,3 +120,6 @@ IP limits before service-role calendar reads, while keeping anonymous iCalendar 
 
 Billing checkout, plan-change, cancellation, and portal-session routes now apply per-family local plus
 durable request limits after parent authorization and before Stripe side effects.
+
+Generic provider sync, Google sync, and the legacy Google Calendar import now apply per-family/user
+request limits before token refreshes or external calendar API work.

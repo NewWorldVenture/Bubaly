@@ -6,6 +6,7 @@ import {
   getValidAccessToken,
   type GoogleToken,
 } from '@/lib/google';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 // Fetches the next 3 months of events from Google Calendar primary and
 // upserts them into calendar_events with source='google'.
@@ -27,6 +28,12 @@ export async function POST() {
     if (!stored?.accessToken) {
       return NextResponse.json({ error: 'Google Calendar not connected' }, { status: 400 });
     }
+
+    const limited = await enforceRequestRateLimit(supabase, `sync:${ctx.active.familyId}:${ctx.user.id}:google-calendar`, { limit: 10 });
+    if (!limited.ok) return NextResponse.json(
+      { error: 'Too many sync requests. Please try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
 
     const timeMin = new Date().toISOString();
     const timeMax = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();

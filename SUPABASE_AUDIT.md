@@ -101,3 +101,6 @@ the service-role `sync_calendars` and `sync_calendar_events` reads. Durable enfo
 
 Billing side-effect routes use the generic shared rate-limit guard keyed by family before Stripe calls;
 the parent-role authorization remains the primary access control.
+
+Calendar sync entry points use provider-specific family/user buckets before external token refresh or
+two-way/import work, reducing duplicate provider calls while preserving authenticated sync behavior.
