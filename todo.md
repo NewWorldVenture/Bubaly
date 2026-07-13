@@ -2613,3 +2613,23 @@ roadmap entries and user worktree changes are preserved.
 - Tests performed: Auction security contract, full suite, typecheck, lint, build, and public E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0209 - Generic provider sync accepted unbounded request bodies
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Authenticated request bounds / provider integration
+- Feature: Generic provider sync
+- File or files: `app/api/sync/run/route.ts`, `lib/server/bounded-request-body.ts`,
+  `tests/sync-request-body.test.ts`
+- Description: The generic sync endpoint called `req.json()` directly and cast the submitted provider
+  value, allowing an authenticated caller to send an arbitrarily large body before adapter lookup.
+- User impact: A compromised session could consume request-body memory and trigger unnecessary auth,
+  adapter, and database work with malformed provider input.
+- Root cause: The route lacked a shared streaming body boundary and runtime shape validation.
+- Resolution: Added a 4 KiB streaming body cap, malformed-JSON handling, and bounded string validation;
+  unsupported providers now fail before service-role work.
+- Tests performed: Sync request-boundary contract, sync adapter tests, OAuth CSRF tests, typecheck,
+  lint, full suite, build, and public E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

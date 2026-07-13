@@ -176,3 +176,7 @@ identity. Migration `0184_marketplace_auction_authorization.sql` removes the dir
 insert policy, hides the original bid implementation behind an authorization wrapper, and adds the
 locked `marketplace_buy_now` RPC so listing claims and order creation commit together. Apply `0184` with
 the auction code before enabling the feature in production.
+
+Generic provider sync now reads a bounded 4 KiB request body and validates the provider field before
+adapter lookup or service-role database work. This is an application request-boundary repair and does
+not require a database migration.

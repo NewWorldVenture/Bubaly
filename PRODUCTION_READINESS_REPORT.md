@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,601 unit tests, builds all 234 Next.js build
+tree compiles, passes lint and type checking, passes 2,604 unit tests, builds all 234 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -18,7 +18,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 - 100 API route handlers.
 - 193 migrations at audit start; additive repair migrations `0178` through `0182` added.
 - 315 SQL files under `supabase`.
-- 316 unit-test files and 2,601 passing tests.
+- 317 unit-test files and 2,604 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -36,6 +36,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   event claim; abandoned claims remain recoverable after ten minutes.
 - Added `0185_marketplace_auction_close_transaction.sql` and moved expired-auction settlement into a
   service-role-only locked transaction, so listing claims cannot commit without their winner order.
+- Added a streaming 4 KiB request-body bound and provider-shape validation to the generic provider-sync
+  endpoint; malformed or unsupported requests now fail before adapter or database work.
 - Hardened the public unsubscribe endpoint with shared request limits, bounded token input, escaped
   HTML output, and production fail-closed secret handling.
 - Preserved active family membership checks and tightened listing-share deletion to the owning family
@@ -72,7 +74,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,601 tests / 316 files | `npm.cmd test` |
+| Unit tests | PASS, 2,604 tests / 317 files | `npm.cmd test` |
 | Production build | PASS, 234 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |

@@ -5,6 +5,9 @@ import { getAdapter } from '@/lib/sync/registry';
 import { runProviderSync } from '@/lib/sync/engine/generic';
 import type { Json, SyncProviderEnum } from '@/lib/database.types';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
+
+const MAX_SYNC_REQUEST_BYTES = 4_096;
 
 // Provider-agnostic two-way sync (R9). Runs a sync for the current user's connected
 // account of ANY registered provider by resolving the adapter from the registry and
@@ -13,12 +16,30 @@ export async function POST(req: Request) {
   const ctx = await requireUserContext();
   const admin = createServiceClient();
 
-  const body = await req.json().catch(() => ({}));
-  const provider = body?.provider as SyncProviderEnum | undefined;
-  if (!provider) return NextResponse.json({ error: 'Missing provider.' }, { status: 400 });
+  const rawBody = await readBoundedRequestText(req, MAX_SYNC_REQUEST_BYTES);
+  if (!rawBody.ok) {
+    return NextResponse.json(
+      { error: rawBody.reason === 'too_large' ? 'Request body too large.' : 'Unable to read request body.' },
+      { status: rawBody.reason === 'too_large' ? 413 : 400 },
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody.text);
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+  }
+  const providerValue = body && typeof body === 'object' && !Array.isArray(body)
+    ? (body as { provider?: unknown }).provider
+    : undefined;
+  const provider = typeof providerValue === 'string' && providerValue.length <= 32
+    ? providerValue as SyncProviderEnum
+    : undefined;
+  if (!provider) return NextResponse.json({ error: 'Missing or invalid provider.' }, { status: 400 });
 
   const adapter = getAdapter(provider);
-  if (!adapter) return NextResponse.json({ error: `No sync adapter for "${provider}".` }, { status: 400 });
+  if (!adapter) return NextResponse.json({ error: 'Unsupported sync provider.' }, { status: 400 });
   if (!adapter.isConfigured()) {
     return NextResponse.json({ error: `${adapter.label} sync isn’t configured yet.` }, { status: 503 });
   }
