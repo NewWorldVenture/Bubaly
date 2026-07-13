@@ -22,6 +22,7 @@ const expected = [
   ['crm_lead_scores', '0172_crm_lead_scores.sql'],
   ['marketplace_circles', '0176_marketplace_circles.sql'],
   ['resend_webhook_events', '0180_resend_webhook_dedup.sql'],
+  ['guardian_callback_events', '0181_guardian_callback_replay.sql'],
 ];
 
 const results = await Promise.all(expected.map(async ([table, migration]) => {

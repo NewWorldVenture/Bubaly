@@ -124,6 +124,16 @@ Audit date: 2026-07-13
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
 - The unsubscribe route now has a shared IP budget, bounded HMAC input, escaped HTML output, and
   production fail-closed secret handling.
+
+## Audit Update - 2026-07-13 (Guardian callback replay protection)
+
+- `npm.cmd test`: 310 files and 2,571 tests passed.
+- `npm.cmd test -- tests/guardian-callback-security.test.ts tests/guardian-screening-turn.test.ts`:
+  2 files, 10 tests passed.
+- `npm.cmd run typecheck`: passed.
+- Signed SMS, WhatsApp, voice, screening, and voicemail callbacks now claim bounded provider event IDs
+  before AI, notification, or telephony side effects through migration `0181_guardian_callback_replay.sql`.
+- Live schema audit correctly reports `guardian_callback_events` missing until migration `0181` is applied.
 ## Audit Update - 2026-07-13
 
 - `node --check scripts/seed*.mjs`: passed for all six legacy seed scripts plus the shared client.

@@ -7,12 +7,14 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { wrapTwiml, twimlSay, twimlHangup, validateTwilioSignature } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
+import { claimGuardianCallback, isTwilioBodyTooLarge, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 
 export const runtime = 'nodejs';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
 export async function POST(req: NextRequest) {
+  if (isTwilioBodyTooLarge(req)) return new NextResponse('Payload too large', { status: 413 });
   const { searchParams } = new URL(req.url);
   const commId = searchParams.get('commId') ?? '';
 
@@ -31,6 +33,14 @@ export async function POST(req: NextRequest) {
   const recordingUrl = params.RecordingUrl ?? null;
   const recordingDuration = params.RecordingDuration ? parseInt(params.RecordingDuration, 10) : null;
   const transcriptionText = params.TranscriptionText ?? null;
+  const recordingSid = params.RecordingSid ?? '';
+
+  if ((commId && !isValidGuardianEventId(commId)) || !isValidGuardianEventId(recordingSid)
+    || (recordingDuration !== null && (!Number.isInteger(recordingDuration) || recordingDuration < 0 || recordingDuration > 120))
+    || (recordingUrl !== null && recordingUrl.length > 2048)
+    || (transcriptionText !== null && transcriptionText.length > 4096)) {
+    return new NextResponse('Invalid callback', { status: 400 });
+  }
 
   if (!commId) {
     return new NextResponse(wrapTwiml(twimlSay('Thank you. Goodbye.'), twimlHangup()), {
@@ -39,6 +49,12 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createServiceClient();
+  const eventClaimed = await claimGuardianCallback(supabase, 'voicemail_recording', recordingSid);
+  if (!eventClaimed) {
+    return new NextResponse(wrapTwiml(twimlSay('Thank you. Goodbye.'), twimlHangup()), {
+      headers: { 'content-type': 'application/xml' },
+    });
+  }
   const db = withGuardianTables(supabase);
   const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
@@ -85,6 +101,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  await markGuardianCallbackProcessed(supabase, recordingSid);
   return new NextResponse(
     wrapTwiml(twimlSay('Thank you for your message. Goodbye.'), twimlHangup()),
     { headers: { 'content-type': 'application/xml' } },

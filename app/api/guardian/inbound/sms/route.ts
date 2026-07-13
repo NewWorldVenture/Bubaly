@@ -9,12 +9,14 @@ import { runDecisionPipeline } from '@/lib/guardian/pipeline';
 import { detectScamWithAI } from '@/lib/guardian/scam-ai';
 import { sendSms, validateTwilioSignature } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
+import { claimGuardianCallback, isTwilioBodyTooLarge, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 
 export const runtime = 'nodejs';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
 export async function POST(req: NextRequest) {
+  if (isTwilioBodyTooLarge(req)) return new NextResponse('Payload too large', { status: 413 });
   const formData = await req.formData();
   const params = Object.fromEntries(formData.entries()) as Record<string, string>;
 
@@ -29,9 +31,15 @@ export async function POST(req: NextRequest) {
   const from = params.From ?? null;
   const to = params.To ?? null;
   const body = params.Body ?? '';
-  const smsSid = params.SmsSid ?? null;
+  const smsSid = params.SmsSid ?? params.MessageSid ?? null;
+
+  if (!isValidGuardianEventId(smsSid) || body.length > 4096) {
+    return new NextResponse('Invalid callback', { status: 400 });
+  }
 
   const supabase = createServiceClient();
+  const eventClaimed = await claimGuardianCallback(supabase, 'inbound_sms', smsSid);
+  if (!eventClaimed) return new NextResponse('', { status: 200 });
   const db = withGuardianTables(supabase);
   const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
@@ -43,6 +51,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (!memberProfile) {
+    await markGuardianCallbackProcessed(supabase, smsSid);
     return new NextResponse('', { status: 200 });
   }
 
@@ -92,6 +101,7 @@ export async function POST(req: NextRequest) {
 
   // For blocked/spam — silently discard (don't auto-reply)
   if (decision.routingMode === 'blocked' || (scamResult.isScam && scamResult.confidence >= 80)) {
+    await markGuardianCallbackProcessed(supabase, smsSid);
     return new NextResponse('', { status: 200 });
   }
 
@@ -138,5 +148,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  await markGuardianCallbackProcessed(supabase, smsSid);
   return new NextResponse('', { status: 200 });
 }

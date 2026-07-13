@@ -14,15 +14,17 @@ import { formatPhone } from '@/lib/guardian/phone';
 import { detectScamFromText } from '@/lib/guardian/scam';
 import type { MemberProfile } from '@/lib/guardian/pipeline';
 import { isNextScreeningTurn } from '@/lib/guardian/screening-turn';
+import { claimGuardianCallback, isTwilioBodyTooLarge, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 
 export const runtime = 'nodejs';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
 export async function POST(req: NextRequest) {
+  if (isTwilioBodyTooLarge(req)) return new NextResponse('Payload too large', { status: 413 });
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get('sessionId') ?? '';
-  const turn = parseInt(searchParams.get('turn') ?? '1', 10);
+  const turn = Number(searchParams.get('turn') ?? '1');
 
   const formData = await req.formData();
   const params = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -40,7 +42,19 @@ export async function POST(req: NextRequest) {
   const speechResult = params.SpeechResult ?? '';
   const callSid = params.CallSid ?? '';
 
+  if (!isValidGuardianEventId(sessionId) || !isValidGuardianEventId(callSid)
+    || !Number.isInteger(turn) || turn < 1 || turn > 5 || speechResult.length > 4096) {
+    return new NextResponse('Invalid callback', { status: 400 });
+  }
+
   const supabase = createServiceClient();
+  const callbackId = `${callSid}:screen:${turn}`;
+  const eventClaimed = await claimGuardianCallback(supabase, 'screening_gather', callbackId);
+  if (!eventClaimed) return twimlResponse(wrapTwiml(twimlSay('Thank you for calling. Goodbye.'), twimlHangup()));
+  const finish = async (xml: string) => {
+    await markGuardianCallbackProcessed(supabase, callbackId);
+    return twimlResponse(xml);
+  };
   const db = withGuardianTables(supabase);
   const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
@@ -51,7 +65,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (!session || (session as { status: string }).status !== 'active') {
-    return twimlResponse(wrapTwiml(
+    return finish(wrapTwiml(
       twimlSay('Thank you for calling. Goodbye.'),
       twimlHangup(),
     ));
@@ -61,7 +75,7 @@ export async function POST(req: NextRequest) {
   // work or service-role reads can be repeated by a Twilio retry/replay.
   const storedTurn = Number((session as { turn?: number }).turn ?? 0);
   if (!isNextScreeningTurn(storedTurn, turn)) {
-    return twimlResponse(wrapTwiml(
+    return finish(wrapTwiml(
       twimlSay('Thank you for calling. Goodbye.'),
       twimlHangup(),
     ));
@@ -85,7 +99,7 @@ export async function POST(req: NextRequest) {
       ai_intent: 'scam',
       resolution_summary: `Scam detected (${scamCheck.scamType}). Call ended.`,
     });
-    return twimlResponse(wrapTwiml(
+    return finish(wrapTwiml(
       twimlSay('We\'re not interested. Thank you and goodbye.'),
       twimlHangup(),
     ));
@@ -141,7 +155,7 @@ export async function POST(req: NextRequest) {
         ai_intent: decision?.intent ?? 'other',
         resolution_summary: decision?.summary ?? 'Call ended by AI.',
       });
-      return twimlResponse(wrapTwiml(
+      return finish(wrapTwiml(
         twimlSay(responseText || 'Thank you. Goodbye.'),
         twimlHangup(),
       ));
@@ -167,13 +181,13 @@ export async function POST(req: NextRequest) {
       }
 
       if (memberPhone) {
-        return twimlResponse(wrapTwiml(
+        return finish(wrapTwiml(
           twimlSay(responseText || 'Connecting you now. One moment.'),
           `<Dial>${memberPhone}</Dial>`,
         ));
       }
 
-      return twimlResponse(wrapTwiml(
+      return finish(wrapTwiml(
         twimlSay('I\'ll let them know you called. Please leave a message after the tone.'),
         twimlRecord({
           action: `${BASE_URL}/api/guardian/status/voicemail?commId=${sess.communication_id ?? ''}`,
@@ -202,7 +216,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return twimlResponse(wrapTwiml(
+    return finish(wrapTwiml(
       twimlSay(responseText || 'Thank you. I\'ll pass along your message.'),
       twimlRecord({
         action: `${BASE_URL}/api/guardian/status/voicemail?commId=${sess.communication_id ?? ''}`,
@@ -213,7 +227,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Continue conversation
-  return twimlResponse(wrapTwiml(
+  return finish(wrapTwiml(
     twimlGather({
       action: `${BASE_URL}/api/guardian/screen?sessionId=${sess.id}&turn=${turn + 1}`,
       text: responseText,

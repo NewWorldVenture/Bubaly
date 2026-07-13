@@ -5,8 +5,9 @@
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
-  `0179_harden_rate_limit_rpc_grants.sql`, and `0180_resend_webhook_dedup.sql`.
-- SQL files: 313.
+  `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
+  `0181_guardian_callback_replay.sql`.
+- SQL files: 314.
 - Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
   not a claim that every object exists in the live database.
@@ -56,7 +57,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
-2. Apply the full migration chain through `0180` and run `npm run db:audit:schema` and
+ 2. Apply the full migration chain through `0181` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
@@ -77,8 +78,10 @@ pending migration is applied in an authorized Supabase environment.
 Public gift-link reads now guard child and family lookups with `gift_links.is_active`; revoked
 capabilities do not disclose identifying names through service-role reads.
 
-Guardian screening callback updates now enforce sequential bounded turns before mutating
-`guardian_screening_sessions`, `guardian_communications`, or `notifications`.
+Guardian callbacks now enforce bounded provider input and durable event claims before mutating
+`guardian_screening_sessions`, `guardian_communications`, or `notifications`. The service-only
+`guardian_callback_events` ledger makes Twilio retries idempotent and allows stale crashed claims to be
+reclaimed.
 
 The public A/B event path now validates `variant_key` against `ab_experiments.variants` before writing
 to `ab_events` with the service-role client.
@@ -109,9 +112,9 @@ two-way/import work, reducing duplicate provider calls while preserving authenti
 Notification generation and test-push dispatch use family/user buckets before service-role device reads
 and push delivery, limiting repeated fan-out work.
 
-- Current live schema audit: all 8 pre-0180 table probes pass; `resend_webhook_events` is missing
-  until migration 0180 is applied. The live Auth Admin users probe still returns HTTP 500 and remains
-  a launch blocker.
+- Current live schema audit: all 8 pre-0180 table probes pass; `resend_webhook_events` and
+  `guardian_callback_events` are missing until migrations 0180 and 0181 are applied. The live Auth
+  Admin users probe still returns HTTP 500 and remains a launch blocker.
 
 Public service-role ingestion now uses `rate_limit_hit` through the shared request guard for contact,
 marketing forms, exit-intent, landing-page, visitor-intelligence, and A/B writes. Durable enforcement

@@ -2413,3 +2413,27 @@ roadmap entries and user worktree changes are preserved.
   passed. Auth Admin probe remains a separate Supabase-owned failure.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0202 - Signed Guardian callbacks could replay side effects before unique inserts
+
+- Status: [x] Completed in code; production enforcement requires migration `0181` to be applied.
+- Severity: P1
+- Category: Twilio webhook replay protection / AI and notification idempotency
+- Feature: Guardian SMS, WhatsApp, inbound voice, screening, and voicemail callbacks
+- File or files: `lib/guardian/callbacks.ts`, `app/api/guardian/inbound/sms/route.ts`,
+  `app/api/guardian/inbound/whatsapp/route.ts`, `app/api/guardian/inbound/voice/route.ts`,
+  `app/api/guardian/screen/route.ts`, `app/api/guardian/status/voicemail/route.ts`,
+  `supabase/migrations/0181_guardian_callback_replay.sql`,
+  `tests/guardian-callback-security.test.ts`
+- Database objects: `guardian_callback_events`
+- Description: Twilio signatures authenticated callbacks, but duplicate requests could execute the
+  Guardian decision pipeline, AI screening, notification writes, or outbound work before a unique
+  communication insert rejected the replay.
+- User impact: Provider retries or captured signed requests could duplicate AI/provider spend, alerts,
+  and call handling.
+- Resolution: Added bounded body/field checks and an atomic service-only callback claim ledger. Duplicate
+  callbacks short-circuit; stale claims can be reclaimed after ten minutes if a worker crashes.
+- Tests performed: Guardian callback contract, screening-turn contract, full suite, typecheck, lint,
+  build, and public E2E passed. Live migration application remains pending.
+- Verified by: Codex
+- Date completed: 2026-07-13

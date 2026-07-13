@@ -8,6 +8,7 @@ const cases = [
   ['0175_independence_milestones.sql', 'independence_milestones'],
   ['0176_marketplace_circles.sql', 'marketplace_circles'],
   ['0180_resend_webhook_dedup.sql', 'resend_webhook_events'],
+  ['0181_guardian_callback_replay.sql', 'guardian_callback_events'],
 ] as const;
 
 describe('forward-only production migration reconciliation', () => {

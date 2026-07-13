@@ -13,12 +13,14 @@ import {
 } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
 import { detectScamFromText } from '@/lib/guardian/scam';
+import { claimGuardianCallback, isTwilioBodyTooLarge, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 
 export const runtime = 'nodejs';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
 export async function POST(req: NextRequest) {
+  if (isTwilioBodyTooLarge(req)) return new NextResponse('Payload too large', { status: 413 });
   // Parse Twilio form data
   const formData = await req.formData();
   const params = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -40,8 +42,17 @@ export async function POST(req: NextRequest) {
   if (!callSid || callStatus === 'completed') {
     return twimlResponse(wrapTwiml(twimlHangup()));
   }
+  if (!isValidGuardianEventId(callSid)) {
+    return new NextResponse('Invalid callback', { status: 400 });
+  }
 
   const supabase = createServiceClient();
+  const eventClaimed = await claimGuardianCallback(supabase, 'inbound_voice', callSid);
+  if (!eventClaimed) return twimlResponse(wrapTwiml(twimlHangup()));
+  const finish = async (xml: string) => {
+    await markGuardianCallbackProcessed(supabase, callSid);
+    return twimlResponse(xml);
+  };
   const db = withGuardianTables(supabase);
   const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
@@ -54,7 +65,7 @@ export async function POST(req: NextRequest) {
 
   if (!memberProfile) {
     // Unknown number — just record to voicemail
-    return twimlResponse(wrapTwiml(
+    return finish(wrapTwiml(
       twimlRecord({
         action: `${BASE_URL}/api/guardian/status/voicemail`,
         text: 'Hello! Please leave a message and we\'ll get back to you.',
@@ -113,7 +124,7 @@ export async function POST(req: NextRequest) {
 
   if (routingMode === 'blocked') {
     await updateCommStatus(supabase, commId, 'blocked');
-    return twimlResponse(wrapTwiml(
+    return finish(wrapTwiml(
       twimlSay('I\'m sorry, we\'re not able to take this call. Goodbye.'),
       twimlHangup(),
     ));
@@ -128,7 +139,7 @@ export async function POST(req: NextRequest) {
 
     if (memberPhone) {
       const callerDisplay = decision.contactName ?? formatPhone(from);
-      return twimlResponse(wrapTwiml(
+      return finish(wrapTwiml(
         twimlSay(`Connecting you now. One moment please.`),
         twimlDial(memberPhone, to ?? undefined),
       ));
@@ -139,7 +150,7 @@ export async function POST(req: NextRequest) {
   if (routingMode === 'voicemail_first') {
     const prompt = buildVoicemailPrompt(profile, memberName);
     await updateCommStatus(supabase, commId, 'handled');
-    return twimlResponse(wrapTwiml(
+    return finish(wrapTwiml(
       twimlRecord({
         action: `${BASE_URL}/api/guardian/status/voicemail?commId=${commId ?? ''}`,
         text: prompt,
@@ -164,7 +175,7 @@ export async function POST(req: NextRequest) {
 
     await updateCommStatus(supabase, commId, 'screening');
 
-    return twimlResponse(wrapTwiml(
+    return finish(wrapTwiml(
       twimlGather({
         action: `${BASE_URL}/api/guardian/screen?sessionId=${sessionId ?? ''}&turn=1`,
         text: greeting,
@@ -178,7 +189,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Default fallback
-  return twimlResponse(wrapTwiml(
+  return finish(wrapTwiml(
     twimlSay('Thank you for calling. We\'ll get back to you soon. Goodbye.'),
     twimlHangup(),
   ));
