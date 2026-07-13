@@ -4,7 +4,7 @@
 // auto-executions (undoable → Autopilot) with specialist-agent actions. Server
 // component; only the decision list hydrates.
 import Link from 'next/link';
-import { Sparkles, Check, BellRing, RotateCcw, Bot } from 'lucide-react';
+import { Sparkles, Check, BellRing, RotateCcw, Bot, ArrowRight } from 'lucide-react';
 import type { FrontDoor } from '@/lib/home/front-door';
 import { PendingApprovals } from '@/components/home/pending-approvals';
 
@@ -54,6 +54,13 @@ export function FrontDoorHero({ frontDoor, canDecide = false }: { frontDoor: Fro
               </div>
             )}
           </div>
+
+          {/* Onward to the full quiet inbox — the deeper Chief-of-Staff surface
+              (everything the staff is tracking, only-what-needs-you first). */}
+          <Link href="/dashboard/calm"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-muted transition hover:text-brand-text">
+            See everything in Calm <ArrowRight className="h-3 w-3" />
+          </Link>
         </div>
       </div>
     </section>
