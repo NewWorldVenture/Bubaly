@@ -112,6 +112,18 @@ Audit date: 2026-07-13
   2 files, 9 tests passed.
 - `npm.cmd run db:audit:schema`: 8 existing required tables passed; the new
   `resend_webhook_events` probe correctly reports missing until migration `0180` is applied.
+
+## Audit Update - 2026-07-13 (unsubscribe boundary)
+
+- `npm.cmd test`: 309 files and 2,561 tests passed.
+- `npm.cmd test -- tests/marketing-unsubscribe.test.ts tests/public-side-effect-rate-limit.test.ts`:
+  2 files, 8 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 233 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- The unsubscribe route now has a shared IP budget, bounded HMAC input, escaped HTML output, and
+  production fail-closed secret handling.
 ## Audit Update - 2026-07-13
 
 - `node --check scripts/seed*.mjs`: passed for all six legacy seed scripts plus the shared client.

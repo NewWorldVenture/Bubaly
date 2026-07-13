@@ -135,3 +135,7 @@ existing server-side calls satisfy the new scope check.
 The Resend/Svix webhook now enforces a five-minute timestamp window, a 256 KB body bound, and durable
 Svix-id deduplication through `resend_webhook_events` before marketing side effects. RLS is enabled with
 no client policies; only the service-role webhook path can read or write the event ledger.
+
+The public unsubscribe endpoint now uses `rate_limit_hit` before its service-role suppression upsert,
+bounds the signed email/token inputs, escapes HTML output, and fails closed in production if no signing
+secret is configured. The existing HMAC token tests now cover the missing-production-secret case.

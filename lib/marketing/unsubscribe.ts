@@ -4,12 +4,15 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 // Signed unsubscribe tokens so the public unsubscribe link can't be forged or
 // enumerated. Token = HMAC-SHA256(email) using a server secret.
 function secret(): string {
-  return (
+  const configured =
     process.env.MARKETING_UNSUB_SECRET ||
     process.env.INTERNAL_SECRET ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    'bubaly-dev-unsub-secret'
-  );
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (configured) return configured;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('MARKETING_UNSUB_SECRET is not configured');
+  }
+  return 'bubaly-dev-unsub-secret';
 }
 
 export function unsubToken(email: string): string {

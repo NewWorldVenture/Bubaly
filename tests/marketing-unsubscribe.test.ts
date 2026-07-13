@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { unsubToken, verifyUnsubToken, unsubUrl } from '@/lib/marketing/unsubscribe';
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe('marketing unsubscribe tokens', () => {
   it('is deterministic and case/space-insensitive on the email', () => {
@@ -24,5 +26,13 @@ describe('marketing unsubscribe tokens', () => {
     const url = unsubUrl('https://app.test/', 'a@b.com');
     expect(url).toContain('/api/marketing/unsubscribe?e=a%40b.com&t=');
     expect(url).not.toContain('//api'); // trailing slash trimmed
+  });
+
+  it('fails closed when production has no unsubscribe secret', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('MARKETING_UNSUB_SECRET', '');
+    vi.stubEnv('INTERNAL_SECRET', '');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', '');
+    expect(() => unsubToken('parent@example.com')).toThrow('MARKETING_UNSUB_SECRET');
   });
 });

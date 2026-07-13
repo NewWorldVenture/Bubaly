@@ -9,6 +9,7 @@ const routes = [
   'app/api/lp/track/route.ts',
   'app/api/mkt/track/route.ts',
   'app/api/ab/track/route.ts',
+  'app/api/marketing/unsubscribe/route.ts',
 ];
 
 describe('public service-role side-effect limits', () => {

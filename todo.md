@@ -2390,3 +2390,26 @@ roadmap entries and user worktree changes are preserved.
   probe remains a separate Supabase-owned failure.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0201 - Public unsubscribe endpoint lacked abuse and output hardening
+
+- Status: [x] Completed in code and covered by the existing unsubscribe/public-ingestion contracts.
+- Severity: P1
+- Category: Public service-role endpoint / secret configuration / reflected output
+- Feature: Email unsubscribe and RFC 8058 one-click unsubscribe
+- Route: `/api/marketing/unsubscribe`
+- File or files: `app/api/marketing/unsubscribe/route.ts`, `lib/marketing/unsubscribe.ts`,
+  `tests/marketing-unsubscribe.test.ts`, `tests/public-side-effect-rate-limit.test.ts`
+- Database objects: `marketing_suppressions`, `rate_limits`, `rate_limit_hit`
+- Description: The public endpoint could receive unlimited HMAC verification attempts, reflected the
+  supplied address into HTML without escaping, and used a predictable development secret if production
+  signing configuration was absent.
+- User impact: Attackers could spend service resources on verification requests, and a future caller
+  could introduce reflected markup through the response; misconfigured production links were forgeable.
+- Root cause: The endpoint predated the shared public-ingestion budget and secret fail-closed policy.
+- Resolution: Added a shared IP limiter, bounded token/email validation, HTML escaping, and production
+  fail-closed secret selection while preserving development convenience.
+- Tests performed: Unsubscribe/public limiter tests, full suite, typecheck, lint, build, and public E2E
+  passed. Auth Admin probe remains a separate Supabase-owned failure.
+- Verified by: Codex
+- Date completed: 2026-07-13
