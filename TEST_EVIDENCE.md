@@ -8,10 +8,11 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 297 files, 2,539 tests |
+| `npm.cmd test` | PASS: 298 files, 2,540 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 233 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
+| `npm.cmd test -- tests/seed-credentials-safety.test.ts ...` | PASS: all seed credential/TLS/safety contracts |
 | `git diff --check` | PASS |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` | PASS: 51, skipped 1 |
 | `npm.cmd audit --omit=dev --audit-level=high` | Reports 2 moderate advisories, no fix available |
@@ -32,6 +33,8 @@ Audit date: 2026-07-13
 - Live Auth audit: public health passed; Admin users returned HTTP 500.
 - Local Supabase migration/RLS tests: not run because Docker Desktop's Linux engine was unavailable.
 - No destructive production database or storage operation was run.
+- Historical credential comparison confirmed the removed source credential matched the current local
+  service key; Supabase key management returned HTTP 403 and rotation was not possible here.
 
 ## Known Gaps
 

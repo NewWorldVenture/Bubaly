@@ -1892,7 +1892,9 @@ roadmap entries and user worktree changes are preserved.
 
 - [x] Typecheck: `npm.cmd run typecheck` passed.
 - [x] Lint: `npm.cmd run lint` passed with only the known Next.js `next lint` deprecation notice.
-- [x] Unit tests: `npm.cmd test` passed, 297 files and 2,539 tests.
+- [x] Unit tests: `npm.cmd test` passed, 298 files and 2,540 tests.
+- [x] Credential-safety regression: all seed scripts load access only from environment; no literal
+  `sb_secret_*` credential remains in runtime/source SQL.
 - [x] Production build: `npm.cmd run build` passed; 233 static pages generated.
 - [x] Public E2E: 51 passed, 1 intentional authenticated-test skip.
 - [x] Public accessibility: dark/light axe checks passed with no serious/critical violations.
@@ -1907,6 +1909,27 @@ roadmap entries and user worktree changes are preserved.
 
 - [x] Added `supabase/seed_production_readiness.sql`, an idempotent 600-record independence-ladder
   dataset with a contract test and no destructive/Auth writes.
+
+### TODO-0183 - Supabase service credential exposed in seed history
+
+- Status: [!] Repository repair complete; external key rotation blocked by Supabase permissions.
+- Severity: P0
+- Category: Credential exposure / incident response
+- Feature: Seed tooling
+- File or files: Historical `scripts/seed-notifs.mjs` and related seed bootstraps; current fix is
+  `scripts/seed-client.mjs` plus `tests/seed-credentials-safety.test.ts`.
+- Description: A historical seed script embedded a live `sb_secret_*` credential. A local comparison
+  confirmed that credential matched the currently configured `SUPABASE_SERVICE_ROLE_KEY`.
+- Security impact: Anyone with repository history could potentially use the service credential to bypass
+  RLS and access or modify Supabase data.
+- Resolution in code: Removed embedded Supabase URLs and credentials from all seed scripts. Scripts now
+  require `NEXT_PUBLIC_SUPABASE_URL`/`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the environment.
+  Added a regression test that rejects literal clients, project URLs, and secret-key patterns.
+- Required external remediation: A Supabase project owner must revoke/rotate the exposed key, review
+  audit logs for its use, update deployment/local environment variables, and invalidate any old copies.
+- Evidence: `npx supabase projects api-keys --project-ref ltcxlbipiihclxwioyqj` returned HTTP 403 due to
+  insufficient project privileges; rotation was not performed by this agent.
+- Launch impact: NO-GO until key rotation and log review are complete.
 
 ### TODO-0179 - Supabase Auth Admin users probe returns 500
 

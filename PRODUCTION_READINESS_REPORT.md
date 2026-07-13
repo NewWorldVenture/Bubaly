@@ -3,14 +3,14 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,539 unit tests, builds all 233 Next.js build
+tree compiles, passes lint and type checking, passes 2,540 unit tests, builds all 233 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
 
 Recommended decision: **NO-GO until the pending database migration is applied and the live Supabase
-Auth Admin 500 is diagnosed.** After those checks pass in an isolated environment, the posture can
-be reconsidered as Conditional Go.
+Auth Admin 500 is diagnosed, and the exposed historical Supabase credential is rotated.** After
+those checks pass in an isolated environment, the posture can be reconsidered as Conditional Go.
 
 ## Scope and Inventory
 
@@ -18,7 +18,7 @@ be reconsidered as Conditional Go.
 - 100 API route handlers.
 - 193 migrations at audit start; new additive repair migration `0178` added.
 - 309 SQL files under `supabase`.
-- 297 unit-test files and 2,539 passing tests.
+- 298 unit-test files and 2,540 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -33,12 +33,17 @@ be reconsidered as Conditional Go.
   regression contract test.
 - Added `supabase/seed_production_readiness.sql`, an idempotent pack generating 600 realistic
   independence-ladder records without destructive statements or Auth writes.
+- Removed a live Supabase service credential from all current seed scripts and centralized credential
+  loading in `scripts/seed-client.mjs`.
 - Updated `.env.example` with runtime variables previously used by the code but undocumented.
 - Preserved pre-existing user changes in the two seed files and the seed-safety contract test.
 
 ## Security Findings
 
 - No new secret was added or printed.
+- P0: a historical seed script contained a credential matching the current configured service key. The
+  current tree is scrubbed and regression-tested, but rotation and audit-log review require a Supabase
+  project owner; the CLI returned HTTP 403 for the key-management endpoint.
 - Existing middleware refreshes Supabase sessions and redirects anonymous users away from protected
   routes.
 - Existing response headers include `nosniff`, frame denial, strict referrer policy, permissions

@@ -1,10 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
+import { createSeedClient } from './seed-client.mjs';
 
-const sb = createClient(
-  'https://ltcxlbipiihclxwioyqj.supabase.co',
-  'sb_secret_BfCiburaPbck_7uXGgWOPA_glwQ5GkV',
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+const sb = createSeedClient();
 
 const FAMILY_ID = 'a0cba6bd-88f7-48a9-926d-b27e5cf671dc';
 const CB        = 'df41e924-9bea-4980-98d4-f9d78df05e49';
