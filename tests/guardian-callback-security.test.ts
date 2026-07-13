@@ -30,7 +30,7 @@ describe('Guardian callback replay and input boundaries', () => {
   it.each(callbackRoutes)('claims %s before downstream side effects', (relativePath) => {
     const source = readFileSync(resolve(root, relativePath), 'utf8');
     expect(source).toContain('claimGuardianCallback');
-    expect(source).toContain('isTwilioBodyTooLarge');
+    expect(source).toContain('readBoundedRequestFormData');
     expect(source).toContain('markGuardianCallbackProcessed');
 
     const claimIndex = source.indexOf('await claimGuardianCallback');

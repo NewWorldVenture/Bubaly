@@ -3,10 +3,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { wrapTwiml, twimlSay, twimlPause, twimlHangup, validateTwilioSignature } from '@/lib/guardian/twilio';
+import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
+const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
 // Only Twilio should fetch this (it renders speech for OUR outbound emergency
 // calls) — validate the request signature in production so it can't be used
@@ -45,8 +47,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const formData = await req.formData().catch(() => null);
-  const params = formData ? (Object.fromEntries(formData.entries()) as Record<string, string>) : {};
+  const boundedForm = await readBoundedRequestFormData(req, MAX_TWILIO_BODY_BYTES);
+  if (!boundedForm.ok) return new NextResponse(boundedForm.reason === 'too_large' ? 'Payload too large' : 'Invalid callback', { status: boundedForm.reason === 'too_large' ? 413 : 400 });
+  const params = Object.fromEntries(boundedForm.value.entries()) as Record<string, string>;
   if (!authorized(req, params)) return new NextResponse('Unauthorized', { status: 401 });
   return render(req);
 }

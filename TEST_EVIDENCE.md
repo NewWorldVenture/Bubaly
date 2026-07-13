@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 325 files, 2,636 tests |
+| `npm.cmd test` | PASS: 325 files, 2,639 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -75,8 +75,18 @@ Audit date: 2026-07-13
 - Stripe, Resend, and money webhooks, push subscription routes, and calendar sync now use a shared
   streaming reader that rejects oversized chunked bodies before complete buffering.
 - Signed webhook bodies remain exact raw text for provider signature verification.
-- Twilio form-encoded callbacks and voice transcription multipart uploads remain separate follow-up
-  ingress paths because they require dedicated bounded form-data handling.
+- Twilio form-encoded callbacks and voice transcription multipart uploads now use dedicated bounded
+  form-data handling before platform parsing.
+
+## Audit Update - 2026-07-13 (bounded form-data ingress)
+
+- `npm.cmd exec vitest run tests/raw-body-boundaries.test.ts tests/guardian-callback-security.test.ts tests/ai-voice.test.ts`:
+  3 files, 34 tests passed.
+- `npm.cmd test`: 325 files and 2,639 tests passed.
+- Twilio URL-encoded callback fields and multipart audio files are parsed only after a bounded byte read.
+- Twilio callback requests are capped at 64 KiB; transcription requests are capped at 26 MiB while the
+  existing 25 MiB audio-file limit remains enforced.
+- No direct `req.formData()` calls remain in the audited Guardian or voice-transcription routes.
 - Added `marketplace_close_auction()` in migration `0185` and moved the close-auctions cron to the
   service-role RPC. Listing, order, and bid settlement now commit together; failed order creation
   leaves the listing retryable.

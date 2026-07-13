@@ -4,9 +4,11 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { cleanTranscript, isValidAudioUpload } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+const MAX_AUDIO_REQUEST_BYTES = 26 * 1024 * 1024;
 
 // Speech-to-text for "talk to AI". Accepts a recorded audio blob (multipart),
 // forwards it to OpenAI's transcription endpoint, and returns the text. The key
@@ -30,8 +32,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const form = await req.formData();
-    const file = form.get('audio');
+    const boundedForm = await readBoundedRequestFormData(req, MAX_AUDIO_REQUEST_BYTES);
+    if (!boundedForm.ok) {
+      return NextResponse.json(
+        { error: boundedForm.reason === 'too_large' ? 'Recording too large (max 25 MB)' : 'Invalid audio upload' },
+        { status: boundedForm.reason === 'too_large' ? 413 : 400 },
+      );
+    }
+    const file = boundedForm.value.get('audio');
     if (!(file instanceof Blob)) {
       return NextResponse.json({ error: 'No audio provided' }, { status: 400 });
     }

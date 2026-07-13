@@ -7,19 +7,21 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { wrapTwiml, twimlSay, twimlHangup, validateTwilioSignature } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
-import { claimGuardianCallback, isTwilioBodyTooLarge, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
+import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
+import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
+const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
 export async function POST(req: NextRequest) {
-  if (isTwilioBodyTooLarge(req)) return new NextResponse('Payload too large', { status: 413 });
   const { searchParams } = new URL(req.url);
   const commId = searchParams.get('commId') ?? '';
 
-  const formData = await req.formData();
-  const params = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const boundedForm = await readBoundedRequestFormData(req, MAX_TWILIO_BODY_BYTES);
+  if (!boundedForm.ok) return new NextResponse(boundedForm.reason === 'too_large' ? 'Payload too large' : 'Invalid callback', { status: boundedForm.reason === 'too_large' ? 413 : 400 });
+  const params = Object.fromEntries(boundedForm.value.entries()) as Record<string, string>;
 
   // Validate Twilio signature (skip in dev) — same guard as the inbound routes.
   if (process.env.NODE_ENV === 'production') {

@@ -9,16 +9,18 @@ import { runDecisionPipeline } from '@/lib/guardian/pipeline';
 import { detectScamWithAI } from '@/lib/guardian/scam-ai';
 import { sendSms, validateTwilioSignature } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
-import { claimGuardianCallback, isTwilioBodyTooLarge, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
+import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
+import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
+const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
 export async function POST(req: NextRequest) {
-  if (isTwilioBodyTooLarge(req)) return new NextResponse('Payload too large', { status: 413 });
-  const formData = await req.formData();
-  const params = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const boundedForm = await readBoundedRequestFormData(req, MAX_TWILIO_BODY_BYTES);
+  if (!boundedForm.ok) return new NextResponse(boundedForm.reason === 'too_large' ? 'Payload too large' : 'Invalid callback', { status: boundedForm.reason === 'too_large' ? 413 : 400 });
+  const params = Object.fromEntries(boundedForm.value.entries()) as Record<string, string>;
 
   if (process.env.NODE_ENV === 'production') {
     const sig = req.headers.get('x-twilio-signature') ?? '';

@@ -2826,7 +2826,7 @@ roadmap entries and user worktree changes are preserved.
 
 ### TODO-0218 - Multipart and form-encoded provider bodies still need streaming bounds
 
-- Status: [~] In progress; separate implementation required.
+- Status: [x] Completed in code; no migration required.
 - Severity: P1
 - Category: Request bounds / provider ingress
 - Feature: Twilio Guardian callbacks and voice transcription upload
@@ -2834,9 +2834,15 @@ roadmap entries and user worktree changes are preserved.
   `app/api/guardian/inbound/whatsapp/route.ts`, `app/api/guardian/inbound/voice/route.ts`,
   `app/api/guardian/inbound/sms/route.ts`, `app/api/guardian/escalate/twiml/route.ts`,
   `app/api/ai/voice/transcribe/route.ts`
-- Description: These routes still rely on platform `formData()` parsing, which can buffer provider or
+- Description: These routes relied on platform `formData()` parsing, which could buffer provider or
   uploaded multipart/form-encoded bodies before application validation.
-- Required remediation: Add bounded form-urlencoded and multipart readers that preserve Twilio signature
-  inputs and enforce file, field, and total-body limits before parsing.
-- Current evidence: The raw-body audit found these paths; they were intentionally not changed in TODO-0217
-  because their parser and signature contracts differ from plain text webhooks.
+- Resolution: Added `readBoundedRequestBytes` and `readBoundedRequestFormData`; Twilio routes cap total
+  bodies at 64 KiB and voice transcription caps the multipart request at 26 MiB before reconstructing a
+  bounded request for platform parsing. Existing 4 KiB Twilio field, 25 MiB audio-file, MIME, signature,
+  and callback-claim checks remain in force.
+- Tests performed: Bounded URL-encoded and multipart parser contracts, Guardian callback contracts, full
+  suite, typecheck, lint, build, and public E2E.
+- Evidence: `tests/raw-body-boundaries.test.ts` verifies decoded Twilio fields, audio file preservation,
+  and static route coverage with no direct `req.formData()` calls.
+- Verified by: Codex
+- Date completed: 2026-07-13
