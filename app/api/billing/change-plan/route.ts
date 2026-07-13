@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     if (!priceId) return NextResponse.json({ error: 'That plan is not configured.' }, { status: 400 });
 
     const supabase = await createServer();
-    const limited = await enforceRequestRateLimit(supabase, `billing:change-plan:${familyId}`, { limit: 10 });
+    const limited = await enforceRequestRateLimit(supabase, `billing:change-plan:${familyId}:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: 'Too many billing requests. Please try again shortly.' },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },

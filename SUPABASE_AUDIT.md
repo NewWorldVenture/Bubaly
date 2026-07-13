@@ -4,7 +4,8 @@
 
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
-- New migration: `0178_marketplace_circles_rls_recursion.sql`.
+- New migrations: `0178_marketplace_circles_rls_recursion.sql` and
+  `0179_harden_rate_limit_rpc_grants.sql`.
 - SQL files: 309.
 - Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
@@ -55,7 +56,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
-2. Apply the full migration chain through `0178` and run `npm run db:audit:schema` and
+2. Apply the full migration chain through `0179` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
@@ -123,3 +124,9 @@ return `Retry-After`; durable enforcement depends on migration `0156` being appl
 The follow-up provider inventory added the same durable guards to marketing-admin AI, behavior coaching,
 and the authenticated Giphy proxy. Marketing AI input is bounded before prompt construction; the
 route contract now includes all three paths and requires a `Retry-After` response on rejection.
+
+The durable limiter privilege audit found that `0156_rate_limits.sql` granted `rate_limit_hit` to
+`anon` and inherited a public execute path for `rate_limit_prune`. Forward migration `0179` revokes
+anonymous/public execution, binds authenticated calls to a key containing `auth.uid()`, and restricts
+pruning to `service_role`. Billing and notification keys now include the authenticated user ID so their
+existing server-side calls satisfy the new scope check.

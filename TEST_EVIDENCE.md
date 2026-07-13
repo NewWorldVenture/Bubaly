@@ -79,6 +79,19 @@ Audit date: 2026-07-13
 - The route contract now covers marketing-admin AI, behavior coaching, and the authenticated Giphy
   proxy in addition to the prior model/provider inventory.
 - Marketing AI request text is trimmed and capped at 4,000 characters before prompt construction.
+
+## Audit Update - 2026-07-13 (durable limiter RPC privileges)
+
+- `npm.cmd test`: 308 files and 2,558 tests passed.
+- `npm.cmd test -- tests/rate-limit-rpc-security.test.ts tests/ai-rate-limit.test.ts tests/public-side-effect-rate-limit.test.ts`:
+  3 files, 6 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 233 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- `npm.cmd run db:audit:schema`: all 8 required tables passed.
+- Migration `0179_harden_rate_limit_rpc_grants.sql` revokes anonymous/public limiter RPC access,
+  binds authenticated keys to `auth.uid()`, and restricts pruning to `service_role`.
 ## Audit Update - 2026-07-13
 
 - `node --check scripts/seed*.mjs`: passed for all six legacy seed scripts plus the shared client.

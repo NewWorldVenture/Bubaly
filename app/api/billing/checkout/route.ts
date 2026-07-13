@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const priceId = STRIPE_PLANS[plan];
     if (!priceId) return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
 
-    const limited = await enforceRequestRateLimit(supabase, `billing:checkout:${familyId}`, { limit: 10 });
+    const limited = await enforceRequestRateLimit(supabase, `billing:checkout:${familyId}:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: 'Too many billing requests. Please try again shortly.' },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },

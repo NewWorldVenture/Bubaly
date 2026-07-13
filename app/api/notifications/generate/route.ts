@@ -13,7 +13,7 @@ export async function POST() {
     const supabase = await createServer();
     const limited = await enforceRequestRateLimit(
       supabase,
-      `notifications:generate:${ctx.active.familyId}`,
+      `notifications:generate:${ctx.active.familyId}:${ctx.user.id}`,
       { limit: 10 },
     );
     if (!limited.ok) {

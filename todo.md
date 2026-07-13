@@ -1982,10 +1982,10 @@ roadmap entries and user worktree changes are preserved.
 - Severity: P1
 - Category: Deployment / database
 - Feature: Latest schema and RLS
-- Description: The repository contains migrations through `0177` plus the new `0178` repair, while the
+- Description: The repository contains migrations through `0177` plus the new `0178` and `0179` repairs, while the
   configured live schema probe failed on the latest required object. The repository cannot safely claim
   that production has every migration applied without running the migration deployment process.
-- Required remediation: Apply pending migrations through `0178` in the intended deployment environment,
+- Required remediation: Apply pending migrations through `0179` in the intended deployment environment,
   run the schema/auth probes, then run isolated RLS allow/deny tests. No destructive production operation
   was performed by this audit.
 
@@ -2342,5 +2342,28 @@ roadmap entries and user worktree changes are preserved.
   marketing prompt bound; expanded the route contract to prevent regression.
 - Tests performed: Focused contract/limiter tests, full suite, typecheck, lint, build, and public E2E
   passed. Durable enforcement depends on migration `0156` in production.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0199 - Durable rate-limit RPCs were publicly executable
+
+- Status: [x] Completed in code; production enforcement requires migration `0179` to be applied.
+- Severity: P1
+- Category: Supabase RPC privilege / distributed rate-limit integrity
+- Feature: Shared request limits for AI, billing, notification, sync, and public ingestion routes
+- Routes: all callers of `rate_limit_hit`, plus the maintenance path for `rate_limit_prune`
+- File or files: `supabase/migrations/0156_rate_limits.sql`,
+  `supabase/migrations/0179_harden_rate_limit_rpc_grants.sql`, authenticated billing and notification
+  routes, `tests/rate-limit-rpc-security.test.ts`
+- Database objects: `rate_limits`, `rate_limit_hit`, `rate_limit_prune`
+- Description: The original SECURITY DEFINER grants allowed anonymous/public direct execution of the
+  limiter RPC, and the prune function inherited a public execute privilege.
+- User impact: A caller could consume arbitrary limiter buckets or clear shared counters, weakening
+  distributed request budgets and enabling repeated provider or side-effect work.
+- Root cause: Migration `0156` granted `anon` and did not revoke PostgreSQL's default PUBLIC execute.
+- Resolution: Added forward migration `0179` to revoke anonymous/public access, bind authenticated keys
+  to `auth.uid()`, restrict pruning to `service_role`, and update authenticated route keys accordingly.
+- Tests performed: RPC security contract, limiter tests, full suite, typecheck, lint, build, public E2E,
+  and schema audit passed. Auth Admin probe remains a separate Supabase-owned failure.
 - Verified by: Codex
 - Date completed: 2026-07-13

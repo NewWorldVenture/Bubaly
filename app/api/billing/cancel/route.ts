@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     }
 
     const cancelAtPeriodEnd = !resume;
-    const limited = await enforceRequestRateLimit(supabase, `billing:cancel:${familyId}`, { limit: 10 });
+    const limited = await enforceRequestRateLimit(supabase, `billing:cancel:${familyId}:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: 'Too many billing requests. Please try again shortly.' },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },

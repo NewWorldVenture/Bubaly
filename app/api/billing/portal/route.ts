@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No billing account found' }, { status: 404 });
     }
 
-    const limited = await enforceRequestRateLimit(supabase, `billing:portal:${familyId}`, { limit: 10 });
+    const limited = await enforceRequestRateLimit(supabase, `billing:portal:${familyId}:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: 'Too many billing requests. Please try again shortly.' },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },

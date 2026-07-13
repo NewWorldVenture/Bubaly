@@ -10,7 +10,7 @@
 ## Database and Supabase
 
 - [ ] Back up the target database and confirm a tested restore path.
-- [ ] Apply migrations in order through `0178_marketplace_circles_rls_recursion.sql`.
+- [ ] Apply migrations in order through `0179_harden_rate_limit_rpc_grants.sql`.
 - [ ] Run `npm run db:audit:schema` and `npm run db:audit:auth`.
 - [ ] Run isolated RLS allow/deny tests for family boundaries and marketplace circles.
 - [ ] Confirm all storage buckets, object policies, RPC grants, trigger functions, and realtime tables.
@@ -41,7 +41,7 @@
 ## Rollback
 
 - [ ] Keep the previous application deployment available for rollback.
-- [ ] If `0178` causes unexpected behavior, stop feature exposure and use the tested migration rollback
+- [ ] If `0178` or `0179` causes unexpected behavior, stop feature exposure and use the tested migration rollback
   procedure; do not manually delete production data.
 - [ ] Restore database only through the approved backup/recovery process.
 - [ ] Re-run smoke tests and record the incident and recovery evidence.
