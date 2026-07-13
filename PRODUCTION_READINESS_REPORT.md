@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,655 unit tests, builds all 234 Next.js build
+tree compiles, passes lint and type checking, passes 2,656 unit tests, builds all 234 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -16,9 +16,9 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 - 348 `page.tsx` route files.
 - 100 API route handlers.
-- 193 migrations at audit start; additive repair migrations through `0187` are now present.
+- 193 migrations at audit start; additive repair migrations through `0189` are now present.
 - 315 SQL files under `supabase`.
-- 329 unit-test files and 2,655 passing tests.
+- 329 unit-test files and 2,656 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -68,6 +68,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   manually validated public-calendar/social fetch path retains its own redirect and timeout controls.
 - Added migration `0188_harden_trigger_function_security.sql` to pin `search_path` and revoke direct
   client execution from two legacy SECURITY DEFINER trigger functions.
+- Added migration `0189_reconcile_stripe_webhook_claims.sql` to restore both Stripe claim columns in
+  environments where migration `0182` was recorded but its additive ALTER did not complete.
 - Hardened the public unsubscribe endpoint with shared request limits, bounded token input, escaped
   HTML output, and production fail-closed secret handling.
 - Preserved active family membership checks and tightened listing-share deletion to the owning family
@@ -108,13 +110,13 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,655 tests / 329 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,656 tests / 329 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 234 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
 | Mobile overflow E2E | PASS at 320, 390, 768, and 1024 widths | Playwright |
 | Migration/seed contract | PASS, 20 focused tests | targeted Vitest run |
-| Schema probe | BLOCKED/FAIL | 10 live table/ledger probes pass; Stripe claim column from 0182 is missing |
+| Schema probe | BLOCKED/FAIL | 10 live table/ledger probes pass; Stripe claim columns required by 0189 are missing |
 | Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
 | Dependency audit | FAIL/PENDING | 2 moderate PostCSS advisories, no fix available |
@@ -122,7 +124,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 ## Remaining Launch Blockers
 
-1. Apply migrations through `0187_harden_marketplace_negotiations.sql` in the intended environment and
+1. Apply migrations through `0189_reconcile_stripe_webhook_claims.sql` in the intended environment and
    rerun schema plus cross-family RLS and negotiation allow/deny probes.
 2. Diagnose the live Supabase Auth Admin 500 in Supabase/GoTrue/Postgres logs and rerun the Auth audit.
 3. Resolve or formally accept the PostCSS advisory after reviewing the next compatible Next.js release.
@@ -242,6 +244,22 @@ remain unchanged.
 - `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
 - Migration `0188_harden_trigger_function_security.sql` repairs both legacy trigger functions with
   `SET search_path = public` and revokes `PUBLIC`, `anon`, and `authenticated` execution privileges.
+
+## Audit Update - 2026-07-13 (Stripe claim-column reconciliation)
+
+- `npm.cmd exec vitest run tests/production-migration-contract.test.ts tests/stripe-webhook-replay-contract.test.ts`:
+  2 files, 15 tests passed.
+- `npm.cmd exec vitest run`: 329 files and 2,656 tests passed.
+- `node --check scripts/audit-supabase-schema.mjs`: passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 234 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- `npm.cmd run db:audit:schema`: 10 live checks passed; `stripe_webhook_events.claim_columns` remains missing
+  until `0189` is applied.
+- `npm.cmd run db:audit:auth`: public auth health passed; Supabase Auth Admin user listing still returns HTTP 500.
+- Migration `0189_reconcile_stripe_webhook_claims.sql` re-applies both claim columns and the processing
+  index idempotently; the live schema audit now verifies `processing_started_at` and `claim_token`.
 
 ## Audit Update - 2026-07-13 (raw webhook and upload body bounds)
 

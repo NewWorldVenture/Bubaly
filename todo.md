@@ -2976,6 +2976,29 @@ roadmap entries and user worktree changes are preserved.
   lint, production build, and public Playwright/axe E2E.
 - Evidence: `tests/sql-security-contract.test.ts` verifies both pinned search paths, client privilege
   revocations, and additive transaction boundaries.
-- Live status: Not applied by this agent; production schema audit must rerun after `0188` is deployed.
+- Live status: Not applied by this agent; production schema audit must rerun after migrations through
+  `0189` are deployed.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0224 - Stripe webhook claim columns drifted from the application contract
+
+- Status: [x] Completed in code; reconciliation migration pending in live environments.
+- Severity: P1
+- Category: Supabase schema drift / webhook idempotency
+- Feature: Stripe money webhook replay protection
+- File or files: `scripts/audit-supabase-schema.mjs`,
+  `supabase/migrations/0182_stripe_webhook_claims.sql`,
+  `supabase/migrations/0189_reconcile_stripe_webhook_claims.sql`,
+  `lib/stripe/webhook.ts`, `tests/production-migration-contract.test.ts`
+- Description: The live `stripe_webhook_events` table was reachable, but the claim columns used by the
+  application were unavailable. This prevents the webhook from safely recording active ownership.
+- Root cause: An environment can retain migration history for `0182` while its additive ALTER TABLE did
+  not complete, leaving the live schema behind the application and source migration contract.
+- Resolution: Added forward migration `0189` with idempotent column/index reconciliation and changed the
+  schema audit to verify both `processing_started_at` and `claim_token` together.
+- Tests performed: Production migration contracts, full Vitest suite, typecheck, lint, production build,
+  and public Playwright/axe E2E.
+- Live status: Not applied by this agent; rerun `npm run db:audit:schema` after deployment.
 - Verified by: Codex
 - Date completed: 2026-07-13

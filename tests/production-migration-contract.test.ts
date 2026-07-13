@@ -40,4 +40,14 @@ describe('forward-only production migration reconciliation', () => {
     expect(sql).toContain('add column if not exists processing_started_at timestamptz');
     expect(sql).toContain('add column if not exists claim_token text');
   });
+
+  it('reconciles Stripe claim columns for partially applied environments', () => {
+    const sql = readFileSync(resolve(root, 'supabase', 'migrations', '0189_reconcile_stripe_webhook_claims.sql'), 'utf8');
+    expect(sql).toContain('alter table public.stripe_webhook_events');
+    expect(sql).toContain('add column if not exists processing_started_at timestamptz');
+    expect(sql).toContain('add column if not exists claim_token text');
+    expect(sql).toContain('create index if not exists idx_stripe_webhook_events_processing');
+    expect(sql).toContain('begin;');
+    expect(sql).toContain('commit;');
+  });
 });

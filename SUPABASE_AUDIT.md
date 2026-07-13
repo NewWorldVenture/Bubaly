@@ -10,7 +10,8 @@
   `0183_marketplace_auctions.sql`, `0184_marketplace_auction_authorization.sql`, and
   `0185_marketplace_auction_close_transaction.sql`, `0186_marketplace_negotiations.sql`, and
   `0187_harden_marketplace_negotiations.sql`, and
-  `0188_harden_trigger_function_security.sql`.
+  `0188_harden_trigger_function_security.sql`, and
+  `0189_reconcile_stripe_webhook_claims.sql`.
 - SQL files: 315.
 - Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
@@ -51,9 +52,18 @@ replaces both definitions with `SET search_path = public` and revokes direct exe
 `anon`, and `authenticated`. PostgreSQL triggers continue to invoke them; clients do not need RPC access.
 The contract is covered by `tests/sql-security-contract.test.ts`.
 
+### Stripe claim-column reconciliation
+
+The live schema probe found that `stripe_webhook_events` existed but did not expose the
+`processing_started_at` and `claim_token` columns used by the replay-safe webhook path. Migration
+`0189_reconcile_stripe_webhook_claims.sql` reapplies both columns and the processing index with
+idempotent DDL, covering environments where `0182` was recorded but its ALTER did not complete.
+
 ## Live Probe Results
 
 - Required schema probes passed for all live tables and replay ledgers introduced through `0181`.
+- The `stripe_webhook_events` table is reachable, but the combined `processing_started_at,claim_token`
+  column probe returns HTTP 400 until migration `0189` is applied.
 - `marketplace_circles` failed before `0178` with the recursion error above.
 - Public Supabase Auth health passed.
 - Supabase Auth Admin user listing still fails with HTTP 500 `Database error finding users`.
@@ -68,7 +78,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
-2. Apply the remaining migrations through `0188` and run `npm run db:audit:schema` and
+2. Apply the remaining migrations through `0189` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
@@ -130,9 +140,9 @@ two-way/import work, reducing duplicate provider calls while preserving authenti
 Notification generation and test-push dispatch use family/user buckets before service-role device reads
 and push delivery, limiting repeated fan-out work.
 
-- Current live schema audit: all 10 table/ledger probes through `0181` pass; only
-  `stripe_webhook_events.processing_started_at` (and its `claim_token` companion) is missing until
-  migration `0182` is applied. The live Auth Admin users probe still returns HTTP 500 and remains a
+- Current live schema audit: all 10 table/ledger probes through `0181` pass; both
+  `stripe_webhook_events` claim columns are missing until migration `0189` is applied. The live Auth
+  Admin users probe still returns HTTP 500 and remains a
   launch blocker.
 
 Public service-role ingestion now uses `rate_limit_hit` through the shared request guard for contact,

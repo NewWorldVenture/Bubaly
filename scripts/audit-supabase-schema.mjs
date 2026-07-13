@@ -43,7 +43,7 @@ const results = await Promise.all(expected.map(async ([table, migration]) => {
 }));
 
 const columnChecks = [
-  ['stripe_webhook_events.processing_started_at', '0182_stripe_webhook_claims.sql', 'stripe_webhook_events?select=processing_started_at'],
+  ['stripe_webhook_events.claim_columns', '0189_reconcile_stripe_webhook_claims.sql', 'stripe_webhook_events?select=processing_started_at,claim_token'],
 ];
 const columnResults = await Promise.all(columnChecks.map(async ([table, migration, resource]) => {
   try {
