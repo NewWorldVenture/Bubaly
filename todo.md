@@ -1896,7 +1896,7 @@ roadmap entries and user worktree changes are preserved.
 
 - [x] Typecheck: `npm.cmd run typecheck` passed.
 - [x] Lint: `npm.cmd run lint` passed with only the known Next.js `next lint` deprecation notice.
-- [x] Unit tests: `npm.cmd test` passed, 301 files and 2,544 tests.
+- [x] Unit tests: `npm.cmd test` passed, 301 files and 2,545 tests.
 - [x] Credential-safety regression: all seed scripts load access only from environment; no literal
   `sb_secret_*` credential remains in runtime/source SQL.
 - [x] Production build: `npm.cmd run build` passed; 233 static pages generated.
@@ -2072,5 +2072,28 @@ roadmap entries and user worktree changes are preserved.
 - Tests performed: Focused guardian and gift regression tests passed; typecheck and lint passed.
 - Evidence: `tests/guardian-screening-turn.test.ts` covers initial/sequential acceptance, stale and
   skipped rejection, maximum-turn rejection, and malformed input rejection.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0187 - Public A/B events accepted fabricated variants
+
+- Status: [x] Completed in code and covered by regression test.
+- Severity: P2
+- Category: Analytics integrity / public write validation
+- Feature: A/B experiment event ingestion
+- Route: `/api/ab/track`
+- File or files: `app/api/ab/track/route.ts`, `lib/marketing/ab.ts`, `tests/marketing-ab.test.ts`
+- Database objects: `ab_experiments`, `ab_events`
+- Description: The public event endpoint verified that an experiment was running but trusted the
+  submitted `variant` string. A caller could create fabricated variant rows and conversion metrics
+  that polluted admin experiment results.
+- User impact: Experiment dashboards could show inaccurate exposure, conversion, and significance data.
+- Security impact: The service-role ingestion path accepted untrusted identifiers without validating
+  them against the experiment definition.
+- Root cause: The endpoint selected only experiment status and never inspected configured `variants`.
+- Resolution: The endpoint now selects the experiment variants, accepts only configured variant keys,
+  and rejects oversized experiment, variant, or visitor identifiers before inserting events.
+- Tests performed: `npm.cmd test -- tests/marketing-ab.test.ts` passed with 9 tests; typecheck and lint
+  passed. The pure helper covers valid, fabricated, malformed, and missing variant definitions.
 - Verified by: Codex
 - Date completed: 2026-07-13

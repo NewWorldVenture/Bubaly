@@ -78,3 +78,6 @@ capabilities do not disclose identifying names through service-role reads.
 
 Guardian screening callback updates now enforce sequential bounded turns before mutating
 `guardian_screening_sessions`, `guardian_communications`, or `notifications`.
+
+The public A/B event path now validates `variant_key` against `ab_experiments.variants` before writing
+to `ab_events` with the service-role client.

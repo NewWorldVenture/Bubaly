@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,544 unit tests, builds all 233 Next.js build
+tree compiles, passes lint and type checking, passes 2,545 unit tests, builds all 233 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -18,7 +18,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 - 100 API route handlers.
 - 193 migrations at audit start; new additive repair migration `0178` added.
 - 309 SQL files under `supabase`.
-- 301 unit-test files and 2,544 passing tests.
+- 301 unit-test files and 2,545 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -99,3 +99,6 @@ service-role lookups or disclose child/family names. A regression contract cover
 
 Guardian AI screening callbacks now require the next bounded persisted turn before AI work or further
 service-role reads, preventing stale, skipped, and over-limit callback replays from duplicating work.
+
+Public A/B event ingestion now validates submitted variants against the active experiment definition
+and bounds identifiers before writing service-role events, preventing fabricated metrics.

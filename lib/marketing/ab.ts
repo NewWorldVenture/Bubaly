@@ -3,6 +3,16 @@
 
 export type ABVariant = { key: string; label: string };
 
+/** True when an untrusted event payload names a variant configured by the experiment. */
+export function hasConfiguredVariant(variants: unknown, key: string): boolean {
+  if (!Array.isArray(variants) || !key) return false;
+  return variants.some((variant) => {
+    if (!variant || typeof variant !== 'object') return false;
+    const candidate = (variant as { key?: unknown }).key;
+    return typeof candidate === 'string' && candidate === key;
+  });
+}
+
 /** Stable 32-bit FNV-1a hash → used for deterministic, sticky variant assignment. */
 export function hashString(str: string): number {
   let h = 0x811c9dc5;

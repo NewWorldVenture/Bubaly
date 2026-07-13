@@ -1,7 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { hashString, assignVariant, computeABResults, leadingVariant } from '@/lib/marketing/ab';
+import { hashString, assignVariant, computeABResults, hasConfiguredVariant, leadingVariant } from '@/lib/marketing/ab';
 
 const variants = [{ key: 'control', label: 'Control' }, { key: 'b', label: 'Variant B' }];
+
+describe('hasConfiguredVariant', () => {
+  it('accepts only configured variant keys and rejects malformed input', () => {
+    expect(hasConfiguredVariant(variants, 'control')).toBe(true);
+    expect(hasConfiguredVariant(variants, 'b')).toBe(true);
+    expect(hasConfiguredVariant(variants, 'fabricated')).toBe(false);
+    expect(hasConfiguredVariant([{ label: 'missing key' }], 'control')).toBe(false);
+    expect(hasConfiguredVariant(null, 'control')).toBe(false);
+  });
+});
 
 describe('assignVariant', () => {
   it('is deterministic / sticky for the same visitor', () => {

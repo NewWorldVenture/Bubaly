@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { hasConfiguredVariant } from '@/lib/marketing/ab';
 
 export const runtime = 'nodejs';
 
@@ -22,17 +23,23 @@ export async function POST(req: NextRequest) {
   const kind = body.kind === 'conversion' ? 'conversion' : 'exposure';
   const visitorId = (body.visitorId ?? '').trim() || null;
   if (!experiment || !variant) return NextResponse.json({ error: 'experiment and variant are required' }, { status: 422 });
+  if (experiment.length > 100 || variant.length > 100 || (visitorId && visitorId.length > 200)) {
+    return NextResponse.json({ error: 'Identifier is too long' }, { status: 422 });
+  }
 
   const supabase = createServiceClient();
 
   // Only record for experiments that are actually running.
   const { data: exp } = await supabase
     .from('ab_experiments')
-    .select('status')
+    .select('status, variants')
     .eq('key', experiment)
     .is('deleted_at', null)
     .maybeSingle();
   if (!exp || exp.status !== 'running') return NextResponse.json({ ok: true, recorded: false });
+  if (!hasConfiguredVariant(exp.variants, variant)) {
+    return NextResponse.json({ error: 'Unknown experiment variant' }, { status: 422 });
+  }
 
   // Insert; ignore unique-violation dupes (one exposure/conversion per visitor).
   const { error } = await supabase.from('ab_events').insert({ experiment_key: experiment, variant_key: variant, kind, visitor_id: visitorId });
