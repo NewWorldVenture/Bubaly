@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { GoogleIcon } from '@/components/auth/google-icon';
 import { AppleIcon } from '@/components/auth/apple-icon';
+import { safeInternalRedirect } from '@/lib/auth/redirect';
 
 type Provider = 'google' | 'apple';
 
@@ -29,7 +30,8 @@ export function OAuthButtons({ next }: { next?: string }) {
     setPending(provider);
     try {
       const supabase = createClient();
-      const nextParam = next ? `?next=${encodeURIComponent(next)}` : '';
+      const destination = safeInternalRedirect(next, '');
+      const nextParam = destination ? `?next=${encodeURIComponent(destination)}` : '';
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {

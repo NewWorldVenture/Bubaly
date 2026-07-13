@@ -14,6 +14,7 @@ import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
 import { resolveLandingPathAction, stitchIdentityAction } from '@/app/(auth)/actions';
 import { describeDbError } from '@/lib/supabase/errors';
+import { safeInternalRedirect } from '@/lib/auth/redirect';
 
 export function LoginForm() {
   const router = useRouter();
@@ -25,7 +26,7 @@ export function LoginForm() {
   // A same-origin ?redirect= (e.g. an invite's /join?token=…) that OAuth + phone
   // sign-in must also honor — not just the password path below.
   const redirectParam = params.get('redirect');
-  const redirectDest = redirectParam && redirectParam.startsWith('/') ? redirectParam : undefined;
+  const redirectDest = safeInternalRedirect(redirectParam, '') || undefined;
   // The /auth/callback route bounces failed OAuth / email-confirmation here.
   const authError = params.get('error') === 'auth';
 
@@ -46,10 +47,9 @@ export function LoginForm() {
       if (error) throw error;
       // Attribute the anonymous visitor spine to this now-known user (best-effort).
       void stitchIdentityAction();
-      const redirectParam = params.get('redirect');
       // Resolve server-side so super admins (DB seed OR env/code allowlist)
       // land on the admin console even before migration 0008 is applied.
-      const destination = redirectParam || (await resolveLandingPathAction());
+      const destination = redirectDest || (await resolveLandingPathAction());
       router.push(destination);
       router.refresh();
     } catch (err) {

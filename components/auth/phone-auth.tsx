@@ -14,6 +14,7 @@ import { OtpInput } from '@/components/ui/otp-input';
 import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { normalizeOtp, isValidOtp, isLikelyE164, formatCountdown, providerHint } from '@/lib/auth/otp';
+import { safeInternalRedirect } from '@/lib/auth/redirect';
 
 const RESEND_SECONDS = 30;
 
@@ -27,6 +28,7 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
   const [verifying, setVerifying] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   const tick = useRef<ReturnType<typeof setInterval> | null>(null);
+  const destination = safeInternalRedirect(next, '/onboarding');
 
   useEffect(() => () => { if (tick.current) clearInterval(tick.current); }, []);
 
@@ -62,7 +64,7 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
     const { error } = await createClient().auth.verifyOtp({ phone, token, type: 'sms' });
     setVerifying(false);
     if (error) { toastError(error.message); return; }
-    router.push(next);
+    router.push(destination);
     router.refresh();
   }
 

@@ -14,6 +14,7 @@ import { stitchIdentityAction } from '@/app/(auth)/actions';
 import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
 import { describeDbError } from '@/lib/supabase/errors';
+import { safeInternalRedirect } from '@/lib/auth/redirect';
 
 export function SignupForm() {
   const router = useRouter();
@@ -91,7 +92,7 @@ export function SignupForm() {
   // instead of being routed into the wizard to create a family of their own.
   // Same-origin paths only; defaults to the onboarding wizard.
   const redirectParam = params.get('redirect');
-  const nextDest = redirectParam && redirectParam.startsWith('/') ? redirectParam : '/onboarding';
+  const nextDest = safeInternalRedirect(redirectParam, '/onboarding');
 
   return (
     <div className="glass-card p-7 animate-fade-in sm:p-8">

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { stitchVisitorIdentity } from '@/lib/marketing/identity';
+import { safeInternalRedirect } from '@/lib/auth/redirect';
 
 const VID_COOKIE = 'bubaly_vid';
 const VID_MAX_AGE = 400 * 24 * 60 * 60;
@@ -11,7 +12,7 @@ const VID_MAX_AGE = 400 * 24 * 60 * 60;
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
-  const next = url.searchParams.get('next') ?? '/home';
+  const next = safeInternalRedirect(url.searchParams.get('next'), '/home');
 
   if (code) {
     const supabase = await createServer();
