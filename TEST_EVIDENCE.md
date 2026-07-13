@@ -45,6 +45,18 @@ Audit date: 2026-07-13
 - Production migration application and post-migration live probes remain pending.
 - Visual regression, large-dataset performance, webhook replay, and third-party provider failure tests
   remain documented in `testing-plan.md` and the production ledger.
+
+## Audit Update - 2026-07-13 (public side-effect limits)
+
+- `npm.cmd test`: 306 files and 2,556 tests passed.
+- `npm.cmd test -- tests/public-side-effect-rate-limit.test.ts tests/ai-rate-limit.test.ts`: 2 files,
+  5 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 233 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- Public service-role ingestion contract now covers contact, forms, exit-intent, landing-page,
+  visitor-intelligence, and A/B routes using the shared durable request guard.
 ## Audit Update - 2026-07-13
 
 - `node --check scripts/seed*.mjs`: passed for all six legacy seed scripts plus the shared client.

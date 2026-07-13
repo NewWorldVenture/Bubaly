@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { contactSchema, fieldErrors } from '@/lib/validation';
-import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { clientIp } from '@/lib/server/rate-limit';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { sendEmail } from '@/lib/server/email';
 import { createServiceClient } from '@/lib/supabase/server';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
@@ -10,11 +11,12 @@ export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   const ip = clientIp(req.headers);
-  const limit = rateLimit(`contact:${ip}`, { limit: 5, windowMs: 60_000 });
-  if (!limit.ok) {
+  const supabase = createServiceClient();
+  const limited = await enforceRequestRateLimit(supabase, `contact:${ip}`, { limit: 5 });
+  if (!limited.ok) {
     return NextResponse.json(
       { error: 'Too many messages. Please try again shortly.' },
-      { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
   }
 
@@ -37,7 +39,7 @@ export async function POST(req: Request) {
   // email delivery is unavailable. Best-effort: never block the user on it.
   const ticketNumber = `WEB-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   try {
-    await createServiceClient()
+    await supabase
       .from('support_tickets')
       .insert({
         ticket_number: ticketNumber,
@@ -57,7 +59,7 @@ export async function POST(req: Request) {
   // Fire any event-driven "form_submitted" automation workflows in real time.
   // Best-effort: never block the contact response on marketing automation.
   try {
-    await fireAutomationEvent(createServiceClient(), {
+    await fireAutomationEvent(supabase, {
       trigger: 'form_submitted',
       email,
       name,

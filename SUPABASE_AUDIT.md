@@ -110,3 +110,7 @@ and push delivery, limiting repeated fan-out work.
 
 - Current live schema audit: all 8 required table probes pass; the live Auth Admin users probe still
   returns HTTP 500 and remains a launch blocker.
+
+Public service-role ingestion now uses `rate_limit_hit` through the shared request guard for contact,
+marketing forms, exit-intent, landing-page, visitor-intelligence, and A/B writes. Durable enforcement
+still depends on migration `0156` being applied in the target environment.

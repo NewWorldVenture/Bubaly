@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { clientIp } from '@/lib/server/rate-limit';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { hasConfiguredVariant } from '@/lib/marketing/ab';
 
 export const runtime = 'nodejs';
@@ -12,8 +13,14 @@ export const runtime = 'nodejs';
  */
 export async function POST(req: NextRequest) {
   const ip = clientIp(req.headers);
-  const limit = rateLimit(`ab:${ip}`, { limit: 60, windowMs: 60_000 });
-  if (!limit.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  const supabase = createServiceClient();
+  const limited = await enforceRequestRateLimit(supabase, `ab:${ip}`, { limit: 60 });
+  if (!limited.ok) {
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
+  }
 
   let body: { experiment?: string; variant?: string; kind?: string; visitorId?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }); }
@@ -26,8 +33,6 @@ export async function POST(req: NextRequest) {
   if (experiment.length > 100 || variant.length > 100 || (visitorId && visitorId.length > 200)) {
     return NextResponse.json({ error: 'Identifier is too long' }, { status: 422 });
   }
-
-  const supabase = createServiceClient();
 
   // Only record for experiments that are actually running.
   const { data: exp } = await supabase

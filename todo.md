@@ -2275,3 +2275,27 @@ roadmap entries and user worktree changes are preserved.
   release gates. Durable enforcement depends on migration `0156` in production.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0196 - Public service-role ingestion used instance-local request limits
+
+- Status: [x] Completed in code and covered by `tests/public-side-effect-rate-limit.test.ts`.
+- Severity: P1
+- Category: Public ingestion abuse resistance / distributed side effects
+- Feature: Contact, marketing forms, attribution, and conversion tracking
+- Routes: `/api/contact`, `/api/forms/submit`, `/api/exit-intent/track`, `/api/lp/track`,
+  `/api/mkt/track`, `/api/ab/track`
+- File or files: the six route handlers, `lib/server/request-rate-limit.ts`,
+  `tests/public-side-effect-rate-limit.test.ts`
+- Database objects: `rate_limits`, `rate_limit_hit`, `support_tickets`, `marketing_form_submissions`,
+  `mkt_visitors`, `mkt_sessions`, `mkt_touchpoints`, `ab_events`
+- Description: Public service-role endpoints had per-instance memory limits, allowing a distributed
+  client to bypass budgets across application instances before database writes or metric RPCs.
+- User impact: Abuse could create duplicate support/marketing records, trigger automation repeatedly,
+  and inflate attribution or conversion metrics.
+- Root cause: These older ingestion paths predated the shared cross-instance limiter.
+- Resolution: Replaced local-only guards with shared local-plus-durable family-independent IP buckets,
+  reused one service client per request, and added `Retry-After` responses.
+- Tests performed: Contract and limiter tests passed; full suite, typecheck, lint, build, and public E2E
+  passed. Durable enforcement depends on migration `0156` in production.
+- Verified by: Codex
+- Date completed: 2026-07-13

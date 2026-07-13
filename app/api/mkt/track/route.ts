@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getConsentState, canRecordAnalytics } from '@/lib/marketing/consent';
-import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { clientIp } from '@/lib/server/rate-limit';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -29,8 +30,14 @@ function clean(v: unknown): string | null {
 export async function POST(req: NextRequest) {
   // Public service-role ingest → must be rate-limited like the other trackers.
   const ip = clientIp(req.headers);
-  const limited = rateLimit(`mkt:${ip}`, { limit: 60, windowMs: 60_000 });
-  if (!limited.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  const supabase = createServiceClient();
+  const limited = await enforceRequestRateLimit(supabase, `mkt:${ip}`, { limit: 60 });
+  if (!limited.ok) {
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
+  }
 
   let body: TrackBody;
   try {
@@ -47,8 +54,6 @@ export async function POST(req: NextRequest) {
   const campaign = clean(body.campaign);
   const kind = body.kind === 'conversion' ? 'conversion' : 'touch';
   const now = new Date().toISOString();
-
-  const supabase = createServiceClient();
 
   // Privacy gate: only record first-party analytics when the visitor permits it.
   // Necessary-only / denied / GPC visitors are acknowledged but not profiled.

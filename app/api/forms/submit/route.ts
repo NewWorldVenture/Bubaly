@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { rateLimit, clientIp } from '@/lib/server/rate-limit';
+import { clientIp } from '@/lib/server/rate-limit';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { parseFormFields, validateSubmission, submissionEmail, submissionName } from '@/lib/marketing/forms';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
@@ -15,11 +16,12 @@ export const runtime = 'nodejs';
  */
 export async function POST(req: NextRequest) {
   const ip = clientIp(req.headers);
-  const limit = rateLimit(`form:${ip}`, { limit: 10, windowMs: 60_000 });
-  if (!limit.ok) {
+  const supabase = createServiceClient();
+  const limited = await enforceRequestRateLimit(supabase, `form:${ip}`, { limit: 10 });
+  if (!limited.ok) {
     return NextResponse.json(
       { error: 'Too many submissions. Please try again shortly.' },
-      { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
   }
 
@@ -30,7 +32,6 @@ export async function POST(req: NextRequest) {
   const values = (body.values && typeof body.values === 'object') ? body.values as Record<string, unknown> : {};
   if (!formId) return NextResponse.json({ error: 'formId is required' }, { status: 422 });
 
-  const supabase = createServiceClient();
   const { data: form } = await supabase
     .from('marketing_forms')
     .select('id, name, fields')
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
   // Fire any event-driven "form_submitted" automation workflows in real time.
   // Best-effort: never block the visitor on marketing automation.
   try {
-    await fireAutomationEvent(createServiceClient(), {
+    await fireAutomationEvent(supabase, {
       trigger: 'form_submitted',
       email,
       name: submissionName(fields, cleaned),
