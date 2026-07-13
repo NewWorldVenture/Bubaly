@@ -1843,7 +1843,7 @@ roadmap entries and user worktree changes are preserved.
 
 - 348 `page.tsx` route files.
 - 193 Supabase migration files and 309 SQL files under `supabase`.
-- 299 test files after the audit's regression contracts.
+- 300 test files after the audit's regression contracts.
 - 2,054 repository files returned by the initial source inventory (excluding node_modules, dist, and build).
 - Detailed route, database, feature, architecture, security, testing, and journey inventories already
   exist in the root documentation and will be reconciled with this session's command evidence.
@@ -1896,7 +1896,7 @@ roadmap entries and user worktree changes are preserved.
 
 - [x] Typecheck: `npm.cmd run typecheck` passed.
 - [x] Lint: `npm.cmd run lint` passed with only the known Next.js `next lint` deprecation notice.
-- [x] Unit tests: `npm.cmd test` passed, 299 files and 2,542 tests.
+- [x] Unit tests: `npm.cmd test` passed, 300 files and 2,543 tests.
 - [x] Credential-safety regression: all seed scripts load access only from environment; no literal
   `sb_secret_*` credential remains in runtime/source SQL.
 - [x] Production build: `npm.cmd run build` passed; 233 static pages generated.
@@ -2020,5 +2020,30 @@ roadmap entries and user worktree changes are preserved.
   2 files and 3 tests; typecheck and lint passed. Static scan found no former fixed family/user IDs.
 - Evidence: `tests/seed-credentials-safety.test.ts` requires the scope guard and rejects the legacy
   identifiers; `tests/seed-scope-safety.test.ts` proves production and mismatched confirmations fail.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0185 - Inactive public gift links disclosed household names
+
+- Status: [x] Completed in code and covered by regression test.
+- Severity: P1
+- Category: Privacy / public capability links
+- Feature: Public gift links
+- Route: `/gift/[token]`
+- File or files: `app/gift/[token]/page.tsx`, `tests/public-gift-privacy-contract.test.ts`
+- Database objects: `gift_links`, `child_wallets`, `family_members`, `families`
+- Description: The public gift page used the service-role client to resolve child and family names
+  before checking whether the gift link was active. A revoked or expired token could therefore
+  disclose identifying household information even though pledges were blocked.
+- User impact: Someone holding an old or revoked gift URL could still see the associated child and
+  family name.
+- Security or privacy impact: Public capability revocation was incomplete; inactive links retained
+  an information-disclosure path.
+- Root cause: The `active` decision was made after identifying lookups instead of guarding them.
+- Resolution: The page now computes `active` immediately after loading the link and performs all
+  child/family lookups only when the link is active. Inactive and invalid links render generic names
+  and the existing inactive-link message.
+- Tests performed: `npm.cmd test -- tests/public-gift-privacy-contract.test.ts` passed; typecheck and
+  lint passed. The contract proves all identifying lookups are behind the active-link guard.
 - Verified by: Codex
 - Date completed: 2026-07-13

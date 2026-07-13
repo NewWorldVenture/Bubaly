@@ -16,21 +16,22 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
     .eq('token', token)
     .maybeSingle();
 
+  const active = !!link && link.is_active;
   let childName = 'a child';
   let familyName = 'a family';
-  if (link?.child_wallet_id) {
+  // An inactive capability must not disclose the household or child it used
+  // to target. Keep all identifying lookups behind the active-link check.
+  if (active && link?.child_wallet_id) {
     const { data: cw } = await supabase.from('child_wallets').select('member_id').eq('id', link.child_wallet_id).maybeSingle();
     if (cw?.member_id) {
       const { data: m } = await supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle();
       if (m?.display_name) childName = m.display_name;
     }
   }
-  if (link?.family_id) {
+  if (active && link?.family_id) {
     const { data: fam } = await supabase.from('families').select('name').eq('id', link.family_id).maybeSingle();
     if (fam?.name) familyName = fam.name;
   }
-
-  const active = !!link && link.is_active;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 px-4 py-10">

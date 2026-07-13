@@ -72,3 +72,6 @@ pending migration is applied in an authorized Supabase environment.
 - `npm.cmd run db:audit:schema` passed for all 8 required live tables.
 - Anonymous REST probes for the three marketplace circle relations returned HTTP 200.
 - Authenticated cross-family allow/deny tests and migration-history verification remain outstanding.
+
+Public gift-link reads now guard child and family lookups with `gift_links.is_active`; revoked
+capabilities do not disclose identifying names through service-role reads.
