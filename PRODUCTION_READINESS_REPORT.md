@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,705 unit tests, builds all 235 Next.js build
+tree compiles, passes lint and type checking, passes 2,712 unit tests, builds all 235 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -14,11 +14,11 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 ## Scope and Inventory
 
-- 351 `page.tsx` route files.
+- 352 `page.tsx` route files.
 - 102 API route handlers.
-- 193 migrations at audit start; additive repair migrations through `0192` are now present.
-- 330 SQL files under `supabase`.
-- 340 unit-test files and 2,705 passing tests.
+- 209 migration files; additive repair migrations through `0193` are now present.
+- 332 SQL files under `supabase`.
+- 341 unit-test files and 2,712 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -137,7 +137,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,705 tests / 340 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,712 tests / 341 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 235 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
@@ -151,7 +151,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 ## Remaining Launch Blockers
 
-1. Confirm migration history through `0192_marketplace_returns.sql` in the intended environment and
+1. Confirm migration history through `0193_marketplace_reports.sql` in the intended environment and
    rerun cross-family RLS and negotiation allow/deny probes.
 2. Diagnose the live Supabase Auth Admin 500 in Supabase/GoTrue/Postgres logs and rerun the Auth audit.
 3. Resolve or formally accept the PostCSS advisory after reviewing the next compatible Next.js release.

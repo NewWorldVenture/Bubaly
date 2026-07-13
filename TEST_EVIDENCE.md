@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 340 files, 2,705 tests |
+| `npm.cmd exec vitest run` | PASS: 341 files, 2,712 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 235 generated pages |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line` | PASS: 51 of 52 tests; 1 intentional auth skip |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
@@ -42,6 +42,16 @@ Audit date: 2026-07-13
 - `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
 - `npm.cmd run db:audit:auth`: public Auth health passed; Admin users still returned HTTP 500
   (`019f5dbf-8c64-7fc2-ae04-75197364e067`).
+
+## Audit Update - 2026-07-13 (post-rebase marketplace reports baseline)
+
+- `npm.cmd exec vitest run`: 341 files and 2,712 tests passed.
+- `npm.cmd exec vitest run tests/rate-limit-db.test.ts`: 1 file, 4 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 235 pages generated, including `/admin/marketplace/reports`.
+- `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional authenticated test skipped.
+- This validation ran after rebasing onto the current `origin/main`, which includes marketplace trust/reporting, migration `0193`, and its seed/test coverage.
 
 ## Browser Coverage
 

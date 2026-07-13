@@ -4,6 +4,7 @@
 
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
+- Current migration files: 209, through `0193_marketplace_reports.sql`.
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
   `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
@@ -12,9 +13,9 @@
   `0187_harden_marketplace_negotiations.sql`, and
   `0188_harden_trigger_function_security.sql`,
   `0189_reconcile_stripe_webhook_claims.sql`, and
-  `0190_marketplace_handoffs.sql`, `0191_marketplace_price_history.sql`, and
-  `0192_marketplace_returns.sql`.
-- SQL files: 330.
+  `0190_marketplace_handoffs.sql`, `0191_marketplace_price_history.sql`, `0192_marketplace_returns.sql`,
+  and `0193_marketplace_reports.sql`.
+- SQL files: 332.
 - Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
   not a claim that every object exists in the live database.
@@ -80,7 +81,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
-2. Apply the remaining migrations through `0192` and run `npm run db:audit:schema` and
+2. Apply the remaining migrations through `0193` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
