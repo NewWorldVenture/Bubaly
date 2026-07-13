@@ -2166,3 +2166,25 @@ roadmap entries and user worktree changes are preserved.
   typecheck and lint passed. Durable enforcement remains dependent on migration `0156` in production.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0191 - Generic AI insights endpoint lacked request budget
+
+- Status: [x] Completed in code and covered by the shared limiter regression tests.
+- Severity: P1
+- Category: AI cost control / family data-read abuse resistance
+- Feature: Family-scoped AI insights
+- Route: `/api/ai/insights`
+- File or files: `app/api/ai/insights/route.ts`, `lib/server/ai-rate-limit.ts`,
+  `tests/ai-rate-limit.test.ts`
+- Database objects: `rate_limits`, `rate_limit_hit`
+- Description: The broad insights route could repeatedly read multi-module family context and invoke
+  a paid model without a per-user request budget.
+- User impact: A runaway dashboard or compromised session could consume provider capacity and perform
+  unnecessary family-data reads.
+- Root cause: The route was authenticated and RLS-scoped but did not use the shared AI limiter.
+- Resolution: Added a distinct 20-request-per-user-per-minute local plus durable guard before context
+  queries and model execution, with `Retry-After` on rejection.
+- Tests performed: Shared limiter tests passed with 3 cases; full suite, typecheck, lint, build, and
+  public E2E remain the release gates. Durable enforcement depends on migration `0156` in production.
+- Verified by: Codex
+- Date completed: 2026-07-13

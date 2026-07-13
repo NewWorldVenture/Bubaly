@@ -111,3 +111,6 @@ validates conversation UUIDs, and rejects oversized or empty messages before mod
 
 Authenticated voice transcription and speech synthesis now share the same local plus durable per-user
 AI request guard before reading keys or calling OpenAI; the existing audio-size and text-size bounds remain.
+
+The family-scoped AI insights endpoint now applies the same per-user guard before loading context or
+invoking a model, protecting its broad multi-module data reader from runaway requests.

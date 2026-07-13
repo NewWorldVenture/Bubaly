@@ -4,6 +4,7 @@ import { createServer } from '@/lib/supabase/server';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { INSIGHTS, isInsightKind, type InsightData, type InsightKind } from '@/lib/ai/insights';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,6 +33,11 @@ export async function POST(req: Request) {
   const params = { ...(body.params ?? {}), ...(question ? { question } : {}) };
 
   const supabase = await createServer();
+  const limited = await enforceAIRateLimit(supabase, `ai-insights:${ctx.user.id}`, { limit: 20 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many AI insight requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
   const familyId = ctx.active.familyId;
   const tz = ctx.active.family.timezone || 'America/New_York';
 

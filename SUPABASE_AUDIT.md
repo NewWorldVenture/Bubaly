@@ -92,3 +92,6 @@ application code. Durable enforcement still depends on migration `0156` being ap
 Voice transcription and speech synthesis use the same per-user durable limiter before paid provider
 calls. The limiter intentionally falls back to the local guard when `0156` is unavailable, so deployment
 must apply that migration before relying on cross-instance enforcement.
+
+The generic family AI insights endpoint is also guarded before its broad context queries and provider
+call, using a distinct per-user bucket.
