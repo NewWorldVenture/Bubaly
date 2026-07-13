@@ -17,6 +17,7 @@ import { AuctionPanel } from '@/components/marketplace/auction-panel';
 import { NegotiationPanel, type Thread } from '@/components/marketplace/negotiation-panel';
 import { priceDropBadge, isAtLowest, historyLine, type PriceChange } from '@/lib/marketplace/price-history';
 import { ReportButton } from '@/components/marketplace/report-button';
+import { priceBand, assessPrice, dealLabel, bandSummary, type Comp } from '@/lib/marketplace/price-coach';
 import { computeTrustScore, ratingSummary, TRUST_BAND_LABELS } from '@/lib/marketplace/trust';
 import {
   KIND_LABELS, CATEGORY_LABELS, CONDITION_LABELS, priceLabel, formatCents,
@@ -116,6 +117,23 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const dropBadge = priceDropBadge(priceHistory, listing.price_cents);
   const atLowest = isAtLowest(priceHistory, listing.price_cents);
 
+  // Price coach: "is this a fair price?" from reachable category comps (sell only).
+  let dealBadge: { text: string; tone: 'ok' | 'good' | 'muted' | 'warn' } | null = null;
+  let compBand: string | null = null;
+  if (tracksPrice && kind === 'sell' && !isOwner) {
+    const { data: compRows } = await sb
+      .from('marketplace_listings')
+      .select('category, condition, price_cents, kind')
+      .eq('kind', 'sell').eq('category', listing.category).gt('price_cents', 0).neq('id', id)
+      .limit(80);
+    const comps: Comp[] = (compRows ?? []).map((c) => ({
+      category: c.category, condition: c.condition, priceCents: c.price_cents, kind: c.kind,
+    }));
+    const band = priceBand(listing.category, listing.condition, comps);
+    dealBadge = dealLabel(assessPrice(listing.price_cents, band));
+    compBand = bandSummary(band);
+  }
+
   // "Make an Offer" negotiation threads (fixed-price sale listings only).
   const negotiable = !isAuctionListing && kind === 'sell' && listing.price_cents > 0;
   let negThreads: Thread[] = [];
@@ -190,8 +208,19 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                   Lowest ever
                 </span>
               )}
+              {dealBadge && (
+                <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold',
+                  dealBadge.tone === 'ok' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                  : dealBadge.tone === 'good' ? 'bg-sky-500/12 text-sky-600 dark:text-sky-400'
+                  : dealBadge.tone === 'warn' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                  : 'bg-border/60 text-muted')}
+                  title={compBand ?? undefined}>
+                  {dealBadge.text}
+                </span>
+              )}
             </div>
           )}
+          {compBand && <p className="mt-0.5 text-[11px] text-muted">{compBand} · based on comparable listings</p>}
           {tracksPrice && priceHistory.length > 0 && (
             <details className="mt-2 text-xs text-muted">
               <summary className="cursor-pointer select-none hover:text-fg">Price history ({priceHistory.length})</summary>

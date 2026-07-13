@@ -1380,6 +1380,19 @@ missing-location events, colliding events for conflicts). Run it, then open
   - ⚠️ apply **`0193`** to prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe before apply: the Report
     button + queue read best-effort and stay dormant until the table exists.
 
+- [x] **Price Coach — "is this a fair price?" ✅ SHIPPED (2026-07-13).** Answers the buyer's core
+  question from real comparable listings — no LLM key, **no migration** (reads existing listings as
+  comps). Closes the todo pricing gap ("is this a fair price?"):
+  - Pure engine **`lib/marketplace/price-coach.ts`** (`percentile` · `priceBand` [p25/median/p75,
+    condition-normalized to a 'good' baseline then re-adjusted, needs ≥3 comps] · `assessPrice`
+    great/good/fair/above-market · `dealLabel` · `bandSummary`, **9 tests**). Sibling to quick-post's
+    single-point `suggestPriceCents` — this returns the whole band + a verdict.
+  - Item page (fixed-price sale, non-owner) shows a **deal badge** next to the price ("Great price" /
+    "Good price" / "Fair price" / "Above similar items") + a **"Similar items: $X–$Y · based on
+    comparable listings"** line, from reachable same-category `sell` comps (RLS/circles). Owners and
+    auctions don't show it. Verified: tsc · eslint · **vitest (9 coach + …77 marketplace total)** ·
+    `next build`. No prod migration — lights up on existing marketplace data.
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:
