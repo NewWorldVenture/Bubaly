@@ -2800,3 +2800,43 @@ roadmap entries and user worktree changes are preserved.
 - Tests performed: Focused SSRF/feed contracts, full suite, typecheck, lint, build, and public E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0217 - Signed and provider raw-body routes buffered before bounds
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Request bounds / webhook integrity / provider ingress
+- Feature: Stripe, Resend, money, push, and calendar webhook-style request bodies
+- File or files: `lib/server/bounded-request-body.ts`, `app/api/webhooks/stripe/route.ts`,
+  `app/api/webhooks/money/route.ts`, `app/api/webhooks/resend/route.ts`,
+  `app/api/push/subscribe/route.ts`, `app/api/push/unsubscribe/route.ts`,
+  `app/api/calendar/sync/route.ts`, `tests/raw-body-boundaries.test.ts`
+- Description: Several raw-body endpoints checked `Content-Length` and then buffered the entire body
+  with `req.text()` before enforcing the limit, allowing chunked oversized requests to consume memory.
+- User impact: A provider or authenticated caller could send an oversized chunked payload before the
+  endpoint rejected it, increasing memory pressure and delaying signature or database work.
+- Root cause: Raw-body routes had local post-read checks instead of using the shared streaming reader.
+- Resolution: Replaced those reads with `readBoundedRequestText`, which checks declared lengths, consumes
+  at most the configured byte budget, cancels oversized streams, and preserves exact signed payload text.
+- Tests performed: Raw-body boundary contract, full suite, typecheck, lint, build, and public E2E.
+- Evidence: `tests/raw-body-boundaries.test.ts` covers exact text preservation, chunked oversized rejection,
+  and static route coverage.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0218 - Multipart and form-encoded provider bodies still need streaming bounds
+
+- Status: [~] In progress; separate implementation required.
+- Severity: P1
+- Category: Request bounds / provider ingress
+- Feature: Twilio Guardian callbacks and voice transcription upload
+- File or files: `app/api/guardian/status/voicemail/route.ts`, `app/api/guardian/screen/route.ts`,
+  `app/api/guardian/inbound/whatsapp/route.ts`, `app/api/guardian/inbound/voice/route.ts`,
+  `app/api/guardian/inbound/sms/route.ts`, `app/api/guardian/escalate/twiml/route.ts`,
+  `app/api/ai/voice/transcribe/route.ts`
+- Description: These routes still rely on platform `formData()` parsing, which can buffer provider or
+  uploaded multipart/form-encoded bodies before application validation.
+- Required remediation: Add bounded form-urlencoded and multipart readers that preserve Twilio signature
+  inputs and enforce file, field, and total-body limits before parsing.
+- Current evidence: The raw-body audit found these paths; they were intentionally not changed in TODO-0217
+  because their parser and signature contracts differ from plain text webhooks.

@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createServiceClient } from '@/lib/supabase/server';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey, isEventTrigger } from '@/lib/marketing/automation-triggers';
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
@@ -51,8 +52,9 @@ const FIELD: Record<string, 'opens' | 'clicks' | 'bounces' | 'unsubscribes'> = {
 };
 
 export async function POST(req: NextRequest) {
-  const body = await req.text();
-  if (body.length > 256_000) return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+  const boundedBody = await readBoundedRequestText(req, 256_000);
+  if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Payload too large' : 'Unable to read payload' }, { status: boundedBody.reason === 'too_large' ? 413 : 400 });
+  const body = boundedBody.text;
   if (!verify(body, req.headers)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }

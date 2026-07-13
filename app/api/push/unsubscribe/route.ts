@@ -3,6 +3,7 @@ import { getUser } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { MAX_PUSH_REQUEST_BYTES, parsePushDeviceKey } from '@/lib/server/push-request';
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,14 +12,9 @@ export async function POST(req: Request) {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const contentLength = Number(req.headers.get('content-length') ?? '');
-  if (Number.isFinite(contentLength) && contentLength > MAX_PUSH_REQUEST_BYTES) {
-    return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
-  }
-  const rawBody = await req.text();
-  if (new TextEncoder().encode(rawBody).byteLength > MAX_PUSH_REQUEST_BYTES) {
-    return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
-  }
+  const boundedBody = await readBoundedRequestText(req, MAX_PUSH_REQUEST_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body too large' : 'Unable to read request body' }, { status: boundedBody.reason === 'too_large' ? 413 : 400 });
+  const rawBody = boundedBody.text;
   let body: unknown;
   try { body = JSON.parse(rawBody); } catch { return NextResponse.json({ error: 'Invalid request body' }, { status: 400 }); }
   const deviceKey = parsePushDeviceKey(body);

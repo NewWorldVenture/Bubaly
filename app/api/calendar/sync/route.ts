@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
 
 // ICS parser — no external dep, pure hand-rolled RFC 5545 parser
 function parseIcs(text: string): IcsEvent[] {
@@ -81,14 +82,9 @@ export async function POST(req: NextRequest) {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
     const supabase = await createServer();
-    const contentLength = Number(req.headers.get('content-length') ?? '');
-    if (Number.isFinite(contentLength) && contentLength > 16_384) {
-      return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
-    }
-    const rawBody = await req.text();
-    if (Buffer.byteLength(rawBody, 'utf8') > 16_384) {
-      return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
-    }
+    const boundedBody = await readBoundedRequestText(req, 16_384);
+    if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body too large' : 'Unable to read request body' }, { status: boundedBody.reason === 'too_large' ? 413 : 400 });
+    const rawBody = boundedBody.text;
     let body: { icsUrl?: unknown; label?: unknown };
     try {
       body = JSON.parse(rawBody) as { icsUrl?: unknown; label?: unknown };

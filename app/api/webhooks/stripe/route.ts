@@ -5,6 +5,7 @@ import { markReferralConverted } from '@/lib/referrals/server';
 import { recordEvent, markEventProcessed, markEventError } from '@/lib/stripe/webhook';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
 import type Stripe from 'stripe';
 
 export const runtime = 'nodejs';
@@ -57,14 +58,9 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
 }
 
 export async function POST(req: NextRequest) {
-  const contentLength = Number(req.headers.get('content-length') ?? '');
-  if (Number.isFinite(contentLength) && contentLength > MAX_WEBHOOK_BODY_BYTES) {
-    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
-  }
-  const body = await req.text();
-  if (Buffer.byteLength(body, 'utf8') > MAX_WEBHOOK_BODY_BYTES) {
-    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
-  }
+  const boundedBody = await readBoundedRequestText(req, MAX_WEBHOOK_BODY_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Payload too large' : 'Unable to read payload' }, { status: boundedBody.reason === 'too_large' ? 413 : 400 });
+  const body = boundedBody.text;
   const sig = req.headers.get('stripe-signature') ?? '';
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? '';
   if (!webhookSecret) return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 });

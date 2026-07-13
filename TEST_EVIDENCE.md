@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 324 files, 2,633 tests |
+| `npm.cmd test` | PASS: 325 files, 2,636 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -64,6 +64,19 @@ Audit date: 2026-07-13
 - `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
 - `npm.cmd run build`: passed; 234 pages generated.
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+
+## Audit Update - 2026-07-13 (raw webhook and upload body bounds)
+
+- `npm.cmd exec vitest run tests/raw-body-boundaries.test.ts tests/request-body-boundaries.test.ts`:
+  2 files, 7 tests passed.
+- `npm.cmd test`: 325 files and 2,636 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- Stripe, Resend, and money webhooks, push subscription routes, and calendar sync now use a shared
+  streaming reader that rejects oversized chunked bodies before complete buffering.
+- Signed webhook bodies remain exact raw text for provider signature verification.
+- Twilio form-encoded callbacks and voice transcription multipart uploads remain separate follow-up
+  ingress paths because they require dedicated bounded form-data handling.
 - Added `marketplace_close_auction()` in migration `0185` and moved the close-auctions cron to the
   service-role RPC. Listing, order, and bid settlement now commit together; failed order creation
   leaves the listing retryable.

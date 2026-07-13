@@ -13,19 +13,15 @@ import {
   handleAuthorizationRequest, handleTransactionCreated, handleAuthorizationUpdated,
 } from '@/lib/stripe/webhook';
 import { syncConnectedAccount } from '@/lib/stripe/connect';
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 const MAX_WEBHOOK_BODY_BYTES = 256_000;
 
 export async function POST(req: NextRequest) {
-  const contentLength = Number(req.headers.get('content-length') ?? '');
-  if (Number.isFinite(contentLength) && contentLength > MAX_WEBHOOK_BODY_BYTES) {
-    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
-  }
-  const body = await req.text();
-  if (Buffer.byteLength(body, 'utf8') > MAX_WEBHOOK_BODY_BYTES) {
-    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
-  }
+  const boundedBody = await readBoundedRequestText(req, MAX_WEBHOOK_BODY_BYTES);
+  if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Payload too large' : 'Unable to read payload' }, { status: boundedBody.reason === 'too_large' ? 413 : 400 });
+  const body = boundedBody.text;
   const sig = req.headers.get('stripe-signature') ?? '';
   const secret = process.env.STRIPE_MONEY_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET || '';
   if (!secret) return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 });
