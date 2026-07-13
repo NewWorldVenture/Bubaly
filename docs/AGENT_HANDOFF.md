@@ -352,6 +352,24 @@
 > depth, surfaces without a 500-row seed, and any remaining "coming soon" that isn't a deliberate
 > key-gate. Keep each slice small + verified; **update this file again before the session ends.**
 >
+> ## 🧹 MERGE STABILIZATION — 2026-07-13 (after big parallel merge) — READ FIRST
+>
+> A large parallel lane merged (App Store, paperwork, CRM lead-scoring, marketplace circles,
+> Playwright e2e suite, vitest 4 upgrade, `--brand-text` token, migration renumbers). Post-merge
+> fixes landed on `main`:
+> - **Duplicate `0165`** (concierge_calls vs. the parallel lane's family_app_store) broke
+>   `supabase db push` → **concierge_calls renumbered to `0173`** (all refs updated, PG16
+>   re-verified). family_app_store keeps 0165.
+> - My earlier lanes' migrations were renumbered by the merge too: **workload = 0174,
+>   independence = 0175** (comments/guards already updated by the lane). Concierge = 0173.
+> - `@axe-core/playwright` was declared in package.json but not installed → installing it
+>   unblocks the new e2e specs under `tsc` (fresh `npm install` handles this in CI).
+> - vitest is now **4.1.10**; its `oxc` config key is valid — do NOT strip it (an earlier tsc
+>   error was a stale-types artifact, resolved by the upgrade).
+> - State: tsc 0 / **2530 vitest tests green** / build verified. Pending-prod list + this doc
+>   updated. Next agent: the top unbuilt item remains **#2 Chief-of-Staff proactive front door**
+>   (assemble autopilot/calm/agents into one home experience) — not yet started.
+
 > ## 💳 STRIPE ISSUING (#5) COMPLETE — 2026-07-12 final+ (same lane) — READ FIRST
 >
 > Open-item **#5 (Issuing → wallet spending cards + real-time balances)** is now complete to the
