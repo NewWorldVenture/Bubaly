@@ -43,7 +43,7 @@ coupled migrations `0154`/`0155`/`0156` to prod with the deploy.** **Do not** re
 **⚠️ Coupled prod migrations — apply with the deployed code** (see `docs/PENDING_PROD_MIGRATIONS.md`):
 `0154_marketplace_ownership.sql`, `0155_wallet_auth_holds.sql`, **and `0156_rate_limits.sql`**. Until
 applied: marketplace owner accept/withdraw/complete error, card auth holds don't reserve, and the
-durable AI rate-limit fails open (in-memory limiter still caps per instance).
+guarded rate-limited operations fail closed with a short retry response rather than bypassing the durable limit.
 
 **✅ Fixed & merged — round 2 (2026-07-10, this session)** — all remaining audit items closed:
 - **AUTH-1 (High)** ✅ — Google Calendar OAuth is now CSRF-safe: `auth/route.ts` issues a random,
@@ -65,7 +65,7 @@ durable AI rate-limit fails open (in-memory limiter still caps per instance).
 - **PAY-5 (Low)** ✅ — billing success/return URLs now build from the trusted `NEXT_PUBLIC_APP_URL`
   first, not the caller-controlled `Origin` header (checkout, change-plan, portal).
 - **AI-2 (Low)** ✅ — durable, cross-instance rate limiting: **`0156_rate_limits.sql`**
-  (`rate_limits` + `rate_limit_hit()` RPC) + `lib/server/rate-limit-db.ts` (fail-open), wired into
+  (`rate_limits` + `rate_limit_hit()` RPC) + `lib/server/rate-limit-db.ts` (fail-closed by default), wired into
   `/api/ai/gift` alongside the per-instance in-memory gate. PG16-verified.
 - Verified: tsc · eslint · **vitest (56 existing + 6 new)** · `next build` (218 pages); `0156`
   applied twice on PG16 (idempotent) and exercised.
@@ -3114,7 +3114,8 @@ roadmap entries and user worktree changes are preserved.
   schema audit to verify both `processing_started_at` and `claim_token` together.
 - Tests performed: Production migration contracts, full Vitest suite, typecheck, lint, production build,
   and public Playwright/axe E2E.
-- Live status: Not applied by this agent; rerun `npm run db:audit:schema` after deployment.
+- Live status: The 2026-07-13 schema audit now finds both claim columns; migration-history verification
+  and authenticated webhook/RLS testing still require an authorized isolated environment.
 - Verified by: Codex
 - Date completed: 2026-07-13
 
@@ -3252,5 +3253,22 @@ roadmap entries and user worktree changes are preserved.
   and fail closed with a generic temporary-unavailable response when either lookup fails.
 - Tests performed: Child-login action/security contracts, child-login and throttle unit tests, full Vitest
   suite, typecheck, lint, production build, and public Playwright/axe E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0233 - Durable rate-limit RPC failures could bypass abuse controls
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Abuse resistance / failure handling
+- Feature: Shared durable request limiter
+- File or files: `lib/server/rate-limit-db.ts`, `tests/rate-limit-db.test.ts`
+- Description: RPC errors, empty responses, malformed rows, and invalid retry values were treated as
+  allowed requests, allowing database degradation to remove cross-instance request budgets.
+- Resolution: The limiter now validates numeric inputs and the RPC response shape, fails closed with a
+  short retry window by default, and exposes an explicit `failOpen` option only for a caller that accepts
+  the availability tradeoff.
+- Tests performed: Durable limiter regression suite, focused rate-limit contracts, typecheck, full Vitest,
+  lint, production build, and public Playwright/axe E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13

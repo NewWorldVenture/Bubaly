@@ -85,6 +85,15 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
 4. Inspect the live Auth Admin 500 in Supabase logs before any production launch decision.
+
+### Current probe follow-up - 2026-07-13
+
+- `npm.cmd run db:audit:schema` passed all 11 required live schema checks, including the
+  `stripe_webhook_events` claim columns previously missing from the live response.
+- `npm.cmd run db:audit:auth` still passes public Auth health but returns HTTP 500 from the Admin users
+  endpoint (`Database error finding users`, error id `019f5dbf-8c64-7fc2-ae04-75197364e067`).
+- The schema result confirms object availability only; migration-history verification and authenticated
+  RLS allow/deny tests still require an authorized isolated environment.
 ## Audit Update - 2026-07-13
 
 Seed tooling no longer embeds a fixed household or creator identity. All six legacy service-role

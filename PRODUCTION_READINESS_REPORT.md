@@ -3,12 +3,12 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,701 unit tests, builds all 235 Next.js build
+tree compiles, passes lint and type checking, passes 2,705 unit tests, builds all 235 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
-real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
-live database by this audit.
+real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
+required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
 
-Recommended decision: **NO-GO until the pending database migration is applied and the live Supabase
+Recommended decision: **NO-GO until full migration history/RLS behavior is verified, the live Supabase
 Auth Admin 500 is diagnosed, and the exposed historical Supabase credential is rotated.** After
 those checks pass in an isolated environment, the posture can be reconsidered as Conditional Go.
 
@@ -18,7 +18,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 - 102 API route handlers.
 - 193 migrations at audit start; additive repair migrations through `0192` are now present.
 - 330 SQL files under `supabase`.
-- 339 unit-test files and 2,701 passing tests.
+- 340 unit-test files and 2,705 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -90,6 +90,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   and gift server actions before their service-role writes.
 - Hardened child username/PIN sign-in with a durable IP-wide guard, hostile-input normalization, and
   fail-closed throttle and login lookup errors so degraded Supabase cannot remove brute-force controls.
+- Hardened the durable rate-limit boundary to fail closed on RPC errors, empty or malformed responses,
+  and invalid retry windows; availability-first behavior now requires an explicit opt-in.
 - Repaired the remote marketplace hand-off seed to be fail-closed and additive: it now requires the
   anchored account and two existing members, uses deterministic IDs, and never deletes or creates users.
 - Repaired the marketplace returns seed in both standalone and `SEED_ALL.sql` forms: it now requires
@@ -135,13 +137,13 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,701 tests / 339 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,705 tests / 340 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 235 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
 | Mobile overflow E2E | PASS at 320, 390, 768, and 1024 widths | Playwright |
 | Migration/seed contract | PASS, 26 focused tests | targeted Vitest run |
-| Schema probe | BLOCKED/FAIL | 10 live table/ledger probes pass; Stripe claim columns required by 0189 are missing |
+| Schema probe | PASS | 11 required live table/ledger probes available, including Stripe claim columns |
 | Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
 | Dependency audit | FAIL/PENDING | 2 moderate PostCSS advisories, no fix available |
@@ -149,8 +151,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 ## Remaining Launch Blockers
 
-1. Apply migrations through `0192_marketplace_returns.sql` in the intended environment and
-   rerun schema plus cross-family RLS and negotiation allow/deny probes.
+1. Confirm migration history through `0192_marketplace_returns.sql` in the intended environment and
+   rerun cross-family RLS and negotiation allow/deny probes.
 2. Diagnose the live Supabase Auth Admin 500 in Supabase/GoTrue/Postgres logs and rerun the Auth audit.
 3. Resolve or formally accept the PostCSS advisory after reviewing the next compatible Next.js release.
 4. Run authenticated E2E and database RLS tests against an isolated local Supabase instance.
@@ -165,8 +167,8 @@ health, and RLS attack tests are not fully proven. No production data was change
 The audited model-backed and external-provider routes now use shared per-user durable request budgets
 before provider calls or broad context reads. This covers the model-backed `/api/ai` inventory plus
 vacation AI/weather, recipe AI, and weekend discovery routes, while preserving existing plan/day caps.
-Rejected requests return `Retry-After`; durable enforcement still depends on migration `0156` being
-applied in the target environment.
+Rejected requests return `Retry-After`; if migration `0156` or the RPC is unavailable, guarded
+operations now fail closed instead of silently bypassing the durable limit.
 
 The follow-up provider inventory also covers marketing-admin AI, behavior coaching, and the authenticated
 Giphy proxy. These routes now budget paid/provider work before loading broad context or calling an

@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 339 files, 2,701 tests |
+| `npm.cmd exec vitest run` | PASS: 340 files, 2,705 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 235 generated pages |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line` | PASS: 51 of 52 tests; 1 intentional auth skip |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
@@ -29,6 +29,19 @@ Audit date: 2026-07-13
 - `npm.cmd run build`: passed; 235 pages generated, including dynamic `/marketplace/selling`.
 - `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional authenticated test skipped.
 - This snapshot was rerun after rebasing the child-login hardening onto the current `origin/main`, which includes the marketplace Seller Cockpit.
+
+## Audit Update - 2026-07-13 (durable limiter failure boundary)
+
+- `npm.cmd exec vitest run`: 340 files and 2,705 tests passed.
+- `npm.cmd exec vitest run tests/rate-limit-db.test.ts tests/ai-rate-limit.test.ts tests/public-side-effect-rate-limit.test.ts tests/child-login-action-security.test.ts`: 4 files, 10 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 235 pages generated.
+- `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional authenticated test skipped.
+- The durable limiter now fails closed on RPC errors, empty or malformed responses, and invalid retry values; explicit availability-first behavior requires `failOpen: true`.
+- `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
+- `npm.cmd run db:audit:auth`: public Auth health passed; Admin users still returned HTTP 500
+  (`019f5dbf-8c64-7fc2-ae04-75197364e067`).
 
 ## Browser Coverage
 
@@ -76,8 +89,8 @@ Audit date: 2026-07-13
 
 - Live schema audit: earlier required probes passed; `marketplace_circles` returned HTTP 500 / `42P17`
   before the new migration.
-- Current schema audit: 10 live table/ledger checks pass; `stripe_webhook_events.claim_columns` is missing
-  until migration `0189_reconcile_stripe_webhook_claims.sql` is applied.
+- Current schema audit: 11 required live table/ledger checks pass, including
+  `stripe_webhook_events.claim_columns`.
 - Live Auth audit: public health passed; Admin users returned HTTP 500.
 - Local Supabase migration/RLS tests: not run because Docker Desktop's Linux engine was unavailable.
 - No destructive production database or storage operation was run.
