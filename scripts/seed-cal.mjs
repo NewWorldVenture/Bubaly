@@ -1,14 +1,17 @@
-import { createSeedClient } from './seed-client.mjs';
+import { createSeedClient, requireSeedScope } from './seed-client.mjs';
 
 const sb = createSeedClient();
+const { familyId: FAMILY_ID, createdByUserId: CB } = requireSeedScope();
 
-const FAMILY_ID = 'a0cba6bd-88f7-48a9-926d-b27e5cf671dc';
-const CB        = 'df41e924-9bea-4980-98d4-f9d78df05e49';
-const DANIEL    = '1dfe994e-75c8-4cb6-920e-20984fae5651';
-
-const { data: mems } = await sb.from('family_members').select('id,display_name').eq('family_id', FAMILY_ID);
+const { data: mems, error: memberError } = await sb.from('family_members').select('id,display_name').eq('family_id', FAMILY_ID);
+if (memberError) throw new Error(`Could not load seed members: ${memberError.message}`);
 const m = Object.fromEntries(mems.map(x => [x.display_name, x.id]));
-const SARAH = m['Sarah'], EMMA = m['Emma'], JACKSON = m['Jackson'], LILY = m['Lily'], GRANDMA = m['Grandma Ruth'];
+const memberId = (name) => {
+  if (!m[name]) throw new Error(`Seed family ${FAMILY_ID} is missing required member "${name}".`);
+  return m[name];
+};
+const DANIEL = memberId('Daniel');
+const SARAH = memberId('Sarah'), EMMA = memberId('Emma'), JACKSON = memberId('Jackson'), LILY = memberId('Lily'), GRANDMA = memberId('Grandma Ruth');
 const ALL = [DANIEL, SARAH, EMMA, JACKSON, LILY];
 
 const uuid = () => crypto.randomUUID();

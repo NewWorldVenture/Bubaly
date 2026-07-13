@@ -1,8 +1,7 @@
-import { createSeedClient } from './seed-client.mjs';
+import { createSeedClient, requireSeedScope } from './seed-client.mjs';
 
 const sb = createSeedClient();
-const FAMILY_ID='a0cba6bd-88f7-48a9-926d-b27e5cf671dc';
-const USER_ID='df41e924-9bea-4980-98d4-f9d78df05e49';
+const { familyId: FAMILY_ID, createdByUserId: USER_ID } = requireSeedScope();
 const uuid=()=>crypto.randomUUID();
 const d=(n)=>{const x=new Date('2026-06-19');x.setDate(x.getDate()-n);return x.toISOString();};
 // Only valid types: 'system' and 'reminder'

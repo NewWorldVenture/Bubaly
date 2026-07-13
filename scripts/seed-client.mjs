@@ -6,6 +6,38 @@ function requireEnv(name) {
   return value;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function requireUuid(name) {
+  const value = requireEnv(name);
+  if (!UUID_PATTERN.test(value)) throw new Error(`${name} must be a valid UUID.`);
+  return value;
+}
+
+/**
+ * Require an explicit, confirmed non-production target for legacy seed scripts.
+ * The seed scripts use a service-role key and may write or delete family data,
+ * so relying on a URL or a hardcoded household ID is not an acceptable guard.
+ */
+export function requireSeedScope() {
+  const environment = requireEnv('SEED_ENVIRONMENT').toLowerCase();
+  if (!['local', 'test', 'preview', 'staging'].includes(environment)) {
+    throw new Error('SEED_ENVIRONMENT must be local, test, preview, or staging; production seeding is disabled.');
+  }
+
+  const familyId = requireUuid('SEED_FAMILY_ID');
+  const confirmation = requireEnv('SEED_CONFIRM_FAMILY_ID');
+  if (confirmation !== familyId) {
+    throw new Error('SEED_CONFIRM_FAMILY_ID must exactly match SEED_FAMILY_ID.');
+  }
+
+  return {
+    environment,
+    familyId,
+    createdByUserId: requireUuid('SEED_CREATED_BY_USER_ID'),
+  };
+}
+
 /**
  * Create a server-only seed client from the process environment.
  * Seed scripts intentionally require an explicit service-role key so a

@@ -15,13 +15,11 @@
  *   todo_items            (200 items across lists)
  */
 
-import { createSeedClient } from './seed-client.mjs';
+import { createSeedClient, requireSeedScope } from './seed-client.mjs';
 
 const sb = createSeedClient();
+const { familyId: FAMILY_ID, createdByUserId: DANIEL_USER_ID } = requireSeedScope();
 
-const FAMILY_ID      = 'a0cba6bd-88f7-48a9-926d-b27e5cf671dc';
-const DANIEL_USER_ID = 'df41e924-9bea-4980-98d4-f9d78df05e49'; // auth.users.id
-const DANIEL_MID     = '1dfe994e-75c8-4cb6-920e-20984fae5651'; // family_members.id
 const CB             = DANIEL_USER_ID;
 
 // ── Resolve live member IDs ────────────────────────────────────────────────
@@ -29,7 +27,11 @@ const { data: mems } = await sb.from('family_members').select('id, display_name,
 console.log('Members:', mems?.map(m => `${m.display_name}:${m.id.slice(0,8)}`));
 
 const memByName = new Map(mems?.map(m => [m.display_name, m]) ?? []);
-const gm = (name) => memByName.get(name) ?? { id: DANIEL_MID, user_id: DANIEL_USER_ID };
+const gm = (name) => {
+  const member = memByName.get(name);
+  if (!member) throw new Error(`Seed family ${FAMILY_ID} is missing required member "${name}".`);
+  return member;
+};
 
 const DANIEL  = gm('Daniel');
 const SARAH   = gm('Sarah');

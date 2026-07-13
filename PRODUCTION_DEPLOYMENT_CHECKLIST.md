@@ -45,3 +45,8 @@
   procedure; do not manually delete production data.
 - [ ] Restore database only through the approved backup/recovery process.
 - [ ] Re-run smoke tests and record the incident and recovery evidence.
+## Audit Update - 2026-07-13
+
+- [x] Legacy service-role seed scripts require a confirmed non-production seed scope.
+- [ ] Rotate the exposed Supabase service-role key and review audit logs before any production use.
+- [ ] Apply pending migrations and rerun live schema, Auth, and isolated RLS checks.

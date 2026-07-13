@@ -60,3 +60,15 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
 4. Inspect the live Auth Admin 500 in Supabase logs before any production launch decision.
+## Audit Update - 2026-07-13
+
+Seed tooling no longer embeds a fixed household or creator identity. All six legacy service-role
+seed scripts require a validated, explicitly confirmed non-production target before creating or
+deleting family-scoped rows. Missing named members fail closed instead of using stale UUID fallbacks.
+This is a client/tooling safety repair; live RLS and migration verification remain blocked until the
+pending migration is applied in an authorized Supabase environment.
+### Live Probe Follow-up - 2026-07-13
+
+- `npm.cmd run db:audit:schema` passed for all 8 required live tables.
+- Anonymous REST probes for the three marketplace circle relations returned HTTP 200.
+- Authenticated cross-family allow/deny tests and migration-history verification remain outstanding.

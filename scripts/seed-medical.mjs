@@ -1,16 +1,18 @@
-import { createSeedClient } from './seed-client.mjs';
+import { createSeedClient, requireSeedScope } from './seed-client.mjs';
 
 const sb = createSeedClient();
-
-const FAMILY_ID = 'a0cba6bd-88f7-48a9-926d-b27e5cf671dc';
-const CB        = 'df41e924-9bea-4980-98d4-f9d78df05e49'; // auth.users.id
+const { familyId: FAMILY_ID, createdByUserId: CB } = requireSeedScope();
 
 const uuid = () => crypto.randomUUID();
 
 const { data: mems, error: memErr } = await sb.from('family_members').select('id,display_name,role').eq('family_id', FAMILY_ID);
 if (memErr) { console.error('❌ could not load members:', memErr.message); process.exit(1); }
 const m = Object.fromEntries(mems.map((x) => [x.display_name, x.id]));
-const DANIEL = m['Daniel'], SARAH = m['Sarah'], EMMA = m['Emma'], JACKSON = m['Jackson'], LILY = m['Lily'];
+const memberId = (name) => {
+  if (!m[name]) throw new Error(`Seed family ${FAMILY_ID} is missing required member "${name}".`);
+  return m[name];
+};
+const DANIEL = memberId('Daniel'), SARAH = memberId('Sarah'), EMMA = memberId('Emma'), JACKSON = memberId('Jackson'), LILY = memberId('Lily');
 
 async function ins(table, rows) {
   const { data, error } = await sb.from(table).insert(rows).select('id');

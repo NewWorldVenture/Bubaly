@@ -1843,7 +1843,7 @@ roadmap entries and user worktree changes are preserved.
 
 - 348 `page.tsx` route files.
 - 193 Supabase migration files and 309 SQL files under `supabase`.
-- 296 test files after this audit's two regression contracts.
+- 299 test files after the audit's regression contracts.
 - 2,054 repository files returned by the initial source inventory (excluding node_modules, dist, and build).
 - Detailed route, database, feature, architecture, security, testing, and journey inventories already
   exist in the root documentation and will be reconciled with this session's command evidence.
@@ -1885,6 +1885,10 @@ roadmap entries and user worktree changes are preserved.
   `infinite recursion detected in policy for relation "marketplace_circle_members"`.
 - Resolution: Additive migration and regression contract are present. Production resolution is not claimed
   until the migration is applied and the live probe returns successfully.
+- Follow-up evidence: `npm.cmd run db:audit:schema` passed, and anonymous REST probes for
+  `marketplace_circles`, `marketplace_circle_members`, and `marketplace_listing_shares` each returned
+  HTTP 200 on 2026-07-13. Authenticated cross-family allow/deny testing and migration-history
+  verification still require an authorized isolated environment.
 - Verified by: Codex
 - Date completed: 2026-07-13
 
@@ -1892,7 +1896,7 @@ roadmap entries and user worktree changes are preserved.
 
 - [x] Typecheck: `npm.cmd run typecheck` passed.
 - [x] Lint: `npm.cmd run lint` passed with only the known Next.js `next lint` deprecation notice.
-- [x] Unit tests: `npm.cmd test` passed, 298 files and 2,540 tests.
+- [x] Unit tests: `npm.cmd test` passed, 299 files and 2,542 tests.
 - [x] Credential-safety regression: all seed scripts load access only from environment; no literal
   `sb_secret_*` credential remains in runtime/source SQL.
 - [x] Production build: `npm.cmd run build` passed; 233 static pages generated.
@@ -1902,7 +1906,8 @@ roadmap entries and user worktree changes are preserved.
 - [x] Seed TLS safety and marketplace RLS contract tests passed.
 - [x] Required reports created: `PRODUCTION_READINESS_REPORT.md`, `SUPABASE_AUDIT.md`,
   `TEST_EVIDENCE.md`, and `PRODUCTION_DEPLOYMENT_CHECKLIST.md`.
-- [!] Live marketplace schema probe remains blocked until `0178` is applied.
+- [x] Live marketplace table probes passed: required schema audit plus all three related REST endpoints
+  returned HTTP 200; authenticated cross-family RLS attack tests remain pending.
 - [!] Live Auth Admin probe remains blocked by Supabase HTTP 500.
 - [!] Local migration/RLS validation remains blocked until Docker Desktop is available.
 - [!] Dependency advisory remains unresolved because npm reports no available PostCSS fix.
@@ -1987,5 +1992,33 @@ roadmap entries and user worktree changes are preserved.
 - Resolution: Removed the process-wide TLS bypass from all seed scripts; normal Node certificate
   validation now applies. Added `tests/seed-tls-safety-contract.test.ts`.
 - Tests performed: Targeted contract test, typecheck, lint, and full suite after the repair.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0184 - Legacy seed scripts used fixed household scope and unsafe fallbacks
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Production data safety / seed tooling
+- Feature: Legacy JavaScript seed scripts
+- File or files: `scripts/seed*.mjs`, `scripts/seed-client.mjs`,
+  `tests/seed-credentials-safety.test.ts`, `tests/seed-scope-safety.test.ts`, `.env.example`
+- Description: Multiple service-role seed scripts embedded a fixed family ID, creator ID, and
+  member-ID fallbacks. A script could therefore be pointed at a different Supabase project and
+  still attempt to mutate the wrong household or silently attach records to a fallback member.
+- User impact: An operator mistake could write synthetic or sensitive fixture data into an unintended
+  family, and the medical seed script also performs family-scoped cleanup before inserting fixtures.
+- Security or privacy impact: The service-role key bypasses RLS, so URL-only targeting was insufficient
+  protection against cross-household mutation.
+- Root cause: Seed scope was encoded in source rather than confirmed at invocation time; missing
+  members fell back to stale UUIDs in older scripts.
+- Resolution: All six legacy seed scripts now require `requireSeedScope()`. The shared guard requires
+  `SEED_ENVIRONMENT` to be local/test/preview/staging, validates `SEED_FAMILY_ID` and
+  `SEED_CREATED_BY_USER_ID`, requires an exact `SEED_CONFIRM_FAMILY_ID` match, and rejects production.
+  Member lookups now fail closed instead of falling back to fixed IDs.
+- Tests performed: `node --check` for every `scripts/seed*.mjs`; focused Vitest suite passed with
+  2 files and 3 tests; typecheck and lint passed. Static scan found no former fixed family/user IDs.
+- Evidence: `tests/seed-credentials-safety.test.ts` requires the scope guard and rejects the legacy
+  identifiers; `tests/seed-scope-safety.test.ts` proves production and mismatched confirmations fail.
 - Verified by: Codex
 - Date completed: 2026-07-13

@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 298 files, 2,540 tests |
+| `npm.cmd test` | PASS: 299 files, 2,542 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 233 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -42,3 +42,16 @@ Audit date: 2026-07-13
 - Production migration application and post-migration live probes remain pending.
 - Visual regression, large-dataset performance, webhook replay, and third-party provider failure tests
   remain documented in `testing-plan.md` and the production ledger.
+## Audit Update - 2026-07-13
+
+- `node --check scripts/seed*.mjs`: passed for all six legacy seed scripts plus the shared client.
+- `npm.cmd test -- tests/seed-credentials-safety.test.ts tests/seed-scope-safety.test.ts`: 2 files,
+  3 tests passed.
+- `npm.cmd test`: 299 files and 2,542 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- Static scope scan: no legacy fixed family, creator, or member UUIDs remain in `scripts/seed*.mjs`.
+- `npm.cmd run db:audit:schema`: 8 required live tables available.
+- Live anonymous REST probes for `marketplace_circles`, `marketplace_circle_members`, and
+  `marketplace_listing_shares`: HTTP 200 for each. This is not a substitute for authenticated
+  cross-family RLS attack tests.
