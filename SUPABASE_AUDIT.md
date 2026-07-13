@@ -8,7 +8,8 @@
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
   `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
   `0183_marketplace_auctions.sql`, `0184_marketplace_auction_authorization.sql`, and
-  `0185_marketplace_auction_close_transaction.sql`.
+  `0185_marketplace_auction_close_transaction.sql`, `0186_marketplace_negotiations.sql`, and
+  `0187_harden_marketplace_negotiations.sql`.
 - SQL files: 315.
 - Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
@@ -58,7 +59,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
- 2. Apply the remaining migration `0182` and run `npm run db:audit:schema` and
+2. Apply the remaining migrations through `0187` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.

@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,614 unit tests, builds all 234 Next.js build
+tree compiles, passes lint and type checking, passes 2,630 unit tests, builds all 234 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -16,9 +16,9 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 - 348 `page.tsx` route files.
 - 100 API route handlers.
-- 193 migrations at audit start; additive repair migrations `0178` through `0182` added.
+- 193 migrations at audit start; additive repair migrations through `0187` are now present.
 - 315 SQL files under `supabase`.
-- 320 unit-test files and 2,614 passing tests.
+- 322 unit-test files and 2,630 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -46,6 +46,10 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   routes; oversized request bodies now fail before parsing or database/provider work.
 - Replaced fail-open scheduled-callback comparisons with a shared fail-closed secret guard across all
   cron routes and concierge placement; missing secrets can no longer authorize `Bearer undefined`.
+- Added `0187_harden_marketplace_negotiations.sql` with cross-family, amount, message, and below-ask
+  integrity guards that remain enforced for future RPC, seed, and service-role writes.
+- Made the marketplace negotiation seed fail closed when the anchored account is absent, including its
+  consolidated `SEED_ALL.sql` section, and added bounded note validation in the action layer.
 - Hardened the public unsubscribe endpoint with shared request limits, bounded token input, escaped
   HTML output, and production fail-closed secret handling.
 - Preserved active family membership checks and tightened listing-share deletion to the owning family
@@ -73,6 +77,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 - Existing documentation records earlier auth, webhook, tenant-isolation, and rate-limit repairs.
 - Marketplace circles had a P1 availability/authorization-verification defect; the additive repair
   is present but awaits migration application and RLS allow/deny testing.
+- Marketplace negotiations now reject same-family self-deals and malformed or above-ask rounds at the
+  database boundary; migration `0187` still requires live application and verification.
 - `npm audit --omit=dev --audit-level=high` reports two moderate PostCSS advisories through Next.js,
   with no available fix in the installed dependency graph.
 - Scheduled jobs now fail closed when `CRON_SECRET` is missing; internal welcome email delivery also
@@ -84,12 +90,12 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,614 tests / 320 files | `npm.cmd test` |
+| Unit tests | PASS, 2,630 tests / 322 files | `npm.cmd test` |
 | Production build | PASS, 234 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
 | Mobile overflow E2E | PASS at 320, 390, 768, and 1024 widths | Playwright |
-| Migration contract | PASS, 10 focused tests | targeted Vitest run |
+| Migration/seed contract | PASS, 20 focused tests | targeted Vitest run |
 | Schema probe | BLOCKED/FAIL | 10 live table/ledger probes pass; Stripe claim column from 0182 is missing |
 | Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
@@ -98,8 +104,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 ## Remaining Launch Blockers
 
-1. Apply migrations through `0182_stripe_webhook_claims.sql` in the intended environment and
-   rerun schema plus cross-family RLS allow/deny probes.
+1. Apply migrations through `0187_harden_marketplace_negotiations.sql` in the intended environment and
+   rerun schema plus cross-family RLS and negotiation allow/deny probes.
 2. Diagnose the live Supabase Auth Admin 500 in Supabase/GoTrue/Postgres logs and rerun the Auth audit.
 3. Resolve or formally accept the PostCSS advisory after reviewing the next compatible Next.js release.
 4. Run authenticated E2E and database RLS tests against an isolated local Supabase instance.

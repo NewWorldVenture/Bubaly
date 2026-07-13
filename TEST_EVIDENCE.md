@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 320 files, 2,614 tests |
+| `npm.cmd test` | PASS: 322 files, 2,630 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -118,6 +118,14 @@ Audit date: 2026-07-13
   streaming byte bounds before parsing.
 - All 16 cron routes plus concierge placement use a shared fail-closed secret guard; missing
   `CRON_SECRET` and `INTERNAL_SECRET` values cannot authorize a request.
+
+## Audit Update - 2026-07-13 (marketplace negotiation integrity)
+
+- `npm.cmd exec vitest run tests/marketplace-negotiation-security.test.ts tests/marketplace-negotiation.test.ts tests/seed-data-safety-contract.test.ts tests/master-seed-scope.test.ts`: 4 files, 20 tests passed.
+- `npm.cmd exec vitest run`: 322 files, 2,630 tests passed.
+- Negotiation migration `0187` adds database-enforced family separation, amount/message bounds, and
+  below-ask round validation. The standalone and consolidated negotiation seeds now fail closed when
+  `newworldventurellc@gmail.com` cannot resolve to an anchored family.
 
 ## Audit Update - 2026-07-13 (model/provider request budgets)
 

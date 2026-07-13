@@ -2738,3 +2738,25 @@ roadmap entries and user worktree changes are preserved.
 - Tests performed: Cron authorization contracts, full suite, typecheck, lint, build, and public E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0214 - Marketplace negotiation writes lacked complete database integrity bounds
+
+- Status: [x] Completed in code; migration pending in production.
+- Severity: P1
+- Category: Marketplace integrity / multi-tenant authorization / bounded input
+- Feature: Marketplace Best Offer negotiations
+- File or files: `supabase/migrations/0187_harden_marketplace_negotiations.sql`,
+  `supabase/seed_marketplace_negotiations.sql`, `supabase/SEED_ALL.sql`,
+  `app/(app)/marketplace/negotiations/actions.ts`, `tests/marketplace-negotiation-security.test.ts`
+- Description: The negotiation RPC boundary did not independently prevent same-family self-deals,
+  oversized notes, extreme amounts, or offer/counter/accept rounds at or above the listing ask. The
+  negotiation seed could also silently select the first family when the anchored account was absent.
+- User impact: Direct RPC or service-role callers could create invalid negotiation data or cause the
+  deterministic fixture pack to write into an unintended household.
+- Root cause: Application validation and caller-family checks were not backed by complete database
+  constraints and the consolidated seed retained a legacy family fallback.
+- Resolution: Added idempotent database constraints and a round trigger, bounded action/panel notes,
+  and made both negotiation seed paths require the explicitly anchored account.
+- Tests performed: Focused negotiation/seed contracts, full suite, typecheck, lint, build, and public E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

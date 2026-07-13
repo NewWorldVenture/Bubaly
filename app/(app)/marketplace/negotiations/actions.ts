@@ -14,6 +14,7 @@ type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string
 
 const OFFER_REASON: Record<string, string> = {
   bad_amount: 'Enter an amount above $0.',
+  message_too_long: 'Keep the note under 500 characters.',
   not_found: 'That listing no longer exists.',
   not_negotiable: 'This listing doesn’t take offers.',
   not_available: 'This listing is no longer available.',
@@ -25,6 +26,8 @@ const OFFER_REASON: Record<string, string> = {
 
 const RESPOND_REASON: Record<string, string> = {
   not_found: 'That negotiation no longer exists.',
+  message_too_long: 'Keep the note under 500 characters.',
+  at_or_above_ask: 'That offer is at or above the asking price. Buy it directly instead.',
   listing_missing: 'The listing no longer exists.',
   not_open: 'This negotiation has already closed.',
   not_authorized: 'You’re not part of this negotiation.',
@@ -51,13 +54,15 @@ export async function makeOfferAction(
   if (!input.listingId || !Number.isFinite(amount) || amount <= 0) {
     return { ok: false, error: 'Enter a valid offer amount.' };
   }
+  const message = input.message?.trim() || null;
+  if (message && message.length > 500) return { ok: false, error: 'Keep the note under 500 characters.' };
 
   const { data, error } = await supabase.rpc('marketplace_negotiation_offer', {
     p_listing: input.listingId,
     p_buyer_member: ctx.active.member.id,
     p_buyer_family: ctx.active.familyId,
     p_amount: amount,
-    p_message: input.message?.trim() || null,
+    p_message: message,
   });
   if (error) return { ok: false, error: error.message };
 
@@ -81,12 +86,14 @@ export async function respondToOfferAction(
   if (input.action === 'counter' && (!amount || amount <= 0)) {
     return { ok: false, error: 'Enter a valid counter amount.' };
   }
+  const message = input.message?.trim() || null;
+  if (message && message.length > 500) return { ok: false, error: 'Keep the note under 500 characters.' };
 
   const { data, error } = await supabase.rpc('marketplace_negotiation_respond', {
     p_negotiation: input.negotiationId,
     p_action: input.action,
     p_amount: amount,
-    p_message: input.message?.trim() || null,
+    p_message: message,
   });
   if (error) return { ok: false, error: error.message };
 

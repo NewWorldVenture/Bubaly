@@ -8,7 +8,8 @@
 -- the listing + write a confirmed order, exactly like the RPC does in prod.
 -- Buyers are a throwaway "Offer Makers" family so threads are valid cross-family.
 -- Idempotent: clears its own '[seed:negotiate]' rows first (rounds + orders
--- cascade / are tagged). Resolves family by email. (Needs migration 0186.)
+-- cascade / are tagged). Requires the anchored family account by email; it
+-- never guesses a household. (Needs migration 0186.)
 -- Where: Supabase → SQL Editor → paste → Run.
 -- ============================================================================
 do $$
@@ -43,8 +44,9 @@ begin
   join public.family_members fm on fm.family_id = f.id
   join auth.users u on u.id = fm.user_id
   where lower(u.email) = lower(v_email) limit 1;
-  if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
-  if v_family is null then raise exception 'No families found.'; end if;
+  if v_family is null then
+    raise exception 'Marketplace negotiation seed requires the anchored account %.', v_email;
+  end if;
 
   select fm.id, fm.user_id into v_owner, v_user
   from public.family_members fm where fm.family_id = v_family order by fm.created_at limit 1;

@@ -133,7 +133,7 @@ function OfferOpener({ listingId, askCents, onDone, onError }: {
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />} Send
         </button>
       </div>
-      <input value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Add a note (optional)"
+      <input value={msg} onChange={(e) => setMsg(e.target.value)} maxLength={500} placeholder="Add a note (optional)"
         className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-xs outline-none focus:border-brand" />
       <p className="text-[11px] text-muted">Offers below the {money(askCents)} asking price. The seller can accept or counter.</p>
     </div>

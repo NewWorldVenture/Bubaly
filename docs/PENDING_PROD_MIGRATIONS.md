@@ -84,6 +84,7 @@ After applying, hard-refresh the app: Marketplace, `/dashboard/voice`,
 
 | 0184 | `0184_marketplace_auction_authorization.sql` | Authenticated bid identity checks, removal of direct bid inserts, and atomic `marketplace_buy_now()` RPC | **Security and consistency repair for 0183.** Requires the bid member to belong to the authenticated family, keeps bid writes on the guarded RPC, and performs the Buy-It-Now listing claim plus order creation in one locked transaction. Apply with `0183` and the auction code. Additive/idempotent. |
 | 0185 | `0185_marketplace_auction_close_transaction.sql` | Service-role-only `marketplace_close_auction()` RPC | **Consistency repair for expired auctions.** Locks and settles the listing, winner order, and bid statuses in one transaction so an order failure rolls the settlement back for retry. Apply with `0183`, `0184`, and the auction cron. Additive/idempotent. |
+| 0187 | `0187_harden_marketplace_negotiations.sql` | Negotiation family separation, amount/message bounds, and below-ask round trigger | **Security and integrity hardening for 0186.** Prevents same-family self-deals, keeps negotiation values within a bounded range, rejects oversized notes, and ensures offer/counter/accept rounds stay below the listing ask. Apply after `0186` and the negotiation deploy. Additive/idempotent. |
 
 If prod is further behind than 0118, `supabase db push` will also pick up any
 earlier un-applied migrations (0104, 0111, 0113, 0117, …) — all additive, all
@@ -97,7 +98,7 @@ Several version prefixes are **duplicated** by parallel work streams:
 (`documents_favorite`, `finance_rls_repair`, `user_preferences_rls_repair`), and
 `0110` (`family_profile`, `transactions_member`). Supabase orders by full
 filename so this still applies deterministically, but a future migration should
-**not** reuse a taken prefix. Next free number: **0187**.
+**not** reuse a taken prefix. Next free number: **0188**.
 
 ## Environment variables (set alongside the migrations)
 
