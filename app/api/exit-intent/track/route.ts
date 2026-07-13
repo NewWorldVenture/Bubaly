@@ -34,6 +34,9 @@ export async function POST(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 422 });
 
   const { error } = await supabase.rpc('bump_exit_intent', { p_id: id, p_metric: metric });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('Exit-intent metric recording failed:', error);
+    return NextResponse.json({ error: 'Could not record the offer event.' }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }

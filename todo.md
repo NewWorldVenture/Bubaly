@@ -3002,3 +3002,19 @@ roadmap entries and user worktree changes are preserved.
 - Live status: Not applied by this agent; rerun `npm run db:audit:schema` after deployment.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0225 - Public metric routes exposed database error details
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P2
+- Category: Public API error disclosure
+- Feature: A/B, landing-page, and exit-intent metric ingestion
+- File or files: `app/api/ab/track/route.ts`, `app/api/lp/track/route.ts`,
+  `app/api/exit-intent/track/route.ts`, `tests/public-error-contract.test.ts`
+- Description: Anonymous metric endpoints returned raw Supabase error messages on write failures.
+- Resolution: Client responses now use stable generic messages while the server logs the underlying error
+  for diagnosis; successful and duplicate metric behavior is unchanged.
+- Tests performed: Public error contract, full Vitest suite, typecheck, lint, production build, and public
+  Playwright/axe E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

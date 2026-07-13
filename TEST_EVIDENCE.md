@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 329 files, 2,656 tests |
+| `npm.cmd exec vitest run` | PASS: 330 files, 2,657 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -120,6 +120,17 @@ Audit date: 2026-07-13
 - `npm.cmd run db:audit:auth`: public auth health passed; Supabase Auth Admin user listing still returns HTTP 500.
 - Migration `0189_reconcile_stripe_webhook_claims.sql` re-applies both claim columns and the processing
   index idempotently; the live schema audit now verifies `processing_started_at` and `claim_token`.
+
+## Audit Update - 2026-07-13 (public metric error boundaries)
+
+- `npm.cmd exec vitest run tests/public-error-contract.test.ts tests/production-migration-contract.test.ts`:
+  2 files, 12 tests passed.
+- `npm.cmd exec vitest run`: 330 files and 2,657 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 234 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- Public metric endpoints now return stable generic failure messages while retaining server-side diagnostics.
 
 ## Audit Update - 2026-07-13 (atomic expired auction settlement)
 

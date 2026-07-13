@@ -40,7 +40,10 @@ export async function POST(req: NextRequest) {
   if (!slug) return NextResponse.json({ error: 'slug is required' }, { status: 422 });
 
   const { error } = await supabase.rpc('bump_landing_metric', { p_slug: slug, p_metric: metric });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('Landing-page metric recording failed:', error);
+    return NextResponse.json({ error: 'Could not record the landing-page event.' }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

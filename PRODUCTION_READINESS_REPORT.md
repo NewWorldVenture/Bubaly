@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,656 unit tests, builds all 234 Next.js build
+tree compiles, passes lint and type checking, passes 2,657 unit tests, builds all 234 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -18,7 +18,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 - 100 API route handlers.
 - 193 migrations at audit start; additive repair migrations through `0189` are now present.
 - 315 SQL files under `supabase`.
-- 329 unit-test files and 2,656 passing tests.
+- 330 unit-test files and 2,657 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -70,6 +70,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   client execution from two legacy SECURITY DEFINER trigger functions.
 - Added migration `0189_reconcile_stripe_webhook_claims.sql` to restore both Stripe claim columns in
   environments where migration `0182` was recorded but its additive ALTER did not complete.
+- Replaced raw Supabase error responses in public A/B, landing-page, and exit-intent metric routes with
+  generic client messages and server-side diagnostics.
 - Hardened the public unsubscribe endpoint with shared request limits, bounded token input, escaped
   HTML output, and production fail-closed secret handling.
 - Preserved active family membership checks and tightened listing-share deletion to the owning family
@@ -110,7 +112,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,656 tests / 329 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,657 tests / 330 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 234 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
@@ -260,6 +262,18 @@ remain unchanged.
 - `npm.cmd run db:audit:auth`: public auth health passed; Supabase Auth Admin user listing still returns HTTP 500.
 - Migration `0189_reconcile_stripe_webhook_claims.sql` re-applies both claim columns and the processing
   index idempotently; the live schema audit now verifies `processing_started_at` and `claim_token`.
+
+## Audit Update - 2026-07-13 (public metric error boundaries)
+
+- `npm.cmd exec vitest run tests/public-error-contract.test.ts tests/production-migration-contract.test.ts`:
+  2 files, 12 tests passed.
+- `npm.cmd exec vitest run`: 330 files and 2,657 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 234 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- Public A/B, landing-page, and exit-intent metric failures now return stable generic messages instead of
+  raw Supabase error details; server logs retain the underlying diagnostic.
 
 ## Audit Update - 2026-07-13 (raw webhook and upload body bounds)
 

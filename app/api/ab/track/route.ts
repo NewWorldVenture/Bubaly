@@ -58,7 +58,10 @@ export async function POST(req: NextRequest) {
 
   // Insert; ignore unique-violation dupes (one exposure/conversion per visitor).
   const { error } = await supabase.from('ab_events').insert({ experiment_key: experiment, variant_key: variant, kind, visitor_id: visitorId });
-  if (error && error.code !== '23505') return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error && error.code !== '23505') {
+    console.error('A/B event recording failed:', error);
+    return NextResponse.json({ error: 'Could not record the experiment event.' }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true, recorded: true });
 }
