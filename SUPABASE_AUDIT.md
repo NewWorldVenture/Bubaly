@@ -81,3 +81,6 @@ Guardian screening callback updates now enforce sequential bounded turns before 
 
 The public A/B event path now validates `variant_key` against `ab_experiments.variants` before writing
 to `ab_events` with the service-role client.
+
+The public consent path now bounds requests and accepts only known boolean categories before writing
+append-only rows to `mkt_consent_events`.

@@ -1843,7 +1843,7 @@ roadmap entries and user worktree changes are preserved.
 
 - 348 `page.tsx` route files.
 - 193 Supabase migration files and 309 SQL files under `supabase`.
-- 301 test files after the audit's regression contracts.
+- 302 test files after the audit's regression contracts.
 - 2,054 repository files returned by the initial source inventory (excluding node_modules, dist, and build).
 - Detailed route, database, feature, architecture, security, testing, and journey inventories already
   exist in the root documentation and will be reconciled with this session's command evidence.
@@ -1896,7 +1896,7 @@ roadmap entries and user worktree changes are preserved.
 
 - [x] Typecheck: `npm.cmd run typecheck` passed.
 - [x] Lint: `npm.cmd run lint` passed with only the known Next.js `next lint` deprecation notice.
-- [x] Unit tests: `npm.cmd test` passed, 301 files and 2,545 tests.
+- [x] Unit tests: `npm.cmd test` passed, 302 files and 2,546 tests.
 - [x] Credential-safety regression: all seed scripts load access only from environment; no literal
   `sb_secret_*` credential remains in runtime/source SQL.
 - [x] Production build: `npm.cmd run build` passed; 233 static pages generated.
@@ -2095,5 +2095,31 @@ roadmap entries and user worktree changes are preserved.
   and rejects oversized experiment, variant, or visitor identifiers before inserting events.
 - Tests performed: `npm.cmd test -- tests/marketing-ab.test.ts` passed with 9 tests; typecheck and lint
   passed. The pure helper covers valid, fabricated, malformed, and missing variant definitions.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0188 - Public consent endpoint lacked abuse bounds
+
+- Status: [x] Completed in code and covered by regression test.
+- Severity: P2
+- Category: Public API abuse resistance / data retention
+- Feature: Visitor consent management
+- Route: `/api/mkt/consent`
+- File or files: `app/api/mkt/consent/route.ts`, `lib/marketing/consent.ts`,
+  `tests/marketing-consent-safety.test.ts`
+- Database objects: `mkt_consent_events`
+- Description: The unauthenticated consent POST appended immutable rows without a rate limit and
+  iterated an unbounded caller-supplied object. The GET path also had no request limit.
+- User impact: Automated callers could generate unnecessary consent rows and database work without
+  affecting a legitimate visitor's consent state.
+- Security or privacy impact: The service-role write path lacked the same public-ingestion controls
+  used by other analytics endpoints.
+- Root cause: Consent was treated as a low-volume browser-only path and did not use the shared limiter
+  or a strict payload contract.
+- Resolution: Added IP-based fixed-window limits (30 POST and 60 GET requests per minute), `Retry-After`
+  responses, and strict validation for a finite map of known boolean categories only.
+- Tests performed: Focused consent/A-B tests passed with 10 tests; typecheck and lint passed.
+- Evidence: `tests/marketing-consent-safety.test.ts` rejects unknown categories, non-boolean values,
+  oversized maps, and null payloads.
 - Verified by: Codex
 - Date completed: 2026-07-13

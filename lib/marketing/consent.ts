@@ -19,6 +19,15 @@ export type ConsentState = Record<ConsentCategory, boolean>;
 
 export const CONSENT_POLICY_VERSION = 'v1';
 
+/** Validate the small, finite consent map accepted by the public endpoint. */
+export function isValidConsentMap(value: unknown): value is Record<string, boolean> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entries = Object.entries(value);
+  return entries.length > 0
+    && entries.length <= CONSENT_CATEGORIES.length
+    && entries.every(([category, decision]) => toConsentCategory(category) !== null && typeof decision === 'boolean');
+}
+
 // Categories that a browser GPC / Do-Not-Sell signal switches off by default
 // (until the visitor makes an explicit choice for that category).
 const GPC_GOVERNED: ConsentCategory[] = ['analytics', 'personalization', 'marketing_email', 'marketing_sms'];

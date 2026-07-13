@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import {
   recordConsentEvents, getConsentState, toConsentCategory,
-  type ConsentCategory, type ConsentDecision,
+  isValidConsentMap, type ConsentCategory, type ConsentDecision,
 } from '@/lib/marketing/consent';
+import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -20,6 +21,12 @@ type ConsentBody = {
 };
 
 export async function POST(req: NextRequest) {
+  const limited = rateLimit(`consent:post:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many consent updates. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
+
   let body: ConsentBody;
   try { body = (await req.json()) as ConsentBody; }
   catch { return NextResponse.json({ error: 'Bad payload' }, { status: 400 }); }
@@ -27,8 +34,12 @@ export async function POST(req: NextRequest) {
   const anonymousId = typeof body.anonymousId === 'string' ? body.anonymousId.trim().slice(0, 200) : '';
   if (!anonymousId) return NextResponse.json({ error: 'anonymousId required' }, { status: 400 });
 
+  if (!isValidConsentMap(body.consents)) {
+    return NextResponse.json({ error: 'Invalid consent map' }, { status: 400 });
+  }
+
   const decisions: Partial<Record<ConsentCategory, ConsentDecision>> = {};
-  for (const [rawKey, rawVal] of Object.entries(body.consents ?? {})) {
+  for (const [rawKey, rawVal] of Object.entries(body.consents)) {
     const category = toConsentCategory(rawKey);
     if (category) decisions[category] = rawVal ? 'granted' : 'denied';
   }
@@ -49,6 +60,12 @@ export async function POST(req: NextRequest) {
 
 // Read the current consent state (for hydrating the banner/preference center).
 export async function GET(req: NextRequest) {
+  const limited = rateLimit(`consent:get:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
+  if (!limited.ok) return NextResponse.json(
+    { error: 'Too many consent requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
+
   const anonymousId = new URL(req.url).searchParams.get('anonymousId')?.trim().slice(0, 200) ?? '';
   if (!anonymousId) return NextResponse.json({ error: 'anonymousId required' }, { status: 400 });
   const gpc = new URL(req.url).searchParams.get('gpc') === '1';
