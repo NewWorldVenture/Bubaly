@@ -1253,10 +1253,11 @@ Has `allowance_rules`, `lib/wallet/allowance.ts`, `lib/wallet/coach.ts`; surface
   cohort, both finalize actions record progress + feed **value engagement / completeness** to the CRM
   contact + `onboarding_completed` automation; new **`/dashboard/setup`** re-onboarding surface (live
   score + what's-left + questionnaire against the EXISTING family — never creates a second one) +
-  **`resetOnboardingAction`**. Seed `seed_onboarding_progress.sql` (500 synthetic accounts, realistic
-  55/35/10 completed/needs-setup/reset spread; in `SEED_ALL.sql` → 46 seeds). Verified: tsc · **vitest
-  (20: 9 completeness + 11 funnel)**; migration + seed PG16-validated (idempotent ×2; cascade, CHECK,
-  unique, trigger, RLS confirmed). ⚠️ apply `0159` to prod.
+  **`resetOnboardingAction`**. Lifecycle rows now come only from real Auth users;
+  the former synthetic-account seed was retired because direct `auth.users`
+  inserts violated GoTrue invariants. Verified: tsc · **vitest (20: 9 completeness
+  + 11 funnel)**; migration PG16-validated (idempotent ×2; cascade, CHECK, unique,
+  trigger, RLS confirmed). ⚠️ apply `0159` to prod.
 
 ### 5. Family Memory — "Build persistent family knowledge graph"  ☑ DONE
 `/dashboard/family-memory` + `/dashboard/family-knowledge-graph`, `lib/memories/*`.
@@ -1450,7 +1451,7 @@ idempotent, stable across re-runs):
 | Decision Engine | `family_decisions`, `decision_options` | `seed_decisions.sql` |
 | Prep Plans | `prep_plans`, `prep_plan_steps` | `seed_prep_plans.sql` |
 | Onboarding funnel | `onboarding_events` | `seed_onboarding_events.sql` |
-| Onboarding lifecycle + marketing signal | `onboarding_progress` (500 synthetic accounts) | `seed_onboarding_progress.sql` |
+| Onboarding lifecycle + marketing signal | `onboarding_progress` (real Auth lifecycle rows only) | Production telemetry; no synthetic Auth seed |
 | Intelligence Network aggregates | `network_aggregates` (+opts family in) | `seed_network_aggregates.sql` |
 | Calendar, To-Dos, Groceries, Notes, Photos, Journal, Habits | `calendar_events`, `todo_items`, `grocery_items`, `notes`, `family_photos`, `journal_entries`, `habits` | `seed_core_content.sql` |
 | #1 AI Orchestrator | `family_events`, `family_polls` | `seed_pillar1_orchestrator.sql` |

@@ -13,7 +13,7 @@
 -- ============================================================================
 -- FamilyOS :: SEED_ALL — one paste populates EVERY surface with 500-row test data.
 -- ============================================================================
--- Runs all 62 paste-ready, idempotent seeds in dependency order (core content
+-- Runs all 61 paste-ready, idempotent seeds in dependency order (core content
 -- first — it creates the to-do/grocery lists later seeds reuse). Each resolves
 -- the family by email (newworldventurellc@gmail.com, falls back to the oldest
 -- family) and clears its own sentinel rows first, so re-running never dupes.
@@ -3850,6 +3850,11 @@ end $$;
 --   select action_kind, count(*) from concierge_plan_actions group by action_kind;
 
 -- ==================== seed_onboarding_progress.sql ====================
+/* RETIRED: this historical block wrote incomplete records directly to
+   auth.users. Migration 0177 removes that synthetic cohort, and the executable
+   master seed intentionally skips this block. Auth users must be created only
+   through Supabase Auth APIs. See tests/seed-auth-safety-contract.test.ts.
+
 -- ============================================================================
 -- FamilyOS · SEED — Onboarding progress (500 accounts).
 -- Fills onboarding_progress (migration 0159) at volume so the onboarding
@@ -3974,6 +3979,7 @@ end $$;
 --   select status, source, count(*) from onboarding_progress op join auth.users u on u.id=op.user_id where u.email like '%@seed-onb.bubaly.test' group by 1,2 order by 1,2;
 --   select count(*) filter (where value_engaged) as engaged, round(avg(completeness)) as avg_score from onboarding_progress op join auth.users u on u.id=op.user_id where u.email like '%@seed-onb.bubaly.test';
 
+*/
 -- ==================== seed_feature_gaps_3.sql ====================
 -- ============================================================================
 -- FamilyOS · SEED — feature-gap coverage (round 3): user-facing, left-nav tables

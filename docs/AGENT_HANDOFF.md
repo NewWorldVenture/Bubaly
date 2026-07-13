@@ -6,6 +6,16 @@
 > shared default/structure/behavior or `SidebarBody`/`FreeTierSidebar`/nav
 > constants globally is not — confirm with the user first.
 
+> ## 2026-07-13 AUTH SEED REPAIR — READ FIRST
+>
+> Production Auth health is 200, but the unfiltered Admin Users endpoint returns
+> HTTP 500 because the retired `seed_onboarding_progress.sql` inserted 500 partial
+> GoTrue records directly into `auth.users`. The unsafe seed and the older
+> destructive `seed_full.sql` are removed; their copied master-seed block is
+> inert; `tests/seed-auth-safety-contract.test.ts` prevents any seed from mutating
+> `auth.users` again. Apply `0177_remove_synthetic_auth_users.sql`, then run
+> `npm run db:audit:auth`. `SEED_ALL.sql` now contains 61 executable sections.
+
 > ## ⏱️ SESSION END STATE — 2026-07-12 (Community Circles #21, Fable lane) — READ FIRST
 >
 > Shipped **backlog #21 — Community Marketplace v1 ("Circles")**, the first of the two big

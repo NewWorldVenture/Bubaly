@@ -16,12 +16,14 @@
 
 ## Current production gates
 
-1. Apply `0174_workload_snapshots.sql`, `0175_independence_milestones.sql`, and
+1. Apply `0177_remove_synthetic_auth_users.sql` first. A retired seed directly
+   inserted 500 incomplete GoTrue records under `@seed-onb.bubaly.test`, causing
+   `/auth/v1/admin/users` to return HTTP 500. The migration removes only the two
+   reserved synthetic patterns, aborts above 1,000 matches, and is idempotent.
+   Run `npm run db:audit:auth` afterward to prove both Auth endpoints are healthy.
+2. Apply `0174_workload_snapshots.sql`, `0175_independence_milestones.sql`, and
    `0176_marketplace_circles.sql`. `npm run db:audit:schema` is the authoritative
    capability check.
-2. Restore the Supabase Admin Users endpoint. On 2026-07-13 the public Auth health
-   endpoint returned 200, while `/auth/v1/admin/users` returned HTTP 500 with
-   `Database error finding users`. Run `npm run db:audit:auth` after remediation.
 3. Verify production environment keys from `.env.example`, especially
    `CRON_SECRET`, sync OAuth credentials, Stripe webhook secrets, Twilio keys,
    `GUARDIAN_INTERNAL_SECRET`, VAPID, monitoring, and email-domain settings.
