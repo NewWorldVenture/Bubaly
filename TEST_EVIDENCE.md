@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 327 files, 2,648 tests |
+| `npm.cmd exec vitest run` | PASS: 328 files, 2,652 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -81,6 +81,16 @@ Audit date: 2026-07-13
 - `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
 - `npm.cmd run build`: passed; 234 pages generated.
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+
+## Audit Update - 2026-07-13 (external provider timeouts)
+
+- `npm.cmd exec vitest run tests/external-fetch-boundaries.test.ts tests/response-body-boundaries.test.ts tests/assistant-tool-loop.test.ts tests/ai-error.test.ts tests/ai-voice.test.ts tests/sync-adapter.test.ts tests/weather.test.ts tests/weekend-feed-security.test.ts tests/recipe-normalize.test.ts tests/trip-departure.test.ts`:
+  10 files, 83 tests passed.
+- `npm.cmd exec vitest run`: 328 files and 2,652 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- Fixed-provider server calls now have explicit finite deadlines; browser weather and routing calls use
+  cancellable 15-second deadlines. The public-calendar/social URL boundary remains separately validated.
 - The response contract covers exact text and JSON parsing, invalid JSON, oversized stream cancellation,
   and static coverage for every audited provider JSON path.
 

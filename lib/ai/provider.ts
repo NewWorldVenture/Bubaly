@@ -1,6 +1,7 @@
 // lib/ai/provider.ts — provider-agnostic LLM interface.
 // Swap Anthropic / OpenAI / Gemini / local by implementing AIProvider.
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
+import { fetchExternal } from '@/lib/server/external-fetch';
 
 export type AITool = {
   name: string;
@@ -159,11 +160,11 @@ export class OpenAIProvider implements AIProvider {
     if (tools.length) {
       body.tools = tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }));
     }
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await fetchExternal('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify(body),
-    });
+    }, 60_000);
     if (!res.ok) throw await openAIError(res);
     const data = await readBoundedResponseJson<OpenAIChatResponse>(res, 2 * 1024 * 1024);
     const msg = data.choices?.[0]?.message ?? {};
@@ -193,7 +194,7 @@ export class OpenAIProvider implements AIProvider {
 
     for (let round = 0; round < maxRounds; round++) {
       const last = round === maxRounds - 1;
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      const res = await fetchExternal('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
         body: JSON.stringify({
@@ -203,7 +204,7 @@ export class OpenAIProvider implements AIProvider {
           // Drop tools on the final round so the model must answer in prose.
           ...(toolDefs && !last ? { tools: toolDefs, tool_choice: 'auto' } : {}),
         }),
-      });
+      }, 60_000);
       if (!res.ok) throw await openAIError(res);
       const data = await readBoundedResponseJson<OpenAIChatResponse>(res, 2 * 1024 * 1024);
       const msg = data.choices?.[0]?.message ?? {};
@@ -225,11 +226,11 @@ export class OpenAIProvider implements AIProvider {
       }
     }
     // Exhausted rounds — ask once more for a plain summary.
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await fetchExternal('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify({ model: this.model, max_tokens: maxTokens, messages: convo }),
-    });
+    }, 60_000);
     const data = res.ok ? await readBoundedResponseJson<OpenAIChatResponse>(res, 2 * 1024 * 1024) : null;
     return { text: data?.choices?.[0]?.message?.content ?? 'Done.', actions };
   }
@@ -247,14 +248,14 @@ export class OpenAIProvider implements AIProvider {
 
     for (let round = 0; round < maxRounds; round++) {
       const last = round === maxRounds - 1;
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      const res = await fetchExternal('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
         body: JSON.stringify({
           model: this.model, max_tokens: maxTokens, messages: convo, stream: true,
           ...(toolDefs && !last ? { tools: toolDefs, tool_choice: 'auto' } : {}),
         }),
-      });
+      }, 60_000);
       if (!res.ok) throw await openAIError(res);
       if (!res.body) throw new Error('OpenAI error: no stream body');
 

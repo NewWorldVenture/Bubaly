@@ -1,6 +1,7 @@
 // Google OAuth helpers for Calendar integration
 
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
+import { fetchExternal } from '@/lib/server/external-fetch';
 
 export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -20,7 +21,7 @@ export function getGoogleOAuthUrl(state: string): string {
 }
 
 export async function exchangeGoogleCode(code: string): Promise<GoogleToken> {
-  const res = await fetch(GOOGLE_TOKEN_URL, {
+  const res = await fetchExternal(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -30,7 +31,7 @@ export async function exchangeGoogleCode(code: string): Promise<GoogleToken> {
       redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/google/calendar/callback`,
       grant_type: 'authorization_code',
     }),
-  });
+  }, 15_000);
   if (!res.ok) throw new Error(`Google token exchange failed: ${res.status}`);
   const data = await readBoundedResponseJson<{ access_token: string; refresh_token?: string; expires_in: number }>(res, 64 * 1024);
   return {
@@ -41,7 +42,7 @@ export async function exchangeGoogleCode(code: string): Promise<GoogleToken> {
 }
 
 export async function refreshGoogleToken(refreshToken: string): Promise<GoogleToken> {
-  const res = await fetch(GOOGLE_TOKEN_URL, {
+  const res = await fetchExternal(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -50,7 +51,7 @@ export async function refreshGoogleToken(refreshToken: string): Promise<GoogleTo
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
     }),
-  });
+  }, 15_000);
   if (!res.ok) throw new Error(`Google token refresh failed: ${res.status}`);
   const data = await readBoundedResponseJson<{ access_token: string; expires_in: number }>(res, 64 * 1024);
   return {
@@ -78,9 +79,9 @@ export async function fetchGoogleCalendarEvents(accessToken: string, timeMin: st
     orderBy: 'startTime',
     maxResults: '250',
   });
-  const res = await fetch(`${GOOGLE_CALENDAR_URL}/calendars/primary/events?${params}`, {
+  const res = await fetchExternal(`${GOOGLE_CALENDAR_URL}/calendars/primary/events?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  }, 15_000);
   if (!res.ok) throw new Error(`Google Calendar API error: ${res.status}`);
   const data = await readBoundedResponseJson<{ items: GoogleCalendarEvent[] }>(res, 2 * 1024 * 1024);
   return data.items ?? [];

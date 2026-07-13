@@ -19,6 +19,7 @@ import type {
 import { SyncApiError } from '@/lib/sync/adapter';
 import { eventContentHash, reminderContentHash } from '@/lib/sync/hash';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
+import { fetchExternal } from '@/lib/server/external-fetch';
 
 const TENANT = process.env.MICROSOFT_SYNC_TENANT || 'common';
 const AUTHORITY = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0`;
@@ -57,7 +58,7 @@ function authUrl(redirectUri: string, state: string): string {
 }
 
 async function tokenRequest(body: Record<string, string>): Promise<OAuthTokens> {
-  const res = await fetch(`${AUTHORITY}/token`, {
+  const res = await fetchExternal(`${AUTHORITY}/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -66,7 +67,7 @@ async function tokenRequest(body: Record<string, string>): Promise<OAuthTokens> 
       scope: microsoftScopes(),
       ...body,
     }),
-  });
+  }, 15_000);
   const data = await readBoundedResponseJson<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string; token_type?: string; error?: string }>(res, 64 * 1024);
   if (!res.ok) throw new SyncApiError(res.status, `Microsoft token request failed: ${data.error ?? res.status}`);
   if (!data.access_token) throw new SyncApiError(res.status, 'Microsoft token response missing access token');
@@ -93,14 +94,14 @@ async function revokeToken(): Promise<void> {
 }
 
 async function gfetch<T>(url: string, accessToken: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url.startsWith('http') ? url : `${GRAPH}${url}`, {
+  const res = await fetchExternal(url.startsWith('http') ? url : `${GRAPH}${url}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
       ...(init?.headers ?? {}),
     },
-  });
+  }, 15_000);
   if (res.status === 204) return undefined as T;
   const bounded = await readBoundedResponseText(res, 2 * 1024 * 1024);
   if (!bounded.ok) throw new SyncApiError(res.status, `Microsoft Graph ${res.status} response too large`, '[provider response exceeded 2 MiB]');

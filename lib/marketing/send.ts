@@ -5,6 +5,7 @@ import { FROM_EMAIL, emailEnabled, APP_URL } from '@/lib/email';
 import { getMarketingCustomers, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
 import { unsubUrl } from '@/lib/marketing/unsubscribe';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
+import { fetchExternal } from '@/lib/server/external-fetch';
 
 type DB = SupabaseClient<Database>;
 
@@ -83,11 +84,11 @@ export async function sendEmailCampaign(supabase: DB, campaignId: string, appUrl
       tags: [{ name: 'campaign', value: campaignId }],
     }));
 
-    const res = await fetch('https://api.resend.com/emails/batch', {
+    const res = await fetchExternal('https://api.resend.com/emails/batch', {
       method: 'POST',
       headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' },
       body: JSON.stringify(payload),
-    });
+    }, 15_000);
 
     if (!res.ok) {
       const bounded = await readBoundedResponseText(res, 64 * 1024);

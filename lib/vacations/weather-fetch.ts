@@ -2,12 +2,13 @@
 // Geocodes a place name then pulls a daily forecast. Used by the weather API route.
 
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
+import { fetchExternal } from '@/lib/server/external-fetch';
 
 export type GeoResult = { name: string; latitude: number; longitude: number; country?: string };
 
 export async function geocode(place: string): Promise<GeoResult | null> {
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(place)}&count=1&language=en&format=json`;
-  const res = await fetch(url, { headers: { accept: 'application/json' } });
+  const res = await fetchExternal(url, { headers: { accept: 'application/json' } });
   if (!res.ok) return null;
   const data = await readBoundedResponseJson<{ results?: Array<{ name: string; latitude: number; longitude: number; country?: string }> }>(res, 512 * 1024);
   const r = data?.results?.[0];
@@ -38,7 +39,7 @@ export async function fetchForecast(lat: number, lon: number, start?: string | n
     const within = new Date(start).getTime() <= Date.now() + 1000 * 60 * 60 * 24 * 15;
     if (within) { params.set('start_date', start); params.set('end_date', end); }
   }
-  const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { headers: { accept: 'application/json' } });
+  const res = await fetchExternal(`https://api.open-meteo.com/v1/forecast?${params}`, { headers: { accept: 'application/json' } });
   if (!res.ok) throw new Error(`Open-Meteo error ${res.status}`);
   const data = await readBoundedResponseJson<{ daily?: {
     time?: string[];

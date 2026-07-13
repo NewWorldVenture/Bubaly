@@ -5,6 +5,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { getAIConfig } from '@/lib/ai/settings';
 import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
+import { fetchExternal } from '@/lib/server/external-fetch';
 
 export const runtime = 'nodejs';
 
@@ -113,7 +114,7 @@ Rules:
       ? { type: 'file' as const, file: { filename: 'flyer.pdf', file_data: `data:application/pdf;base64,${data}` } }
       : { type: 'image_url' as const, image_url: { url: `data:${mediaType};base64,${data}` } };
 
-    const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+    const aiRes = await fetchExternal('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
@@ -121,7 +122,7 @@ Rules:
         max_tokens: 1500,
         messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, filePart] }],
       }),
-    });
+    }, 60_000);
     if (!aiRes.ok) {
       const bounded = await readBoundedResponseText(aiRes, 64 * 1024);
       console.error('Flyer OpenAI error', aiRes.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');

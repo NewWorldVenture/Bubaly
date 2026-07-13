@@ -6,6 +6,7 @@
 // needs a secret — mirroring lib/weather/open-meteo.ts.
 
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
+import { fetchWithTimeout } from '@/lib/client-fetch';
 
 export type LatLng = { lat: number; lng: number };
 
@@ -38,7 +39,7 @@ export async function driveEstimate(from: LatLng, to: LatLng): Promise<DriveEsti
   try {
     const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
     const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=false&alternatives=false`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     if (!res.ok) return null;
     const json = await readBoundedResponseJson<unknown>(res, 512 * 1024);
     const seconds = parseOsrmDuration(json);

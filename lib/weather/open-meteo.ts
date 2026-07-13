@@ -4,6 +4,7 @@
 // policy and never need a secret.
 
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
+import { fetchWithTimeout } from '@/lib/client-fetch';
 
 export type GeoResult = {
   name: string;
@@ -77,7 +78,7 @@ export async function geocodeCity(query: string): Promise<GeoResult[]> {
   const q = query.trim();
   if (!q) return [];
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`;
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   if (!res.ok) return [];
   const json = await readBoundedResponseJson<{ results?: Array<Record<string, unknown>> }>(res, 1 * 1024 * 1024);
   return (json.results ?? []).map((r) => ({
@@ -93,7 +94,7 @@ export async function geocodeCity(query: string): Promise<GeoResult[]> {
 export async function reverseGeocode(lat: number, lon: number): Promise<GeoResult | null> {
   try {
     const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     if (!res.ok) return null;
     const j = await readBoundedResponseJson<Record<string, unknown>>(res, 512 * 1024);
     const name = (j.city as string) || (j.locality as string) || (j.principalSubdivision as string) || 'My Location';
@@ -122,7 +123,7 @@ export async function fetchForecast(lat: number, lon: number, days = 14): Promis
     timezone: 'auto',
     forecast_days: String(Math.min(16, Math.max(1, days))),
   });
-  const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
+  const res = await fetchWithTimeout(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
   if (!res.ok) return null;
   const j = await readBoundedResponseJson<{
     current: Record<string, number>;

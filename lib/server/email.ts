@@ -5,6 +5,7 @@
 // never break — production just adds the key.
 import { FROM_EMAIL, emailEnabled } from '@/lib/email';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
+import { fetchExternal } from '@/lib/server/external-fetch';
 
 type SendArgs = { to: string; subject: string; html: string; replyTo?: string };
 
@@ -13,11 +14,11 @@ export async function sendEmail({ to, subject, html, replyTo }: SendArgs): Promi
     console.info(`[email skipped — no RESEND_API_KEY] to=${to} subject="${subject}"`);
     return { ok: true, skipped: true };
   }
-  const res = await fetch('https://api.resend.com/emails', {
+  const res = await fetchExternal('https://api.resend.com/emails', {
     method: 'POST',
     headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' },
     body: JSON.stringify({ from: FROM_EMAIL, to, subject, html, reply_to: replyTo }),
-  });
+  }, 15_000);
   if (!res.ok) {
     const bounded = await readBoundedResponseText(res, 64 * 1024);
     console.error('[email failed]', res.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');

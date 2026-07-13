@@ -2925,3 +2925,32 @@ roadmap entries and user worktree changes are preserved.
   cancellation, and static absence of direct audited `res.json()` reads.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0222 - Fixed-provider fetches could hang without deadlines
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: External dependency reliability / request cancellation
+- Feature: AI, OAuth, sync, messaging, push, weather, routing, flyer, transcription, speech, and GIF integrations
+- File or files: `lib/server/external-fetch.ts`, `lib/client-fetch.ts`, `lib/ai/provider.ts`, `lib/google.ts`,
+  `lib/guardian/ai-screen.ts`, `lib/guardian/scam-ai.ts`, `lib/guardian/twilio.ts`,
+  `lib/marketing/send.ts`, `lib/server/email.ts`, `lib/server/push.ts`,
+  `lib/sync/providers/google.ts`, `lib/sync/providers/microsoft.ts`, `lib/vacations/weather-fetch.ts`,
+  `lib/weather/open-meteo.ts`, `lib/trips/routing.ts`, `app/api/ai/flyer/route.ts`,
+  `app/api/ai/voice/speak/route.ts`, `app/api/ai/voice/transcribe/route.ts`,
+  `app/api/gif/search/route.ts`, `tests/external-fetch-boundaries.test.ts`
+- Description: Several fixed-provider calls had no finite deadline, allowing a slow or stalled third-party
+  connection to occupy a route, job, or browser request indefinitely.
+- User impact: AI, sync, messaging, push, weather, or routing workflows could remain pending instead of
+  returning a recoverable failure to the user or worker.
+- Root cause: Provider calls used raw `fetch()` or relied on platform defaults without a shared timeout
+  contract.
+- Resolution: Added `fetchExternal` for server-side provider calls and `fetchWithTimeout` for browser-side
+  public APIs. Deadlines range from 10 seconds for GIF search to 60 seconds for model/audio generation;
+  existing public-calendar/social manual redirect and timeout validation remains unchanged.
+- Tests performed: Timeout-boundary contracts, focused provider tests, full Vitest suite, typecheck, lint,
+  production build, and public Playwright/axe E2E.
+- Evidence: `tests/external-fetch-boundaries.test.ts` verifies timeout signals and statically prevents raw
+  fetch calls in the audited fixed-provider files.
+- Verified by: Codex
+- Date completed: 2026-07-13

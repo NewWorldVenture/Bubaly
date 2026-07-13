@@ -9,6 +9,7 @@
 
 import { createHash } from 'node:crypto';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
+import { fetchExternal } from '@/lib/server/external-fetch';
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -80,7 +81,7 @@ export function googleAuthUrl(redirectUri: string, state: string): string {
 }
 
 export async function exchangeCode(code: string, redirectUri: string): Promise<OAuthTokens> {
-  const res = await fetch(TOKEN_URL, {
+  const res = await fetchExternal(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -90,7 +91,7 @@ export async function exchangeCode(code: string, redirectUri: string): Promise<O
       redirect_uri: redirectUri,
       grant_type: 'authorization_code',
     }),
-  });
+  }, 15_000);
   const data = await readBoundedResponseJson<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string; token_type?: string; error?: string }>(res, 64 * 1024);
   if (!res.ok) throw new GoogleApiError(res.status, `Token exchange failed: ${data.error ?? res.status}`);
   if (!data.access_token) throw new GoogleApiError(res.status, 'Token exchange response missing access token');
@@ -104,7 +105,7 @@ export async function exchangeCode(code: string, redirectUri: string): Promise<O
 }
 
 export async function refreshAccessToken(refreshToken: string): Promise<OAuthTokens> {
-  const res = await fetch(TOKEN_URL, {
+  const res = await fetchExternal(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -113,7 +114,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
     }),
-  });
+  }, 15_000);
   const data = await readBoundedResponseJson<{ access_token?: string; expires_in?: number; scope?: string; token_type?: string; error?: string }>(res, 64 * 1024);
   if (!res.ok) throw new GoogleApiError(res.status, `Token refresh failed: ${data.error ?? res.status}`);
   if (!data.access_token) throw new GoogleApiError(res.status, 'Token refresh response missing access token');
@@ -128,7 +129,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
 
 export async function revokeToken(token: string): Promise<void> {
   // Best-effort; ignore failures (token may already be invalid).
-  await fetch(`${REVOKE_URL}?token=${encodeURIComponent(token)}`, { method: 'POST' }).catch(() => {});
+  await fetchExternal(`${REVOKE_URL}?token=${encodeURIComponent(token)}`, { method: 'POST' }, 15_000).catch(() => {});
 }
 
 /** The connected account's email, for display + as the account's external_id. */
@@ -142,14 +143,14 @@ export async function getGoogleUserEmail(accessToken: string): Promise<string | 
 }
 
 async function gfetch<T>(url: string, accessToken: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetchExternal(url, {
     ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
       ...(init?.headers ?? {}),
     },
-  });
+  }, 15_000);
   if (res.status === 204) return undefined as T;
   const bounded = await readBoundedResponseText(res, 2 * 1024 * 1024);
   if (!bounded.ok) throw new GoogleApiError(res.status, `Google API ${res.status} response too large`, '[provider response exceeded 2 MiB]');
