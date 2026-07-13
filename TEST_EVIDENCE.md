@@ -8,8 +8,8 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 314 files, 2,587 tests |
-| `npm.cmd run build` | PASS: Next.js 15.5.19, 233 generated pages |
+| `npm.cmd test` | PASS: 316 files, 2,600 tests |
+| `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
 | `npm.cmd test -- tests/ai-chat-request.test.ts tests/marketing-consent-safety.test.ts` | PASS: 2 files, 4 tests |
@@ -210,3 +210,15 @@ Audit date: 2026-07-13
 - Registration and removal use per-user local plus durable request budgets before Supabase writes.
 - No migration was added; the existing `push_devices` table and all current web/native payloads remain
   supported.
+
+## Audit Update - 2026-07-13 (marketplace auction authorization and atomic purchase)
+
+- `npm.cmd exec vitest run tests/marketplace-auction.test.ts tests/marketplace-auction-security.test.ts`:
+  2 files, 13 tests passed.
+- `npm.cmd test`: 316 files and 2,600 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- Auction bidding now has an authenticated member/family check and no direct authenticated table-insert
+  path. Buy-It-Now uses the atomic `marketplace_buy_now` RPC.
+- `npm.cmd run build`: passed; 234 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.

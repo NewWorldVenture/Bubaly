@@ -11,6 +11,8 @@ import { createServer } from '@/lib/supabase/server';
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
 const BID_REASON: Record<string, string> = {
+  unauthorized: 'You can’t place a bid for this account.',
+  invalid_amount: 'Enter a valid bid amount.',
   not_found: 'That listing no longer exists.',
   not_auction: 'This listing isn’t an auction.',
   not_available: 'Bidding has closed on this listing.',
@@ -29,7 +31,7 @@ export async function placeBidAction(input: { listingId: string; maxCents: numbe
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const maxCents = Math.round(input.maxCents);
-  if (!input.listingId || !Number.isFinite(maxCents) || maxCents <= 0) {
+  if (!input.listingId || !Number.isFinite(maxCents) || maxCents <= 0 || maxCents > 1_000_000_000_00) {
     return { ok: false, error: 'Enter a valid bid amount.' };
   }
 
@@ -39,7 +41,7 @@ export async function placeBidAction(input: { listingId: string; maxCents: numbe
     p_bidder_family_id: ctx.active.familyId,
     p_max_cents: maxCents,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: 'Could not place that bid right now.' };
 
   const res = (data ?? {}) as { ok?: boolean; reason?: string; min_cents?: number; leading?: boolean; current_cents?: number; extended?: boolean };
   if (!res.ok) {
@@ -61,39 +63,23 @@ export async function buyNowAction(listingId: string): Promise<Result<{ orderId:
   const ctx = await requireUserContext();
   const supabase = await createServer();
   if (!listingId) return { ok: false, error: 'Invalid listing.' };
-
-  const { data: listing } = await supabase
-    .from('marketplace_listings')
-    .select('id, family_id, member_id, kind, buy_now_cents, status, sale_format')
-    .eq('id', listingId)
-    .maybeSingle();
-  if (!listing) return { ok: false, error: 'Listing not found.' };
-  if (listing.sale_format !== 'auction' || listing.buy_now_cents == null) {
+  const { data, error } = await supabase.rpc('marketplace_buy_now', {
+    p_listing_id: listingId,
+    p_buyer_member_id: ctx.active.member.id,
+    p_buyer_family_id: ctx.active.familyId,
+  });
+  if (error) return { ok: false, error: 'Could not complete Buy-It-Now right now.' };
+  const result = (data ?? {}) as { ok?: boolean; reason?: string; order_id?: string };
+  if (!result.ok || !result.order_id) {
+    const reason = result.reason;
+    if (reason === 'own_listing') return { ok: false, error: 'You can’t buy your own family’s listing.' };
+    if (reason === 'ended') return { ok: false, error: 'This auction has ended.' };
+    if (reason === 'not_started') return { ok: false, error: 'This auction hasn’t started yet.' };
+    if (reason === 'not_found') return { ok: false, error: 'Listing not found.' };
     return { ok: false, error: 'Buy-It-Now isn’t available on this listing.' };
   }
-  if (listing.family_id === ctx.active.familyId) return { ok: false, error: 'You can’t buy your own family’s listing.' };
-
-  // Atomic claim: flips only if still available (guards the double-buy race).
-  const { data: claimed, error: claimErr } = await supabase
-    .from('marketplace_listings')
-    .update({ status: 'claimed', claimed_by: ctx.active.member.id, claimed_at: new Date().toISOString(), auction_closed_at: new Date().toISOString() })
-    .eq('id', listingId).eq('status', 'available')
-    .select('id').maybeSingle();
-  if (claimErr) return { ok: false, error: claimErr.message };
-  if (!claimed) return { ok: false, error: 'Someone just bought this — it’s no longer available.' };
-
-  const { data: order, error: orderErr } = await supabase
-    .from('marketplace_orders')
-    .insert({
-      family_id: listing.family_id, listing_id: listing.id,
-      buyer_member: ctx.active.member.id, seller_member: listing.member_id,
-      kind: 'buy', status: 'confirmed', amount_cents: listing.buy_now_cents,
-      notes: 'Buy-It-Now', created_by: ctx.user.id,
-    })
-    .select('id').single();
-  if (orderErr) return { ok: false, error: orderErr.message };
 
   revalidatePath(`/marketplace/item/${listingId}`);
   revalidatePath('/marketplace/orders');
-  return { ok: true, data: { orderId: order.id } };
+  return { ok: true, data: { orderId: result.order_id } };
 }

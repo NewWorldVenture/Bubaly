@@ -2565,3 +2565,28 @@ roadmap entries and user worktree changes are preserved.
 - Tests performed: Push request contract, typecheck, lint, full suite, build, and public E2E passed.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0207 - Marketplace auctions exposed an unsafe bid path and non-atomic Buy-It-Now
+
+- Status: [x] Completed in code; production enforcement requires migration `0184` to be applied.
+- Severity: P1
+- Category: Marketplace authorization / transaction integrity
+- Feature: Proxy bidding and Buy-It-Now
+- File or files: `supabase/migrations/0184_marketplace_auction_authorization.sql`,
+  `app/(app)/marketplace/auctions/actions.ts`, `lib/database.types.ts`,
+  `tests/marketplace-auction-security.test.ts`
+- Database objects: `marketplace_bids`, `marketplace_listings`, `marketplace_orders`,
+  `marketplace_place_bid`, `marketplace_buy_now`
+- Description: Migration `0183` left an authenticated insert policy on `marketplace_bids` and accepted
+  caller-supplied member/family IDs in the SECURITY DEFINER bid RPC. Buy-It-Now claimed the listing in one
+  statement and inserted the order in a second operation.
+- User impact: A signed-in caller could bypass auction rules through direct table writes or forge the RPC
+  identity, and an order failure could leave a listing claimed without a corresponding order.
+- Root cause: The first auction slice trusted client-side routing and split the purchase state transition
+  from order creation.
+- Resolution: Added an authenticated member/family wrapper, revoked authenticated bid inserts, bounded bid
+  amounts, and added a locked `marketplace_buy_now` RPC that claims the listing, closes bids, and creates
+  the order in one transaction. Actions now use the RPC and return provider-safe errors.
+- Tests performed: Auction engine/security contracts, full suite, typecheck, lint, build, and public E2E passed.
+- Verified by: Codex
+- Date completed: 2026-07-13

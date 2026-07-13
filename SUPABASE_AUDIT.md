@@ -6,7 +6,8 @@
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
-  `0181_guardian_callback_replay.sql`, and `0182_stripe_webhook_claims.sql`.
+  `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
+  `0183_marketplace_auctions.sql`, and `0184_marketplace_auction_authorization.sql`.
 - SQL files: 315.
 - Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
@@ -161,3 +162,9 @@ Push device registration now validates web endpoint URLs, native provider/platfo
 lengths, and user-agent bounds before writing `push_devices`. Registration/removal requests also use the
 shared per-user limiter. The existing `push_devices` RLS and schema remain the authorization boundary;
 no migration is required.
+
+Marketplace auctions now require the authenticated user's active family member to match every bid RPC
+identity. Migration `0184_marketplace_auction_authorization.sql` removes the direct authenticated bid
+insert policy, hides the original bid implementation behind an authorization wrapper, and adds the
+locked `marketplace_buy_now` RPC so listing claims and order creation commit together. Apply `0184` with
+the auction code before enabling the feature in production.

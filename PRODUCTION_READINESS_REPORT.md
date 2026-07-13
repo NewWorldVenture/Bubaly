@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,587 unit tests, builds all 233 Next.js build
+tree compiles, passes lint and type checking, passes 2,600 unit tests, builds all 234 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -18,7 +18,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 - 100 API route handlers.
 - 193 migrations at audit start; additive repair migrations `0178` through `0182` added.
 - 315 SQL files under `supabase`.
-- 314 unit-test files and 2,587 passing tests.
+- 316 unit-test files and 2,600 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -70,8 +70,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,587 tests / 314 files | `npm.cmd test` |
-| Production build | PASS, 233 generated pages | `npm.cmd run build` |
+| Unit tests | PASS, 2,600 tests / 316 files | `npm.cmd test` |
+| Production build | PASS, 234 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
 | Mobile overflow E2E | PASS at 320, 390, 768, and 1024 widths | Playwright |
@@ -158,6 +158,20 @@ response-read boundary shared by legacy imports and scheduled feed syncs.
   local plus durable request budgets before Supabase writes.
 - Database schema is unchanged; the repair uses the existing `push_devices` contract and remains
   compatible with web push, APNs, and FCM clients.
+
+## Audit Update - 2026-07-13 (marketplace auction authorization and atomic purchase)
+
+- `npm.cmd exec vitest run tests/marketplace-auction.test.ts tests/marketplace-auction-security.test.ts`:
+  2 files, 13 tests passed.
+- Migration `0184_marketplace_auction_authorization.sql` removes direct authenticated bid inserts,
+  validates that the RPC member belongs to the authenticated family, and keeps the unchecked bid engine
+  private to service-role internals.
+- Buy-It-Now now locks the listing and creates the order in one database transaction, so a failed order
+  insert cannot leave a claimed listing without an order.
+- No production migration has been applied by this agent; the live schema probe must pass after `0184`
+  is deployed with the auction feature.
+- `npm.cmd run build`: passed; 234 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
 ## Audit Update - 2026-07-13
 
 Legacy service-role seed scripts were hardened after the initial report: fixed family/user scopes

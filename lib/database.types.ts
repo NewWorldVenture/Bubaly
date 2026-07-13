@@ -2292,6 +2292,7 @@ export interface Database {
       marketplace_join_circle: { Args: { p_family: string; p_code: string }; Returns: string };
       marketplace_leave_circle: { Args: { p_family: string; p_circle: string }; Returns: undefined };
       marketplace_place_bid: { Args: { p_listing_id: string; p_bidder_member_id: string; p_bidder_family_id: string; p_max_cents: number }; Returns: Json };
+      marketplace_buy_now: { Args: { p_listing_id: string; p_buyer_member_id: string; p_buyer_family_id: string }; Returns: Json };
     };
     Enums: {
       member_role: MemberRole;

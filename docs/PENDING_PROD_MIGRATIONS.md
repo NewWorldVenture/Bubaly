@@ -82,6 +82,8 @@ After applying, hard-refresh the app: Marketplace, `/dashboard/voice`,
 | 0162 | `0162_demo_email_uses.sql` | `demo_email_uses` (one durable row per email that has used a demo) | Enforces **one 5-minute demo per email**: when an email starts a demo it's stamped here with that demo's expiry; once expired, re-entering the same email routes to the `/demo/upgrade` plan-choice page instead of starting a new clock (paid plan → signup → billing). Service-role only (RLS enabled, no policies). Additive/idempotent. Safe before apply: the gate check is wrapped so a missing table simply doesn't gate (every email can still demo) until applied. PG16-verified (idempotent ×2; RLS on, expiry check confirmed). |
 | 0163 | `0163_messages_audio_read_fix.sql` | Widens `family_messages.kind` CHECK (+`'audio'`) + `mark_conversation_read(uuid)` RPC | **Fixes two live Messages bugs.** (1) Voice notes NEVER saved: the recorder inserts `kind='audio'` but the 0014 CHECK didn't allow it — every voice message failed. (2) Read receipts wiped each other: mark-as-read *replaced* `read_by` with just the reader; the RPC appends instead (SECURITY INVOKER — family RLS still governs). Safe before apply: the client falls back to a correct per-row merge for receipts, but **voice notes stay broken until applied**. Additive/idempotent. PG16-verified (idempotent ×2; audio accepted, bogus kind rejected, RPC appends without clobber and is idempotent). |
 
+| 0184 | `0184_marketplace_auction_authorization.sql` | Authenticated bid identity checks, removal of direct bid inserts, and atomic `marketplace_buy_now()` RPC | **Security and consistency repair for 0183.** Requires the bid member to belong to the authenticated family, keeps bid writes on the guarded RPC, and performs the Buy-It-Now listing claim plus order creation in one locked transaction. Apply with `0183` and the auction code. Additive/idempotent. |
+
 If prod is further behind than 0118, `supabase db push` will also pick up any
 earlier un-applied migrations (0104, 0111, 0113, 0117, …) — all additive, all
 safe to re-run. When in doubt, **run the full push**: idempotent migrations make
@@ -94,7 +96,7 @@ Several version prefixes are **duplicated** by parallel work streams:
 (`documents_favorite`, `finance_rls_repair`, `user_preferences_rls_repair`), and
 `0110` (`family_profile`, `transactions_member`). Supabase orders by full
 filename so this still applies deterministically, but a future migration should
-**not** reuse a taken prefix. Next free number: **0184**.
+**not** reuse a taken prefix. Next free number: **0185**.
 
 ## Environment variables (set alongside the migrations)
 
