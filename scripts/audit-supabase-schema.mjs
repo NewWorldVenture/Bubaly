@@ -21,6 +21,7 @@ const expected = [
   ['crm_contact_profile', '0171_crm_contact_profile.sql'],
   ['crm_lead_scores', '0172_crm_lead_scores.sql'],
   ['marketplace_circles', '0176_marketplace_circles.sql'],
+  ['resend_webhook_events', '0180_resend_webhook_dedup.sql'],
 ];
 
 const results = await Promise.all(expected.map(async ([table, migration]) => {

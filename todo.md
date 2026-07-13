@@ -1842,7 +1842,7 @@ roadmap entries and user worktree changes are preserved.
 ### Inventory Snapshot
 
 - 348 `page.tsx` route files.
-- 193 Supabase migration files and 309 SQL files under `supabase`.
+- 196 Supabase migration files and 313 SQL files under `supabase`.
 - 305 test files after the audit's regression contracts.
 - 2,054 repository files returned by the initial source inventory (excluding node_modules, dist, and build).
 - Detailed route, database, feature, architecture, security, testing, and journey inventories already
@@ -1982,10 +1982,10 @@ roadmap entries and user worktree changes are preserved.
 - Severity: P1
 - Category: Deployment / database
 - Feature: Latest schema and RLS
-- Description: The repository contains migrations through `0177` plus the new `0178` and `0179` repairs, while the
+- Description: The repository contains migrations through `0177` plus the new `0178`, `0179`, and `0180` repairs, while the
   configured live schema probe failed on the latest required object. The repository cannot safely claim
   that production has every migration applied without running the migration deployment process.
-- Required remediation: Apply pending migrations through `0179` in the intended deployment environment,
+- Required remediation: Apply pending migrations through `0180` in the intended deployment environment,
   run the schema/auth probes, then run isolated RLS allow/deny tests. No destructive production operation
   was performed by this audit.
 
@@ -2365,5 +2365,28 @@ roadmap entries and user worktree changes are preserved.
   to `auth.uid()`, restrict pruning to `service_role`, and update authenticated route keys accordingly.
 - Tests performed: RPC security contract, limiter tests, full suite, typecheck, lint, build, public E2E,
   and schema audit passed. Auth Admin probe remains a separate Supabase-owned failure.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0200 - Resend webhook accepted replayed signed deliveries
+
+- Status: [x] Completed in code; production enforcement requires migration `0180` to be applied.
+- Severity: P1
+- Category: Webhook authenticity / replay protection / marketing data integrity
+- Feature: Resend email engagement webhooks and marketing automations
+- Route: `/api/webhooks/resend`
+- File or files: `app/api/webhooks/resend/route.ts`,
+  `supabase/migrations/0180_resend_webhook_dedup.sql`, `lib/database.types.ts`,
+  `tests/resend-webhook-replay-contract.test.ts`
+- Database objects: `resend_webhook_events`, `marketing_email_campaigns`, `marketing_suppressions`
+- Description: Signed Resend/Svix deliveries were authenticated but had no timestamp freshness check
+  or durable event-ID deduplication, so valid replays could increment counters and re-fire work.
+- User impact: Marketing analytics could be inflated and engagement automations could be retriggered;
+  old captured webhook payloads remained useful beyond the provider retry window.
+- Root cause: Signature verification checked only the HMAC and did not persist the Svix delivery ID.
+- Resolution: Added a five-minute timestamp window, 256 KB payload bound, service-role-only event ledger,
+  duplicate short-circuit, and retryable processing state.
+- Tests performed: Replay contract, full suite, typecheck, lint, build, and public E2E passed. Auth Admin
+  probe remains a separate Supabase-owned failure.
 - Verified by: Codex
 - Date completed: 2026-07-13

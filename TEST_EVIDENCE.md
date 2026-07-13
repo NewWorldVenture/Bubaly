@@ -92,6 +92,26 @@ Audit date: 2026-07-13
 - `npm.cmd run db:audit:schema`: all 8 required tables passed.
 - Migration `0179_harden_rate_limit_rpc_grants.sql` revokes anonymous/public limiter RPC access,
   binds authenticated keys to `auth.uid()`, and restricts pruning to `service_role`.
+
+## Audit Update - 2026-07-13 (Resend webhook replay protection)
+
+- `npm.cmd test`: 309 files and 2,559 tests passed.
+- `npm.cmd test -- tests/resend-webhook-replay-contract.test.ts tests/marketing-unsubscribe.test.ts`:
+  2 files, 6 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 233 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- Resend/Svix webhook processing now rejects stale signatures and oversized payloads, and deduplicates
+  signed event IDs through migration `0180_resend_webhook_dedup.sql`.
+
+## Audit Update - 2026-07-13 (schema audit coverage)
+
+- `npm.cmd test`: 309 files and 2,560 tests passed.
+- `npm.cmd test -- tests/production-migration-contract.test.ts tests/resend-webhook-replay-contract.test.ts`:
+  2 files, 9 tests passed.
+- `npm.cmd run db:audit:schema`: 8 existing required tables passed; the new
+  `resend_webhook_events` probe correctly reports missing until migration `0180` is applied.
 ## Audit Update - 2026-07-13
 
 - `node --check scripts/seed*.mjs`: passed for all six legacy seed scripts plus the shared client.

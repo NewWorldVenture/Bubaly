@@ -1505,6 +1505,11 @@ export interface Database {
         { email: string; reason?: string; campaign_id?: string | null },
         Partial<{ reason: string; campaign_id: string | null }>
       >;
+      resend_webhook_events: T<
+        { svix_id: string; event_type: string; status: string; received_at: string; processed_at: string | null; error: string | null },
+        { svix_id: string; event_type: string; status?: string; received_at?: string; processed_at?: string | null; error?: string | null },
+        Partial<{ event_type: string; status: string; received_at: string; processed_at: string | null; error: string | null }>
+      >;
       crm_contacts: T<
         { id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null; company: string | null; lead_status: string; lifecycle_stage: string; lead_source: string | null; family_id: string | null; owner_id: string | null; notes: string | null; created_by: string | null } & Stamps,
         { id?: string; first_name?: string | null; last_name?: string | null; email?: string | null; phone?: string | null; company?: string | null; lead_status?: string; lifecycle_stage?: string; lead_source?: string | null; family_id?: string | null; owner_id?: string | null; notes?: string | null; created_by?: string | null },

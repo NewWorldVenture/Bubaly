@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,558 unit tests, builds all 233 Next.js build
+tree compiles, passes lint and type checking, passes 2,560 unit tests, builds all 233 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -16,9 +16,9 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 - 348 `page.tsx` route files.
 - 100 API route handlers.
-- 193 migrations at audit start; additive repair migrations `0178` and `0179` added.
-- 309 SQL files under `supabase`.
-- 308 unit-test files and 2,558 passing tests.
+- 193 migrations at audit start; additive repair migrations `0178`, `0179`, and `0180` added.
+- 313 SQL files under `supabase`.
+- 309 unit-test files and 2,560 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -28,6 +28,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   pinned SECURITY DEFINER membership helpers.
 - Added `0179_harden_rate_limit_rpc_grants.sql` to remove anonymous/public access to durable limiter
   RPCs and bind authenticated limiter keys to the calling user.
+- Added `0180_resend_webhook_dedup.sql` to persist signed Resend/Svix event IDs and make webhook
+  processing replay-safe.
 - Preserved active family membership checks and tightened listing-share deletion to the owning family
   and listing.
 - Added `tests/marketplace-circles-rls.test.ts`.
@@ -62,13 +64,13 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,558 tests / 308 files | `npm.cmd test` |
+| Unit tests | PASS, 2,560 tests / 309 files | `npm.cmd test` |
 | Production build | PASS, 233 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
 | Mobile overflow E2E | PASS at 320, 390, 768, and 1024 widths | Playwright |
-| Migration contract | PASS, 4 tests | targeted Vitest run |
-| Schema probe | BLOCKED/FAIL | live `marketplace_circles` HTTP 500, PostgreSQL `42P17` before repair |
+| Migration contract | PASS, 9 focused tests | targeted Vitest run |
+| Schema probe | BLOCKED/FAIL | 8 legacy probes pass; `resend_webhook_events` is missing until migration 0180 |
 | Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
 | Dependency audit | FAIL/PENDING | 2 moderate PostCSS advisories, no fix available |
@@ -76,7 +78,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 ## Remaining Launch Blockers
 
-1. Apply migrations through `0179_harden_rate_limit_rpc_grants.sql` in the intended environment and
+1. Apply migrations through `0180_resend_webhook_dedup.sql` in the intended environment and
    rerun schema plus cross-family RLS allow/deny probes.
 2. Diagnose the live Supabase Auth Admin 500 in Supabase/GoTrue/Postgres logs and rerun the Auth audit.
 3. Resolve or formally accept the PostCSS advisory after reviewing the next compatible Next.js release.
@@ -105,6 +107,10 @@ anonymous/public callers and left `rate_limit_prune` publicly executable. Migrat
 those privileges, preserves authenticated server calls only for user-scoped keys, and grants pruning
 only to `service_role`. Billing and notification route keys were updated to include the authenticated
 user ID.
+
+The Resend webhook now rejects signatures older than five minutes or payloads over 256 KB and records
+each Svix event ID in `resend_webhook_events` before applying campaign analytics, suppression, or
+automation side effects. Processed deliveries short-circuit; stale processing rows remain retryable.
 ## Audit Update - 2026-07-13
 
 Legacy service-role seed scripts were hardened after the initial report: fixed family/user scopes

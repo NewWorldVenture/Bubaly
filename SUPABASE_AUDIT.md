@@ -4,9 +4,9 @@
 
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
-- New migrations: `0178_marketplace_circles_rls_recursion.sql` and
-  `0179_harden_rate_limit_rpc_grants.sql`.
-- SQL files: 309.
+- New migrations: `0178_marketplace_circles_rls_recursion.sql`,
+  `0179_harden_rate_limit_rpc_grants.sql`, and `0180_resend_webhook_dedup.sql`.
+- SQL files: 313.
 - Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
   not a claim that every object exists in the live database.
@@ -56,7 +56,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
-2. Apply the full migration chain through `0179` and run `npm run db:audit:schema` and
+2. Apply the full migration chain through `0180` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
@@ -109,8 +109,9 @@ two-way/import work, reducing duplicate provider calls while preserving authenti
 Notification generation and test-push dispatch use family/user buckets before service-role device reads
 and push delivery, limiting repeated fan-out work.
 
-- Current live schema audit: all 8 required table probes pass; the live Auth Admin users probe still
-  returns HTTP 500 and remains a launch blocker.
+- Current live schema audit: all 8 pre-0180 table probes pass; `resend_webhook_events` is missing
+  until migration 0180 is applied. The live Auth Admin users probe still returns HTTP 500 and remains
+  a launch blocker.
 
 Public service-role ingestion now uses `rate_limit_hit` through the shared request guard for contact,
 marketing forms, exit-intent, landing-page, visitor-intelligence, and A/B writes. Durable enforcement
@@ -130,3 +131,7 @@ The durable limiter privilege audit found that `0156_rate_limits.sql` granted `r
 anonymous/public execution, binds authenticated calls to a key containing `auth.uid()`, and restricts
 pruning to `service_role`. Billing and notification keys now include the authenticated user ID so their
 existing server-side calls satisfy the new scope check.
+
+The Resend/Svix webhook now enforces a five-minute timestamp window, a 256 KB body bound, and durable
+Svix-id deduplication through `resend_webhook_events` before marketing side effects. RLS is enabled with
+no client policies; only the service-role webhook path can read or write the event ledger.

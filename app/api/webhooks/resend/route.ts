@@ -14,7 +14,7 @@ const EVENT_TRIGGER: Record<string, 'email_opened' | 'email_clicked'> = {
 
 // Verify a Svix-signed webhook (Resend uses Svix). Returns true only on a valid
 // signature against RESEND_WEBHOOK_SECRET (whsec_...).
-function verify(body: string, headers: Headers): boolean {
+function verify(body: string, headers: Headers, nowMs = Date.now()): boolean {
   const secret = process.env.RESEND_WEBHOOK_SECRET;
   if (!secret) return false;
   const id = headers.get('svix-id');
@@ -22,9 +22,17 @@ function verify(body: string, headers: Headers): boolean {
   const sigHeader = headers.get('svix-signature');
   if (!id || !ts || !sigHeader) return false;
 
-  const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
-  const signed = `${id}.${ts}.${body}`;
-  const expected = createHmac('sha256', key).update(signed).digest('base64');
+  const timestampSeconds = Number(ts);
+  if (!Number.isFinite(timestampSeconds) || Math.abs(nowMs / 1000 - timestampSeconds) > 300) return false;
+
+  let expected: string;
+  try {
+    const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+    const signed = `${id}.${ts}.${body}`;
+    expected = createHmac('sha256', key).update(signed).digest('base64');
+  } catch {
+    return false;
+  }
   // Header is space-separated "v1,<sig>" pairs.
   return sigHeader.split(' ').some((part) => {
     const sig = part.split(',')[1];
@@ -44,9 +52,12 @@ const FIELD: Record<string, 'opens' | 'clicks' | 'bounces' | 'unsubscribes'> = {
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
+  if (body.length > 256_000) return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
   if (!verify(body, req.headers)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
+
+  const svixId = req.headers.get('svix-id')!;
 
   let event: { type: string; data?: { tags?: { name: string; value: string }[]; to?: string | string[] } };
   try {
@@ -55,10 +66,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Bad payload' }, { status: 400 });
   }
 
-  const field = FIELD[event.type];
-  if (!field) return NextResponse.json({ received: true });
-
   const supabase = createServiceClient();
+  const { data: prior, error: priorError } = await supabase
+    .from('resend_webhook_events')
+    .select('status, received_at')
+    .eq('svix_id', svixId)
+    .maybeSingle();
+  if (priorError) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+
+  const priorAge = prior?.received_at ? Date.now() - new Date(prior.received_at).getTime() : 0;
+  if (prior?.status === 'processed' || (prior?.status === 'processing' && priorAge < 10 * 60_000)) {
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
+  if (prior) {
+    const { error: claimError } = await supabase
+      .from('resend_webhook_events')
+      .update({ status: 'processing', received_at: new Date().toISOString(), processed_at: null, error: null })
+      .eq('svix_id', svixId);
+    if (claimError) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+  } else {
+    const { error: insertError } = await supabase.from('resend_webhook_events').insert({
+      svix_id: svixId,
+      event_type: event.type,
+      status: 'processing',
+    });
+    if (insertError) {
+      if (insertError.code === '23505') return NextResponse.json({ received: true, duplicate: true });
+      return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+    }
+  }
+
+  const field = FIELD[event.type];
+  if (!field) {
+    await supabase.from('resend_webhook_events').update({ status: 'processed', processed_at: new Date().toISOString() }).eq('svix_id', svixId);
+    return NextResponse.json({ received: true });
+  }
+
   const campaignId = event.data?.tags?.find((t) => t.name === 'campaign')?.value;
 
   if (campaignId) {
@@ -96,6 +140,10 @@ export async function POST(req: NextRequest) {
       }
     }
   }
+
+  await supabase.from('resend_webhook_events')
+    .update({ status: 'processed', processed_at: new Date().toISOString(), error: null })
+    .eq('svix_id', svixId);
 
   return NextResponse.json({ received: true });
 }
