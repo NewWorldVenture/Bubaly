@@ -9,7 +9,8 @@
   `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
   `0183_marketplace_auctions.sql`, `0184_marketplace_auction_authorization.sql`, and
   `0185_marketplace_auction_close_transaction.sql`, `0186_marketplace_negotiations.sql`, and
-  `0187_harden_marketplace_negotiations.sql`.
+  `0187_harden_marketplace_negotiations.sql`, and
+  `0188_harden_trigger_function_security.sql`.
 - SQL files: 315.
 - Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
@@ -42,6 +43,14 @@ Migration `0178_marketplace_circles_rls_recursion.sql` adds:
 The migration pins `search_path`, is additive/idempotent in the normal migration sequence, and does
 not delete or rewrite application data.
 
+### SECURITY DEFINER trigger hardening
+
+The migration audit found two legacy trigger functions in `0014_core_platform.sql` without a pinned
+`search_path`: `sync_album_photo_count()` and `update_conversation_last_message()`. Migration `0188`
+replaces both definitions with `SET search_path = public` and revokes direct execution from `PUBLIC`,
+`anon`, and `authenticated`. PostgreSQL triggers continue to invoke them; clients do not need RPC access.
+The contract is covered by `tests/sql-security-contract.test.ts`.
+
 ## Live Probe Results
 
 - Required schema probes passed for all live tables and replay ledgers introduced through `0181`.
@@ -59,7 +68,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
-2. Apply the remaining migrations through `0187` and run `npm run db:audit:schema` and
+2. Apply the remaining migrations through `0188` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.

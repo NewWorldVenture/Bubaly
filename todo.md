@@ -2954,3 +2954,28 @@ roadmap entries and user worktree changes are preserved.
   fetch calls in the audited fixed-provider files.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0223 - SECURITY DEFINER trigger functions lacked a pinned search_path
+
+- Status: [x] Completed in code; migration pending in live environments.
+- Severity: P1
+- Category: Supabase function security / privilege boundary
+- Feature: Family photo album counters and conversation last-message triggers
+- File or files: `supabase/migrations/0014_core_platform.sql`,
+  `supabase/migrations/0188_harden_trigger_function_security.sql`,
+  `tests/sql-security-contract.test.ts`
+- Database objects: `public.sync_album_photo_count()`, `public.update_conversation_last_message()`
+- Description: Two legacy `SECURITY DEFINER` trigger functions ran without `SET search_path`, and their
+  default execution privileges were not explicitly revoked from client roles.
+- User impact: If invoked outside their trigger context, an attacker could potentially influence object
+  resolution or call the definer functions directly through the exposed public function surface.
+- Root cause: Migration `0014` predates the repository's current definer-function hardening standard.
+- Resolution: Forward migration `0188` replaces both functions with `SET search_path = public` and revokes
+  execution from `PUBLIC`, `anon`, and `authenticated`; trigger ownership and behavior are preserved.
+- Tests performed: SQL security contracts, production migration contracts, full Vitest suite, typecheck,
+  lint, production build, and public Playwright/axe E2E.
+- Evidence: `tests/sql-security-contract.test.ts` verifies both pinned search paths, client privilege
+  revocations, and additive transaction boundaries.
+- Live status: Not applied by this agent; production schema audit must rerun after `0188` is deployed.
+- Verified by: Codex
+- Date completed: 2026-07-13

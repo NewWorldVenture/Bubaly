@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 328 files, 2,652 tests |
+| `npm.cmd exec vitest run` | PASS: 329 files, 2,655 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -91,6 +91,16 @@ Audit date: 2026-07-13
 - `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
 - Fixed-provider server calls now have explicit finite deadlines; browser weather and routing calls use
   cancellable 15-second deadlines. The public-calendar/social URL boundary remains separately validated.
+
+## Audit Update - 2026-07-13 (SECURITY DEFINER trigger hardening)
+
+- `npm.cmd exec vitest run tests/sql-security-contract.test.ts tests/production-migration-contract.test.ts tests/rate-limit-rpc-security.test.ts tests/marketplace-auction-security.test.ts tests/marketplace-negotiation-security.test.ts`:
+  5 files, 19 tests passed.
+- `npm.cmd exec vitest run`: 329 files and 2,655 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- Migration `0188_harden_trigger_function_security.sql` pins both repaired trigger functions to the
+  `public` search path and revokes direct client execution privileges.
 - The response contract covers exact text and JSON parsing, invalid JSON, oversized stream cancellation,
   and static coverage for every audited provider JSON path.
 
