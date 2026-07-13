@@ -6,6 +6,7 @@ import { discoveryWindow, normalizeTicketmasterResponse, type NormalizedEvent } 
 import { normalizeSeatGeekResponse, parseICS, parseRSS, withinWindow, dedupeEvents } from '@/lib/weekend/sources';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
+import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 import { isValidZip, RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS } from '@/lib/weekend/meta';
 
 export const runtime = 'nodejs';
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
     try {
       const p = new URLSearchParams({ apikey: tmKey, postalCode: zip.trim(), radius: String(radiusMiles), unit: 'miles', startDateTime: startISO, endDateTime: endISO, size: '100', sort: 'date,asc' });
       const res = await fetchWithTimeout(`https://app.ticketmaster.com/discovery/v2/events.json?${p}`);
-      if (res.ok) lists.push(normalizeTicketmasterResponse(await res.json()));
+      if (res.ok) lists.push(normalizeTicketmasterResponse(await readBoundedResponseJson<unknown>(res, 2 * 1024 * 1024)));
       else sourceErrors.ticketmaster = `HTTP ${res.status}`;
     } catch (e) { sourceErrors.ticketmaster = e instanceof Error ? e.message : 'failed'; }
   }
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
     try {
       const p = new URLSearchParams({ client_id: sgKey, postal_code: zip.trim(), range: `${radiusMiles}mi`, 'datetime_utc.gte': startISO, 'datetime_utc.lte': endISO, per_page: '100', sort: 'datetime_utc.asc' });
       const res = await fetchWithTimeout(`https://api.seatgeek.com/2/events?${p}`);
-      if (res.ok) lists.push(normalizeSeatGeekResponse(await res.json()));
+      if (res.ok) lists.push(normalizeSeatGeekResponse(await readBoundedResponseJson<unknown>(res, 2 * 1024 * 1024)));
       else sourceErrors.seatgeek = `HTTP ${res.status}`;
     } catch (e) { sourceErrors.seatgeek = e instanceof Error ? e.message : 'failed'; }
   }

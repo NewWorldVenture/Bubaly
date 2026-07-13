@@ -1,6 +1,6 @@
 // lib/ai/provider.ts — provider-agnostic LLM interface.
 // Swap Anthropic / OpenAI / Gemini / local by implementing AIProvider.
-import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
+import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 export type AITool = {
   name: string;
@@ -24,6 +24,15 @@ export type AIMessage = {
 export type AICompletion = {
   text: string;
   toolCalls: { name: string; args: Record<string, unknown> }[];
+};
+
+type OpenAIChatResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string;
+      tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
+    };
+  }>;
 };
 
 /** A tool the model can call, paired with a server-side executor. */
@@ -156,7 +165,7 @@ export class OpenAIProvider implements AIProvider {
       body: JSON.stringify(body),
     });
     if (!res.ok) throw await openAIError(res);
-    const data = await res.json();
+    const data = await readBoundedResponseJson<OpenAIChatResponse>(res, 2 * 1024 * 1024);
     const msg = data.choices?.[0]?.message ?? {};
     const text = msg.content ?? '';
     const toolCalls = (msg.tool_calls ?? []).map((c: { function: { name: string; arguments: string } }) => {
@@ -196,7 +205,7 @@ export class OpenAIProvider implements AIProvider {
         }),
       });
       if (!res.ok) throw await openAIError(res);
-      const data = await res.json();
+      const data = await readBoundedResponseJson<OpenAIChatResponse>(res, 2 * 1024 * 1024);
       const msg = data.choices?.[0]?.message ?? {};
       const calls: { id: string; function: { name: string; arguments: string } }[] = msg.tool_calls ?? [];
 
@@ -221,7 +230,7 @@ export class OpenAIProvider implements AIProvider {
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify({ model: this.model, max_tokens: maxTokens, messages: convo }),
     });
-    const data = res.ok ? await res.json() : null;
+    const data = res.ok ? await readBoundedResponseJson<OpenAIChatResponse>(res, 2 * 1024 * 1024) : null;
     return { text: data?.choices?.[0]?.message?.content ?? 'Done.', actions };
   }
 

@@ -16,6 +16,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { detectScamFromText, type ScamDetectionResult, type ScamType } from './scam';
+import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 
 const VALID_SCAM_TYPES = new Set<ScamType>([
   'robocall', 'warranty_scam', 'irs_scam', 'grandparent_scam', 'tech_support_scam',
@@ -113,7 +114,7 @@ export async function detectScamWithAI(
         }),
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = await readBoundedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(res, 256 * 1024);
         responseText = data.choices?.[0]?.message?.content ?? '';
       }
     }

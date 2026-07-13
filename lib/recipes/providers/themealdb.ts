@@ -1,6 +1,7 @@
 import 'server-only';
 import { normalizeThemealdb } from '@/lib/recipes/normalize';
 import type { NormalizedRecipe, RecipeProvider } from '@/lib/recipes/providers/types';
+import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 
 // TheMealDB — free, keyless (public test key "1"). A paid key can be supplied
 // via THEMEALDB_API_KEY to lift rate limits, but it's optional by design.
@@ -10,7 +11,7 @@ const BASE = `https://www.themealdb.com/api/json/v1/${KEY}`;
 async function getJson(url: string): Promise<{ meals: Record<string, string>[] | null }> {
   const res = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`TheMealDB ${res.status}`);
-  return res.json();
+  return readBoundedResponseJson<{ meals: Record<string, string>[] | null }>(res, 1 * 1024 * 1024);
 }
 
 export const themealdb: RecipeProvider = {

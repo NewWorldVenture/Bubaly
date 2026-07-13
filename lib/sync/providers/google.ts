@@ -8,7 +8,7 @@
 // SERVER ONLY.
 
 import { createHash } from 'node:crypto';
-import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
+import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -91,8 +91,9 @@ export async function exchangeCode(code: string, redirectUri: string): Promise<O
       grant_type: 'authorization_code',
     }),
   });
-  const data = await res.json();
+  const data = await readBoundedResponseJson<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string; token_type?: string; error?: string }>(res, 64 * 1024);
   if (!res.ok) throw new GoogleApiError(res.status, `Token exchange failed: ${data.error ?? res.status}`);
+  if (!data.access_token) throw new GoogleApiError(res.status, 'Token exchange response missing access token');
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token ?? null,
@@ -113,8 +114,9 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
       grant_type: 'refresh_token',
     }),
   });
-  const data = await res.json();
+  const data = await readBoundedResponseJson<{ access_token?: string; expires_in?: number; scope?: string; token_type?: string; error?: string }>(res, 64 * 1024);
   if (!res.ok) throw new GoogleApiError(res.status, `Token refresh failed: ${data.error ?? res.status}`);
+  if (!data.access_token) throw new GoogleApiError(res.status, 'Token refresh response missing access token');
   return {
     accessToken: data.access_token,
     refreshToken, // Google does not re-send the refresh token on refresh

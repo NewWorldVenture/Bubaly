@@ -1,5 +1,7 @@
 // Google OAuth helpers for Calendar integration
 
+import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
+
 export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 export const GOOGLE_CALENDAR_URL = 'https://www.googleapis.com/calendar/v3';
@@ -30,7 +32,7 @@ export async function exchangeGoogleCode(code: string): Promise<GoogleToken> {
     }),
   });
   if (!res.ok) throw new Error(`Google token exchange failed: ${res.status}`);
-  const data = await res.json() as { access_token: string; refresh_token?: string; expires_in: number };
+  const data = await readBoundedResponseJson<{ access_token: string; refresh_token?: string; expires_in: number }>(res, 64 * 1024);
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token ?? null,
@@ -50,7 +52,7 @@ export async function refreshGoogleToken(refreshToken: string): Promise<GoogleTo
     }),
   });
   if (!res.ok) throw new Error(`Google token refresh failed: ${res.status}`);
-  const data = await res.json() as { access_token: string; expires_in: number };
+  const data = await readBoundedResponseJson<{ access_token: string; expires_in: number }>(res, 64 * 1024);
   return {
     accessToken: data.access_token,
     refreshToken,
@@ -80,7 +82,7 @@ export async function fetchGoogleCalendarEvents(accessToken: string, timeMin: st
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error(`Google Calendar API error: ${res.status}`);
-  const data = await res.json() as { items: GoogleCalendarEvent[] };
+  const data = await readBoundedResponseJson<{ items: GoogleCalendarEvent[] }>(res, 2 * 1024 * 1024);
   return data.items ?? [];
 }
 

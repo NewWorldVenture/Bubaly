@@ -2897,3 +2897,31 @@ roadmap entries and user worktree changes are preserved.
   statically verifies the audited paths use the helper without direct unbounded text reads.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0221 - Provider JSON responses were parsed without byte bounds
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Provider response memory bounds / malformed provider data
+- Feature: AI, OAuth, calendar, weather, routing, weekend discovery, Guardian, recipes, flyer, and GIF integrations
+- File or files: `lib/server/bounded-response-body.ts`, `lib/ai/provider.ts`, `lib/weather/open-meteo.ts`,
+  `lib/trips/routing.ts`, `app/api/weekend/discover/route.ts`, `lib/vacations/weather-fetch.ts`,
+  `lib/guardian/twilio.ts`, `lib/sync/providers/google.ts`, `lib/sync/providers/microsoft.ts`,
+  `lib/recipes/providers/themealdb.ts`, `lib/guardian/scam-ai.ts`, `lib/guardian/ai-screen.ts`,
+  `app/api/ai/flyer/route.ts`, `app/api/ai/voice/transcribe/route.ts`, `lib/google.ts`,
+  `app/api/gif/search/route.ts`, `tests/response-body-boundaries.test.ts`
+- Description: Audited external integrations called `response.json()` directly, allowing third-party
+  JSON bodies to be fully buffered before application parsing or validation.
+- User impact: An unexpectedly large or malformed provider response could consume excess memory or cause
+  an integration failure outside its intended error boundary.
+- Root cause: The prior response hardening covered text/error paths and Graph text reads but did not cover
+  successful JSON responses or OAuth payloads.
+- Resolution: Added `readBoundedResponseJson`, which uses the streaming byte reader before JSON parsing.
+  OAuth/token responses cap at 64 KiB and validate required access tokens; provider payloads use bounded
+  limits from 256 KiB to 2 MiB. OpenAI SSE remains intentionally streamed incrementally.
+- Tests performed: Response-boundary, AI, sync, weather, weekend, recipe, and routing focused tests; full
+  Vitest suite; typecheck; lint; production build; public Playwright/axe E2E.
+- Evidence: `tests/response-body-boundaries.test.ts` verifies compact JSON, invalid JSON, oversized stream
+  cancellation, and static absence of direct audited `res.json()` reads.
+- Verified by: Codex
+- Date completed: 2026-07-13

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase/server';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 
 export const runtime = 'nodejs';
 
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
   try {
     const res = await fetch(endpoint, { next: { revalidate: 60 } });
     if (!res.ok) return NextResponse.json({ error: 'GIF search failed.' }, { status: 502 });
-    const json = await res.json() as { data?: Array<{ id: string; title?: string; images?: Record<string, { url?: string; width?: string; height?: string }> }> };
+    const json = await readBoundedResponseJson<{ data?: Array<{ id: string; title?: string; images?: Record<string, { url?: string; width?: string; height?: string }> }> }>(res, 2 * 1024 * 1024);
     const gifs: GifResult[] = (json.data ?? []).flatMap((g) => {
       const preview = g.images?.fixed_width_small ?? g.images?.fixed_width;
       const full = g.images?.fixed_width ?? g.images?.original;

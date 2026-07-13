@@ -3,6 +3,8 @@
 // All requests run in the browser, so they work regardless of server network
 // policy and never need a secret.
 
+import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
+
 export type GeoResult = {
   name: string;
   admin1: string | null;
@@ -77,7 +79,7 @@ export async function geocodeCity(query: string): Promise<GeoResult[]> {
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`;
   const res = await fetch(url);
   if (!res.ok) return [];
-  const json = (await res.json()) as { results?: Array<Record<string, unknown>> };
+  const json = await readBoundedResponseJson<{ results?: Array<Record<string, unknown>> }>(res, 1 * 1024 * 1024);
   return (json.results ?? []).map((r) => ({
     name: String(r.name),
     admin1: (r.admin1 as string) ?? null,
@@ -93,7 +95,7 @@ export async function reverseGeocode(lat: number, lon: number): Promise<GeoResul
     const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
     const res = await fetch(url);
     if (!res.ok) return null;
-    const j = (await res.json()) as Record<string, unknown>;
+    const j = await readBoundedResponseJson<Record<string, unknown>>(res, 512 * 1024);
     const name = (j.city as string) || (j.locality as string) || (j.principalSubdivision as string) || 'My Location';
     return {
       name: String(name),
@@ -122,11 +124,11 @@ export async function fetchForecast(lat: number, lon: number, days = 14): Promis
   });
   const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
   if (!res.ok) return null;
-  const j = (await res.json()) as {
+  const j = await readBoundedResponseJson<{
     current: Record<string, number>;
     daily: Record<string, (number | string)[]>;
     timezone: string;
-  };
+  }>(res, 1 * 1024 * 1024);
   const d = j.daily;
   const daily: DailyForecast[] = (d.time as string[]).map((date, i) => ({
     date,

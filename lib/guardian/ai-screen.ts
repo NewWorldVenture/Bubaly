@@ -2,6 +2,7 @@
 // The AI acts as an executive-assistant receptionist for the family.
 
 import type { MemberProfile } from './pipeline';
+import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 
 export type ScreeningTurn = {
   role: 'assistant' | 'caller';
@@ -130,7 +131,7 @@ export async function screeningTurn(params: {
         }),
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = await readBoundedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(res, 256 * 1024);
         responseText = data.choices?.[0]?.message?.content ?? '';
       }
     }

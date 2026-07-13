@@ -1,7 +1,7 @@
 // lib/guardian/twilio.ts — Twilio REST API helpers (no npm package, raw fetch).
 // Covers: TwiML generation, call control, SMS, number provisioning.
 
-import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
+import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID ?? '';
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN ?? '';
@@ -27,7 +27,7 @@ async function twilioFetch(path: string, body?: Record<string, string>): Promise
     const text = bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]';
     throw new Error(`Twilio ${res.status}: ${text.slice(0, 200)}`);
   }
-  return res.json();
+  return readBoundedResponseJson<unknown>(res, 256 * 1024);
 }
 
 /** True if Twilio is configured in this environment. */
@@ -143,7 +143,7 @@ export async function lookupCallerName(phoneNumber: string): Promise<string | nu
     const url = `https://lookups.twilio.com/v1/PhoneNumbers/${encodeURIComponent(phoneNumber)}?Type=caller-name`;
     const res = await fetch(url, { headers: { authorization: authHeader() } });
     if (!res.ok) return null;
-    const data = await res.json() as { caller_name?: { caller_name?: string } };
+    const data = await readBoundedResponseJson<{ caller_name?: { caller_name?: string } }>(res, 256 * 1024);
     return data.caller_name?.caller_name ?? null;
   } catch {
     return null;

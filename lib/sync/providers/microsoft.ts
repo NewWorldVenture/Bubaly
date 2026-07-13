@@ -18,7 +18,7 @@ import type {
 } from '@/lib/sync/adapter';
 import { SyncApiError } from '@/lib/sync/adapter';
 import { eventContentHash, reminderContentHash } from '@/lib/sync/hash';
-import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
+import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 const TENANT = process.env.MICROSOFT_SYNC_TENANT || 'common';
 const AUTHORITY = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0`;
@@ -67,8 +67,9 @@ async function tokenRequest(body: Record<string, string>): Promise<OAuthTokens> 
       ...body,
     }),
   });
-  const data = await res.json();
+  const data = await readBoundedResponseJson<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string; token_type?: string; error?: string }>(res, 64 * 1024);
   if (!res.ok) throw new SyncApiError(res.status, `Microsoft token request failed: ${data.error ?? res.status}`);
+  if (!data.access_token) throw new SyncApiError(res.status, 'Microsoft token response missing access token');
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token ?? null,

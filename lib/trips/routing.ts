@@ -5,6 +5,8 @@
 // in the browser, so it works regardless of server network policy and never
 // needs a secret — mirroring lib/weather/open-meteo.ts.
 
+import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
+
 export type LatLng = { lat: number; lng: number };
 
 /** Pure parser for an OSRM /route response → driving seconds (or null). */
@@ -38,7 +40,7 @@ export async function driveEstimate(from: LatLng, to: LatLng): Promise<DriveEsti
     const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=false&alternatives=false`;
     const res = await fetch(url);
     if (!res.ok) return null;
-    const json = await res.json();
+    const json = await readBoundedResponseJson<unknown>(res, 512 * 1024);
     const seconds = parseOsrmDuration(json);
     if (seconds == null) return null;
     return { seconds, meters: parseOsrmDistance(json) };

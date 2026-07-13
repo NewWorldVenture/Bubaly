@@ -5,7 +5,7 @@ import { getOpenAIKey } from '@/lib/ai/settings';
 import { cleanTranscript, isValidAudioUpload } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
-import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
+import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: msg }, { status: 502 });
     }
 
-    const data = (await res.json()) as { text?: string };
+    const data = await readBoundedResponseJson<{ text?: string }>(res, 256 * 1024);
     const text = cleanTranscript(data.text ?? '');
     if (!text) {
       return NextResponse.json({ error: 'I couldn’t hear anything. Try again.' }, { status: 422 });

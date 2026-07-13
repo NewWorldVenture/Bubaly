@@ -1,13 +1,15 @@
 // Server-side weather fetching via Open-Meteo (free, no API key, real data).
 // Geocodes a place name then pulls a daily forecast. Used by the weather API route.
 
+import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
+
 export type GeoResult = { name: string; latitude: number; longitude: number; country?: string };
 
 export async function geocode(place: string): Promise<GeoResult | null> {
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(place)}&count=1&language=en&format=json`;
   const res = await fetch(url, { headers: { accept: 'application/json' } });
   if (!res.ok) return null;
-  const data = await res.json();
+  const data = await readBoundedResponseJson<{ results?: Array<{ name: string; latitude: number; longitude: number; country?: string }> }>(res, 512 * 1024);
   const r = data?.results?.[0];
   if (!r) return null;
   return { name: r.name, latitude: r.latitude, longitude: r.longitude, country: r.country };
@@ -38,7 +40,15 @@ export async function fetchForecast(lat: number, lon: number, start?: string | n
   }
   const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { headers: { accept: 'application/json' } });
   if (!res.ok) throw new Error(`Open-Meteo error ${res.status}`);
-  const data = await res.json();
+  const data = await readBoundedResponseJson<{ daily?: {
+    time?: string[];
+    temperature_2m_max?: (number | null)[];
+    temperature_2m_min?: (number | null)[];
+    precipitation_probability_max?: (number | null)[];
+    precipitation_sum?: (number | null)[];
+    wind_speed_10m_max?: (number | null)[];
+    weathercode?: (number | null)[];
+  } }>(res, 1 * 1024 * 1024);
   const d = data?.daily;
   if (!d?.time) return [];
   return d.time.map((date: string, i: number): ForecastDay => ({

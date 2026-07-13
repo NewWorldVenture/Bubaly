@@ -4,7 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { getAIConfig } from '@/lib/ai/settings';
 import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
-import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
+import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 export const runtime = 'nodejs';
 
@@ -127,7 +127,7 @@ Rules:
       console.error('Flyer OpenAI error', aiRes.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');
       return NextResponse.json({ error: 'Could not read that flyer. Try a clearer photo or a different file.' }, { status: 502 });
     }
-    const aiJson = await aiRes.json();
+    const aiJson = await readBoundedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(aiRes, 1 * 1024 * 1024);
     const text: string = aiJson.choices?.[0]?.message?.content ?? '[]';
     let raw: Array<Record<string, unknown>> = [];
     try {
