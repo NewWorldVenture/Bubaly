@@ -136,7 +136,10 @@ export async function POST(req: Request) {
   const { data: saved, error } = await supabase.from('meal_nutrition')
     .upsert(row, { onConflict: 'family_id,subject_type,subject_id' })
     .select('*').single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('Meal nutrition write failed:', error);
+    return NextResponse.json({ error: 'Could not save the nutrition details.' }, { status: 500 });
+  }
 
   return NextResponse.json({ nutrition: saved, cached: false });
 }

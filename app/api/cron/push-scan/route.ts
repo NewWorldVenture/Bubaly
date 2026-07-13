@@ -26,7 +26,10 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
   const { data: families, error } = await supabase.from('families').select('id');
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('Push-scan cron read failed:', error);
+    return NextResponse.json({ error: 'Push-scan processing failed.' }, { status: 500 });
+  }
 
   let created = 0;
   for (const f of families ?? []) {

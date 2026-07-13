@@ -16,7 +16,10 @@ export async function GET(req: NextRequest) {
   const { data: feeds, error } = await supabase
     .from('calendar_feeds')
     .select('id, family_id, url');
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('Calendar-feed cron read failed:', error);
+    return NextResponse.json({ error: 'Calendar-feed processing failed.' }, { status: 500 });
+  }
 
   let synced = 0;
   let imported = 0;

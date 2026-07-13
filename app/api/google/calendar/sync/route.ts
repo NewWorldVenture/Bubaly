@@ -77,7 +77,7 @@ export async function POST() {
 
       if (error && error.code !== '23505') {
         console.error('Calendar upsert error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: 'Could not save imported calendar events.' }, { status: 500 });
       }
     }
 

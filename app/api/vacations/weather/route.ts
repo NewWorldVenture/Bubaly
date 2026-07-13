@@ -53,7 +53,10 @@ export async function POST(req: NextRequest) {
   const { error } = await supabase
     .from('vacation_weather_snapshots')
     .upsert(rows, { onConflict: 'vacation_id,location_label,forecast_date' });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('Vacation weather write failed:', error);
+    return NextResponse.json({ error: 'Could not save the weather forecast.' }, { status: 500 });
+  }
 
   return NextResponse.json({ snapshots: rows.length, location: geo.name });
 }

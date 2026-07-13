@@ -21,7 +21,10 @@ export async function GET(req: NextRequest) {
     .from('checkout_sessions')
     .select('session_id, email, name, status, created_at')
     .eq('status', 'pending');
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('Abandoned-checkout cron read failed:', error);
+    return NextResponse.json({ error: 'Abandoned-checkout processing failed.' }, { status: 500 });
+  }
 
   const abandoned = selectAbandonedSessions(pending ?? [], Date.now(), { graceMinutes: 60, maxAgeHours: 24 });
 

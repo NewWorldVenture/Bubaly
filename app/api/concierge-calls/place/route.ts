@@ -27,7 +27,10 @@ export async function GET(req: NextRequest) {
     .or(`scheduled_for.is.null,scheduled_for.lte.${nowIso}`)
     .order('created_at', { ascending: true })
     .limit(25);
-  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  if (error) {
+    console.error('Concierge call queue read failed:', error);
+    return NextResponse.json({ ok: false, error: 'Could not load queued concierge calls.' }, { status: 500 });
+  }
 
   const rows = due ?? [];
   const providerReady = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_CALLER_NUMBER);

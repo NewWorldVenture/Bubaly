@@ -3063,3 +3063,19 @@ roadmap entries and user worktree changes are preserved.
   Playwright/axe E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0226 - API routes exposed raw database error details
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P2
+- Category: API error disclosure
+- Feature: Calendar, meal, vacation, concierge, and scheduled database writes
+- File or files: affected `app/api` route handlers, `tests/database-error-boundaries.test.ts`
+- Description: Several authenticated and cron handlers returned raw Supabase error messages in HTTP 500
+  responses, exposing schema/provider details to callers or scheduled-service clients.
+- Resolution: Replaced those responses with stable operation-specific messages and server-side diagnostics;
+  error status and existing authorization behavior are unchanged.
+- Tests performed: Database-error boundary contract, full Vitest suite, typecheck, lint, production build,
+  and public Playwright/axe E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

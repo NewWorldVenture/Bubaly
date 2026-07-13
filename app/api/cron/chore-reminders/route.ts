@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     console.error('Cron chore fetch error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Chore reminder processing failed.' }, { status: 500 });
   }
 
   // Group by member_id

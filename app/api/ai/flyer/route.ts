@@ -75,7 +75,10 @@ export async function POST(req: NextRequest) {
         category: (CATEGORIES.includes(e.category) ? e.category : 'general') as never,
       }));
       const { data, error } = await supabase.from('calendar_events').insert(rows).select('id');
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) {
+        console.error('Flyer calendar write failed:', error);
+        return NextResponse.json({ error: 'Could not save the calendar events.' }, { status: 500 });
+      }
       return NextResponse.json({ created: data?.length ?? 0 });
     }
 

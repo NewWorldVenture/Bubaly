@@ -108,7 +108,10 @@ export async function POST(req: NextRequest) {
       .map((e) => ({ ...e, family_id: familyId, search_zip: zip.trim(), search_radius: radiusMiles, discovered_at: new Date().toISOString(), created_by: ctx!.user.id }));
     if (rows.length) {
       const { error } = await supabase.from('weekend_events').upsert(rows, { onConflict: 'family_id,source,external_id' });
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) {
+        console.error('Weekend event write failed:', error);
+        return NextResponse.json({ error: 'Could not save discovered events.' }, { status: 500 });
+      }
     }
   }
 

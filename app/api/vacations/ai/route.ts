@@ -158,7 +158,10 @@ Costs/planned are whole US dollars. Keep itinerary within the trip's day count. 
     let conversationId = body.conversationId;
     if (!conversationId) {
       const { data: convo, error } = await supabase.from('vacation_ai_conversations').insert({ family_id: familyId, vacation_id: vacationId, title: message.slice(0, 60), created_by: ctx.user.id }).select('id').single();
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) {
+        console.error('Vacation AI conversation write failed:', error);
+        return NextResponse.json({ error: 'Could not start the trip conversation.' }, { status: 500 });
+      }
       conversationId = convo.id;
     }
     await supabase.from('vacation_ai_messages').insert({ family_id: familyId, conversation_id: conversationId, role: 'user', content: message, created_by: ctx.user.id });

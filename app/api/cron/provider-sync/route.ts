@@ -26,7 +26,10 @@ export async function GET(req: NextRequest) {
     .select('id, user_id, family_id, external_id, provider')
     .order('last_synced_at', { ascending: true, nullsFirst: true })
     .limit(BATCH);
-  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  if (error) {
+    console.error('Provider-sync cron read failed:', error);
+    return NextResponse.json({ ok: false, error: 'Provider synchronization failed.' }, { status: 500 });
+  }
 
   let synced = 0, skipped = 0, failed = 0;
   const details: Record<string, unknown>[] = [];

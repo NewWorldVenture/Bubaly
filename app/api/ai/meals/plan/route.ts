@@ -125,7 +125,10 @@ export async function POST(req: Request) {
   }
   if (rows.length) {
     const { error } = await supabase.from('meal_plans').insert(rows);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error('Meal plan write failed:', error);
+      return NextResponse.json({ error: 'Could not save the meal plan.' }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ assignments, written: true, count: rows.length });
