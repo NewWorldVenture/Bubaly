@@ -1843,7 +1843,7 @@ roadmap entries and user worktree changes are preserved.
 
 - 348 `page.tsx` route files.
 - 193 Supabase migration files and 309 SQL files under `supabase`.
-- 304 test files after the audit's regression contracts.
+- 305 test files after the audit's regression contracts.
 - 2,054 repository files returned by the initial source inventory (excluding node_modules, dist, and build).
 - Detailed route, database, feature, architecture, security, testing, and journey inventories already
   exist in the root documentation and will be reconciled with this session's command evidence.
@@ -1896,7 +1896,7 @@ roadmap entries and user worktree changes are preserved.
 
 - [x] Typecheck: `npm.cmd run typecheck` passed.
 - [x] Lint: `npm.cmd run lint` passed with only the known Next.js `next lint` deprecation notice.
-- [x] Unit tests: `npm.cmd test` passed, 304 files and 2,552 tests.
+- [x] Unit tests: `npm.cmd test` passed, 305 files and 2,554 tests.
 - [x] Credential-safety regression: all seed scripts load access only from environment; no literal
   `sb_secret_*` credential remains in runtime/source SQL.
 - [x] Production build: `npm.cmd run build` passed; 233 static pages generated.
@@ -2186,5 +2186,27 @@ roadmap entries and user worktree changes are preserved.
   queries and model execution, with `Retry-After` on rejection.
 - Tests performed: Shared limiter tests passed with 3 cases; full suite, typecheck, lint, build, and
   public E2E remain the release gates. Durable enforcement depends on migration `0156` in production.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0192 - Public calendar feed lacked abuse bounds
+
+- Status: [x] Completed in code and covered by regression test.
+- Severity: P1
+- Category: Public capability access / service-role read abuse resistance
+- Feature: Anonymous iCalendar subscriptions
+- Route: `/api/sync/feeds/[token]`
+- File or files: `app/api/sync/feeds/[token]/route.ts`, `lib/sync/feed-request.ts`,
+  `tests/sync-feed-contract.test.ts`
+- Database objects: `sync_calendars`, `sync_calendar_events`, `rate_limits`, `rate_limit_hit`
+- Description: A valid capability URL intentionally grants calendar access, but the endpoint had no
+  request budget and accepted unbounded token strings before a service-role query returning up to 2,000 rows.
+- User impact: A leaked feed URL or automated poller could create avoidable database load.
+- Security impact: The capability read path had weaker abuse resistance than other public service-role routes.
+- Root cause: The route treated the token as sufficient authorization without a bounded input or rate guard.
+- Resolution: Added URL-safe token validation (16-200 characters) and 60 requests per IP per minute using
+  local plus durable limits, with `Retry-After` responses. Anonymous calendar clients remain supported.
+- Tests performed: `npm.cmd test -- tests/sync-feed-contract.test.ts` passed with 2 tests; full suite,
+  typecheck, lint, build, and public E2E remain the release gates. Durable enforcement depends on `0156`.
 - Verified by: Codex
 - Date completed: 2026-07-13

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { generateICS, type IcsEvent } from '@/lib/sync/ics';
+import { isValidFeedToken } from '@/lib/sync/feed-request';
+import { clientIp, rateLimit } from '@/lib/server/rate-limit';
+import { rateLimitDb } from '@/lib/server/rate-limit-db';
 
 // Public iCalendar feed for a single bubaly calendar.
 //
@@ -20,11 +23,22 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params;
-  if (!token || token.length < 16) {
+  if (!isValidFeedToken(token)) {
     return new NextResponse('Not found', { status: 404 });
   }
 
   const supabase = createServiceClient();
+  const key = `sync-feed:${clientIp(_req.headers)}`;
+  const limited = rateLimit(key, { limit: 60, windowMs: 60_000 });
+  if (!limited.ok) return new NextResponse('Too many requests', {
+    status: 429,
+    headers: { 'Retry-After': String(limited.retryAfter) },
+  });
+  const durable = await rateLimitDb(supabase, key, { limit: 60, windowMs: 60_000 });
+  if (!durable.ok) return new NextResponse('Too many requests', {
+    status: 429,
+    headers: { 'Retry-After': String(durable.retryAfter) },
+  });
 
   const { data: calendar, error } = await supabase
     .from('sync_calendars')

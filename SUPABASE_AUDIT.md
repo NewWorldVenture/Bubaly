@@ -95,3 +95,6 @@ must apply that migration before relying on cross-instance enforcement.
 
 The generic family AI insights endpoint is also guarded before its broad context queries and provider
 call, using a distinct per-user bucket.
+
+The public calendar feed now validates the URL-safe capability shape and rate-limits by client IP before
+the service-role `sync_calendars` and `sync_calendar_events` reads. Durable enforcement depends on `0156`.
