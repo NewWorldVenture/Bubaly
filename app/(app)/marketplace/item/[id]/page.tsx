@@ -14,6 +14,7 @@ import { ListingQuestions } from '@/components/marketplace/listing-questions';
 import { ListingImage } from '@/components/marketplace/listing-image';
 import { OfferInbox } from '@/components/marketplace/offer-inbox';
 import { AuctionPanel } from '@/components/marketplace/auction-panel';
+import { NegotiationPanel, type Thread } from '@/components/marketplace/negotiation-panel';
 import { computeTrustScore, ratingSummary, TRUST_BAND_LABELS } from '@/lib/marketplace/trust';
 import {
   KIND_LABELS, CATEGORY_LABELS, CONDITION_LABELS, priceLabel, formatCents,
@@ -99,6 +100,36 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const claimLabel = kind === 'sell' || kind === 'rent' ? "I'm interested" : kind === 'wanted' ? 'I have this' : 'Claim it';
   const sentLabel = kind === 'sell' || kind === 'rent' ? 'Interest sent' : 'Claim sent';
   const open = listing.status === 'available' || listing.status === 'pending';
+
+  // "Make an Offer" negotiation threads (fixed-price sale listings only).
+  const negotiable = !isAuctionListing && kind === 'sell' && listing.price_cents > 0;
+  let negThreads: Thread[] = [];
+  if (negotiable) {
+    const { data: negRows } = await sb
+      .from('marketplace_negotiations')
+      .select('id, buyer_member_id, status, current_amount_cents, last_actor, agreed_amount_cents')
+      .eq('listing_id', id).order('created_at', { ascending: true });
+    const visible = (negRows ?? []).filter((n) =>
+      isOwner ? ['open', 'agreed'].includes(n.status) : n.buyer_member_id === selfId && n.status === 'open');
+    const negIds = visible.map((n) => n.id);
+    const { data: roundRows } = negIds.length
+      ? await sb.from('marketplace_negotiation_rounds')
+          .select('id, negotiation_id, actor_role, kind, amount_cents, message, created_at')
+          .in('negotiation_id', negIds).order('created_at', { ascending: true })
+      : { data: [] };
+    negThreads = visible.map((n) => ({
+      id: n.id,
+      buyerName: nameOf(n.buyer_member_id),
+      status: n.status,
+      currentAmountCents: n.current_amount_cents,
+      lastActor: n.last_actor as 'buyer' | 'seller',
+      agreedAmountCents: n.agreed_amount_cents,
+      rounds: (roundRows ?? []).filter((r) => r.negotiation_id === n.id).map((r) => ({
+        id: r.id, actorRole: r.actor_role as 'buyer' | 'seller', kind: r.kind as Thread['rounds'][number]['kind'],
+        amountCents: r.amount_cents, message: r.message, createdAt: r.created_at,
+      })),
+    }));
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
@@ -207,6 +238,19 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           {/* Owner: accept / decline the offers on this listing */}
           {isOwner && inboxOffers.length > 0 && (
             <OfferInbox offers={inboxOffers} />
+          )}
+
+          {/* Make an Offer — Best Offer negotiation (fixed-price sales) */}
+          {negotiable && (isOwner || open) && (
+            <div className="mt-5">
+              <NegotiationPanel
+                listingId={listing.id}
+                askCents={listing.price_cents}
+                isOwner={isOwner}
+                canOffer={!isOwner && open}
+                threads={negThreads}
+              />
+            </div>
           )}
         </div>
       </div>
