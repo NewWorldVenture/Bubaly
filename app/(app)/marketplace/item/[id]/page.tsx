@@ -13,6 +13,7 @@ import { InterestButton } from '@/components/marketplace/interest-button';
 import { ListingQuestions } from '@/components/marketplace/listing-questions';
 import { ListingImage } from '@/components/marketplace/listing-image';
 import { OfferInbox } from '@/components/marketplace/offer-inbox';
+import { AuctionPanel } from '@/components/marketplace/auction-panel';
 import { computeTrustScore, ratingSummary, TRUST_BAND_LABELS } from '@/lib/marketplace/trust';
 import {
   KIND_LABELS, CATEGORY_LABELS, CONDITION_LABELS, priceLabel, formatCents,
@@ -37,9 +38,15 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
 
   const { data: listing } = await sb
     .from('marketplace_listings')
-    .select('id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, created_at')
+    .select('id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, created_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, reserve_cents, buy_now_cents, current_bid_cents, bid_count, highest_bidder_family_id')
     .eq('id', id).eq('family_id', familyId).maybeSingle();
   if (!listing) notFound();
+
+  const isAuctionListing = listing.sale_format === 'auction';
+  const { data: bidRows } = isAuctionListing
+    ? await sb.from('marketplace_bids').select('id, bidder_family_id, amount_cents, status, created_at, is_auto')
+        .eq('listing_id', id).order('created_at', { ascending: false }).limit(20)
+    : { data: [] };
 
   const kind = listing.kind as ListingKind;
   const KindIcon = KIND_ICON[kind] ?? ShoppingBag;
@@ -124,7 +131,26 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           </div>
 
           <h1 className="mt-2 text-2xl font-semibold text-fg">{listing.title}</h1>
-          {price && <div className="mt-1 text-xl font-bold text-fg">{price}</div>}
+          {!isAuctionListing && price && <div className="mt-1 text-xl font-bold text-fg">{price}</div>}
+
+          {/* Live auction box (replaces the fixed price when this is an auction) */}
+          {isAuctionListing && (
+            <div className="mt-4">
+              <AuctionPanel
+                listingId={listing.id}
+                isOwner={isOwner}
+                myFamilyId={familyId}
+                initial={{
+                  saleFormat: listing.sale_format, status: listing.status,
+                  startingBidCents: listing.starting_bid_cents, currentBidCents: listing.current_bid_cents,
+                  bidCount: listing.bid_count, reserveCents: listing.reserve_cents, buyNowCents: listing.buy_now_cents,
+                  auctionStartsAt: listing.auction_starts_at, auctionEndsAt: listing.auction_ends_at,
+                  highestBidderFamilyId: listing.highest_bidder_family_id,
+                }}
+                initialBids={(bidRows ?? []) as never}
+              />
+            </div>
+          )}
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
             <span className="inline-flex items-center gap-1"><Tag className="h-4 w-4" />{CATEGORY_LABELS[listing.category as ListingCategory]}</span>

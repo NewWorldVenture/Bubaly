@@ -1215,6 +1215,41 @@ missing-location events, colliding events for conflicts). Run it, then open
   the parallel session's `components/demo/demo-experience.tsx` + `lib/demo/config.ts` +
   `useApp().demoExpiresAt`; the standalone `demo-timer.tsx` was removed in #292.)*
 
+- [x] **Live Auctions — real proxy bidding ✅ SHIPPED (2026-07-13). The eBay-beating gap.** Turns the
+  marketplace into a live auction house — the signature eBay behavior Craigslist has never had and our
+  fixed-price board lacked. Full vertical slice, realtime, atomic, 100% Supabase:
+  - Migration **`0183_marketplace_auctions.sql`** — auction columns on `marketplace_listings`
+    (`sale_format` fixed|auction · `auction_starts_at`/`ends_at` · `starting_bid_cents` · `reserve_cents`
+    · `buy_now_cents` · `current_bid_cents` · `bid_count` · `highest_bidder_*` · `highest_max_cents` ·
+    `anti_snipe_minutes` · `auction_closed_at`) + new **`marketplace_bids`** (proxy `max_cents` vs
+    visible `amount_cents` · status active/outbid/won/lost/retracted · is_auto). RLS: a bidder sees their
+    own bids + the owner sees all. **`marketplace_place_bid()`** RPC (`SECURITY DEFINER`,
+    `SELECT … FOR UPDATE` row-lock) implements **eBay-style max/proxy bidding**: tiered min increments,
+    hidden reserve, own-listing/too-low/ended guards, and **anti-sniping** (a late bid extends the clock).
+    PG16-verified idempotent ×2 + proxy/reserve/anti-snipe scenarios (Bob 8000 leads at 5000; Cara 6000
+    → Bob auto-covers 6100; Cara 12000 → leads 8100; reserve 9000 unmet; anti-snipe extended=true).
+  - Pure engine **`lib/marketplace/auction.ts`** (`bidIncrementCents`/`minNextBidCents`/`reserveMet`/
+    `auctionStatus`/`timeLeft`/`resolveAuctionOutcome`/`quickBidLadder`, **11 tests**) mirrors the SQL
+    increment/reserve/status math. Types added to `lib/database.types.ts` (listings triple + `marketplace_bids`
+    + the RPC in the typed Functions registry).
+  - Server actions `placeBidAction`/`buyNowAction` (`app/(app)/marketplace/auctions/actions.ts`) — bid via
+    the RPC (human-mapped reason codes); Buy-It-Now atomically flips the listing to claimed + writes a
+    confirmed `marketplace_orders` row.
+  - Realtime **`AuctionPanel`** on the item page (ticking countdown · current bid · reserve state ·
+    proxy-bid input + quick-bid ladder · Buy-It-Now · live bid history via a `marketplace_bids` Realtime
+    channel). Live board **`/marketplace/auctions`** (stat tiles · soonest-ending-first grid · countdowns
+    · reserve/Buy-Now flags) + nav entry (Live Auctions, `Gavel`, additive).
+  - **`close-auctions` cron** (`app/api/cron/close-auctions/route.ts`, CRON_SECRET, `*/5 * * * *` in
+    `vercel.json`): closes expired auctions — winner (reserve met) → confirmed order + bids won/lost +
+    notify winner & seller; reserve-not-met → withdrawn + notify. Atomic close (only if still available;
+    guards a concurrent Buy-It-Now).
+  - Seed **`seed_marketplace_auctions.sql`** (60 auctions + ~456 bids ≈ 516 rows; throwaway "Auction
+    Bidders" family so bids are valid cross-family; live/ending-soon/scheduled spread, 20 with reserve,
+    15 with Buy-Now, 8 zero-bid lots for the empty state; in `SEED_ALL.sql`). PG16-validated ×2 (60 lots
+    / 456 bids, idempotent). Verified: tsc · eslint · **vitest (11 auction)** · `next build`.
+  - ⚠️ apply **`0183`** + set **`CRON_SECRET`** in prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe
+    before apply: the board + panel read best-effort and show nothing until the table exists.
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:
