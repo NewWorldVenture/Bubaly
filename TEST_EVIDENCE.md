@@ -8,8 +8,9 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 331 files, 2,658 tests |
+| `npm.cmd exec vitest run` | PASS: 332 files, 2,670 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
+| `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line` | PASS: 51 of 52 tests; 1 intentional auth skip |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
 | `npm.cmd test -- tests/ai-chat-request.test.ts tests/marketing-consent-safety.test.ts` | PASS: 2 files, 4 tests |
@@ -143,6 +144,18 @@ Audit date: 2026-07-13
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
 - Audited authenticated and cron routes now return operation-specific generic database failures while
   preserving server-side diagnostics.
+
+## Audit Update - 2026-07-13 (marketplace hand-off seed repair and integration)
+
+- `npm.cmd exec vitest run tests/seed-data-safety-contract.test.ts tests/production-readiness-seed.test.ts tests/marketplace-handoff.test.ts`:
+  3 files, 17 tests passed.
+- `npm.cmd exec vitest run`: 332 files and 2,670 tests passed.
+- `npm.cmd run typecheck`: PASS.
+- `npm.cmd run lint`: PASS with the known Next.js `next lint` deprecation notice.
+- `npm.cmd run build`: PASS with 234 generated pages.
+- `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line`: 51 of 52 tests passed; 1 intentional authenticated skip.
+- The hand-off feature remains covered after rebasing onto the concurrent marketplace commit; its seed
+  is now anchored, deterministic, additive, and free of deletes or stand-in member creation.
 
 ## Audit Update - 2026-07-13 (atomic expired auction settlement)
 

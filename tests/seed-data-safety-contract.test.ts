@@ -49,4 +49,20 @@ describe('seed data safety', () => {
       expect(sql).toContain('hashtextextended');
     }
   });
+
+  it('keeps the marketplace hand-off seed fail-closed and conflict-safe', () => {
+    const seed = readFileSync(resolve(supabaseDir, 'seed_marketplace_handoffs.sql'), 'utf8');
+    const master = readFileSync(resolve(supabaseDir, 'SEED_ALL.sql'), 'utf8');
+    const marker = 'seed_marketplace_handoffs.sql';
+    const start = master.indexOf(marker);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const masterSection = master.slice(start);
+    for (const sql of [seed, masterSection]) {
+      expect(sql).toContain('requires the anchored account');
+      expect(sql).not.toMatch(/delete\s+from\s+public\.marketplace_(?:handoffs|orders|listings)/i);
+      expect(sql).not.toContain('Pickup Pat');
+      expect(sql).toContain("md5('familyos-seed-handoff-listing-' || i)::uuid");
+      expect(sql).toContain('on conflict (order_id) do nothing');
+    }
+  });
 });

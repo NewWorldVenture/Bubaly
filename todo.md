@@ -3079,3 +3079,20 @@ roadmap entries and user worktree changes are preserved.
   and public Playwright/axe E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0227 - Marketplace hand-off seed was destructive and could choose arbitrary families
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Seed safety / tenant isolation
+- Feature: Marketplace pickup and hand-off coordinator
+- File or files: `supabase/seed_marketplace_handoffs.sql`, `supabase/SEED_ALL.sql`,
+  `tests/seed-data-safety-contract.test.ts`
+- Description: The new hand-off seed deleted tagged rows on rerun, selected the first family when the
+  anchored account was absent, and created a stand-in family member when the fixture family was incomplete.
+- Resolution: Replaced cleanup with deterministic conflict-safe IDs and `ON CONFLICT DO NOTHING`; the
+  seed now fails closed unless the anchored account and two existing active members resolve.
+- Tests performed: Seed safety, production-readiness seed, marketplace hand-off contracts, full Vitest
+  suite, typecheck, lint, production build, and public Playwright/axe E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

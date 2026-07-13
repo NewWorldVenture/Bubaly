@@ -3,8 +3,8 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,658 unit tests, builds all 234 Next.js build
-routes, and passes 51 public/mobile/accessibility E2E checks. The audit also found and repaired a
+tree compiles, passes lint and type checking, passes 2,670 unit tests, builds all 234 Next.js build
+routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
 
@@ -16,9 +16,9 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 - 348 `page.tsx` route files.
 - 100 API route handlers.
-- 193 migrations at audit start; additive repair migrations through `0189` are now present.
+- 193 migrations at audit start; additive repair migrations through `0190` are now present.
 - 315 SQL files under `supabase`.
-- 331 unit-test files and 2,658 passing tests.
+- 332 unit-test files and 2,670 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -70,10 +70,14 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   client execution from two legacy SECURITY DEFINER trigger functions.
 - Added migration `0189_reconcile_stripe_webhook_claims.sql` to restore both Stripe claim columns in
   environments where migration `0182` was recorded but its additive ALTER did not complete.
+- Added migration `0190_marketplace_handoffs.sql` and the Orders hand-off coordinator for safe pickup
+  proposals, confirmations, calendar placement, and code-based completion.
 - Replaced raw Supabase error responses in public A/B, landing-page, and exit-intent metric routes with
   generic client messages and server-side diagnostics.
 - Extended the same database-error boundary to authenticated calendar, meal, vacation, event, and
   concierge routes plus scheduled jobs; callers receive stable generic failures while logs retain detail.
+- Repaired the remote marketplace hand-off seed to be fail-closed and additive: it now requires the
+  anchored account and two existing members, uses deterministic IDs, and never deletes or creates users.
 - Hardened the public unsubscribe endpoint with shared request limits, bounded token input, escaped
   HTML output, and production fail-closed secret handling.
 - Preserved active family membership checks and tightened listing-share deletion to the owning family
@@ -114,9 +118,9 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,658 tests / 331 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,670 tests / 332 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 234 generated pages | `npm.cmd run build` |
-| Public E2E | PASS, 51 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
+| Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
 | Mobile overflow E2E | PASS at 320, 390, 768, and 1024 widths | Playwright |
 | Migration/seed contract | PASS, 20 focused tests | targeted Vitest run |
@@ -128,7 +132,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 ## Remaining Launch Blockers
 
-1. Apply migrations through `0189_reconcile_stripe_webhook_claims.sql` in the intended environment and
+1. Apply migrations through `0190_marketplace_handoffs.sql` in the intended environment and
    rerun schema plus cross-family RLS and negotiation allow/deny probes.
 2. Diagnose the live Supabase Auth Admin 500 in Supabase/GoTrue/Postgres logs and rerun the Auth audit.
 3. Resolve or formally accept the PostCSS advisory after reviewing the next compatible Next.js release.
