@@ -22,11 +22,11 @@ begin
   where lower(u.email) = lower(v_email) limit 1;
   if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
 
-  delete from public.network_aggregates;
   -- Full product: each cohort (kids × size) × each metric value → exactly one row.
   insert into public.network_aggregates (scope, cohort_key, metric, value, count, cohort_size)
   select 'benchmarks', 'kids:' || k || '|size:' || s, mv.metric, mv.value,
-    (20 + floor(random()*480))::int, (20 + floor(random()*480))::int
+    20 + mod(hashtextextended(k || '|' || s || '|' || mv.metric || '|' || mv.value, 1) & 2147483647, 80)::int,
+    100 + mod(hashtextextended(k || '|' || s || '|' || mv.metric || '|' || mv.value, 2) & 2147483647, 401)::int
   from unnest(kid_bands) k
   cross join unnest(size_bands) s
   cross join (values

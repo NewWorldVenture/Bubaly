@@ -1807,3 +1807,162 @@ Verified end-to-end, not rebuilt:
 Net: every 4–5 star agent-buildable item on the owner's open-items table is now built. Remaining
 items are human-owned (keys/OAuth/Issuing/CI Supabase login) or large greenfield strategic bets
 (open developer platform), all logged.
+- Honest deferrals per the prompt's own priority rules: E2E suite (needs CI Supabase login -
+  open item #24), RLS CI matrix, visual regression - scoped in `testing-plan.md`.
+
+---
+
+## 2026-07-13 Autonomous Audit Session
+
+This section is an additive execution ledger for the current repository-wide audit. Existing
+roadmap entries and user worktree changes are preserved.
+
+### Audit Metadata
+
+- Audit started: 2026-07-13T08:42:01-04:00
+- Repository: FamilyOS
+- Branch: `codex/world-class-production`
+- Commit at audit start: `3fd3ab9` (`remove unsafe synthetic auth seeds`)
+- Environment: Windows workspace, Next.js 15, Node/npm project
+- Supabase project: configured through environment; live credentials intentionally not recorded
+- Auditor: Codex
+- Overall status: CONDITIONAL GO pending validation and external-environment checks
+- Critical blockers remaining: unknown until full validation completes
+- High-priority issues remaining: unknown until full validation completes
+- Medium-priority issues remaining: unknown until full validation completes
+- Low-priority issues remaining: unknown until full validation completes
+
+### Initial Worktree Safety Record
+
+- [x] Existing `todo.md` found and extended rather than replaced.
+- [x] Existing user changes preserved: `supabase/SEED_ALL.sql`, `supabase/seed_network_aggregates.sql`,
+  and untracked `tests/seed-data-safety-contract.test.ts`.
+- [x] No production data, users, storage objects, migrations, or secrets were modified by audit setup.
+
+### Inventory Snapshot
+
+- 348 `page.tsx` route files.
+- 193 Supabase migration files and 309 SQL files under `supabase`.
+- 296 test files after this audit's two regression contracts.
+- 2,054 repository files returned by the initial source inventory (excluding node_modules, dist, and build).
+- Detailed route, database, feature, architecture, security, testing, and journey inventories already
+  exist in the root documentation and will be reconciled with this session's command evidence.
+
+### Open Audit Items
+
+- [~] Run typecheck, lint, unit tests, production build, dependency audit, and static searches.
+- [ ] Verify route/API/feature coverage against the current tree.
+- [ ] Review Supabase migrations, RLS/policy coverage, storage declarations, RPCs, triggers, and client usage.
+- [ ] Repair safe defects found by the current validation pass.
+- [ ] Produce the required uppercase production reports and deployment checklist.
+- [ ] Perform live Supabase, authenticated browser, RLS attack, and deployment checks where credentials/services
+  are available; document any unavailable checks as blockers.
+
+### TODO-0178 - Marketplace circles RLS recursion
+
+- Status: [x] Completed in code; live migration application and post-migration probe pending.
+- Severity: P1
+- Category: Database authorization / reliability
+- Feature: Cross-family marketplace circles
+- Route: `/marketplace`
+- File or files: `supabase/migrations/0176_marketplace_circles.sql`, `supabase/migrations/0178_marketplace_circles_rls_recursion.sql`
+- Database objects: `marketplace_circles`, `marketplace_circle_members`, `marketplace_listing_shares`, related RLS policies
+- Affected roles: Authenticated family members using circles
+- Description: Production REST access to `marketplace_circles` returned PostgreSQL `42P17` because the
+  `marketplace_circle_members` SELECT policy queried the same table directly. Related policies also
+  depended on that recursive path.
+- User impact: Circle discovery and any related listing feed could fail with HTTP 500.
+- Security or privacy impact: The failure blocked access rather than broadening access, but the policy
+  design was not safely verifiable until recursion was removed.
+- Root cause: Direct membership-table subqueries inside RLS policies on the membership table and related tables.
+- Required remediation: Apply migration `0178_marketplace_circles_rls_recursion.sql`, then rerun the schema
+  probe and authenticated cross-family allow/deny tests in an isolated Supabase environment.
+- Implementation notes: Added stable SECURITY DEFINER helpers with pinned `search_path`; preserved active
+  family membership checks; tightened share delete to the owning family/listing.
+- Test plan: Contract test plus local Supabase migration/RLS tests; live non-destructive REST probe after deploy.
+- Tests performed: `tests/marketplace-circles-rls.test.ts` added; typecheck, lint, unit suite, and build rerun after patch.
+- Evidence before fix: `marketplace_circles` REST probe returned HTTP 500, code `42P17`, message
+  `infinite recursion detected in policy for relation "marketplace_circle_members"`.
+- Resolution: Additive migration and regression contract are present. Production resolution is not claimed
+  until the migration is applied and the live probe returns successfully.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### Audit Closeout Evidence (2026-07-13)
+
+- [x] Typecheck: `npm.cmd run typecheck` passed.
+- [x] Lint: `npm.cmd run lint` passed with only the known Next.js `next lint` deprecation notice.
+- [x] Unit tests: `npm.cmd test` passed, 297 files and 2,539 tests.
+- [x] Production build: `npm.cmd run build` passed; 233 static pages generated.
+- [x] Public E2E: 51 passed, 1 intentional authenticated-test skip.
+- [x] Public accessibility: dark/light axe checks passed with no serious/critical violations.
+- [x] Public responsive overflow: 320/390/768/1024 width checks passed.
+- [x] Seed TLS safety and marketplace RLS contract tests passed.
+- [x] Required reports created: `PRODUCTION_READINESS_REPORT.md`, `SUPABASE_AUDIT.md`,
+  `TEST_EVIDENCE.md`, and `PRODUCTION_DEPLOYMENT_CHECKLIST.md`.
+- [!] Live marketplace schema probe remains blocked until `0178` is applied.
+- [!] Live Auth Admin probe remains blocked by Supabase HTTP 500.
+- [!] Local migration/RLS validation remains blocked until Docker Desktop is available.
+- [!] Dependency advisory remains unresolved because npm reports no available PostCSS fix.
+
+- [x] Added `supabase/seed_production_readiness.sql`, an idempotent 600-record independence-ladder
+  dataset with a contract test and no destructive/Auth writes.
+
+### TODO-0179 - Supabase Auth Admin users probe returns 500
+
+- Status: [!] Blocked on external Supabase service diagnosis.
+- Severity: P1
+- Category: Authentication / operations
+- Feature: Admin user inventory
+- Route: `/admin/users`
+- File or files: `scripts/audit-supabase-auth.mjs`, `app/(app)/admin/users/page.tsx`
+- Database objects: Supabase Auth `auth.users` / GoTrue Admin API
+- Affected roles: Super administrators
+- Description: The configured live project reports HTTP 500 `Database error finding users` for
+  `GET /auth/v1/admin/users?page=1&per_page=1` with the service-role key.
+- User impact: Admin user listing and the Auth audit cannot be verified against the live project.
+- Root cause: Not determinable from repository code; the response includes a Supabase error id and no SQL detail.
+- Required remediation: Supabase owner should inspect GoTrue/Postgres logs for the returned error id,
+  verify `auth.users` health, and rerun the probe after repair.
+- Tests performed: Public Auth health probe passed; Admin users probe failed with HTTP 500.
+- Evidence: `019f5b84-d42e-7354-9db9-89b9460d2921` from the live probe at audit time.
+
+### TODO-0180 - Production Supabase migration state is incomplete
+
+- Status: [!] Blocked pending deployment authorization and migration application.
+- Severity: P1
+- Category: Deployment / database
+- Feature: Latest schema and RLS
+- Description: The repository contains migrations through `0177` plus the new `0178` repair, while the
+  configured live schema probe failed on the latest required object. The repository cannot safely claim
+  that production has every migration applied without running the migration deployment process.
+- Required remediation: Apply pending migrations through `0178` in the intended deployment environment,
+  run the schema/auth probes, then run isolated RLS allow/deny tests. No destructive production operation
+  was performed by this audit.
+
+### TODO-0181 - Dependency audit reports unresolved PostCSS advisory
+
+- Status: [!] No fix available from `npm audit`.
+- Severity: P2
+- Category: Dependency security
+- Feature: Build dependency chain
+- Description: `npm audit --omit=dev --audit-level=high` reports two moderate PostCSS vulnerabilities
+  (`GHSA-qx2v-qp2m-jg93`) through Next.js with no available fix in the installed dependency graph.
+- Required remediation: Track the Next.js/PostCSS release that removes the advisory, then upgrade and
+  rerun build, lint, typecheck, and tests. Do not force an unreviewed breaking dependency change.
+
+### TODO-0182 - Seed scripts disabled TLS verification
+
+- Status: [x] Completed and covered by regression test.
+- Severity: P2
+- Category: Security / developer tooling
+- Feature: Remote seed scripts
+- File or files: `scripts/seed*.mjs`
+- Description: Six seed scripts set `NODE_TLS_REJECT_UNAUTHORIZED=0`, disabling certificate
+  verification for every outbound request in the process.
+- User impact: A remote seed run could expose Supabase credentials to a man-in-the-middle.
+- Resolution: Removed the process-wide TLS bypass from all seed scripts; normal Node certificate
+  validation now applies. Added `tests/seed-tls-safety-contract.test.ts`.
+- Tests performed: Targeted contract test, typecheck, lint, and full suite after the repair.
+- Verified by: Codex
+- Date completed: 2026-07-13

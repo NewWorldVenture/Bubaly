@@ -1,4 +1,3 @@
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import { createClient } from '@supabase/supabase-js';
 const sb = createClient('https://ltcxlbipiihclxwioyqj.supabase.co','sb_secret_BfCiburaPbck_7uXGgWOPA_glwQ5GkV',{auth:{autoRefreshToken:false,persistSession:false}});
 const FAMILY_ID='a0cba6bd-88f7-48a9-926d-b27e5cf671dc';
