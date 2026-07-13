@@ -1792,3 +1792,18 @@ vitest enforced per push). This pass closed the prompt's outstanding requirement
   (inert: the test glob is .ts-only); 2508 tests still green.
 - Honest deferrals per the prompt's own priority rules: E2E suite (needs CI Supabase login —
   open item #24), RLS CI matrix, visual regression — scoped in `testing-plan.md`.
+
+### ✅ Open-item #2 (Chief-of-Staff proactive front door) — VERIFIED COMPLETE (2026-07-13)
+The opportunities-table screenshot was stale: this is fully built as **R5** and shipping on Home.
+Verified end-to-end, not rebuilt:
+- Engine `lib/home/front-door.ts` (`buildFrontDoor` + `mergeHandled`) assembles autopilot
+  auto-executed actions + specialist-agent completed actions ("Done for you") and pending
+  approvals ("Waiting on you") into one warm greeting. **11 tests pass.**
+- `FrontDoorHero` renders on `/home`; `pending-approvals.tsx` calls the REAL
+  `decideApprovalAction` (manager-gated + re-enforced server-side) — one-tap Approve/Decline in
+  place; "Done for you" links to Autopilot for review/undo.
+- Small connective add this pass: a "See everything in Calm →" link from the hero to the deeper
+  quiet inbox (`/dashboard/calm`), so the home assembly leads onward to the full surface.
+Net: every 4–5 star agent-buildable item on the owner's open-items table is now built. Remaining
+items are human-owned (keys/OAuth/Issuing/CI Supabase login) or large greenfield strategic bets
+(open developer platform), all logged.
