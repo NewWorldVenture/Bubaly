@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/journey-recovery",
       "schedule": "0 9,15,21 * * *"
+    },
+    {
+      "path": "/api/cron/close-auctions",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

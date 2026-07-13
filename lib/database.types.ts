@@ -369,9 +369,14 @@ export interface Database {
         Partial<{ member_id: string | null; title: string; with_kids: string | null; location: string | null; place_id: string | null; starts_at: string; ends_at: string | null; status: string; contact_name: string | null; contact_phone: string | null; notes: string | null }>
       >;
       marketplace_listings: T<
-        { id: string; family_id: string; member_id: string | null; title: string; description: string | null; kind: string; category: string; condition: string | null; price_cents: number; rent_period: string | null; photo_url: string | null; location: string | null; status: string; claimed_by: string | null; claimed_at: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; member_id?: string | null; title: string; description?: string | null; kind?: string; category?: string; condition?: string | null; price_cents?: number; rent_period?: string | null; photo_url?: string | null; location?: string | null; status?: string; claimed_by?: string | null; claimed_at?: string | null; created_by?: string | null },
-        Partial<{ member_id: string | null; title: string; description: string | null; kind: string; category: string; condition: string | null; price_cents: number; rent_period: string | null; photo_url: string | null; location: string | null; status: string; claimed_by: string | null; claimed_at: string | null }>
+        { id: string; family_id: string; member_id: string | null; title: string; description: string | null; kind: string; category: string; condition: string | null; price_cents: number; rent_period: string | null; photo_url: string | null; location: string | null; status: string; claimed_by: string | null; claimed_at: string | null; created_by: string | null; sale_format: string; auction_starts_at: string | null; auction_ends_at: string | null; starting_bid_cents: number; reserve_cents: number | null; buy_now_cents: number | null; current_bid_cents: number; bid_count: number; highest_bidder_member_id: string | null; highest_bidder_family_id: string | null; highest_max_cents: number; anti_snipe_minutes: number; auction_closed_at: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; title: string; description?: string | null; kind?: string; category?: string; condition?: string | null; price_cents?: number; rent_period?: string | null; photo_url?: string | null; location?: string | null; status?: string; claimed_by?: string | null; claimed_at?: string | null; created_by?: string | null; sale_format?: string; auction_starts_at?: string | null; auction_ends_at?: string | null; starting_bid_cents?: number; reserve_cents?: number | null; buy_now_cents?: number | null; anti_snipe_minutes?: number },
+        Partial<{ member_id: string | null; title: string; description: string | null; kind: string; category: string; condition: string | null; price_cents: number; rent_period: string | null; photo_url: string | null; location: string | null; status: string; claimed_by: string | null; claimed_at: string | null; sale_format: string; auction_starts_at: string | null; auction_ends_at: string | null; starting_bid_cents: number; reserve_cents: number | null; buy_now_cents: number | null; current_bid_cents: number; bid_count: number; highest_bidder_member_id: string | null; highest_bidder_family_id: string | null; highest_max_cents: number; anti_snipe_minutes: number; auction_closed_at: string | null }>
+      >;
+      marketplace_bids: T<
+        { id: string; listing_id: string; family_id: string; bidder_member_id: string; bidder_family_id: string; amount_cents: number; max_cents: number; status: string; is_auto: boolean; created_at: string },
+        { id?: string; listing_id: string; family_id: string; bidder_member_id: string; bidder_family_id: string; amount_cents: number; max_cents: number; status?: string; is_auto?: boolean },
+        Partial<{ status: string }>
       >;
       marketplace_offers: T<
         { id: string; family_id: string; listing_id: string; member_id: string | null; kind: string; amount_cents: number | null; message: string | null; status: string; created_by: string | null } & Stamps,
@@ -2286,6 +2291,7 @@ export interface Database {
       marketplace_create_circle: { Args: { p_family: string; p_name: string; p_emoji?: string }; Returns: string };
       marketplace_join_circle: { Args: { p_family: string; p_code: string }; Returns: string };
       marketplace_leave_circle: { Args: { p_family: string; p_circle: string }; Returns: undefined };
+      marketplace_place_bid: { Args: { p_listing_id: string; p_bidder_member_id: string; p_bidder_family_id: string; p_max_cents: number }; Returns: Json };
     };
     Enums: {
       member_role: MemberRole;
