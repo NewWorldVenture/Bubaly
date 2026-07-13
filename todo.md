@@ -1323,6 +1323,26 @@ missing-location events, colliding events for conflicts). Run it, then open
   - ⚠️ apply **`0191`** to prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe before apply: the item page
     reads best-effort and shows no badge/history until the table exists.
 
+- [x] **Rent/Borrow Returns + Overdue tracking ✅ SHIPPED (2026-07-13). A family lending library.** The
+  marketplace supports `rent`/`borrow` listings and orders carry `ends_on`, but nothing closed the loop —
+  no "due back Friday" nudge, no overdue flag. Now:
+  - Migration **`0192_marketplace_returns.sql`** — additive `marketplace_orders` columns
+    (`due_reminder_sent_at`, `overdue_notified_at`, `returned_at`) + a partial due-date index for the
+    cron. No new table. PG16-verified idempotent ×2.
+  - Pure engine **`lib/marketplace/returns.ts`** (`returnStatus` upcoming/due_soon/due_today/overdue/
+    returned · `daysUntilDue` · `returnLabel` with tones · cron `needsDueReminder`/`needsOverdueAlert`,
+    **8 tests**). Columns added to `lib/database.types.ts`.
+  - **`return-reminders` cron** (`app/api/cron/return-reminders/route.ts`, `hasCronAuthorization`, daily
+    08:00 in `vercel.json`): one due-soon nudge + one overdue alert per order, deduped by the stamps.
+  - Orders page now shows a **due / overdue / returned badge** on each rent/borrow order (existing
+    `returned` order-control transition unchanged).
+  - Seed **`seed_marketplace_returns.sql`** (250 rent/borrow listings + 250 orders across all five
+    return states, 50 each ≈ 500 rows; borrower = 2nd family member; in `SEED_ALL.sql`). PG16-validated
+    ×2 (even 50-per-bucket spread). Verified: tsc · eslint · **vitest (8 returns + 8 price + 11 handoff +
+    14 negotiation + 11 auction)** · `next build`.
+  - ⚠️ apply **`0192`** + ensure **`CRON_SECRET`** in prod (see `docs/PENDING_PROD_MIGRATIONS.md`). Safe
+    before apply: the badge/cron no-op until the columns exist (the Orders page still renders).
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:

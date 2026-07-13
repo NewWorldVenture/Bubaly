@@ -8,10 +8,19 @@ import { HandoffPanel, type HandoffData } from '@/components/marketplace/handoff
 import type { HandoffStatus, HandoffRole, LocationKind } from '@/lib/marketplace/handoff';
 import { formatCents } from '@/lib/marketplace/listings';
 import { marketplaceServiceFeeCents, orderFeeBreakdown } from '@/lib/marketplace/fee-policy';
+import { returnStatus, returnLabel } from '@/lib/marketplace/returns';
 import { cn } from '@/lib/utils/cn';
 
 export const metadata: Metadata = { title: 'Orders · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
+
+const RETURN_TONE: Record<string, string> = {
+  muted: 'bg-border/60 text-muted',
+  info: 'bg-sky-500/12 text-sky-600 dark:text-sky-400',
+  warn: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  danger: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
+  ok: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400',
+};
 
 const STATUS_CHIP: Record<string, string> = {
   requested: 'bg-amber-500/12 text-amber-600 dark:text-amber-400',
@@ -27,10 +36,11 @@ export default async function MarketplaceOrdersPage() {
   const sb = await createServer();
   const familyId = ctx.active.familyId;
   const selfId = ctx.active.member.id;
+  const now = new Date();
 
   const { data: orders } = await sb
     .from('marketplace_orders')
-    .select('id, listing_id, buyer_member, seller_member, kind, status, amount_cents, created_at')
+    .select('id, listing_id, buyer_member, seller_member, kind, status, amount_cents, ends_on, returned_at, created_at')
     .eq('family_id', familyId)
     .order('created_at', { ascending: false })
     .limit(100);
@@ -97,10 +107,17 @@ export default async function MarketplaceOrdersPage() {
             const role = o.buyer_member === selfId ? 'buyer' : 'seller';
             const other = role === 'buyer' ? nameOf(o.seller_member) : nameOf(o.buyer_member);
             const fee = o.amount_cents > 0 ? orderFeeBreakdown(o.amount_cents, serviceFeeCents) : null;
+            const retStatus = returnStatus({ kind: o.kind, status: o.status, endsOn: o.ends_on, returnedAt: o.returned_at }, now);
+            const retLabel = retStatus === 'not_applicable' ? null : returnLabel(retStatus, o.ends_on, now);
             return (
               <li key={o.id} className="rounded-xl border border-border bg-surface/60 p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide', STATUS_CHIP[o.status] ?? STATUS_CHIP.cancelled)}>{o.status}</span>
+                  {retLabel && (
+                    <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide', RETURN_TONE[retLabel.tone])}>
+                      {retLabel.text}
+                    </span>
+                  )}
                   <p className="min-w-0 flex-1 truncate text-sm font-medium">{titleOf.get(o.listing_id) ?? 'Listing'}</p>
                   {o.amount_cents > 0 && <span className="text-sm font-semibold text-brand-text">{formatCents(o.amount_cents)}</span>}
                 </div>

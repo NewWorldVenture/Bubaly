@@ -439,9 +439,9 @@ export interface Database {
         Partial<{ collection_id: string; listing_id: string }>
       >;
       marketplace_orders: T<
-        { id: string; family_id: string; listing_id: string; buyer_member: string | null; seller_member: string | null; kind: string; status: string; amount_cents: number; starts_on: string | null; ends_on: string | null; notes: string | null; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; listing_id: string; buyer_member?: string | null; seller_member?: string | null; kind?: string; status?: string; amount_cents?: number; starts_on?: string | null; ends_on?: string | null; notes?: string | null; created_by?: string | null },
-        Partial<{ buyer_member: string | null; seller_member: string | null; kind: string; status: string; amount_cents: number; starts_on: string | null; ends_on: string | null; notes: string | null }>
+        { id: string; family_id: string; listing_id: string; buyer_member: string | null; seller_member: string | null; kind: string; status: string; amount_cents: number; starts_on: string | null; ends_on: string | null; notes: string | null; due_reminder_sent_at: string | null; overdue_notified_at: string | null; returned_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; listing_id: string; buyer_member?: string | null; seller_member?: string | null; kind?: string; status?: string; amount_cents?: number; starts_on?: string | null; ends_on?: string | null; notes?: string | null; due_reminder_sent_at?: string | null; overdue_notified_at?: string | null; returned_at?: string | null; created_by?: string | null },
+        Partial<{ buyer_member: string | null; seller_member: string | null; kind: string; status: string; amount_cents: number; starts_on: string | null; ends_on: string | null; notes: string | null; due_reminder_sent_at: string | null; overdue_notified_at: string | null; returned_at: string | null }>
       >;
       marketplace_handoffs: T<
         { id: string; order_id: string; family_id: string; listing_id: string | null; proposed_by: string | null; proposer_role: string; meet_at: string | null; location_label: string | null; location_kind: string; status: string; confirm_code: string | null; confirmed_at: string | null; completed_at: string | null; calendar_event_id: string | null; notes: string | null } & Stamps,
