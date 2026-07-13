@@ -215,6 +215,12 @@ The `SEED_ALL.sql` master entrypoint now performs the same anchored-account pref
 its legacy sections. This protects the one-paste production fixture workflow even where individual
 operator-scoped seed files retain their own historical resolution logic.
 
+## Audit Update - 2026-07-13 (authenticated context failure boundary)
+
+`getUserContext()` now checks errors from the `family_members`, `families`, and `user_preferences`
+queries. A failed read raises a generic temporary-unavailable error and logs the diagnostic server-side;
+it is never treated as an empty membership result that could trigger service-role family provisioning.
+
 ## Audit Update - 2026-07-13 (marketplace returns seed safety)
 
 The new returns fixture pack now fails closed when migration `0192` or the required `returned_at`

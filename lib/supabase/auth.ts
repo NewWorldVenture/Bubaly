@@ -22,6 +22,11 @@ export type UserContext = {
   active: FamilyMembership;
 };
 
+function throwContextUnavailable(scope: string, error: unknown): never {
+  console.error(`[auth] ${scope} query failed`, error);
+  throw new Error('Account context is temporarily unavailable.');
+}
+
 /** Returns the signed-in user or null. */
 export async function getUser() {
   const supabase = await createServer();
@@ -65,17 +70,19 @@ export async function getUserContext(): Promise<UserContext | { needsFamily: tru
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return null;
 
-  const { data: members } = await supabase
+  const { data: members, error: membersError } = await supabase
     .from('family_members')
     .select('*')
     .eq('user_id', auth.user.id)
     .eq('is_active', true);
+  if (membersError) throwContextUnavailable('family membership', membersError);
 
   const rows = members ?? [];
   if (rows.length === 0) return { needsFamily: true };
 
   const familyIds = rows.map((m) => m.family_id);
-  const { data: families } = await supabase.from('families').select('*').in('id', familyIds);
+  const { data: families, error: familiesError } = await supabase.from('families').select('*').in('id', familyIds);
+  if (familiesError) throwContextUnavailable('family', familiesError);
   const byId = new Map((families ?? []).map((f) => [f.id, f]));
 
   const memberships: FamilyMembership[] = rows
@@ -89,11 +96,12 @@ export async function getUserContext(): Promise<UserContext | { needsFamily: tru
 
   if (memberships.length === 0) return { needsFamily: true };
 
-  const { data: prefs } = await supabase
+  const { data: prefs, error: prefsError } = await supabase
     .from('user_preferences')
     .select('active_family_id')
     .eq('user_id', auth.user.id)
     .maybeSingle();
+  if (prefsError) throwContextUnavailable('user preference', prefsError);
 
   const active =
     memberships.find((m) => m.familyId === prefs?.active_family_id) ?? memberships[0];

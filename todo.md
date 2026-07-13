@@ -3151,3 +3151,21 @@ roadmap entries and user worktree changes are preserved.
   and public Playwright/axe E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0230 - Context read failures could trigger automatic family provisioning
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Authentication / data integrity / failure handling
+- Feature: Authenticated context resolution and automatic family setup
+- File or files: `lib/supabase/auth.ts`, `tests/auth-context-error-contract.test.ts`
+- Description: `getUserContext()` ignored errors from family membership, family, and preference reads.
+  A transient database failure therefore looked like an account with no family and could enter the
+  service-role auto-provisioning path.
+- Resolution: Context reads now fail closed with a generic temporary-unavailable error while logging
+  the diagnostic server-side. Automatic provisioning is reached only after a successful empty-membership
+  result.
+- Tests performed: Auth context contract, full Vitest suite, typecheck, lint, production build, and
+  public Playwright/axe E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13
