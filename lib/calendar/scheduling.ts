@@ -15,7 +15,7 @@ export const CONTEXT_LABELS: Record<CalendarContext, string> = {
 
 // Tailwind text/bg tokens per context for badges + dots.
 export const CONTEXT_META: Record<CalendarContext, { dot: string; chip: string }> = {
-  family: { dot: 'bg-brand', chip: 'bg-brand/10 text-brand' },
+  family: { dot: 'bg-brand', chip: 'bg-brand/10 text-brand-text' },
   personal: { dot: 'bg-emerald-500', chip: 'bg-emerald-500/10 text-emerald-500' },
   work: { dot: 'bg-amber-500', chip: 'bg-amber-500/10 text-amber-500' },
 };

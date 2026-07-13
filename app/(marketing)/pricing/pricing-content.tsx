@@ -176,7 +176,7 @@ function TestAccountCard() {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-base font-black">Demo Account</h2>
-            <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
+            <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-950">
               Free · 5-min demo
             </span>
           </div>

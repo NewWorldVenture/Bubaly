@@ -137,7 +137,7 @@ export function MoneyCardsView({
         <div className="rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-6">
           <div className="flex items-start gap-4">
             <div className="grid h-12 w-12 flex-shrink-0 place-items-center rounded-2xl bg-brand/20">
-              {onboardingStarted ? <Sparkles className="h-6 w-6 text-brand" /> : <CreditCard className="h-6 w-6 text-brand" />}
+              {onboardingStarted ? <Sparkles className="h-6 w-6 text-brand-text" /> : <CreditCard className="h-6 w-6 text-brand-text" />}
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-bold">
@@ -169,7 +169,7 @@ export function MoneyCardsView({
             { icon: SlidersHorizontal, label: 'Per-card controls', desc: 'Set daily limits and block categories like gaming.' },
           ].map((f) => (
             <div key={f.label} className="rounded-2xl border border-border bg-surface/40 p-4">
-              <f.icon className="mb-2 h-5 w-5 text-brand" />
+              <f.icon className="mb-2 h-5 w-5 text-brand-text" />
               <p className="text-sm font-semibold">{f.label}</p>
               <p className="mt-0.5 text-xs text-muted">{f.desc}</p>
             </div>
@@ -198,7 +198,7 @@ export function MoneyCardsView({
       {canManage && childrenWithoutCards.length > 0 && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-brand/20 bg-brand/5 px-4 py-3">
           <div className="flex items-center gap-3">
-            <Zap className="h-5 w-5 flex-shrink-0 text-brand" />
+            <Zap className="h-5 w-5 flex-shrink-0 text-brand-text" />
             <p className="text-sm font-medium">
               {childrenWithoutCards.length === 1
                 ? `${childrenWithoutCards[0].name} doesn't have a card yet.`
@@ -309,7 +309,7 @@ function SetupSteps({ current }: { current: number }) {
           <div className="flex w-full items-center">
             {i > 0 && <div className={cn('h-0.5 flex-1 transition-colors', i <= current ? 'bg-brand' : 'bg-border')} />}
             <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-              i < current ? 'border-brand bg-brand text-white' : i === current ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted')}>
+              i < current ? 'border-brand bg-brand text-white' : i === current ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted')}>
               {i < current ? <CheckCircle2 className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
             </div>
             {i < steps.length - 1 && <div className={cn('h-0.5 flex-1 transition-colors', i < current ? 'bg-brand' : 'bg-border')} />}
@@ -407,7 +407,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
     <Modal open title={`Order physical card — ${child.name}`} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <div className="flex items-center gap-3 rounded-xl border border-brand/20 bg-brand/5 p-3">
-          <Package className="h-5 w-5 flex-shrink-0 text-brand" />
+          <Package className="h-5 w-5 flex-shrink-0 text-brand-text" />
           <div>
             <p className="text-sm font-semibold">Physical Visa Debit Card</p>
             <p className="text-xs text-muted">Shipped in 5–7 business days. Works everywhere Visa is accepted.</p>
@@ -416,7 +416,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
 
         <div className="rounded-xl border border-border bg-surface/40 p-3">
           <div className="flex items-start gap-2">
-            <Lock className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand" />
+            <Lock className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-text" />
             <div>
               <p className="text-sm font-semibold">Real-time balance gate</p>
               <p className="text-xs text-muted">Every swipe checks {child.name}&apos;s Spend bucket. Declines instantly if insufficient — no overdraft possible.</p>

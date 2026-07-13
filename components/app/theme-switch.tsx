@@ -27,7 +27,7 @@ export function ThemeSwitch() {
         aria-pressed={resolved === 'dark'}
         className={cn(
           'flex items-center justify-center gap-2 rounded-lg py-2.5 transition',
-          resolved === 'dark' ? 'bg-brand/15 font-semibold text-brand' : 'text-muted hover:text-fg',
+          resolved === 'dark' ? 'bg-brand/15 font-semibold text-brand-text' : 'text-muted hover:text-fg',
         )}
       >
         <Moon className="h-4 w-4" /> Dark
@@ -38,7 +38,7 @@ export function ThemeSwitch() {
         aria-pressed={resolved === 'light'}
         className={cn(
           'flex items-center justify-center gap-2 rounded-lg py-2.5 transition',
-          resolved === 'light' ? 'bg-brand/15 font-semibold text-brand' : 'text-muted hover:text-fg',
+          resolved === 'light' ? 'bg-brand/15 font-semibold text-brand-text' : 'text-muted hover:text-fg',
         )}
       >
         <SunMedium className="h-4 w-4" /> Light

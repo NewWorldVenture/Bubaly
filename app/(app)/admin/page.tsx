@@ -209,7 +209,7 @@ export default async function AdminDashboardPage() {
           <Card>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-base font-semibold"><Activity className="h-4 w-4 text-muted" /> Recent Activities</h2>
-              <Link href="/admin/audit" className="text-xs font-medium text-brand hover:underline">View all</Link>
+              <Link href="/admin/audit" className="text-xs font-medium text-brand-text hover:underline">View all</Link>
             </div>
             {!recentLogs || recentLogs.length === 0 ? (
               <EmptyState icon={Activity} title="No activity recorded yet" />
@@ -259,7 +259,7 @@ export default async function AdminDashboardPage() {
           <Card>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-semibold">Top Families</h2>
-              <Link href="/admin/users" className="text-xs font-medium text-brand hover:underline">View all</Link>
+              <Link href="/admin/users" className="text-xs font-medium text-brand-text hover:underline">View all</Link>
             </div>
             {topFamilies.length === 0 ? (
               <EmptyState icon={Home} title="No families yet" />
@@ -310,7 +310,7 @@ export default async function AdminDashboardPage() {
         <Card>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-base font-semibold"><LifeBuoy className="h-4 w-4 text-muted" /> Support Overview</h2>
-            <Link href="/admin/support" className="text-xs font-medium text-brand hover:underline">View all</Link>
+            <Link href="/admin/support" className="text-xs font-medium text-brand-text hover:underline">View all</Link>
           </div>
           <ul className="space-y-2.5">
             {[
@@ -338,8 +338,8 @@ export default async function AdminDashboardPage() {
               { href: '/admin/integrations', label: 'Integrations', icon: Plug },
             ].map((a) => (
               <Link key={a.href} href={a.href} className="group flex flex-col items-start gap-2 rounded-xl border border-border bg-surface/40 p-3 transition hover:border-brand/40 hover:bg-elevated">
-                <a.icon className="h-5 w-5 text-brand" />
-                <span className="flex items-center gap-1 text-xs font-medium">{a.label}<ArrowUpRight className="h-3 w-3 text-muted transition group-hover:text-brand" /></span>
+                <a.icon className="h-5 w-5 text-brand-text" />
+                <span className="flex items-center gap-1 text-xs font-medium">{a.label}<ArrowUpRight className="h-3 w-3 text-muted transition group-hover:text-brand-text" /></span>
               </Link>
             ))}
           </div>

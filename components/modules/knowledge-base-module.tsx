@@ -162,7 +162,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-semibold text-fg">{f.label}</span>
-                        {f.is_pinned && <Pin className="h-3 w-3 text-brand" />}
+                        {f.is_pinned && <Pin className="h-3 w-3 text-brand-text" />}
                       </div>
                       <p className="break-words text-sm text-fg">{f.value}</p>
                       {f.notes && <p className="mt-0.5 text-xs text-muted">{f.notes}</p>}
@@ -172,7 +172,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
                       <button onClick={() => copyValue(f)} aria-label="Copy value" title="Copy" className="rounded p-1.5 text-muted hover:bg-elevated hover:text-fg">
                         {copiedId === f.id ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
                       </button>
-                      <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? 'Unpin' : 'Pin'} title={f.is_pinned ? 'Unpin' : 'Pin'} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-brand">
+                      <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? 'Unpin' : 'Pin'} title={f.is_pinned ? 'Unpin' : 'Pin'} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-brand-text">
                         {f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                       </button>
                       <button onClick={() => openEdit(f)} aria-label="Edit" className="rounded p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>

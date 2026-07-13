@@ -171,14 +171,14 @@ export function GroceryModule() {
               </button>
             ))}
             <div className="ml-auto flex items-center gap-2">
-              <button onClick={shareList} className="text-xs text-brand hover:underline">Share List</button>
+              <button onClick={shareList} className="text-xs text-brand-text hover:underline">Share List</button>
             </div>
           </div>
 
           {/* Stats */}
           <div className="grid-stats mt-4">
             {[
-              { label: 'Total Items', value: items.length, icon: '🛒', color: 'text-brand' },
+              { label: 'Total Items', value: items.length, icon: '🛒', color: 'text-brand-text' },
               { label: 'Completed', value: checked, icon: '✅', color: 'text-green-400' },
               { label: 'To Buy', value: unchecked, icon: '📋', color: 'text-amber-400' },
               { label: 'Est. Total', value: '$—', icon: '💰', color: 'text-blue-400' },
@@ -232,7 +232,7 @@ export function GroceryModule() {
                           {item.is_checked && <Check className="h-3 w-3 text-brand-fg" />}
                         </button>
                         <span className={cn('flex-1 text-sm font-medium', item.is_checked && 'line-through text-muted')}>{item.name}</span>
-                        {item.quantity && <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-semibold text-brand">{item.quantity}</span>}
+                        {item.quantity && <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-semibold text-brand-text">{item.quantity}</span>}
                         <div className="ml-auto flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
                           <button onClick={() => deleteItem(item.id)} className="rounded p-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                           <button aria-label="More options" className="rounded p-1 text-muted hover:text-fg"><MoreHorizontal className="h-3.5 w-3.5" /></button>
@@ -366,7 +366,7 @@ function ShopOnlineModal({ retailer, items, onClose }: {
                   className="flex items-center gap-3 rounded-lg border border-border bg-surface/40 px-3 py-2 text-sm hover:bg-elevated transition">
                   <span className="flex-1 font-medium">{item.name}</span>
                   {item.quantity && <span className="text-xs text-muted">{item.quantity}</span>}
-                  <ExternalLink className="h-3.5 w-3.5 text-brand" />
+                  <ExternalLink className="h-3.5 w-3.5 text-brand-text" />
                 </a>
               </li>
             ))}

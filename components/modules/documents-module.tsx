@@ -320,7 +320,7 @@ export function DocumentsModule() {
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Folders</h2>
             {folders.length > 6 && (
-              <button onClick={() => setShowAllFolders((v) => !v)} className="flex items-center gap-0.5 text-xs font-semibold text-brand hover:underline">
+              <button onClick={() => setShowAllFolders((v) => !v)} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">
                 {showAllFolders ? 'Show less' : 'View all folders'} <ChevronRight className="h-3.5 w-3.5" />
               </button>
             )}
@@ -363,7 +363,7 @@ export function DocumentsModule() {
             <h2 className="font-semibold">
               All Files
               {folderFilter && (
-                <button onClick={() => setFolderFilter(null)} className="ml-2 inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
+                <button onClick={() => setFolderFilter(null)} className="ml-2 inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand-text">
                   {folderLabel(folderFilter)} ✕
                 </button>
               )}
@@ -563,7 +563,7 @@ export function DocumentsModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Recent Activity</h2>
-            <AiInsight kind="documents" label="View all" variant="ghost" className="!px-0 text-xs text-brand" />
+            <AiInsight kind="documents" label="View all" variant="ghost" className="!px-0 text-xs text-brand-text" />
           </div>
           {recentActivity.length === 0 ? (
             <p className="py-4 text-center text-sm text-muted">No recent activity.</p>
@@ -597,7 +597,7 @@ export function DocumentsModule() {
 
         {/* AI Document Assistant */}
         <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand" /></div>
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand-text" /></div>
           <h3 className="font-bold">AI Document Assistant</h3>
           <p className="mt-2 text-xs leading-5 text-muted">Summarize, extract key info, and get insights from any document.</p>
           <AiInsight kind="documents" label="Ask AI" variant="primary" className="mt-4 w-full justify-center" />

@@ -36,7 +36,7 @@ export default async function FamilyPermissionsPage() {
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {ROLE_ORDER.map((role) => (
             <li key={role} className="rounded-xl border border-border bg-surface/40 p-3">
-              <p className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-brand" /> {ROLE_LABELS[role]}</p>
+              <p className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> {ROLE_LABELS[role]}</p>
               <p className="mt-1 text-xs text-muted">{ROLE_DESCRIPTIONS[role]}</p>
             </li>
           ))}

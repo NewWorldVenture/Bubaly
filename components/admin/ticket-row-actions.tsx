@@ -47,7 +47,7 @@ export function TicketRowActions({ ticketId, status }: { ticketId: string; statu
             {(status === 'resolved' || status === 'closed') && (
               <button
                 onClick={() => act(reopenTicketAction)}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-brand hover:bg-elevated"
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-brand-text hover:bg-elevated"
               >
                 <RefreshCw className="h-4 w-4" /> Reopen
               </button>

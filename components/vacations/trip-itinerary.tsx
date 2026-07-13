@@ -108,7 +108,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold"><CalendarRange className="h-5 w-5 text-brand" /> Daily itinerary</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><CalendarRange className="h-5 w-5 text-brand-text" /> Daily itinerary</h2>
         <div className="flex gap-2">
           <Button size="sm" variant="secondary" onClick={generateDays} loading={busy}><Wand2 className="h-4 w-4" /> Build days from dates</Button>
         </div>
@@ -139,7 +139,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
                     <div key={part.value} className="rounded-xl border border-border/60 bg-elevated/30 p-2">
                       <div className="mb-1.5 flex items-center justify-between">
                         <p className="text-xs font-semibold text-muted">{part.emoji} {part.label}</p>
-                        <button onClick={() => setForm(blankItem(day.id, part.value))} className="rounded p-0.5 text-muted hover:text-brand"><Plus className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => setForm(blankItem(day.id, part.value))} className="rounded p-0.5 text-muted hover:text-brand-text"><Plus className="h-3.5 w-3.5" /></button>
                       </div>
                       <ul className="space-y-1.5">
                         {list.map((it) => (

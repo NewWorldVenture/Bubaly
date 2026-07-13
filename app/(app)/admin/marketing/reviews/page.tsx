@@ -33,7 +33,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2">
-        <MessageSquareQuote className="h-5 w-5 text-brand" />
+        <MessageSquareQuote className="h-5 w-5 text-brand-text" />
         <div>
           <h2 className="text-base font-bold">Reviews &amp; Reputation</h2>
           <p className="text-xs text-muted">Collect star reviews, reply, feature the best, and route happy customers to public platforms.</p>
@@ -65,7 +65,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
       <Card>
         <p className="text-xs font-medium text-muted">Public review link &amp; wall</p>
         <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
-          <a href={reviewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand underline">{reviewUrl} <ExternalLink className="h-3.5 w-3.5" /></a>
+          <a href={reviewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand-text underline">{reviewUrl} <ExternalLink className="h-3.5 w-3.5" /></a>
           <a href={`${SITE_URL}/reviews`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-muted underline">View public wall <ExternalLink className="h-3.5 w-3.5" /></a>
         </div>
       </Card>
@@ -90,7 +90,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
 
       {/* Reputation settings */}
       <Card>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Settings2 className="h-4 w-4 text-brand" /> Reputation settings</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Settings2 className="h-4 w-4 text-brand-text" /> Reputation settings</h3>
         <form action={saveReputationSettingsAction} className="grid gap-3 sm:grid-cols-2">
           <label className="space-y-1"><span className="block text-xs font-medium text-muted">Google review URL</span><input name="google_url" defaultValue={set?.google_url ?? ''} className={inputCls} placeholder="https://g.page/r/…/review" /></label>
           <label className="space-y-1"><span className="block text-xs font-medium text-muted">App Store URL</span><input name="app_store_url" defaultValue={set?.app_store_url ?? ''} className={inputCls} /></label>

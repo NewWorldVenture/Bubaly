@@ -198,7 +198,7 @@ export function RidesModule() {
                     <div key={r.id} className={cn('rounded-2xl border p-4', conflicted ? 'border-amber-500/40 bg-amber-500/[0.03]' : 'border-border bg-surface/50')}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-3 min-w-0">
-                          <div className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand flex-shrink-0">
+                          <div className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand-text flex-shrink-0">
                             <Car className="h-5 w-5" />
                           </div>
                           <div className="min-w-0">

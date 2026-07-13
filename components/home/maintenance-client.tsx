@@ -68,7 +68,7 @@ export function MaintenanceClient({
 
         {/* AI forecast */}
         <Card>
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand" /> AI maintenance forecast</h2>
+          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> AI maintenance forecast</h2>
           <p className="mb-2 text-xs text-muted">A budget-aware 12-month outlook based on your assets&apos; ages and lifespans.</p>
           <button onClick={runForecast} disabled={forecastBusy || assets.length === 0} className="inline-flex h-9 items-center gap-2 rounded-lg bg-brand px-3 text-sm font-medium text-brand-fg disabled:opacity-60">
             {forecastBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Forecast my home
@@ -81,7 +81,7 @@ export function MaintenanceClient({
 
       {/* Assets with life + schedule-recommended */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Wrench className="h-4 w-4 text-brand" /> Asset health &amp; recommended schedules</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Wrench className="h-4 w-4 text-brand-text" /> Asset health &amp; recommended schedules</h2>
         {assets.length === 0 ? (
           <p className="text-sm text-muted">No assets yet. Add HVAC, water heater, roof, appliances and more in Overview.</p>
         ) : (

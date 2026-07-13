@@ -65,7 +65,7 @@ export function DecisionSimulator({ members, budgetCategories }: { members: Memb
   return (
     <div className="rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/[0.06] to-surface/40 p-4 sm:p-5">
       <div className="mb-3 flex items-center gap-2">
-        <span className="grid h-8 w-8 place-items-center rounded-xl bg-brand/15 text-brand"><FlaskConical className="h-4 w-4" /></span>
+        <span className="grid h-8 w-8 place-items-center rounded-xl bg-brand/15 text-brand-text"><FlaskConical className="h-4 w-4" /></span>
         <div>
           <h2 className="text-sm font-semibold">Decision simulator</h2>
           <p className="text-xs text-muted">Try a decision before you make it — nothing is saved.</p>
@@ -160,7 +160,7 @@ export function DecisionSimulator({ members, budgetCategories }: { members: Memb
             </ul>
           )}
           {result.verdict === 'conflict' && (
-            <a href="/dashboard/calendar" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">
+            <a href="/dashboard/calendar" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">
               Open the calendar to rearrange <ArrowRight className="h-3 w-3" />
             </a>
           )}

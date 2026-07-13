@@ -58,12 +58,12 @@ export function TreasuryView({
       <div className="mb-6 overflow-hidden rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-6">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-brand/70">Total Family Balance</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-brand-text/70">Total Family Balance</p>
             <p className="mt-1 text-4xl font-black tracking-tight">{formatCents(familyTotal)}</p>
             <p className="mt-1 text-sm text-muted">{wallets.length} wallet{wallets.length !== 1 ? 's' : ''} · {totalActiveGoals} active goal{totalActiveGoals !== 1 ? 's' : ''}</p>
           </div>
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-brand/15">
-            <Building2 className="h-6 w-6 text-brand" />
+            <Building2 className="h-6 w-6 text-brand-text" />
           </div>
         </div>
         {/* Mini donut summary */}
@@ -91,7 +91,7 @@ export function TreasuryView({
         <StatCard
           label="Net"
           value={(netMonth >= 0 ? '+' : '−') + formatCents(Math.abs(netMonth))}
-          icon={<TrendingUp className="h-4 w-4 text-brand" />}
+          icon={<TrendingUp className="h-4 w-4 text-brand-text" />}
           color={netMonth >= 0 ? 'text-emerald-400' : 'text-rose-400'}
         />
       </div>
@@ -128,7 +128,7 @@ export function TreasuryView({
                 </p>
                 <p className="text-xs text-muted">{totalActiveGoals} active goal{totalActiveGoals !== 1 ? 's' : ''} across {wallets.filter((c) => c.activeGoals > 0).length} child{wallets.filter((c) => c.activeGoals > 0).length !== 1 ? 'ren' : ''}</p>
               </div>
-              <div className="flex items-center gap-1 text-lg font-black text-brand">
+              <div className="flex items-center gap-1 text-lg font-black text-brand-text">
                 {goalPct}%
               </div>
             </div>
@@ -139,7 +139,7 @@ export function TreasuryView({
               />
             </div>
             <div className="mt-3 flex justify-end">
-              <Link href="/wallet/goals" className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline">
+              <Link href="/wallet/goals" className="flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline">
                 View all goals <ChevronRight className="h-3.5 w-3.5" />
               </Link>
             </div>
@@ -277,7 +277,7 @@ function ChildRow({ child, familyTotal }: { child: TreasuryChild; familyTotal: n
         <div className="mt-1 flex items-center gap-3 text-[11px] text-muted">
           <span>{share}% of family</span>
           {child.activeGoals > 0 && (
-            <span className="flex items-center gap-0.5 text-brand">
+            <span className="flex items-center gap-0.5 text-brand-text">
               <Target className="h-2.5 w-2.5" />
               {goalPct != null ? `${goalPct}% to goal` : `${child.activeGoals} goal${child.activeGoals !== 1 ? 's' : ''}`}
             </span>

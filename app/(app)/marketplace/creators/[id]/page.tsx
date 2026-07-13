@@ -95,7 +95,7 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat icon={<ShieldCheck className="h-4 w-4 text-emerald-500" />} value={String(trust.score)} label={TRUST_BAND_LABELS[trust.band]} />
           <Stat icon={<Star className="h-4 w-4 fill-amber-400 text-amber-400" />} value={rs.count > 0 ? rs.avg.toFixed(1) : '—'} label={rs.count > 0 ? `${rs.count} review${rs.count === 1 ? '' : 's'}` : 'No reviews'} />
-          <Stat icon={<Users className="h-4 w-4 text-brand" />} value={String(followers)} label={`follower${followers === 1 ? '' : 's'}`} />
+          <Stat icon={<Users className="h-4 w-4 text-brand-text" />} value={String(followers)} label={`follower${followers === 1 ? '' : 's'}`} />
           <Stat icon={<Package className="h-4 w-4 text-muted" />} value={String(listings.length)} label="open listings" />
         </div>
       </div>
@@ -131,7 +131,7 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
                     </span>
                     {price && <span className="text-sm font-semibold text-fg">{price}</span>}
                   </div>
-                  <p className="mt-1 line-clamp-2 text-sm font-medium text-fg group-hover:text-brand">{l.title}</p>
+                  <p className="mt-1 line-clamp-2 text-sm font-medium text-fg group-hover:text-brand-text">{l.title}</p>
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted">
                     <span className="inline-flex items-center gap-1"><Tag className="h-3 w-3" />{CATEGORY_LABELS[l.category as ListingCategory]}</span>
                     {l.location && <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{l.location}</span>}

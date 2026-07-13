@@ -36,7 +36,7 @@ export default async function AutoOverviewPage() {
   return (
     <div className="space-y-4">
       <div className="grid-stats">
-        <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand"><Car className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{vehicles.length}</p><p className="mt-1 text-xs text-muted">Vehicles</p></div></div>
+        <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text"><Car className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{vehicles.length}</p><p className="mt-1 text-xs text-muted">Vehicles</p></div></div>
         <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-success/10 text-success"><ShieldCheck className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{activePolicies.length}</p><p className="mt-1 text-xs text-muted">Active policies</p></div></div>
         <div className="stat-card"><div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${dueSoon ? 'bg-warning/10 text-warning' : 'bg-elevated text-muted'}`}><CalendarClock className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{dueSoon}</p><p className="mt-1 text-xs text-muted">Renewals due ≤30d</p></div></div>
         <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent"><KeyRound className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{activeRental ? 1 : 0}</p><p className="mt-1 text-xs text-muted">Active rental</p></div></div>
@@ -47,10 +47,10 @@ export default async function AutoOverviewPage() {
         <Card>
           <div className="mb-2 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-success" /> Insurance — quick access</h2>
-            <Link href="/dashboard/auto/insurance" className="text-xs font-medium text-brand underline">All policies</Link>
+            <Link href="/dashboard/auto/insurance" className="text-xs font-medium text-brand-text underline">All policies</Link>
           </div>
           {activePolicies.length === 0 ? (
-            <p className="text-sm text-muted">No active policy yet. <Link href="/dashboard/auto/insurance" className="text-brand underline">Add one</Link> for instant emergency access.</p>
+            <p className="text-sm text-muted">No active policy yet. <Link href="/dashboard/auto/insurance" className="text-brand-text underline">Add one</Link> for instant emergency access.</p>
           ) : (
             <div className="space-y-2">
               {activePolicies.slice(0, 3).map((p) => (
@@ -88,7 +88,7 @@ export default async function AutoOverviewPage() {
       {/* Upcoming renewals */}
       <Card>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold"><CalendarClock className="h-4 w-4 text-brand" /> Upcoming renewals</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><CalendarClock className="h-4 w-4 text-brand-text" /> Upcoming renewals</h2>
         </div>
         {renewals.length === 0 ? (
           <p className="text-sm text-muted">No renewal dates on file yet. Add expiry dates to your license, registration, inspection, and insurance to get reminders here.</p>

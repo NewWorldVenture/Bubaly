@@ -97,7 +97,7 @@ export function ScreenTimeModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><MonitorSmartphone className="h-4 w-4 text-brand" /> Screen Time & Balance</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><MonitorSmartphone className="h-4 w-4 text-brand-text" /> Screen Time & Balance</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="screen_time" iconOnly />
           <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Log time</Button>
@@ -131,7 +131,7 @@ export function ScreenTimeModule() {
                   <p className="text-xs text-muted">today{limit > 0 ? ` / ${formatMinutes(limit)}` : ''}</p>
                 </div>
                 <div className="text-right text-xs">
-                  <p className="inline-flex items-center gap-1"><Gauge className="h-3 w-3 text-brand" /> {balance}/100 balance</p>
+                  <p className="inline-flex items-center gap-1"><Gauge className="h-3 w-3 text-brand-text" /> {balance}/100 balance</p>
                   <p className="text-muted">{formatMinutes(week)} this week</p>
                 </div>
               </div>

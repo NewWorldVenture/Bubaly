@@ -39,7 +39,7 @@ export default async function ReconciliationPage() {
     <div className="space-y-5">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-          <ShieldCheck className="h-6 w-6 text-brand" /> Wallet Reconciliation
+          <ShieldCheck className="h-6 w-6 text-brand-text" /> Wallet Reconciliation
         </h1>
         <p className="mt-1 text-sm text-muted">
           Ledger integrity across every family. Verifies derived balances, bucket sums, reversal

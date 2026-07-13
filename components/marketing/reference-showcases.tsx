@@ -283,7 +283,7 @@ function MiniCalendar() {
   return (
     <div className="relative h-full text-[8px] text-white/65">
       <div className="flex items-center justify-between text-[10px] text-white/85"><span>May 2024</span><span className="text-white/45">⌄　×</span></div>
-      <div className="mt-3 grid grid-cols-7 gap-y-2 text-center text-[6px] text-white/42">{['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((day) => <span key={day}>{day}</span>)}</div>
+      <div className="mt-3 grid grid-cols-7 gap-y-2 text-center text-[6px] text-white/55">{['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((day) => <span key={day}>{day}</span>)}</div>
       <div className="mt-1.5 grid grid-cols-7 gap-y-2 text-center">
         {days.map((day, index) => <span key={`${day}-${index}`} className={cn(index < 3 && 'text-white/30', index === 11 && 'mx-auto grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white')}>{day}</span>)}
       </div>
@@ -332,7 +332,7 @@ function GroceryList() {
     <div className="-m-3 flex h-[calc(100%+24px)] flex-col p-3">
       <p className="mb-2.5 text-[10px] font-semibold">My Grocery List</p>
       <div className="flex-1 space-y-2.5">{items.map((item) => <p key={item} className="flex items-center gap-2 text-[9px]"><Circle className="h-[13px] w-[13px] text-white/55" />{item}</p>)}</div>
-      <div className="rounded-lg border border-white/10 px-2 py-1.5 text-[9px] text-white/42"><Plus className="mr-1 inline h-3 w-3" /> Add item</div>
+      <div className="rounded-lg border border-white/10 px-2 py-1.5 text-[9px] text-white/55"><Plus className="mr-1 inline h-3 w-3" /> Add item</div>
     </div>
   );
 }
@@ -474,7 +474,7 @@ function DetailedPhone() {
           {[['3 Events Today','orange'],['2 Tasks Due','amber'],['1 Medication Reminder','blue'],['No Conflicts','green']].map(([item, color], i) => <div key={item} className="flex items-center gap-2 py-1 text-[7px]"><span className={cn('grid h-3.5 w-3.5 place-items-center rounded-full', color === 'orange' && 'bg-orange-500/20 text-orange-400', color === 'amber' && 'bg-amber-500/20 text-amber-400', color === 'blue' && 'bg-blue-500/20 text-blue-400', color === 'green' && 'bg-emerald-500/20 text-emerald-400')}>{i < 3 ? <CalendarDays className="h-2.5 w-2.5" /> : <Check className="h-2.5 w-2.5" />}</span>{item}</div>)}
         </PhonePanel>
         <PhonePanel title="Upcoming" className="mt-2">
-          {[['Soccer Practice','Today · 5:00 PM'],['Math Test','Tomorrow · 9:00 AM'],['Family Dinner','Tomorrow · 6:30 PM']].map(([item, date], i) => <div key={item} className="flex items-center gap-2 py-1.5"><span className="grid h-4 w-4 place-items-center rounded-full bg-orange-500/25 text-[7px] text-orange-400">{i + 1}</span><div><p className="text-[7px]">{item}</p><p className="text-[6px] text-white/42">{date}</p></div></div>)}
+          {[['Soccer Practice','Today · 5:00 PM'],['Math Test','Tomorrow · 9:00 AM'],['Family Dinner','Tomorrow · 6:30 PM']].map(([item, date], i) => <div key={item} className="flex items-center gap-2 py-1.5"><span className="grid h-4 w-4 place-items-center rounded-full bg-orange-500/25 text-[7px] text-orange-400">{i + 1}</span><div><p className="text-[7px]">{item}</p><p className="text-[6px] text-white/55">{date}</p></div></div>)}
         </PhonePanel>
         <div className="mt-2 flex items-center justify-between border-t border-white/[0.06] px-1 pt-2 text-[6px] text-white/50"><Home className="h-3.5 w-3.5 text-violet-400" /><CalendarDays className="h-3.5 w-3.5" /><span className="grid h-8 w-8 place-items-center rounded-full bg-violet-600 text-lg text-white">+</span><CheckSquare2 className="h-3.5 w-3.5" /><span className="text-sm leading-none">•••</span></div>
       </div>

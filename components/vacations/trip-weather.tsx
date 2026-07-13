@@ -46,7 +46,7 @@ export function TripWeather({ vacationId }: { vacationId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold"><CloudSun className="h-5 w-5 text-brand" /> Weather intelligence</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><CloudSun className="h-5 w-5 text-brand-text" /> Weather intelligence</h2>
         <div className="flex items-end gap-2">
           <div className="flex items-center gap-1 rounded-xl border border-border bg-surface/60 px-2">
             <MapPin className="h-4 w-4 text-muted" />

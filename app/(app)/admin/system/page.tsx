@@ -76,7 +76,7 @@ export default async function AdminSystemPage() {
 
       <div className="grid-stats">
         <StatCard icon={allHealthy ? CheckCircle2 : XCircle} label="Overall status" value={allHealthy ? 'All systems go' : 'Degraded'} tone={allHealthy ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'} />
-        <StatCard icon={Users} label="Total users" value={(userCount ?? 0).toLocaleString()} tone="bg-brand/10 text-brand" />
+        <StatCard icon={Users} label="Total users" value={(userCount ?? 0).toLocaleString()} tone="bg-brand/10 text-brand-text" />
         <StatCard icon={Home} label="Active families" value={(familyCount ?? 0).toLocaleString()} tone="bg-accent/10 text-accent" />
         <StatCard icon={DollarSign} label="Monthly revenue" value={fmtMoney(mrr)} tone="bg-success/10 text-success" />
       </div>
@@ -99,7 +99,7 @@ export default async function AdminSystemPage() {
             <RefreshCw className="h-4 w-4 text-muted" />
           </div>
           <div className="flex items-center gap-3">
-            <FolderLock className="h-5 w-5 text-brand" />
+            <FolderLock className="h-5 w-5 text-brand-text" />
             <div>
               <p className="text-xl font-bold leading-none">{fmtBytes(storageBytes)}</p>
               <p className="text-xs text-muted">Document storage used, across every family</p>

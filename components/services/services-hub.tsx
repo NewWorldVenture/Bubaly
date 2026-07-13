@@ -49,10 +49,10 @@ export function ServicesHub() {
                 </div>
               </div>
               <div className="mt-auto flex items-center justify-between">
-                <span className="text-sm font-semibold text-brand">
+                <span className="text-sm font-semibold text-brand-text">
                   {count} {cat.countLabel === 'integrations' ? 'Integrations' : `Tool${count === 1 ? '' : 's'}`}
                 </span>
-                <span className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted transition group-hover:border-brand/40 group-hover:text-brand">
+                <span className="grid h-8 w-8 place-items-center rounded-full border border-border text-muted transition group-hover:border-brand/40 group-hover:text-brand-text">
                   <ChevronRight className="h-4 w-4" />
                 </span>
               </div>

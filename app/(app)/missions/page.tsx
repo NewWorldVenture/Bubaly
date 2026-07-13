@@ -83,7 +83,7 @@ export default async function MissionsPage() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
-        <Trophy className="h-5 w-5 text-brand" />
+        <Trophy className="h-5 w-5 text-brand-text" />
         <div>
           <h1 className="text-lg font-bold">Family Missions</h1>
           <p className="text-xs text-muted">Review proof, approve rewards, and keep chores fair.</p>
@@ -101,7 +101,7 @@ export default async function MissionsPage() {
 
       <section className="space-y-3">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <ClipboardCheck className="h-4 w-4 text-brand" /> Approval queue
+          <ClipboardCheck className="h-4 w-4 text-brand-text" /> Approval queue
         </h2>
         {items.length === 0 ? (
           <EmptyState icon={Sparkles} title="All caught up! 🎉" description="No submissions are waiting for your review." />

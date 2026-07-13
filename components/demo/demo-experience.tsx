@@ -128,7 +128,7 @@ export function DemoClockPill({ expiresAt }: { expiresAt: string }) {
         'flex shrink-0 items-center gap-1.5 rounded-full border py-1 pl-1 pr-1.5 text-xs font-semibold shadow-sm backdrop-blur-sm transition-colors sm:gap-2 sm:pr-2 ' +
         (urgent
           ? 'border-danger/40 bg-danger/12 text-danger'
-          : 'border-brand/30 bg-brand/10 text-brand')
+          : 'border-brand/30 bg-brand/10 text-brand-text')
       }
     >
       {/* DEMO badge */}
@@ -199,7 +199,7 @@ function DemoEnded() {
   return (
     <BlurOverlay>
       <div className="grid h-12 w-12 place-items-center rounded-2xl bg-brand/15 ring-1 ring-brand/30">
-        <Clock className="h-6 w-6 text-brand" />
+        <Clock className="h-6 w-6 text-brand-text" />
       </div>
       <h2 className="mt-4 text-2xl font-black">Your {DEMO_TTL_MINUTES} minutes are up ⏱️</h2>
       <p className="mt-2 text-sm text-white/65">

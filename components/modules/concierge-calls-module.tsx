@@ -110,7 +110,7 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
           return (
             <div key={c.id} className="rounded-2xl border border-border bg-surface/40 p-4">
               <button type="button" onClick={() => setExpanded(open ? null : c.id)} className="flex w-full items-start gap-3 text-left">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text">
                   <PhoneCall className="h-5 w-5" />
                 </span>
                 <span className="min-w-0 flex-1">
@@ -138,13 +138,13 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
                   )}
 
                   <div className="rounded-xl border border-brand/25 bg-brand/5 p-3">
-                    <p className="flex items-center gap-1.5 text-xs font-semibold text-brand">
+                    <p className="flex items-center gap-1.5 text-xs font-semibold text-brand-text">
                       <Sparkles className="h-3.5 w-3.5" /> Bubaly’s call plan
                     </p>
                     {brief.opening && <p className="mt-2 text-sm italic text-fg/90">“{brief.opening}”</p>}
                     {!!brief.keyPoints?.length && (
                       <ul className="mt-2 space-y-1 text-xs text-muted">
-                        {brief.keyPoints.map((k, i) => <li key={i} className="flex gap-1.5"><Check className="mt-0.5 h-3 w-3 shrink-0 text-brand" /><span>{k}</span></li>)}
+                        {brief.keyPoints.map((k, i) => <li key={i} className="flex gap-1.5"><Check className="mt-0.5 h-3 w-3 shrink-0 text-brand-text" /><span>{k}</span></li>)}
                       </ul>
                     )}
                     {!!brief.questions?.length && (
@@ -212,7 +212,7 @@ function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: () =
   return (
     <div className="rounded-2xl border border-border bg-surface/40 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
-        <p className="flex items-center gap-2 text-sm font-bold"><PhoneCall className="h-4 w-4 text-brand" /> Request a call</p>
+        <p className="flex items-center gap-2 text-sm font-bold"><PhoneCall className="h-4 w-4 text-brand-text" /> Request a call</p>
         <button type="button" onClick={onClose} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
       </div>
       <div className="space-y-3">
@@ -231,7 +231,7 @@ function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: () =
           </label>
         </div>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted">Who to call <span className="text-brand">*</span></span>
+          <span className="mb-1 block text-xs font-medium text-muted">Who to call <span className="text-brand-text">*</span></span>
           <input value={calleeName} onChange={(e) => setCalleeName(e.target.value)} placeholder="Bright Smiles Dental" className={inputCls} />
         </label>
         <div className="grid grid-cols-2 gap-2">
@@ -245,7 +245,7 @@ function Composer({ onClose, onCreated }: { onClose: () => void; onCreated: () =
           </label>
         </div>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted">Goal <span className="text-brand">*</span></span>
+          <span className="mb-1 block text-xs font-medium text-muted">Goal <span className="text-brand-text">*</span></span>
           <textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={2} placeholder="Book a cleaning, ideally a weekday morning in the next two weeks."
             className="w-full resize-y rounded-xl border border-border bg-bg px-3 py-2 text-sm focus-ring" />
         </label>

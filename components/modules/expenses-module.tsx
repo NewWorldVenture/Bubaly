@@ -136,7 +136,7 @@ export function ExpensesModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><Split className="h-4 w-4 text-brand" /> Expense Splitting</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><Split className="h-4 w-4 text-brand-text" /> Expense Splitting</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="expenses" />
           <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Split an expense</Button>
@@ -152,7 +152,7 @@ export function ExpensesModule() {
       {/* Settle up */}
       {transfers.length > 0 && (
         <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
-          <p className="mb-2 flex items-center gap-2 text-sm font-semibold"><Scale className="h-4 w-4 text-brand" /> Settle up</p>
+          <p className="mb-2 flex items-center gap-2 text-sm font-semibold"><Scale className="h-4 w-4 text-brand-text" /> Settle up</p>
           <ul className="space-y-1 text-sm">
             {transfers.map((t, i) => (
               <li key={i} className="flex items-center gap-2">

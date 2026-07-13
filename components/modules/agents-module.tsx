@@ -79,7 +79,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
             : chief.status === 'attention' ? 'border-amber-500/30 bg-amber-500/5'
             : 'border-emerald-500/30 bg-emerald-500/5')}>
           <div className="flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-surface text-brand"><Compass className="h-5 w-5" /></span>
+            <span className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-surface text-brand-text"><Compass className="h-5 w-5" /></span>
             <div>
               <h2 className="text-sm font-semibold text-fg">Chief of Staff</h2>
               <p className="text-xs text-muted">{AGENTS_BY_ID.chief_of_staff.role}</p>
@@ -129,7 +129,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
         {selectedBriefing && (
           <div className="rounded-2xl border border-border bg-surface/50 p-5">
             <div className="flex items-center gap-2">
-              <span className="grid h-9 w-9 place-items-center rounded-xl border border-border text-brand"><SelIcon className="h-5 w-5" /></span>
+              <span className="grid h-9 w-9 place-items-center rounded-xl border border-border text-brand-text"><SelIcon className="h-5 w-5" /></span>
               <div>
                 <h2 className="text-lg font-bold text-fg">{selectedAgent.name}</h2>
                 <p className="text-xs text-muted">{selectedAgent.role}</p>
@@ -170,7 +170,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
                             <p className="truncate text-sm text-fg">{a.title}</p>
                             {a.detail && <p className="truncate text-xs text-muted">{a.detail}</p>}
                           </div>
-                          {a.href && <Link href={a.href} className="rounded-lg p-1.5 text-muted hover:text-brand" aria-label="Open"><ArrowRight className="h-4 w-4" /></Link>}
+                          {a.href && <Link href={a.href} className="rounded-lg p-1.5 text-muted hover:text-brand-text" aria-label="Open"><ArrowRight className="h-4 w-4" /></Link>}
                           <button onClick={() => resolve(a, 'done')} aria-label="Mark done" className="rounded-lg p-1.5 text-muted hover:text-emerald-300"><Check className="h-4 w-4" /></button>
                           <button onClick={() => resolve(a, 'dismissed')} aria-label="Dismiss" className="rounded-lg p-1.5 text-muted hover:text-rose-400"><X className="h-4 w-4" /></button>
                         </div>

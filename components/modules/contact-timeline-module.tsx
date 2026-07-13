@@ -87,7 +87,7 @@ export function ContactTimelineModule({
       <section className="mt-5 rounded-2xl border border-border bg-surface p-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/12 ring-1 ring-brand/25">
-            <HeartPulse className="h-5 w-5 text-brand" />
+            <HeartPulse className="h-5 w-5 text-brand-text" />
           </span>
           <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide', hs.chip)}>{hs.label}</span>
           {health.daysSince != null && (
@@ -112,7 +112,7 @@ export function ContactTimelineModule({
             {KIND_OPTIONS.map((k) => (
               <label key={k} className="cursor-pointer">
                 <input type="radio" name="kind" value={k} defaultChecked={k === 'visit'} className="peer sr-only" />
-                <span className="inline-flex h-8 items-center rounded-full border border-border px-3 text-xs font-semibold text-muted transition peer-checked:border-brand peer-checked:bg-brand/15 peer-checked:text-brand">
+                <span className="inline-flex h-8 items-center rounded-full border border-border px-3 text-xs font-semibold text-muted transition peer-checked:border-brand peer-checked:bg-brand/15 peer-checked:text-brand-text">
                   {INTERACTION_LABEL[k]}
                 </span>
               </label>
@@ -157,7 +157,7 @@ export function ContactTimelineModule({
                     'z-10 grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1',
                     e.kind === 'birthday' ? 'bg-pink-500/12 ring-pink-400/25' : 'bg-white/[0.04] ring-white/10',
                   )}>
-                    <Icon className={cn('h-4 w-4', e.kind === 'birthday' ? 'text-pink-400' : 'text-brand')} />
+                    <Icon className={cn('h-4 w-4', e.kind === 'birthday' ? 'text-pink-400' : 'text-brand-text')} />
                   </span>
                   <div className="min-w-0 flex-1 rounded-2xl border border-border bg-surface p-3">
                     <div className="flex items-start justify-between gap-2">
@@ -221,7 +221,7 @@ function ReconnectDrafter({ contactId, name }: { contactId: string; name: string
         <button
           onClick={() => draft(tone)}
           disabled={pending}
-          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-brand/12 px-3 text-xs font-bold text-brand ring-1 ring-brand/25 transition hover:bg-brand/20 disabled:opacity-60"
+          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-brand/12 px-3 text-xs font-bold text-brand-text ring-1 ring-brand/25 transition hover:bg-brand/20 disabled:opacity-60"
         >
           {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
           Draft a message with AI
@@ -229,7 +229,7 @@ function ReconnectDrafter({ contactId, name }: { contactId: string; name: string
       ) : (
         <div className="rounded-xl border border-brand/25 bg-brand/[0.05] p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand">
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-text">
               <Sparkles className="h-3.5 w-3.5" /> AI draft for {name}
             </div>
             <div className="flex items-center gap-1">
@@ -238,7 +238,7 @@ function ReconnectDrafter({ contactId, name }: { contactId: string; name: string
                   onClick={() => { setTone(t.key); draft(t.key); }}
                   disabled={pending}
                   className={cn('h-7 rounded-full px-2.5 text-[11px] font-semibold transition disabled:opacity-60',
-                    tone === t.key ? 'bg-brand/20 text-brand' : 'text-muted hover:bg-elevated')}
+                    tone === t.key ? 'bg-brand/20 text-brand-text' : 'text-muted hover:bg-elevated')}
                 >
                   {t.label}
                 </button>

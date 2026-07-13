@@ -41,7 +41,7 @@ export default async function GuardianSettingsPage() {
           <ArrowLeft className="h-5 w-5" />
         </a>
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15">
-          <Settings className="h-5 w-5 text-brand" />
+          <Settings className="h-5 w-5 text-brand-text" />
         </div>
         <div>
           <h1 className="text-xl font-bold leading-tight">Guardian Settings</h1>

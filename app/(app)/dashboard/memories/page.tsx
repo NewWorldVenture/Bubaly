@@ -115,7 +115,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
     <div className="mb-3 flex items-center justify-between">
       <h2 className="text-lg font-bold">{title}</h2>
       {action && href && (
-        <Link href={href} className="flex items-center gap-1 text-sm font-semibold text-brand hover:underline">{action} <ChevronRight className="h-3.5 w-3.5" /></Link>
+        <Link href={href} className="flex items-center gap-1 text-sm font-semibold text-brand-text hover:underline">{action} <ChevronRight className="h-3.5 w-3.5" /></Link>
       )}
     </div>
   );
@@ -226,7 +226,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                 return (
                   <Link key={t.key} href={`/dashboard/memories?tab=${t.key}${q ? `&q=${encodeURIComponent(q)}` : ''}`}
                     className={cn('flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition',
-                      active ? 'bg-brand/15 text-brand' : 'text-muted hover:bg-elevated hover:text-fg')}>
+                      active ? 'bg-brand/15 text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg')}>
                     <t.icon className="h-4 w-4" /> {t.label}
                   </Link>
                 );
@@ -328,9 +328,9 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <h3 className="mb-4 text-base font-bold">Family Moments</h3>
             <div className="relative mx-auto grid h-24 w-24 place-items-center rounded-full bg-brand/15">
-              <Camera className="h-9 w-9 text-brand" />
-              <Sparkles className="absolute -right-1 top-2 h-4 w-4 text-brand/70" />
-              <Sparkles className="absolute -left-2 bottom-3 h-3 w-3 text-brand/50" />
+              <Camera className="h-9 w-9 text-brand-text" />
+              <Sparkles className="absolute -right-1 top-2 h-4 w-4 text-brand-text/70" />
+              <Sparkles className="absolute -left-2 bottom-3 h-3 w-3 text-brand-text/50" />
             </div>
             <p className="mt-4 text-center text-sm font-semibold">Add memories every day</p>
             <p className="mt-1 text-center text-xs text-muted">Small moments. Big memories.</p>
@@ -350,14 +350,14 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                 </div>
               ))}
             </div>
-            <Link href="/dashboard/photos" className="mt-4 flex items-center justify-center gap-1 text-sm font-semibold text-brand hover:underline">View full report <ChevronRight className="h-3.5 w-3.5" /></Link>
+            <Link href="/dashboard/photos" className="mt-4 flex items-center justify-center gap-1 text-sm font-semibold text-brand-text hover:underline">View full report <ChevronRight className="h-3.5 w-3.5" /></Link>
           </div>
 
           {/* Upcoming Events */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-base font-bold">Upcoming Events</h3>
-              <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand hover:underline">View calendar</Link>
+              <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">View calendar</Link>
             </div>
             {(upcoming ?? []).length === 0 ? (
               <p className="text-sm text-muted">Nothing scheduled yet.</p>
@@ -367,7 +367,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                   const Icon = eventIcon(e.category);
                   return (
                     <Link key={e.id} href="/dashboard/calendar" className="flex items-center gap-3">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand"><Icon className="h-4 w-4" /></span>
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text"><Icon className="h-4 w-4" /></span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{e.title}</span>
                         <span className="block truncate text-xs text-muted">{fmtEventRange(e.starts_at, e.ends_at)}</span>
@@ -383,7 +383,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-base font-bold">Shared With You</h3>
-              <Link href="/dashboard/photos" className="text-xs font-semibold text-brand hover:underline">View all</Link>
+              <Link href="/dashboard/photos" className="text-xs font-semibold text-brand-text hover:underline">View all</Link>
             </div>
             {shared.length === 0 ? (
               <p className="text-sm text-muted">No new shares.</p>

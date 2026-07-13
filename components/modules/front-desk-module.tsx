@@ -212,7 +212,7 @@ export function FrontDeskModule() {
           <Link href="/dashboard/concierge-calls"
             className="mb-4 flex items-center gap-3 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-transparent p-4 transition hover:border-brand/40">
             <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-brand/15">
-              <PhoneOutgoing className="h-5 w-5 text-brand" />
+              <PhoneOutgoing className="h-5 w-5 text-brand-text" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold">Have Bubaly make a call for you</p>
@@ -220,14 +220,14 @@ export function FrontDeskModule() {
                 Book, reschedule, confirm or chase — the AI dials out with a ready call plan.
               </p>
             </div>
-            <ArrowRight className="h-4 w-4 flex-shrink-0 text-brand" />
+            <ArrowRight className="h-4 w-4 flex-shrink-0 text-brand-text" />
           </Link>
 
           {/* The paper side of the front desk: slips, forms, flyers, bills. */}
           <Link href="/dashboard/paperwork"
             className="mb-4 flex items-center gap-3 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-transparent p-4 transition hover:border-brand/40">
             <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-brand/15">
-              <FileText className="h-5 w-5 text-brand" />
+              <FileText className="h-5 w-5 text-brand-text" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold">Paperwork Inbox — Bubaly reads it for you</p>
@@ -235,13 +235,13 @@ export function FrontDeskModule() {
                 Slips, forms, flyers and bills → what to sign, pay and return, with the dates on your calendar.
               </p>
             </div>
-            <ArrowRight className="h-4 w-4 flex-shrink-0 text-brand" />
+            <ArrowRight className="h-4 w-4 flex-shrink-0 text-brand-text" />
           </Link>
 
           {/* Stats */}
           <div className="grid-stats">
             {[
-              { label: 'Total Calls', value: calls.length,    icon: '📞', color: 'text-brand' },
+              { label: 'Total Calls', value: calls.length,    icon: '📞', color: 'text-brand-text' },
               { label: 'Unread',      value: unreadCount,      icon: '🔵', color: 'text-blue-400' },
               { label: 'Voicemails',  value: vmCount,          icon: '🎙️', color: 'text-violet-400' },
               { label: 'Spam Blocked', value: blockedCount,    icon: '🛡️', color: 'text-red-400' },
@@ -284,7 +284,7 @@ export function FrontDeskModule() {
             {filtered.length === 0 ? (
               <div className="flex flex-col items-center py-16 text-center">
                 <div className="mb-4 grid h-16 w-16 place-items-center rounded-full bg-brand/10">
-                  <PhoneIncoming className="h-7 w-7 text-brand opacity-60" />
+                  <PhoneIncoming className="h-7 w-7 text-brand-text opacity-60" />
                 </div>
                 <p className="text-sm font-semibold">No calls here</p>
                 <p className="mt-1 text-xs text-muted">When the AI Front Desk handles a call, it shows up here.</p>
@@ -359,7 +359,7 @@ export function FrontDeskModule() {
               ].map((row, i) => (
                 <div key={i} className="flex items-start gap-2.5">
                   <div className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-brand/10">
-                    <row.icon className="h-3.5 w-3.5 text-brand" />
+                    <row.icon className="h-3.5 w-3.5 text-brand-text" />
                   </div>
                   <span className="pt-1">{row.text}</span>
                 </div>
@@ -471,8 +471,8 @@ function CallDetail({ call, familyId, userId, onClose, onDelete, canDelete }: {
         {call.ai_summary && (
           <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
             <div className="flex items-center gap-1.5 mb-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-brand" />
-              <span className="text-[10px] font-semibold text-brand uppercase tracking-wide">AI Summary</span>
+              <Sparkles className="h-3.5 w-3.5 text-brand-text" />
+              <span className="text-[10px] font-semibold text-brand-text uppercase tracking-wide">AI Summary</span>
             </div>
             <p className="text-xs leading-relaxed text-fg/80">{call.ai_summary}</p>
           </div>
@@ -710,7 +710,7 @@ Keep the summary to one sentence. action_items are concrete follow-ups for the f
           {id => <Textarea id={id} value={transcript} onChange={e => setTranscript(e.target.value)} rows={3} placeholder="Paste the voicemail or what was discussed…" />}
         </Field>
         <button type="button" onClick={analyze} disabled={!transcript.trim() || analyzing}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand/10 px-3 py-2 text-xs font-semibold text-brand hover:bg-brand/20 transition disabled:opacity-50">
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand/10 px-3 py-2 text-xs font-semibold text-brand-text hover:bg-brand/20 transition disabled:opacity-50">
           {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
           {analyzing ? 'Analyzing…' : 'Analyze with AI'}
         </button>

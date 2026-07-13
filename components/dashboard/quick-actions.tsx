@@ -97,7 +97,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
               </button>
             )}
             {canCustomize ? (
-              <button onClick={() => setEditing(true)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10 transition">
+              <button onClick={() => setEditing(true)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-text hover:bg-brand/10 transition">
                 <Settings2 className="h-3.5 w-3.5" /> Customize
               </button>
             ) : (
@@ -119,9 +119,9 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
         {fixed.map((f) => (
           <Link key={f.key} href={f.route}
             className="relative flex flex-col items-center gap-1.5 rounded-2xl border border-brand/30 bg-brand/5 py-4 text-center">
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 text-brand"><FeatureIcon icon={f.icon} className="h-4 w-4" /></div>
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 text-brand-text"><FeatureIcon icon={f.icon} className="h-4 w-4" /></div>
             <span className="text-[11px] font-semibold">{f.label}</span>
-            {editing && <span className="absolute right-1 top-1 rounded bg-brand/15 px-1 text-[8px] font-bold uppercase text-brand">Fixed</span>}
+            {editing && <span className="absolute right-1 top-1 rounded bg-brand/15 px-1 text-[8px] font-bold uppercase text-brand-text">Fixed</span>}
           </Link>
         ))}
 
@@ -148,15 +148,15 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
             shown right after the customizable tiles. Not removable/reorderable. */}
         <Link href="/dashboard/social-feed"
           className="relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 py-4 text-center transition hover:border-brand/20 hover:bg-elevated">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-elevated text-brand"><Rss className="h-4 w-4" /></div>
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-elevated text-brand-text"><Rss className="h-4 w-4" /></div>
           <span className="text-[11px] font-semibold">Social Feed</span>
-          {editing && <span className="absolute right-1 top-1 rounded bg-brand/15 px-1 text-[8px] font-bold uppercase text-brand">Pinned</span>}
+          {editing && <span className="absolute right-1 top-1 rounded bg-brand/15 px-1 text-[8px] font-bold uppercase text-brand-text">Pinned</span>}
         </Link>
 
         {/* Add tile */}
         {editing && keys.length < MAX_DASH_BUTTONS && addable.length > 0 && (
           <button onClick={() => setPicker({ mode: 'add', index: keys.length })}
-            className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border py-4 text-muted hover:border-brand/40 hover:text-brand transition">
+            className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border py-4 text-muted hover:border-brand/40 hover:text-brand-text transition">
             <Plus className="h-5 w-5" /><span className="text-[11px] font-semibold">Add</span>
           </button>
         )}

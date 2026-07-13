@@ -303,7 +303,7 @@ export function AssistantModule() {
           {hasConversation ? (
             <div className="flex items-center gap-3">
               <div className="ai-orb h-11 w-11 shrink-0">
-                <Sparkles className="h-5 w-5 text-brand drop-shadow" />
+                <Sparkles className="h-5 w-5 text-brand-text drop-shadow" />
               </div>
               <h1 className="text-2xl font-black sm:text-3xl">Family AI</h1>
               <span className="rounded-md bg-brand px-2.5 py-1 text-[10px] font-black tracking-wide text-brand-fg">BETA</span>
@@ -320,7 +320,7 @@ export function AssistantModule() {
                   'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition',
                   voice.mode === 'text'
                     ? 'border-border bg-surface/40 text-fg hover:bg-elevated'
-                    : 'border-brand/40 bg-brand/10 text-brand',
+                    : 'border-brand/40 bg-brand/10 text-brand-text',
                 )}
               >
                 {voice.mode === 'text' ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
@@ -340,7 +340,7 @@ export function AssistantModule() {
                           voice.mode === m.value ? 'bg-brand/10' : 'hover:bg-elevated',
                         )}
                       >
-                        <span className={cn('text-sm font-medium', voice.mode === m.value ? 'text-brand' : 'text-fg')}>{m.label}</span>
+                        <span className={cn('text-sm font-medium', voice.mode === m.value ? 'text-brand-text' : 'text-fg')}>{m.label}</span>
                         <span className="text-xs text-muted">{m.hint}</span>
                       </button>
                     ))}
@@ -363,7 +363,7 @@ export function AssistantModule() {
                   key={label} onClick={() => void send(label)}
                   className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface/40 px-4 text-sm text-fg transition hover:border-brand/40 hover:bg-elevated"
                 >
-                  <Icon className="h-4 w-4 text-brand" />
+                  <Icon className="h-4 w-4 text-brand-text" />
                   {label}
                 </button>
               ))}
@@ -374,7 +374,7 @@ export function AssistantModule() {
                 msg.role === 'assistant' ? (
                   <div key={msg.id} className="assistant-message-enter flex gap-4">
                     <div className="ai-orb mt-1 h-9 w-9 shrink-0">
-                      <Sparkles className="h-4 w-4 text-brand" />
+                      <Sparkles className="h-4 w-4 text-brand-text" />
                     </div>
                     <div className="max-w-[480px] space-y-2">
                       <div className="rounded-2xl border border-border bg-surface/40 p-5 text-sm leading-6 whitespace-pre-wrap">
@@ -441,7 +441,7 @@ export function AssistantModule() {
                     disabled={loading}
                     className="ai-suggest-card group flex items-start gap-2.5 p-3 text-left disabled:opacity-50"
                   >
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand transition group-hover:bg-brand/20">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text transition group-hover:bg-brand/20">
                       <Icon className="h-4 w-4" />
                     </span>
                     <span className="min-w-0">
@@ -467,7 +467,7 @@ export function AssistantModule() {
         {/* Conversations */}
         <SideCard
           title="Conversations"
-          action={<button onClick={newChat} className="inline-flex items-center gap-1 text-xs font-semibold text-brand"><Plus className="h-3.5 w-3.5" /> New</button>}
+          action={<button onClick={newChat} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-text"><Plus className="h-3.5 w-3.5" /> New</button>}
         >
           {conversations.length === 0 ? (
             <p className="py-3 text-xs text-muted/60 text-center">No saved chats yet.</p>
@@ -476,7 +476,7 @@ export function AssistantModule() {
               {conversations.map((c) => (
                 <div key={c.id} className={cn('group flex items-center gap-2 rounded-lg px-2 py-2', c.id === convId ? 'bg-brand/10' : 'hover:bg-elevated')}>
                   <button onClick={() => void loadConversation(c.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-                    <MessageSquare className={cn('h-4 w-4 shrink-0', c.id === convId ? 'text-brand' : 'text-muted')} />
+                    <MessageSquare className={cn('h-4 w-4 shrink-0', c.id === convId ? 'text-brand-text' : 'text-muted')} />
                     <span className="truncate text-xs text-fg/80">{c.title || 'New conversation'}</span>
                   </button>
                   <button onClick={() => void renameConversation(c.id, c.title)} aria-label="Rename conversation" className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-fg group-hover:opacity-100">
@@ -496,7 +496,7 @@ export function AssistantModule() {
           <div className="grid grid-cols-2 gap-3">
             {glance.map(({ icon: Icon, value, label }) => (
               <div key={label} className="rounded-xl border border-border bg-bg/40 p-3">
-                <Icon className="h-5 w-5 text-brand" />
+                <Icon className="h-5 w-5 text-brand-text" />
                 <p className="mt-2 text-2xl font-black leading-none">{value}</p>
                 <p className="mt-1 text-xs text-muted">{label}</p>
               </div>
@@ -505,7 +505,7 @@ export function AssistantModule() {
         </SideCard>
 
         {/* Upcoming */}
-        <SideCard title="Upcoming" action={<a href="/dashboard/calendar" className="text-xs font-semibold text-brand">View Calendar</a>}>
+        <SideCard title="Upcoming" action={<a href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">View Calendar</a>}>
           {upcoming.length > 0 ? upcoming.map((e, i) => {
             const d = new Date(e.starts_at);
             return (
@@ -537,7 +537,7 @@ export function AssistantModule() {
           ].map(({ icon: Icon, text }) => (
             <button key={text} onClick={() => void send(text)} className="flex w-full gap-3 rounded-lg py-2.5 px-1 text-left transition hover:bg-elevated">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10">
-                <Icon className="h-4 w-4 text-brand" />
+                <Icon className="h-4 w-4 text-brand-text" />
               </span>
               <p className="text-xs leading-5 text-fg/80">{text}</p>
             </button>
@@ -545,7 +545,7 @@ export function AssistantModule() {
         </SideCard>
 
         {/* Recent Activity */}
-        <SideCard title="Recent Activity" action={<a href="/dashboard/calendar" className="text-xs font-semibold text-brand">View All</a>}>
+        <SideCard title="Recent Activity" action={<a href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">View All</a>}>
           {activity.length > 0 ? activity.map((a) => (
             <div key={a.text} className="flex items-center gap-3 py-2 text-xs">
               <a.icon className={cn('h-4 w-4 shrink-0', a.color)} />
@@ -604,7 +604,7 @@ function Composer({
       {voice.status === 'speaking' && (
         <button
           onClick={voice.stopSpeaking}
-          className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-3 py-1.5 text-xs font-medium text-brand"
+          className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/10 px-3 py-1.5 text-xs font-medium text-brand-text"
         >
           <Square className="h-3 w-3" /> Stop speaking
         </button>

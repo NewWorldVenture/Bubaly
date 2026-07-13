@@ -74,12 +74,12 @@ export function SignupForm() {
   if (checkEmail) {
     return (
       <div className="glass-card flex flex-col items-center p-8 text-center animate-fade-in">
-        <MailCheck className="h-12 w-12 text-brand" />
+        <MailCheck className="h-12 w-12 text-brand-text" />
         <h1 className="mt-4 text-xl font-semibold">Check your email</h1>
         <p className="mt-2 text-sm text-muted">
           We sent a confirmation link to verify your address. Click it to finish setting up your family.
         </p>
-        <Link href="/login" className="mt-6 text-sm font-medium text-brand hover:underline">
+        <Link href="/login" className="mt-6 text-sm font-medium text-brand-text hover:underline">
           Back to sign in
         </Link>
       </div>
@@ -99,7 +99,7 @@ export function SignupForm() {
       {/* Hero */}
       <div className="text-center">
         <span className="ai-orb mx-auto flex h-16 w-16 items-center justify-center">
-          <Sparkles className="h-7 w-7 text-brand" />
+          <Sparkles className="h-7 w-7 text-brand-text" />
         </span>
         <h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">A safe place for your family</h1>
         <p className="mt-2 text-sm text-muted">
@@ -170,7 +170,7 @@ export function SignupForm() {
 
       <p className="mt-5 text-center text-sm text-muted">
         Already have an account?{' '}
-        <Link href="/login" className="font-medium text-brand hover:underline">Sign in</Link>
+        <Link href="/login" className="font-medium text-brand-text hover:underline">Sign in</Link>
       </p>
     </div>
   );

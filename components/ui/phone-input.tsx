@@ -163,12 +163,12 @@ export function PhoneInput({
                     onClick={() => selectCountry(c)}
                     className={cn(
                       'flex w-full items-center gap-3 px-3 py-2 text-sm transition hover:bg-elevated',
-                      active && 'bg-brand/10 font-semibold text-brand',
+                      active && 'bg-brand/10 font-semibold text-brand-text',
                     )}
                   >
                     <span className="w-6 shrink-0 text-center text-base leading-none">{c.flag}</span>
                     <span className="flex-1 truncate text-left">{c.name}</span>
-                    <span className={cn('text-xs', active ? 'text-brand' : 'text-muted')}>
+                    <span className={cn('text-xs', active ? 'text-brand-text' : 'text-muted')}>
                       {c.dialCode}
                     </span>
                   </button>

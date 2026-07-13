@@ -15,7 +15,7 @@ export default async function TierFeaturesPage() {
     <div className="space-y-5">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-          <SlidersHorizontal className="h-6 w-6 text-brand" /> Tier &amp; Features
+          <SlidersHorizontal className="h-6 w-6 text-brand-text" /> Tier &amp; Features
         </h1>
         <p className="mt-1 text-sm text-muted">
           Control the global offering: which tier each service belongs to (Off / Free / Basic / Plus).

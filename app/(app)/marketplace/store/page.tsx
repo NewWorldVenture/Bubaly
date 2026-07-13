@@ -64,8 +64,8 @@ export default async function MarketplaceStorePage() {
 
       <section id="listings" className="mt-6">
         <div className="mb-2 flex items-baseline justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand" /> My Listings</h2>
-          <Link href="/marketplace/browse?post=1" className="text-xs text-brand hover:underline">Post an item</Link>
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand-text" /> My Listings</h2>
+          <Link href="/marketplace/browse?post=1" className="text-xs text-brand-text hover:underline">Post an item</Link>
         </div>
         {(myListings ?? []).length === 0 ? (
           <p className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">
@@ -78,7 +78,7 @@ export default async function MarketplaceStorePage() {
                 <span className="min-w-0 flex-1 truncate text-sm">{l.title}</span>
                 <span className="text-xs text-muted">{KIND_LABELS[l.kind as ListingKind] ?? l.kind}</span>
                 {priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null) && (
-                  <span className="text-xs font-semibold text-brand">{priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null)}</span>
+                  <span className="text-xs font-semibold text-brand-text">{priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null)}</span>
                 )}
                 <span className={cn(
                   'rounded-full px-2 py-0.5 text-[10px] font-medium',

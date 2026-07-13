@@ -69,7 +69,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
       )}
 
       <div className="space-y-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold"><Wallet className="h-5 w-5 text-brand" /> Budget by category</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><Wallet className="h-5 w-5 text-brand-text" /> Budget by category</h2>
         <div className="space-y-2">
           {BUDGET_CATEGORIES.map((cat) => {
             const roll = summary.categories.find((c) => c.category === cat.value);
@@ -85,7 +85,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
                       <Input type="number" step="0.01" autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={() => savePlanned(cat.value)} onKeyDown={(e) => e.key === 'Enter' && savePlanned(cat.value)} className="h-8 w-28" />
                     </span>
                   ) : (
-                    <button onClick={() => { setEditing(cat.value); setDraft(planned ? String(planned / 100) : ''); }} className="text-sm text-muted hover:text-brand">
+                    <button onClick={() => { setEditing(cat.value); setDraft(planned ? String(planned / 100) : ''); }} className="text-sm text-muted hover:text-brand-text">
                       {dollars(spent)} / {dollars(planned)} ✎
                     </button>
                   )}

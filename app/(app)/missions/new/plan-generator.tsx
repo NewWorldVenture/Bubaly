@@ -45,7 +45,7 @@ export function PlanGenerator({ members }: { members: { id: string; name: string
 
   return (
     <Card className="border-brand/30 bg-brand/5">
-      <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Wand2 className="h-4 w-4 text-brand" /> AI chore plan builder</h2>
+      <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Wand2 className="h-4 w-4 text-brand-text" /> AI chore plan builder</h2>
       <p className="mb-3 text-xs text-muted">Describe your family and let AI suggest an age-appropriate, balanced plan.{members.length > 0 ? ` Kids: ${members.map((m) => m.name).join(', ')}.` : ''}</p>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input

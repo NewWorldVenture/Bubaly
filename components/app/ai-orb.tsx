@@ -9,7 +9,7 @@ import { Sparkles, X, Loader2 } from 'lucide-react';
 // globally-mounted orb doesn't ship the assistant bundle on every page.
 const AssistantModule = dynamic(
   () => import('@/components/modules/assistant-module').then((m) => m.AssistantModule),
-  { ssr: false, loading: () => <div className="grid h-40 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-brand" /></div> },
+  { ssr: false, loading: () => <div className="grid h-40 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-brand-text" /></div> },
 );
 
 /**

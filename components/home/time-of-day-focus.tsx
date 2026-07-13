@@ -34,7 +34,7 @@ export function TimeOfDayFocus({ now = new Date(), role = null }: { now?: Date; 
   return (
     <section className="rounded-2xl border border-brand/15 bg-gradient-to-br from-brand/[0.07] via-surface/40 to-surface/40 p-4">
       <div className="mb-3 flex items-center gap-2">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text">
           <PhaseIcon className="h-4 w-4" />
         </span>
         <p className="text-sm font-semibold">{focusHeadline(role)} <span className="font-normal text-muted">· {phaseBlurb(phase)}</span></p>
@@ -47,11 +47,11 @@ export function TimeOfDayFocus({ now = new Date(), role = null }: { now?: Date; 
               key={it.key}
               href={it.href}
               className={cn(
-                'inline-flex items-center border border-border bg-surface/60 font-medium transition hover:bg-elevated hover:text-brand',
+                'inline-flex items-center border border-border bg-surface/60 font-medium transition hover:bg-elevated hover:text-brand-text',
                 sizing.chip,
               )}
             >
-              <Icon className={cn('text-brand', sizing.icon)} /> {it.label}
+              <Icon className={cn('text-brand-text', sizing.icon)} /> {it.label}
             </Link>
           );
         })}

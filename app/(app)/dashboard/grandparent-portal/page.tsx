@@ -76,7 +76,7 @@ export default async function GrandparentPortalPage() {
       {/* Family members */}
       <section>
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold">
-          <Users className="h-4 w-4 text-brand" /> Family
+          <Users className="h-4 w-4 text-brand-text" /> Family
         </h2>
         <div className="grid max-h-[32rem] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3">
           {digest.members.map((m) => (
@@ -166,7 +166,7 @@ export default async function GrandparentPortalPage() {
                   <p className="font-semibold">{c.title}</p>
                   <p className="text-xs text-muted">{fmtDate(c.date)}</p>
                 </div>
-                <span className={`shrink-0 text-sm font-semibold ${c.daysUntil <= 7 ? 'text-brand' : 'text-muted'}`}>
+                <span className={`shrink-0 text-sm font-semibold ${c.daysUntil <= 7 ? 'text-brand-text' : 'text-muted'}`}>
                   {celebrationCountdown(c.daysUntil)}
                 </span>
               </li>

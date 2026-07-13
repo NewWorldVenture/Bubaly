@@ -70,7 +70,7 @@ export default async function MarketplaceInsightsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Supply by type */}
         <section className="rounded-2xl border border-border bg-surface/30 p-4">
-          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Package className="h-4 w-4 text-brand" /> Supply by type</h2>
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Package className="h-4 w-4 text-brand-text" /> Supply by type</h2>
           {ins.byKind.length === 0 ? <p className="text-sm text-muted">No active listings yet.</p> : (
             <div className="space-y-2.5">
               {ins.byKind.map((k) => <Bar key={k.kind} label={kindLabel(k.kind)} value={k.count} max={maxKind} />)}
@@ -80,7 +80,7 @@ export default async function MarketplaceInsightsPage() {
 
         {/* Demand gaps */}
         <section className="rounded-2xl border border-border bg-surface/30 p-4">
-          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><TrendingUp className="h-4 w-4 text-brand" /> Where demand outruns supply</h2>
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><TrendingUp className="h-4 w-4 text-brand-text" /> Where demand outruns supply</h2>
           {ins.demandGaps.length === 0 ? (
             <p className="text-sm text-muted">Supply is keeping up with requests — nice and balanced.</p>
           ) : (
@@ -98,7 +98,7 @@ export default async function MarketplaceInsightsPage() {
 
       {/* Price benchmarks */}
       <section className="rounded-2xl border border-border bg-surface/30 p-4">
-        <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Tag className="h-4 w-4 text-brand" /> Price benchmarks (for sale)</h2>
+        <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Tag className="h-4 w-4 text-brand-text" /> Price benchmarks (for sale)</h2>
         {ins.prices.length === 0 ? <p className="text-sm text-muted">No priced listings yet.</p> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[420px] text-left text-sm">
@@ -122,7 +122,7 @@ export default async function MarketplaceInsightsPage() {
 
       {/* Hot right now */}
       <section className="rounded-2xl border border-border bg-surface/30 p-4">
-        <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Flame className="h-4 w-4 text-brand" /> Hot right now</h2>
+        <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Flame className="h-4 w-4 text-brand-text" /> Hot right now</h2>
         {ins.hot.length === 0 ? <p className="text-sm text-muted">No engagement yet — saves and offers surface the hottest items here.</p> : (
           <ul className="space-y-2">
             {ins.hot.map((h) => (

@@ -86,7 +86,7 @@ export default async function FamilySportsPage() {
               <li key={t.id} className="rounded-xl border border-border bg-surface/40 p-3">
                 <p className="text-sm font-semibold">{t.team_name}</p>
                 <p className="mt-0.5 text-xs text-muted">{[t.sport, t.season, t.coach && `Coach ${t.coach}`].filter(Boolean).join(' · ')}</p>
-                {t.member_id && <p className="mt-1 text-xs text-brand">{nameById.get(t.member_id)}</p>}
+                {t.member_id && <p className="mt-1 text-xs text-brand-text">{nameById.get(t.member_id)}</p>}
               </li>
             ))}
           </ul>

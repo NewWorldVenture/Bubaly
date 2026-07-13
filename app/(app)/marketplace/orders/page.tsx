@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 const STATUS_CHIP: Record<string, string> = {
   requested: 'bg-amber-500/12 text-amber-600 dark:text-amber-400',
   confirmed: 'bg-sky-500/12 text-sky-600 dark:text-sky-400',
-  active: 'bg-brand/12 text-brand',
+  active: 'bg-brand/12 text-brand-text',
   returned: 'bg-violet-500/12 text-violet-600 dark:text-violet-400',
   completed: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400',
   cancelled: 'bg-border/60 text-muted',
@@ -82,7 +82,7 @@ export default async function MarketplaceOrdersPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide', STATUS_CHIP[o.status] ?? STATUS_CHIP.cancelled)}>{o.status}</span>
                   <p className="min-w-0 flex-1 truncate text-sm font-medium">{titleOf.get(o.listing_id) ?? 'Listing'}</p>
-                  {o.amount_cents > 0 && <span className="text-sm font-semibold text-brand">{formatCents(o.amount_cents)}</span>}
+                  {o.amount_cents > 0 && <span className="text-sm font-semibold text-brand-text">{formatCents(o.amount_cents)}</span>}
                 </div>
                 <p className="mt-1 text-xs text-muted">
                   {role === 'buyer' ? `You’re getting this from ${other}` : `${other} is getting this from you`} · {o.kind}
@@ -91,7 +91,7 @@ export default async function MarketplaceOrdersPage() {
                   <p className="mt-1 text-xs text-muted">
                     {role === 'buyer' ? (
                       <>
-                        You pay <span className="font-semibold text-brand">{formatCents(fee.buyerTotalCents)}</span>
+                        You pay <span className="font-semibold text-brand-text">{formatCents(fee.buyerTotalCents)}</span>
                         {fee.serviceFeeCents > 0 && (
                           <span> · {formatCents(fee.subtotalCents)} item + {formatCents(fee.serviceFeeCents)} Bubaly service fee</span>
                         )}

@@ -55,7 +55,7 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
       {/* Share link */}
       <Card>
         <p className="text-xs font-medium text-muted">Public share link {survey.status !== 'active' && <span className="text-warning">(activate the survey to accept responses)</span>}</p>
-        <a href={publicUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1.5 break-all text-sm font-medium text-brand underline">
+        <a href={publicUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1.5 break-all text-sm font-medium text-brand-text underline">
           {publicUrl} <ExternalLink className="h-3.5 w-3.5 shrink-0" />
         </a>
         <p className="mt-2 text-sm text-muted">“{survey.question}”</p>

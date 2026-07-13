@@ -58,7 +58,7 @@ export default async function FamilyEmergencyPage() {
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-2 text-sm font-semibold">{c.name}{c.is_primary && <span className="rounded bg-rose-500/20 px-1.5 text-[10px] font-bold text-rose-300">PRIMARY</span>}</p>
                   <p className="text-xs text-muted">{[c.relationship, c.member_id ? `for ${nameById.get(c.member_id)}` : null].filter(Boolean).join(' · ')}</p>
-                  <a href={`tel:${c.phone}`} className="mt-1 inline-block text-sm font-semibold text-brand">{c.phone}</a>
+                  <a href={`tel:${c.phone}`} className="mt-1 inline-block text-sm font-semibold text-brand-text">{c.phone}</a>
                   {c.can_pickup && <p className="mt-1 inline-flex items-center gap-1 text-xs text-emerald-300"><UserCheck className="h-3 w-3" /> Pickup approved</p>}
                 </div>
                 {manager && <DeleteButton table="family_emergency_contacts" id={c.id} />}

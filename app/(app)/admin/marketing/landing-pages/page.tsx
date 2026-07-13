@@ -38,7 +38,7 @@ export default async function LandingPagesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {p.published && (
-                    <a href={`/lp/${p.slug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand hover:underline">
+                    <a href={`/lp/${p.slug}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline">
                       View <ExternalLink className="h-3 w-3" />
                     </a>
                   )}

@@ -71,7 +71,7 @@ export function PlanWriteBacks({ planId, plan }: { planId: string; plan: PlanFor
               className={cn(
                 'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition',
                 done ? 'text-green-400'
-                  : o.available ? 'bg-brand/10 text-brand hover:bg-brand/20'
+                  : o.available ? 'bg-brand/10 text-brand-text hover:bg-brand/20'
                   : 'cursor-not-allowed text-muted/50',
               )}
             >

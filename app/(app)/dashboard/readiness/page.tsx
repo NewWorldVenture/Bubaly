@@ -105,7 +105,7 @@ export default async function ReadinessPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2">
-        <Gauge className="h-5 w-5 text-brand" />
+        <Gauge className="h-5 w-5 text-brand-text" />
         <h1 className="text-lg font-bold">Family Readiness</h1>
       </div>
 
@@ -145,12 +145,12 @@ export default async function ReadinessPage() {
 
       {!isPlus && (
         <Link href="/dashboard/billing?upgrade=1&need=2" className="group flex items-center gap-4 rounded-3xl border border-brand/30 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 transition hover:border-brand/50">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15"><Sparkles className="h-5 w-5 text-brand" /></div>
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15"><Sparkles className="h-5 w-5 text-brand-text" /></div>
           <div className="flex-1">
             <p className="font-semibold">Want the full picture?</p>
             <p className="text-sm text-muted">Family+ adds live Stress &amp; Operations scores, predictive alerts, and the AI Command Center.</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand" />
+          <ArrowRight className="h-5 w-5 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-text" />
         </Link>
       )}
     </div>

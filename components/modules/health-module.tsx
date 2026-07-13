@@ -188,7 +188,7 @@ export function HealthModule() {
   // Stats grid
   const statsGrid = useMemo(() => [
     { icon: Heart, label: 'Family Members', value: members.length, sub: 'Tracking health', bg: 'bg-rose-600/20 text-rose-300' },
-    { icon: Activity, label: 'Steps Today', value: totalStepsToday.toLocaleString(), sub: 'Family combined', bg: 'bg-brand/15 text-brand' },
+    { icon: Activity, label: 'Steps Today', value: totalStepsToday.toLocaleString(), sub: 'Family combined', bg: 'bg-brand/15 text-brand-text' },
     { icon: Zap, label: 'Active Calories', value: totalCaloriesToday.toLocaleString(), sub: 'Today combined', bg: 'bg-orange-600/20 text-orange-300' },
     { icon: Activity, label: 'Avg Sleep', value: formatSleepHours(avgSleepToday), sub: 'Last night', bg: 'bg-blue-600/20 text-blue-300' },
   ], [members.length, totalStepsToday, totalCaloriesToday, avgSleepToday]);
@@ -254,7 +254,7 @@ export function HealthModule() {
       }
     });
     return [
-      { label: 'Avg Steps', value: avgSteps.toLocaleString(), sub: 'Family average', color: 'text-brand' },
+      { label: 'Avg Steps', value: avgSteps.toLocaleString(), sub: 'Family average', color: 'text-brand-text' },
       { label: 'Avg Sleep', value: formatSleepHours(avgSleep), sub: 'Per night', color: 'text-blue-300' },
       { label: 'Calories Burned', value: totalCals.toLocaleString(), sub: 'This week total', color: 'text-emerald-300' },
       { label: 'Active Days', value: `${activeDaySet.size} / 7`, sub: 'This week', color: 'text-orange-300' },
@@ -536,7 +536,7 @@ export function HealthModule() {
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">Activity Summary</h2>
-              <button onClick={() => setGoalOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-brand"><Target className="h-3 w-3" /> Set goals</button>
+              <button onClick={() => setGoalOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-brand-text"><Target className="h-3 w-3" /> Set goals</button>
             </div>
             {metrics.length === 0 ? (
               <EmptyState icon={Activity} title="No activity data yet" description="Log your first health metric to see activity summaries." action={<Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Metric</Button>} />
@@ -623,7 +623,7 @@ export function HealthModule() {
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">Recent Workouts</h2>
-              <button onClick={() => setWorkoutOpen(true)} className="text-xs font-semibold text-brand">+ Log workout</button>
+              <button onClick={() => setWorkoutOpen(true)} className="text-xs font-semibold text-brand-text">+ Log workout</button>
             </div>
             {workouts.length === 0 ? (
               <EmptyState icon={Dumbbell} title="No workouts logged" description="Track runs, swims, bike rides, and more." action={<Button onClick={() => setWorkoutOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> Log Workout</Button>} />
@@ -657,7 +657,7 @@ export function HealthModule() {
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">Health Insights</h2>
-              <span className="flex items-center gap-1 text-xs text-brand"><Sparkles className="h-3 w-3" /> Data-driven</span>
+              <span className="flex items-center gap-1 text-xs text-brand-text"><Sparkles className="h-3 w-3" /> Data-driven</span>
             </div>
             <div className="space-y-3">
               {insights.map((insight, i) => (
@@ -793,7 +793,7 @@ export function HealthModule() {
         {/* AI Health Coach */}
         <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
           <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15">
-            <Sparkles className="h-6 w-6 text-brand" />
+            <Sparkles className="h-6 w-6 text-brand-text" />
           </div>
           <h3 className="font-bold">AI Health Coach</h3>
           <p className="mt-2 text-xs leading-5 text-muted">Get personalized health tips and wellness insights for your family.</p>

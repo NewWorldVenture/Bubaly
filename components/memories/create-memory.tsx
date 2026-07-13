@@ -153,7 +153,7 @@ export function CreateMemory() {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={picks[0].preview} alt="" className="h-24 w-24 rounded-2xl object-cover" />
           ) : (
-            <div className="grid h-24 w-24 place-items-center rounded-2xl bg-brand/15 text-brand"><ImageIcon className="h-10 w-10" /></div>
+            <div className="grid h-24 w-24 place-items-center rounded-2xl bg-brand/15 text-brand-text"><ImageIcon className="h-10 w-10" /></div>
           )}
           <span className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full bg-emerald-500 text-white ring-4 ring-bg">
             <Check className="h-4 w-4" />
@@ -221,7 +221,7 @@ export function CreateMemory() {
         <button
           type="button"
           onClick={() => setCameraOpen(true)}
-          className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border text-muted transition hover:border-brand/50 hover:bg-brand/5 hover:text-brand"
+          className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border text-muted transition hover:border-brand/50 hover:bg-brand/5 hover:text-brand-text"
         >
           <Camera className="h-7 w-7" />
           <span className="text-xs font-medium">Take photo</span>
@@ -229,7 +229,7 @@ export function CreateMemory() {
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border text-muted transition hover:border-brand/50 hover:bg-brand/5 hover:text-brand"
+          className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-border text-muted transition hover:border-brand/50 hover:bg-brand/5 hover:text-brand-text"
         >
           <Plus className="h-7 w-7" />
           <span className="text-xs font-medium">Upload</span>

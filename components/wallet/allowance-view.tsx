@@ -58,7 +58,7 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
       {enabled && canManage && due.count > 0 && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand/20 bg-brand/5 p-4">
           <div className="flex items-center gap-3">
-            <Zap className="h-5 w-5 flex-shrink-0 text-brand" />
+            <Zap className="h-5 w-5 flex-shrink-0 text-brand-text" />
             <p className="text-sm">
               <span className="font-semibold">{due.count} allowance{due.count === 1 ? '' : 's'} due</span>
               <span className="text-muted"> · {formatCents(due.totalCents)}. They pay automatically, or run them now.</span>
@@ -149,7 +149,7 @@ function AllowanceModal({ row, onClose }: { row: AllowanceRow; onClose: () => vo
             {(['weekly', 'biweekly', 'monthly'] as const).map((c) => (
               <button key={c} type="button" onClick={() => setCadence(c)}
                 className={cn('flex-1 rounded-xl border-2 px-3 py-2 text-sm font-medium capitalize transition',
-                  cadence === c ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:border-brand/40')}>
+                  cadence === c ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40')}>
                 {c}
               </button>
             ))}

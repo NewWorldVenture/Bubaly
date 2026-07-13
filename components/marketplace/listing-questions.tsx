@@ -53,7 +53,7 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
   return (
     <div className="mt-8">
       <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-fg">
-        <MessageSquare className="h-4 w-4 text-brand" /> Questions{rows.length > 0 ? ` (${rows.length})` : ''}
+        <MessageSquare className="h-4 w-4 text-brand-text" /> Questions{rows.length > 0 ? ` (${rows.length})` : ''}
       </h2>
 
       {!isOwner && meId && (
@@ -81,9 +81,9 @@ export function ListingQuestions({ listingId, isOwner }: { listingId: string; is
               <p className="mt-1.5 text-sm text-fg">{q.question}</p>
               {isAnswered(q) ? (
                 <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-brand/5 p-2 text-sm">
-                  <CornerDownRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
+                  <CornerDownRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-text" />
                   <div>
-                    <span className="text-xs font-medium text-brand">{nameOf(q.answered_by)}</span>
+                    <span className="text-xs font-medium text-brand-text">{nameOf(q.answered_by)}</span>
                     <p className="text-muted">{q.answer}</p>
                   </div>
                 </div>

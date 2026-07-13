@@ -33,7 +33,7 @@ const KIND_CONFIG: Record<string, { icon: React.ComponentType<{ className?: stri
   activity:    { icon: Zap,             label: 'Family Activity',     color: 'bg-green-500/15 text-green-400',  prompt: 'Suggest a fun family activity. Ask about age ranges, interests, budget, and whether we prefer indoor or outdoor.' },
   party:       { icon: PartyPopper,     label: 'Plan a Party',        color: 'bg-violet-500/15 text-violet-400', prompt: 'Help me plan a family party or celebration. Ask about the occasion, number of guests, budget, and venue preference.' },
   travel:      { icon: MapPin,          label: 'Vacation Planning',   color: 'bg-cyan-500/15 text-cyan-400',    prompt: 'Help me plan a family vacation. Ask about destination preferences, travel dates, budget, and activities we enjoy.' },
-  general:     { icon: Sparkles,        label: 'Ask Anything',        color: 'bg-brand/15 text-brand',          prompt: 'I\'m your personal family concierge. What can I help you plan or arrange today?' },
+  general:     { icon: Sparkles,        label: 'Ask Anything',        color: 'bg-brand/15 text-brand-text',          prompt: 'I\'m your personal family concierge. What can I help you plan or arrange today?' },
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -167,7 +167,7 @@ export function ConciergeModule() {
                 <div className="ml-auto flex gap-2">
                   {messages.length >= 3 && (
                     <button onClick={savePlanFromChat}
-                      className="flex items-center gap-1.5 rounded-lg bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand hover:bg-brand/20 transition">
+                      className="flex items-center gap-1.5 rounded-lg bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
                       <CheckCircle2 className="h-3.5 w-3.5" /> Save Plan
                     </button>
                   )}
@@ -180,7 +180,7 @@ export function ConciergeModule() {
                   <div key={i} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
                     {msg.role === 'assistant' && (
                       <div className="mr-2 mt-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand/20">
-                        <Sparkles className="h-3.5 w-3.5 text-brand" />
+                        <Sparkles className="h-3.5 w-3.5 text-brand-text" />
                       </div>
                     )}
                     <div className={cn(
@@ -196,7 +196,7 @@ export function ConciergeModule() {
                 {sending && (
                   <div className="flex justify-start">
                     <div className="mr-2 mt-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand/20">
-                      <Sparkles className="h-3.5 w-3.5 text-brand animate-pulse" />
+                      <Sparkles className="h-3.5 w-3.5 text-brand-text animate-pulse" />
                     </div>
                     <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm border border-border bg-surface/60 px-4 py-3">
                       <span className="h-1.5 w-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -234,10 +234,10 @@ export function ConciergeModule() {
                   <div>
                     <div className="mb-2 flex items-center gap-2">
                       <div className="grid h-10 w-10 place-items-center rounded-xl bg-brand/20">
-                        <Sparkles className="h-5 w-5 text-brand" />
+                        <Sparkles className="h-5 w-5 text-brand-text" />
                       </div>
                       <div>
-                        <p className="text-xs font-semibold text-brand uppercase tracking-wide">AI Concierge</p>
+                        <p className="text-xs font-semibold text-brand-text uppercase tracking-wide">AI Concierge</p>
                         <h1 className="text-xl font-bold">Life. Simplified.</h1>
                       </div>
                     </div>
@@ -261,9 +261,9 @@ export function ConciergeModule() {
                   <button onClick={() => startChat('general')}
                     className="flex items-center gap-2.5 rounded-xl border border-brand/30 bg-brand/5 px-3 py-2.5 text-left transition hover:bg-brand/10">
                     <div className="grid h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-brand/20">
-                      <Sparkles className="h-4 w-4 text-brand" />
+                      <Sparkles className="h-4 w-4 text-brand-text" />
                     </div>
-                    <span className="text-xs font-semibold text-brand">Ask Anything</span>
+                    <span className="text-xs font-semibold text-brand-text">Ask Anything</span>
                   </button>
                 </div>
               </div>
@@ -274,7 +274,7 @@ export function ConciergeModule() {
                   <div className="mb-3 flex items-center justify-between">
                     <h2 className="text-sm font-semibold">Active Plans</h2>
                     <button onClick={() => setShowAddPlan(true)}
-                      className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline">
+                      className="flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline">
                       <Plus className="h-3.5 w-3.5" /> Add
                     </button>
                   </div>
@@ -307,7 +307,7 @@ export function ConciergeModule() {
               {plans.length === 0 && !plansLoading && (
                 <div className="flex flex-col items-center py-10 text-center">
                   <div className="mb-3 grid h-14 w-14 place-items-center rounded-full bg-brand/10">
-                    <Sparkles className="h-6 w-6 text-brand opacity-60" />
+                    <Sparkles className="h-6 w-6 text-brand-text opacity-60" />
                   </div>
                   <p className="text-sm font-semibold">No plans yet</p>
                   <p className="mt-1 text-xs text-muted">Start with one of the quick actions above.</p>
@@ -482,8 +482,8 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
         {plan.ai_suggestion && (
           <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
             <div className="flex items-center gap-1.5 mb-1">
-              <Sparkles className="h-3 w-3 text-brand" />
-              <span className="text-[10px] font-semibold text-brand uppercase tracking-wide">AI Suggestion</span>
+              <Sparkles className="h-3 w-3 text-brand-text" />
+              <span className="text-[10px] font-semibold text-brand-text uppercase tracking-wide">AI Suggestion</span>
             </div>
             <p className="text-xs text-muted leading-relaxed">{plan.ai_suggestion}</p>
           </div>

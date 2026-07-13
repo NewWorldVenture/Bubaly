@@ -163,7 +163,7 @@ export function ShoppingModule() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold">My Lists</h2>
           <button onClick={() => setNewListOpen(true)}
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/15 text-brand hover:bg-brand/25 transition">
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/15 text-brand-text hover:bg-brand/25 transition">
             <Plus className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -175,11 +175,11 @@ export function ShoppingModule() {
               <button key={list.id} onClick={() => setActiveListId(list.id)}
                 className={cn(
                   'group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition',
-                  isActive ? 'bg-brand/15 text-brand' : 'hover:bg-elevated/40 text-muted',
+                  isActive ? 'bg-brand/15 text-brand-text' : 'hover:bg-elevated/40 text-muted',
                 )}>
                 <span className="text-lg">{(list as Record<string, unknown>).list_icon as string ?? '🛒'}</span>
                 <div className="flex-1 min-w-0">
-                  <p className={cn('truncate text-sm font-medium', isActive && 'text-brand font-bold')}>{list.name}</p>
+                  <p className={cn('truncate text-sm font-medium', isActive && 'text-brand-text font-bold')}>{list.name}</p>
                   <p className="text-[10px]">{activeListId === list.id ? `${totalCount} items` : ''}</p>
                 </div>
                 {isActive && (
@@ -192,7 +192,7 @@ export function ShoppingModule() {
             );
           })}
           <button onClick={() => setNewListOpen(true)}
-            className="flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-border px-3 py-2 text-sm text-muted hover:border-brand/40 hover:text-brand transition">
+            className="flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-border px-3 py-2 text-sm text-muted hover:border-brand/40 hover:text-brand-text transition">
             <Plus className="h-3.5 w-3.5" /> New list
           </button>
         </div>
@@ -274,7 +274,7 @@ export function ShoppingModule() {
                                 {item.name}
                               </span>
                               {item.quantity && (
-                                <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand">
+                                <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand-text">
                                   {item.quantity}
                                 </span>
                               )}

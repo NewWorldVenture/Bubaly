@@ -151,7 +151,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
           <div className="space-y-5">
             {/* Stat cards */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <AdminStatCard icon={Users}     label="Total Admins"         sub="Active administrators"  value={total}          color="text-brand     bg-brand/10" />
+              <AdminStatCard icon={Users}     label="Total Admins"         sub="Active administrators"  value={total}          color="text-brand-text     bg-brand/10" />
               <AdminStatCard icon={ShieldCheck} label="Super Admins"       sub="Full system access"     value={superAdmins}    color="text-emerald-400 bg-emerald-500/10" />
               <AdminStatCard icon={UserCog}   label="Admins"               sub="Standard access"        value={administrators} color="text-blue-400  bg-blue-500/10" />
               <AdminStatCard icon={UserPlus}  label="Pending Invitations"  sub="Awaiting acceptance"    value={pendingInvites} color="text-yellow-400 bg-yellow-500/10" />
@@ -281,7 +281,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
               <h2 className="mb-3 text-base font-semibold">Recent Admin Activity</h2>
               <ul className="space-y-4">
                 {[
-                  { icon: UserPlus,    color: 'text-brand     bg-brand/10',   title: 'New admin invited',   sub: 'Brian White was invited',            date: 'May 14, 2024', time: '08:10 AM' },
+                  { icon: UserPlus,    color: 'text-brand-text     bg-brand/10',   title: 'New admin invited',   sub: 'Brian White was invited',            date: 'May 14, 2024', time: '08:10 AM' },
                   { icon: KeyRound,    color: 'text-violet-400 bg-violet-500/10', title: 'Role updated',   sub: 'Kevin Patel role changed to Billing Manager', date: 'May 13, 2024', time: '11:25 AM' },
                   { icon: UserCog,     color: 'text-success   bg-success/10',  title: 'Admin activated',   sub: 'Amanda Clark activated their account', date: 'May 13, 2024', time: '03:35 PM' },
                   { icon: Shield,      color: 'text-warning   bg-warning/10',  title: 'Admin deactivated', sub: 'Robert Taylor was deactivated',        date: 'May 10, 2024', time: '10:15 AM' },
@@ -304,7 +304,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
                   );
                 })}
               </ul>
-              <a href="/admin/admins?tab=activity" className="mt-4 flex items-center gap-1 text-xs text-brand hover:underline">
+              <a href="/admin/admins?tab=activity" className="mt-4 flex items-center gap-1 text-xs text-brand-text hover:underline">
                 View all activity →
               </a>
             </Card>

@@ -57,7 +57,7 @@ export function BusynessHeatmap({ familyId }: { familyId: string }) {
     <div className="rounded-2xl border border-border bg-surface/40 p-4">
       <button onClick={() => setOpen(v => !v)} className="flex w-full items-center justify-between gap-2">
         <span className="flex items-center gap-2 text-sm font-bold">
-          <Flame className="h-4 w-4 text-brand" /> Busyness — last {WEEKS} weeks
+          <Flame className="h-4 w-4 text-brand-text" /> Busyness — last {WEEKS} weeks
         </span>
         <ChevronDown className={cn('h-4 w-4 text-muted transition-transform', open && 'rotate-180')} />
       </button>

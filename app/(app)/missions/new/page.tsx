@@ -29,7 +29,7 @@ export default async function NewMissionPage() {
       <PlanGenerator members={kids.map((m) => ({ id: m.id, name: m.display_name }))} />
 
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Plus className="h-4 w-4 text-brand" /> Create a mission</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Plus className="h-4 w-4 text-brand-text" /> Create a mission</h2>
         <form action={createChoreAction} className="grid gap-3 sm:grid-cols-2">
           <label className={`${labelCls} sm:col-span-2`}><span className={spanCls}>Title</span><input name="title" required className={inputCls} placeholder="e.g. Make your bed" /></label>
           <label className={`${labelCls} sm:col-span-2`}><span className={spanCls}>Instructions</span><input name="instructions" className={inputCls} placeholder="How to do it well" /></label>

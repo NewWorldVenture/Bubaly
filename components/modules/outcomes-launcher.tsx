@@ -88,12 +88,12 @@ export function OutcomesLauncher({ plans }: { plans: OutcomePlan[] }) {
                 <li key={s.href + s.label}>
                   <Link href={s.href}
                     className="group flex items-center gap-3 rounded-xl border border-border bg-bg/40 p-3 transition hover:border-brand/40 hover:bg-elevated">
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted transition group-hover:text-brand" />
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted transition group-hover:text-brand-text" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-fg">{s.label}</span>
                         {s.badge && (
-                          <span className="rounded-full bg-brand/15 px-1.5 py-0.5 text-[11px] font-semibold text-brand">{s.badge}</span>
+                          <span className="rounded-full bg-brand/15 px-1.5 py-0.5 text-[11px] font-semibold text-brand-text">{s.badge}</span>
                         )}
                       </div>
                       <p className="truncate text-xs text-muted">{s.detail}</p>

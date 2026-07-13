@@ -14,7 +14,7 @@ export default function DemoUsedUpgradePage() {
     <div className="grid min-h-dvh place-items-center bg-bg px-4 py-12 text-fg">
       <div className="w-full max-w-md rounded-3xl border border-border bg-surface p-7 shadow-2xl sm:p-8">
         <div className="grid h-12 w-12 place-items-center rounded-2xl bg-brand/15 ring-1 ring-brand/30">
-          <Clock className="h-6 w-6 text-brand" />
+          <Clock className="h-6 w-6 text-brand-text" />
         </div>
         <h1 className="mt-4 text-2xl font-black">You’ve already used your free demo ⏱️</h1>
         <p className="mt-2 text-sm text-white/65">

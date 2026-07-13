@@ -26,11 +26,11 @@ export default async function SocialOverviewPage() {
 
   const stats = [
     { label: 'Connected accounts', value: overview.connectedCount, icon: CheckCircle2, tone: 'text-success bg-success/10' },
-    { label: 'Feed items', value: overview.feedCount, icon: Newspaper, tone: 'text-brand bg-brand/10' },
+    { label: 'Feed items', value: overview.feedCount, icon: Newspaper, tone: 'text-brand-text bg-brand/10' },
     { label: 'Drafts', value: overview.drafts, icon: FileEdit, tone: 'text-accent bg-accent/10' },
     { label: 'Scheduled', value: overview.scheduled, icon: CalendarClock, tone: 'text-warning bg-warning/10' },
     { label: 'Published', value: overview.published, icon: Send, tone: 'text-success bg-success/10' },
-    { label: 'Open inbox', value: overview.openInbox, icon: InboxIcon, tone: 'text-brand bg-brand/10' },
+    { label: 'Open inbox', value: overview.openInbox, icon: InboxIcon, tone: 'text-brand-text bg-brand/10' },
   ];
 
   const quickLinks = [
@@ -68,7 +68,7 @@ export default async function SocialOverviewPage() {
                 href={q.href}
                 className="flex items-center gap-2 rounded-xl border border-border bg-elevated px-3 py-3 text-sm font-medium transition hover:border-brand/40"
               >
-                <q.icon className="h-4 w-4 text-brand" /> {q.label}
+                <q.icon className="h-4 w-4 text-brand-text" /> {q.label}
               </Link>
             ))}
           </div>
@@ -85,7 +85,7 @@ export default async function SocialOverviewPage() {
                 {access.permissions.length} permission{access.permissions.length === 1 ? '' : 's'}:{' '}
                 {access.permissions.map((p) => p.replace(/_/g, ' ')).join(', ')}
               </p>
-              <Link href="/dashboard/social/settings" className="inline-block text-sm font-medium text-brand underline">
+              <Link href="/dashboard/social/settings" className="inline-block text-sm font-medium text-brand-text underline">
                 Manage access &amp; settings
               </Link>
             </div>
@@ -98,7 +98,7 @@ export default async function SocialOverviewPage() {
       <Card>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold">Platform readiness</h2>
-          <Link href="/dashboard/social/accounts" className="text-sm font-medium text-brand underline">Manage accounts</Link>
+          <Link href="/dashboard/social/accounts" className="text-sm font-medium text-brand-text underline">Manage accounts</Link>
         </div>
         <p className="mb-3 text-xs text-muted">
           A platform is <strong>ready</strong> only when its app credentials are configured in this environment. Others show

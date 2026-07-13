@@ -88,7 +88,7 @@ export function TaxVaultModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand" /> Tax Document Vault</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand-text" /> Tax Document Vault</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="tax" iconOnly />
           <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add document</Button>
@@ -117,7 +117,7 @@ export function TaxVaultModule() {
                         {taxCategoryLabel(d.category)}{d.amount_cents != null ? ` · ${usd(d.amount_cents)}` : ''}{m ? ` · ${m.display_name}` : ''} · {fmtDate(d.created_at)}
                       </p>
                     </div>
-                    {d.storage_path && <button onClick={() => download(d.storage_path!)} className="text-muted hover:text-brand" aria-label="Download"><Download className="h-4 w-4" /></button>}
+                    {d.storage_path && <button onClick={() => download(d.storage_path!)} className="text-muted hover:text-brand-text" aria-label="Download"><Download className="h-4 w-4" /></button>}
                     <button onClick={() => remove(d)} className="text-muted hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 );

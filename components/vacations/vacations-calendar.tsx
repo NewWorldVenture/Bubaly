@@ -55,7 +55,7 @@ export function VacationsCalendar() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarDays className="h-6 w-6 text-brand" /> Vacation Calendar</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarDays className="h-6 w-6 text-brand-text" /> Vacation Calendar</h1>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="secondary" onClick={exportICS}><Download className="h-4 w-4" /> Export .ics</Button>
           <Link href="/dashboard/vacations"><Button size="sm" variant="ghost">All trips</Button></Link>
@@ -77,7 +77,7 @@ export function VacationsCalendar() {
             const isToday = day === now.toISOString().slice(0, 10);
             return (
               <div key={i} className={`aspect-square overflow-hidden rounded-lg border p-1 text-left ${isToday ? 'border-brand' : 'border-border/50'} ${dayTrips.length ? 'bg-brand/5' : ''}`}>
-                <span className={`text-[11px] ${isToday ? 'font-bold text-brand' : 'text-muted'}`}>{Number(day.slice(-2))}</span>
+                <span className={`text-[11px] ${isToday ? 'font-bold text-brand-text' : 'text-muted'}`}>{Number(day.slice(-2))}</span>
                 <div className="mt-0.5 space-y-0.5">
                   {dayTrips.slice(0, 2).map((t) => (
                     <Link key={t.id} href={`/dashboard/vacations/${t.id}/overview`} className="block truncate rounded bg-brand/20 px-1 text-[9px] leading-tight text-fg hover:bg-brand/30">{lookup(VACATION_KINDS, t.kind).emoji} {t.title}</Link>

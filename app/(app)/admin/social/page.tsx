@@ -37,7 +37,7 @@ export default async function AdminSocialPage() {
       <div className="grid-stats">
         {stats.map((s) => (
           <div key={s.label} className="stat-card">
-            <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand"><s.icon className="h-5 w-5" /></div>
+            <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text"><s.icon className="h-5 w-5" /></div>
             <div>
               <p className="text-xl font-bold leading-none">{s.value}</p>
               <p className="mt-1 text-xs text-muted">{s.label}</p>

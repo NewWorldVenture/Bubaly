@@ -41,11 +41,11 @@ function CardHead({ icon: Icon, title, href, action }: { icon: React.ComponentTy
   return (
     <div className="mb-4 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-brand" />
+        <Icon className="h-4 w-4 text-brand-text" />
         <h2 className="text-sm font-bold">{title}</h2>
       </div>
       {href && (
-        <Link href={href} className="flex items-center gap-0.5 text-xs font-semibold text-brand hover:underline">
+        <Link href={href} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">
           {action ?? 'View all'} <ChevronRight className="h-3.5 w-3.5" />
         </Link>
       )}
@@ -298,7 +298,7 @@ export default async function HomePage() {
           href="/dashboard/setup"
           className="flex items-center gap-3 rounded-2xl border border-brand/30 bg-brand/5 px-4 py-3 transition hover:border-brand/50 hover:bg-brand/10"
         >
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text">
             <Rocket className="h-5 w-5" />
           </span>
           <span className="min-w-0 flex-1">
@@ -306,7 +306,7 @@ export default async function HomePage() {
             <span className="block text-xs text-muted">A couple of quick questions tailor Bubaly to your family.</span>
           </span>
           <span className="hidden shrink-0 items-center gap-2 sm:flex">
-            <span className="rounded-full bg-brand/15 px-2.5 py-1 text-xs font-bold text-brand tabular-nums">{setupNudge.score}% set up</span>
+            <span className="rounded-full bg-brand/15 px-2.5 py-1 text-xs font-bold text-brand-text tabular-nums">{setupNudge.score}% set up</span>
             <ArrowRight className="h-4 w-4 text-muted" />
           </span>
         </Link>
@@ -347,7 +347,7 @@ export default async function HomePage() {
                 </div>
               </div>
             ))}
-            <Link href="/dashboard/settings#members" className="flex w-16 flex-col items-center gap-1.5 text-center text-muted hover:text-brand">
+            <Link href="/dashboard/settings#members" className="flex w-16 flex-col items-center gap-1.5 text-center text-muted hover:text-brand-text">
               <span className="grid h-[52px] w-[52px] place-items-center rounded-full border border-dashed border-border"><Plus className="h-5 w-5" /></span>
               <span className="text-[10px]">Invite</span>
             </Link>
@@ -375,7 +375,7 @@ export default async function HomePage() {
             {(todayEvents ?? []).length === 0 && <EmptyRow>Nothing scheduled today.</EmptyRow>}
             {((todayEvents ?? []) as { id: string; title: string; starts_at: string; all_day: boolean; location: string | null }[]).map((e) => (
               <div key={e.id} className="flex gap-3">
-                <div className="w-16 shrink-0 text-xs font-semibold text-brand">{e.all_day ? 'All day' : fmtTime(e.starts_at)}</div>
+                <div className="w-16 shrink-0 text-xs font-semibold text-brand-text">{e.all_day ? 'All day' : fmtTime(e.starts_at)}</div>
                 <div className="min-w-0 flex-1 border-l border-border pl-3">
                   <p className="truncate text-sm font-semibold">{e.title}</p>
                   {e.location && <p className="truncate text-xs text-muted">{e.location}</p>}
@@ -403,7 +403,7 @@ export default async function HomePage() {
               );
             })}
           </div>
-          <Link href="/dashboard/todos" className="mt-3 flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-muted transition hover:text-brand">
+          <Link href="/dashboard/todos" className="mt-3 flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-muted transition hover:text-brand-text">
             <Plus className="h-3.5 w-3.5" /> Add a new task
           </Link>
         </Card>
@@ -478,7 +478,7 @@ export default async function HomePage() {
               );
             })}
           </div>
-          <Link href="/dashboard/chores" className="mt-3 flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-muted transition hover:text-brand">
+          <Link href="/dashboard/chores" className="mt-3 flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-muted transition hover:text-brand-text">
             <Plus className="h-3.5 w-3.5" /> Add a chore
           </Link>
         </Card>
@@ -492,7 +492,7 @@ export default async function HomePage() {
             <div className="flex-1 space-y-2 text-sm">
               <Row label="Total Income" value={usd(finances.income)} valueClass="text-emerald-400" />
               <Row label="Total Expenses" value={usd(finances.expenses)} valueClass="text-rose-400" />
-              <Row label="Remaining" value={usd(finances.remaining)} valueClass="text-brand font-bold" />
+              <Row label="Remaining" value={usd(finances.remaining)} valueClass="text-brand-text font-bold" />
             </div>
           </div>
         </Card>

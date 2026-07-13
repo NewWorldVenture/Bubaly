@@ -84,7 +84,7 @@ export function FindPhoneView() {
 
       <p className="text-center text-xs text-muted">
         Location updates come from each member&apos;s device via the Family Map. Manage sharing in{' '}
-        <Link href="/dashboard/locator" className="text-brand">Location settings</Link>.
+        <Link href="/dashboard/locator" className="text-brand-text">Location settings</Link>.
       </p>
     </div>
   );

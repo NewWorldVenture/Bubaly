@@ -65,7 +65,7 @@ export function MemoryTimeline({ memories, nameById }: {
             return (
               <li key={m.id} className="flex items-start gap-3 rounded-xl bg-surface/40 p-3">
                 <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-500/15">
-                  <Icon className="h-4 w-4 text-brand" />
+                  <Icon className="h-4 w-4 text-brand-text" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-2 text-sm font-medium">{m.title}{m.is_favorite && <Star className="h-3.5 w-3.5 text-amber-400" />}</p>

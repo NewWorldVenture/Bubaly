@@ -127,7 +127,7 @@ export function WeekendModule() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarHeart className="h-6 w-6 text-brand" /> Weekend Planner</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-bold"><CalendarHeart className="h-6 w-6 text-brand-text" /> Weekend Planner</h1>
         <p className="text-sm text-muted">Type a ZIP code, pick how far you&apos;ll travel, and discover everything happening nearby over the next few days.</p>
       </div>
 
@@ -164,7 +164,7 @@ export function WeekendModule() {
                     <span className="font-medium">{f.label}</span>
                     <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] uppercase text-muted">{f.kind}</span>
                     {f.last_status && <span className={`text-[11px] ${f.last_status === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}>{f.last_status === 'ok' ? `✓ ${f.last_count} found` : `⚠ ${f.last_status}`}</span>}
-                    <a href={f.url} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-muted hover:text-brand">{f.url}</a>
+                    <a href={f.url} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-muted hover:text-brand-text">{f.url}</a>
                     <button onClick={() => removeFeed(f.id)} className="ml-auto text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </li>
                 ))}
@@ -183,7 +183,7 @@ export function WeekendModule() {
       {/* saved plans */}
       {savedEvents.length > 0 && (
         <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-brand"><Star className="h-4 w-4" /> Your shortlist ({savedEvents.length})</h2>
+          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-brand-text"><Star className="h-4 w-4" /> Your shortlist ({savedEvents.length})</h2>
           <ul className="space-y-2">
             {savedEvents.map(({ plan, event }) => {
               const st = PLAN_STATUSES.find((s) => s.value === plan.status)!;
@@ -241,11 +241,11 @@ export function WeekendModule() {
                         </p>
                         <div className="mt-auto flex items-center gap-2 pt-3">
                           {saved ? (
-                            <span className="flex items-center gap-1 text-xs font-medium text-brand"><Star className="h-3.5 w-3.5 fill-current" /> {PLAN_STATUSES.find((s) => s.value === saved.status)!.label}</span>
+                            <span className="flex items-center gap-1 text-xs font-medium text-brand-text"><Star className="h-3.5 w-3.5 fill-current" /> {PLAN_STATUSES.find((s) => s.value === saved.status)!.label}</span>
                           ) : (
                             <Button size="sm" variant="secondary" onClick={() => setStatus(e, 'interested')}><Star className="h-3.5 w-3.5" /> Save</Button>
                           )}
-                          {e.url && <a href={e.url} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs text-brand hover:underline">Tickets <ExternalLink className="h-3 w-3" /></a>}
+                          {e.url && <a href={e.url} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs text-brand-text hover:underline">Tickets <ExternalLink className="h-3 w-3" /></a>}
                         </div>
                       </div>
                     </div>

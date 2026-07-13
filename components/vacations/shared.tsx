@@ -16,7 +16,7 @@ import { LoadingBlock, EmptyState } from '@/components/ui/states';
 export function SectionHeader({ icon: Icon, title, action }: { icon: LucideIcon; title: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <h2 className="flex items-center gap-2 text-lg font-semibold"><Icon className="h-5 w-5 text-brand" /> {title}</h2>
+      <h2 className="flex items-center gap-2 text-lg font-semibold"><Icon className="h-5 w-5 text-brand-text" /> {title}</h2>
       {action}
     </div>
   );

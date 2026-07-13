@@ -85,7 +85,7 @@ export default async function SyncHubPage() {
           <Link href="/dashboard/sync/conflicts"><p className="text-xl font-bold leading-none">{conflictCount}</p><p className="mt-1 text-xs text-muted">Open conflicts</p></Link>
         </div>
         <div className="stat-card">
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand"><CalendarClock className="h-5 w-5" /></div>
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text"><CalendarClock className="h-5 w-5" /></div>
           <div><p className="text-xl font-bold leading-none">{calendarCount}</p><p className="mt-1 text-xs text-muted">Synced calendars</p></div>
         </div>
       </div>
@@ -134,7 +134,7 @@ export default async function SyncHubPage() {
                 href={`/dashboard/sync/accounts/${p}`}
                 className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 p-4 transition hover:border-brand/40"
               >
-                <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand"><Plug className="h-5 w-5" /></div>
+                <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text"><Plug className="h-5 w-5" /></div>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{PROVIDER_LABELS[p]}</p>
                   <p className="text-xs text-muted">{conn ? `Status: ${conn.sync_status}` : 'Not connected'}</p>
@@ -150,7 +150,7 @@ export default async function SyncHubPage() {
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold">Recent sync activity</h2>
-          <Link href="/dashboard/sync/history" className="text-xs text-brand hover:underline">View history</Link>
+          <Link href="/dashboard/sync/history" className="text-xs text-brand-text hover:underline">View history</Link>
         </div>
         {runs.length === 0 ? (
           <p className="text-sm text-muted">No sync runs yet. Connect an account to get started.</p>

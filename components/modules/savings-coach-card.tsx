@@ -28,7 +28,7 @@ export function SavingsCoachCard() {
   return (
     <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand" /> AI Savings Suggestions</p>
+        <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> AI Savings Suggestions</p>
         <Button variant="secondary" onClick={run} loading={state?.loading}>Analyze my finances</Button>
       </div>
       {state && !state.loading && (

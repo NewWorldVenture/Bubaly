@@ -42,7 +42,7 @@ export default async function ReferralsPage() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-3">
-        <div className="grid h-11 w-11 place-items-center rounded-2xl bg-brand/15 text-brand"><Gift className="h-6 w-6" /></div>
+        <div className="grid h-11 w-11 place-items-center rounded-2xl bg-brand/15 text-brand-text"><Gift className="h-6 w-6" /></div>
         <div>
           <h1 className="text-xl font-bold">Refer a Family</h1>
           <p className="text-sm text-muted">

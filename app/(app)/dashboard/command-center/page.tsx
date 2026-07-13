@@ -111,7 +111,7 @@ export default async function CommandCenterPage() {
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Readiness score */}
         <div className="rounded-2xl border border-border bg-surface/40 p-6">
-          <h2 className="mb-4 flex items-center gap-2 font-semibold"><Gauge className="h-4 w-4 text-brand" /> Family Readiness</h2>
+          <h2 className="mb-4 flex items-center gap-2 font-semibold"><Gauge className="h-4 w-4 text-brand-text" /> Family Readiness</h2>
           <div className="flex items-center gap-5">
             <div className="relative h-32 w-32 shrink-0">
               <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">

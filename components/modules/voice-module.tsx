@@ -203,7 +203,7 @@ export function VoiceModule() {
       {/* Recent commands */}
       <div className="mt-8">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-fg">
-          <Sparkles className="h-4 w-4 text-brand" /> Recent commands
+          <Sparkles className="h-4 w-4 text-brand-text" /> Recent commands
         </h2>
         {loading ? (
           <SkeletonList count={3} />
@@ -230,7 +230,7 @@ export function VoiceModule() {
                     </p>
                   </div>
                   <button onClick={() => run(c.transcript)} aria-label="Run again" title="Run again"
-                    className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-brand"><RotateCcw className="h-4 w-4" /></button>
+                    className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-brand-text"><RotateCcw className="h-4 w-4" /></button>
                   <button onClick={() => remove(c)} aria-label="Remove" title="Remove"
                     className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                 </li>

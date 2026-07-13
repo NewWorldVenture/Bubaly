@@ -82,7 +82,7 @@ export default async function GuardianPage() {
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6">
       <div className="flex items-start gap-3">
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15">
-          <Shield className="h-5 w-5 text-brand" />
+          <Shield className="h-5 w-5 text-brand-text" />
         </div>
         <div>
           <h1 className="text-xl font-bold leading-tight">AI Call Guardian™</h1>

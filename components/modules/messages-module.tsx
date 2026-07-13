@@ -551,7 +551,7 @@ export function MessagesModule() {
             {CONV_TABS.map((t) => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={cn('shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
-                  tab === t.key ? 'bg-brand/15 text-brand' : 'text-muted hover:bg-elevated hover:text-fg')}>
+                  tab === t.key ? 'bg-brand/15 text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg')}>
                 {t.label}
               </button>
             ))}
@@ -559,7 +559,7 @@ export function MessagesModule() {
           <div className="relative">
             <button onClick={() => setFilterOpen((v) => !v)} aria-label="Filter conversations"
               className={cn('grid h-8 w-8 place-items-center rounded-lg border border-border text-muted hover:text-fg',
-                unreadOnly && 'border-brand/50 text-brand')}>
+                unreadOnly && 'border-brand/50 text-brand-text')}>
               <SlidersHorizontal className="h-4 w-4" />
             </button>
             {filterOpen && (
@@ -568,7 +568,7 @@ export function MessagesModule() {
                 <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-elevated py-1 shadow-glass">
                   <button onClick={() => { setUnreadOnly((v) => !v); setFilterOpen(false); }}
                     className="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-surface">
-                    Unread only {unreadOnly && <Check className="h-4 w-4 text-brand" />}
+                    Unread only {unreadOnly && <Check className="h-4 w-4 text-brand-text" />}
                   </button>
                   <button onClick={() => { setShowArchived((v) => !v); setFilterOpen(false); }}
                     className="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-surface">
@@ -608,7 +608,7 @@ export function MessagesModule() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <p className={cn('truncate text-sm font-semibold', isActive && 'text-brand')}>
+                      <p className={cn('truncate text-sm font-semibold', isActive && 'text-brand-text')}>
                         {conv.name ?? 'Direct Message'}
                       </p>
                       {last && <span className="shrink-0 text-[11px] text-muted">{shortTime(last.created_at)}</span>}
@@ -633,7 +633,7 @@ export function MessagesModule() {
 
         {/* View archived */}
         <button onClick={() => setShowArchived((v) => !v)}
-          className="flex items-center justify-center gap-1.5 border-t border-border py-3 text-xs font-semibold text-brand hover:bg-elevated/30">
+          className="flex items-center justify-center gap-1.5 border-t border-border py-3 text-xs font-semibold text-brand-text hover:bg-elevated/30">
           {showArchived
             ? <><ArrowLeft className="h-3.5 w-3.5" /> Back to conversations</>
             : <>View archived conversations {archivedCount > 0 && `(${archivedCount})`} <ChevronRight className="h-3.5 w-3.5" /></>}
@@ -718,7 +718,7 @@ export function MessagesModule() {
                             {/* Sender name (incl. "You" on own messages, matching the mock) */}
                             {!sameSender && (
                               <span className={cn('mb-0.5 text-[11px] font-semibold',
-                                isMine ? 'mr-1 text-muted' : 'ml-1 text-brand')}>
+                                isMine ? 'mr-1 text-muted' : 'ml-1 text-brand-text')}>
                                 {isMine ? `${myName} (You)` : (msg.sender_name ?? 'Family member')}
                               </span>
                             )}
@@ -729,7 +729,7 @@ export function MessagesModule() {
                                 'mb-1 rounded-lg border-l-2 border-brand/60 bg-elevated/60 px-3 py-1.5 text-xs text-muted',
                                 isMine ? 'border-r-2 border-l-0 text-right' : '',
                               )}>
-                                <span className="font-semibold text-brand/80">{replyMsg.sender_name}</span>
+                                <span className="font-semibold text-brand-text/80">{replyMsg.sender_name}</span>
                                 <p className="truncate">{replyMsg.content}</p>
                               </div>
                             )}
@@ -801,7 +801,7 @@ export function MessagesModule() {
                                       className={cn(
                                         'flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition',
                                         users.includes(userId)
-                                          ? 'border-brand/50 bg-brand/15 text-brand'
+                                          ? 'border-brand/50 bg-brand/15 text-brand-text'
                                           : 'border-border bg-elevated hover:bg-elevated/70',
                                       )}>
                                       {emoji} {users.length}
@@ -863,9 +863,9 @@ export function MessagesModule() {
             {/* Reply banner */}
             {replyTo && (
               <div className="flex items-center gap-2 border-t border-brand/20 bg-brand/5 px-4 py-2 text-xs">
-                <Reply className="h-3.5 w-3.5 text-brand" />
+                <Reply className="h-3.5 w-3.5 text-brand-text" />
                 <span className="flex-1 truncate text-muted">
-                  Replying to <span className="font-semibold text-brand">{replyTo.sender_name}</span>:{' '}
+                  Replying to <span className="font-semibold text-brand-text">{replyTo.sender_name}</span>:{' '}
                   <span>{replyTo.content?.slice(0, 60)}</span>
                 </span>
                 <button onClick={() => setReplyTo(null)} className="text-muted hover:text-fg">✕</button>
@@ -992,7 +992,7 @@ export function MessagesModule() {
             <button onClick={() => { setShowAbout(false); searchRef.current?.focus(); }} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
               <Search className="h-5 w-5" /> Search
             </button>
-            <button onClick={() => toggleMute(activeConv.id)} className={cn('flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg', isMuted && 'text-brand')}>
+            <button onClick={() => toggleMute(activeConv.id)} className={cn('flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg', isMuted && 'text-brand-text')}>
               <BellOff className="h-5 w-5" /> {isMuted ? 'Unmute' : 'Mute'}
             </button>
             <a href="/dashboard/settings#members" className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
@@ -1004,7 +1004,7 @@ export function MessagesModule() {
           <div>
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-semibold">Members ({activeConv.kind === 'direct' ? Math.max(memberCount, activeParticipants.length) : memberCount})</h3>
-              <button onClick={() => setNewConvOpen(true)} className="text-xs font-semibold text-brand">Add members</button>
+              <button onClick={() => setNewConvOpen(true)} className="text-xs font-semibold text-brand-text">Add members</button>
             </div>
             <div className="space-y-2.5">
               {(activeParticipants.length ? activeParticipants : members).map((m) => {
@@ -1036,7 +1036,7 @@ export function MessagesModule() {
           <div>
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-semibold">Shared Photos</h3>
-              <a href="/dashboard/photos" className="text-xs font-semibold text-brand">View all</a>
+              <a href="/dashboard/photos" className="text-xs font-semibold text-brand-text">View all</a>
             </div>
             {sharedPhotos.length === 0 ? (
               <p className="rounded-xl border border-dashed border-border py-4 text-center text-xs text-muted">
@@ -1212,7 +1212,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="pl-1 text-xs font-semibold text-muted">To:</span>
               {selectedMembers.map((m) => (
-                <span key={m.id} className="flex items-center gap-1.5 rounded-full bg-brand/15 py-1 pl-1 pr-2 text-xs font-medium text-brand">
+                <span key={m.id} className="flex items-center gap-1.5 rounded-full bg-brand/15 py-1 pl-1 pr-2 text-xs font-medium text-brand-text">
                   <Avatar name={m.display_name} color={m.color} size={18} />
                   {m.display_name.split(' ')[0]}
                   <button onClick={() => toggle(m.id)} aria-label={`Remove ${m.display_name}`} className="rounded-full hover:text-fg">
@@ -1235,7 +1235,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
               <button key={t} onClick={() => setTab(t)}
                 className={cn(
                   'relative px-3 py-2 text-sm font-medium capitalize transition',
-                  tab === t ? 'text-brand' : 'text-muted hover:text-fg',
+                  tab === t ? 'text-brand-text' : 'text-muted hover:text-fg',
                 )}>
                 {t}
                 {tab === t && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand" />}

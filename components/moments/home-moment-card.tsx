@@ -98,12 +98,12 @@ export function HomeMomentCard() {
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-brand/30 bg-gradient-to-r from-brand/10 to-transparent p-4 sm:p-5">
       <Link href="/dashboard/moments" className="group flex min-w-0 flex-1 items-center gap-4" aria-label={`Get ready for ${event.title}`}>
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand">
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text">
           <Sparkles className="h-6 w-6" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-brand">Get ready</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-brand-text">Get ready</span>
             <span className="text-xs font-medium text-muted">· {momentWhen(event.starts_at, event.all_day)}</span>
           </div>
           <p className="truncate text-sm font-bold sm:text-base">{event.title}</p>
@@ -116,7 +116,7 @@ export function HomeMomentCard() {
             ) : null}
             {prep.leaveByISO && (
               <span className="inline-flex items-center gap-1 rounded-lg bg-elevated px-2 py-1 text-xs font-semibold">
-                <Clock className="h-3.5 w-3.5 text-brand" />
+                <Clock className="h-3.5 w-3.5 text-brand-text" />
                 Leave {new Date(prep.leaveByISO).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
               </span>
             )}
@@ -143,7 +143,7 @@ export function HomeMomentCard() {
           onClick={setReminder}
           disabled={remindState !== 'idle'}
           aria-label={remindState === 'done' ? 'Reminder set' : `Remind me: ${primaryReminder.title}`}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2 text-xs font-semibold text-brand transition hover:bg-brand/15 disabled:opacity-60"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2 text-xs font-semibold text-brand-text transition hover:bg-brand/15 disabled:opacity-60"
         >
           {remindState === 'saving' ? <Loader2 className="h-4 w-4 animate-spin" />
             : remindState === 'done' ? <Check className="h-4 w-4" />
@@ -151,7 +151,7 @@ export function HomeMomentCard() {
           <span className="hidden sm:inline">{remindState === 'done' ? 'Reminder set' : 'Remind me'}</span>
         </button>
       ) : (
-        <Link href="/dashboard/moments" aria-label="Open Moments" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:text-brand">
+        <Link href="/dashboard/moments" aria-label="Open Moments" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:text-brand-text">
           <ChevronRight className="h-5 w-5" />
         </Link>
       )}

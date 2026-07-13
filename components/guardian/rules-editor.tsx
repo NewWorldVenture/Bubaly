@@ -134,7 +134,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
                   <span className="ml-auto text-[10px] text-muted">#{rule.priority}</span>
                 </div>
                 <p className="text-xs text-muted mt-0.5">
-                  → <span className="text-brand">{ROUTING_MODE_LABELS[rule.action_routing_mode]}</span>
+                  → <span className="text-brand-text">{ROUTING_MODE_LABELS[rule.action_routing_mode]}</span>
                   {rule.condition_trust_levels?.length && (
                     <> · {rule.condition_trust_levels.map(t => TRUST_ICONS[t]).join(' ')}</>
                   )}
@@ -154,7 +154,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
                 className="text-muted hover:text-fg transition"
               >
                 {rule.is_active
-                  ? <ToggleRight className="h-5 w-5 text-brand" />
+                  ? <ToggleRight className="h-5 w-5 text-brand-text" />
                   : <ToggleLeft className="h-5 w-5" />
                 }
               </button>
@@ -271,7 +271,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
               {TRUST_LEVELS.map((t) => (
                 <button key={t} type="button" onClick={() => toggleTrust(t)}
                   className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
-                    form.trust_levels.includes(t) ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:border-brand/40'
+                    form.trust_levels.includes(t) ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40'
                   )}>
                   {TRUST_ICONS[t]} {TRUST_LABELS[t]}
                 </button>
@@ -296,7 +296,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
               {DAYS.map((d, i) => (
                 <button key={d} type="button" onClick={() => toggleDay(i)}
                   className={cn('flex-1 rounded-lg border py-2 text-xs font-medium transition',
-                    form.days.includes(i) ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:border-brand/40'
+                    form.days.includes(i) ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40'
                   )}>{d[0]}</button>
               ))}
             </div>
@@ -307,7 +307,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
               {CONTEXTS.map((c) => (
                 <button key={c.value} type="button" onClick={() => toggleCtx(c.value)}
                   className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
-                    form.contexts.includes(c.value) ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:border-brand/40'
+                    form.contexts.includes(c.value) ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40'
                   )}>{c.label}</button>
               ))}
             </div>
@@ -324,7 +324,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
               {ROUTING_MODES.map((mode) => (
                 <button key={mode} type="button" onClick={() => setForm(p => ({ ...p, routing_mode: mode }))}
                   className={cn('rounded-xl border px-3 py-2 text-xs font-medium text-left transition',
-                    form.routing_mode === mode ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:border-brand/40'
+                    form.routing_mode === mode ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40'
                   )}>
                   {ROUTING_MODE_LABELS[mode]}
                 </button>

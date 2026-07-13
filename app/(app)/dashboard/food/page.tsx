@@ -37,12 +37,12 @@ function FeatureCard({
             <h2 className="-mt-0.5 text-sm font-bold">{title}</h2>
           </div>
         </div>
-        <Link href={href} className="flex items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-semibold text-brand transition hover:bg-brand/10" aria-label={`Open ${title}`}>
+        <Link href={href} className="flex items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-semibold text-brand-text transition hover:bg-brand/10" aria-label={`Open ${title}`}>
           Open <ChevronRight className="h-3.5 w-3.5" />
         </Link>
       </div>
       <div className="min-h-[120px] flex-1 space-y-2">{children}</div>
-      <Link href={href} className="mt-4 border-t border-border/60 pt-3 text-xs font-semibold text-muted transition hover:text-brand">
+      <Link href={href} className="mt-4 border-t border-border/60 pt-3 text-xs font-semibold text-muted transition hover:text-brand-text">
         {count} {countLabel} <ChevronRight className="inline h-3 w-3" />
       </Link>
     </section>

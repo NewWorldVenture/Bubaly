@@ -208,7 +208,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-5">
             <div className="grid-stats">
-              <StatCard icon={UsersRound} label="Total Members" value={totalUsers} tone="bg-brand/10 text-brand" />
+              <StatCard icon={UsersRound} label="Total Members" value={totalUsers} tone="bg-brand/10 text-brand-text" />
               <StatCard icon={UserCheck} label="With Account" value={activeUsers} tone="bg-success/10 text-success" />
               <StatCard icon={UserPlus} label="New This Month" value={newThisMonth} tone="bg-accent/10 text-accent" />
               <StatCard icon={UserX} label="No Account" value={noAccountUsers} tone="bg-warning/10 text-warning" />

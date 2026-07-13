@@ -69,7 +69,7 @@ export function PaymentsView() {
           { label: 'In · this month', value: `+${usd(summary.income)}`, icon: '📥', color: 'text-emerald-400' },
           { label: 'Out · this month', value: `-${usd(summary.expense)}`, icon: '📤', color: 'text-fg' },
           { label: 'Net', value: `${summary.net < 0 ? '-' : '+'}${usd(Math.abs(summary.net))}`, icon: '⚖️', color: summary.net < 0 ? 'text-rose-400' : 'text-emerald-400' },
-          { label: 'Transactions', value: summary.count, icon: '🧾', color: 'text-brand' },
+          { label: 'Transactions', value: summary.count, icon: '🧾', color: 'text-brand-text' },
         ].map((s) => (
           <div key={s.label} className="stat-card">
             <span className="text-2xl">{s.icon}</span>
@@ -85,7 +85,7 @@ export function PaymentsView() {
         <div className="flex gap-1">
           {FILTERS.map((f) => (
             <button key={f} onClick={() => setFilter(f)}
-              className={cn('rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition', filter === f ? 'bg-brand/15 text-brand' : 'text-muted hover:bg-elevated hover:text-fg')}>{f}</button>
+              className={cn('rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition', filter === f ? 'bg-brand/15 text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg')}>{f}</button>
           ))}
         </div>
         <div className="relative sm:w-64">

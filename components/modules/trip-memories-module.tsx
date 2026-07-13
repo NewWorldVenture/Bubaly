@@ -104,7 +104,7 @@ export function TripMemoriesModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><BookHeart className="h-4 w-4 text-brand" /> Trip Memories</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><BookHeart className="h-4 w-4 text-brand-text" /> Trip Memories</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="memories" iconOnly />
           <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add memory</Button>
@@ -116,7 +116,7 @@ export function TripMemoriesModule() {
       ) : groups.map((g) => (
         <div key={g.vacationId || 'general'}>
           <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-            {g.vacationId ? <><Plane className="h-3.5 w-3.5 text-brand" /> {vacName(g.vacationId)}</> : 'Other memories'}
+            {g.vacationId ? <><Plane className="h-3.5 w-3.5 text-brand-text" /> {vacName(g.vacationId)}</> : 'Other memories'}
             <span className="text-xs font-normal text-muted">· {g.memories.length}</span>
           </h4>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

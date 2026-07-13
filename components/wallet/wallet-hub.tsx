@@ -104,7 +104,7 @@ export function WalletHub() {
       {/* Header */}
       <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand"><Wallet className="h-6 w-6" /></span>
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text"><Wallet className="h-6 w-6" /></span>
           <div className="min-w-0">
             <h1 className="text-xl font-bold tracking-tight sm:text-2xl lg:text-3xl">My Wallet</h1>
             <p className="mt-0.5 text-xs text-muted sm:text-sm">All your money, cards, passes and rewards in one place.</p>
@@ -147,7 +147,7 @@ export function WalletHub() {
           <section>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-bold">Wallet Overview</h2>
-              <button onClick={() => setTab('Transactions')} className="text-xs font-semibold text-brand">View Full Summary</button>
+              <button onClick={() => setTab('Transactions')} className="text-xs font-semibold text-brand-text">View Full Summary</button>
             </div>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <StatCard tint="from-violet-600/20 to-violet-600/5 text-violet-300" icon={Wallet} label="Total Balance" value={fmtUsd(overview.totalCents)} sub="Across all accounts" />
@@ -162,7 +162,7 @@ export function WalletHub() {
             {TABS.map((t) => (
               <button key={t} onClick={() => setTab(t)}
                 className={cn('relative shrink-0 px-3 py-2.5 text-sm font-medium transition',
-                  tab === t ? 'text-brand' : 'text-muted hover:text-fg')}>
+                  tab === t ? 'text-brand-text' : 'text-muted hover:text-fg')}>
                 {t}
                 {tab === t && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand" />}
               </button>
@@ -171,7 +171,7 @@ export function WalletHub() {
 
           {loading ? <SkeletonList /> : tab === 'Accounts' ? (
             <>
-              <Panel title="Cash & Bank Accounts" action={<button onClick={() => setAdding('account')} className="text-xs font-semibold text-brand">Add</button>}>
+              <Panel title="Cash & Bank Accounts" action={<button onClick={() => setAdding('account')} className="text-xs font-semibold text-brand-text">Add</button>}>
                 {accounts.length === 0 ? (
                   <EmptyState icon={Landmark} title="No accounts yet" description="Add a checking, savings, or cash account to track your balances."
                     action={<Button onClick={() => setAdding('account')}><Plus className="h-4 w-4" /> Add Account</Button>} />
@@ -194,18 +194,18 @@ export function WalletHub() {
                 })}
               </Panel>
 
-              <Panel title="Recent Transactions" action={<button onClick={() => setTab('Transactions')} className="text-xs font-semibold text-brand">View All</button>}>
+              <Panel title="Recent Transactions" action={<button onClick={() => setTab('Transactions')} className="text-xs font-semibold text-brand-text">View All</button>}>
                 <TransactionList txns={txns.slice(0, 6)} onDelete={(t) => del('transactions', t.id, t.name)} />
               </Panel>
             </>
           ) : tab === 'Cards' ? (
-            <Panel title="My Cards" action={<button onClick={() => setAdding('card')} className="text-xs font-semibold text-brand">Add Card</button>}>
+            <Panel title="My Cards" action={<button onClick={() => setAdding('card')} className="text-xs font-semibold text-brand-text">Add Card</button>}>
               {cards.length === 0 ? <EmptyBlock label="No cards yet." onAdd={() => setAdding('card')} addLabel="Add Card" /> : (
                 <div className="grid gap-3 sm:grid-cols-2">{cards.map((c) => <CardRow key={c.id} card={c} onDelete={() => del('wallet_cards', c.id, c.name)} />)}</div>
               )}
             </Panel>
           ) : tab === 'Passes' ? (
-            <Panel title="Passes & Memberships" action={<button onClick={() => setAdding('pass')} className="text-xs font-semibold text-brand">Add Pass</button>}>
+            <Panel title="Passes & Memberships" action={<button onClick={() => setAdding('pass')} className="text-xs font-semibold text-brand-text">Add Pass</button>}>
               {passes.length === 0 ? <EmptyBlock label="No passes or memberships yet." onAdd={() => setAdding('pass')} addLabel="Add Pass" /> : passes.map((p) => (
                 <Row key={p.id} onDelete={() => del('wallet_passes', p.id, p.name)}>
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-500/15 text-violet-300"><Ticket className="h-5 w-5" /></span>
@@ -214,7 +214,7 @@ export function WalletHub() {
               ))}
             </Panel>
           ) : tab === 'Rewards' ? (
-            <Panel title="Rewards" action={<button onClick={() => setAdding('reward')} className="text-xs font-semibold text-brand">Add Program</button>}>
+            <Panel title="Rewards" action={<button onClick={() => setAdding('reward')} className="text-xs font-semibold text-brand-text">Add Program</button>}>
               {rewards.length === 0 ? <EmptyBlock label="No reward programs yet." onAdd={() => setAdding('reward')} addLabel="Add Program" /> : rewards.map((r) => (
                 <Row key={r.id} onDelete={() => del('wallet_rewards', r.id, r.name)}>
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-300"><Award className="h-5 w-5" /></span>
@@ -385,7 +385,7 @@ function RailCard({ title, children, onViewAll, viewAllLabel = 'View All' }: { t
     <div className="rounded-2xl border border-border bg-surface/40 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-semibold">{title}</h3>
-        {onViewAll && <button onClick={onViewAll} className="text-xs font-semibold text-brand">{viewAllLabel}</button>}
+        {onViewAll && <button onClick={onViewAll} className="text-xs font-semibold text-brand-text">{viewAllLabel}</button>}
       </div>
       <div className="space-y-3">{children}</div>
     </div>
@@ -400,7 +400,7 @@ function LinkButton({ href, children }: { href: string; children: React.ReactNod
 }
 function RailEmpty({ label }: { label: string }) { return <p className="py-2 text-center text-xs text-muted">{label}</p>; }
 function RailAdd({ label, onClick }: { label: string; onClick: () => void }) {
-  return <button onClick={onClick} className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand"><Plus className="h-3.5 w-3.5" /> {label}</button>;
+  return <button onClick={onClick} className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand-text"><Plus className="h-3.5 w-3.5" /> {label}</button>;
 }
 function EmptyBlock({ label, onAdd, addLabel }: { label: string; onAdd: () => void; addLabel: string }) {
   return (

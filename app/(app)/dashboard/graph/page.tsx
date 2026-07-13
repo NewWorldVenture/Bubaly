@@ -20,7 +20,7 @@ export default async function GraphPage() {
       {reasoning && reasoning.stats.entities > 0 && (
         <div className="mx-auto mb-4 max-w-5xl px-4">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/[0.07] to-surface/40 px-4 py-3">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text">
               <Brain className="h-4 w-4" />
             </span>
             <p className="text-sm font-medium">{contextSummary(reasoning)}</p>

@@ -42,7 +42,7 @@ export default async function AdminWalletPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-            <Wallet className="h-6 w-6 text-brand" /> Family Wallet
+            <Wallet className="h-6 w-6 text-brand-text" /> Family Wallet
           </h1>
           <p className="mt-1 text-sm text-muted">
             Oversight for the virtual-ledger Family Wallet across every family — activation, pending
@@ -50,7 +50,7 @@ export default async function AdminWalletPage() {
           </p>
         </div>
         <Link href="/admin/wallet/reconciliation"
-          className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-border bg-surface/40 px-4 py-2 text-sm font-semibold transition hover:border-brand/40 hover:text-brand">
+          className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-border bg-surface/40 px-4 py-2 text-sm font-semibold transition hover:border-brand/40 hover:text-brand-text">
           <ShieldCheck className="h-4 w-4" /> Reconciliation
         </Link>
       </div>

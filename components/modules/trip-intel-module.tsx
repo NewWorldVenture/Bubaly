@@ -122,7 +122,7 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
           <div className="space-y-2">
             {upcoming.map((e) => (
               <div key={e.id} className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4">
-                <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-brand/10 text-brand">
+                <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text">
                   <MapPin className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -133,7 +133,7 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
                 </div>
                 <div className="flex items-center gap-1.5">
                   <button onClick={() => setResearchEvent(e)}
-                    className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand transition">
+                    className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand-text transition">
                     <Sparkles className="h-3.5 w-3.5" /> Research
                   </button>
                   <button onClick={() => setDepartureEvent(e)}
@@ -259,7 +259,7 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
                   return (
                     <button key={m.id} type="button" onClick={() => toggleMember(m.name)}
                       className={cn('flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition',
-                        on ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:border-brand/40')}>
+                        on ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40')}>
                       <Users className="h-3 w-3" /> {m.name}
                     </button>
                   );
@@ -349,7 +349,7 @@ function RecsView({ recs }: { recs: TripRecommendations }) {
           </h4>
           <ul className="space-y-1">
             {recs.tips.map((t, i) => (
-              <li key={i} className="flex gap-2 text-xs text-muted"><span className="text-brand">•</span> {t}</li>
+              <li key={i} className="flex gap-2 text-xs text-muted"><span className="text-brand-text">•</span> {t}</li>
             ))}
           </ul>
         </div>
@@ -376,7 +376,7 @@ function TripPlanCard({ plan }: { plan: SavedTripPlan }) {
   return (
     <div className="rounded-2xl border border-border bg-surface/40 p-4">
       <div className="flex items-start gap-3">
-        <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-brand/10 text-brand"><Plane className="h-5 w-5" /></div>
+        <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text"><Plane className="h-5 w-5" /></div>
         <button onClick={() => setOpen((v) => !v)} className="min-w-0 flex-1 text-left">
           <p className="truncate text-sm font-semibold">{plan.title}</p>
           <p className="truncate text-xs text-muted">
@@ -483,7 +483,7 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
     <Modal open onClose={onClose} title={`Plan departure · ${event.title}`}>
       <div className="space-y-4">
         <div className="rounded-xl border border-brand/20 bg-brand/5 px-4 py-2.5 text-sm">
-          <p className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-brand" /> {event.location}</p>
+          <p className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-brand-text" /> {event.location}</p>
           <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted"><Clock className="h-3.5 w-3.5" /> Arrive by {fmtDateTime(event.startsAt)}</p>
         </div>
 
@@ -622,7 +622,7 @@ function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
   return (
     <div className={cn('rounded-2xl border p-4 transition', toneCls)}>
       <div className="flex items-start gap-3">
-        <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-bg/60 text-brand"><Car className="h-5 w-5" /></div>
+        <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-bg/60 text-brand-text"><Car className="h-5 w-5" /></div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold">{plan.title}</p>
@@ -633,7 +633,7 @@ function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
           </p>
           {plan.leaveBy && (
             <p className="mt-1.5 text-sm font-bold">
-              {live.status === 'arrived' ? 'Event has passed' : <>Leave by {fmtTime(plan.leaveBy)} · <span className="text-brand">{leaveByLabel(live.minutesUntilLeave)}</span></>}
+              {live.status === 'arrived' ? 'Event has passed' : <>Leave by {fmtTime(plan.leaveBy)} · <span className="text-brand-text">{leaveByLabel(live.minutesUntilLeave)}</span></>}
             </p>
           )}
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted">
@@ -644,7 +644,7 @@ function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
           </div>
         </div>
         <div className="flex flex-shrink-0 flex-col gap-1">
-          <button onClick={refresh} disabled={refreshing} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-brand transition" aria-label="Refresh live intel">
+          <button onClick={refresh} disabled={refreshing} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-brand-text transition" aria-label="Refresh live intel">
             {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </button>
           <button onClick={remove} disabled={deleting} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition" aria-label="Remove">

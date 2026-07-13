@@ -41,7 +41,7 @@ export function GuardianNumberForm({
         {phone && !editing && (
           <button
             onClick={() => { setDraft(phone ?? ''); setEditing(true); }}
-            className="text-xs font-medium text-brand hover:underline"
+            className="text-xs font-medium text-brand-text hover:underline"
           >
             Change
           </button>

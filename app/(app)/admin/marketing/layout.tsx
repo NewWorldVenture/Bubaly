@@ -5,7 +5,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2">
-        <Megaphone className="h-5 w-5 text-brand" />
+        <Megaphone className="h-5 w-5 text-brand-text" />
         <h1 className="text-lg font-bold">Marketing</h1>
       </div>
       <MarketingSubnav />

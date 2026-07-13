@@ -61,7 +61,7 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
                 </div>
 
                 {/* Full policy (expandable) */}
-                <button onClick={() => setExpanded(isOpen ? null : p.id)} className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand">
+                <button onClick={() => setExpanded(isOpen ? null : p.id)} className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-text">
                   {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {isOpen ? 'Hide' : 'Full policy details'}
                 </button>
                 {isOpen && (

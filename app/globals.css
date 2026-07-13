@@ -34,7 +34,8 @@
   --border: 35 45 62;
   --fg: 237 240 247;
   --muted: 148 160 184;
-  --brand: 124 93 255;
+  --brand: 116 75 232;
+  --brand-text: 155 135 255;
   --brand-fg: 255 255 255;
   --brand-soft: 56 52 110;
   --accent: 244 153 110;
@@ -74,6 +75,7 @@
   --fg: 23 28 42;
   --muted: 96 108 134;
   --brand: 99 91 230;
+  --brand-text: 81 69 205;
   --brand-fg: 255 255 255;
   --brand-soft: 226 224 252;
   --accent: 233 122 74;
@@ -427,7 +429,7 @@ body::before {
     @apply shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition;
   }
   .tab-item-active {
-    @apply bg-brand/20 text-brand;
+    @apply bg-brand/20 text-brand-text;
   }
   .tab-item-inactive {
     @apply text-muted hover:bg-elevated hover:text-fg;

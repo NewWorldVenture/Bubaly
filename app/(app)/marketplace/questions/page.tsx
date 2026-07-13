@@ -30,7 +30,7 @@ export default async function MarketplaceQuestionsPage() {
   const { toAnswer, answered, mine } = categorizeQuestions((questions ?? []) as QRow[], meId, myListingIds);
 
   const QLink = ({ id, children }: { id: string; children: React.ReactNode }) => (
-    <Link href={`/marketplace/item/${id}`} className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">{children} <ArrowRight className="h-3.5 w-3.5" /></Link>
+    <Link href={`/marketplace/item/${id}`} className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">{children} <ArrowRight className="h-3.5 w-3.5" /></Link>
   );
 
   return (
@@ -38,7 +38,7 @@ export default async function MarketplaceQuestionsPage() {
       <PageHeader title="Questions" description="Questions on your listings, and the ones you’ve asked." />
 
       <section className="space-y-2">
-        <h2 className="flex items-center gap-1.5 text-sm font-semibold"><MessageSquare className="h-4 w-4 text-brand" /> Needs your answer <span className="text-muted">({toAnswer.length})</span></h2>
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold"><MessageSquare className="h-4 w-4 text-brand-text" /> Needs your answer <span className="text-muted">({toAnswer.length})</span></h2>
         {toAnswer.length === 0 ? <p className="text-sm text-muted">You’re all caught up.</p> : (
           <ul className="space-y-2">
             {toAnswer.map((q) => (
@@ -55,7 +55,7 @@ export default async function MarketplaceQuestionsPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="flex items-center gap-1.5 text-sm font-semibold"><CornerDownRight className="h-4 w-4 text-brand" /> Your questions <span className="text-muted">({mine.length})</span></h2>
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold"><CornerDownRight className="h-4 w-4 text-brand-text" /> Your questions <span className="text-muted">({mine.length})</span></h2>
         {mine.length === 0 ? <p className="text-sm text-muted">You haven’t asked anything yet.</p> : (
           <ul className="space-y-2">
             {mine.map((q) => (
@@ -65,7 +65,7 @@ export default async function MarketplaceQuestionsPage() {
                   <QLink id={q.listing_id}>View</QLink>
                 </div>
                 <p className="mt-0.5 text-muted">“{q.question}”</p>
-                {q.answer && <p className="mt-1.5 rounded-lg bg-brand/5 p-2 text-fg"><span className="font-medium text-brand">{nameOf(q.answered_by)}:</span> {q.answer}</p>}
+                {q.answer && <p className="mt-1.5 rounded-lg bg-brand/5 p-2 text-fg"><span className="font-medium text-brand-text">{nameOf(q.answered_by)}:</span> {q.answer}</p>}
               </li>
             ))}
           </ul>

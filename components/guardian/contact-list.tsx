@@ -159,7 +159,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
       {filtered.length === 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 py-10 text-center text-sm text-muted">
           No contacts found.{' '}
-          <button className="text-brand underline" onClick={() => setEditing('new')}>Add one</button>.
+          <button className="text-brand-text underline" onClick={() => setEditing('new')}>Add one</button>.
         </div>
       )}
 
@@ -286,7 +286,7 @@ function ContactModal({
                   onClick={() => set('trust_level', lvl)}
                   className={cn(
                     'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition',
-                    form.trust_level === lvl ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:border-brand/40',
+                    form.trust_level === lvl ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40',
                   )}
                 >
                   {TRUST_ICONS[lvl]} {TRUST_LABELS[lvl]}

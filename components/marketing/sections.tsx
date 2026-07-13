@@ -18,7 +18,7 @@ export function Section({
 
 export function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand">
+    <span className="inline-flex items-center rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand-text">
       {children}
     </span>
   );
@@ -55,7 +55,7 @@ export function FeatureCard({
 }) {
   return (
     <div className="glass-card p-6 transition hover:-translate-y-0.5 hover:shadow-glow">
-      <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-brand/10 text-brand">
+      <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-brand/10 text-brand-text">
         <Icon className="h-6 w-6" />
       </div>
       <h3 className="mt-4 text-lg font-semibold">{title}</h3>

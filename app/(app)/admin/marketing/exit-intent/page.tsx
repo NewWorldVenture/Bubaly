@@ -58,7 +58,7 @@ export default async function ExitIntentPage() {
       </div>
 
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><LogOut className="h-4 w-4 text-brand" /> New offer</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><LogOut className="h-4 w-4 text-brand-text" /> New offer</h2>
         <form action={createExitIntentAction} className="space-y-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <input name="name" required placeholder="Internal name" className={`${inputCls} lg:col-span-2`} />

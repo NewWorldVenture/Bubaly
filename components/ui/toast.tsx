@@ -86,14 +86,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   'mt-0.5 h-5 w-5 shrink-0',
                   t.tone === 'success' && 'text-success',
                   t.tone === 'error' && 'text-danger',
-                  t.tone === 'info' && 'text-brand',
+                  t.tone === 'info' && 'text-brand-text',
                 )}
               />
               <span className="flex-1">{t.message}</span>
               {t.action && (
                 <button
                   onClick={() => { t.action!.onClick(); setToasts((arr) => arr.filter((x) => x.id !== t.id)); }}
-                  className="shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold text-brand hover:bg-brand/10"
+                  className="shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold text-brand-text hover:bg-brand/10"
                 >
                   {t.action.label}
                 </button>

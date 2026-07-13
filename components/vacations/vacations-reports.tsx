@@ -55,7 +55,7 @@ export function VacationsReports() {
 
   return (
     <div className="space-y-6">
-      <h1 className="flex items-center gap-2 text-2xl font-bold"><BarChart3 className="h-6 w-6 text-brand" /> Vacation Reports</h1>
+      <h1 className="flex items-center gap-2 text-2xl font-bold"><BarChart3 className="h-6 w-6 text-brand-text" /> Vacation Reports</h1>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatPill label="Total trips" value={<span className="flex items-center gap-1"><Plane className="h-4 w-4 text-muted" /> {trips.length}</span>} />
@@ -65,7 +65,7 @@ export function VacationsReports() {
       </div>
 
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
-        <h2 className="mb-3 flex items-center gap-2 font-semibold"><BarChart3 className="h-4 w-4 text-brand" /> Trips by type</h2>
+        <h2 className="mb-3 flex items-center gap-2 font-semibold"><BarChart3 className="h-4 w-4 text-brand-text" /> Trips by type</h2>
         <div className="space-y-2">
           {byKind.map(([kind, n]) => (
             <div key={kind} className="flex items-center gap-3">
@@ -78,7 +78,7 @@ export function VacationsReports() {
       </div>
 
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
-        <h2 className="mb-3 flex items-center gap-2 font-semibold"><Wallet className="h-4 w-4 text-brand" /> Per-trip budget vs spend</h2>
+        <h2 className="mb-3 flex items-center gap-2 font-semibold"><Wallet className="h-4 w-4 text-brand-text" /> Per-trip budget vs spend</h2>
         <div className="space-y-3">
           {trips.map((t) => {
             const planned = plannedByTrip.get(t.id) ?? 0, spent = spentByTrip.get(t.id) ?? 0;

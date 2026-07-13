@@ -183,7 +183,7 @@ export function CaptureShortcuts({
             <button
               type="button"
               onClick={() => { setEditing((v) => !v); setPicker(null); }}
-              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand transition hover:bg-brand/10"
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-text transition hover:bg-brand/10"
             >
               {editing
                 ? <><span className="text-muted">{keys.length}/{MAX_CAPTURE_SHORTCUTS} ·</span> <Check className="h-3.5 w-3.5" /> Done</>
@@ -198,7 +198,7 @@ export function CaptureShortcuts({
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="w-full rounded-2xl border-2 border-dashed border-border px-3 py-4 text-center text-xs text-muted transition hover:border-brand/40 hover:text-brand"
+          className="w-full rounded-2xl border-2 border-dashed border-border px-3 py-4 text-center text-xs text-muted transition hover:border-brand/40 hover:text-brand-text"
         >
           No shortcuts yet — tap to add up to {MAX_CAPTURE_SHORTCUTS}.
         </button>
@@ -217,9 +217,9 @@ export function CaptureShortcuts({
                   onClick={() => setPicker({ mode: 'replace', index })}
                   className="flex w-full flex-col items-center gap-1 rounded-2xl border border-brand/30 bg-brand/5 px-2 py-3 text-center transition hover:bg-brand/10"
                 >
-                  <Icon className="h-5 w-5 text-brand" />
+                  <Icon className="h-5 w-5 text-brand-text" />
                   <span className="w-full truncate text-xs font-semibold">{s.label}</span>
-                  <span className="text-[10px] text-brand">Tap to change</span>
+                  <span className="text-[10px] text-brand-text">Tap to change</span>
                 </button>
                 <button
                   type="button"
@@ -239,7 +239,7 @@ export function CaptureShortcuts({
               onClick={onNavigate}
               className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-surface/40 px-2 py-3 text-center transition hover:border-brand/30 hover:bg-elevated"
             >
-              <Icon className="h-5 w-5 text-brand" />
+              <Icon className="h-5 w-5 text-brand-text" />
               <span className="w-full truncate text-xs font-semibold">{s.label}</span>
               <span className="w-full truncate text-[10px] text-muted">{s.hint}</span>
             </Link>
@@ -251,7 +251,7 @@ export function CaptureShortcuts({
           <button
             type="button"
             onClick={() => setPicker({ mode: 'add', index: keys.length })}
-            className="flex flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-border px-2 py-3 text-center text-muted transition hover:border-brand/40 hover:text-brand"
+            className="flex flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-border px-2 py-3 text-center text-muted transition hover:border-brand/40 hover:text-brand-text"
           >
             <Plus className="h-5 w-5" />
             <span className="text-xs font-semibold">Add shortcut</span>
@@ -278,7 +278,7 @@ export function CaptureShortcuts({
                   className={cn('flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition',
                     isCurrent ? 'border-brand bg-brand/10' : 'border-border bg-surface/40 hover:border-brand/40 hover:bg-elevated')}
                 >
-                  <Icon className="h-6 w-6 text-brand" />
+                  <Icon className="h-6 w-6 text-brand-text" />
                   <span className="text-xs font-semibold">{s.label}</span>
                 </button>
               );

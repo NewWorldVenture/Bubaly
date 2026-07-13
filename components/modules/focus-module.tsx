@@ -98,7 +98,7 @@ export function FocusModule() {
       {total === 0 || finished ? (
         <div className="flex flex-col items-center gap-5">
           <div className="grid h-20 w-20 place-items-center rounded-full bg-brand/10">
-            <Sparkles className="h-10 w-10 text-brand" />
+            <Sparkles className="h-10 w-10 text-brand-text" />
           </div>
           <div>
             <h1 className="text-2xl font-bold">{total === 0 ? 'Nothing on your plate' : "You're all clear"}</h1>

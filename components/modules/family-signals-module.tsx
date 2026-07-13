@@ -65,7 +65,7 @@ export function FamilySignalsModule({ active, hidden }: { active: SignalView[]; 
     <div className="space-y-6 pb-24">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand/15 text-brand"><Brain className="h-6 w-6" /></div>
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand/15 text-brand-text"><Brain className="h-6 w-6" /></div>
           <div>
             <h1 className="text-xl font-bold">Family Intelligence</h1>
             <p className="mt-0.5 max-w-md text-sm text-muted">Patterns Bubaly has learned about how your family actually runs. Everything here is yours to keep or clear.</p>
@@ -105,7 +105,7 @@ export function FamilySignalsModule({ active, hidden }: { active: SignalView[]; 
 
       {active.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface/40 py-12 text-center">
-          <div className="grid h-14 w-14 place-items-center rounded-full bg-brand/10"><Brain className="h-7 w-7 text-brand" /></div>
+          <div className="grid h-14 w-14 place-items-center rounded-full bg-brand/10"><Brain className="h-7 w-7 text-brand-text" /></div>
           <div>
             <p className="font-semibold">No patterns to flag yet</p>
             <p className="mx-auto mt-1 max-w-xs text-sm text-muted">As your family uses Bubaly, it learns what keeps slipping and when you’re stretched. Refresh to check now.</p>
@@ -114,7 +114,7 @@ export function FamilySignalsModule({ active, hidden }: { active: SignalView[]; 
       ) : (
         <div className="space-y-3">
           {active.map((s) => {
-            const meta = KIND_META[s.kind] ?? { icon: Brain, label: 'Pattern', accent: 'text-brand bg-brand/10' };
+            const meta = KIND_META[s.kind] ?? { icon: Brain, label: 'Pattern', accent: 'text-brand-text bg-brand/10' };
             const Icon = meta.icon;
             return (
               <div key={s.id} className="rounded-2xl border border-border bg-surface/40 p-4">
@@ -166,7 +166,7 @@ export function FamilySignalsModule({ active, hidden }: { active: SignalView[]; 
                   <span className="min-w-0 flex-1 truncate text-sm text-muted">{s.title}</span>
                   <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted">{s.status}</span>
                   <button type="button" onClick={() => setStatus(s.id, 'active')} disabled={pending}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand transition hover:bg-elevated disabled:opacity-50">
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-text transition hover:bg-elevated disabled:opacity-50">
                     <RotateCcw className="h-3.5 w-3.5" /> Restore
                   </button>
                 </div>

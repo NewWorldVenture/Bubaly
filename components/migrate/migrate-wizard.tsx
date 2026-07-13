@@ -90,7 +90,7 @@ export function MigrateWizard() {
               <ul className="mt-3 flex flex-wrap gap-1.5">
                 {c.transfers.map((t) => <li key={t} className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-muted">{t}</li>)}
               </ul>
-              <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand">Migrate from {c.name} <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" /></span>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-text">Migrate from {c.name} <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" /></span>
             </button>
           ))}
           <button type="button" onClick={() => { setSource(competitorByKey('cozi')!); setStep('upload'); }}
@@ -120,7 +120,7 @@ export function MigrateWizard() {
             { label: 'Notes', value: counts.notes, href: '/dashboard/notes', icon: StickyNote },
           ].map((s) => (
             <Link key={s.label} href={s.href} className="rounded-2xl border border-border bg-surface/40 p-3 transition hover:bg-elevated">
-              <s.icon className="mx-auto h-5 w-5 text-brand" />
+              <s.icon className="mx-auto h-5 w-5 text-brand-text" />
               <p className="mt-1 text-xl font-bold tabular-nums">{s.value}</p>
               <p className="text-[11px] text-muted">{s.label}</p>
             </Link>
@@ -150,12 +150,12 @@ export function MigrateWizard() {
           <ol className="mt-4 space-y-2.5">
             {source?.steps.map((s, i) => (
               <li key={i} className="flex gap-3 text-sm">
-                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand/15 text-[11px] font-bold text-brand">{i + 1}</span>
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand/15 text-[11px] font-bold text-brand-text">{i + 1}</span>
                 <span className="text-fg/85">{s}</span>
               </li>
             ))}
           </ol>
-          <p className="mt-4 flex items-center gap-1.5 rounded-xl bg-white/5 p-3 text-xs text-muted"><Sparkles className="h-4 w-4 shrink-0 text-brand" /> Accepts .ics calendars and .csv lists. Naive (timezone-less) times are imported as UTC.</p>
+          <p className="mt-4 flex items-center gap-1.5 rounded-xl bg-white/5 p-3 text-xs text-muted"><Sparkles className="h-4 w-4 shrink-0 text-brand-text" /> Accepts .ics calendars and .csv lists. Naive (timezone-less) times are imported as UTC.</p>
         </div>
 
         {/* Upload + preview */}
@@ -206,7 +206,7 @@ export function MigrateWizard() {
                   { label: 'Grocery', value: preview.grocery.length, icon: ShoppingCart },
                   { label: 'Notes', value: preview.notes.length, icon: StickyNote },
                 ].map((s) => (
-                  <li key={s.label} className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2"><s.icon className="h-4 w-4 text-brand" /><span className="font-bold tabular-nums">{s.value}</span><span className="text-xs text-muted">{s.label}</span></li>
+                  <li key={s.label} className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2"><s.icon className="h-4 w-4 text-brand-text" /><span className="font-bold tabular-nums">{s.value}</span><span className="text-xs text-muted">{s.label}</span></li>
                 ))}
               </ul>
               {preview.events.length > 0 && (

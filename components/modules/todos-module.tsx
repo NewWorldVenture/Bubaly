@@ -324,10 +324,10 @@ export function TodosModule() {
             {TABS.map((t) => (
               <button key={t.id} onClick={() => setTab(t.id)}
                 className={cn('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition',
-                  tab === t.id ? 'bg-brand/15 text-brand' : 'text-muted hover:bg-elevated hover:text-fg')}>
+                  tab === t.id ? 'bg-brand/15 text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg')}>
                 {t.label}
                 <span className={cn('grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-bold',
-                  tab === t.id ? 'bg-brand/25 text-brand' : 'bg-elevated text-muted')}>{t.n}</span>
+                  tab === t.id ? 'bg-brand/25 text-brand-text' : 'bg-elevated text-muted')}>{t.n}</span>
               </button>
             ))}
           </div>
@@ -351,14 +351,14 @@ export function TodosModule() {
           ) : (
             <>
               <Section label="Overdue" tone="text-danger" list={groups.overdue} />
-              <Section label="Today" tone="text-brand" list={groups.today} />
+              <Section label="Today" tone="text-brand-text" list={groups.today} />
               <Section label="Upcoming" tone="text-fg" list={groups.upcoming} />
               <Section label="No due date" tone="text-muted" list={groups.noDate} />
             </>
           )}
 
           <button onClick={openAdd}
-            className="mt-2 flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-border px-3 py-2.5 text-sm font-medium text-muted transition hover:border-brand/40 hover:text-brand">
+            className="mt-2 flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-border px-3 py-2.5 text-sm font-medium text-muted transition hover:border-brand/40 hover:text-brand-text">
             <Plus className="h-4 w-4" /> Add Task
           </button>
         </div>
@@ -368,7 +368,7 @@ export function TodosModule() {
       <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
         {/* Task Summary */}
         <div className="sidebar-card">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><ListChecks className="h-4 w-4 text-brand" /> Task Summary</h3>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><ListChecks className="h-4 w-4 text-brand-text" /> Task Summary</h3>
           <SummaryDonut summary={summary} />
           <div className="mt-3 space-y-1.5">
             {([['overdue', summary.overdue], ['today', summary.today], ['week', summary.week], ['completed', summary.completed]] as const).map(([k, v]) => (
@@ -384,7 +384,7 @@ export function TodosModule() {
 
         {/* My Top Priorities */}
         <div className="sidebar-card">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><Flag className="h-4 w-4 text-brand" /> My Top Priorities</h3>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><Flag className="h-4 w-4 text-brand-text" /> My Top Priorities</h3>
           {priorities.length === 0 ? (
             <p className="text-xs text-muted">Nothing assigned to you yet.</p>
           ) : (
@@ -412,8 +412,8 @@ export function TodosModule() {
         {/* Assigned to Others */}
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-sm font-bold"><UserIcon className="h-4 w-4 text-brand" /> Assigned to Others</h3>
-            <button onClick={() => setTab('all')} className="text-[11px] font-medium text-brand hover:underline">View all</button>
+            <h3 className="flex items-center gap-2 text-sm font-bold"><UserIcon className="h-4 w-4 text-brand-text" /> Assigned to Others</h3>
+            <button onClick={() => setTab('all')} className="text-[11px] font-medium text-brand-text hover:underline">View all</button>
           </div>
           {assignedToOthers.length === 0 ? (
             <p className="text-xs text-muted">No tasks assigned to others.</p>
@@ -438,19 +438,19 @@ export function TodosModule() {
 
         {/* Quick Add */}
         <div className="sidebar-card">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-brand" /> Quick Add</h3>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-brand-text" /> Quick Add</h3>
           <Input value={quickTitle} onChange={(e) => setQuickTitle(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void quickAdd('today'); } }}
             placeholder="What needs to be done?" disabled={quickBusy} />
           <div className="mt-2 grid grid-cols-4 gap-1.5">
             {([['today', 'Today'], ['tomorrow', 'Tomorrow'], ['week', 'This Week']] as const).map(([w, label]) => (
               <button key={w} onClick={() => void quickAdd(w)} disabled={quickBusy}
-                className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surface/40 py-2 text-[10px] font-medium text-muted transition hover:border-brand/40 hover:text-brand disabled:opacity-50">
+                className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surface/40 py-2 text-[10px] font-medium text-muted transition hover:border-brand/40 hover:text-brand-text disabled:opacity-50">
                 <CalendarIcon className="h-3.5 w-3.5" /> {label}
               </button>
             ))}
             <button onClick={openAdd} disabled={quickBusy}
-              className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surface/40 py-2 text-[10px] font-medium text-muted transition hover:border-brand/40 hover:text-brand disabled:opacity-50">
+              className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surface/40 py-2 text-[10px] font-medium text-muted transition hover:border-brand/40 hover:text-brand-text disabled:opacity-50">
               <CalendarIcon className="h-3.5 w-3.5" /> Pick Date
             </button>
           </div>

@@ -23,7 +23,7 @@ function AdminProfile({ name, email }: { name: string; email: string | null }) {
         <Avatar name={name} size={36} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{name}</p>
-          <p className="truncate text-xs text-brand">Super Administrator</p>
+          <p className="truncate text-xs text-brand-text">Super Administrator</p>
         </div>
       </div>
       <p className="mt-2 text-xs text-muted">{email}</p>
@@ -67,7 +67,7 @@ export function AdminShell({
                 href={item.href}
                 className={cn(
                   'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
-                  active ? 'bg-brand/15 text-brand shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg',
+                  active ? 'bg-brand/15 text-brand-text shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg',
                 )}
               >
                 <item.icon className="h-5 w-5 shrink-0" />
@@ -95,7 +95,7 @@ export function AdminShell({
           <Link href="/admin" className="lg:hidden">
             <LogoMark className="h-9 w-16" />
           </Link>
-          <span className="hidden items-center gap-1 rounded-full border border-brand/25 bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand sm:inline-flex">
+          <span className="hidden items-center gap-1 rounded-full border border-brand/25 bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand-text sm:inline-flex">
             <ShieldCheck className="h-3.5 w-3.5" /> Super Admin
           </span>
           <form action="/admin/users" method="GET" className="hidden flex-1 max-w-md md:flex">

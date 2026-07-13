@@ -84,7 +84,7 @@ export function SubscriptionsModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><RefreshCw className="h-4 w-4 text-brand" /> Subscription Tracking</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><RefreshCw className="h-4 w-4 text-brand-text" /> Subscription Tracking</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="subscriptions" />
           <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add subscription</Button>

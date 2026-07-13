@@ -45,7 +45,7 @@ export default async function LoyaltyPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2">
-        <Trophy className="h-5 w-5 text-brand" />
+        <Trophy className="h-5 w-5 text-brand-text" />
         <div>
           <h2 className="text-base font-bold">Loyalty &amp; Rewards</h2>
           <p className="text-xs text-muted">Reward families with points for signing up, referring, reviewing, and spending — then let them redeem from your catalog.</p>
@@ -63,7 +63,7 @@ export default async function LoyaltyPage() {
 
       {/* Rewards catalog */}
       <Card>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Gift className="h-4 w-4 text-brand" /> Rewards catalog</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Gift className="h-4 w-4 text-brand-text" /> Rewards catalog</h3>
         {rewardRows.length === 0 ? (
           <EmptyState icon={Gift} title="No rewards yet" description="Add your first reward so families have something to redeem." />
         ) : (
@@ -74,7 +74,7 @@ export default async function LoyaltyPage() {
 
       {/* Redemptions queue */}
       <Card>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand" /> Redemptions {pendingCount > 0 && <Badge tone="warning">{pendingCount} pending</Badge>}</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> Redemptions {pendingCount > 0 && <Badge tone="warning">{pendingCount} pending</Badge>}</h3>
         {redemptionView.length === 0 ? (
           <EmptyState icon={Sparkles} title="No redemptions yet" description="Redemptions from families will appear here for you to fulfill." />
         ) : (
@@ -84,7 +84,7 @@ export default async function LoyaltyPage() {
 
       {/* Members + manual award */}
       <Card>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-brand" /> Members</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-brand-text" /> Members</h3>
         {accountRows.length === 0 ? (
           <EmptyState icon={Users} title="No members yet" description="Accounts are created automatically when a family first earns points." />
         ) : (
@@ -120,7 +120,7 @@ export default async function LoyaltyPage() {
 
       {/* Program settings */}
       <Card>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Settings2 className="h-4 w-4 text-brand" /> Program settings</h3>
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Settings2 className="h-4 w-4 text-brand-text" /> Program settings</h3>
         <form action={saveLoyaltySettingsAction} className="grid gap-3 sm:grid-cols-2">
           <label className="flex items-center gap-2 self-end pb-2 text-sm sm:col-span-2"><input type="checkbox" name="enabled" defaultChecked={set?.enabled ?? false} className="h-4 w-4 rounded border-border" /> Program enabled (visible to families)</label>
           <label className="space-y-1"><span className="block text-xs font-medium text-muted">Program name</span><input name="program_name" defaultValue={set?.program_name ?? DEFAULT_LOYALTY.program_name} className={inputCls} /></label>

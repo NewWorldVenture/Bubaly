@@ -234,7 +234,7 @@ export function RecipesModule() {
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
               {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
-            <button onClick={() => { setTonightOpen(true); setTonightPicks(null); }} className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-semibold text-brand hover:bg-brand/15"><Sparkles className="h-4 w-4" /> Tonight?</button>
+            <button onClick={() => { setTonightOpen(true); setTonightPicks(null); }} className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-semibold text-brand-text hover:bg-brand/15"><Sparkles className="h-4 w-4" /> Tonight?</button>
             <a href="/dashboard/recipes/vote" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Vote className="h-4 w-4" /> Vote</a>
             <a href="/dashboard/recipes/discover" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Search className="h-4 w-4" /> Discover</a>
             <AiInsight kind="recipes" iconOnly />
@@ -246,7 +246,7 @@ export function RecipesModule() {
       {/* Stats */}
       <div className="grid-stats">
         {[
-          { label: 'Total Recipes', value: stats.total, icon: '📖', color: 'text-brand' },
+          { label: 'Total Recipes', value: stats.total, icon: '📖', color: 'text-brand-text' },
           { label: 'Favorites', value: stats.favorites, icon: '⭐', color: 'text-warning' },
           { label: 'Times Cooked', value: stats.timesCooked, icon: '🍳', color: 'text-accent' },
           { label: 'Categories', value: [...new Set(recipes.map((r) => r.category))].length, icon: '🗂️', color: 'text-muted' },
@@ -412,7 +412,7 @@ export function RecipesModule() {
 
             {/* AI Remix — saves a transformed variant to your recipes */}
             <div className="mb-5 rounded-2xl border border-brand/25 bg-brand/5 p-3">
-              <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand" /> AI Remix</p>
+              <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> AI Remix</p>
               <div className="flex flex-wrap gap-2">
                 {RECIPE_AI_ACTIONS.map((a) => (
                   <button
@@ -473,7 +473,7 @@ export function RecipesModule() {
             <div className="flex items-center justify-between pt-2">
               {viewing.source_url && (
                 <a href={viewing.source_url} target="_blank" rel="noreferrer"
-                  className="flex items-center gap-1 text-sm text-brand hover:underline">
+                  className="flex items-center gap-1 text-sm text-brand-text hover:underline">
                   <ExternalLink className="h-3.5 w-3.5" /> View original
                 </a>
               )}
@@ -663,7 +663,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         <div>
           <div className="mb-2 flex items-center justify-between">
             <label className="text-sm font-medium">Ingredients</label>
-            <button type="button" onClick={addIngredient} className="text-xs text-brand hover:underline">+ Add ingredient</button>
+            <button type="button" onClick={addIngredient} className="text-xs text-brand-text hover:underline">+ Add ingredient</button>
           </div>
           <div className="space-y-2">
             {ingredients.map((ing, i) => (
@@ -681,7 +681,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         <div>
           <div className="mb-2 flex items-center justify-between">
             <label className="text-sm font-medium">Instructions</label>
-            <button type="button" onClick={addStep} className="text-xs text-brand hover:underline">+ Add step</button>
+            <button type="button" onClick={addStep} className="text-xs text-brand-text hover:underline">+ Add step</button>
           </div>
           <div className="space-y-2">
             {instructions.map((step, i) => (

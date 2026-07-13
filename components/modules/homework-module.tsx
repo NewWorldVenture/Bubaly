@@ -202,7 +202,7 @@ export function HomeworkModule() {
                         </button>
                         <div className="flex-1 min-w-0">
                           <div className={cn('text-sm font-medium flex items-center gap-2 flex-wrap', done ? 'text-muted line-through' : 'text-fg')}>
-                            {h.subject && <span className="text-xs uppercase tracking-wide text-brand bg-brand/10 rounded px-1.5 py-0.5 no-underline">{h.subject}</span>}
+                            {h.subject && <span className="text-xs uppercase tracking-wide text-brand-text bg-brand/10 rounded px-1.5 py-0.5 no-underline">{h.subject}</span>}
                             {h.title}
                           </div>
                           {h.details && <div className="text-xs text-muted mt-0.5">{h.details}</div>}

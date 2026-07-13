@@ -106,7 +106,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
         <div className="flex flex-wrap items-center gap-4">
           <ReadinessRing score={readiness.score} />
           <div className="flex-1">
-            <h2 className="flex items-center gap-2 text-lg font-semibold"><Gauge className="h-5 w-5 text-brand" /> Vacation Readiness · {lvlLabel}</h2>
+            <h2 className="flex items-center gap-2 text-lg font-semibold"><Gauge className="h-5 w-5 text-brand-text" /> Vacation Readiness · {lvlLabel}</h2>
             <p className="text-sm text-muted">{countdownLabel(trip?.start_date)} · {members.length} traveler{members.length === 1 ? '' : 's'}</p>
           </div>
         </div>
@@ -136,7 +136,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
       {/* recommendations */}
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-lg font-semibold"><Sparkles className="h-5 w-5 text-brand" /> AI recommendations</h2>
+          <h2 className="flex items-center gap-2 text-lg font-semibold"><Sparkles className="h-5 w-5 text-brand-text" /> AI recommendations</h2>
           <Button size="sm" variant="secondary" onClick={refreshRecos} loading={refreshing}><RefreshCw className="h-4 w-4" /> Refresh</Button>
         </div>
         {openRecos.length === 0 ? (
@@ -160,13 +160,13 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
       {/* budget + weather summary */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Link href={`/dashboard/vacations/${vacationId}/budget`} className="rounded-2xl border border-border bg-surface/40 p-5 transition hover:border-brand/40">
-          <h3 className="flex items-center gap-2 font-semibold"><Wallet className="h-4 w-4 text-brand" /> Budget</h3>
+          <h3 className="flex items-center gap-2 font-semibold"><Wallet className="h-4 w-4 text-brand-text" /> Budget</h3>
           <p className="mt-2 text-2xl font-bold">{dollars(budget.spent_cents)} <span className="text-sm font-normal text-muted">/ {dollars(budget.planned_cents)}</span></p>
           <div className="mt-2"><Progress pct={budget.pct === 999 ? 100 : budget.pct} tone={budget.over ? 'bg-rose-500' : 'bg-brand'} /></div>
           {budget.over && <p className="mt-1 text-xs text-rose-300">Over budget in {budget.categories.filter((c) => c.over).length} categor{budget.categories.filter((c) => c.over).length === 1 ? 'y' : 'ies'}</p>}
         </Link>
         <Link href={`/dashboard/vacations/${vacationId}/weather`} className="rounded-2xl border border-border bg-surface/40 p-5 transition hover:border-brand/40">
-          <h3 className="flex items-center gap-2 font-semibold"><CloudSun className="h-4 w-4 text-brand" /> Weather</h3>
+          <h3 className="flex items-center gap-2 font-semibold"><CloudSun className="h-4 w-4 text-brand-text" /> Weather</h3>
           {weather.length === 0 ? <p className="mt-2 text-sm text-muted">No forecast yet — fetch one on the Weather tab.</p> : (
             <ul className="mt-2 space-y-1 text-sm">
               {weatherAdvice.slice(0, 3).map((a, i) => <li key={i} className="text-muted">• {a.text}</li>)}

@@ -132,7 +132,7 @@ function ConflictCard({
       {/* Quick fix (deterministic) */}
       {conflict.quickFix && (
         <div className="mt-3 rounded-xl border border-brand/30 bg-brand/5 p-3">
-          <p className="text-xs font-medium text-brand">Quick fix</p>
+          <p className="text-xs font-medium text-brand-text">Quick fix</p>
           <p className="mt-0.5 text-sm">{conflict.quickFix.label} — new time {conflict.quickFix.newWhenLabel}.</p>
           <button
             onClick={applyQuickFix}

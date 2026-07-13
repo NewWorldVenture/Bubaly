@@ -98,7 +98,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold"><Luggage className="h-5 w-5 text-brand" /> Packing</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><Luggage className="h-5 w-5 text-brand-text" /> Packing</h2>
         <div className="flex gap-2">
           <Button size="sm" variant="secondary" onClick={generate} loading={busy}><Wand2 className="h-4 w-4" /> Smart list</Button>
           <Button size="sm" onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add</Button>
@@ -124,7 +124,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
                   <li key={it.id} className="group flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={it.packed} onChange={() => toggle(it)} className="h-4 w-4 rounded border-border" />
                     <span className={it.packed ? 'flex-1 text-muted line-through' : 'flex-1'}>{it.name}{it.quantity > 1 ? ` ×${it.quantity}` : ''}</span>
-                    {it.ai_suggested && <Sparkles className="h-3 w-3 text-brand/60" />}
+                    {it.ai_suggested && <Sparkles className="h-3 w-3 text-brand-text/60" />}
                     <button onClick={() => remove(it.id)} className="hidden text-muted hover:text-danger group-hover:block"><Trash2 className="h-3.5 w-3.5" /></button>
                   </li>
                 ))}

@@ -28,7 +28,7 @@ export function StoreForm({ initial }: { initial: StoreSeed | null }) {
   return (
     <form onSubmit={submit} className="space-y-3 rounded-2xl border border-border bg-surface/60 p-4">
       <div className="flex items-center gap-2">
-        <Building2 className="h-4 w-4 text-brand" />
+        <Building2 className="h-4 w-4 text-brand-text" />
         <h2 className="text-sm font-semibold">{initial ? 'Your store' : 'Open your store'}</h2>
       </div>
       <div className="grid gap-3 sm:grid-cols-[1fr_120px]">

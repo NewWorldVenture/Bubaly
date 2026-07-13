@@ -30,17 +30,17 @@ export function MarketplaceSeedScreen() {
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight"><Database className="h-6 w-6 text-brand" /> Seed test data</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight"><Database className="h-6 w-6 text-brand-text" /> Seed test data</h1>
           <p className="text-sm text-muted">Fill the Family Marketplace with 500 realistic listings (plus offers) to test every feature.</p>
         </div>
       </div>
 
       {/* Steps */}
       <ol className="mb-5 space-y-2 text-sm text-fg">
-        <li className="flex gap-2"><span className="font-semibold text-brand">1.</span> Open your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand hover:underline">Supabase dashboard <ExternalLink className="h-3.5 w-3.5" /></a> → <span className="font-medium">SQL Editor</span> → <span className="font-medium">New query</span>.</li>
-        <li className="flex gap-2"><span className="font-semibold text-brand">2.</span> Tap <span className="font-medium">Copy SQL</span> below and paste it into the editor.</li>
-        <li className="flex gap-2"><span className="font-semibold text-brand">3.</span> Press <span className="font-medium">Run</span>. You&apos;ll see “Marketplace seed complete: 500 listings”.</li>
-        <li className="flex gap-2"><span className="font-semibold text-brand">4.</span> Reload the Marketplace — 500 listings across every type and status will be live.</li>
+        <li className="flex gap-2"><span className="font-semibold text-brand-text">1.</span> Open your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline">Supabase dashboard <ExternalLink className="h-3.5 w-3.5" /></a> → <span className="font-medium">SQL Editor</span> → <span className="font-medium">New query</span>.</li>
+        <li className="flex gap-2"><span className="font-semibold text-brand-text">2.</span> Tap <span className="font-medium">Copy SQL</span> below and paste it into the editor.</li>
+        <li className="flex gap-2"><span className="font-semibold text-brand-text">3.</span> Press <span className="font-medium">Run</span>. You&apos;ll see “Marketplace seed complete: 500 listings”.</li>
+        <li className="flex gap-2"><span className="font-semibold text-brand-text">4.</span> Reload the Marketplace — 500 listings across every type and status will be live.</li>
       </ol>
 
       <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">

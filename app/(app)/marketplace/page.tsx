@@ -35,7 +35,7 @@ const ACTIONS: { label: string; sub: string; href: string; icon: typeof Shopping
   { label: 'Request', sub: 'Request an item', href: `${BASE}/browse?post=1&kind=wanted`, icon: HelpCircle, tint: 'text-rose-500 bg-rose-500/12' },
   { label: 'Donate', sub: 'Give for free', href: `${BASE}/browse?post=1&kind=donate`, icon: Gift, tint: 'text-pink-500 bg-pink-500/12' },
   { label: 'Swap', sub: 'Trade items', href: `${BASE}/browse?post=1&kind=swap`, icon: Repeat, tint: 'text-teal-500 bg-teal-500/12' },
-  { label: 'Create Store', sub: 'Build your brand', href: `${BASE}/store`, icon: Building2, tint: 'text-brand bg-brand/12' },
+  { label: 'Create Store', sub: 'Build your brand', href: `${BASE}/store`, icon: Building2, tint: 'text-brand-text bg-brand/12' },
 ];
 
 const CATEGORY_ICON: Record<string, typeof Shirt> = {
@@ -45,7 +45,7 @@ const CATEGORY_ICON: Record<string, typeof Shirt> = {
 };
 
 const BADGE_STYLE: Record<string, string> = {
-  'AI Match': 'bg-brand/15 text-brand',
+  'AI Match': 'bg-brand/15 text-brand-text',
   'Hot Rental': 'bg-orange-500/15 text-orange-600 dark:text-orange-400',
   'Great Deal': 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
   'Borrow Nearby': 'bg-violet-500/15 text-violet-600 dark:text-violet-400',
@@ -159,7 +159,7 @@ export default async function MarketplaceHomePage() {
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl font-bold leading-tight sm:text-3xl">
                 The world’s easiest<br />
-                <span className="text-brand">AI-first marketplace</span>
+                <span className="text-brand-text">AI-first marketplace</span>
               </h1>
               <p className="mt-2 text-sm text-muted">
                 Buy, sell, rent, borrow, lend &amp; more — all in one trusted family community.
@@ -172,7 +172,7 @@ export default async function MarketplaceHomePage() {
                   { icon: Lock, label: 'Secure Payments' },
                 ].map(({ icon: Icon, label }) => (
                   <span key={label} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface/70 px-2.5 py-1 text-[11px] font-medium text-muted">
-                    <Icon className="h-3 w-3 text-brand" /> {label}
+                    <Icon className="h-3 w-3 text-brand-text" /> {label}
                   </span>
                 ))}
               </div>
@@ -181,11 +181,11 @@ export default async function MarketplaceHomePage() {
               <div className="flex shrink-0 gap-2.5 overflow-x-auto">
                 {hero.map((l) => (
                   <Link key={l.id} href={`${BASE}/item/${l.id}`} className="w-36 shrink-0 rounded-xl border border-border bg-surface/80 p-3 transition hover:border-brand/40">
-                    <span className="inline-block rounded-md bg-brand/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">
+                    <span className="inline-block rounded-md bg-brand/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-text">
                       {KIND_LABELS[l.kind as ListingKind]}
                     </span>
                     <p className="mt-1.5 line-clamp-2 text-xs font-medium">{l.title}</p>
-                    <p className="mt-1 text-xs font-semibold text-brand">{listingChip(l)}</p>
+                    <p className="mt-1 text-xs font-semibold text-brand-text">{listingChip(l)}</p>
                     {ratingChip(l.id) && <p className="mt-0.5 text-[10px] text-amber-500">{ratingChip(l.id)}</p>}
                   </Link>
                 ))}
@@ -223,14 +223,14 @@ export default async function MarketplaceHomePage() {
         <section>
           <div className="mb-2 flex items-baseline justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <Sparkles className="h-4 w-4 text-brand" /> AI Picks for You
+              <Sparkles className="h-4 w-4 text-brand-text" /> AI Picks for You
               <span className="text-[11px] font-normal text-muted">Personalized</span>
             </h2>
-            <Link href={`${BASE}/browse`} className="text-xs text-brand hover:underline">View all</Link>
+            <Link href={`${BASE}/browse`} className="text-xs text-brand-text hover:underline">View all</Link>
           </div>
           {picks.length === 0 ? (
             <div className="rounded-2xl border border-border bg-surface/40 p-6 text-center text-sm text-muted">
-              Nothing on the board yet — <Link href={`${BASE}/browse?post=1`} className="text-brand hover:underline">post the first item</Link>.
+              Nothing on the board yet — <Link href={`${BASE}/browse?post=1`} className="text-brand-text hover:underline">post the first item</Link>.
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
@@ -242,7 +242,7 @@ export default async function MarketplaceHomePage() {
                   </div>
                   <Link href={`${BASE}/item/${l.id}`}>
                     <p className="line-clamp-2 text-xs font-medium">{l.title}</p>
-                    <p className="mt-1 text-sm font-semibold text-brand">{listingChip(l)}</p>
+                    <p className="mt-1 text-sm font-semibold text-brand-text">{listingChip(l)}</p>
                     <p className="mt-0.5 flex items-center gap-1 text-[10px] text-muted">
                       {ratingChip(l.id) ? <span className="text-amber-500">{ratingChip(l.id)}</span> : <span>{CATEGORY_LABELS[l.category as ListingCategory] ?? l.category}</span>}
                       {l.location && <span className="inline-flex items-center gap-0.5"><MapPin className="h-2.5 w-2.5" />{l.location}</span>}
@@ -257,12 +257,12 @@ export default async function MarketplaceHomePage() {
         {/* ── Assistant / Matches / Safety row ─────────────────────────────── */}
         <section className="grid gap-2.5 sm:grid-cols-3">
           <Link href="/dashboard/assistant" className="group rounded-2xl border border-brand/30 bg-brand/[0.06] p-4 transition hover:bg-brand/10">
-            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand" /> AI Buyer Assistant</p>
+            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> AI Buyer Assistant</p>
             <p className="mt-1 text-xs text-muted">Find exactly what you need in seconds — ask in plain language.</p>
-            <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand">Ask anything <ArrowRight className="h-3 w-3 transition group-hover:translate-x-0.5" /></p>
+            <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand-text">Ask anything <ArrowRight className="h-3 w-3 transition group-hover:translate-x-0.5" /></p>
           </Link>
           <Link href={`${BASE}/browse?kind=wanted`} className="group rounded-2xl border border-border bg-surface/60 p-4 transition hover:border-brand/40">
-            <p className="flex items-center gap-2 text-sm font-semibold"><HandHeart className="h-4 w-4 text-brand" /> Request &amp; Get Matched</p>
+            <p className="flex items-center gap-2 text-sm font-semibold"><HandHeart className="h-4 w-4 text-brand-text" /> Request &amp; Get Matched</p>
             <p className="mt-1 text-xs text-muted">Can’t find it? Post a request and we’ll match it for you.</p>
             <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
               {matchCount > 0 ? `${matchCount} match${matchCount === 1 ? '' : 'es'} found!` : 'Post a request'}
@@ -283,14 +283,14 @@ export default async function MarketplaceHomePage() {
         <section>
           <div className="mb-2 flex items-baseline justify-between">
             <h2 className="text-sm font-semibold">Browse by Category</h2>
-            <Link href={`${BASE}/browse`} className="text-xs text-brand hover:underline">View all</Link>
+            <Link href={`${BASE}/browse`} className="text-xs text-brand-text hover:underline">View all</Link>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {(Object.keys(CATEGORY_LABELS) as ListingCategory[]).map((c) => {
               const Icon = CATEGORY_ICON[c] ?? LayoutGrid;
               return (
                 <Link key={c} href={`${BASE}/browse?cat=${c}`} className="flex w-20 shrink-0 flex-col items-center gap-1.5 rounded-xl border border-border bg-surface/60 p-3 transition hover:border-brand/40">
-                  <Icon className="h-5 w-5 text-brand" />
+                  <Icon className="h-5 w-5 text-brand-text" />
                   <span className="text-[11px] font-medium">{CATEGORY_LABELS[c]}</span>
                 </Link>
               );
@@ -303,7 +303,7 @@ export default async function MarketplaceHomePage() {
           <section>
             <div className="mb-2 flex items-baseline justify-between">
               <h2 className="text-sm font-semibold">Popular Collections</h2>
-              <Link href={`${BASE}/collections`} className="text-xs text-brand hover:underline">View all</Link>
+              <Link href={`${BASE}/collections`} className="text-xs text-brand-text hover:underline">View all</Link>
             </div>
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
               {collections.slice(0, 4).map((c) => (
@@ -326,7 +326,7 @@ export default async function MarketplaceHomePage() {
 
         {/* Nearby Activity */}
         <section className="rounded-2xl border border-border bg-surface/60 p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold"><ActivityIcon className="h-4 w-4 text-brand" /> Nearby Activity</p>
+          <p className="flex items-center gap-2 text-sm font-semibold"><ActivityIcon className="h-4 w-4 text-brand-text" /> Nearby Activity</p>
           <p className="mt-0.5 text-[11px] text-muted">See what’s happening near you</p>
           {feed.length === 0 ? (
             <p className="mt-2 text-xs text-muted">Quiet so far — activity shows here as the family trades.</p>
@@ -345,12 +345,12 @@ export default async function MarketplaceHomePage() {
         {/* Top Creators */}
         <section className="rounded-2xl border border-border bg-surface/60 p-4">
           <div className="flex items-baseline justify-between">
-            <p className="flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-brand" /> Top Creators</p>
-            <Link href={`${BASE}/creators`} className="text-[11px] text-brand hover:underline">View all</Link>
+            <p className="flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-brand-text" /> Top Creators</p>
+            <Link href={`${BASE}/creators`} className="text-[11px] text-brand-text hover:underline">View all</Link>
           </div>
           {creators.length === 0 ? (
             <p className="mt-2 text-xs text-muted">
-              No storefronts yet — <Link href={`${BASE}/store`} className="text-brand hover:underline">open the first one</Link>.
+              No storefronts yet — <Link href={`${BASE}/store`} className="text-brand-text hover:underline">open the first one</Link>.
             </p>
           ) : (
             <ul className="mt-2 space-y-2.5">

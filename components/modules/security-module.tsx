@@ -83,7 +83,7 @@ export function SecurityModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><ShieldAlert className="h-4 w-4 text-brand" /> Security Alerts</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><ShieldAlert className="h-4 w-4 text-brand-text" /> Security Alerts</h3>
         <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Log event</Button>
       </div>
 
@@ -108,7 +108,7 @@ export function SecurityModule() {
         {[
           { label: 'Open', value: stats.open, icon: '🚨', color: stats.open ? 'text-amber-400' : 'text-success' },
           { label: 'Critical', value: stats.openCritical, icon: '🔴', color: stats.openCritical ? 'text-danger' : 'text-muted' },
-          { label: 'This week', value: weekCount, icon: '🗓️', color: 'text-brand' },
+          { label: 'This week', value: weekCount, icon: '🗓️', color: 'text-brand-text' },
           { label: 'Resolved', value: stats.total - stats.open, icon: '✅', color: 'text-success' },
         ].map(s => (
           <div key={s.label} className="stat-card">

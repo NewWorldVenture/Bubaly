@@ -98,7 +98,7 @@ export function ActivityProjection({
   return (
     <div className="rounded-2xl border border-border bg-surface/40 p-5">
       <div className="mb-4 flex items-center gap-2">
-        <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 text-brand"><Sparkles className="h-5 w-5" /></div>
+        <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 text-brand-text"><Sparkles className="h-5 w-5" /></div>
         <div>
           <h2 className="text-sm font-bold">Activity projection</h2>
           <p className="text-xs text-muted">See the full ripple before you say yes — schedule, driving, cost, family time.</p>

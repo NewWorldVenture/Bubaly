@@ -150,7 +150,7 @@ export function VotingModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-2 text-base font-semibold"><Vote className="h-4 w-4 text-brand" /> Group Voting</h3>
+          <h3 className="flex items-center gap-2 text-base font-semibold"><Vote className="h-4 w-4 text-brand-text" /> Group Voting</h3>
           <p className="mt-0.5 text-xs text-muted">The family votes — Bubaly weighs it against your budget and needs, and recommends.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -273,7 +273,7 @@ export function VotingModule() {
                     <span className="absolute inset-y-0 left-0 bg-brand/10" style={{ width: `${t.pct}%` }} aria-hidden />
                     <span className="relative flex items-center justify-between gap-2">
                       <span className="flex items-center gap-2">
-                        {selected && <Check className="h-3.5 w-3.5 text-brand" />}
+                        {selected && <Check className="h-3.5 w-3.5 text-brand-text" />}
                         {isRec && <Sparkles className="h-3.5 w-3.5 text-emerald-400" />}
                         {t.leading && t.count > 0 && <Trophy className="h-3.5 w-3.5 text-amber-500" />}
                         {t.label}
@@ -328,7 +328,7 @@ export function VotingModule() {
                       </div>
                     </div>
                   ))}
-                  <button type="button" onClick={() => setForm({ ...form, options: [...form.options, blankOption()] })} className="text-xs font-semibold text-brand">+ Add option</button>
+                  <button type="button" onClick={() => setForm({ ...form, options: [...form.options, blankOption()] })} className="text-xs font-semibold text-brand-text">+ Add option</button>
                 </div>
               )}
             </Field>

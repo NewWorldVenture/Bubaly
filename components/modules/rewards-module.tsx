@@ -215,7 +215,7 @@ export function RewardsModule() {
 
       {/* Rewards catalog */}
       <h2 className="text-sm font-semibold text-fg uppercase tracking-wider mb-3 flex items-center gap-2">
-        <Gift className="h-4 w-4 text-brand" /> Rewards Catalog
+        <Gift className="h-4 w-4 text-brand-text" /> Rewards Catalog
       </h2>
       {(rewards ?? []).length === 0 ? (
         <EmptyState icon={Gift} title="No rewards yet"
@@ -228,7 +228,7 @@ export function RewardsModule() {
             return (
               <div key={r.id} className="rounded-2xl border border-border bg-surface/50 p-5 flex flex-col">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand flex-shrink-0">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text flex-shrink-0">
                     <Gift className="h-5 w-5" />
                   </div>
                   {canManage && (

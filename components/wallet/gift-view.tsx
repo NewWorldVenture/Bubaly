@@ -51,7 +51,7 @@ export function GiftView({ links, pending, childOptions, canManage }: {
       {/* Pending gifts to approve */}
       {pending.length > 0 && (
         <div className="mb-6">
-          <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-brand">Gifts to approve</h2>
+          <h2 className="mb-2.5 text-xs font-bold uppercase tracking-widest text-brand-text">Gifts to approve</h2>
           <div className="space-y-2">
             {pending.map((g) => (
               <div key={g.id} className="flex items-center gap-3 rounded-2xl border border-brand/20 bg-brand/5 p-4">
@@ -112,10 +112,10 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
           <p className="truncate text-xs text-muted">{giftPath(link.token)}{link.isActive ? '' : ' · inactive'}</p>
         </div>
         <button onClick={() => setShowQr(true)} aria-label="Show QR code"
-          className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand transition">
+          className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand-text transition">
           <QrIcon className="h-3.5 w-3.5" /> <span className="hidden sm:inline">QR</span>
         </button>
-        <button onClick={copy} className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand transition">
+        <button onClick={copy} className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:border-brand/40 hover:text-brand-text transition">
           {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy'}
         </button>
       </div>

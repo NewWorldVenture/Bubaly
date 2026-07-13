@@ -91,7 +91,7 @@ export function AvatarPicker({ name = 'avatarUrl', defaultValue = '', displayNam
               className="h-full w-full rounded-full object-cover ring-2 ring-brand/30"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center rounded-full bg-brand/10 text-xl font-bold text-brand">
+            <div className="flex h-full w-full items-center justify-center rounded-full bg-brand/10 text-xl font-bold text-brand-text">
               {initials(displayName) || '?'}
             </div>
           )}

@@ -92,7 +92,7 @@ export default async function CompleteSetupPage() {
           description="Tell us your household makeup and what you want help with. This tailors your dashboard and never creates a second family."
         >
           <div className="mb-4 flex items-center gap-2 rounded-xl border border-brand/30 bg-brand/5 px-3 py-2.5 text-xs text-muted">
-            <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand" />
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand-text" />
             <span>Saved to your existing family — <span className="font-medium text-fg">{ctx.active.family.name}</span>.</span>
           </div>
           <CompleteSetupForm familyId={familyId} initial={initial} />

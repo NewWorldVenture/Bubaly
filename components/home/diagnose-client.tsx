@@ -80,7 +80,7 @@ export function DiagnoseClient({ assets }: { assets: Asset[] }) {
         <Card>
           <p className="whitespace-pre-wrap text-sm">{result.text}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
-            <span className="inline-flex items-center gap-1.5 text-sm"><Wrench className="h-4 w-4 text-brand" /> Recommended pro: <strong>{result.tradeLabel}</strong></span>
+            <span className="inline-flex items-center gap-1.5 text-sm"><Wrench className="h-4 w-4 text-brand-text" /> Recommended pro: <strong>{result.tradeLabel}</strong></span>
             <Link href={`/dashboard/home/pros?trade=${result.trade}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-medium text-brand-fg">
               Find a {result.tradeLabel} pro
             </Link>

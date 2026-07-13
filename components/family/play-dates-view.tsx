@@ -58,7 +58,7 @@ export function PlayDatesView() {
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                 <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {fmtDateTime(pd.starts_at)}</span>
                 {pd.location && <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> {pd.location}</span>}
-                {pd.contact_phone && <a href={`tel:${pd.contact_phone}`} className="inline-flex items-center gap-1 text-brand"><Phone className="h-3.5 w-3.5" /> {pd.contact_name || pd.contact_phone}</a>}
+                {pd.contact_phone && <a href={`tel:${pd.contact_phone}`} className="inline-flex items-center gap-1 text-brand-text"><Phone className="h-3.5 w-3.5" /> {pd.contact_name || pd.contact_phone}</a>}
               </div>
             </div>
           </div>

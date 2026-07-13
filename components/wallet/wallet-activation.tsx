@@ -38,7 +38,7 @@ export function WalletActivation({ canActivate }: { canActivate: boolean }) {
 
       <div className="mb-6 flex flex-col items-center gap-4 rounded-3xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-8 text-center">
         <div className="grid h-16 w-16 place-items-center rounded-2xl bg-brand/15">
-          <Wallet className="h-8 w-8 text-brand" />
+          <Wallet className="h-8 w-8 text-brand-text" />
         </div>
         <div>
           <h2 className="text-xl font-bold">Activate Bubaly Family Wallet</h2>
@@ -49,7 +49,7 @@ export function WalletActivation({ canActivate }: { canActivate: boolean }) {
       <div className="mb-6 grid gap-3 sm:grid-cols-2">
         {FEATURES.map((f) => (
           <div key={f.title} className="rounded-2xl border border-border bg-surface/40 p-4">
-            <f.icon className="mb-2 h-5 w-5 text-brand" />
+            <f.icon className="mb-2 h-5 w-5 text-brand-text" />
             <p className="text-sm font-semibold">{f.title}</p>
             <p className="mt-0.5 text-xs text-muted">{f.body}</p>
           </div>
@@ -59,7 +59,7 @@ export function WalletActivation({ canActivate }: { canActivate: boolean }) {
       {/* Compliance disclosures */}
       <div className="mb-5 rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-          <ShieldCheck className="h-4 w-4 text-brand" /> Before you start
+          <ShieldCheck className="h-4 w-4 text-brand-text" /> Before you start
         </div>
         <ul className="space-y-2 text-xs text-muted">
           <li>• The wallet is <strong>controlled by you</strong>, the parent/guardian. Child balances are parent-managed.</li>

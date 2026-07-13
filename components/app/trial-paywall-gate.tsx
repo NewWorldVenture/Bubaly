@@ -70,7 +70,7 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
         </div>
 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
-          <Link href="/pricing" className="text-brand hover:underline">See all plans & monthly pricing</Link>
+          <Link href="/pricing" className="text-brand-text hover:underline">See all plans & monthly pricing</Link>
           <span className="text-muted/40">·</span>
           <a href="/auth/signout" className="text-muted hover:text-fg">Log out</a>
           <span className="text-muted/40">·</span>

@@ -15,7 +15,7 @@ export function FrontDoorHero({ frontDoor, canDecide = false }: { frontDoor: Fro
   return (
     <section className="rounded-2xl border border-brand/25 bg-gradient-to-br from-brand/[0.09] via-surface/40 to-surface/40 p-4 sm:p-5">
       <div className="flex items-start gap-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text">
           <Sparkles className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
@@ -39,7 +39,7 @@ export function FrontDoorHero({ frontDoor, canDecide = false }: { frontDoor: Fro
                     </li>
                   ))}
                 </ul>
-                <Link href="/dashboard/autopilot" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-muted transition hover:text-brand">
+                <Link href="/dashboard/autopilot" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-muted transition hover:text-brand-text">
                   <RotateCcw className="h-3 w-3" /> Review or undo{doneCount > 3 ? ` (+${doneCount - 3} more)` : ''}
                 </Link>
               </div>

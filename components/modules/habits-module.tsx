@@ -186,7 +186,7 @@ export function HabitsModule() {
         <Modal open onClose={() => setCoachOpen(false)} title="AI Habit Coach">
           {coachLoading ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted">
-              <Sparkles className="h-4 w-4 animate-pulse text-brand" /> Analyzing your streaks…
+              <Sparkles className="h-4 w-4 animate-pulse text-brand-text" /> Analyzing your streaks…
             </div>
           ) : coaching ? (
             <div className="space-y-4">
@@ -195,14 +195,14 @@ export function HabitsModule() {
                 <ul className="space-y-2">
                   {coaching.nudges.map((n, i) => (
                     <li key={i} className="flex items-start gap-2 rounded-xl bg-surface/60 p-3 text-sm">
-                      <Sparkles className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand" /> {n}
+                      <Sparkles className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-text" /> {n}
                     </li>
                   ))}
                 </ul>
               )}
               {coaching.suggestion && (
                 <div className="rounded-xl border border-brand/30 bg-brand/5 p-3 text-sm">
-                  <span className="font-semibold text-brand">Try this: </span>{coaching.suggestion}
+                  <span className="font-semibold text-brand-text">Try this: </span>{coaching.suggestion}
                 </div>
               )}
             </div>
@@ -349,7 +349,7 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
             {(['daily', 'weekly'] as const).map((cd) => (
               <button key={cd} type="button" onClick={() => setCadence(cd)}
                 className={cn('flex-1 rounded-xl border-2 px-3 py-2 text-sm font-medium capitalize transition',
-                  cadence === cd ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:border-brand/40')}>
+                  cadence === cd ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40')}>
                 {cd}
               </button>
             ))}

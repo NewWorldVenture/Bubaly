@@ -88,7 +88,7 @@ export function ConnectionsModule() {
       />
 
       <div className="mb-5 flex items-center gap-2 rounded-xl border border-border bg-surface/50 px-4 py-3 text-sm">
-        <Network className="h-4 w-4 text-brand" />
+        <Network className="h-4 w-4 text-brand-text" />
         {connected > 0
           ? <span><span className="font-semibold text-fg">{connected}</span> {connected === 1 ? 'service' : 'services'} connected across {grouped.length} categories.</span>
           : <span>Nothing connected yet — link a calendar, bank, or grocery service to get started.</span>}

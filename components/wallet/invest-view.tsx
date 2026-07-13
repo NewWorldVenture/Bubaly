@@ -186,7 +186,7 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
         {estCost > 0 && <span className="text-xs text-muted">≈ {formatCents(estCost)}</span>}
         <Button onClick={trade} loading={busy === `trade-${child.id}`} disabled={!assetId || shares <= 0}>Request</Button>
         <button type="button" onClick={explain} disabled={explaining}
-          className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-elevated disabled:opacity-60">
+          className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-brand-text hover:bg-elevated disabled:opacity-60">
           {explaining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Explain
         </button>
       </div>

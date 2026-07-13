@@ -23,7 +23,7 @@ export function RedemptionRow({ redemption }: { redemption: Redemption }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <Gift className="h-4 w-4 text-brand" />
+            <Gift className="h-4 w-4 text-brand-text" />
             <p className="font-semibold">{r.reward_name}</p>
             <Badge tone="brand">{r.cost_points.toLocaleString()} pts</Badge>
           </div>

@@ -75,7 +75,7 @@ export function BabysittersView({ sitters, payments, canManage }: {
       {sitters.length === 0 ? (
         <div className="flex flex-col items-center rounded-2xl border border-border bg-surface/40 py-12 text-center">
           <div className="mb-3 grid h-14 w-14 place-items-center rounded-full bg-brand/10">
-            <Baby className="h-6 w-6 text-brand opacity-60" />
+            <Baby className="h-6 w-6 text-brand-text opacity-60" />
           </div>
           <p className="text-sm font-semibold">No babysitters yet</p>
           <p className="mt-1 text-xs text-muted">Add a sitter to track payments and keep their contact handy.</p>

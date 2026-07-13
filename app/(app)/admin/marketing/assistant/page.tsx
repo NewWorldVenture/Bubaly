@@ -58,7 +58,7 @@ export default function MarketingAssistantPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Sparkles className="h-5 w-5 text-brand" />
+        <Sparkles className="h-5 w-5 text-brand-text" />
         <h2 className="font-semibold">AI Marketing Assistant</h2>
       </div>
       <p className="text-sm text-muted">Grounded in your live customer, segment, and campaign data. Never fabricates metrics.</p>
@@ -68,7 +68,7 @@ export default function MarketingAssistantPage() {
           <button
             key={t.key}
             onClick={() => { setTask(t.key); setOutput(''); setError(null); }}
-            className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${t.key === task ? 'border-brand/40 bg-brand/15 text-brand' : 'border-border text-muted hover:bg-elevated'}`}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${t.key === task ? 'border-brand/40 bg-brand/15 text-brand-text' : 'border-border text-muted hover:bg-elevated'}`}
           >
             {t.label}
           </button>

@@ -143,7 +143,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                   {sellerName}{isOwner && <span className="text-xs text-muted">(you)</span>}
                 </div>
                 {store && (
-                  <Link href={`/marketplace/creators/${store.id}`} className="inline-flex items-center gap-1 text-xs text-brand hover:underline">
+                  <Link href={`/marketplace/creators/${store.id}`} className="inline-flex items-center gap-1 text-xs text-brand-text hover:underline">
                     <StoreIcon className="h-3 w-3" /> {store.emoji ? `${store.emoji} ` : ''}{store.name}
                   </Link>
                 )}

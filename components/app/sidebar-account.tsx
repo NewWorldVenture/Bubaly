@@ -26,7 +26,7 @@ export function SidebarAccount() {
           <Avatar name={name} color={selfMember?.color} size={40} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{name}</p>
-            <p className="truncate text-xs font-medium text-brand">{roleLine}</p>
+            <p className="truncate text-xs font-medium text-brand-text">{roleLine}</p>
           </div>
         </div>
 
@@ -36,7 +36,7 @@ export function SidebarAccount() {
           className={
             isSuperAdmin
               ? 'mt-2.5 inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300'
-              : 'mt-2.5 inline-flex items-center rounded-full bg-brand/15 px-2.5 py-1 text-[11px] font-semibold text-brand'
+              : 'mt-2.5 inline-flex items-center rounded-full bg-brand/15 px-2.5 py-1 text-[11px] font-semibold text-brand-text'
           }
         >
           {isSuperAdmin ? 'Full Access' : tierLabelForLevel(planLevel)}

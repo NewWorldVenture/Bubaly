@@ -60,7 +60,7 @@ const NEED_META: Record<string, NeedRenderMeta> = {
   grocery: { icon: ShoppingCart, iconBg: 'bg-emerald-500/15 text-emerald-400', cta: 'Update', subtitle: 'Items may be running low.' },
   todos: { icon: CheckSquare, iconBg: 'bg-teal-500/15 text-teal-400', cta: 'View', subtitle: 'Personal items waiting for you.' },
 };
-const DEFAULT_NEED_META: NeedRenderMeta = { icon: Bell, iconBg: 'bg-brand/15 text-brand', cta: 'View', subtitle: '' };
+const DEFAULT_NEED_META: NeedRenderMeta = { icon: Bell, iconBg: 'bg-brand/15 text-brand-text', cta: 'View', subtitle: '' };
 
 export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const familyId = ctx.active.familyId;
@@ -368,7 +368,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           <p className="text-sm text-muted">{todayLabel()}</p>
           <h1 className="mt-0.5 text-2xl font-bold sm:text-3xl">{greeting()}, {name.split(' ')[0]}.</h1>
         </div>
-        <Link href="/dashboard/assistant" className="flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand hover:bg-brand/20 transition">
+        <Link href="/dashboard/assistant" className="flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
           <Sparkles className="h-3.5 w-3.5" /> Ask AI
         </Link>
       </div>
@@ -411,14 +411,14 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15">
-                <Rocket className="h-5 w-5 text-brand" />
+                <Rocket className="h-5 w-5 text-brand-text" />
               </div>
               <div>
                 <p className="text-sm font-bold">Family Autopilot</p>
                 <p className="text-xs text-muted">Bubaly is watching over today</p>
               </div>
             </div>
-            <ArrowRight className="h-4 w-4 text-brand" />
+            <ArrowRight className="h-4 w-4 text-brand-text" />
           </div>
 
           <div className="mt-4 flex items-center gap-5">
@@ -508,7 +508,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       {needs.shown.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-brand" />
+            <Sparkles className="h-4 w-4 text-brand-text" />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Needs you</h2>
           </div>
           <p className="-mt-1 text-sm text-fg/80">{needsHeader}</p>
@@ -546,7 +546,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
               return (
                 <Link key={item.id} href={item.href} className={cn(cardClass, 'hover:bg-elevated')}>
                   {body}
-                  <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-brand">
+                  <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-brand-text">
                     {meta.cta} <ChevronRight className="h-3.5 w-3.5" />
                   </div>
                 </Link>
@@ -567,7 +567,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
               <Sun className="h-4 w-4 text-amber-400" />
               <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">Today</h2>
             </div>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand hover:underline">View all</Link>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">View all</Link>
           </div>
           <div className="space-y-2">
             {(todayEvents ?? []).map((ev) => (
@@ -593,7 +593,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
               <Calendar className="h-4 w-4 text-blue-400" />
               <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">Coming Up</h2>
             </div>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand hover:underline">Calendar</Link>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">Calendar</Link>
           </div>
           <div className="space-y-1.5">
             {upcomingItems.map((item) => (
@@ -632,7 +632,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-brand/10 to-violet-500/5 p-5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-brand" /> {homeBrief.isSparse ? 'Your first wins' : 'Your week'}</p>
+                <p className="flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-brand-text" /> {homeBrief.isSparse ? 'Your first wins' : 'Your week'}</p>
                 <p className="mt-1 text-sm text-fg/85">{homeBrief.headline}</p>
               </div>
               <div className="shrink-0 text-right">
@@ -656,12 +656,12 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
                   s.done ? 'border-border/60 bg-surface/20' : 'border-border bg-surface/40')}>
                 {s.done
                   ? <CircleCheck className="h-5 w-5 shrink-0 text-emerald-400" />
-                  : <Circle className="h-5 w-5 shrink-0 text-brand" />}
+                  : <Circle className="h-5 w-5 shrink-0 text-brand-text" />}
                 <div className="min-w-0 flex-1">
                   <p className={cn('truncate text-sm font-semibold', s.done && 'text-muted line-through')}>{s.label}</p>
                   <p className="truncate text-xs text-muted">{s.detail}</p>
                 </div>
-                {!s.done && <ChevronRight className="h-4 w-4 shrink-0 text-brand" />}
+                {!s.done && <ChevronRight className="h-4 w-4 shrink-0 text-brand-text" />}
               </Link>
             ))}
           </div>
@@ -670,8 +670,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
           {homeBrief.dinnerIdeas.length > 0 && (
             <div className="rounded-2xl border border-border bg-surface/40 p-4">
               <div className="mb-2 flex items-center justify-between">
-                <p className="flex items-center gap-2 text-sm font-semibold"><Utensils className="h-4 w-4 text-brand" /> Dinner ideas for this week</p>
-                <Link href="/dashboard/meals" className="text-xs font-semibold text-brand hover:underline">Plan meals</Link>
+                <p className="flex items-center gap-2 text-sm font-semibold"><Utensils className="h-4 w-4 text-brand-text" /> Dinner ideas for this week</p>
+                <Link href="/dashboard/meals" className="text-xs font-semibold text-brand-text hover:underline">Plan meals</Link>
               </div>
               <ul className="space-y-1.5 text-sm">
                 {homeBrief.dinnerIdeas.map((d) => (
@@ -690,13 +690,13 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       <Link href="/dashboard/assistant"
         className="flex items-center gap-4 rounded-2xl border border-brand/20 bg-gradient-to-r from-brand/10 to-violet-500/10 p-5 transition hover:border-brand/40">
         <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand/20">
-          <Sparkles className="h-6 w-6 text-brand" />
+          <Sparkles className="h-6 w-6 text-brand-text" />
         </div>
         <div className="flex-1">
           <p className="font-semibold">Ask your AI Chief of Staff</p>
           <p className="mt-0.5 text-xs text-muted">Plan meals, resolve schedule conflicts, draft messages…</p>
         </div>
-        <ArrowRight className="h-5 w-5 shrink-0 text-brand" />
+        <ArrowRight className="h-5 w-5 shrink-0 text-brand-text" />
       </Link>
     </div>
   );

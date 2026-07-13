@@ -34,7 +34,7 @@ export function ServiceClient({ records, assets }: { records: ServiceRecord[]; a
 
       {records.length > 0 && (
         <div className="grid-stats">
-          <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand"><Wrench className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{records.length}</p><p className="mt-1 text-xs text-muted">Records</p></div></div>
+          <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text"><Wrench className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{records.length}</p><p className="mt-1 text-xs text-muted">Records</p></div></div>
           <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-success/10 text-success"><CalendarClock className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">${totalSpend.toLocaleString()}</p><p className="mt-1 text-xs text-muted">Total logged spend</p></div></div>
         </div>
       )}

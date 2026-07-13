@@ -84,7 +84,7 @@ export function CalendarSyncPanel() {
         <div className="rounded-xl border-2 border-dashed border-border p-6 text-center">
           <Link2 className="mx-auto h-8 w-8 text-muted/40" />
           <p className="mt-2 text-sm text-muted">No calendars subscribed yet.</p>
-          <button onClick={() => setOpen(true)} className="mt-1 text-xs font-semibold text-brand hover:underline">
+          <button onClick={() => setOpen(true)} className="mt-1 text-xs font-semibold text-brand-text hover:underline">
             Subscribe to your first calendar
           </button>
         </div>

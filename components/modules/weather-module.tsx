@@ -189,7 +189,7 @@ export function WeatherModule() {
             onClick={() => setActiveKey(p.key)}
             className={cn(
               'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition',
-              active?.key === p.key ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:bg-elevated',
+              active?.key === p.key ? 'border-brand/50 bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:bg-elevated',
             )}
           >
             {p.isGeo ? <LocateFixed className="h-3.5 w-3.5" /> : <MapPin className="h-3.5 w-3.5" />}
@@ -217,7 +217,7 @@ export function WeatherModule() {
             <ul className="mt-3 divide-y divide-border/60">
               {results.map((r, i) => (
                 <li key={`${r.latitude}-${r.longitude}-${i}`}>
-                  <button onClick={() => addCity(r)} className="flex w-full items-center justify-between gap-3 px-1 py-2.5 text-left text-sm hover:text-brand">
+                  <button onClick={() => addCity(r)} className="flex w-full items-center justify-between gap-3 px-1 py-2.5 text-left text-sm hover:text-brand-text">
                     <span>{[r.name, r.admin1, r.country].filter(Boolean).join(', ')}</span>
                     <Plus className="h-4 w-4 shrink-0 text-muted" />
                   </button>

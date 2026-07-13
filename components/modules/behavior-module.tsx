@@ -99,7 +99,7 @@ export function BehaviorModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><Smile className="h-4 w-4 text-brand" /> Behavior & Parenting Insights</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><Smile className="h-4 w-4 text-brand-text" /> Behavior & Parenting Insights</h3>
         <div className="flex items-center gap-2">
           {members.length > 0 && (
             <Select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} className="h-9">
@@ -119,7 +119,7 @@ export function BehaviorModule() {
       {/* AI parenting insight */}
       <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
         <div className="flex items-center justify-between gap-3">
-          <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand" /> AI parenting insight</p>
+          <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> AI parenting insight</p>
           <Button variant="secondary" onClick={getInsight} loading={ai?.loading}>Generate</Button>
         </div>
         {ai && !ai.loading && (

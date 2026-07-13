@@ -159,7 +159,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
       {/* Recent visits */}
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center gap-2">
-          <Receipt className="h-4 w-4 text-brand" />
+          <Receipt className="h-4 w-4 text-brand-text" />
           <h2 className="text-sm font-bold">Recent dining out</h2>
         </div>
         {visits.length === 0 ? (
@@ -168,7 +168,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
           <ul className="divide-y divide-border/60">
             {visits.map((v) => (
               <li key={v.id} className="flex items-center gap-3 py-3">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand"><Utensils className="h-5 w-5" /></span>
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text"><Utensils className="h-5 w-5" /></span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{v.name}</p>
                   <p className="truncate text-xs text-muted">

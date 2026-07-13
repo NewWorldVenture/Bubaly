@@ -77,7 +77,7 @@ export function PublicGiftForm({ token, suggestedCents, childName }: {
           {suggestedCents.map((c) => (
             <button key={c} type="button" onClick={() => { setAmount(c); setCustom(''); }}
               className={cn('rounded-xl border-2 py-3 text-sm font-bold transition',
-                amount === c && !custom ? 'border-brand bg-brand/10 text-brand' : 'border-border hover:border-brand/40')}>
+                amount === c && !custom ? 'border-brand bg-brand/10 text-brand-text' : 'border-border hover:border-brand/40')}>
               {formatCents(c)}
             </button>
           ))}
@@ -93,12 +93,12 @@ export function PublicGiftForm({ token, suggestedCents, childName }: {
 
       {aiAmounts.length > 0 && (
         <div className="rounded-xl border border-brand/20 bg-brand/5 p-2.5">
-          <p className="mb-1.5 text-[11px] font-medium text-brand">Suggested amounts</p>
+          <p className="mb-1.5 text-[11px] font-medium text-brand-text">Suggested amounts</p>
           <div className="flex flex-wrap gap-2">
             {aiAmounts.map((c) => (
               <button key={c} type="button" onClick={() => { setAmount(c); setCustom(''); }}
                 className={cn('rounded-lg border px-3 py-1.5 text-sm font-semibold transition',
-                  amount === c && !custom ? 'border-brand bg-brand/10 text-brand' : 'border-border hover:border-brand/40')}>
+                  amount === c && !custom ? 'border-brand bg-brand/10 text-brand-text' : 'border-border hover:border-brand/40')}>
                 {formatCents(c)}
               </button>
             ))}
@@ -110,7 +110,7 @@ export function PublicGiftForm({ token, suggestedCents, childName }: {
         <div className="mb-1.5 flex items-center justify-between">
           <label className="text-sm font-medium">Add a message (optional)</label>
           <button type="button" onClick={getIdeas} disabled={assisting}
-            className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline disabled:opacity-60">
+            className="inline-flex items-center gap-1 text-xs font-medium text-brand-text hover:underline disabled:opacity-60">
             {assisting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
             Help me write something
           </button>

@@ -255,7 +255,7 @@ export function PhotosModule() {
               {/* Create album card */}
               <button onClick={() => setNewAlbumOpen(true)}
                 className="group flex aspect-square items-center justify-center rounded-2xl border-2 border-dashed border-border hover:border-brand/50 hover:bg-brand/5 transition">
-                <div className="flex flex-col items-center gap-2 text-muted group-hover:text-brand transition">
+                <div className="flex flex-col items-center gap-2 text-muted group-hover:text-brand-text transition">
                   <Plus className="h-8 w-8" />
                   <span className="text-xs font-medium">New Album</span>
                 </div>
@@ -272,7 +272,7 @@ export function PhotosModule() {
           {activeAlbum && (
             <div className="mb-3 flex items-center gap-2 text-sm">
               <button onClick={() => { setActiveAlbum(null); setTab('albums'); }}
-                className="flex items-center gap-1 text-muted hover:text-brand transition">
+                className="flex items-center gap-1 text-muted hover:text-brand-text transition">
                 <ChevronLeft className="h-4 w-4" /> Albums
               </button>
               <span className="text-muted">/</span>

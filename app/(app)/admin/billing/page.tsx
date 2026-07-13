@@ -139,7 +139,7 @@ export default async function AdminBillingPage() {
       </Card>
 
       <p className="text-center text-xs text-muted">
-        Manage plans &amp; processor settings in <Link href="/admin/subscriptions" className="text-brand hover:underline">Subscriptions</Link>.
+        Manage plans &amp; processor settings in <Link href="/admin/subscriptions" className="text-brand-text hover:underline">Subscriptions</Link>.
         Refunds, disputes, and individual charges are handled in the Stripe dashboard.
       </p>
     </div>

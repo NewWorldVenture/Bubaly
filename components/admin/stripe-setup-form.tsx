@@ -69,7 +69,7 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
   return (
     <Card className="p-5">
       <div className="mb-1 flex items-center gap-2">
-        <CreditCard className="h-4 w-4 text-brand" />
+        <CreditCard className="h-4 w-4 text-brand-text" />
         <h2 className="font-semibold">Stripe Setup</h2>
       </div>
       <p className="mb-4 text-sm text-muted">

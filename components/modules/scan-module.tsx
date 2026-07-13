@@ -124,11 +124,11 @@ export function ScanModule() {
           <img src={preview} alt={fileName ?? 'flyer'} className="mb-4 max-h-56 rounded-xl object-contain" />
         ) : (
           <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-brand/15">
-            <Camera className="h-8 w-8 text-brand" />
+            <Camera className="h-8 w-8 text-brand-text" />
           </div>
         )}
         {scanning ? (
-          <p className="flex items-center gap-2 text-sm font-semibold text-brand">
+          <p className="flex items-center gap-2 text-sm font-semibold text-brand-text">
             <Sparkles className="h-4 w-4 animate-pulse" /> Reading flyer…
           </p>
         ) : (
@@ -142,7 +142,7 @@ export function ScanModule() {
       {events && events.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center gap-2">
-            <CalendarPlus className="h-4 w-4 text-brand" />
+            <CalendarPlus className="h-4 w-4 text-brand-text" />
             <h2 className="font-semibold">Found {events.length} event{events.length === 1 ? '' : 's'}</h2>
             <span className="ml-auto text-xs text-muted">{selected.size} selected</span>
           </div>
@@ -184,7 +184,7 @@ export function ScanModule() {
           <ImageIcon className="h-5 w-5 shrink-0" />
           <span>
             Works great with school newsletters, picture-day notices, team schedules, and birthday invites.
-            Prefer to type? Use the <Link href="/dashboard/inbox" className="text-brand hover:underline">Magic Import Inbox</Link>.
+            Prefer to type? Use the <Link href="/dashboard/inbox" className="text-brand-text hover:underline">Magic Import Inbox</Link>.
           </span>
         </div>
       )}

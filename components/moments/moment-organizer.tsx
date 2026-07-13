@@ -45,7 +45,7 @@ export function MomentOrganizer({ moments }: { moments: OrganizerMoment[] }) {
   return (
     <section className="space-y-3">
       <div className="flex items-center gap-2">
-        <Compass className="h-4 w-4 text-brand" />
+        <Compass className="h-4 w-4 text-brand-text" />
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Right now</h2>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -58,7 +58,7 @@ export function MomentOrganizer({ moments }: { moments: OrganizerMoment[] }) {
                 <X className="h-3.5 w-3.5" />
               </button>
               <div className="flex items-start gap-3 pr-6">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand"><Icon className="h-5 w-5" /></div>
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text"><Icon className="h-5 w-5" /></div>
                 <div className="min-w-0">
                   <p className="text-sm font-bold">{m.label}</p>
                   <p className="truncate text-xs text-muted">{m.reason}</p>

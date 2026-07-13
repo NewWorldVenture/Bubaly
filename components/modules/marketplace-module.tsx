@@ -280,7 +280,7 @@ export function MarketplaceModule({
                     {price && <span className="text-sm font-semibold text-fg">{price}</span>}
                   </div>
 
-                  <Link href={`/marketplace/item/${l.id}`} className="mt-2 font-semibold text-fg hover:text-brand">{l.title}</Link>
+                  <Link href={`/marketplace/item/${l.id}`} className="mt-2 font-semibold text-fg hover:text-brand-text">{l.title}</Link>
                   {l.description && <p className="mt-0.5 line-clamp-2 text-sm text-muted">{l.description}</p>}
 
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">

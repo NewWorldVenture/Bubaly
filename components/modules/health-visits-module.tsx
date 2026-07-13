@@ -86,7 +86,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><Stethoscope className="h-4 w-4 text-brand" /> {title}</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><Stethoscope className="h-4 w-4 text-brand-text" /> {title}</h3>
         <div className="flex items-center gap-2">
           {members.length > 0 && (
             <select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} className="h-9 rounded-lg border border-border bg-surface px-2 text-sm">

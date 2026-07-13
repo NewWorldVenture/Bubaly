@@ -28,7 +28,7 @@ export default async function FunnelsPage() {
                 <ol className="mt-3 space-y-2">
                   {steps.map((s, i) => (
                     <li key={i} className="flex items-center gap-3 text-sm">
-                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand/15 text-xs font-semibold text-brand">{i + 1}</span>
+                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand/15 text-xs font-semibold text-brand-text">{i + 1}</span>
                       {s.label}
                     </li>
                   ))}

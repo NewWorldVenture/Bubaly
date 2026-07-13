@@ -59,7 +59,7 @@ export default async function PushPage() {
       </div>
 
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><BellRing className="h-4 w-4 text-brand" /> New push</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><BellRing className="h-4 w-4 text-brand-text" /> New push</h2>
         <form action={createPushCampaignAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input name="title" required placeholder="Title" className={`${inputCls} lg:col-span-2`} />
           <input name="url" placeholder="Click URL (e.g. /pricing)" className={`${inputCls} lg:col-span-2`} />
@@ -86,7 +86,7 @@ export default async function PushPage() {
               <div className="flex shrink-0 items-center gap-3 text-sm">
                 {canSendPush(c.status) && (
                   <form action={sendPushCampaignAction.bind(null, c.id)}>
-                    <button type="submit" className="inline-flex items-center gap-1 font-semibold text-brand hover:underline">
+                    <button type="submit" className="inline-flex items-center gap-1 font-semibold text-brand-text hover:underline">
                       <Send className="h-3.5 w-3.5" /> Send
                     </button>
                   </form>

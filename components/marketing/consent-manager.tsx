@@ -79,7 +79,7 @@ export function ConsentManager() {
           className="animate-fade-in-up fixed inset-x-3 bottom-3 z-50 mx-auto max-w-2xl rounded-2xl border border-border bg-surface/95 p-4 shadow-glass backdrop-blur sm:inset-x-auto sm:right-4 sm:bottom-4 sm:p-5"
         >
           <div className="flex items-start gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text">
               <Cookie className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
@@ -88,9 +88,9 @@ export function ConsentManager() {
                 We use strictly-necessary cookies to run Bubaly, plus optional first-party
                 analytics to improve it. No ad trackers, no fingerprinting. Choose what you
                 allow — see our{' '}
-                <Link href="/cookies" className="font-medium text-brand hover:underline">Cookie Policy</Link>{' '}
+                <Link href="/cookies" className="font-medium text-brand-text hover:underline">Cookie Policy</Link>{' '}
                 and{' '}
-                <Link href="/privacy" className="font-medium text-brand hover:underline">Privacy Policy</Link>.
+                <Link href="/privacy" className="font-medium text-brand-text hover:underline">Privacy Policy</Link>.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
@@ -151,7 +151,7 @@ function PreferenceCenter({
       <div className="animate-fade-in-up relative w-full max-w-lg rounded-2xl border border-border bg-surface p-5 shadow-glass sm:p-6">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand"><ShieldCheck className="h-4 w-4" /></span>
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-text"><ShieldCheck className="h-4 w-4" /></span>
             <h2 className="text-base font-bold">Privacy preferences</h2>
           </div>
           <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-fg">
@@ -190,7 +190,7 @@ function PreferenceCenter({
                   }
                 >
                   <span className={'absolute top-0.5 grid h-5 w-5 place-items-center rounded-full bg-white transition-all ' + (on ? 'left-[22px]' : 'left-0.5')}>
-                    {on && <Check className="h-3 w-3 text-brand" />}
+                    {on && <Check className="h-3 w-3 text-brand-text" />}
                   </span>
                 </button>
               </div>

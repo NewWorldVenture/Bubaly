@@ -53,7 +53,7 @@ const ACCOUNT_ICON: Record<string, LucideIcon> = {
   checking: Wallet, savings: PiggyBank, credit: CreditCard, investment: TrendingUp, retirement: Landmark,
 };
 const ACCOUNT_TINT: Record<string, string> = {
-  checking: 'bg-brand/20 text-brand', savings: 'bg-green-500/20 text-green-400',
+  checking: 'bg-brand/20 text-brand-text', savings: 'bg-green-500/20 text-green-400',
   credit: 'bg-amber-500/20 text-amber-400', investment: 'bg-blue-500/20 text-blue-400',
   retirement: 'bg-teal-500/20 text-teal-400',
 };
@@ -203,20 +203,20 @@ export function FinancesModule() {
           className="mb-4 flex items-center gap-3 rounded-2xl border border-brand/30 bg-gradient-to-r from-brand/[0.12] to-transparent p-4 transition hover:border-brand/50"
         >
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 ring-1 ring-brand/30">
-            <Sparkles className="h-5 w-5 text-brand" />
+            <Sparkles className="h-5 w-5 text-brand-text" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-bold">Financial Copilot</span>
             <span className="block text-xs text-muted">See bills, goals &amp; your calendar on one money timeline — get ahead of heavy weeks.</span>
           </span>
-          <ArrowRight className="h-4 w-4 shrink-0 text-brand" />
+          <ArrowRight className="h-4 w-4 shrink-0 text-brand-text" />
         </Link>
 
         {/* Overview stat tiles */}
         <div className="rounded-2xl border border-border bg-surface/30 p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-semibold">Overview</h2>
-            <Link href={MANAGE} className="text-xs font-medium text-brand hover:underline">View full report ›</Link>
+            <Link href={MANAGE} className="text-xs font-medium text-brand-text hover:underline">View full report ›</Link>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {STATS.map((s) => (
@@ -284,7 +284,7 @@ export function FinancesModule() {
           <div className="rounded-2xl border border-border bg-surface/30 p-4 lg:col-span-2">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-semibold">Recent Transactions</h2>
-              <Link href={MANAGE} className="text-xs font-medium text-brand hover:underline">View all ›</Link>
+              <Link href={MANAGE} className="text-xs font-medium text-brand-text hover:underline">View all ›</Link>
             </div>
             {recent.length === 0 ? <p className="text-xs text-muted">No transactions yet.</p> : (
               <div className="space-y-1">
@@ -318,7 +318,7 @@ export function FinancesModule() {
           <div className="rounded-2xl border border-border bg-surface/30 p-4 lg:col-span-3">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-semibold">Bills &amp; Reminders</h2>
-              <Link href="/dashboard/calendar" className="text-xs font-medium text-brand hover:underline">View calendar ›</Link>
+              <Link href="/dashboard/calendar" className="text-xs font-medium text-brand-text hover:underline">View calendar ›</Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <BillsCalendar month={calMonth} bills={bills} onPrev={() => setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))} onNext={() => setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))} />
@@ -378,7 +378,7 @@ export function FinancesModule() {
                 ))}
               </div>
             )}
-            <Link href={MANAGE} className="mt-3 block text-center text-xs font-medium text-brand hover:underline">View full breakdown ›</Link>
+            <Link href={MANAGE} className="mt-3 block text-center text-xs font-medium text-brand-text hover:underline">View full breakdown ›</Link>
           </div>
         </div>
 
@@ -399,7 +399,7 @@ export function FinancesModule() {
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-bold">Accounts</h3>
-            <Link href={MANAGE} className="text-[11px] font-medium text-brand hover:underline">View all ›</Link>
+            <Link href={MANAGE} className="text-[11px] font-medium text-brand-text hover:underline">View all ›</Link>
           </div>
           {accounts.length === 0 ? (
             <div className="text-center">
@@ -430,7 +430,7 @@ export function FinancesModule() {
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-bold">Savings Goals</h3>
-            <Link href={MANAGE} className="text-[11px] font-medium text-brand hover:underline">View all ›</Link>
+            <Link href={MANAGE} className="text-[11px] font-medium text-brand-text hover:underline">View all ›</Link>
           </div>
           {goals.length === 0 ? <p className="text-xs text-muted">No savings goals yet.</p> : (
             <div className="space-y-3">

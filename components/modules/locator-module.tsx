@@ -286,7 +286,7 @@ export function LocatorModule() {
               <div className="absolute right-0 mt-1 w-32 overflow-hidden rounded-lg border border-border bg-elevated shadow-lg" onClick={(e) => e.stopPropagation()}>
                 {MAP_STYLES.map((s) => (
                   <button key={s.key} onClick={() => { setMapStyle(s.key); setStyleOpen(false); }}
-                    className={cn('block w-full px-3 py-1.5 text-left text-xs hover:bg-surface', s.key === mapStyle && 'text-brand font-semibold')}>{s.label}</button>
+                    className={cn('block w-full px-3 py-1.5 text-left text-xs hover:bg-surface', s.key === mapStyle && 'text-brand-text font-semibold')}>{s.label}</button>
                 ))}
               </div>
             )}
@@ -345,7 +345,7 @@ export function LocatorModule() {
                   <Avatar name={m.display_name} color={m.color} size={40} />
                   <div className="min-w-0 flex-[1.3]">
                     <div className="flex items-center gap-1.5 text-sm font-semibold">{m.display_name}{selfMember?.id === m.id && <span className="text-xs font-normal text-muted">(You)</span>}</div>
-                    <div className="flex items-center gap-1 text-xs font-medium text-brand"><MapPin className="h-3 w-3" />{place?.name ?? placeLabel(l)}</div>
+                    <div className="flex items-center gap-1 text-xs font-medium text-brand-text"><MapPin className="h-3 w-3" />{place?.name ?? placeLabel(l)}</div>
                   </div>
                   <div className="hidden min-w-0 flex-1 truncate text-sm text-muted sm:block">{l.address ?? place?.address ?? '—'}</div>
                   <div className="w-24 shrink-0 text-right text-xs text-muted">{sinceLabel(l.updated_at, now)}</div>
@@ -367,7 +367,7 @@ export function LocatorModule() {
         {/* Location History (mobile-visible summary card) */}
         <a href="#geofence-history" onClick={(e) => { e.preventDefault(); historyRef.current?.scrollIntoView({ behavior: 'smooth' }); }}
           className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-4 py-3 transition hover:bg-elevated/40 xl:hidden">
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-brand/15 text-brand"><Clock className="h-4 w-4" /></span>
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-brand/15 text-brand-text"><Clock className="h-4 w-4" /></span>
           <div className="flex-1"><p className="text-sm font-semibold">Location History</p><p className="text-xs text-muted">See where your family has been</p></div>
           <ChevronDown className="h-4 w-4 -rotate-90 text-muted" />
         </a>
@@ -379,7 +379,7 @@ export function LocatorModule() {
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold">Place Alerts</p>
-            <button onClick={() => historyRef.current?.scrollIntoView({ behavior: 'smooth' })} className="text-xs font-medium text-brand hover:underline">View all</button>
+            <button onClick={() => historyRef.current?.scrollIntoView({ behavior: 'smooth' })} className="text-xs font-medium text-brand-text hover:underline">View all</button>
           </div>
           <div className="space-y-2.5">
             {alerts.length === 0 ? <p className="text-xs text-muted">No arrivals yet today.</p> : alerts.map((ev) => {
@@ -403,7 +403,7 @@ export function LocatorModule() {
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold">Geofences</p>
-            {canManage && <button onClick={openNewPlace} className="text-xs font-medium text-brand hover:underline">Manage</button>}
+            {canManage && <button onClick={openNewPlace} className="text-xs font-medium text-brand-text hover:underline">Manage</button>}
           </div>
           <div className="space-y-2.5">
             {(places ?? []).length === 0 ? (
@@ -438,7 +438,7 @@ export function LocatorModule() {
         {/* Location History */}
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
-            <p className="flex items-center gap-1.5 text-sm font-semibold"><Bell className="h-4 w-4 text-brand" /> Location History</p>
+            <p className="flex items-center gap-1.5 text-sm font-semibold"><Bell className="h-4 w-4 text-brand-text" /> Location History</p>
           </div>
           {history.length === 0 ? (
             <p className="text-xs text-muted">No history yet.</p>
@@ -498,7 +498,7 @@ export function LocatorModule() {
             </Field>
           </div>
           <div className="flex items-center justify-between">
-            <button type="button" onClick={useCurrentForPlace} className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">
+            <button type="button" onClick={useCurrentForPlace} className="inline-flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">
               <LocateFixed className="h-3.5 w-3.5" /> Use my current location
             </button>
             <div className="flex items-center gap-2">

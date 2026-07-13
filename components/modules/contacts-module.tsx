@@ -29,7 +29,7 @@ type Contact = Tables<'family_contacts'>;
 
 const CATEGORIES = [
   { id: 'emergency', label: 'Emergency', icon: AlertTriangle, color: 'text-danger', bg: 'bg-danger/10', badge: 'danger' },
-  { id: 'family', label: 'Family', icon: Home, color: 'text-brand', bg: 'bg-brand/10', badge: 'brand' },
+  { id: 'family', label: 'Family', icon: Home, color: 'text-brand-text', bg: 'bg-brand/10', badge: 'brand' },
   { id: 'doctor', label: 'Doctor', icon: Stethoscope, color: 'text-success', bg: 'bg-success/10', badge: 'success' },
   { id: 'dentist', label: 'Dentist', icon: Smile, color: 'text-success', bg: 'bg-success/10', badge: 'success' },
   { id: 'teacher', label: 'Teacher', icon: GraduationCap, color: 'text-accent', bg: 'bg-accent/10', badge: 'accent' },
@@ -225,7 +225,7 @@ export function ContactsModule() {
                       )}
                       {contact.email && (
                         <a href={`mailto:${contact.email}`} onClick={(e) => e.stopPropagation()}
-                          className="hidden rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-brand sm:flex">
+                          className="hidden rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-brand-text sm:flex">
                           <Mail className="h-4 w-4" />
                         </a>
                       )}
@@ -273,7 +273,7 @@ export function ContactsModule() {
                   </span>
                 ); })()}
                 <Link href={`/dashboard/contacts/${selected.id}`}
-                  className="flex items-center gap-1 rounded-lg bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand/20 transition">
+                  className="flex items-center gap-1 rounded-lg bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
                   🕰️ Relationship timeline
                 </Link>
                 {selected.is_emergency && (
@@ -308,11 +308,11 @@ export function ContactsModule() {
                 {selected.email && (
                   <div className="flex items-center justify-between rounded-xl bg-elevated/50 px-3 py-2.5">
                     <div className="flex items-center gap-2 text-sm">
-                      <Mail className="h-4 w-4 text-brand" />
+                      <Mail className="h-4 w-4 text-brand-text" />
                       <span className="truncate">{selected.email}</span>
                     </div>
                     <a href={`mailto:${selected.email}`}
-                      className="rounded p-1 text-muted hover:text-brand"><ExternalLink className="h-3.5 w-3.5" /></a>
+                      className="rounded p-1 text-muted hover:text-brand-text"><ExternalLink className="h-3.5 w-3.5" /></a>
                   </div>
                 )}
                 {selected.address && (
@@ -455,7 +455,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
                     className="peer sr-only" />
                   <div className={cn(
                     'flex items-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-medium transition',
-                    'border-border hover:bg-elevated peer-checked:border-brand/60 peer-checked:bg-brand/10 peer-checked:text-brand',
+                    'border-border hover:bg-elevated peer-checked:border-brand/60 peer-checked:bg-brand/10 peer-checked:text-brand-text',
                   )}>
                     <cat.icon className="h-3.5 w-3.5" /> {cat.label}
                   </div>

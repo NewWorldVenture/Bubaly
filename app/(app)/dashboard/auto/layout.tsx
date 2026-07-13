@@ -7,7 +7,7 @@ export default async function AutoLayout({ children }: { children: React.ReactNo
   return (
     <div className="module-page">
       <div className="flex items-center gap-3">
-        <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand">
+        <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text">
           <Car className="h-5 w-5" />
         </div>
         <div>

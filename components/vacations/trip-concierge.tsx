@@ -68,14 +68,14 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold"><Sparkles className="h-5 w-5 text-brand" /> AI Vacation Concierge</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><Sparkles className="h-5 w-5 text-brand-text" /> AI Vacation Concierge</h2>
         <Button size="sm" variant="secondary" onClick={autoBuild} loading={building}><Wand2 className="h-4 w-4" /> Auto-build trip</Button>
       </div>
 
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
         {messages.length === 0 ? (
           <div className="py-6 text-center">
-            <Sparkles className="mx-auto h-8 w-8 text-brand/60" />
+            <Sparkles className="mx-auto h-8 w-8 text-brand-text/60" />
             <p className="mt-2 text-sm text-muted">Your personal travel agent. Ask anything about this trip, or tap a prompt below.</p>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {QUICK.map((q) => <button key={q} onClick={() => send(q)} className="rounded-xl border border-border bg-elevated/40 p-3 text-left text-sm hover:border-brand/40">{q}</button>)}

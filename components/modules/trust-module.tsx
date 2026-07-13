@@ -98,7 +98,7 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
       <PageHeader
         title="Trust & Permissions"
         description="The household policy engine that governs every AI action and family member — least-privilege by default, fully overridable."
-        action={<div className="hidden sm:flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand"><ShieldCheck className="h-3.5 w-3.5" /> Trust Engine</div>}
+        action={<div className="hidden sm:flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text"><ShieldCheck className="h-3.5 w-3.5" /> Trust Engine</div>}
       />
 
       {/* Emergency banner */}
@@ -117,7 +117,7 @@ export function TrustModule({ data, canManage }: { data: TrustData; canManage: b
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           { label: 'Pending approvals', value: String(pendingApprovals.length), icon: Inbox, color: pendingApprovals.length ? 'text-amber-400' : 'text-muted' },
-          { label: 'Active policies', value: String(data.policies.filter(p => p.enabled).length), icon: Scale, color: 'text-brand' },
+          { label: 'Active policies', value: String(data.policies.filter(p => p.enabled).length), icon: Scale, color: 'text-brand-text' },
           { label: 'Active delegations', value: String(data.delegations.length), icon: Share2, color: 'text-blue-400' },
           { label: 'Members governed', value: String(data.members.length), icon: Users, color: 'text-violet-400' },
         ].map(s => (
@@ -506,7 +506,7 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
         {members.map(m => (
           <button key={m.id} onClick={() => setSelected(m.id)}
             className={cn('flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition',
-              selected === m.id ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
+              selected === m.id ? 'border-brand/50 bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
             <Avatar name={m.name} color={m.color ?? undefined} size={18} /> {m.name} <span className="text-[10px] capitalize opacity-70">({m.role})</span>
           </button>
         ))}
@@ -652,7 +652,7 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
             {['transportation', 'medical', 'calendar', 'chores', 'shopping', 'meal_planning', 'school_forms', 'pets'].map(d => (
               <button key={d} type="button" onClick={() => toggleDomain(d)}
                 className={cn('rounded-full border px-2.5 py-1 text-[11px] font-medium transition',
-                  domains.includes(d) ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
+                  domains.includes(d) ? 'border-brand/50 bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
                 {DOMAIN_LABELS[d]}
               </button>
             ))}
@@ -777,7 +777,7 @@ function AuditTab({ audit, members }: { audit: Audit[]; members: Member[] }) {
 function EmptyCard({ icon: Icon, title, sub }: { icon: React.ComponentType<{ className?: string }>; title: string; sub: string }) {
   return (
     <div className="flex flex-col items-center rounded-2xl border border-border bg-surface/40 py-12 text-center">
-      <div className="mb-3 grid h-14 w-14 place-items-center rounded-full bg-brand/10"><Icon className="h-6 w-6 text-brand opacity-60" /></div>
+      <div className="mb-3 grid h-14 w-14 place-items-center rounded-full bg-brand/10"><Icon className="h-6 w-6 text-brand-text opacity-60" /></div>
       <p className="text-sm font-semibold">{title}</p>
       <p className="mt-1 max-w-sm text-xs text-muted">{sub}</p>
     </div>

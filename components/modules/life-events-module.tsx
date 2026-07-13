@@ -113,7 +113,7 @@ export function LifeEventsModule() {
       {/* ── What Bubaly has learned ─────────────────────────────────────────── */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold"><BookHeart className="h-4 w-4 text-brand" /> What Bubaly has learned</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><BookHeart className="h-4 w-4 text-brand-text" /> What Bubaly has learned</h2>
           <Button size="sm" variant="secondary" onClick={() => setFactModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> Add</Button>
         </div>
         {learned.length === 0 ? (
@@ -129,7 +129,7 @@ export function LifeEventsModule() {
                     {f.notes && <p className="mt-1 text-xs text-muted/80">{f.notes}</p>}
                   </div>
                   <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-                    <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? 'Unpin' : 'Pin'} className="rounded-lg p-1.5 text-muted hover:text-brand">{f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}</button>
+                    <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? 'Unpin' : 'Pin'} className="rounded-lg p-1.5 text-muted hover:text-brand-text">{f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}</button>
                     <button onClick={() => setFactModal({ open: true, editing: f })} aria-label="Edit" className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                     <button onClick={() => removeFact(f)} aria-label="Remove" className="rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
@@ -151,9 +151,9 @@ export function LifeEventsModule() {
               <button key={t.key} onClick={() => setStartTemplate(t.key)}
                 className="group flex flex-col rounded-2xl border border-border bg-card p-4 text-left transition hover:border-brand/50 hover:bg-brand/[0.03]">
                 <div className="flex items-center gap-3">
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand/10 text-brand"><Icon className="h-5 w-5" /></span>
+                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand/10 text-brand-text"><Icon className="h-5 w-5" /></span>
                   <span className="font-semibold">{t.title}</span>
-                  <ChevronRight className="ml-auto h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand" />
+                  <ChevronRight className="ml-auto h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-text" />
                 </div>
                 <p className="mt-2 text-xs text-muted">{t.description}</p>
                 <p className="mt-2 text-[11px] text-muted/70">{t.items.length} guided steps</p>
@@ -177,7 +177,7 @@ export function LifeEventsModule() {
                 <div key={p.id} className="rounded-2xl border border-border bg-surface/40 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand"><Icon className="h-4.5 w-4.5" /></span>
+                      <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-text"><Icon className="h-4.5 w-4.5" /></span>
                       <div>
                         <p className="font-semibold">{p.title}{p.status === 'completed' && <span className="ml-2 text-xs text-emerald-400">complete</span>}</p>
                         <p className="text-xs text-muted">{p.event_date ? `Target ${new Date(`${p.event_date}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}` : 'No date set'} · {done}/{pItems.length} done</p>
@@ -202,7 +202,7 @@ export function LifeEventsModule() {
                             <span className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-md border', it.is_done ? 'border-brand bg-brand text-white' : 'border-border text-transparent')}>
                               <Check className="h-3.5 w-3.5" />
                             </span>
-                            <ItIcon className={cn('h-3.5 w-3.5 shrink-0', it.is_done ? 'text-muted' : 'text-brand')} />
+                            <ItIcon className={cn('h-3.5 w-3.5 shrink-0', it.is_done ? 'text-muted' : 'text-brand-text')} />
                             <span className={cn('min-w-0 flex-1 truncate', it.is_done && 'text-muted line-through')}>{it.title}</span>
                             {it.due_on && <span className="shrink-0 text-[11px] text-muted">{fmtDate(it.due_on)}</span>}
                           </button>

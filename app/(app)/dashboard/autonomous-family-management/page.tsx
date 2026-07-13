@@ -68,7 +68,7 @@ export default async function AutonomousManagementPage() {
               <li key={m.label} className="flex items-center gap-3 text-sm">
                 <Eye className="h-4 w-4 shrink-0 text-muted" />
                 <span className="flex-1">{m.label}</span>
-                <span className="text-xs font-semibold capitalize text-brand">{m.value}</span>
+                <span className="text-xs font-semibold capitalize text-brand-text">{m.value}</span>
               </li>
             ))}
           </ul>
@@ -79,7 +79,7 @@ export default async function AutonomousManagementPage() {
             <ul className="space-y-2.5">
               {(recs.data ?? []).map((r) => (
                 <li key={r.id} className="flex items-start gap-3 rounded-xl bg-surface/40 p-3">
-                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-text" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">{r.title}</p>
                     {r.body && <p className="text-xs text-muted">{r.body}</p>}

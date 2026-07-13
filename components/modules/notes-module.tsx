@@ -210,8 +210,8 @@ export function NotesModule() {
           <div className="max-h-[70vh] overflow-y-auto -m-1">
             <div className="flex items-center justify-between mb-4">
               <div className="flex gap-1">
-                <button onClick={() => togglePin(viewing)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-brand transition">
-                  {viewing.is_pinned ? <PinOff className="h-4 w-4 text-brand" /> : <Pin className="h-4 w-4" />}
+                <button onClick={() => togglePin(viewing)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-brand-text transition">
+                  {viewing.is_pinned ? <PinOff className="h-4 w-4 text-brand-text" /> : <Pin className="h-4 w-4" />}
                 </button>
                 <button onClick={() => duplicate(viewing)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg transition">
                   <Copy className="h-4 w-4" />
@@ -269,14 +269,14 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                 <div className="flex items-center gap-2">
                   {checklist && <CheckSquare className="h-3.5 w-3.5 flex-shrink-0 text-success" />}
                   <p className="truncate text-sm font-semibold">{note.title ?? 'Untitled'}</p>
-                  {note.is_pinned && <Pin className="h-3 w-3 flex-shrink-0 text-brand" />}
+                  {note.is_pinned && <Pin className="h-3 w-3 flex-shrink-0 text-brand-text" />}
                 </div>
                 <p className="truncate text-xs text-muted">{note.body?.replace(/^\[[ x]\]\s*/gim, '').slice(0, 80)}</p>
               </div>
               {checklist && <span className="text-xs text-success">{checkCount}/{totalCheck}</span>}
               <span className="hidden text-xs text-muted sm:block">{fmtRelative(note.updated_at)}</span>
               <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => onTogglePin(note)} className="rounded p-1.5 text-muted hover:text-brand">
+                <button onClick={() => onTogglePin(note)} className="rounded p-1.5 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                 </button>
                 <button onClick={() => onDuplicate(note)} className="rounded p-1.5 text-muted hover:text-fg"><Copy className="h-3.5 w-3.5" /></button>
@@ -304,7 +304,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
               'group relative flex min-h-[140px] cursor-pointer flex-col rounded-2xl border-2 p-4 transition hover:-translate-y-0.5',
               color.bg, color.ring,
             )}>
-            {note.is_pinned && <Pin className="absolute right-3 top-3 h-3.5 w-3.5 text-brand" />}
+            {note.is_pinned && <Pin className="absolute right-3 top-3 h-3.5 w-3.5 text-brand-text" />}
             {note.title && <p className="mb-2 pr-5 text-sm font-bold leading-tight">{note.title}</p>}
             {checklist ? (
               <div className="flex-1 space-y-0.5 overflow-hidden">
@@ -334,7 +334,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                 {fmtRelative(note.updated_at)}
               </div>
               <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => onTogglePin(note)} className="rounded p-1 text-muted hover:text-brand">
+                <button onClick={() => onTogglePin(note)} className="rounded p-1 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
                 </button>
                 <button onClick={() => { if (confirm('Delete?')) onDelete(note.id); }} className="rounded p-1 text-muted hover:text-danger">
@@ -445,7 +445,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
                 <CheckSquare className="h-3 w-3" /> Add checklist item
               </button>
               <button type="button" onClick={runAiAssist} disabled={aiLoading}
-                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand hover:bg-brand/10 transition disabled:opacity-50">
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-text hover:bg-brand/10 transition disabled:opacity-50">
                 <Sparkles className={cn('h-3 w-3', aiLoading && 'animate-pulse')} />
                 {aiLoading ? 'Thinking…' : 'AI Assist'}
               </button>
@@ -461,7 +461,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
           {insights && (
             <div className="mt-3 rounded-xl border border-brand/30 bg-brand/5 p-3">
               <div className="mb-2 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand">
+                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand-text">
                   <Sparkles className="h-3.5 w-3.5" /> AI summary
                 </span>
                 <button type="button" onClick={() => setInsights(null)} className="text-muted hover:text-fg">
@@ -481,7 +481,7 @@ function NoteModal({ note, familyId, userId, onClose, onSaved }: {
               {insights.tags.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {insights.tags.map((tag) => (
-                    <span key={tag} className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-medium text-brand">#{tag}</span>
+                    <span key={tag} className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-medium text-brand-text">#{tag}</span>
                   ))}
                 </div>
               )}

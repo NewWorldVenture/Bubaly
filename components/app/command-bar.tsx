@@ -121,7 +121,7 @@ export function CommandBar() {
                     disabled={busy}
                     className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm ${i === active ? 'bg-elevated' : ''}`}
                   >
-                    <Icon className={`h-4 w-4 shrink-0 ${r.kind === 'assistant' || r.kind === 'intent' ? 'text-brand' : 'text-muted'}`} />
+                    <Icon className={`h-4 w-4 shrink-0 ${r.kind === 'assistant' || r.kind === 'intent' ? 'text-brand-text' : 'text-muted'}`} />
                     <span className="min-w-0 flex-1 truncate">{r.label}</span>
                     {i === active && <CornerDownLeft className="h-3.5 w-3.5 shrink-0 text-muted" />}
                   </button>

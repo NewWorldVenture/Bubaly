@@ -56,7 +56,7 @@ export function ProsClient({ contractors, initialTrade }: { contractors: Contrac
 
       {/* AI sourcing */}
       <Card>
-        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand" /> AI hiring guidance</h2>
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> AI hiring guidance</h2>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Trade">
             <Select value={trade} onChange={(e) => setTrade(e.target.value)}>

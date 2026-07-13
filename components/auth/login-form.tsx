@@ -111,11 +111,11 @@ export function LoginForm() {
 
       <p className="mt-5 text-center text-sm text-muted">
         New here?{' '}
-        <Link href="/signup" className="font-medium text-brand hover:underline">Create an account</Link>
+        <Link href="/signup" className="font-medium text-brand-text hover:underline">Create an account</Link>
       </p>
       <p className="mt-2 text-center text-sm text-muted">
         Kid logging in?{' '}
-        <Link href="/kid-login" className="font-medium text-brand hover:underline">Use your username &amp; PIN</Link>
+        <Link href="/kid-login" className="font-medium text-brand-text hover:underline">Use your username &amp; PIN</Link>
       </p>
     </div>
   );

@@ -45,7 +45,7 @@ export default async function AdminSupportPage({ searchParams }: Params) {
         <StatCard icon={Inbox} label="Open" value={counts.open} tone="bg-warning/10 text-warning" />
         <StatCard icon={Clock} label="Pending" value={counts.pending} tone="bg-accent/10 text-accent" />
         <StatCard icon={CheckCircle2} label="Resolved" value={counts.resolved} tone="bg-success/10 text-success" />
-        <StatCard icon={Archive} label="Closed" value={counts.closed} tone="bg-brand/10 text-brand" />
+        <StatCard icon={Archive} label="Closed" value={counts.closed} tone="bg-brand/10 text-brand-text" />
       </div>
 
       <Card>
@@ -75,7 +75,7 @@ export default async function AdminSupportPage({ searchParams }: Params) {
                 </div>
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm text-muted">{t.description}</p>
                 <div className="mt-2 flex items-center gap-2">
-                  <a href={`mailto:${t.requester_email}?subject=Re: ${encodeURIComponent(t.subject || 'Your message to Bubaly')}`} className="text-xs font-medium text-brand hover:underline">Reply by email →</a>
+                  <a href={`mailto:${t.requester_email}?subject=Re: ${encodeURIComponent(t.subject || 'Your message to Bubaly')}`} className="text-xs font-medium text-brand-text hover:underline">Reply by email →</a>
                   <span className="text-xs text-muted">· via {t.tags.includes('contact-form') ? 'contact form' : t.category}</span>
                 </div>
               </li>

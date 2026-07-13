@@ -121,7 +121,7 @@ export function FindTimeModal({
     <Modal open title="Find a time" onClose={onClose}>
       <div className="space-y-4">
         <p className="flex items-center gap-1.5 text-xs text-muted">
-          <Sparkles className="h-3.5 w-3.5 text-brand" />
+          <Sparkles className="h-3.5 w-3.5 text-brand-text" />
           We&apos;ll scan everyone&apos;s calendars and surface slots where they&apos;re all free.
         </p>
 
@@ -134,7 +134,7 @@ export function FindTimeModal({
               return (
                 <button key={m.id} type="button" onClick={() => toggleMember(m.id)}
                   className={cn('flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition',
-                    on ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
+                    on ? 'border-brand/50 bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
                   <Avatar name={m.display_name} color={m.color} size={16} />
                   {m.display_name}
                 </button>
@@ -153,7 +153,7 @@ export function FindTimeModal({
             {DURATIONS.map((d) => (
               <button key={d.min} type="button" onClick={() => { setDurationMin(d.min); setSearched(false); }}
                 className={cn('rounded-full border px-3 py-1 text-xs font-medium transition',
-                  durationMin === d.min ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
+                  durationMin === d.min ? 'border-brand/50 bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
                 {d.label}
               </button>
             ))}
@@ -167,7 +167,7 @@ export function FindTimeModal({
             {WINDOWS.map((w) => (
               <button key={w.days} type="button" onClick={() => { setWindowDays(w.days); setSearched(false); }}
                 className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
-                  windowDays === w.days ? 'border-brand/50 bg-brand/15 text-brand' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
+                  windowDays === w.days ? 'border-brand/50 bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
                 {w.label}
               </button>
             ))}
@@ -203,7 +203,7 @@ export function FindTimeModal({
                     return (
                       <button key={s.startISO} type="button" disabled={busy} onClick={() => book(s)}
                         className="flex w-full items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5 text-left transition hover:border-brand/50 hover:bg-elevated disabled:opacity-60">
-                        <Clock className="h-4 w-4 shrink-0 text-brand" />
+                        <Clock className="h-4 w-4 shrink-0 text-brand-text" />
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-semibold">{f.day}</div>
                           <div className="text-xs text-muted">{f.time}</div>

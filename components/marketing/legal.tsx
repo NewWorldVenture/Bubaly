@@ -28,7 +28,7 @@ export function LegalPage({
     <>
       {/* Hero */}
       <Section className="pb-0 pt-20 text-center">
-        <span className="inline-flex items-center rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand">
+        <span className="inline-flex items-center rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand-text">
           Legal
         </span>
         <h1 className="mx-auto mt-4 max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl">{title}</h1>
@@ -67,7 +67,7 @@ export function LegalPage({
                 <div className="mt-3 space-y-4 text-[15px] leading-7 text-muted">
                   {s.body.map((block, j) =>
                     Array.isArray(block) ? (
-                      <ul key={j} className="list-disc space-y-2 pl-5 marker:text-brand/60">
+                      <ul key={j} className="list-disc space-y-2 pl-5 marker:text-brand-text/60">
                         {block.map((item, k) => <li key={k}>{item}</li>)}
                       </ul>
                     ) : (
@@ -81,9 +81,9 @@ export function LegalPage({
             <div className="mt-10 rounded-2xl border border-border bg-surface/40 p-6">
               <p className="text-sm text-muted">
                 Questions about this policy? Email{' '}
-                <a href="mailto:support@bubaly.com" className="font-medium text-brand hover:underline">support@bubaly.com</a>{' '}
+                <a href="mailto:support@bubaly.com" className="font-medium text-brand-text hover:underline">support@bubaly.com</a>{' '}
                 or visit our{' '}
-                <Link href="/contact" className="font-medium text-brand hover:underline">contact page</Link>.
+                <Link href="/contact" className="font-medium text-brand-text hover:underline">contact page</Link>.
               </p>
             </div>
           </article>

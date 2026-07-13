@@ -11,7 +11,7 @@ export default function WelcomePage() {
   return (
     <div className="glass-card p-7 text-center animate-fade-in sm:p-9">
       <span className="ai-orb mx-auto flex h-16 w-16 items-center justify-center">
-        <Sparkles className="h-7 w-7 text-brand" />
+        <Sparkles className="h-7 w-7 text-brand-text" />
       </span>
 
       <h1 className="mt-6 text-2xl font-bold tracking-tight sm:text-3xl">
@@ -21,7 +21,7 @@ export default function WelcomePage() {
         The AI operating system for family life. One calm home for your calendar,
         lists, meals, money and memories.
       </p>
-      <p className="mt-4 text-sm font-semibold text-brand">
+      <p className="mt-4 text-sm font-semibold text-brand-text">
         Less Managing Life. More Living It.
       </p>
 

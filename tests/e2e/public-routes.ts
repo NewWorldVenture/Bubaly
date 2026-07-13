@@ -1,0 +1,14 @@
+export const PUBLIC_ROUTES = [
+  '/',
+  '/pricing',
+  '/features',
+  '/how-it-works',
+  '/security',
+  '/faq',
+  '/ai',
+  '/mobile',
+  '/blog',
+  '/contact',
+  '/login',
+  '/signup',
+] as const;

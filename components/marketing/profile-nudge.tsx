@@ -55,7 +55,7 @@ export function ProfileNudge() {
     <section className="rounded-2xl border border-brand/25 bg-brand/[0.05] p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/12 text-brand ring-1 ring-brand/25">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/12 text-brand-text ring-1 ring-brand/25">
             <Sparkles className="h-4 w-4" />
           </span>
           <div>
@@ -110,7 +110,7 @@ function Question({
               onClick={() => (q.kind === 'multi' ? toggleMulti(o.value) : onChoose(o.value))}
               className={cn(
                 'inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-xs font-semibold transition disabled:opacity-60',
-                active ? 'border-brand bg-brand/15 text-brand' : 'border-border text-fg hover:bg-elevated',
+                active ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-fg hover:bg-elevated',
               )}
             >
               {active && <Check className="h-3 w-3" />}

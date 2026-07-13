@@ -54,7 +54,7 @@ export function MarketAssistant({ firstName }: { firstName: string }) {
   return (
     <section className="rounded-2xl border border-brand/25 bg-brand/[0.04] p-4">
       <p className="flex items-center gap-2 text-sm font-semibold">
-        <Sparkles className="h-4 w-4 text-brand" /> AI Marketplace Assistant
+        <Sparkles className="h-4 w-4 text-brand-text" /> AI Marketplace Assistant
       </p>
 
       {turns.length === 0 ? (
@@ -91,7 +91,7 @@ export function MarketAssistant({ firstName }: { firstName: string }) {
                       <Link
                         key={`${l.href}-${l.label}`}
                         href={l.href}
-                        className="inline-flex items-center gap-0.5 rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand transition hover:bg-brand/20"
+                        className="inline-flex items-center gap-0.5 rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand-text transition hover:bg-brand/20"
                       >
                         {l.label} <ArrowRight className="h-2.5 w-2.5" />
                       </Link>

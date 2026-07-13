@@ -87,7 +87,7 @@ export default async function AdminDataPage() {
       </Card>
 
       <Card className="flex items-start gap-3">
-        <Info className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
+        <Info className="mt-0.5 h-5 w-5 shrink-0 text-brand-text" />
         <div className="text-sm text-muted">
           <p className="font-medium text-fg">Backups</p>
           <p className="mt-1">

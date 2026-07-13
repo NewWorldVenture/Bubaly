@@ -43,7 +43,7 @@ function StatCard({ href, label, value, icon: Icon, bg, linkLabel }: {
           <p className="mt-0.5 text-xs text-muted">{label}</p>
         </div>
       </div>
-      <p className="mt-3 text-xs font-semibold text-brand">{linkLabel} →</p>
+      <p className="mt-3 text-xs font-semibold text-brand-text">{linkLabel} →</p>
     </Link>
   );
 }
@@ -200,7 +200,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Today&apos;s Schedule</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand">View Calendar</Link>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">View Calendar</Link>
           </div>
           {todayEvents && todayEvents.length > 0 ? (
             <ul className="space-y-3">
@@ -237,7 +237,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Upcoming Events</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand">View all</Link>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">View all</Link>
           </div>
           {upcomingEvents && upcomingEvents.length > 0 ? (
             <ul className="space-y-3">
@@ -274,7 +274,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         <div className="rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-brand" />
+              <Sparkles className="h-4 w-4 text-brand-text" />
               <h2 className="font-semibold">AI Assistant</h2>
             </div>
           </div>
@@ -286,11 +286,11 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
               {suggestions.map(({ icon: Icon, text, cta }) => (
                 <div key={text} className="flex gap-3 rounded-xl bg-surface/40 p-3">
                   <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-violet-500/15">
-                    <Icon className="h-4 w-4 text-brand" />
+                    <Icon className="h-4 w-4 text-brand-text" />
                   </div>
                   <div>
                     <p className="text-xs leading-5 text-fg/80">{text}</p>
-                    <p className="text-xs font-semibold text-brand">{cta} →</p>
+                    <p className="text-xs font-semibold text-brand-text">{cta} →</p>
                   </div>
                 </div>
               ))}
@@ -306,7 +306,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
       <div className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-semibold">Meals This Week</h2>
-          <Link href="/dashboard/meals" className="text-xs font-semibold text-brand">View meal plan</Link>
+          <Link href="/dashboard/meals" className="text-xs font-semibold text-brand-text">View meal plan</Link>
         </div>
         <div className="grid grid-cols-7 gap-2">
           {DAYS.map((day, i) => {
@@ -338,7 +338,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Chores Progress</h2>
-            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand">View all</Link>
+            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">View all</Link>
           </div>
           <div className="flex items-center gap-8">
             <div className="relative h-32 w-32 shrink-0">
@@ -382,7 +382,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Grocery List</h2>
-            <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-xs font-bold text-brand">
+            <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-xs font-bold text-brand-text">
               {groceryItems?.length ?? 0} items
             </span>
           </div>
@@ -399,7 +399,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <ShoppingCart className="h-8 w-8 text-muted/30" />
               <p className="mt-2 text-sm text-muted/60">Grocery list is empty</p>
-              <Link href="/dashboard/grocery" className="mt-2 text-xs font-semibold text-brand">Add items →</Link>
+              <Link href="/dashboard/grocery" className="mt-2 text-xs font-semibold text-brand-text">Add items →</Link>
             </div>
           )}
           <Link href="/dashboard/grocery" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
@@ -414,7 +414,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Tasks Due</h2>
-            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand">View all</Link>
+            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">View all</Link>
           </div>
           {dueTasks && dueTasks.length > 0 ? (
             <ul className="space-y-3">
@@ -456,13 +456,13 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Recent Activity</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand">View All</Link>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">View All</Link>
           </div>
           <ul className="space-y-3">
             {(todayEvents ?? []).slice(0, 3).map((e, i) => (
               <li key={e.id} className="flex items-start gap-3">
                 <div className={cn('mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg', ACCENT[i % ACCENT.length] + '/20')}>
-                  <Calendar className={cn('h-4 w-4', ['text-emerald-300', 'text-brand', 'text-blue-300'][i])} />
+                  <Calendar className={cn('h-4 w-4', ['text-emerald-300', 'text-brand-text', 'text-blue-300'][i])} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{e.title} added to calendar</p>
@@ -490,7 +490,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Family Members</h2>
             {isManager(ctx.active.role) && (
-              <Link href="/dashboard/settings#members" className="text-xs font-semibold text-brand">Manage</Link>
+              <Link href="/dashboard/settings#members" className="text-xs font-semibold text-brand-text">Manage</Link>
             )}
           </div>
           <ul className="space-y-2.5">
@@ -507,7 +507,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             ))}
           </ul>
           {isManager(ctx.active.role) && (
-            <Link href="/dashboard/settings#members" className="mt-4 flex items-center gap-2 text-xs font-medium text-brand hover:text-violet-200">
+            <Link href="/dashboard/settings#members" className="mt-4 flex items-center gap-2 text-xs font-medium text-brand-text hover:text-violet-200">
               <Users className="h-3.5 w-3.5" /> Invite a family member
             </Link>
           )}

@@ -75,7 +75,7 @@ export default async function FamilyCooPage() {
                     <div className="h-4 w-4 shrink-0 rounded-full border-2 border-border" />
                     <span className="min-w-0 flex-1 truncate text-sm">{titleById.get(t.chore_id) ?? 'Task'}</span>
                     {t.due_at && <span className="text-xs text-muted">{fmtRelative(t.due_at)}</span>}
-                    {who && <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs font-semibold text-brand">{who.display_name.split(' ')[0]}</span>}
+                    {who && <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs font-semibold text-brand-text">{who.display_name.split(' ')[0]}</span>}
                   </li>
                 );
               })}
@@ -131,7 +131,7 @@ export default async function FamilyCooPage() {
             </ul>
           ) : (
             <div className="py-6 text-center">
-              <Link href="/dashboard/grocery" className="inline-flex items-center gap-1 text-sm font-semibold text-brand">Build a list <ArrowRight className="h-3.5 w-3.5" /></Link>
+              <Link href="/dashboard/grocery" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-text">Build a list <ArrowRight className="h-3.5 w-3.5" /></Link>
             </div>
           )}
         </SectionCard>

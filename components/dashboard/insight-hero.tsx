@@ -53,11 +53,11 @@ export function InsightHero({ insight }: { insight: { id: string; kind: string; 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-brand/30 bg-gradient-to-br from-brand/12 to-violet-500/8 p-5">
       <div className="flex items-start gap-3">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text">
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1 pr-6">
-          <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-brand">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-brand-text">
             <Sparkles className="h-3 w-3" /> Insight of the day
           </p>
           <p className="mt-1 text-sm font-bold leading-snug">{insight.title}</p>

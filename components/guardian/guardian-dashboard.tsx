@@ -206,7 +206,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
                     className={cn(
                       'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition',
                       profile.current_context === opt.value
-                        ? 'border-brand bg-brand/10 text-brand'
+                        ? 'border-brand bg-brand/10 text-brand-text'
                         : 'border-border text-muted hover:border-brand/40',
                     )}
                   >
@@ -262,7 +262,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
                   <button
                     onClick={() => handleSuggestion(s.id, 'approved')}
                     disabled={suggestionLoading === s.id}
-                    className="rounded-lg bg-brand/10 px-2.5 py-1.5 text-xs font-semibold text-brand hover:bg-brand/20 transition disabled:opacity-50"
+                    className="rounded-lg bg-brand/10 px-2.5 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20 transition disabled:opacity-50"
                   >
                     Apply
                   </button>
@@ -284,7 +284,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
       <div className="rounded-2xl border border-border bg-surface/40">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 className="text-sm font-semibold">Recent Communications</h3>
-          <a href="/guardian/history" className="text-xs text-brand hover:underline">View all</a>
+          <a href="/guardian/history" className="text-xs text-brand-text hover:underline">View all</a>
         </div>
         {recentComms.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted">

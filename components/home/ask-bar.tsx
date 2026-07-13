@@ -35,7 +35,7 @@ export function AskBar() {
         role="search"
         className="flex items-center gap-2 rounded-xl border border-border bg-bg px-3 focus-within:border-brand"
       >
-        <Sparkles className="h-5 w-5 shrink-0 text-brand" />
+        <Sparkles className="h-5 w-5 shrink-0 text-brand-text" />
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -59,7 +59,7 @@ export function AskBar() {
             key={s}
             type="button"
             onClick={() => go(s)}
-            className="rounded-full border border-border bg-bg/60 px-2.5 py-1 text-xs text-muted transition hover:border-brand/40 hover:text-brand"
+            className="rounded-full border border-border bg-bg/60 px-2.5 py-1 text-xs text-muted transition hover:border-brand/40 hover:text-brand-text"
           >
             {s}
           </button>

@@ -79,7 +79,7 @@ export function InsuranceModule() {
           {/* Spend */}
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <Wallet className="h-4 w-4 text-brand" /> Annual premiums
+              <Wallet className="h-4 w-4 text-brand-text" /> Annual premiums
             </div>
             <p className="mt-2 text-2xl font-bold">{fmtMoney(summary.annualPremium)}</p>
             <p className="mt-1 text-xs text-muted">≈ {fmtMoney(summary.monthlyPremium)}/mo across {summary.count} {summary.count === 1 ? 'policy' : 'policies'}</p>
@@ -97,7 +97,7 @@ export function InsuranceModule() {
 
           {/* AI awareness */}
           <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5 lg:col-span-2">
-            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand-text">
               <Sparkles className="h-4 w-4" /> Insurance awareness
             </div>
             <p className={cn('mt-2 text-lg font-bold', summary.lapsed > 0 ? 'text-rose-300' : summary.dueSoon > 0 || summary.gaps.length > 0 ? 'text-amber-300' : 'text-emerald-300')}>
@@ -315,16 +315,16 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
           <div className="space-y-2">
             {(policy.agent_name || policy.agent_phone) && (
               <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm">
-                <ShieldCheck className="h-4 w-4 text-brand" />
+                <ShieldCheck className="h-4 w-4 text-brand-text" />
                 <span>{policy.agent_name || 'Agent'}</span>
-                {policy.agent_phone && <a href={`tel:${policy.agent_phone}`} className="ml-auto inline-flex items-center gap-1 text-brand"><Phone className="h-3.5 w-3.5" /> {policy.agent_phone}</a>}
+                {policy.agent_phone && <a href={`tel:${policy.agent_phone}`} className="ml-auto inline-flex items-center gap-1 text-brand-text"><Phone className="h-3.5 w-3.5" /> {policy.agent_phone}</a>}
               </div>
             )}
             {policy.claim_phone && (
               <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm">
                 <AlertTriangle className="h-4 w-4 text-amber-300" />
                 <span>Claims</span>
-                <a href={`tel:${policy.claim_phone}`} className="ml-auto inline-flex items-center gap-1 text-brand"><Phone className="h-3.5 w-3.5" /> {policy.claim_phone}</a>
+                <a href={`tel:${policy.claim_phone}`} className="ml-auto inline-flex items-center gap-1 text-brand-text"><Phone className="h-3.5 w-3.5" /> {policy.claim_phone}</a>
               </div>
             )}
           </div>

@@ -81,7 +81,7 @@ export function ActivityFeed({
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <ActivityIcon className="h-5 w-5 text-brand" />
+          <ActivityIcon className="h-5 w-5 text-brand-text" />
           <h1 className="text-lg font-bold">Family Activity</h1>
         </div>
         <button
@@ -95,7 +95,7 @@ export function ActivityFeed({
 
       {showSummary && (
         <div className="rounded-xl border border-brand/20 bg-brand/5 p-4">
-          <div className="flex items-center gap-2 text-sm font-medium text-brand">
+          <div className="flex items-center gap-2 text-sm font-medium text-brand-text">
             <Sparkles className="h-4 w-4" /> Activity Summary
           </div>
           <p className="mt-1 text-sm text-muted">{summary}</p>
@@ -110,7 +110,7 @@ export function ActivityFeed({
             type="button"
             onClick={() => setFilterKind('all')}
             className={`rounded-full border px-2.5 py-1 text-xs transition ${
-              filterKind === 'all' ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:text-fg'
+              filterKind === 'all' ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:text-fg'
             }`}
           >
             All
@@ -123,7 +123,7 @@ export function ActivityFeed({
                 type="button"
                 onClick={() => setFilterKind(filterKind === k ? 'all' : k)}
                 className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
-                  filterKind === k ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:text-fg'
+                  filterKind === k ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:text-fg'
                 }`}
               >
                 <Icon className="h-3 w-3" /> {KIND_LABELS[k]}

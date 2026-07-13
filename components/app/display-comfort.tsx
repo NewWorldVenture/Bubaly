@@ -44,7 +44,7 @@ export function DisplayComfort() {
   return (
     <section className="rounded-2xl border border-border bg-surface p-4 sm:p-5">
       <div className="flex items-center gap-2">
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand"><Type className="h-4 w-4" /></span>
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-text"><Type className="h-4 w-4" /></span>
         <div>
           <h2 className="text-sm font-bold">Display comfort</h2>
           <p className="text-[11px] text-muted">Text size &amp; spacing across the app. Bubaly tailors this to each member&apos;s role.</p>
@@ -68,7 +68,7 @@ export function DisplayComfort() {
                 <span className="block text-sm font-semibold">{o.label}</span>
                 <span className="block text-xs text-muted">{o.desc}</span>
               </span>
-              {active && <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" />}
+              {active && <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-text" />}
             </button>
           );
         })}

@@ -79,7 +79,7 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
 
       {/* AI verdict */}
       <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-elevated/40 p-2 text-sm">
-        <Bot className="h-4 w-4 text-brand" />
+        <Bot className="h-4 w-4 text-brand-text" />
         {item.aiIsFallback ? (
           <span className="text-muted">AI review unavailable — please check manually.</span>
         ) : (

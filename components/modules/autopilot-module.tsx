@@ -196,7 +196,7 @@ export function AutopilotModule() {
 function Section({ icon: Icon, title, tone, children }: {
   icon: typeof Rocket; title: string; tone: 'success' | 'brand' | 'muted'; children: React.ReactNode;
 }) {
-  const toneCls = tone === 'success' ? 'text-success' : tone === 'brand' ? 'text-brand' : 'text-muted';
+  const toneCls = tone === 'success' ? 'text-success' : tone === 'brand' ? 'text-brand-text' : 'text-muted';
   return (
     <div>
       <h2 className={cn('mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest', toneCls)}>
@@ -230,7 +230,7 @@ function SuggestionRow({ s, onApprove, onDismiss }: {
     <div className={cn('rounded-xl border px-4 py-3',
       urgent ? 'border-danger/30 bg-danger/5' : 'border-border bg-surface/40')}>
       <div className="flex items-center gap-3">
-        <Icon className={cn('h-4 w-4 flex-shrink-0', urgent ? 'text-danger' : 'text-brand')} />
+        <Icon className={cn('h-4 w-4 flex-shrink-0', urgent ? 'text-danger' : 'text-brand-text')} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{s.title}</p>
           {s.detail && <p className="truncate text-xs text-muted">{s.detail}</p>}

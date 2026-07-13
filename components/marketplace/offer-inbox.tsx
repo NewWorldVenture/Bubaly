@@ -51,7 +51,7 @@ export function OfferInbox({ offers }: { offers: InboxOffer[] }) {
   return (
     <div className="mt-5 w-full rounded-xl border border-border bg-surface/50 p-4">
       <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-fg">
-        <HandHeart className="h-4 w-4 text-brand" /> Offers on your listing
+        <HandHeart className="h-4 w-4 text-brand-text" /> Offers on your listing
       </h2>
       <ul className="space-y-2.5">
         {rows.map((o) => (

@@ -85,7 +85,7 @@ export function UtilitiesModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><Gauge className="h-4 w-4 text-brand" /> Utility Tracking</h3>
+        <h3 className="flex items-center gap-2 text-base font-semibold"><Gauge className="h-4 w-4 text-brand-text" /> Utility Tracking</h3>
         <div className="flex items-center gap-2">
           {kinds.length > 0 && (
             <Button variant="secondary" onClick={analyze} disabled={analyzing}>
@@ -105,7 +105,7 @@ export function UtilitiesModule() {
       {savings && (
         <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="flex items-center gap-2 text-sm font-semibold"><Lightbulb className="h-4 w-4 text-brand" /> Savings analysis</h4>
+            <h4 className="flex items-center gap-2 text-sm font-semibold"><Lightbulb className="h-4 w-4 text-brand-text" /> Savings analysis</h4>
             <span className="text-xs text-muted">~{usd(savings.summary.annualTotalCents)}/yr {savings.aiUsed ? '· AI' : '· data-based'}</span>
           </div>
           {savings.findings.length === 0 && !savings.recommendations ? (

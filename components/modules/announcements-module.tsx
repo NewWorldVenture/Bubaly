@@ -125,7 +125,7 @@ export function AnnouncementsModule() {
             return (
               <li key={a.id} className="rounded-2xl border border-border bg-surface/40 p-4">
                 <div className="flex items-start gap-3">
-                  {author ? <Avatar name={author.display_name} color={author.color} size={36} /> : <div className="grid h-9 w-9 place-items-center rounded-full bg-brand/15 text-brand"><Megaphone className="h-4 w-4" /></div>}
+                  {author ? <Avatar name={author.display_name} color={author.color} size={36} /> : <div className="grid h-9 w-9 place-items-center rounded-full bg-brand/15 text-brand-text"><Megaphone className="h-4 w-4" /></div>}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="font-semibold">{a.title}</p>

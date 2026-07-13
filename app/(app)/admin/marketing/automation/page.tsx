@@ -40,7 +40,7 @@ export default async function AutomationPage() {
                     <form key={st} action={setAutomationStatus}>
                       <input type="hidden" name="id" value={w.id} />
                       <input type="hidden" name="status" value={st} />
-                      <button disabled={st === w.status} className={`rounded-lg border px-2.5 py-1 text-xs capitalize ${st === w.status ? 'cursor-default border-brand/40 bg-brand/15 text-brand' : 'border-border text-muted hover:bg-elevated'}`}>{st}</button>
+                      <button disabled={st === w.status} className={`rounded-lg border px-2.5 py-1 text-xs capitalize ${st === w.status ? 'cursor-default border-brand/40 bg-brand/15 text-brand-text' : 'border-border text-muted hover:bg-elevated'}`}>{st}</button>
                     </form>
                   ))}
                 </div>

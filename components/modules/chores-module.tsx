@@ -237,7 +237,7 @@ export function ChoresModule() {
                 {t.label}
                 {typeof t.count === 'number' && t.count > 0 && (
                   <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-bold',
-                    t.key === 'approvals' ? 'bg-amber-500/20 text-amber-400' : 'bg-brand/20 text-brand')}>{t.count}</span>
+                    t.key === 'approvals' ? 'bg-amber-500/20 text-amber-400' : 'bg-brand/20 text-brand-text')}>{t.count}</span>
                 )}
                 {tab === t.key && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand" />}
               </button>
@@ -335,7 +335,7 @@ export function ChoresModule() {
                   <div key={r.id} className="flex flex-col rounded-xl border border-border bg-surface/40 p-4">
                     <div className="flex items-start justify-between">
                       <span className="text-3xl">{choreEmoji(null)}</span>
-                      <span className="flex items-center gap-1 rounded-full bg-brand/15 px-2 py-1 text-xs font-bold text-brand"><Star className="h-3 w-3 fill-brand" /> {r.cost_points}</span>
+                      <span className="flex items-center gap-1 rounded-full bg-brand/15 px-2 py-1 text-xs font-bold text-brand-text"><Star className="h-3 w-3 fill-brand" /> {r.cost_points}</span>
                     </div>
                     <div className="mt-2 text-sm font-semibold">{r.title}</div>
                     {r.description && <div className="text-xs text-muted line-clamp-2">{r.description}</div>}
@@ -374,7 +374,7 @@ export function ChoresModule() {
             </div>
             <Trophy className="h-14 w-14 text-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.35)]" />
           </div>
-          <button onClick={() => setTab('completed')} className="mt-3 text-xs font-medium text-brand hover:underline">View Leaderboard</button>
+          <button onClick={() => setTab('completed')} className="mt-3 text-xs font-medium text-brand-text hover:underline">View Leaderboard</button>
         </div>
 
         {/* Top Earners */}
@@ -391,7 +391,7 @@ export function ChoresModule() {
             ))}
             {earners.length === 0 && <p className="text-xs text-muted">No points earned yet.</p>}
           </div>
-          <button onClick={() => setTab('completed')} className="mt-3 flex items-center gap-1 text-xs font-medium text-brand hover:underline">
+          <button onClick={() => setTab('completed')} className="mt-3 flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">
             <ChevronRight className="h-3 w-3" /> View Full Leaderboard
           </button>
         </div>
@@ -410,7 +410,7 @@ export function ChoresModule() {
             {streaks.length === 0 && <p className="text-xs text-muted">No active streaks. Complete a chore today to start one!</p>}
           </div>
           {streaks.length > 0 && (
-            <button onClick={() => setTab('completed')} className="mt-3 flex items-center gap-1 text-xs font-medium text-brand hover:underline">
+            <button onClick={() => setTab('completed')} className="mt-3 flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">
               <ChevronRight className="h-3 w-3" /> View All Streaks
             </button>
           )}
@@ -420,7 +420,7 @@ export function ChoresModule() {
         <div className="sidebar-card">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-semibold">Rewards Progress</p>
-            <button onClick={() => router.push('/dashboard/rewards')} className="text-xs font-medium text-brand hover:underline">Manage Rewards</button>
+            <button onClick={() => router.push('/dashboard/rewards')} className="text-xs font-medium text-brand-text hover:underline">Manage Rewards</button>
           </div>
           {progress ? (
             <>
@@ -432,7 +432,7 @@ export function ChoresModule() {
                 <span className="shrink-0 text-[11px] text-muted">{progress.points} / {progress.cost} pts</span>
               </div>
               <div className="mt-3 flex items-center gap-2 text-xs">
-                <Gift className="h-4 w-4 text-brand" />
+                <Gift className="h-4 w-4 text-brand-text" />
                 <span className="text-muted">Next Reward:</span>
                 <span className="font-medium">{progress.rewardTitle}</span>
               </div>
@@ -470,7 +470,7 @@ export function ChoresModule() {
             {pendingApprovals.length === 0 && <p className="text-xs text-muted">Nothing waiting for approval. 🎉</p>}
           </div>
           {pendingApprovals.length > 0 && (
-            <button onClick={() => setTab('approvals')} className="mt-3 flex items-center gap-1 text-xs font-medium text-brand hover:underline">
+            <button onClick={() => setTab('approvals')} className="mt-3 flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">
               <ChevronRight className="h-3 w-3" /> View All Approvals
             </button>
           )}
@@ -517,7 +517,7 @@ function ChoreTable({ title, rows, ...p }: { title: string; rows: AssignmentLike
     <section>
       <div className="mb-2 flex items-center gap-2">
         <h2 className="text-base font-semibold">{title}</h2>
-        <span className="rounded-full bg-brand/15 px-2 py-0.5 text-xs font-bold text-brand">{rows.length}</span>
+        <span className="rounded-full bg-brand/15 px-2 py-0.5 text-xs font-bold text-brand-text">{rows.length}</span>
       </div>
       <div className="overflow-hidden rounded-xl border border-border bg-surface/30">
         <div className="hidden grid-cols-[1fr_150px_120px_110px_140px_40px] border-b border-border bg-surface/40 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted lg:grid">
@@ -614,7 +614,7 @@ function CompletedStrip({ rows, memberById, onViewAll }: { rows: Assignment[]; m
           <h2 className="text-base font-semibold">Completed Chores</h2>
           <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-bold text-emerald-400">{rows.length}</span>
         </div>
-        <button onClick={onViewAll} className="flex items-center gap-1 text-xs font-medium text-brand hover:underline">View all <ChevronRight className="h-3 w-3" /></button>
+        <button onClick={onViewAll} className="flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">View all <ChevronRight className="h-3 w-3" /></button>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {rows.slice(0, 6).map((a) => <CompletedCard key={a.id} a={a} member={memberById.get(a.member_id)} />)}

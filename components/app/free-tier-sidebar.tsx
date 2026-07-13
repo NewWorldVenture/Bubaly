@@ -187,9 +187,9 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin }: {
                           onClick={(e) => { e.stopPropagation(); onTogglePin(key); }}
                           aria-label={isPinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
                           title={isPinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
-                          className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-md text-muted/60 transition hover:bg-elevated hover:text-brand"
+                          className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-md text-muted/60 transition hover:bg-elevated hover:text-brand-text"
                         >
-                          <Star className={cn('h-3.5 w-3.5', isPinned && 'fill-brand text-brand')} />
+                          <Star className={cn('h-3.5 w-3.5', isPinned && 'fill-brand text-brand-text')} />
                         </button>
                       )}
                     </div>

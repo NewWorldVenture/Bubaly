@@ -30,7 +30,7 @@ export function KidLoginForm() {
 
   return (
     <div className="glass-card p-7 animate-fade-in sm:p-8">
-      <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-brand/15 text-brand">
+      <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-brand/15 text-brand-text">
         <Sparkles className="h-6 w-6" />
       </div>
       <h1 className="text-center text-2xl font-bold tracking-tight">Kid sign in</h1>
@@ -69,7 +69,7 @@ export function KidLoginForm() {
 
       <p className="mt-5 text-center text-sm text-muted">
         Grown-up?{' '}
-        <Link href="/login" className="font-medium text-brand hover:underline">Sign in here</Link>
+        <Link href="/login" className="font-medium text-brand-text hover:underline">Sign in here</Link>
       </p>
     </div>
   );

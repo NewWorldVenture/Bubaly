@@ -34,7 +34,7 @@ export default async function AdminSyncPage() {
       </div>
 
       <div className="grid-stats">
-        <Stat icon={Plug} label="Active connections" value={activeConns} tone="bg-brand/10 text-brand" />
+        <Stat icon={Plug} label="Active connections" value={activeConns} tone="bg-brand/10 text-brand-text" />
         <Stat icon={AlertTriangle} label="Connections in error" value={erroredConns} tone="bg-danger/10 text-danger" />
         <Stat icon={RefreshCw} label="Dead-letter jobs" value={deadJobs.count ?? 0} tone="bg-warning/10 text-warning" />
         <Stat icon={Webhook} label="Bad webhook signatures" value={webhookFails.count ?? 0} tone="bg-accent/10 text-accent" />

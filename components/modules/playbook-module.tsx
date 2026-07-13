@@ -31,7 +31,7 @@ type Suggestion = Tables<'family_playbook_suggestions'>;
 /** Confidence → a calm label + tint (no vanity numbers front and center). */
 function confidenceMeta(n: number): { label: string; tint: string } {
   if (n >= 85) return { label: 'Very likely', tint: 'bg-emerald-500/12 text-emerald-500' };
-  if (n >= 65) return { label: 'Likely', tint: 'bg-brand/12 text-brand' };
+  if (n >= 65) return { label: 'Likely', tint: 'bg-brand/12 text-brand-text' };
   return { label: 'Worth a look', tint: 'bg-amber-500/12 text-amber-500' };
 }
 
@@ -105,7 +105,7 @@ export function PlaybookModule() {
             <p className="text-xs text-muted">Knowledge Base</p>
             <p className="mt-1 text-sm font-semibold">Open</p>
           </div>
-          <ArrowRight className="h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand" />
+          <ArrowRight className="h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-text" />
         </Link>
       </div>
 
@@ -180,7 +180,7 @@ export function PlaybookModule() {
 function StatTile({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: number }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
-      <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand">
+      <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand-text">
         <Icon className="h-5 w-5" />
       </div>
       <div>

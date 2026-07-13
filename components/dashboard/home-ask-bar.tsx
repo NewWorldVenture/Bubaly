@@ -25,7 +25,7 @@ export function HomeAskBar() {
       onSubmit={submit}
       className="flex items-center gap-2 rounded-full border border-border bg-surface/60 px-4 py-2.5 shadow-sm transition focus-within:border-brand/50 focus-within:ring-1 focus-within:ring-brand/30"
     >
-      <Sparkles className="h-4 w-4 shrink-0 text-brand" />
+      <Sparkles className="h-4 w-4 shrink-0 text-brand-text" />
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}

@@ -48,7 +48,7 @@ function Row({
     )}>
       <Icon className="h-5 w-5 shrink-0 text-muted" />
       <span className="flex-1 text-sm font-medium">{label}</span>
-      {badge && <span className="rounded-full bg-brand/20 px-2 py-0.5 text-xs font-semibold text-brand">{badge}</span>}
+      {badge && <span className="rounded-full bg-brand/20 px-2 py-0.5 text-xs font-semibold text-brand-text">{badge}</span>}
       <ChevronRight className="h-4 w-4 text-muted/60" />
     </div>
   );
@@ -85,7 +85,7 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
         <div className="text-center">
           <h1 className="text-xl font-bold">{name}</h1>
           <p className="text-sm text-muted">{userEmail}</p>
-          <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-0.5 text-xs font-semibold text-brand">
+          <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-0.5 text-xs font-semibold text-brand-text">
             <Users className="h-3 w-3" />
             {family.name} · {ROLE_LABELS[role]}
           </p>

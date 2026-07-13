@@ -144,8 +144,8 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
   return (
     <div className="sidebar-card">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm font-bold"><Repeat className="h-4 w-4 text-brand" /> Routines</h3>
-        <button onClick={() => setCreating(true)} className="flex items-center gap-1 text-[11px] font-medium text-brand hover:underline">
+        <h3 className="flex items-center gap-1.5 text-sm font-bold"><Repeat className="h-4 w-4 text-brand-text" /> Routines</h3>
+        <button onClick={() => setCreating(true)} className="flex items-center gap-1 text-[11px] font-medium text-brand-text hover:underline">
           <Plus className="h-3.5 w-3.5" /> New
         </button>
       </div>
@@ -156,7 +156,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
           {suggestions.map((s) => (
             <div key={s.signature} className="rounded-xl border border-brand/30 bg-brand/5 p-2.5">
               <div className="flex items-start gap-2">
-                <Wand2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
+                <Wand2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-text" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold">{s.title}</p>
                   <p className="text-[10px] text-muted">
@@ -317,7 +317,7 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
         <div>
           <div className="mb-1 flex items-center justify-between">
             <p className="text-sm font-medium">Steps</p>
-            <button type="button" onClick={addRow} className="flex items-center gap-1 text-xs font-medium text-brand hover:underline"><Plus className="h-3.5 w-3.5" /> Add step</button>
+            <button type="button" onClick={addRow} className="flex items-center gap-1 text-xs font-medium text-brand-text hover:underline"><Plus className="h-3.5 w-3.5" /> Add step</button>
           </div>
           <div className="space-y-2">
             {rows.map((r, i) => (

@@ -104,7 +104,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
               <p className="mt-0.5 text-xs text-muted">
                 {level.achievedCount} of {level.eligibleCount} age-appropriate skills achieved.
               </p>
-              <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-brand">
+              <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-brand-text">
                 <Sparkles className="h-3.5 w-3.5" /> Next unlock: {level.nextUnlock}
               </p>
             </div>
@@ -146,7 +146,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
           {/* Suggestions */}
           <section className="mb-4 rounded-2xl border border-border bg-surface/30 p-4">
             <h2 className="mb-1 flex items-center gap-2 text-sm font-bold">
-              <Sparkles className="h-4 w-4 text-brand" /> Ready for {kid.display_name} (age {age})
+              <Sparkles className="h-4 w-4 text-brand-text" /> Ready for {kid.display_name} (age {age})
             </h2>
             <p className="mb-3 text-xs text-muted">Age-matched skills to start next — foundations first.</p>
             <div className="space-y-2">

@@ -90,7 +90,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold"><Plane className="h-6 w-6 text-brand" /> Vacation Planner</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold"><Plane className="h-6 w-6 text-brand-text" /> Vacation Planner</h1>
           <p className="text-sm text-muted">Plan, coordinate, and pack for every family trip — with an AI travel concierge.</p>
         </div>
         <div className="flex gap-2">
@@ -104,7 +104,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
           <div className="rounded-2xl border border-brand/30 bg-gradient-to-br from-brand/10 to-transparent p-5 transition hover:border-brand/50">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-brand">{isActive(current.start_date, current.end_date) ? 'Current trip' : 'Next trip'}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-brand-text">{isActive(current.start_date, current.end_date) ? 'Current trip' : 'Next trip'}</p>
                 <h2 className="mt-1 flex items-center gap-2 text-xl font-bold">{lookup(VACATION_KINDS, current.kind).emoji} {current.title}</h2>
                 <p className="mt-0.5 flex items-center gap-3 text-sm text-muted">
                   {current.destination && <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> {current.destination}</span>}
@@ -129,7 +129,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
                   <span className="text-2xl">{lookup(VACATION_KINDS, t.kind).emoji}</span>
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${(VACATION_STATUSES.find((s) => s.value === t.status))?.tone}`}>{st.label}</span>
                 </div>
-                <h3 className="mt-2 truncate font-semibold group-hover:text-brand">{t.title}</h3>
+                <h3 className="mt-2 truncate font-semibold group-hover:text-brand-text">{t.title}</h3>
                 <p className="mt-0.5 truncate text-sm text-muted">{t.destination || lookup(VACATION_KINDS, t.kind).label}</p>
                 <div className="mt-3 flex items-center justify-between text-xs text-muted">
                   <span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> {t.start_date ? fmtDate(t.start_date) : 'No dates'}</span>
@@ -138,7 +138,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
                 <div className="mt-2 flex items-center gap-2">
                   <Gauge className="h-3.5 w-3.5 text-muted" />
                   <span className="text-xs text-muted">Readiness {latestScore.get(t.id) ?? '—'}{latestScore.has(t.id) ? '%' : ''}</span>
-                  <span className="ml-auto text-xs font-medium text-brand">{countdownLabel(t.start_date)}</span>
+                  <span className="ml-auto text-xs font-medium text-brand-text">{countdownLabel(t.start_date)}</span>
                 </div>
               </Link>
             );
@@ -166,7 +166,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
             </div>
             <Field label="Notes">{(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />}</Field>
             <div className="rounded-xl border border-border bg-elevated/40 p-3 text-xs text-muted">
-              <Sparkles className="mr-1 inline h-3.5 w-3.5 text-brand" /> Tip: after creating, open the AI Concierge to auto-build a full itinerary, packing list, and budget.
+              <Sparkles className="mr-1 inline h-3.5 w-3.5 text-brand-text" /> Tip: after creating, open the AI Concierge to auto-build a full itinerary, packing list, and budget.
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setForm(null)}>Cancel</Button>
@@ -181,7 +181,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
 
 export function ReadinessRing({ score }: { score: number | null }) {
   const pct = score ?? 0;
-  const tone = pct >= 90 ? 'text-emerald-400' : pct >= 65 ? 'text-brand' : pct >= 30 ? 'text-amber-400' : 'text-rose-400';
+  const tone = pct >= 90 ? 'text-emerald-400' : pct >= 65 ? 'text-brand-text' : pct >= 30 ? 'text-amber-400' : 'text-rose-400';
   return (
     <div className="relative grid h-16 w-16 place-items-center">
       <svg className="h-16 w-16 -rotate-90" viewBox="0 0 36 36">

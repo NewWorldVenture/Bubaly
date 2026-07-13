@@ -31,7 +31,7 @@ import type { Tables } from '@/lib/database.types';
 type Reminder = Tables<'family_reminders'>;
 
 const KINDS = [
-  { id: 'time', label: 'Time-based', icon: Clock, color: 'text-brand' },
+  { id: 'time', label: 'Time-based', icon: Clock, color: 'text-brand-text' },
   { id: 'location', label: 'Location', icon: MapPin, color: 'text-accent' },
   { id: 'recurring', label: 'Recurring', icon: Repeat, color: 'text-success' },
   { id: 'medication', label: 'Medication', icon: Pill, color: 'text-danger' },
@@ -246,7 +246,7 @@ export function RemindersModule() {
           <div className="flex items-center gap-2">
             <AiInsight kind="reminders" iconOnly />
             <Button variant="outline" onClick={() => setShowSuggestions(!showSuggestions)}>
-              <Sparkles className="h-4 w-4 text-brand" /> Quick Add
+              <Sparkles className="h-4 w-4 text-brand-text" /> Quick Add
             </Button>
             <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> New Reminder</Button>
           </div>
@@ -256,7 +256,7 @@ export function RemindersModule() {
       {/* Stats */}
       <div className="grid-stats">
         {[
-          { label: 'Active', value: activeCount, icon: Bell, color: 'text-brand' },
+          { label: 'Active', value: activeCount, icon: Bell, color: 'text-brand-text' },
           { label: 'Overdue', value: overdue.length, icon: AlertTriangle, color: 'text-danger' },
           { label: 'Completed', value: reminders.filter((r) => r.status === 'completed').length, icon: Check, color: 'text-success' },
           { label: 'Total', value: reminders.length, icon: Calendar, color: 'text-muted' },
@@ -287,7 +287,7 @@ export function RemindersModule() {
         <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
           <div className="mb-3 flex items-center justify-between">
             <p className="flex items-center gap-2 text-sm font-bold">
-              <Sparkles className="h-4 w-4 text-brand" /> Common Reminders
+              <Sparkles className="h-4 w-4 text-brand-text" /> Common Reminders
             </p>
             <button onClick={() => setShowSuggestions(false)}><X className="h-4 w-4 text-muted" /></button>
           </div>
@@ -303,8 +303,8 @@ export function RemindersModule() {
                     <p className="text-xs text-muted">{s.notes}</p>
                   </div>
                   {isPending(`quickadd:${s.title}`)
-                    ? <Loader2 className="ml-auto h-4 w-4 flex-shrink-0 animate-spin text-brand" />
-                    : <Plus className="ml-auto h-4 w-4 flex-shrink-0 text-brand" />}
+                    ? <Loader2 className="ml-auto h-4 w-4 flex-shrink-0 animate-spin text-brand-text" />
+                    : <Plus className="ml-auto h-4 w-4 flex-shrink-0 text-brand-text" />}
                 </button>
               );
             })}
@@ -373,7 +373,7 @@ export function RemindersModule() {
           {allTags.map((t) => (
             <button key={t} onClick={() => setFilterTag((cur) => cur === t ? null : t)} aria-pressed={filterTag === t}
               className={cn('rounded-full border px-2.5 py-0.5 text-[11px] transition',
-                filterTag === t ? 'border-brand/60 bg-brand/10 text-brand' : 'border-border bg-surface/40 text-muted hover:bg-elevated')}>
+                filterTag === t ? 'border-brand/60 bg-brand/10 text-brand-text' : 'border-border bg-surface/40 text-muted hover:bg-elevated')}>
               {t}
             </button>
           ))}
@@ -438,7 +438,7 @@ export function RemindersModule() {
                     {snoozed && <Badge tone="warning">Snoozed</Badge>}
                     {overdue && !completed && <Badge tone="danger">Overdue</Badge>}
                     {reminder.ai_suggested && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-brand/70">
+                      <span className="flex items-center gap-0.5 text-[10px] text-brand-text/70">
                         <Sparkles className="h-2.5 w-2.5" /> AI
                       </span>
                     )}
@@ -490,14 +490,14 @@ export function RemindersModule() {
                       </button>
                     ) : null; })()}
                     {reminder.url && (
-                      <a href={reminder.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-brand hover:underline" onClick={(e) => e.stopPropagation()}>
+                      <a href={reminder.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-brand-text hover:underline" onClick={(e) => e.stopPropagation()}>
                         <Link2 className="h-3.5 w-3.5" />Link
                       </a>
                     )}
                     {(reminder.tags ?? []).map((t) => (
                       <button key={t} type="button" onClick={() => setFilterTag((cur) => cur === t ? null : t)}
                         className={cn('flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] transition hover:bg-brand/15',
-                          filterTag === t ? 'bg-brand/15 text-brand' : 'bg-elevated')}>
+                          filterTag === t ? 'bg-brand/15 text-brand-text' : 'bg-elevated')}>
                         <Tag className="h-2.5 w-2.5" />{t}
                       </button>
                     ))}
@@ -711,7 +711,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
                 <button key={k.id} type="button" onClick={() => setKind(k.id)}
                   className={cn('flex items-center gap-2 rounded-xl border px-3 py-2 text-xs transition',
                     kind === k.id ? 'border-brand/60 bg-brand/10' : 'border-border hover:bg-elevated')}>
-                  <k.icon className={cn('h-3.5 w-3.5', kind === k.id ? 'text-brand' : k.color)} />
+                  <k.icon className={cn('h-3.5 w-3.5', kind === k.id ? 'text-brand-text' : k.color)} />
                   {k.label}
                 </button>
               ))}
@@ -817,7 +817,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
               {tags.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {tags.map((t) => (
-                    <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand">
+                    <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand-text">
                       <Tag className="h-3 w-3" />{t}
                       <button type="button" onClick={() => setTags((cur) => cur.filter((x) => x !== t))} aria-label={`Remove ${t}`}><X className="h-3 w-3" /></button>
                     </span>

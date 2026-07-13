@@ -88,7 +88,7 @@ export function PendingApprovals({
           </li>
         ))}
       </ul>
-      <Link href="/dashboard/inbox" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline">
+      <Link href="/dashboard/inbox" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline">
         Review all{remaining > 3 ? ` (+${remaining - 3} more)` : ''} <ChevronRight className="h-3 w-3" />
       </Link>
     </>

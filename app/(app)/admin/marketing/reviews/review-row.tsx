@@ -36,14 +36,14 @@ export function ReviewRow({ review }: { review: Review }) {
 
       {review.reply && (
         <div className="mt-2 rounded-lg border border-border bg-elevated/50 p-2 text-xs">
-          <p className="font-medium text-brand">Your reply</p>
+          <p className="font-medium text-brand-text">Your reply</p>
           <p className="mt-0.5 text-muted">{review.reply}</p>
         </div>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-2 text-xs">
         {review.status !== 'approved' && <button onClick={() => moderate('approved')} disabled={pending} className="inline-flex items-center gap-1 text-success hover:underline"><Check className="h-3.5 w-3.5" /> Approve</button>}
-        {review.status !== 'featured' && <button onClick={() => moderate('featured')} disabled={pending} className="inline-flex items-center gap-1 text-brand hover:underline"><Sparkles className="h-3.5 w-3.5" /> Feature</button>}
+        {review.status !== 'featured' && <button onClick={() => moderate('featured')} disabled={pending} className="inline-flex items-center gap-1 text-brand-text hover:underline"><Sparkles className="h-3.5 w-3.5" /> Feature</button>}
         {review.status !== 'rejected' && <button onClick={() => moderate('rejected')} disabled={pending} className="inline-flex items-center gap-1 text-muted hover:text-danger"><X className="h-3.5 w-3.5" /> Reject</button>}
         <button onClick={() => setReplyOpen((o) => !o)} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Reply className="h-3.5 w-3.5" /> Reply</button>
         {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted" />}

@@ -31,7 +31,7 @@ export function DocumentRowActions({ documentId, storagePath }: { documentId: st
 
   return (
     <div className="flex items-center gap-1">
-      <button onClick={view} disabled={busy !== null} className="rounded-lg p-1.5 text-muted hover:text-brand disabled:opacity-50" aria-label="View document" title="View">
+      <button onClick={view} disabled={busy !== null} className="rounded-lg p-1.5 text-muted hover:text-brand-text disabled:opacity-50" aria-label="View document" title="View">
         <ExternalLink className="h-4 w-4" />
       </button>
       <button onClick={remove} disabled={busy !== null} className="rounded-lg p-1.5 text-muted hover:text-danger disabled:opacity-50" aria-label="Delete document" title="Delete">

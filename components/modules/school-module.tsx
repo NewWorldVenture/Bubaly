@@ -319,7 +319,7 @@ export function SchoolModule() {
           <div className="rounded-2xl border border-border bg-surface/40">
             <div className="flex items-center justify-between p-5">
               <h2 className="font-semibold">Upcoming Assignments</h2>
-              <button onClick={() => setTab('Assignments')} className="flex items-center gap-1 text-xs font-semibold text-brand">View all assignments <ChevronRight className="h-3.5 w-3.5" /></button>
+              <button onClick={() => setTab('Assignments')} className="flex items-center gap-1 text-xs font-semibold text-brand-text">View all assignments <ChevronRight className="h-3.5 w-3.5" /></button>
             </div>
             {assignments.length === 0 ? (
               <div className="p-5 pt-0">
@@ -362,7 +362,7 @@ export function SchoolModule() {
                 </div>
                 {tab === 'Overview' && assignments.length > 5 && (
                   <div className="border-t border-border p-4 text-center">
-                    <button onClick={() => setTab('Assignments')} className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand">View all {assignments.length} assignments <ChevronRight className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setTab('Assignments')} className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand-text">View all {assignments.length} assignments <ChevronRight className="h-3.5 w-3.5" /></button>
                   </div>
                 )}
               </>
@@ -456,7 +456,7 @@ export function SchoolModule() {
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="font-semibold">Today&apos;s Classes</h2>
-                <button onClick={() => setTab('Classes')} className="text-xs font-semibold text-brand">View full schedule →</button>
+                <button onClick={() => setTab('Classes')} className="text-xs font-semibold text-brand-text">View full schedule →</button>
               </div>
               {members.length > 0 && (
                 <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
@@ -561,7 +561,7 @@ export function SchoolModule() {
                   ))}
                 </div>
               </div>
-              <button onClick={() => setTab('Grades')} className="mt-4 flex items-center gap-1 text-xs text-brand">View grade details <ChevronRight className="h-3.5 w-3.5" /></button>
+              <button onClick={() => setTab('Grades')} className="mt-4 flex items-center gap-1 text-xs text-brand-text">View grade details <ChevronRight className="h-3.5 w-3.5" /></button>
             </>
           )}
         </div>
@@ -578,7 +578,7 @@ export function SchoolModule() {
                 return (
                   <div key={e.id} className="flex items-start gap-3">
                     <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand/15 text-center">
-                      <div><p className="text-[9px] font-bold uppercase text-brand">{d.toLocaleDateString('en-US', { month: 'short' })}</p><p className="text-sm font-black text-violet-200 leading-none">{d.getDate()}</p></div>
+                      <div><p className="text-[9px] font-bold uppercase text-brand-text">{d.toLocaleDateString('en-US', { month: 'short' })}</p><p className="text-sm font-black text-violet-200 leading-none">{d.getDate()}</p></div>
                     </div>
                     <div><p className="text-sm font-semibold">{e.title}</p><p className="text-xs text-muted">{d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p></div>
                   </div>
@@ -590,7 +590,7 @@ export function SchoolModule() {
 
         {/* AI Study Helper */}
         <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand" /></div>
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand-text" /></div>
           <h3 className="font-bold">AI Study Helper</h3>
           <p className="mt-2 text-xs leading-5 text-muted">Get study tips, homework help, and resources for your kids.</p>
           <Button className="mt-4 w-full">Ask AI</Button>

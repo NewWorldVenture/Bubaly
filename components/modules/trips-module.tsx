@@ -242,11 +242,11 @@ export function TripsModule() {
               <div key={kind} className="rounded-2xl bg-surface/50 border border-border p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold text-fg uppercase tracking-wider flex items-center gap-2">
-                    <Icon className="h-4 w-4 text-brand" /> {TRIP_ITEM_KIND_LABELS[kind]}
+                    <Icon className="h-4 w-4 text-brand-text" /> {TRIP_ITEM_KIND_LABELS[kind]}
                     {kp.total > 0 && <span className="text-xs text-muted font-normal">{kp.done}/{kp.total}</span>}
                   </h3>
                   {canEdit && (
-                    <button onClick={() => openNewItem(kind)} className="text-xs font-medium text-brand hover:underline inline-flex items-center gap-1">
+                    <button onClick={() => openNewItem(kind)} className="text-xs font-medium text-brand-text hover:underline inline-flex items-center gap-1">
                       <Plus className="h-3.5 w-3.5" /> Add
                     </button>
                   )}
@@ -339,8 +339,8 @@ export function TripsModule() {
               <button key={t.id} onClick={() => setSelectedId(t.id)}
                 className="text-left rounded-2xl bg-surface/50 border border-border p-5 hover:border-brand/40 transition group">
                 <div className="flex items-start justify-between">
-                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand"><Plane className="h-5 w-5" /></div>
-                  <ChevronRight className="h-4 w-4 text-muted group-hover:text-brand transition" />
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text"><Plane className="h-5 w-5" /></div>
+                  <ChevronRight className="h-4 w-4 text-muted group-hover:text-brand-text transition" />
                 </div>
                 <div className="mt-3 flex items-center gap-2">
                   <h3 className="font-semibold text-fg truncate">{t.name}</h3>

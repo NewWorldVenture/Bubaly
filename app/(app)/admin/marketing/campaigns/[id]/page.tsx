@@ -72,7 +72,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
               <input type="hidden" name="status" value={s} />
               <button
                 disabled={s === c.status}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-medium capitalize transition ${s === c.status ? 'cursor-default border-brand/40 bg-brand/15 text-brand' : 'border-border text-muted hover:bg-elevated hover:text-fg'}`}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium capitalize transition ${s === c.status ? 'cursor-default border-brand/40 bg-brand/15 text-brand-text' : 'border-border text-muted hover:bg-elevated hover:text-fg'}`}
               >
                 {s}
               </button>

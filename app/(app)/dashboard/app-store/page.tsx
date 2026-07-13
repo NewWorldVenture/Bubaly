@@ -35,7 +35,7 @@ export default async function AppStorePage({ searchParams }: { searchParams: Pro
   const chip = (key: string, label: string) => (
     <Link key={key} href={`/dashboard/app-store?cat=${key}${q ? `&q=${encodeURIComponent(q)}` : ''}`}
       className={cn('whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition',
-        cat === key ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:text-fg')}>
+        cat === key ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:text-fg')}>
       {label}
     </Link>
   );
@@ -64,7 +64,7 @@ export default async function AppStorePage({ searchParams }: { searchParams: Pro
       {cat === 'all' && !q && recommended.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-fg">
-            <Sparkles className="h-4 w-4 text-brand" /> Recommended for your family
+            <Sparkles className="h-4 w-4 text-brand-text" /> Recommended for your family
           </h2>
           <div className="flex gap-3 overflow-x-auto pb-2">
             {recommended.map((a) => (
@@ -111,7 +111,7 @@ function AppCard({ app, installed }: { app: CatalogApp; installed: boolean }) {
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1 text-sm font-bold text-fg">
             <span className="truncate">{app.name}</span>
-            {app.is_official && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-brand" aria-label="Official" />}
+            {app.is_official && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-brand-text" aria-label="Official" />}
           </p>
           <p className="truncate text-[11px] text-muted">{app.publisher} · {categoryLabel(app.category)}</p>
         </div>

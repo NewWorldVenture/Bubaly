@@ -224,7 +224,7 @@ export function MealsModule() {
                       <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-border bg-elevated p-1 shadow-lg">
                         <button onClick={() => { setMoreOpen(false); setAutoPlanOpen(true); }}
                           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-surface">
-                          <Sparkles className="h-4 w-4 text-brand" /> Auto-plan the week
+                          <Sparkles className="h-4 w-4 text-brand-text" /> Auto-plan the week
                         </button>
                         <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm"><AiInsight kind="meals" /> AI insight</div>
                       </div>
@@ -267,8 +267,8 @@ export function MealsModule() {
                     const isToday = d.toISOString().slice(0, 10) === todayStr;
                     return (
                       <div key={i} className={cn('border-l border-border px-2 py-2 text-center', isToday && 'bg-brand/10')}>
-                        <div className={cn('text-[10px] font-semibold uppercase tracking-wide', isToday ? 'text-brand' : 'text-muted')}>{d.toLocaleDateString('en-US', { weekday: 'short' })}</div>
-                        <div className={cn('text-xs font-bold', isToday ? 'text-brand' : 'text-fg')}>{d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                        <div className={cn('text-[10px] font-semibold uppercase tracking-wide', isToday ? 'text-brand-text' : 'text-muted')}>{d.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                        <div className={cn('text-xs font-bold', isToday ? 'text-brand-text' : 'text-fg')}>{d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
                       </div>
                     );
                   })}
@@ -320,8 +320,8 @@ export function MealsModule() {
                 return (
                   <div key={di} className={cn('overflow-hidden rounded-xl border border-border', isToday && 'border-brand/40')}>
                     <div className={cn('flex items-center gap-2 border-b border-border px-3 py-2', isToday ? 'bg-brand/10' : 'bg-surface/40')}>
-                      <span className={cn('text-sm font-semibold', isToday ? 'text-brand' : 'text-fg')}>{d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                      {isToday && <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand">Today</span>}
+                      <span className={cn('text-sm font-semibold', isToday ? 'text-brand-text' : 'text-fg')}>{d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                      {isToday && <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand-text">Today</span>}
                     </div>
                     <div className="divide-y divide-border/50">
                       {MEAL_TYPES.map(type => {
@@ -353,7 +353,7 @@ export function MealsModule() {
               <div className="mt-6">
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-base font-semibold">Recently Cooked</h2>
-                  <button onClick={() => setTab('recipes')} className="text-xs text-brand hover:underline">View all</button>
+                  <button onClick={() => setTab('recipes')} className="text-xs text-brand-text hover:underline">View all</button>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
                   {recentlyCooked.map((r) => (
@@ -395,7 +395,7 @@ export function MealsModule() {
           <div className="py-3">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-semibold">Grocery List</h2>
-              <Link href="/dashboard/grocery" className="text-xs text-brand hover:underline">Open full list →</Link>
+              <Link href="/dashboard/grocery" className="text-xs text-brand-text hover:underline">Open full list →</Link>
             </div>
             {groceryItems.length === 0 ? (
               <EmptyState icon={Check} title="Your list is empty" description="Add items from the Grocery module." />
@@ -477,7 +477,7 @@ export function MealsModule() {
         <div className="sidebar-card">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold">Grocery List</p>
-            <button onClick={() => setTab('groceries')} className="text-[11px] font-medium text-brand hover:underline">View List</button>
+            <button onClick={() => setTab('groceries')} className="text-[11px] font-medium text-brand-text hover:underline">View List</button>
           </div>
           {groceryItems.length === 0 ? (
             <p className="text-xs text-muted">Your grocery list is empty.</p>
@@ -522,7 +522,7 @@ export function MealsModule() {
                 ))}
               </div>
             )}
-            <button onClick={() => { setAddCell(null); setNewMealOpen(true); }} className="w-full rounded-lg border border-dashed border-border py-2 text-xs text-muted transition hover:border-brand/50 hover:text-brand">
+            <button onClick={() => { setAddCell(null); setNewMealOpen(true); }} className="w-full rounded-lg border border-dashed border-border py-2 text-xs text-muted transition hover:border-brand/50 hover:text-brand-text">
               + Create new meal
             </button>
           </div>
@@ -599,7 +599,7 @@ function FamilyVoteCard({ data, selfId, memberById, onVote }: {
                   : <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elevated text-xs">🍽️</span>}
                 <span className="flex-1 truncate text-xs font-medium">{opt.label}</span>
                 <span className="text-xs font-bold">{n}</span>
-                <ThumbsUp className={cn('h-3.5 w-3.5', mine ? 'fill-brand text-brand' : 'text-muted')} />
+                <ThumbsUp className={cn('h-3.5 w-3.5', mine ? 'fill-brand text-brand-text' : 'text-muted')} />
               </div>
               <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-elevated">
                 <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${pct}%` }} />
@@ -662,7 +662,7 @@ function AutoPlanModal({ weekStart, mealTypes, onClose, onPlanned }: {
             {mealTypes.map((t) => (
               <button key={t} type="button" onClick={() => toggleType(t)}
                 className={cn('rounded-lg border px-3 py-1.5 text-xs font-medium capitalize transition',
-                  selected.includes(t) ? 'border-brand bg-brand/10 text-brand' : 'border-border hover:bg-elevated')}>
+                  selected.includes(t) ? 'border-brand bg-brand/10 text-brand-text' : 'border-border hover:bg-elevated')}>
                 {selected.includes(t) && <Check className="mr-1 inline h-3 w-3" />}{MEAL_LABELS[t]}
               </button>
             ))}
@@ -764,7 +764,7 @@ function WeekNutritionPanel({ weekStart, planCount }: { weekStart: string; planC
             );
           })}
           {data.summary && <p className="pt-1 text-[11px] text-muted">{data.summary}</p>}
-          <button onClick={() => analyze(true)} className="w-full pt-1 text-center text-[11px] text-muted hover:text-brand" disabled={loading}>
+          <button onClick={() => analyze(true)} className="w-full pt-1 text-center text-[11px] text-muted hover:text-brand-text" disabled={loading}>
             {loading ? 'Analyzing…' : 'Re-analyze'}
           </button>
         </div>

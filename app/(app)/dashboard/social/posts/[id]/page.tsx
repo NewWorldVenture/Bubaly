@@ -39,7 +39,7 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
           </Badge>
         </div>
         <p className="whitespace-pre-wrap text-sm text-muted">{post.body}</p>
-        {post.link && <a href={post.link} className="mt-2 inline-flex items-center gap-1 text-sm text-brand underline" target="_blank" rel="noreferrer">{post.link} <ExternalLink className="h-3 w-3" /></a>}
+        {post.link && <a href={post.link} className="mt-2 inline-flex items-center gap-1 text-sm text-brand-text underline" target="_blank" rel="noreferrer">{post.link} <ExternalLink className="h-3 w-3" /></a>}
         {post.scheduled_for && <p className="mt-2 text-xs text-muted">Scheduled for {new Date(post.scheduled_for).toLocaleString()}</p>}
       </Card>
 
@@ -54,7 +54,7 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
                   <span className="text-xs text-muted">{v.char_count} chars</span>
                 </div>
                 <p className="whitespace-pre-wrap text-sm text-muted">{v.body}</p>
-                {v.hashtags.length > 0 && <p className="mt-1 text-xs text-brand">{v.hashtags.map((h) => `#${h}`).join(' ')}</p>}
+                {v.hashtags.length > 0 && <p className="mt-1 text-xs text-brand-text">{v.hashtags.map((h) => `#${h}`).join(' ')}</p>}
               </div>
             ))}
           </div>
@@ -75,7 +75,7 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
                 <PlatformDot platform={t.platform as SocialPlatform} />
                 <Badge tone={TARGET_TONE[t.status] ?? 'neutral'}>{t.status}</Badge>
                 {t.permalink_url ? (
-                  <a href={t.permalink_url} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-brand underline">
+                  <a href={t.permalink_url} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-brand-text underline">
                     View <ExternalLink className="h-3 w-3" />
                   </a>
                 ) : (

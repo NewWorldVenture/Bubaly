@@ -110,7 +110,7 @@ export function QuickPost({ className }: { className?: string }) {
     <section className={cn('rounded-2xl border border-brand/30 bg-gradient-to-br from-brand/[0.08] to-transparent p-4 sm:p-5', className)}>
       <div className="flex items-center gap-2">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/15">
-          <Zap className="h-5 w-5 text-brand" />
+          <Zap className="h-5 w-5 text-brand-text" />
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-black sm:text-base">Post in 60 seconds</h2>
@@ -150,9 +150,9 @@ export function QuickPost({ className }: { className?: string }) {
           {/* What the AI detected */}
           {draft.matched.length > 0 && (
             <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
-              <Sparkles className="h-3 w-3 text-brand" /> AI filled:
+              <Sparkles className="h-3 w-3 text-brand-text" /> AI filled:
               {draft.matched.map((m) => (
-                <span key={m} className="rounded-full bg-brand/10 px-2 py-0.5 font-semibold text-brand">{MATCH_LABEL[m]}</span>
+                <span key={m} className="rounded-full bg-brand/10 px-2 py-0.5 font-semibold text-brand-text">{MATCH_LABEL[m]}</span>
               ))}
             </p>
           )}

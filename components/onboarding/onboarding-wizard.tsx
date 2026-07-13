@@ -224,7 +224,7 @@ function ProfilePanel({ draft, update, onEnter }: { draft: OnboardingDraft; upda
       </div>
       <div className="mt-6 space-y-4">
         <label className="block">
-          <span className="mb-1 block text-sm font-medium">Your name <span className="text-brand">*</span></span>
+          <span className="mb-1 block text-sm font-medium">Your name <span className="text-brand-text">*</span></span>
           <input value={draft.name} onChange={(e) => update({ name: e.target.value })} autoFocus placeholder="Jordan"
             aria-required="true" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter(); } }} className={inputCls} />
         </label>
@@ -261,13 +261,13 @@ function FamilyPanel({ draft, firstName, onChange, onEnter }: { draft: Onboardin
         <Home className="h-8 w-8" />
       </div>
       <label className="block">
-        <span className="mb-1 block text-sm font-medium">Family name <span className="text-brand">*</span></span>
+        <span className="mb-1 block text-sm font-medium">Family name <span className="text-brand-text">*</span></span>
         <input value={draft.familyName} onChange={(e) => onChange(e.target.value)} autoFocus placeholder={suggestFamilyName(firstName) || 'The Smith Family'}
           aria-required="true" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter(); } }} className={inputCls} />
       </label>
       <p className="mt-2 text-xs text-muted">This is your shared space — everyone you add joins it. You can rename it anytime in Settings.</p>
       <div className="mt-5 flex items-center gap-2 rounded-xl border border-border bg-bg/40 px-3 py-2.5 text-xs text-muted">
-        <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand" />
+        <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand-text" />
         <span>Calendars &amp; reminders will use <span className="font-medium text-fg">{tzLabel}</span>, detected automatically.</span>
       </div>
     </div>
@@ -323,7 +323,7 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
     return (
       <div className="space-y-4">
         <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4 text-center">
-          <div className="mx-auto mb-1 flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-brand">
+          <div className="mx-auto mb-1 flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-brand-text">
             <Sparkles className="h-5 w-5" />
           </div>
           <p className="text-base font-semibold">{brief.headline}</p>
@@ -336,7 +336,7 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
 
         {brief.timeline.length > 0 && (
           <section className="rounded-2xl border border-border p-4">
-            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><CalendarDays className="h-4 w-4 text-brand" /> Today</h2>
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><CalendarDays className="h-4 w-4 text-brand-text" /> Today</h2>
             <ul className="space-y-1.5">
               {brief.timeline.slice(0, 6).map((t, i) => (
                 <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
@@ -361,11 +361,11 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
 
         {brief.actions.length > 0 && (
           <section className="rounded-2xl border border-border p-4">
-            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand" /> First things to handle</h2>
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand-text" /> First things to handle</h2>
             <ul className="space-y-1.5 text-sm">
               {brief.actions.slice(0, 4).map((a) => (
                 <li key={a.id} className="flex items-start gap-2">
-                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-text" />
                   <span><span className="font-medium">{a.label}</span> — <span className="text-muted">{a.detail}</span></span>
                 </li>
               ))}
@@ -375,7 +375,7 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
 
         {brief.opportunities.length > 0 && (
           <section className="rounded-2xl border border-border p-4">
-            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-brand" /> Working for you already</h2>
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-brand-text" /> Working for you already</h2>
             <ul className="space-y-1.5 text-sm">
               {brief.opportunities.map((o) => (
                 <li key={o.id}><span className="font-medium">{o.label}</span> <span className="text-muted">· {o.detail}</span></li>
@@ -386,7 +386,7 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
 
         {brief.dinnerIdeas.length > 0 && (
           <section className="rounded-2xl border border-border p-4">
-            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Utensils className="h-4 w-4 text-brand" /> Dinner ideas for tonight</h2>
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Utensils className="h-4 w-4 text-brand-text" /> Dinner ideas for tonight</h2>
             <ul className="space-y-1.5 text-sm">
               {brief.dinnerIdeas.map((d) => (
                 <li key={d.title} className="flex items-baseline justify-between gap-3">
@@ -409,7 +409,7 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
     <div className="space-y-4">
       <div className="rounded-2xl border border-border p-4">
         <label htmlFor="ics-paste" className="mb-2 flex items-center gap-2 text-sm font-semibold">
-          <Clipboard className="h-4 w-4 text-brand" /> Paste your calendar export (.ics)
+          <Clipboard className="h-4 w-4 text-brand-text" /> Paste your calendar export (.ics)
         </label>
         <p className="mb-2 text-xs text-muted">
           In Google/Apple/Outlook Calendar, export or open your <code className="rounded bg-surface px-1">.ics</code> file and paste its contents here. Nothing is saved until you finish setup.
@@ -430,7 +430,7 @@ function ValuePanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
 
       <button type="button" onClick={() => run('demo')} disabled={loading !== null}
         className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border p-4 text-sm font-medium transition hover:border-brand/50 hover:bg-brand/5 disabled:opacity-50">
-        {loading === 'demo' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4 text-brand" />}
+        {loading === 'demo' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4 text-brand-text" />}
         See it with a sample family week
       </button>
     </div>
@@ -481,7 +481,7 @@ function AboutPanel({ draft, update }: { draft: OnboardingDraft; update: (p: Par
                   on ? 'border-brand bg-brand/10 text-fg' : 'border-border bg-bg/40 text-muted hover:border-brand/40')}>
                 <span className="text-base">{g.icon}</span>
                 <span className="flex-1 truncate font-medium">{g.label}</span>
-                {on && <Check className="h-4 w-4 text-brand" />}
+                {on && <Check className="h-4 w-4 text-brand-text" />}
               </button>
             );
           })}
@@ -585,7 +585,7 @@ function PinPanel({ draft, update, firstName }: { draft: OnboardingDraft; update
   const [show, setShow] = useState(false);
   return (
     <div>
-      <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand"><Lock className="h-7 w-7" /></div>
+      <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand-text"><Lock className="h-7 w-7" /></div>
       <div className="space-y-4">
         <label className="block">
           <span className="mb-1 block text-sm font-medium">Create a 4-digit PIN</span>
@@ -609,9 +609,9 @@ function PinPanel({ draft, update, firstName }: { draft: OnboardingDraft; update
         <div className="rounded-xl border border-border bg-bg/50 p-3">
           <p className="mb-1.5 text-xs font-semibold text-muted">Why a PIN?</p>
           <ul className="space-y-1 text-xs text-muted">
-            <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand" /> Keeps {firstName}’s profile private on shared devices</li>
-            <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand" /> Stored securely; App Lock stays off until you turn it on</li>
-            <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand" /> Totally optional — you can add one later in Settings</li>
+            <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand-text" /> Keeps {firstName}’s profile private on shared devices</li>
+            <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand-text" /> Stored securely; App Lock stays off until you turn it on</li>
+            <li className="flex items-center gap-1.5"><Check className="h-3 w-3 text-brand-text" /> Totally optional — you can add one later in Settings</li>
           </ul>
         </div>
       </div>
@@ -642,19 +642,19 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
           <Check className="h-4 w-4" />
         </span>
       </div>
-      <h1 className="mt-4 flex items-center justify-center gap-2 text-2xl font-bold">You’re all set, {firstName}! <PartyPopper className="h-6 w-6 text-brand" /></h1>
+      <h1 className="mt-4 flex items-center justify-center gap-2 text-2xl font-bold">You’re all set, {firstName}! <PartyPopper className="h-6 w-6 text-brand-text" /></h1>
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{draft.familyName || 'Your family'} is ready. Welcome to Bubaly!</p>
 
       {hasBrief && brief && (
         <div className="mt-6 space-y-3 text-left">
           <div className="rounded-2xl border border-brand/30 bg-brand/5 p-4">
-            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand" /> {brief.headline}</p>
+            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {brief.headline}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {brief.timeSavedMinutes > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1 text-xs font-medium text-brand"><Clock className="h-3 w-3" /> ~{brief.timeSavedMinutes} min saved</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1 text-xs font-medium text-brand-text"><Clock className="h-3 w-3" /> ~{brief.timeSavedMinutes} min saved</span>
               )}
               {brief.todayCount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-xs font-medium"><CalendarDays className="h-3 w-3 text-brand" /> {brief.todayCount} today</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-xs font-medium"><CalendarDays className="h-3 w-3 text-brand-text" /> {brief.todayCount} today</span>
               )}
               {brief.conflicts.length > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600"><AlertTriangle className="h-3 w-3" /> {brief.conflicts.length} clash{brief.conflicts.length === 1 ? '' : 'es'}</span>
@@ -664,7 +664,7 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
 
           {brief.dinnerIdeas.length > 0 && (
             <div className="rounded-2xl border border-border p-4">
-              <p className="mb-2 flex items-center gap-2 text-sm font-semibold"><Utensils className="h-4 w-4 text-brand" /> Dinner ideas for this week</p>
+              <p className="mb-2 flex items-center gap-2 text-sm font-semibold"><Utensils className="h-4 w-4 text-brand-text" /> Dinner ideas for this week</p>
               <ul className="space-y-1.5 text-sm">
                 {brief.dinnerIdeas.map((d) => (
                   <li key={d.title} className="flex items-baseline justify-between gap-3">
@@ -685,7 +685,7 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
           { icon: Sparkles, title: 'Let’s begin', body: 'Your dashboard is personalized and ready to explore.' },
         ].map(({ icon: Icon, title, body }) => (
           <div key={title} className="flex items-start gap-3 rounded-xl border border-border bg-bg/40 p-3">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand"><Icon className="h-4 w-4" /></div>
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand-text"><Icon className="h-4 w-4" /></div>
             <div className="min-w-0"><p className="truncate text-sm font-semibold">{title}</p><p className="text-xs text-muted">{body}</p></div>
           </div>
         ))}
@@ -696,7 +696,7 @@ function DonePanel({ draft, firstName, brief, onGo }: { draft: OnboardingDraft; 
       {kids.length > 0 && (
         <Link
           href="/dashboard/family-access"
-          className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-brand/40 bg-brand/10 px-4 py-3 text-sm font-semibold text-brand transition hover:bg-brand/15"
+          className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-brand/40 bg-brand/10 px-4 py-3 text-sm font-semibold text-brand-text transition hover:bg-brand/15"
         >
           <KeyRound className="h-4 w-4 shrink-0" />
           Give {kidLabel} a login — username &amp; PIN, no email needed

@@ -82,7 +82,7 @@ export default async function FamilySchoolPage() {
               <li key={c.id} className="rounded-xl border border-border bg-surface/40 p-3">
                 <p className="text-sm font-semibold">{c.subject}</p>
                 <p className="mt-0.5 text-xs text-muted">{[c.teacher, c.time_slot, c.room].filter(Boolean).join(' · ')}</p>
-                {c.member_id && <p className="mt-1 text-xs text-brand">{nameById.get(c.member_id)}</p>}
+                {c.member_id && <p className="mt-1 text-xs text-brand-text">{nameById.get(c.member_id)}</p>}
               </li>
             ))}
           </ul>

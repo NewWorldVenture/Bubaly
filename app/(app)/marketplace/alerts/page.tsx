@@ -63,11 +63,11 @@ export default async function MarketplaceAlertsPage() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="flex items-center gap-1.5 font-semibold">
-                        <BellRing className="h-4 w-4 text-brand" />
+                        <BellRing className="h-4 w-4 text-brand-text" />
                         {s.label?.trim() || describeSearch(criteria, KIND_LABELS, CATEGORY_LABELS)}
                       </h2>
                       {newCount > 0 && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2 py-0.5 text-[11px] font-semibold text-brand">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2 py-0.5 text-[11px] font-semibold text-brand-text">
                           <Sparkles className="h-3 w-3" /> {newCount} new
                         </span>
                       )}
@@ -89,9 +89,9 @@ export default async function MarketplaceAlertsPage() {
                       return (
                         <li key={l.id} className="flex items-start gap-3 rounded-xl border border-border bg-surface/60 p-3.5">
                           <div className="min-w-0 flex-1">
-                            <Link href={`/marketplace/item/${l.id}`} className="line-clamp-2 text-sm font-medium hover:text-brand">
+                            <Link href={`/marketplace/item/${l.id}`} className="line-clamp-2 text-sm font-medium hover:text-brand-text">
                               {l.title}
-                              {isNew && <span className="ml-1.5 rounded bg-brand/15 px-1 py-0.5 text-[10px] font-semibold text-brand align-middle">NEW</span>}
+                              {isNew && <span className="ml-1.5 rounded bg-brand/15 px-1 py-0.5 text-[10px] font-semibold text-brand-text align-middle">NEW</span>}
                             </Link>
                             <p className="mt-1 text-xs text-muted">
                               {KIND_LABELS[l.kind as ListingKind] ?? l.kind}

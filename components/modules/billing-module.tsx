@@ -867,7 +867,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       <div className="rounded-2xl border border-border bg-surface/40 p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-semibold">Overview</h2>
-          <button onClick={() => setTab('Reports')} className="flex items-center gap-0.5 text-xs font-semibold text-brand hover:underline">View full report <ChevronRight className="h-3.5 w-3.5" /></button>
+          <button onClick={() => setTab('Reports')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">View full report <ChevronRight className="h-3.5 w-3.5" /></button>
         </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
@@ -945,7 +945,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                 </p>
               </>
             ) : (
-              <button onClick={() => setTab('Budgets')} className="text-xs font-semibold text-brand hover:underline">Set a monthly budget →</button>
+              <button onClick={() => setTab('Budgets')} className="text-xs font-semibold text-brand-text hover:underline">Set a monthly budget →</button>
             )}
           </div>
         </div>
@@ -954,7 +954,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Recent Transactions</h2>
-            <button onClick={() => setTab('Transactions')} className="flex items-center gap-0.5 text-xs font-semibold text-brand hover:underline">View all <ChevronRight className="h-3.5 w-3.5" /></button>
+            <button onClick={() => setTab('Transactions')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">View all <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           {transactions.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted">No transactions yet.</p>
@@ -991,7 +991,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Bills &amp; Reminders</h2>
-            <button onClick={() => setTab('Bills')} className="flex items-center gap-0.5 text-xs font-semibold text-brand hover:underline">View calendar <ChevronRight className="h-3.5 w-3.5" /></button>
+            <button onClick={() => setTab('Bills')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">View calendar <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           <div className="grid gap-5 sm:grid-cols-2">
             {/* Mini calendar */}
@@ -1075,7 +1075,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                   </div>
                 </div>
               ))}
-              <button onClick={() => setTab('Reports')} className="flex w-full items-center justify-center gap-0.5 pt-1 text-sm font-semibold text-brand hover:underline">
+              <button onClick={() => setTab('Reports')} className="flex w-full items-center justify-center gap-0.5 pt-1 text-sm font-semibold text-brand-text hover:underline">
                 View full breakdown <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -1197,7 +1197,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
           {bills.map((b) => (
             <div key={b.id} className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface/40">
-                <Receipt className="h-5 w-5 text-brand" />
+                <Receipt className="h-5 w-5 text-brand-text" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold">{b.name}</p>
@@ -1377,7 +1377,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         {/* ── Stripe Subscription Section ────────────────────────────────── */}
         <div className="rounded-2xl border border-border bg-surface/30 p-5">
           <div className="mb-4 flex items-center gap-3">
-            <CreditCard className="h-5 w-5 text-brand" />
+            <CreditCard className="h-5 w-5 text-brand-text" />
             <h2 className="font-semibold">Bubaly Subscription</h2>
           </div>
           {subLoading ? <SkeletonList /> : (
@@ -1488,7 +1488,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Savings Goals</h2>
-            <button onClick={() => setTab('Savings Goals')} className="flex items-center gap-0.5 text-xs font-semibold text-brand hover:underline">View all <ChevronRight className="h-3.5 w-3.5" /></button>
+            <button onClick={() => setTab('Savings Goals')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">View all <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           {savingsGoals.length === 0 ? (
             <div className="py-2 text-center">

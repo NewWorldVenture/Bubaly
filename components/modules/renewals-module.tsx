@@ -194,14 +194,14 @@ export function RenewalsModule() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-semibold text-fg">{r.title}</span>
-                              {r.category && <span className="text-[10px] uppercase tracking-wide rounded bg-brand/10 text-brand px-1.5 py-0.5">{CATEGORY_LABELS[r.category] ?? r.category}</span>}
+                              {r.category && <span className="text-[10px] uppercase tracking-wide rounded bg-brand/10 text-brand-text px-1.5 py-0.5">{CATEGORY_LABELS[r.category] ?? r.category}</span>}
                               {r.status !== 'active' && <span className="text-[10px] uppercase tracking-wide rounded border border-border text-muted px-1.5 py-0.5">{RENEWAL_STATUS_LABELS[r.status]}</span>}
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
                               <span className={cn('inline-flex items-center gap-1', expired && 'text-rose-400')}><Clock className="h-3.5 w-3.5" />Expires {fmtDate(r.expires_at)} · {countdown(r)}</span>
                               {r.member_id && <span className="inline-flex items-center gap-1"><Avatar name={memberName(r.member_id) ?? '?'} size={14} />{memberName(r.member_id)}</span>}
                               {r.cost != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{r.cost}</span>}
-                              {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand hover:underline"><ExternalLink className="h-3.5 w-3.5" />Renew</a>}
+                              {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />Renew</a>}
                             </div>
                             {r.notes && <p className="mt-1.5 text-sm text-fg/80">{r.notes}</p>}
                           </div>

@@ -109,7 +109,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
       {step === 'to' && fromChild && (
         <div className="space-y-3 px-4">
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setStep('from')} className="text-sm text-brand hover:underline">← Back</button>
+            <button type="button" onClick={() => setStep('from')} className="text-sm text-brand-text hover:underline">← Back</button>
             <p className="text-sm font-semibold text-muted">Send to…</p>
           </div>
           <div className="mb-2 flex items-center gap-3 rounded-xl border border-brand/20 bg-brand/5 px-4 py-2.5">
@@ -139,7 +139,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
       {/* Step: Amount */}
       {step === 'amount' && fromChild && toChild && (
         <div className="flex flex-col items-center px-4">
-          <button type="button" onClick={() => setStep('to')} className="mb-4 self-start text-sm text-brand hover:underline">← Back</button>
+          <button type="button" onClick={() => setStep('to')} className="mb-4 self-start text-sm text-brand-text hover:underline">← Back</button>
 
           {/* Sender → recipient header */}
           <div className="mb-6 flex items-center gap-3">
@@ -147,7 +147,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
               <Avatar name={fromChild.name} color={fromChild.color ?? undefined} size={40} className="rounded-full" />
               <p className="text-[11px] text-muted">{fromChild.name}</p>
             </div>
-            <Send className="h-4 w-4 text-brand" />
+            <Send className="h-4 w-4 text-brand-text" />
             <div className="flex flex-col items-center gap-1">
               <Avatar name={toChild.name} color={toChild.color ?? undefined} size={40} className="rounded-full" />
               <p className="text-[11px] text-muted">{toChild.name}</p>
@@ -169,7 +169,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
             {[5, 10, 20, 50].map((d) => (
               <button key={d} type="button"
                 onClick={() => setAmountDisplay(String(d))}
-                className="rounded-full border border-border px-3 py-1 text-sm font-semibold hover:border-brand hover:text-brand transition">
+                className="rounded-full border border-border px-3 py-1 text-sm font-semibold hover:border-brand hover:text-brand-text transition">
                 ${d}
               </button>
             ))}
@@ -208,7 +208,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
       {/* Step: Confirm */}
       {step === 'confirm' && fromChild && toChild && (
         <div className="flex flex-col items-center px-4">
-          <button type="button" onClick={() => setStep('amount')} className="mb-6 self-start text-sm text-brand hover:underline">← Back</button>
+          <button type="button" onClick={() => setStep('amount')} className="mb-6 self-start text-sm text-brand-text hover:underline">← Back</button>
 
           <div className="mb-6 w-full rounded-2xl border border-border bg-surface/40 p-5">
             <p className="mb-4 text-center text-sm font-semibold text-muted">Review transfer</p>
@@ -219,7 +219,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
               </div>
               <div className="flex flex-col items-center">
                 <p className="text-2xl font-black">{formatCents(amountCents)}</p>
-                <Send className="mt-1 h-5 w-5 text-brand" />
+                <Send className="mt-1 h-5 w-5 text-brand-text" />
               </div>
               <div className="flex flex-col items-center gap-2">
                 <Avatar name={toChild.name} color={toChild.color ?? undefined} size={52} className="rounded-full" />

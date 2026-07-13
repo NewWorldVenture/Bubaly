@@ -175,7 +175,7 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
             <button key={id} type="button" onClick={action}
               className={cn(
                 'flex flex-col items-center gap-1.5 rounded-2xl py-3 text-xs font-semibold transition',
-                mode === id ? 'bg-brand/15 text-brand' : 'bg-elevated text-muted hover:bg-elevated/80 hover:text-fg',
+                mode === id ? 'bg-brand/15 text-brand-text' : 'bg-elevated text-muted hover:bg-elevated/80 hover:text-fg',
               )}>
               <Icon className="h-5 w-5" />
               {label}
@@ -188,10 +188,10 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
           {recording ? (
             <div className="flex min-h-[120px] flex-col items-center justify-center gap-3 p-6">
               <div className="relative">
-                <Mic className="h-10 w-10 text-brand" />
+                <Mic className="h-10 w-10 text-brand-text" />
                 <span className="absolute inset-0 animate-ping rounded-full bg-brand/30" />
               </div>
-              <p className="text-sm font-medium text-brand">Listening…</p>
+              <p className="text-sm font-medium text-brand-text">Listening…</p>
               <button type="button" onClick={() => setRecording(false)} className="text-xs text-muted underline">Cancel</button>
             </div>
           ) : (
@@ -243,9 +243,9 @@ export function CaptureShell({ initialShortcuts = null }: { initialShortcuts?: s
         ) : routed ? (
           <div className="mb-4 overflow-hidden rounded-2xl border border-brand/30 bg-brand/5">
             <div className="flex items-center gap-3 p-4">
-              <Sparkles className="h-5 w-5 shrink-0 text-brand" />
+              <Sparkles className="h-5 w-5 shrink-0 text-brand-text" />
               <div className="flex-1">
-                <p className="text-sm font-semibold">Sending to <span className="text-brand">{routed.destination}</span></p>
+                <p className="text-sm font-semibold">Sending to <span className="text-brand-text">{routed.destination}</span></p>
                 <p className="text-xs text-muted">AI matched your input to the best destination.</p>
               </div>
             </div>

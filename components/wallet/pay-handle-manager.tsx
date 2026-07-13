@@ -55,7 +55,7 @@ export function PayHandleManager({ handles, childOptions, canManage, baseUrl }: 
   return (
     <div className="rounded-2xl border border-border bg-surface/40 p-4">
       <div className="mb-1 flex items-center gap-2">
-        <AtSign className="h-4 w-4 text-brand" />
+        <AtSign className="h-4 w-4 text-brand-text" />
         <h3 className="font-semibold">Pay-ID</h3>
       </div>
       <p className="mb-3 text-xs text-muted">A short, memorable link relatives can use to send a gift — no long codes to copy.</p>

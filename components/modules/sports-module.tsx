@@ -193,7 +193,7 @@ export function SportsModule() {
         <div className="rounded-2xl border border-border bg-surface/40">
           <div className="flex items-center justify-between p-5">
             <h2 className="font-semibold">Upcoming Events</h2>
-            <button onClick={() => setTab('Schedule')} className="flex items-center gap-1 text-xs font-semibold text-brand">View full schedule <ChevronRight className="h-3.5 w-3.5" /></button>
+            <button onClick={() => setTab('Schedule')} className="flex items-center gap-1 text-xs font-semibold text-brand-text">View full schedule <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           {upcoming.length === 0 ? (
             <div className="px-5 pb-5">
@@ -245,7 +245,7 @@ export function SportsModule() {
                 </table>
               </div>
               <div className="border-t border-border p-4 text-center">
-                <button onClick={() => setTab('Schedule')} className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand">View full schedule <ChevronRight className="h-3.5 w-3.5" /></button>
+                <button onClick={() => setTab('Schedule')} className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand-text">View full schedule <ChevronRight className="h-3.5 w-3.5" /></button>
               </div>
             </>
           )}
@@ -323,7 +323,7 @@ export function SportsModule() {
       <aside className="module-sidebar hidden lg:flex lg:flex-col gap-5">
         {/* Upcoming Games */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Upcoming Games</h2><button onClick={() => setTab('Schedule')} className="text-xs font-semibold text-brand">View schedule &rarr;</button></div>
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Upcoming Games</h2><button onClick={() => setTab('Schedule')} className="text-xs font-semibold text-brand-text">View schedule &rarr;</button></div>
           {upcomingGames.length === 0 ? (
             <p className="text-sm text-muted">No upcoming games scheduled.</p>
           ) : (
@@ -345,7 +345,7 @@ export function SportsModule() {
 
         {/* Team Standings */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Team Standings</h2><button onClick={() => setTab('Standings')} className="text-xs font-semibold text-brand">View all &rarr;</button></div>
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Team Standings</h2><button onClick={() => setTab('Standings')} className="text-xs font-semibold text-brand-text">View all &rarr;</button></div>
           {standings.length === 0 ? (
             <p className="text-sm text-muted">No standings data yet. Log game results to see standings.</p>
           ) : (
@@ -394,7 +394,7 @@ export function SportsModule() {
 
         {/* AI Sports Coach */}
         <div className="rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5 text-center">
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand" /></div>
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand-text" /></div>
           <h3 className="font-bold">AI Sports Coach</h3>
           <p className="mt-2 text-xs leading-5 text-muted">Get training tips, schedule help, and insights for your athletes.</p>
           <Button className="mt-4 w-full">Ask AI</Button>

@@ -26,7 +26,7 @@ import type { Tables } from '@/lib/database.types';
 type Event = Tables<'calendar_events'>;
 
 const CATEGORY_COLORS: Record<string, string> = {
-  general: 'bg-brand/20 border-brand/40 text-brand',
+  general: 'bg-brand/20 border-brand/40 text-brand-text',
   school: 'bg-blue-500/20 border-blue-500/40 text-blue-400',
   sports: 'bg-green-500/20 border-green-500/40 text-green-400',
   appointment: 'bg-amber-500/20 border-amber-500/40 text-amber-400',
@@ -127,7 +127,7 @@ function MiniCalendar({ current, onSelect }: { current: Date; onSelect: (d: Date
             <button key={i} onClick={() => onSelect(d)}
               className={cn('rounded py-1 text-xs transition hover:bg-elevated',
                 isSelected && 'bg-brand text-white hover:bg-brand',
-                isToday && !isSelected && 'font-bold text-brand',
+                isToday && !isSelected && 'font-bold text-brand-text',
                 !isSelected && !isToday && 'text-fg',
               )}>
               {d.getDate()}
@@ -439,7 +439,7 @@ export function CalendarModule() {
 
               <div className="relative">
                 <button onClick={() => setCatMenu(v => !v)}
-                  className={cn('btn-inline', filterCategory !== 'all' && 'text-brand')}>
+                  className={cn('btn-inline', filterCategory !== 'all' && 'text-brand-text')}>
                   <Filter className="h-3.5 w-3.5" /> {filterCategory === 'all' ? 'Filters' : filterCategory[0].toUpperCase() + filterCategory.slice(1)}
                 </button>
                 {catMenu && (
@@ -449,7 +449,7 @@ export function CalendarModule() {
                       {(['all', 'general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'] as const).map(c => (
                         <button key={c} onClick={() => { setFilterCategory(c); setCatMenu(false); }}
                           className={cn('flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-surface transition capitalize',
-                            filterCategory === c && 'text-brand font-semibold')}>
+                            filterCategory === c && 'text-brand-text font-semibold')}>
                           {c === 'all' ? 'All categories' : c}
                           {filterCategory === c && <Check className="h-3.5 w-3.5" />}
                         </button>
@@ -462,7 +462,7 @@ export function CalendarModule() {
               {/* People / member-visibility popover (works on every screen size). */}
               <div className="relative">
                 <button onClick={() => setMemberMenu(v => !v)} aria-label="Member calendars"
-                  className={cn('grid h-9 w-9 place-items-center rounded-full border border-border transition hover:bg-elevated', hiddenMembers.size > 0 && 'text-brand')}>
+                  className={cn('grid h-9 w-9 place-items-center rounded-full border border-border transition hover:bg-elevated', hiddenMembers.size > 0 && 'text-brand-text')}>
                   <Users className="h-4 w-4" />
                 </button>
                 {memberMenu && (
@@ -500,7 +500,7 @@ export function CalendarModule() {
               <div className="text-xs font-semibold uppercase tracking-wide text-muted">
                 {mobileDay.toLocaleDateString('en-US', { weekday: 'long' })}
               </div>
-              <div className={cn('text-lg font-bold', mobileDayStr === todayStr ? 'text-brand' : 'text-fg')}>
+              <div className={cn('text-lg font-bold', mobileDayStr === todayStr ? 'text-brand-text' : 'text-fg')}>
                 {mobileDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </div>
             </div>
@@ -565,7 +565,7 @@ export function CalendarModule() {
                   const isToday = dStr === todayStr;
                   return (
                     <div key={i} className="flex flex-1 flex-col items-center border-l border-border py-2">
-                      <span className={cn('text-[10px] font-semibold uppercase tracking-wide', isToday ? 'text-brand' : 'text-muted')}>
+                      <span className={cn('text-[10px] font-semibold uppercase tracking-wide', isToday ? 'text-brand-text' : 'text-muted')}>
                         {d.toLocaleDateString('en-US', { weekday: 'short' })}
                       </span>
                       <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold', isToday ? 'bg-brand text-white' : 'text-fg')}>
@@ -662,13 +662,13 @@ export function CalendarModule() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <RefreshCw className="h-4 w-4 text-brand" />
+              <RefreshCw className="h-4 w-4 text-brand-text" />
               <div className="leading-tight">
                 <div className="font-medium">Family Sync</div>
                 <div className="text-[11px] text-green-400">Up to date</div>
               </div>
             </div>
-            <a href="/dashboard/sync" className="ml-auto font-medium text-brand hover:underline">Manage Connections →</a>
+            <a href="/dashboard/sync" className="ml-auto font-medium text-brand-text hover:underline">Manage Connections →</a>
           </div>
         </div>
 
@@ -690,7 +690,7 @@ export function CalendarModule() {
         <div className="sidebar-card">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-muted uppercase tracking-wide">Upcoming</span>
-            <button onClick={() => setView('month')} className="text-[10px] font-medium text-brand hover:underline">View all</button>
+            <button onClick={() => setView('month')} className="text-[10px] font-medium text-brand-text hover:underline">View all</button>
           </div>
           {upcomingByDay.length === 0 ? (
             <p className="text-xs text-muted">Nothing coming up</p>
@@ -729,7 +729,7 @@ export function CalendarModule() {
         <div className="sidebar-card">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-muted uppercase tracking-wide">Calendars</span>
-            <a href="/dashboard/settings#members" className="text-[10px] font-medium text-brand hover:underline">Manage</a>
+            <a href="/dashboard/settings#members" className="text-[10px] font-medium text-brand-text hover:underline">Manage</a>
           </div>
           <div className="max-h-64 space-y-0.5 overflow-y-auto pr-1">
             {calendarRows.map((row) => {
@@ -771,7 +771,7 @@ export function CalendarModule() {
         <div className="sidebar-card">
           <div className="mb-1 text-xs font-semibold text-muted uppercase tracking-wide">Share Calendar</div>
           <p className="mb-2 text-xs text-muted">Keep everyone in the loop.</p>
-          <a href="/dashboard/settings#members" className="flex items-center gap-2 text-xs font-medium text-brand hover:underline">
+          <a href="/dashboard/settings#members" className="flex items-center gap-2 text-xs font-medium text-brand-text hover:underline">
             <Users className="h-4 w-4" /> Invite People
           </a>
         </div>

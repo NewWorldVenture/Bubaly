@@ -37,7 +37,7 @@ export default async function AnalyticsPage() {
       <div className="grid-stats">
         {cards.map((c) => (
           <div key={c.label} className="stat-card">
-            <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand"><c.icon className="h-5 w-5" /></div>
+            <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text"><c.icon className="h-5 w-5" /></div>
             <div>
               <p className="text-xl font-bold leading-none">{c.value.toLocaleString()}</p>
               <p className="mt-1 text-xs text-muted">{c.label}</p>

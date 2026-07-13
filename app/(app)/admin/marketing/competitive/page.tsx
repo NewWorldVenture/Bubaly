@@ -56,7 +56,7 @@ export default async function CompetitivePage() {
 
       {/* Competitors */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Radar className="h-4 w-4 text-brand" /> Competitors</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Radar className="h-4 w-4 text-brand-text" /> Competitors</h2>
         <form action={saveCompetitorAction} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input name="name" required placeholder="HubSpot" className={inputCls} />
           <input name="domain" placeholder="hubspot.com" className={inputCls} />
@@ -77,7 +77,7 @@ export default async function CompetitivePage() {
 
       {/* Keyword Intelligence */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Search className="h-4 w-4 text-brand" /> Keyword Intelligence</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Search className="h-4 w-4 text-brand-text" /> Keyword Intelligence</h2>
         <form action={saveKeywordAction} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <input name="keyword" required placeholder="family calendar app" className={`${inputCls} lg:col-span-2`} />
           <input name="search_volume" type="number" min="0" placeholder="Volume/mo" className={inputCls} />
@@ -108,7 +108,7 @@ export default async function CompetitivePage() {
 
       {/* Backlinks */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Link2 className="h-4 w-4 text-brand" /> Backlink Monitoring</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Link2 className="h-4 w-4 text-brand-text" /> Backlink Monitoring</h2>
         <form action={saveBacklinkAction} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <input name="source_domain" required placeholder="techcrunch.com" className={`${inputCls} lg:col-span-2`} />
           <input name="target_url" placeholder="/blog/post" className={inputCls} />

@@ -120,18 +120,18 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
       {coach && (
         <div className="mb-5 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-5">
           <div className="mb-2 flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand"><Sparkles className="h-3.5 w-3.5" /> Money Coach</span>
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand-text"><Sparkles className="h-3.5 w-3.5" /> Money Coach</span>
             <button onClick={() => setCoach(null)} className="text-muted hover:text-fg"><X className="h-3.5 w-3.5" /></button>
           </div>
           {coach.headline && <p className="text-sm font-semibold leading-relaxed">{coach.headline}</p>}
           {coach.insights.length > 0 && (
             <ul className="mt-2 space-y-1">
               {coach.insights.map((it, i) => (
-                <li key={i} className="flex items-start gap-1.5 text-xs text-muted"><Sparkles className="mt-0.5 h-3 w-3 flex-shrink-0 text-brand" /> {it}</li>
+                <li key={i} className="flex items-start gap-1.5 text-xs text-muted"><Sparkles className="mt-0.5 h-3 w-3 flex-shrink-0 text-brand-text" /> {it}</li>
               ))}
             </ul>
           )}
-          {coach.suggestion && <p className="mt-2 rounded-xl border border-brand/20 bg-brand/5 p-2.5 text-xs"><span className="font-semibold text-brand">Try this: </span>{coach.suggestion}</p>}
+          {coach.suggestion && <p className="mt-2 rounded-xl border border-brand/20 bg-brand/5 p-2.5 text-xs"><span className="font-semibold text-brand-text">Try this: </span>{coach.suggestion}</p>}
         </div>
       )}
 
@@ -155,17 +155,17 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {canSend && (
           <button onClick={() => setSendOpen(true)}
-            className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm font-semibold transition hover:border-brand/40 hover:text-brand">
+            className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm font-semibold transition hover:border-brand/40 hover:text-brand-text">
             <Send className="h-4 w-4" /> Send money
           </button>
         )}
         <button onClick={() => setRequestFor(childWallets[0] ?? null)} disabled={childWallets.length === 0}
-          className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm font-semibold transition hover:border-brand/40 hover:text-brand disabled:opacity-50">
+          className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm font-semibold transition hover:border-brand/40 hover:text-brand-text disabled:opacity-50">
           <HandCoins className="h-4 w-4" /> Request to spend
         </button>
         {canManage && (
           <button onClick={() => setAddFor(childWallets[0] ?? null)} disabled={childWallets.length === 0}
-            className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm font-semibold transition hover:border-brand/40 hover:text-brand disabled:opacity-50">
+            className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-sm font-semibold transition hover:border-brand/40 hover:text-brand-text disabled:opacity-50">
             <Plus className="h-4 w-4" /> Add funds
           </button>
         )}
@@ -216,7 +216,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
                 </div>
                 <div className="flex items-center gap-1.5">
                   <button onClick={() => setRequestFor(c)}
-                    className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold transition hover:border-brand/40 hover:text-brand">
+                    className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold transition hover:border-brand/40 hover:text-brand-text">
                     <HandCoins className="h-3.5 w-3.5" /> Spend
                   </button>
                   {canManage && (
@@ -236,7 +236,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
                   </div>
                 ))}
               </div>
-              <Link href={`/wallet/children/${c.id}`} className="mt-3 block text-center text-xs font-semibold text-brand hover:underline">
+              <Link href={`/wallet/children/${c.id}`} className="mt-3 block text-center text-xs font-semibold text-brand-text hover:underline">
                 View details &amp; history →
               </Link>
             </div>
@@ -312,8 +312,8 @@ function SpendingAnalytics({ analytics }: { analytics: WalletAnalytics }) {
           <p className="mt-0.5 text-base font-black text-rose-500">{formatCents(thisMonthOut)}</p>
         </div>
         <div className={cn('rounded-xl p-3', net >= 0 ? 'bg-brand/10' : 'bg-amber-500/10')}>
-          <p className={cn('text-[10px] font-semibold uppercase tracking-wide', net >= 0 ? 'text-brand' : 'text-amber-500')}>Net</p>
-          <p className={cn('mt-0.5 text-base font-black', net >= 0 ? 'text-brand' : 'text-amber-500')}>
+          <p className={cn('text-[10px] font-semibold uppercase tracking-wide', net >= 0 ? 'text-brand-text' : 'text-amber-500')}>Net</p>
+          <p className={cn('mt-0.5 text-base font-black', net >= 0 ? 'text-brand-text' : 'text-amber-500')}>
             {net >= 0 ? '+' : '−'}{formatCents(Math.abs(net))}
           </p>
         </div>
@@ -558,7 +558,7 @@ function AddFundsModal({ child, onClose }: { child: ChildWalletView; onClose: ()
         <div className="flex flex-wrap gap-2">
           {[5, 10, 20, 50].map((q) => (
             <button key={q} type="button" onClick={() => setAmount(String(q))}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand transition">
+              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand-text transition">
               ${q}
             </button>
           ))}

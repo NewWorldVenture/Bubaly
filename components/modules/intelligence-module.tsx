@@ -85,7 +85,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
       {contribution.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="mb-1 flex items-center gap-2">
-            <Info className="size-5 text-brand" />
+            <Info className="size-5 text-brand-text" />
             <h3 className="font-semibold">What you’d contribute</h3>
           </div>
           <p className="mb-3 text-sm text-muted">
@@ -129,7 +129,7 @@ export function IntelligenceModule({ contribution = [], candidates = [] }: { con
       {/* Insights (k-anonymity gated; empty until the aggregation pipeline exists) */}
       {contributing && (
         <div className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-3 flex items-center gap-2"><Radar className="size-5 text-brand" /><h3 className="font-semibold">Network insights</h3></div>
+          <div className="mb-3 flex items-center gap-2"><Radar className="size-5 text-brand-text" /><h3 className="font-semibold">Network insights</h3></div>
           {insights.length === 0 ? (
             <p className="text-sm text-muted">
               No insights for families like yours yet. A pattern appears here only once it&apos;s backed

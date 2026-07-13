@@ -128,7 +128,7 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
           <div className="flex items-center gap-2">
             {goal.is_complete
               ? <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
-              : <Target className="h-5 w-5 shrink-0 text-brand" />}
+              : <Target className="h-5 w-5 shrink-0 text-brand-text" />}
             <p className="truncate font-semibold">{goal.title}</p>
           </div>
           {goal.description && <p className="mt-1 line-clamp-2 text-sm text-muted">{goal.description}</p>}
@@ -162,7 +162,7 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
                 disabled={pending}
                 className={cn(
                   'flex-1 rounded-lg border px-2 py-1 text-xs font-medium transition hover:bg-elevated disabled:opacity-50',
-                  goal.progress >= v ? 'border-brand text-brand' : 'border-border text-muted',
+                  goal.progress >= v ? 'border-brand text-brand-text' : 'border-border text-muted',
                 )}
               >
                 {v}%

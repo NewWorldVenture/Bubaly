@@ -53,7 +53,7 @@ export function CalmModule({ inbox }: { inbox: CalmInbox }) {
       {/* Daily digest */}
       <div className={cn('mb-6 flex items-start gap-3 rounded-2xl border p-5',
         allClear ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border bg-surface/50')}>
-        <span className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl', allClear ? 'bg-emerald-500/15 text-emerald-300' : 'bg-brand/10 text-brand')}>
+        <span className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl', allClear ? 'bg-emerald-500/15 text-emerald-300' : 'bg-brand/10 text-brand-text')}>
           <Leaf className="h-5 w-5" />
         </span>
         <div>
@@ -107,8 +107,8 @@ export function CalmModule({ inbox }: { inbox: CalmInbox }) {
       {showQuiet && (
         <p className="mt-2 px-2 text-center text-xs text-muted">
           Bubaly is tracking these across your hubs — you don’t need to act on them now. Open the
-          {' '}<Link href="/dashboard/family-operating-index" className="text-brand hover:underline">Operating Index</Link>{' '}
-          or <Link href="/dashboard/agents" className="text-brand hover:underline">Family Assistant</Link> to see the full picture.
+          {' '}<Link href="/dashboard/family-operating-index" className="text-brand-text hover:underline">Operating Index</Link>{' '}
+          or <Link href="/dashboard/agents" className="text-brand-text hover:underline">Family Assistant</Link> to see the full picture.
         </p>
       )}
     </div>

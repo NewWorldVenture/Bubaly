@@ -82,7 +82,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
       {!alreadyReferred && (
         <section className="rounded-3xl border border-border bg-surface/40 p-6">
           <div className="flex items-center gap-2">
-            <Ticket className="h-4 w-4 text-brand" />
+            <Ticket className="h-4 w-4 text-brand-text" />
             <h2 className="text-base font-semibold">Have a referral code?</h2>
           </div>
           <p className="mt-1 text-sm text-muted">Enter a friend&apos;s code to claim {rewardLabel} when you upgrade.</p>

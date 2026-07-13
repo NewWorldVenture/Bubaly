@@ -72,7 +72,7 @@ export default async function AdminAuditPage({ searchParams }: Params) {
       </div>
 
       <div className="grid-stats">
-        <StatCard icon={ScrollText} label="Logged events" value={rows.length} tone="bg-brand/10 text-brand" />
+        <StatCard icon={ScrollText} label="Logged events" value={rows.length} tone="bg-brand/10 text-brand-text" />
         <StatCard icon={ShieldAlert} label="Site-admin actions" value={adminActions} tone="bg-danger/10 text-danger" />
         <StatCard icon={Activity} label="Action types" value={actionOptions.length} tone="bg-accent/10 text-accent" />
         <StatCard icon={Building2} label="Families touched" value={new Set(rows.map((l) => l.family_id).filter(Boolean)).size} tone="bg-success/10 text-success" />

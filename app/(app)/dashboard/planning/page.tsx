@@ -45,12 +45,12 @@ function FeatureCard({
             <h2 className="-mt-0.5 text-sm font-bold">{title}</h2>
           </div>
         </div>
-        <Link href={href} className="flex items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-semibold text-brand transition hover:bg-brand/10" aria-label={`Open ${title}`}>
+        <Link href={href} className="flex items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-semibold text-brand-text transition hover:bg-brand/10" aria-label={`Open ${title}`}>
           Open <ChevronRight className="h-3.5 w-3.5" />
         </Link>
       </div>
       <div className="min-h-[120px] flex-1 space-y-2">{children}</div>
-      <Link href={href} className="mt-4 border-t border-border/60 pt-3 text-xs font-semibold text-muted transition hover:text-brand">
+      <Link href={href} className="mt-4 border-t border-border/60 pt-3 text-xs font-semibold text-muted transition hover:text-brand-text">
         {count} {countLabel} <ChevronRight className="inline h-3 w-3" />
       </Link>
     </section>
@@ -127,13 +127,13 @@ export default async function PlanningPage() {
           <p className="mt-1 text-sm text-muted">Every page. Everything you need to plan, organize and stay in sync as a family.</p>
         </div>
         <span className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm font-bold">
-          <LayoutGrid className="h-4 w-4 text-brand" /> 8 Pages
+          <LayoutGrid className="h-4 w-4 text-brand-text" /> 8 Pages
         </span>
       </div>
 
       {/* Intro hero */}
       <section className="rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-6">
-        <p className="text-sm font-semibold text-brand">All your plans, tasks, notes, documents and people — organized in one place.</p>
+        <p className="text-sm font-semibold text-brand-text">All your plans, tasks, notes, documents and people — organized in one place.</p>
         <div className="mt-4 flex flex-wrap gap-2">
           {PAGES.map((p) => (
             <span key={p} className="rounded-full border border-border bg-surface/60 px-3 py-1 text-xs font-semibold text-fg/80">{p}</span>

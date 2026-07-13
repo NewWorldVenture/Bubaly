@@ -195,7 +195,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">My Day</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand">Calendar</Link>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">Calendar</Link>
           </div>
           {todayEvents && todayEvents.length > 0 ? (
             <ul className="space-y-3">
@@ -210,7 +210,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
                     {e.location && <p className="truncate text-xs text-muted">{e.location}</p>}
                   </div>
                   {e.assignee_id === myMemberId && (
-                    <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold text-brand">Mine</span>
+                    <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold text-brand-text">Mine</span>
                   )}
                 </li>
               ))}
@@ -227,7 +227,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">{isKid ? 'My Chores' : 'My Tasks'}</h2>
-            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand">View all</Link>
+            <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">View all</Link>
           </div>
           {myChores && myChores.length > 0 ? (
             <ul className="space-y-3">
@@ -267,7 +267,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
               <h2 className="flex items-center gap-2 font-semibold">
                 <ClipboardCheck className="h-4 w-4 text-amber-400" /> Needs Your Approval
               </h2>
-              <Link href="/dashboard/chores" className="text-xs font-semibold text-brand">Review</Link>
+              <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">Review</Link>
             </div>
             {pendingApprovals && pendingApprovals.length > 0 ? (
               <ul className="space-y-3">
@@ -297,9 +297,9 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
           <div className="rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-5">
             <div className="mb-2 flex items-center justify-between">
               <h2 className="flex items-center gap-2 font-semibold">
-                <Gift className="h-4 w-4 text-brand" /> My Rewards
+                <Gift className="h-4 w-4 text-brand-text" /> My Rewards
               </h2>
-              <Link href="/dashboard/chores" className="text-xs font-semibold text-brand">Chores</Link>
+              <Link href="/dashboard/chores" className="text-xs font-semibold text-brand-text">Chores</Link>
             </div>
             <div className="mb-4 flex items-center gap-2 rounded-xl bg-surface/40 p-3">
               <Award className="h-5 w-5 text-amber-400" />
@@ -328,7 +328,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">Coming Up</h2>
-              <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand">View all</Link>
+              <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text">View all</Link>
             </div>
             {upcomingEvents && upcomingEvents.length > 0 ? (
               <ul className="space-y-3">

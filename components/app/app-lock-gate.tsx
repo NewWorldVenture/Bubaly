@@ -103,7 +103,7 @@ export function AppLockGate({
   return (
     <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-bg px-6">
       <div className="flex w-full max-w-xs flex-col items-center">
-        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand">
+        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand-text">
           <Lock className="h-7 w-7" />
         </div>
         <h1 className="mt-5 text-lg font-bold">Enter your PIN</h1>

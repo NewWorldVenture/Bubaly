@@ -40,7 +40,7 @@ export default async function FamilyReportsPage() {
 
       <SectionCard title="Highlights">
         <ul className="space-y-2 text-sm">
-          <li className="flex items-center gap-2"><BarChart3 className="h-4 w-4 text-brand" /> {taskRate}% of tasks completed this cycle.</li>
+          <li className="flex items-center gap-2"><BarChart3 className="h-4 w-4 text-brand-text" /> {taskRate}% of tasks completed this cycle.</li>
           <li className="flex items-center gap-2"><Gauge className="h-4 w-4 text-violet-400" /> Family load is <LevelBadge level={stress.level} /> with {stress.factors.length} factor{stress.factors.length === 1 ? '' : 's'} flagged.</li>
           <li className="flex items-center gap-2"><CreditCard className="h-4 w-4 text-blue-400" /> {counts.billsPaid} of {counts.billsTotal} tracked bills are paid.</li>
         </ul>

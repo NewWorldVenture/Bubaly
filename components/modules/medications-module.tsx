@@ -286,7 +286,7 @@ export function MedicationsModule() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div className="lg:col-span-2 rounded-2xl bg-surface/50 border border-border p-5">
           <h2 className="text-sm font-semibold text-fg uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-brand" /> Today&apos;s Doses
+            <Clock className="h-4 w-4 text-brand-text" /> Today&apos;s Doses
           </h2>
           {todayDoses.length === 0 ? (
             <p className="text-muted text-sm py-6 text-center">No doses scheduled for today.</p>
@@ -305,7 +305,7 @@ export function MedicationsModule() {
                       : 'border-border bg-surface/40',
                   )}>
                     <div className="w-14 text-sm font-semibold text-fg tabular-nums">{due.time}</div>
-                    <Pill className="h-4 w-4 text-brand flex-shrink-0" />
+                    <Pill className="h-4 w-4 text-brand-text flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-fg truncate">
                         {med.name}{med.dosage ? <span className="text-muted font-normal"> · {med.dosage}</span> : null}
@@ -371,7 +371,7 @@ export function MedicationsModule() {
               <div key={m.id} className={cn('rounded-2xl border p-5', m.is_active ? 'bg-surface/50 border-border' : 'bg-surface/20 border-border/50 opacity-70')}>
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand flex-shrink-0">
+                    <div className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand-text flex-shrink-0">
                       <Pill className="h-5 w-5" />
                     </div>
                     <div className="min-w-0">
@@ -407,7 +407,7 @@ export function MedicationsModule() {
                     <p className="text-xs text-muted">No schedule set.</p>
                   ) : medSchedules.map((s) => (
                     <div key={s.id} className="flex items-center gap-2 text-xs rounded-lg bg-surface/40 border border-border px-2.5 py-1.5">
-                      <CalendarClock className="h-3.5 w-3.5 text-brand flex-shrink-0" />
+                      <CalendarClock className="h-3.5 w-3.5 text-brand-text flex-shrink-0" />
                       <span className="font-medium text-fg tabular-nums">{shortTime(s.time_of_day)}</span>
                       <span className="text-muted">
                         {s.days_of_week.length === 7 ? 'Every day' : s.days_of_week.map((d) => DAY_LABELS[d]).join(', ')}
@@ -421,7 +421,7 @@ export function MedicationsModule() {
 
                 {canEdit && (
                   <div className="mt-3 flex items-center gap-3">
-                    <button onClick={() => openSchedule(m)} className="text-xs font-medium text-brand hover:underline inline-flex items-center gap-1">
+                    <button onClick={() => openSchedule(m)} className="text-xs font-medium text-brand-text hover:underline inline-flex items-center gap-1">
                       <Plus className="h-3.5 w-3.5" /> Add schedule
                     </button>
                     <button onClick={() => toggleActive(m)} className="text-xs font-medium text-muted hover:text-fg">

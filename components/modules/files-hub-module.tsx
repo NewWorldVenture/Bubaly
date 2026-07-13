@@ -149,7 +149,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
           { label: 'Shared', value: String(summary.shared), icon: Share2 },
         ].map((s) => (
           <div key={s.label} className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand/10 text-brand"><s.icon className="h-5 w-5" /></span>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand/10 text-brand-text"><s.icon className="h-5 w-5" /></span>
             <div><div className="text-lg font-bold">{s.value}</div><div className="text-xs text-muted">{s.label}</div></div>
           </div>
         ))}
@@ -182,7 +182,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
               <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg">
                 {([['recent', 'Most recent'], ['name', 'Name (A–Z)'], ['size', 'Largest']] as const).map(([k, l]) => (
                   <button key={k} onClick={() => { setSort(k); setSortOpen(false); }}
-                    className={cn('block w-full px-3 py-2 text-left text-xs hover:bg-surface', sort === k && 'text-brand font-semibold')}>{l}</button>
+                    className={cn('block w-full px-3 py-2 text-left text-xs hover:bg-surface', sort === k && 'text-brand-text font-semibold')}>{l}</button>
                 ))}
               </div>
             </>
@@ -221,7 +221,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
                   <p className="text-xs text-muted">{d.category?.trim() || 'General'} · {formatBytes(d.size_bytes)}</p>
                 </div>
                 <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
-                  {d.is_secure && <span className="inline-flex items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-brand"><Lock className="h-2.5 w-2.5" /> Secure</span>}
+                  {d.is_secure && <span className="inline-flex items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-brand-text"><Lock className="h-2.5 w-2.5" /> Secure</span>}
                   <span>{fmtDate(full.created_at)}</span>
                 </div>
                 <div className="mt-3 flex items-center gap-2 border-t border-border/50 pt-3">

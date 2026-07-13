@@ -37,7 +37,7 @@ export function RegistrationClient({
       {/* Registrations */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold"><FileText className="h-4 w-4 text-brand" /> Registrations</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><FileText className="h-4 w-4 text-brand-text" /> Registrations</h2>
           <Button onClick={() => { setRegEdit(null); setRegOpen(true); }}><Plus className="h-4 w-4" /> Add</Button>
         </div>
         {registrations.length === 0 ? (
@@ -66,7 +66,7 @@ export function RegistrationClient({
       {/* Inspections */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold"><ClipboardCheck className="h-4 w-4 text-brand" /> Inspection stickers</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><ClipboardCheck className="h-4 w-4 text-brand-text" /> Inspection stickers</h2>
           <Button onClick={() => { setInspEdit(null); setInspOpen(true); }}><Plus className="h-4 w-4" /> Add</Button>
         </div>
         {inspections.length === 0 ? (

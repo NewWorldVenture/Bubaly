@@ -204,7 +204,7 @@ function AICoachCard({ childId }: { childId: string }) {
         disabled={loading}
         className="flex w-full items-center gap-3 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/5 to-violet-500/5 px-4 py-3.5 text-left transition hover:border-brand/30 hover:from-brand/10 disabled:opacity-60"
       >
-        <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-brand/15 text-brand">
+        <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text">
           {loading ? (
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
           ) : (
@@ -212,7 +212,7 @@ function AICoachCard({ childId }: { childId: string }) {
           )}
         </div>
         <div>
-          <p className="text-sm font-semibold text-brand">{loading ? 'Thinking…' : 'Ask AI Money Coach'}</p>
+          <p className="text-sm font-semibold text-brand-text">{loading ? 'Thinking…' : 'Ask AI Money Coach'}</p>
           <p className="text-xs text-muted">Get personalised insights for this wallet</p>
         </div>
         {!loading && <ChevronRight className="ml-auto h-4 w-4 text-muted" />}
@@ -223,11 +223,11 @@ function AICoachCard({ childId }: { childId: string }) {
   return (
     <div className="rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/8 to-violet-500/5 p-4">
       <div className="mb-2 flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand">
+        <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand-text">
           <Sparkles className="h-3.5 w-3.5" /> AI Money Coach
         </span>
         <div className="flex items-center gap-1.5">
-          <button onClick={load} disabled={loading} className="rounded-md p-1 text-muted hover:text-brand disabled:opacity-50" title="Refresh">
+          <button onClick={load} disabled={loading} className="rounded-md p-1 text-muted hover:text-brand-text disabled:opacity-50" title="Refresh">
             {loading
               ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand border-t-transparent" />
               : <Sparkles className="h-3.5 w-3.5" />}
@@ -242,14 +242,14 @@ function AICoachCard({ childId }: { childId: string }) {
         <ul className="mt-2 space-y-1">
           {coaching.insights.map((it, i) => (
             <li key={i} className="flex items-start gap-1.5 text-xs text-muted">
-              <Sparkles className="mt-0.5 h-3 w-3 flex-shrink-0 text-brand" /> {it}
+              <Sparkles className="mt-0.5 h-3 w-3 flex-shrink-0 text-brand-text" /> {it}
             </li>
           ))}
         </ul>
       )}
       {coaching.suggestion && (
         <p className="mt-2.5 rounded-xl border border-brand/20 bg-brand/5 p-2.5 text-xs">
-          <span className="font-semibold text-brand">Try this: </span>{coaching.suggestion}
+          <span className="font-semibold text-brand-text">Try this: </span>{coaching.suggestion}
         </p>
       )}
     </div>
@@ -281,7 +281,7 @@ function GoalCard({ goal }: { goal: Goal }) {
             )}
           </p>
         </div>
-        <span className={cn('flex-shrink-0 text-sm font-bold', reached ? 'text-success' : 'text-brand')}>
+        <span className={cn('flex-shrink-0 text-sm font-bold', reached ? 'text-success' : 'text-brand-text')}>
           {pct}%
         </span>
       </div>
@@ -403,7 +403,7 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
         <div className="flex flex-wrap gap-2">
           {[5, 10, 20, 50].map((q) => (
             <button key={q} type="button" onClick={() => setAmount(String(q))}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand transition">
+              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand-text transition">
               ${q}
             </button>
           ))}
@@ -509,7 +509,7 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
         <div className="flex flex-wrap gap-2">
           {[5, 10, 20, 50].map((q) => (
             <button key={q} type="button" onClick={() => setAmount(String(q))}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand transition">
+              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand-text transition">
               ${q}
             </button>
           ))}
@@ -560,7 +560,7 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
         <div className="flex flex-wrap gap-2">
           {[5, 10, 20, 50].map((q) => (
             <button key={q} type="button" onClick={() => setAmount(String(q))}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand transition">
+              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand-text transition">
               ${q}
             </button>
           ))}
@@ -637,14 +637,14 @@ export function ChildDetailView({
         <div className="mt-4 grid grid-cols-3 gap-2">
           <button
             onClick={() => setRequesting(true)}
-            className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-bg/40 py-3 text-xs font-semibold transition hover:border-brand/40 hover:text-brand"
+            className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-bg/40 py-3 text-xs font-semibold transition hover:border-brand/40 hover:text-brand-text"
           >
             <HandCoins className="h-5 w-5" /> Request
           </button>
           {canManage && (
             <button
               onClick={() => setAdding(true)}
-              className="flex flex-col items-center gap-1 rounded-2xl border border-brand/30 bg-brand/10 py-3 text-xs font-semibold text-brand transition hover:bg-brand/15"
+              className="flex flex-col items-center gap-1 rounded-2xl border border-brand/30 bg-brand/10 py-3 text-xs font-semibold text-brand-text transition hover:bg-brand/15"
             >
               <Plus className="h-5 w-5" /> Add funds
             </button>
@@ -652,13 +652,13 @@ export function ChildDetailView({
           {siblings.length > 0 && canManage ? (
             <button
               onClick={() => setSending(true)}
-              className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-bg/40 py-3 text-xs font-semibold transition hover:border-brand/40 hover:text-brand"
+              className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-bg/40 py-3 text-xs font-semibold transition hover:border-brand/40 hover:text-brand-text"
             >
               <Send className="h-5 w-5" /> Send
             </button>
           ) : (
             <Link href="/wallet/cards"
-              className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-bg/40 py-3 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand">
+              className="flex flex-col items-center gap-1 rounded-2xl border border-border bg-bg/40 py-3 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand-text">
               <CreditCard className="h-5 w-5" /> Cards
             </Link>
           )}
@@ -667,7 +667,7 @@ export function ChildDetailView({
         {/* Secondary: request allowance (visible to all — child or parent can ask) */}
         <button
           onClick={() => setRequestingAllowance(true)}
-          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/60 py-2 text-xs font-medium text-muted transition hover:border-brand/40 hover:text-brand"
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/60 py-2 text-xs font-medium text-muted transition hover:border-brand/40 hover:text-brand-text"
         >
           <Banknote className="h-3.5 w-3.5" /> Ask for more allowance
         </button>
@@ -679,7 +679,7 @@ export function ChildDetailView({
           <h2 className="flex items-center gap-2 text-sm font-bold">
             <span className="inline-block h-2 w-2 rounded-full bg-brand" /> Smart Split
           </h2>
-          <Link href="/wallet/settings" className="text-xs font-semibold text-brand hover:underline">Edit split →</Link>
+          <Link href="/wallet/settings" className="text-xs font-semibold text-brand-text hover:underline">Edit split →</Link>
         </div>
         <SmartSplitDonut buckets={child.buckets} total={child.total} />
 
@@ -704,16 +704,16 @@ export function ChildDetailView({
             <Target className="h-4 w-4 text-amber-500" /> Goals
             {activeGoals.length > 0 && <span className="rounded-full bg-amber-500/15 px-1.5 text-[10px] font-bold text-amber-500">{activeGoals.length}</span>}
           </h2>
-          <Link href="/wallet/goals" className="text-xs font-semibold text-brand hover:underline">Manage →</Link>
+          <Link href="/wallet/goals" className="text-xs font-semibold text-brand-text hover:underline">Manage →</Link>
         </div>
         {goals.length === 0 ? (
-          <p className="text-sm text-muted">No goals yet. <Link href="/wallet/goals" className="text-brand hover:underline">Create one →</Link></p>
+          <p className="text-sm text-muted">No goals yet. <Link href="/wallet/goals" className="text-brand-text hover:underline">Create one →</Link></p>
         ) : (
           <div className="space-y-2">
             {activeGoals.map((g) => <GoalCard key={g.id} goal={g} />)}
             {reachedGoals.length > 0 && (
               <details className="group">
-                <summary className="cursor-pointer list-none text-xs font-semibold text-muted hover:text-brand">
+                <summary className="cursor-pointer list-none text-xs font-semibold text-muted hover:text-brand-text">
                   {reachedGoals.length} reached goal{reachedGoals.length !== 1 ? 's' : ''} 🎉
                 </summary>
                 <div className="mt-1.5 space-y-2">
@@ -759,7 +759,7 @@ export function ChildDetailView({
       <div className="rounded-2xl border border-border bg-surface/40 overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
           <h2 className="flex items-center gap-2 text-sm font-bold">
-            <Receipt className="h-4 w-4 text-brand" /> Activity
+            <Receipt className="h-4 w-4 text-brand-text" /> Activity
           </h2>
           <div className="flex items-center gap-3">
             {history.length > 0 && (
@@ -767,7 +767,7 @@ export function ChildDetailView({
                 <Download className="h-3.5 w-3.5" /> Statement
               </button>
             )}
-            <Link href="/wallet/activity" className="text-xs font-semibold text-brand hover:underline">All activity →</Link>
+            <Link href="/wallet/activity" className="text-xs font-semibold text-brand-text hover:underline">All activity →</Link>
           </div>
         </div>
         {history.length === 0 ? (
@@ -787,7 +787,7 @@ export function ChildDetailView({
             {hasMore && (
               <button
                 onClick={() => setActivityExpanded(!activityExpanded)}
-                className="flex w-full items-center justify-center gap-1 py-3 text-xs font-semibold text-muted hover:text-brand transition"
+                className="flex w-full items-center justify-center gap-1 py-3 text-xs font-semibold text-muted hover:text-brand-text transition"
               >
                 {activityExpanded ? <><ChevronDown className="h-3.5 w-3.5 rotate-180" /> Show less</> : <><ChevronDown className="h-3.5 w-3.5" /> Show {groups.length - 3} more days</>}
               </button>

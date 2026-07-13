@@ -35,7 +35,7 @@ export default async function VideoPage() {
       </p>
 
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Film className="h-4 w-4 text-brand" /> Add video</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Film className="h-4 w-4 text-brand-text" /> Add video</h2>
         <form action={saveVideoAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input name="title" required placeholder="Title" className={`${inputCls} lg:col-span-2`} />
           <select name="status" defaultValue="draft" className={inputCls} aria-label="Status">

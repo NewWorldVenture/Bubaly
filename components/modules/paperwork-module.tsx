@@ -110,7 +110,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
-            <Inbox className="h-6 w-6 text-brand" /> Paperwork Inbox
+            <Inbox className="h-6 w-6 text-brand-text" /> Paperwork Inbox
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted">
             Paste any slip, form, or flyer — AI pulls out what you actually have to
@@ -138,7 +138,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
             className={cn(
               'inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-xs font-bold transition',
               filter === f.key
-                ? 'border-brand bg-brand/15 text-brand'
+                ? 'border-brand bg-brand/15 text-brand-text'
                 : 'border-border text-muted hover:bg-elevated',
             )}
           >
@@ -174,7 +174,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
             )}>
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/[0.04] ring-1 ring-white/10">
-                  <Icon className="h-5 w-5 text-brand" />
+                  <Icon className="h-5 w-5 text-brand-text" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -215,7 +215,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                               <button
                                 onClick={() => materialize(it.id, i)}
                                 disabled={pending && busy}
-                                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg bg-brand/15 px-2.5 text-[11px] font-bold text-brand transition hover:bg-brand/25 disabled:opacity-60"
+                                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg bg-brand/15 px-2.5 text-[11px] font-bold text-brand-text transition hover:bg-brand/25 disabled:opacity-60"
                               >
                                 {busy ? <Loader2 className="h-3 w-3 animate-spin" />
                                   : isEvent ? <CalendarPlus className="h-3 w-3" /> : <BellPlus className="h-3 w-3" />}

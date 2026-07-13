@@ -149,7 +149,7 @@ export function QuickCapture() {
             type="button"
             onClick={() => setCustomizing((v) => !v)}
             aria-pressed={customizing}
-            className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand transition hover:bg-brand/10"
+            className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-text transition hover:bg-brand/10"
           >
             {customizing ? <><Check className="h-3.5 w-3.5" /> Done</> : <><Settings2 className="h-3.5 w-3.5" /> Customize</>}
           </button>
@@ -167,7 +167,7 @@ export function QuickCapture() {
                 type="button"
                 onClick={() => setType(t.key)}
                 className={cn('flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-xs font-medium transition',
-                  type === t.key ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:bg-elevated')}
+                  type === t.key ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated')}
               >
                 <t.icon className="h-5 w-5" />
                 {t.label}
@@ -190,7 +190,7 @@ export function QuickCapture() {
             <button
               type="button"
               onClick={() => setType(suggested)}
-              className="flex w-full items-center gap-1.5 rounded-lg bg-brand/5 px-3 py-2 text-left text-xs text-brand transition hover:bg-brand/10"
+              className="flex w-full items-center gap-1.5 rounded-lg bg-brand/5 px-3 py-2 text-left text-xs text-brand-text transition hover:bg-brand/10"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
               <span>Looks like a <span className="font-semibold">{TYPES.find((t) => t.key === suggested)!.label.toLowerCase()}</span> — tap to switch.</span>
@@ -204,7 +204,7 @@ export function QuickCapture() {
           </Field>
 
           {type === 'shopping' && shoppingItems && (
-            <p className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-brand">
+            <p className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-brand-text">
               <ShoppingCart className="h-3.5 w-3.5" />
               Adds {shoppingItems.length} items:
               <span className="text-muted">{shoppingItems.join(', ')}</span>
@@ -212,7 +212,7 @@ export function QuickCapture() {
           )}
 
           {type === 'task' && taskPreview && (
-            <p className="flex items-center gap-1.5 text-xs font-medium text-brand">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-brand-text">
               <CalendarClock className="h-3.5 w-3.5" />
               Due {taskPreview.when}
               {taskPreview.title && taskPreview.title !== text.trim() && (
@@ -223,7 +223,7 @@ export function QuickCapture() {
 
           {type === 'event' && (
             eventPreview?.matched ? (
-              <p className="flex items-center gap-1.5 text-xs font-medium text-brand">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-brand-text">
                 <CalendarClock className="h-3.5 w-3.5" />
                 {formatWhen(eventPreview.startsAt, eventPreview.allDay)}
                 {eventPreview.title && eventPreview.title !== text.trim() && (

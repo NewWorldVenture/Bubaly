@@ -28,6 +28,7 @@ const config: Config = {
           DEFAULT: 'rgb(var(--brand) / <alpha-value>)',
           fg: 'rgb(var(--brand-fg) / <alpha-value>)',
           soft: 'rgb(var(--brand-soft) / <alpha-value>)',
+          text: 'rgb(var(--brand-text) / <alpha-value>)',
         },
         accent: 'rgb(var(--accent) / <alpha-value>)',
         success: 'rgb(var(--success) / <alpha-value>)',

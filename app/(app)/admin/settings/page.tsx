@@ -53,7 +53,7 @@ export default async function AdminSettingsPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <div className="mb-4 flex items-center gap-2"><Plug className="h-4 w-4 text-brand" /><h2 className="font-semibold">Connected services</h2></div>
+          <div className="mb-4 flex items-center gap-2"><Plug className="h-4 w-4 text-brand-text" /><h2 className="font-semibold">Connected services</h2></div>
           <ul className="space-y-2">
             {providers.map((p) => (
               <li key={p.name} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm">
@@ -71,7 +71,7 @@ export default async function AdminSettingsPage() {
 
         <div className="space-y-4">
           <Card>
-            <div className="mb-4 flex items-center gap-2"><Server className="h-4 w-4 text-brand" /><h2 className="font-semibold">System</h2></div>
+            <div className="mb-4 flex items-center gap-2"><Server className="h-4 w-4 text-brand-text" /><h2 className="font-semibold">System</h2></div>
             <div className="space-y-2 text-sm">
               {system.map((r) => (
                 <div key={r.label} className="flex justify-between gap-3">

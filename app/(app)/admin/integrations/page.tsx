@@ -20,7 +20,7 @@ function Row({ integration }: { integration: Integration }) {
   const Icon = integration.icon;
   return (
     <div className="flex items-center gap-4 rounded-xl border border-border bg-surface/40 p-4">
-      <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+      <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand-text">
         <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0 flex-1">

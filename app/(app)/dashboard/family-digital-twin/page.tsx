@@ -74,14 +74,14 @@ export default async function FamilyDigitalTwinPage() {
                 <Avatar name={m.display_name} color={m.color} size={48} />
                 <div className="min-w-0 flex-1 space-y-3">
                   <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2.5 py-1 text-brand"><Repeat className="h-3 w-3" /> {r.length} routines</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2.5 py-1 text-brand-text"><Repeat className="h-3 w-3" /> {r.length} routines</span>
                     <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2.5 py-1 text-blue-300"><BookOpen className="h-3 w-3" /> {c.length} classes</span>
                     <span className="inline-flex items-center gap-1 rounded-full bg-teal-500/15 px-2.5 py-1 text-teal-300"><Trophy className="h-3 w-3" /> {t.length} teams</span>
                   </div>
                   {profile?.strengths && <p className="text-sm"><span className="text-muted">Strengths: </span>{profile.strengths}</p>}
                   {profile?.ai_insights ? (
                     <p className="flex items-start gap-2 rounded-xl bg-surface/40 p-3 text-sm text-fg/90">
-                      <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand" /> {profile.ai_insights}
+                      <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-text" /> {profile.ai_insights}
                     </p>
                   ) : (
                     <p className="text-xs text-muted">No AI insights captured yet.</p>

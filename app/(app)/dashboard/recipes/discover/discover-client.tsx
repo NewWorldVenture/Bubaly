@@ -58,7 +58,7 @@ export function DiscoverClient() {
       <div className="flex items-center gap-3">
         <Link href="/dashboard/recipes" className="text-muted hover:text-fg"><ArrowLeft className="h-5 w-5" /></Link>
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold"><ChefHat className="h-5 w-5 text-brand" /> Discover Recipes</h1>
+          <h1 className="flex items-center gap-2 text-xl font-bold"><ChefHat className="h-5 w-5 text-brand-text" /> Discover Recipes</h1>
           <p className="text-sm text-muted">Search free recipe libraries and save favorites to your family vault.</p>
         </div>
       </div>

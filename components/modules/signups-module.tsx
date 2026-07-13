@@ -219,14 +219,14 @@ export function SignupsModule() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-semibold text-fg">{o.title}</span>
-                              {o.category && <span className="text-[10px] uppercase tracking-wide rounded bg-brand/10 text-brand px-1.5 py-0.5">{o.category}</span>}
+                              {o.category && <span className="text-[10px] uppercase tracking-wide rounded bg-brand/10 text-brand-text px-1.5 py-0.5">{o.category}</span>}
                               <span className={cn('text-[10px] uppercase tracking-wide rounded border px-1.5 py-0.5', STATUS_STYLES[o.status])}>{OPPORTUNITY_STATUS_LABELS[o.status]}</span>
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
                               {o.member_id && <span className="inline-flex items-center gap-1"><Avatar name={memberName(o.member_id) ?? '?'} size={14} />{memberName(o.member_id)}</span>}
                               {o.deadline && <span className={cn('inline-flex items-center gap-1', missed && 'text-rose-400')}><CalendarClock className="h-3.5 w-3.5" />Deadline {fmtDate(o.deadline)} · {countdownLabel(o)}</span>}
                               {o.cost != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{o.cost}</span>}
-                              {o.url && <a href={o.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand hover:underline"><ExternalLink className="h-3.5 w-3.5" />Register</a>}
+                              {o.url && <a href={o.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />Register</a>}
                             </div>
                             {o.notes && <p className="mt-1.5 text-sm text-fg/80">{o.notes}</p>}
                           </div>

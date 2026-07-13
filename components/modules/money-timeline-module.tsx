@@ -19,7 +19,7 @@ type KeyedInsight = TimelineInsight & { key: string };
 const SEV: Record<InsightSeverity, { ring: string; chip: string; icon: string; label: string }> = {
   urgent: { ring: 'border-rose-400/40 bg-rose-500/[0.07]', chip: 'bg-rose-500/15 text-rose-300', icon: 'text-rose-400', label: 'Urgent' },
   watch:  { ring: 'border-amber-400/40 bg-amber-500/[0.06]', chip: 'bg-amber-500/15 text-amber-300', icon: 'text-amber-400', label: 'Watch' },
-  info:   { ring: 'border-border bg-surface', chip: 'bg-brand/15 text-brand', icon: 'text-brand', label: 'Note' },
+  info:   { ring: 'border-border bg-surface', chip: 'bg-brand/15 text-brand-text', icon: 'text-brand-text', label: 'Note' },
 };
 
 const KIND_ICON: Record<string, typeof Sparkles> = {
@@ -60,7 +60,7 @@ export function MoneyTimelineModule({
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
-            <Sparkles className="h-6 w-6 text-brand" /> Financial Copilot
+            <Sparkles className="h-6 w-6 text-brand-text" /> Financial Copilot
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted">
             Your money and your calendar on one timeline — so a heavy week never
@@ -123,7 +123,7 @@ export function MoneyTimelineModule({
                           <button
                             onClick={() => act(i, 'acknowledged')}
                             disabled={pending}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand/15 px-3 text-xs font-bold text-brand transition hover:bg-brand/25 disabled:opacity-60"
+                            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand/15 px-3 text-xs font-bold text-brand-text transition hover:bg-brand/25 disabled:opacity-60"
                           >
                             <Check className="h-3.5 w-3.5" /> Got it
                           </button>

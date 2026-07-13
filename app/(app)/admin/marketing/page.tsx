@@ -112,7 +112,7 @@ export default async function MarketingDashboard() {
 
         <Card>
           <div className="mb-4 flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-brand" />
+            <Sparkles className="h-4 w-4 text-brand-text" />
             <h2 className="text-base font-semibold">Recommended Next Actions</h2>
           </div>
           {recs.length > 0 ? (

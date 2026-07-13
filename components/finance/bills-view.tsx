@@ -72,7 +72,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
           <p className="truncate text-sm font-semibold">{b.name}</p>
           <p className="truncate text-xs text-muted">
             Due {fmtDueDate(b.due_date)}{b.category ? ` · ${b.category}` : ''}{b.is_recurring ? ' · recurring' : ''}
-            {b.autopay && <span className="ml-1 inline-flex items-center gap-0.5 text-brand"><Repeat className="h-3 w-3" /> Auto Pay</span>}
+            {b.autopay && <span className="ml-1 inline-flex items-center gap-0.5 text-brand-text"><Repeat className="h-3 w-3" /> Auto Pay</span>}
           </p>
         </div>
         <div className="text-right">
@@ -82,7 +82,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
         <div className="flex shrink-0 items-center gap-1">
           {mode !== 'due' && (
             <button onClick={() => toggleAutopay(b)} title="Toggle Auto Pay"
-              className={cn('rounded-lg p-1.5 transition', b.autopay ? 'text-brand' : 'text-muted/50 hover:text-fg')}><Repeat className="h-4 w-4" /></button>
+              className={cn('rounded-lg p-1.5 transition', b.autopay ? 'text-brand-text' : 'text-muted/50 hover:text-fg')}><Repeat className="h-4 w-4" /></button>
           )}
           <button onClick={() => markPaid(b)} title={b.status === 'paid' ? 'Reopen' : 'Mark paid'}
             className="rounded-lg p-1.5 text-muted/50 transition hover:text-emerald-400">{b.status === 'paid' ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}</button>

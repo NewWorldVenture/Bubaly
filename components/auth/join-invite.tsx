@@ -60,7 +60,7 @@ export function JoinInvite() {
     const redirect = `/join?token=${encodeURIComponent(state.token)}`;
     return (
       <div className="glass-card p-8 text-center animate-fade-in">
-        <LogIn className="mx-auto h-12 w-12 text-brand" />
+        <LogIn className="mx-auto h-12 w-12 text-brand-text" />
         <h1 className="mt-4 text-xl font-semibold">You’ve been invited</h1>
         <p className="mt-2 text-sm text-muted">
           Sign in or create an account with the email your invite was sent to, and you’ll join automatically.

@@ -15,7 +15,7 @@ export default async function AdminAIPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl"><Sparkles className="h-6 w-6 text-brand" /> AI Engine</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl"><Sparkles className="h-6 w-6 text-brand-text" /> AI Engine</h1>
         <p className="mt-1 text-sm text-muted">
           Choose which AI powers Bubaly&apos;s assistant, briefings, and smart features, and link your API keys.
           Applies to every AI feature that uses the shared provider.

@@ -64,7 +64,7 @@ export function ReconciliationClient({ report }: { report: ReconReport }) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Credit Volume" value={formatCents(report.creditVolumeCents)} icon={TrendingUp} color="text-emerald-400" />
         <StatCard label="Debit Volume" value={formatCents(report.debitVolumeCents)} icon={TrendingDown} color="text-rose-400" />
-        <StatCard label="Net Position" value={formatCents(report.netCents)} icon={Scale} color="text-brand" />
+        <StatCard label="Net Position" value={formatCents(report.netCents)} icon={Scale} color="text-brand-text" />
         <StatCard label="Pending" value={String(report.pendingCount)} icon={Clock} color="text-amber-400" />
       </div>
 
@@ -127,7 +127,7 @@ export function ReconciliationClient({ report }: { report: ReconReport }) {
 
       {/* Reversal summary footer */}
       <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 text-sm text-muted">
-        <RotateCcw className="h-4 w-4 text-brand" />
+        <RotateCcw className="h-4 w-4 text-brand-text" />
         <span>{report.reversalCount} reversal transaction{report.reversalCount === 1 ? '' : 's'} in the ledger. Corrections are made via reversals, never edits.</span>
       </div>
     </div>

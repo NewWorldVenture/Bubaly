@@ -49,7 +49,7 @@ export default async function MarketplaceFollowingPage() {
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
           <UserCheck className="mx-auto mb-2 h-6 w-6" />
           You’re not following anyone yet.
-          <div className="mt-2"><Link href="/marketplace/creators" className="text-brand hover:underline">Find creators to follow</Link></div>
+          <div className="mt-2"><Link href="/marketplace/creators" className="text-brand-text hover:underline">Find creators to follow</Link></div>
         </div>
       ) : feed.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
@@ -58,7 +58,7 @@ export default async function MarketplaceFollowingPage() {
       ) : (
         <>
           {newCount > 0 && (
-            <p className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
+            <p className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand-text">
               <Sparkles className="h-3.5 w-3.5" /> {newCount} new this week
             </p>
           )}
@@ -71,9 +71,9 @@ export default async function MarketplaceFollowingPage() {
                     <p className="mb-0.5 flex items-center gap-1 text-[11px] text-muted">
                       <span>{storeEmoji ?? '🛍️'}</span> <span className="truncate">{storeName}</span>
                     </p>
-                    <Link href={`/marketplace/item/${l.id}`} className="line-clamp-2 text-sm font-medium hover:text-brand">
+                    <Link href={`/marketplace/item/${l.id}`} className="line-clamp-2 text-sm font-medium hover:text-brand-text">
                       {l.title}
-                      {isNew && <span className="ml-1.5 rounded bg-brand/15 px-1 py-0.5 align-middle text-[10px] font-semibold text-brand">NEW</span>}
+                      {isNew && <span className="ml-1.5 rounded bg-brand/15 px-1 py-0.5 align-middle text-[10px] font-semibold text-brand-text">NEW</span>}
                     </Link>
                     <p className="mt-1 text-xs text-muted">
                       {KIND_LABELS[l.kind as ListingKind] ?? l.kind}{price && ` · ${price}`}

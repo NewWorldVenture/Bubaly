@@ -45,7 +45,7 @@ export default async function ContentStudioPage() {
 
         <div className="space-y-4">
           <Card>
-            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand" /> Recent AI generations</h3>
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> Recent AI generations</h3>
             {(generations ?? []).length === 0 ? (
               <p className="text-xs text-muted">AI generation history will appear here. Open a new post to generate captions, hashtags, scripts, and more.</p>
             ) : (

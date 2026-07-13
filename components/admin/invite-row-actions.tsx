@@ -28,7 +28,7 @@ export function InviteRowActions({ inviteId }: { inviteId: string }) {
 
   return (
     <div className="flex items-center gap-1">
-      <button onClick={resend} disabled={busy !== null} className="rounded-lg p-1.5 text-muted hover:text-brand disabled:opacity-50" aria-label="Resend invite" title="Resend">
+      <button onClick={resend} disabled={busy !== null} className="rounded-lg p-1.5 text-muted hover:text-brand-text disabled:opacity-50" aria-label="Resend invite" title="Resend">
         <Send className="h-4 w-4" />
       </button>
       <button onClick={revoke} disabled={busy !== null} className="rounded-lg p-1.5 text-muted hover:text-danger disabled:opacity-50" aria-label="Revoke invite" title="Revoke">

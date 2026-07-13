@@ -51,7 +51,7 @@ export function WalletActivityView({ rows, childOptions }: { rows: Row[]; childO
     <div>
       <WalletSubnav />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-bold"><Receipt className="h-5 w-5 text-brand" /> Activity</h2>
+        <h2 className="flex items-center gap-2 text-lg font-bold"><Receipt className="h-5 w-5 text-brand-text" /> Activity</h2>
         <div className="flex flex-wrap gap-2">
           <select value={child} onChange={(e) => setChild(e.target.value)} className={selCls} aria-label="Child">
             <option value="">All children</option>

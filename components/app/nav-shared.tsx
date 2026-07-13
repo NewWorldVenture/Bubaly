@@ -34,11 +34,11 @@ export function AiAssistantNavButton({ onNavigate }: { onNavigate?: () => void }
       className={cn(
         'group flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition xl:px-4 xl:py-3 xl:text-base',
         active
-          ? 'border-brand/40 bg-brand/15 text-brand'
+          ? 'border-brand/40 bg-brand/15 text-brand-text'
           : 'border-border/70 bg-gradient-to-r from-brand/10 to-transparent text-fg hover:border-brand/40 hover:from-brand/20',
       )}
     >
-      <Sparkles className={cn('h-5 w-5 shrink-0', active ? 'text-brand' : 'text-brand/90')} />
+      <Sparkles className={cn('h-5 w-5 shrink-0', active ? 'text-brand-text' : 'text-brand-text/90')} />
       AI Assistant
     </Link>
   );
@@ -107,7 +107,7 @@ export function NavEntry({ item, variant, locked, onLocked, badge }: {
   return (
     <Link
       href={item.href}
-      className={cn(base, active ? 'bg-brand/15 text-brand shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg')}
+      className={cn(base, active ? 'bg-brand/15 text-brand-text shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg')}
     >
       <item.icon className="h-5 w-5 shrink-0" />
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
@@ -133,7 +133,7 @@ function ExpandableNavEntry({ item }: { item: NavItem }) {
 
   return (
     <div>
-      <div className={cn(row, 'pr-1', parentActive ? 'bg-brand/15 text-brand shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg')}>
+      <div className={cn(row, 'pr-1', parentActive ? 'bg-brand/15 text-brand-text shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg')}>
         <Link href={item.href} className="flex min-w-0 flex-1 items-center gap-3">
           <item.icon className="h-5 w-5 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{item.label}</span>
@@ -160,7 +160,7 @@ function ExpandableNavEntry({ item }: { item: NavItem }) {
                 aria-current={active ? 'page' : undefined}
                 className={cn(
                   'flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition xl:px-4',
-                  active ? 'bg-brand/15 text-brand shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg',
+                  active ? 'bg-brand/15 text-brand-text shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg',
                 )}
               >
                 <child.icon className="h-4 w-4 shrink-0" />

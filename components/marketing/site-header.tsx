@@ -26,7 +26,7 @@ export function SiteHeader() {
               href={item.href}
               className={cn(
                 'relative inline-flex h-full items-center text-sm font-medium text-muted transition hover:text-fg xl:text-base',
-                pathname === item.href && 'text-violet-400',
+                pathname === item.href && 'text-brand-text',
               )}
             >
               {item.label}
@@ -66,7 +66,7 @@ export function SiteHeader() {
                 onClick={() => setOpen(false)}
                 className={cn(
                   'rounded-lg px-3 py-3 text-base text-fg hover:bg-elevated/70',
-                  pathname === item.href && 'bg-violet-500/15 text-violet-300',
+                  pathname === item.href && 'bg-brand/15 text-brand-text',
                 )}
               >
                 {item.label}

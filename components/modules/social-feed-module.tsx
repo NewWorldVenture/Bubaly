@@ -170,7 +170,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
           <form
             onSubmit={(e) => { e.preventDefault(); void addLink(); }}
             className="mb-3 flex items-center gap-2 rounded-2xl border border-brand/30 bg-brand/5 p-2.5">
-            <Link2 className="ml-1 hidden h-4 w-4 shrink-0 text-brand sm:block" />
+            <Link2 className="ml-1 hidden h-4 w-4 shrink-0 text-brand-text sm:block" />
             <input
               value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} inputMode="url"
               placeholder="Paste any link — a video, post, or article — to add it to your feed"
@@ -221,7 +221,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
           <section className="rounded-2xl border border-border bg-surface/40 p-4">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-semibold">Your Sources</h3>
-              {counts.unread > 0 && <button onClick={() => run('readall', () => markAllReadAction(), 'Marked all read')} className="text-xs text-brand hover:underline">Mark all read</button>}
+              {counts.unread > 0 && <button onClick={() => run('readall', () => markAllReadAction(), 'Marked all read')} className="text-xs text-brand-text hover:underline">Mark all read</button>}
             </div>
             {sources.length === 0 ? (
               <p className="text-sm text-muted">No sources yet.</p>
@@ -270,7 +270,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                 return (
                   <button key={q.key} onClick={() => setQuick(on ? null : q.key)}
                     className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition',
-                      on ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:text-fg')}>
+                      on ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:text-fg')}>
                     <q.icon className="h-3.5 w-3.5" /> {q.label}
                     <span className={cn('rounded-full px-1.5 text-[10px] font-bold', on ? 'bg-brand/20' : 'bg-elevated')}>{counts[q.key]}</span>
                   </button>
@@ -280,7 +280,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
           </section>
 
           <section className="rounded-2xl border border-brand/20 bg-brand/5 p-4 text-center">
-            <Heart className="mx-auto h-7 w-7 text-brand" />
+            <Heart className="mx-auto h-7 w-7 text-brand-text" />
             <p className="mt-2 text-sm font-semibold">Less scrolling. More connecting.</p>
             <p className="mt-1 text-xs text-muted">Your family&rsquo;s world in one calm, ad-free place — so you can focus on what matters most.</p>
           </section>
@@ -311,7 +311,7 @@ function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: st
         <div className="flex items-center gap-1">
           <button type="button" onClick={onFavorite} disabled={busy === `fav-${item.id}`} aria-label={item.isFavorite ? 'Remove bookmark' : 'Bookmark'}
             className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
-            <Bookmark className={cn('h-4 w-4', item.isFavorite && 'fill-brand text-brand')} />
+            <Bookmark className={cn('h-4 w-4', item.isFavorite && 'fill-brand text-brand-text')} />
           </button>
           {item.permalink && (
             <button type="button" onClick={onOpen} aria-label="Open post" className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">

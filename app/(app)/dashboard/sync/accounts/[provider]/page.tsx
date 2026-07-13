@@ -174,7 +174,7 @@ export default async function SyncProviderPage({
         <ol className="space-y-2">
           {setup.steps.map((step, i) => (
             <li key={i} className="flex gap-3 text-sm">
-              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand/15 text-xs font-semibold text-brand">{i + 1}</span>
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand/15 text-xs font-semibold text-brand-text">{i + 1}</span>
               <span className="text-muted">{step}</span>
             </li>
           ))}

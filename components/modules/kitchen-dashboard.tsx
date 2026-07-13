@@ -46,7 +46,7 @@ const TONE: Record<string, string> = {
 
 function scoreColor(n: number): string {
   if (n >= 85) return 'text-emerald-500';
-  if (n >= 70) return 'text-brand';
+  if (n >= 70) return 'text-brand-text';
   if (n >= 55) return 'text-amber-500';
   return 'text-rose-500';
 }
@@ -75,7 +75,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
         <div className="lg:col-span-2 overflow-hidden rounded-3xl border border-brand/20 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-6">
           <div className="flex items-start justify-between">
             <div>
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-brand/70">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-brand-text/70">
                 <Flame className="h-3.5 w-3.5" /> Tonight&apos;s dinner
               </p>
               <p className="mt-2 text-3xl font-black tracking-tight">{data.tonight ?? 'Nothing planned yet'}</p>
@@ -84,7 +84,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
               )}
             </div>
             <div className="hidden h-14 w-14 flex-shrink-0 place-items-center rounded-2xl bg-brand/15 sm:grid">
-              <UtensilsCrossed className="h-7 w-7 text-brand" />
+              <UtensilsCrossed className="h-7 w-7 text-brand-text" />
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -95,7 +95,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
               <CalendarDays className="h-4 w-4" /> Meal plan
             </Link>
             <Link href="/dashboard/grocery" className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium hover:bg-elevated transition">
-              <ShoppingCart className="h-4 w-4" /> Grocery {data.groceryOpen > 0 && <span className="rounded-full bg-brand/15 px-1.5 text-xs font-bold text-brand">{data.groceryOpen}</span>}
+              <ShoppingCart className="h-4 w-4" /> Grocery {data.groceryOpen > 0 && <span className="rounded-full bg-brand/15 px-1.5 text-xs font-bold text-brand-text">{data.groceryOpen}</span>}
             </Link>
           </div>
         </div>
@@ -131,7 +131,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
             <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted">
               <Apple className="h-4 w-4" /> Use it up
             </h2>
-            <Link href="/dashboard/pantry" className="text-xs font-semibold text-brand hover:underline">Pantry →</Link>
+            <Link href="/dashboard/pantry" className="text-xs font-semibold text-brand-text hover:underline">Pantry →</Link>
           </div>
           {data.expiring.length === 0 ? (
             <p className="py-4 text-center text-sm text-muted">Nothing expiring soon. 👍</p>
@@ -223,7 +223,7 @@ function FoodScoreCard({ score }: { score: FoodScore }) {
       {score.coaching.length > 0 && (
         <ul className="mt-4 space-y-1">
           {score.coaching.map((c, i) => (
-            <li key={i} className="flex gap-1.5 text-xs text-muted"><span className="text-brand">•</span> {c}</li>
+            <li key={i} className="flex gap-1.5 text-xs text-muted"><span className="text-brand-text">•</span> {c}</li>
           ))}
         </ul>
       )}
@@ -406,7 +406,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
           <div className="flex flex-wrap gap-1.5">
             {CHEF_PROMPTS.map((p) => (
               <button key={p} type="button" onClick={() => ask(p)} disabled={loading}
-                className="rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted hover:border-brand/40 hover:text-brand transition disabled:opacity-50">
+                className="rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted hover:border-brand/40 hover:text-brand-text transition disabled:opacity-50">
                 {p}
               </button>
             ))}
@@ -464,7 +464,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
 
             {reply.tips.length > 0 && (
               <ul className="space-y-1">
-                {reply.tips.map((t, i) => <li key={i} className="flex gap-1.5 text-xs text-muted"><span className="text-brand">•</span> {t}</li>)}
+                {reply.tips.map((t, i) => <li key={i} className="flex gap-1.5 text-xs text-muted"><span className="text-brand-text">•</span> {t}</li>)}
               </ul>
             )}
 

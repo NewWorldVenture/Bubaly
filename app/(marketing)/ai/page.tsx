@@ -31,7 +31,7 @@ export default function AIPage() {
         <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-2">
           {PROMPTS.map((p) => (
             <div key={p.text} className="glass-card flex items-center gap-4 p-5">
-              <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+              <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand-text">
                 <p.icon className="h-5 w-5" />
               </div>
               <p className="text-sm font-medium">{p.text}</p>

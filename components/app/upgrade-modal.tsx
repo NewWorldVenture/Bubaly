@@ -91,7 +91,7 @@ export function UpgradeModal({
       <div className="space-y-5">
         <div className="flex items-start gap-3 rounded-2xl border border-brand/25 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-4">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15">
-            <Sparkles className="h-5 w-5 text-brand" />
+            <Sparkles className="h-5 w-5 text-brand-text" />
           </div>
           <div>
             <p className="font-semibold">{plan.name}</p>
@@ -117,7 +117,7 @@ export function UpgradeModal({
             >
               <p className="text-sm font-semibold">Monthly</p>
               <p className="mt-1 text-2xl font-bold">{dollars(tier.monthlyCents)}<span className="text-sm font-normal text-muted">/mo</span></p>
-              <span className="mt-2 inline-block text-xs font-semibold text-brand">
+              <span className="mt-2 inline-block text-xs font-semibold text-brand-text">
                 {pending === tier.monthlyPlan ? 'Redirecting…' : 'Choose monthly →'}
               </span>
             </button>
@@ -131,7 +131,7 @@ export function UpgradeModal({
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400">Save ~17%</span>
               </div>
               <p className="mt-1 text-2xl font-bold">{dollars(tier.annualPerMoCents)}<span className="text-sm font-normal text-muted">/mo</span></p>
-              <span className="mt-2 inline-block text-xs font-semibold text-brand">
+              <span className="mt-2 inline-block text-xs font-semibold text-brand-text">
                 {pending === tier.annualPlan ? 'Redirecting…' : 'Choose annual →'}
               </span>
             </button>

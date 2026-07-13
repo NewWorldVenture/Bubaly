@@ -17,7 +17,7 @@ const MONEY_FLAG_KEYS = [
 function Stat({ label, value, icon: Icon, tone = 'neutral' }: {
   label: string; value: string | number; icon: typeof CreditCard; tone?: 'neutral' | 'success' | 'warning' | 'danger';
 }) {
-  const color = tone === 'success' ? 'text-success' : tone === 'warning' ? 'text-warning' : tone === 'danger' ? 'text-danger' : 'text-brand';
+  const color = tone === 'success' ? 'text-success' : tone === 'warning' ? 'text-warning' : tone === 'danger' ? 'text-danger' : 'text-brand-text';
   return (
     <Card className="p-4">
       <div className="flex items-center gap-2 text-muted"><Icon className={`h-4 w-4 ${color}`} /><span className="text-xs">{label}</span></div>
@@ -86,7 +86,7 @@ export default async function AdminStripeMoneyPage() {
       <Card className="p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Radio className="h-5 w-5 text-brand" />
+            <Radio className="h-5 w-5 text-brand-text" />
             <span className="font-semibold">Runtime mode</span>
           </div>
           <Badge tone={caps.mode === 'stripe' ? 'success' : 'neutral'}>

@@ -103,7 +103,7 @@ function FamilySwitcher() {
               >
                 <Avatar name={f.name} size={24} className="rounded-md" />
                 <span className="flex-1 truncate">{f.name}</span>
-                {f.familyId === family.id && <Check className="h-4 w-4 text-brand" />}
+                {f.familyId === family.id && <Check className="h-4 w-4 text-brand-text" />}
               </button>
             ))}
             <Link
@@ -170,7 +170,7 @@ function UserMenu() {
               <Home className="h-4 w-4 text-muted" />
               <span className="flex-1 truncate">Home</span>
               <span className="text-[10px] font-semibold uppercase text-muted">Default</span>
-              {pathname === '/home' && <Check className="h-4 w-4 text-brand" />}
+              {pathname === '/home' && <Check className="h-4 w-4 text-brand-text" />}
             </Link>
             {DASHBOARD_VIEWS.map((view) => {
               const Icon = dashboardIcon[view];
@@ -184,7 +184,7 @@ function UserMenu() {
                 >
                   <Icon className="h-4 w-4 text-muted" />
                   <span className="flex-1 truncate">{dashboardLabel(view, role)}</span>
-                  {active && <Check className="h-4 w-4 text-brand" />}
+                  {active && <Check className="h-4 w-4 text-brand-text" />}
                 </Link>
               );
             })}
@@ -201,7 +201,7 @@ function UserMenu() {
                   >
                     <Avatar name={f.name} size={20} className="rounded-md" />
                     <span className="flex-1 truncate">{f.name}</span>
-                    {f.familyId === family.id && <Check className="h-4 w-4 text-brand" />}
+                    {f.familyId === family.id && <Check className="h-4 w-4 text-brand-text" />}
                   </button>
                 ))}
                 <Link href="/dashboard/settings#families" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted hover:bg-elevated">
@@ -211,7 +211,7 @@ function UserMenu() {
               </>
             )}
             {isSuperAdmin && (
-              <Link href="/admin" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-brand hover:bg-elevated">
+              <Link href="/admin" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-brand-text hover:bg-elevated">
                 <ShieldCheck className="h-4 w-4" /> Site Admin
               </Link>
             )}
@@ -258,7 +258,7 @@ function SidebarDashboardLinks() {
             href={view === defaultDashboard ? '/dashboard' : `/dashboard?view=${view}`}
             className={cn(
               'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition xl:px-4 xl:py-3 xl:text-base',
-              active ? 'bg-brand/15 text-brand shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg',
+              active ? 'bg-brand/15 text-brand-text shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg',
             )}
           >
             <Icon className="h-5 w-5 shrink-0" />
@@ -445,7 +445,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             const tabClass = cn(
               'relative flex flex-1 flex-col items-center gap-0.5 pb-1 pt-2 text-[11px] font-medium transition',
-              locked ? 'text-muted/45' : active ? 'text-brand' : 'text-muted',
+              locked ? 'text-muted/45' : active ? 'text-brand-text' : 'text-muted',
             );
             const inner = (
               <>

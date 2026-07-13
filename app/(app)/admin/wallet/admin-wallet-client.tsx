@@ -42,7 +42,7 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
   }
 
   const STAT_CARDS = [
-    { label: 'Active Wallets', value: String(stats.activeWallets), icon: Wallet, color: 'text-brand' },
+    { label: 'Active Wallets', value: String(stats.activeWallets), icon: Wallet, color: 'text-brand-text' },
     { label: 'Child Wallets', value: String(stats.childWallets), icon: Users, color: 'text-blue-400' },
     { label: 'Pending Gifts', value: String(stats.pendingGifts), icon: Gift, color: 'text-pink-400' },
     { label: 'Pending Approvals', value: String(stats.pendingApprovals), icon: ShieldCheck, color: 'text-amber-400' },
@@ -72,7 +72,7 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
           <div className="mt-1 text-xl font-bold text-rose-400">{formatCents(stats.debitVolumeCents)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
-          <div className="flex items-center gap-2 text-xs text-muted"><Scale className="h-4 w-4 text-brand" /> Net Outstanding</div>
+          <div className="flex items-center gap-2 text-xs text-muted"><Scale className="h-4 w-4 text-brand-text" /> Net Outstanding</div>
           <div className="mt-1 text-xl font-bold">{formatCents(stats.netCents)}</div>
         </div>
       </div>
@@ -121,7 +121,7 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
             {audit.map((a) => (
               <div key={a.id} className="flex items-center gap-3 px-4 py-2.5">
                 <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-brand/10">
-                  <Wallet className="h-4 w-4 text-brand" />
+                  <Wallet className="h-4 w-4 text-brand-text" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm">{a.detail ?? a.action}</div>

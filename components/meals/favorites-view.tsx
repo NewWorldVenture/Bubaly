@@ -82,7 +82,7 @@ export function FavoritesView() {
                   </div>
                 )}
                 {f.notes && <p className="mt-2 text-sm text-muted">{f.notes}</p>}
-                {f.ref_url && <a href={f.ref_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand"><ExternalLink className="h-3.5 w-3.5" /> Open</a>}
+                {f.ref_url && <a href={f.ref_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text"><ExternalLink className="h-3.5 w-3.5" /> Open</a>}
               </div>
             );
           })}
@@ -96,7 +96,7 @@ export function FavoritesView() {
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className={cn('rounded-full px-3 py-1.5 text-xs font-semibold transition', active ? 'bg-brand/15 text-brand' : 'bg-surface/60 text-muted hover:bg-elevated hover:text-fg')}>{children}</button>
+    <button onClick={onClick} className={cn('rounded-full px-3 py-1.5 text-xs font-semibold transition', active ? 'bg-brand/15 text-brand-text' : 'bg-surface/60 text-muted hover:bg-elevated hover:text-fg')}>{children}</button>
   );
 }
 

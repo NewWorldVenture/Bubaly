@@ -129,7 +129,7 @@ export function NextActionsModule() {
       ) : (
         <>
           <div className="mb-5 flex items-center gap-2 rounded-xl border border-border bg-surface/50 px-4 py-3 text-sm">
-            <Target className="h-4 w-4 text-brand" />
+            <Target className="h-4 w-4 text-brand-text" />
             {needAttention > 0
               ? <span><span className="font-semibold text-fg">{needAttention}</span> {needAttention === 1 ? 'item needs' : 'items need'} attention today. {ranked.length} total in your queue.</span>
               : <span><span className="font-semibold text-fg">{ranked.length}</span> upcoming — nothing overdue. Nicely ahead.</span>}
@@ -168,7 +168,7 @@ export function NextActionsModule() {
                             </button>
                           )}
                           <Link href={a.href} aria-label="Open" title="Open"
-                            className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-brand">
+                            className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-brand-text">
                             <ArrowRight className="h-4 w-4" />
                           </Link>
                         </li>

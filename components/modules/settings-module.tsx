@@ -251,7 +251,7 @@ export function SettingsModule() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold">{dashboardLabel(view, role)}</p>
-                    {selected && <Check className="h-4 w-4 text-brand" />}
+                    {selected && <Check className="h-4 w-4 text-brand-text" />}
                   </div>
                   <p className="mt-0.5 text-xs leading-5 text-muted">{DASHBOARD_DESCRIPTIONS[view]}</p>
                 </div>
@@ -283,7 +283,7 @@ export function SettingsModule() {
       <Card id="members">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-semibold">
-            <Users className="h-4 w-4 text-brand" /> Family members
+            <Users className="h-4 w-4 text-brand-text" /> Family members
           </h2>
           {admin && (
             <Button size="sm" onClick={() => setInviteOpen(true)}>

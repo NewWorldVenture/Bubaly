@@ -95,7 +95,7 @@ export function WorkloadModule({
       {/* AI headline */}
       <div className="mb-4 flex items-start gap-3 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-transparent p-4">
         <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-brand/15">
-          <Sparkles className="h-5 w-5 text-brand" />
+          <Sparkles className="h-5 w-5 text-brand-text" />
         </div>
         <div className="min-w-0">
           <p className="text-sm font-bold">{report.headline}</p>
@@ -141,7 +141,7 @@ export function WorkloadModule({
 
       {/* Per-member load bars */}
       <section className="mt-5 rounded-2xl border border-border bg-surface/30 p-4">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold"><Scale className="h-4 w-4 text-brand" /> This week&apos;s split</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold"><Scale className="h-4 w-4 text-brand-text" /> This week&apos;s split</h2>
         <div className="space-y-3">
           {report.loads.map((l, i) => (
             <div key={l.memberId}>
@@ -172,7 +172,7 @@ export function WorkloadModule({
       {report.suggestions.length > 0 && (
         <section className="mt-4 rounded-2xl border border-border bg-surface/30 p-4">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold">
-            <ArrowRightLeft className="h-4 w-4 text-brand" /> One-tap rebalance
+            <ArrowRightLeft className="h-4 w-4 text-brand-text" /> One-tap rebalance
           </h2>
           <div className="space-y-2">
             {report.suggestions.map(s => {
@@ -205,7 +205,7 @@ export function WorkloadModule({
 
       {/* Week-over-week trend */}
       <section className="mt-4 rounded-2xl border border-border bg-surface/30 p-4">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold"><TrendingUp className="h-4 w-4 text-brand" /> Share of load, week over week</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold"><TrendingUp className="h-4 w-4 text-brand-text" /> Share of load, week over week</h2>
         {trend.size === 0 ? (
           <p className="py-4 text-center text-sm text-muted">
             History builds automatically each week you visit — check back after a few weeks.

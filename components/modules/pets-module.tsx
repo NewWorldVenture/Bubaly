@@ -99,7 +99,7 @@ export function PetsModule() {
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <CalendarClock className="h-4 w-4 text-brand" /> Care status
+              <CalendarClock className="h-4 w-4 text-brand-text" /> Care status
             </div>
             <p className={cn('mt-2 text-2xl font-bold', summary.overdue > 0 ? 'text-rose-300' : summary.dueSoon > 0 ? 'text-amber-300' : 'text-emerald-300')}>
               {summary.text}
@@ -108,7 +108,7 @@ export function PetsModule() {
           </div>
 
           <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5 lg:col-span-2">
-            <div className="flex items-center gap-2 text-sm font-semibold text-brand">
+            <div className="flex items-center gap-2 text-sm font-semibold text-brand-text">
               <Sparkles className="h-4 w-4" /> Care needs
             </div>
             {recommendations.length === 0 ? (
@@ -174,7 +174,7 @@ export function PetsModule() {
       {upcoming.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-            <CalendarClock className="h-4 w-4 text-brand" /> Upcoming care
+            <CalendarClock className="h-4 w-4 text-brand-text" /> Upcoming care
           </div>
           <ul className="space-y-2">
             {upcoming.map((u) => {
@@ -182,7 +182,7 @@ export function PetsModule() {
               const Icon = CARE_ICON[u.kind] ?? PawPrint;
               return (
                 <li key={u.id} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2">
-                  <Icon className="h-4 w-4 shrink-0 text-brand" />
+                  <Icon className="h-4 w-4 shrink-0 text-brand-text" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm">{pet?.name}: {u.title}</p>
                   </div>
@@ -359,9 +359,9 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
 
         {(pet.vet_name || pet.vet_phone) && (
           <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm">
-            <Stethoscope className="h-4 w-4 text-brand" />
+            <Stethoscope className="h-4 w-4 text-brand-text" />
             <span>{pet.vet_name || 'Veterinarian'}</span>
-            {pet.vet_phone && <a href={`tel:${pet.vet_phone}`} className="ml-auto inline-flex items-center gap-1 text-brand"><Phone className="h-3.5 w-3.5" /> {pet.vet_phone}</a>}
+            {pet.vet_phone && <a href={`tel:${pet.vet_phone}`} className="ml-auto inline-flex items-center gap-1 text-brand-text"><Phone className="h-3.5 w-3.5" /> {pet.vet_phone}</a>}
           </div>
         )}
 
@@ -381,7 +381,7 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
                 const u = careUrgency(r.next_due);
                 return (
                   <li key={r.id} className="group flex items-center gap-3 rounded-xl border border-border px-3 py-2">
-                    <Icon className="h-4 w-4 shrink-0 text-brand" />
+                    <Icon className="h-4 w-4 shrink-0 text-brand-text" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{r.title}</p>
                       <p className="text-xs text-muted">

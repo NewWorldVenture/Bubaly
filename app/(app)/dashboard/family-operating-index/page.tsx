@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic';
 
 const BAND_COPY: Record<Band, { label: string; blurb: string; ring: string; text: string; chip: string }> = {
   thriving: { label: 'Thriving', blurb: 'The household is running smoothly — nice work.', ring: 'text-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', chip: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400' },
-  steady: { label: 'Steady', blurb: 'On top of things with a few easy wins available.', ring: 'text-brand', text: 'text-brand', chip: 'bg-brand/12 text-brand' },
+  steady: { label: 'Steady', blurb: 'On top of things with a few easy wins available.', ring: 'text-brand-text', text: 'text-brand-text', chip: 'bg-brand/12 text-brand-text' },
   stretched: { label: 'Stretched', blurb: 'A handful of things need attention this week.', ring: 'text-amber-500', text: 'text-amber-600 dark:text-amber-400', chip: 'bg-amber-500/12 text-amber-600 dark:text-amber-400' },
   overloaded: { label: 'Overloaded', blurb: 'Several things are piling up — let’s clear the top ones.', ring: 'text-rose-500', text: 'text-rose-600 dark:text-rose-400', chip: 'bg-rose-500/12 text-rose-600 dark:text-rose-400' },
 };
@@ -35,7 +35,7 @@ const DIM_ICON: Record<DimensionId, React.ComponentType<{ className?: string }>>
 const IMPACT_CHIP: Record<'high' | 'medium' | 'low', string> = {
   high: 'bg-rose-500/12 text-rose-600 dark:text-rose-400',
   medium: 'bg-amber-500/12 text-amber-600 dark:text-amber-400',
-  low: 'bg-brand/10 text-brand',
+  low: 'bg-brand/10 text-brand-text',
 };
 
 const Q_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -128,7 +128,7 @@ export default async function FamilyOperatingIndexPage() {
       {/* Chief of Staff — the five orchestrator questions (pillar #1) */}
       <section className="mt-5">
         <div className="mb-2 flex items-center gap-2">
-          <Compass className="h-4 w-4 text-brand" />
+          <Compass className="h-4 w-4 text-brand-text" />
           <h2 className="text-sm font-semibold">Your family chief of staff</h2>
           {orchestrator.allClear && (
             <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
@@ -149,7 +149,7 @@ export default async function FamilyOperatingIndexPage() {
                 )}
               >
                 <div className="mb-1 flex items-start gap-2">
-                  <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', attention ? 'text-brand' : 'text-muted')} />
+                  <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', attention ? 'text-brand-text' : 'text-muted')} />
                   <div className="min-w-0">
                     <p className="text-xs font-medium text-muted">{a.question}</p>
                     <p className={cn('text-sm', attention ? 'font-medium text-fg' : 'text-muted')}>{a.headline}</p>
@@ -160,7 +160,7 @@ export default async function FamilyOperatingIndexPage() {
                     {a.items.map((it, i) => (
                       <li key={i} className="text-xs text-muted">
                         {it.href ? (
-                          <Link href={it.href} className="inline-flex items-center gap-1 hover:text-brand">
+                          <Link href={it.href} className="inline-flex items-center gap-1 hover:text-brand-text">
                             {it.label} <ArrowRight className="h-3 w-3" />
                           </Link>
                         ) : it.label}
@@ -177,7 +177,7 @@ export default async function FamilyOperatingIndexPage() {
       {/* Top suggestions — the "system of execution" payoff */}
       <section className="mt-5">
         <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-          <Sparkles className="h-4 w-4 text-brand" /> Do these next
+          <Sparkles className="h-4 w-4 text-brand-text" /> Do these next
         </h2>
         {index.suggestions.length === 0 ? (
           <div className="rounded-2xl border border-border bg-surface/40 p-5 text-center text-sm text-muted">
@@ -198,7 +198,7 @@ export default async function FamilyOperatingIndexPage() {
                     <span className="block text-sm font-medium">{s.title}</span>
                     <span className="block text-xs text-muted">{s.detail}</span>
                   </span>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand" />
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-text" />
                 </Link>
               </li>
             ))}
@@ -209,7 +209,7 @@ export default async function FamilyOperatingIndexPage() {
       {/* Dimension breakdown */}
       <section className="mt-6">
         <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-          <ListChecks className="h-4 w-4 text-brand" /> What went into the score
+          <ListChecks className="h-4 w-4 text-brand-text" /> What went into the score
         </h2>
         <div className="grid gap-2.5 sm:grid-cols-2">
           {index.dimensions.map((d) => {

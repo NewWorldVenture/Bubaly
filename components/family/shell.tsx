@@ -21,7 +21,7 @@ export function StatTile({
           <p className="mt-0.5 truncate text-xs text-muted">{label}</p>
         </div>
       </div>
-      {sublabel && <p className="mt-3 text-xs font-semibold text-brand">{sublabel} →</p>}
+      {sublabel && <p className="mt-3 text-xs font-semibold text-brand-text">{sublabel} →</p>}
     </>
   );
   const klass = 'flex flex-col rounded-2xl border border-border bg-surface/40 p-5 transition hover:bg-elevated';
@@ -44,7 +44,7 @@ export function SectionCard({
         <div className="flex shrink-0 items-center gap-3">
           {action}
           {viewAllHref && (
-            <Link href={viewAllHref} className="inline-flex items-center gap-1 text-xs font-semibold text-brand">
+            <Link href={viewAllHref} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-text">
               View all <ArrowRight className="h-3 w-3" />
             </Link>
           )}

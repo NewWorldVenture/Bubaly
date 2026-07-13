@@ -40,9 +40,9 @@ export function AIEngineForm({ view }: { view: AIConfigView }) {
         <label className="mb-2 block text-sm font-semibold">AI engine</label>
         <div className="rounded-2xl border border-brand bg-brand/10 p-4 text-left">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-brand" />
+            <Sparkles className="h-4 w-4 text-brand-text" />
             <span className="font-semibold">ChatGPT (OpenAI)</span>
-            <Check className="ml-auto h-4 w-4 text-brand" />
+            <Check className="ml-auto h-4 w-4 text-brand-text" />
           </div>
           <p className="mt-1 text-xs text-muted">All AI features run on the GPT-4o family.</p>
         </div>
@@ -58,7 +58,7 @@ export function AIEngineForm({ view }: { view: AIConfigView }) {
       </label>
 
       <div className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold"><KeyRound className="h-4 w-4 text-brand" /> API key</div>
+        <div className="flex items-center gap-2 text-sm font-semibold"><KeyRound className="h-4 w-4 text-brand-text" /> API key</div>
         <p className="text-xs text-muted">
           The key is stored server-side and never shown again. Leave it blank to keep the existing key.
           {view.openaiKeySet ? <span className="ml-1 text-emerald-400">OpenAI key is set{view.openaiFromEnv ? ' (from environment)' : ''}.</span>

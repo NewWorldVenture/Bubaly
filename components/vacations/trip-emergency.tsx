@@ -66,7 +66,7 @@ function EmergencySummary({ vacationId }: { vacationId: string }) {
               <li key={c.id} className="flex flex-wrap items-center gap-x-2">
                 <span className="font-medium">{c.name}</span>
                 {c.category && <span className="text-xs text-muted">({c.category})</span>}
-                {c.phone && <a href={`tel:${c.phone}`} className="flex items-center gap-1 text-brand"><Phone className="h-3 w-3" /> {c.phone}</a>}
+                {c.phone && <a href={`tel:${c.phone}`} className="flex items-center gap-1 text-brand-text"><Phone className="h-3 w-3" /> {c.phone}</a>}
               </li>
             ))}
           </ul>

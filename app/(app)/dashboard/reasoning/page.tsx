@@ -42,7 +42,7 @@ export default async function ReasoningPage() {
 
       <section className="mb-5 rounded-2xl border border-border bg-surface/60 p-5">
         <div className="flex items-center gap-2.5">
-          <Compass className="h-5 w-5 text-brand" />
+          <Compass className="h-5 w-5 text-brand-text" />
           {report.allClear ? (
             <p className="text-sm text-fg">
               <span className="font-medium">All clear.</span> Nothing needs the family right now — you’re in good shape.
@@ -73,7 +73,7 @@ export default async function ReasoningPage() {
               )}
             >
               <div className="mb-1.5 flex items-start gap-2">
-                <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', attn ? 'text-brand' : 'text-muted')} />
+                <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', attn ? 'text-brand-text' : 'text-muted')} />
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-muted">{a.question}</p>
                   <p className={cn('text-sm', attn ? 'font-medium text-fg' : 'text-muted')}>{a.headline}</p>
@@ -84,7 +84,7 @@ export default async function ReasoningPage() {
                   {a.items.map((it, i) => (
                     <li key={i} className="text-xs">
                       {it.href ? (
-                        <Link href={it.href} className="inline-flex items-center gap-1 text-muted hover:text-brand">
+                        <Link href={it.href} className="inline-flex items-center gap-1 text-muted hover:text-brand-text">
                           <span className="font-medium text-fg">{it.title}</span>
                           <ArrowRight className="h-3 w-3" />
                         </Link>

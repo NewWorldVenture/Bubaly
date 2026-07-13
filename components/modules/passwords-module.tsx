@@ -161,12 +161,12 @@ export function PasswordsModule() {
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <button onClick={() => setCatFilter(null)}
-            className={cn('rounded-lg border px-2.5 py-1.5 text-xs font-medium transition', catFilter === null ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:bg-elevated')}>
+            className={cn('rounded-lg border px-2.5 py-1.5 text-xs font-medium transition', catFilter === null ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated')}>
             All ({data.length})
           </button>
           {CATEGORIES.filter((c) => counts[c.value]).map((c) => (
             <button key={c.value} onClick={() => setCatFilter(catFilter === c.value ? null : c.value)}
-              className={cn('flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition', catFilter === c.value ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:bg-elevated')}>
+              className={cn('flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition', catFilter === c.value ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated')}>
               <c.icon className="h-3.5 w-3.5" /> {c.label} ({counts[c.value]})
             </button>
           ))}
@@ -236,7 +236,7 @@ export function PasswordsModule() {
                   </div>
                   {c.url && (
                     <a href={/^https?:\/\//.test(c.url) ? c.url : `https://${c.url}`} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 truncate text-xs font-medium text-brand hover:underline">
+                      className="flex items-center gap-1 truncate text-xs font-medium text-brand-text hover:underline">
                       <ExternalLink className="h-3 w-3 shrink-0" /> {c.url}
                     </a>
                   )}

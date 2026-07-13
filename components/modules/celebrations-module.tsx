@@ -113,7 +113,7 @@ export function CelebrationsModule() {
                   <p className="text-xs text-muted">{new Date(c.nextDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
                 </div>
                 {who && <Avatar name={who.display_name} color={who.color} size={32} />}
-                <span className={`shrink-0 text-sm font-semibold ${soon ? 'text-brand' : 'text-muted'}`}>{countdownLabel(c.daysUntil)}</span>
+                <span className={`shrink-0 text-sm font-semibold ${soon ? 'text-brand-text' : 'text-muted'}`}>{countdownLabel(c.daysUntil)}</span>
                 {admin && c.id.startsWith('d-') && (
                   <button onClick={() => remove(c.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                 )}

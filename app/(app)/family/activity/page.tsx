@@ -30,7 +30,7 @@ export default async function FamilyActivityPage() {
           <ul className="space-y-1">
             {logs.map((l) => (
               <li key={l.id} className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm hover:bg-surface/40">
-                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-violet-500/15"><FileEdit className="h-4 w-4 text-brand" /></div>
+                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-violet-500/15"><FileEdit className="h-4 w-4 text-brand-text" /></div>
                 <span className="min-w-0 flex-1">
                   <span className="font-medium capitalize">{VERB[l.action] ?? l.action}</span>{' '}
                   <span className="text-muted">{l.resource.replace(/_/g, ' ')}</span>

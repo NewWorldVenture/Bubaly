@@ -88,7 +88,7 @@ const server = spawn(
 let testStatus = 1;
 try {
   await waitForServer(server);
-  testStatus = run('node_modules/@playwright/test/cli.js', ['test']);
+  testStatus = run('node_modules/@playwright/test/cli.js', ['test', ...process.argv.slice(2)]);
 } finally {
   await stopServer(server);
 }

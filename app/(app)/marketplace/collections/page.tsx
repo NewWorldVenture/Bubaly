@@ -40,7 +40,7 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
       : { data: [] };
     return (
       <div>
-        <Link href="/marketplace/collections" className="mb-3 inline-flex items-center gap-1 text-xs text-muted hover:text-brand">
+        <Link href="/marketplace/collections" className="mb-3 inline-flex items-center gap-1 text-xs text-muted hover:text-brand-text">
           <ArrowLeft className="h-3 w-3" /> All collections
         </Link>
         <PageHeader title={`${open.emoji ?? '🗂️'} ${open.name}`} description={open.description ?? `${ids.length} items in this collection.`} />
@@ -60,7 +60,7 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
                       fallback={<div className="h-28 w-full bg-gradient-to-br from-surface to-border" />}
                     />
                     <div className="p-3">
-                      <p className="line-clamp-2 text-sm font-medium text-fg group-hover:text-brand">{l.title}</p>
+                      <p className="line-clamp-2 text-sm font-medium text-fg group-hover:text-brand-text">{l.title}</p>
                       <p className="mt-1 text-xs text-muted">
                         {KIND_LABELS[l.kind as ListingKind] ?? l.kind}{price && ` · ${price}`}
                       </p>

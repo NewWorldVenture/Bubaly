@@ -179,7 +179,7 @@ export function HomeModule() {
               return (
                 <li key={asset.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10">
-                    <Home className="h-4 w-4 text-brand" />
+                    <Home className="h-4 w-4 text-brand-text" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{asset.name}</p>
@@ -244,7 +244,7 @@ export function HomeModule() {
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-semibold">
-            <Package className="h-4 w-4 text-brand" /> Home assets
+            <Package className="h-4 w-4 text-brand-text" /> Home assets
           </h2>
           <Badge tone="neutral">{assets.length}</Badge>
         </div>
@@ -258,7 +258,7 @@ export function HomeModule() {
               return (
                 <div key={a.id} className="flex items-start gap-3 rounded-xl border border-border bg-surface/40 p-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10">
-                    <Home className="h-4 w-4 text-brand" />
+                    <Home className="h-4 w-4 text-brand-text" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{a.name}</p>
@@ -399,12 +399,12 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
             <ul className="space-y-1.5">
               {files.map((f) => (
                 <li key={f.id} className="flex items-center gap-2 rounded-lg border border-border bg-surface/50 px-3 py-2">
-                  <FileText className="h-4 w-4 shrink-0 text-brand" />
+                  <FileText className="h-4 w-4 shrink-0 text-brand-text" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm">{f.title}</p>
                     <p className="text-xs text-muted">{fmtBytes(f.size_bytes)} · added {fmtDate(f.created_at, 'MMM d, yyyy')}</p>
                   </div>
-                  <button onClick={() => viewFile(f)} className="rounded-lg p-1.5 text-muted hover:text-brand" aria-label="View file">
+                  <button onClick={() => viewFile(f)} className="rounded-lg p-1.5 text-muted hover:text-brand-text" aria-label="View file">
                     <ExternalLink className="h-4 w-4" />
                   </button>
                   {manager && (

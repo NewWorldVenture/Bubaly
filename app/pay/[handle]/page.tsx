@@ -44,7 +44,7 @@ export default async function PayHandlePage({ params }: { params: Promise<{ hand
       <p className="text-sm text-muted">
         This Pay-ID doesn’t have an active gift link right now. Please ask the family for a current link.
       </p>
-      <Link href="/" className="text-sm font-medium text-brand hover:underline">Go to Bubaly</Link>
+      <Link href="/" className="text-sm font-medium text-brand-text hover:underline">Go to Bubaly</Link>
     </div>
   );
 }

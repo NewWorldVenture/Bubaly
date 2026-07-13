@@ -61,7 +61,7 @@ export default async function ABTestingPage() {
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2">
-                      <FlaskConical className="h-4 w-4 text-brand" />
+                      <FlaskConical className="h-4 w-4 text-brand-text" />
                       <h2 className="font-semibold">{exp.name}</h2>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[exp.status] ?? 'bg-elevated text-muted'}`}>{exp.status}</span>
                       {exp.winner && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-300"><Trophy className="h-3 w-3" />{variants.find((v) => v.key === exp.winner)?.label ?? exp.winner}</span>}

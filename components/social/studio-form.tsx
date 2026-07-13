@@ -116,7 +116,7 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
                 type="button"
                 onClick={() => setKind(k)}
                 className={`rounded-lg border px-2.5 py-1 text-xs font-medium capitalize transition ${
-                  kind === k ? 'border-brand bg-brand/15 text-brand' : 'border-border text-muted hover:text-fg'
+                  kind === k ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted hover:text-fg'
                 }`}
               >
                 {k}
@@ -263,7 +263,7 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
         {/* AI assistant */}
         <Card>
           <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-            <Sparkles className="h-4 w-4 text-brand" /> AI assistant
+            <Sparkles className="h-4 w-4 text-brand-text" /> AI assistant
           </h3>
           <select value={aiKind} onChange={(e) => setAiKind(e.target.value as AiGenerationKind)} className="mb-2 w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm">
             {AI_GENERATION_KINDS.map((k) => <option key={k} value={k}>{AI_KIND_LABELS[k]}</option>)}

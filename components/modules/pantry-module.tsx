@@ -103,7 +103,7 @@ export function PantryModule() {
       {/* Stats */}
       <div className="grid-stats">
         {[
-          { label: 'Items tracked', value: summary.total, icon: '📦', color: 'text-brand' },
+          { label: 'Items tracked', value: summary.total, icon: '📦', color: 'text-brand-text' },
           { label: 'Expiring soon', value: summary.expiringSoon, icon: '⏳', color: 'text-warning' },
           { label: 'Expired', value: summary.expired, icon: '⚠️', color: 'text-danger' },
           { label: 'Running low', value: summary.lowStock, icon: '🛒', color: 'text-amber-400' },
@@ -190,7 +190,7 @@ export function PantryModule() {
                 const lowS = isLowStock(item);
                 return (
                   <div key={item.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5">
-                    <Package className="h-4 w-4 shrink-0 text-brand" />
+                    <Package className="h-4 w-4 shrink-0 text-brand-text" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
                         {item.name}
@@ -207,7 +207,7 @@ export function PantryModule() {
                       <span className="w-10 text-center text-sm font-semibold tabular-nums">{Number(item.quantity)}{item.unit ? <span className="text-[10px] text-muted"> {item.unit}</span> : ''}</span>
                       <button onClick={() => adjustQty(item, 1)} className="rounded-md p-1 text-muted hover:bg-elevated hover:text-fg" aria-label="Increase"><Plus className="h-3.5 w-3.5" /></button>
                     </div>
-                    <button onClick={() => { setEditing(item); setOpen(true); }} className="rounded-lg p-1.5 text-muted hover:text-brand" aria-label="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => { setEditing(item); setOpen(true); }} className="rounded-lg p-1.5 text-muted hover:text-brand-text" aria-label="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
                     <button onClick={() => removeItem(item.id)} className="rounded-lg p-1.5 text-muted hover:text-danger" aria-label="Remove"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 );

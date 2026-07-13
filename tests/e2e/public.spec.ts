@@ -1,11 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { PUBLIC_ROUTES } from './public-routes';
 
 // Public marketing + auth routes must render without a database or session.
-const PUBLIC_ROUTES = [
-  '/', '/pricing', '/features', '/how-it-works', '/security',
-  '/faq', '/ai', '/mobile', '/blog', '/contact', '/login', '/signup',
-];
-
 test.describe('public routes render', () => {
   for (const path of PUBLIC_ROUTES) {
     test(`GET ${path} → 200 with content`, async ({ page }) => {

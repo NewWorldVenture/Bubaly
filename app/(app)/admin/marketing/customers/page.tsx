@@ -41,7 +41,7 @@ export default async function MarketingCustomersPage({ searchParams }: { searchP
           <a
             key={f}
             href={`/admin/marketing/customers${f === 'all' ? '' : `?lifecycle=${f}`}`}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-medium capitalize transition ${f === lifecycle ? 'border-brand/40 bg-brand/15 text-brand' : 'border-border text-muted hover:bg-elevated'}`}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium capitalize transition ${f === lifecycle ? 'border-brand/40 bg-brand/15 text-brand-text' : 'border-border text-muted hover:bg-elevated'}`}
           >
             {f}
           </a>

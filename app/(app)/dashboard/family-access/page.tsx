@@ -40,7 +40,7 @@ export default async function FamilyAccessPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 pb-28">
       <div className="flex items-center gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand/15 text-brand"><KeyRound className="h-6 w-6" /></span>
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brand/15 text-brand-text"><KeyRound className="h-6 w-6" /></span>
         <div>
           <h1 className="text-2xl font-black tracking-tight">Kid Logins</h1>
           <p className="mt-0.5 text-sm text-muted">Give a child their own sign-in — a username and 4-digit PIN, no email required.</p>

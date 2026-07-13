@@ -85,7 +85,7 @@ export function AppLockSettings() {
     <div id="app-lock" className="scroll-mt-20 rounded-2xl border border-border bg-surface/40 p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text">
             <Lock className="h-5 w-5" />
           </div>
           <div>

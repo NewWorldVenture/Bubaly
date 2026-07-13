@@ -77,7 +77,7 @@ function NavList() {
             href={it.href}
             className={cn(
               'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition',
-              active ? 'bg-brand/12 font-medium text-brand' : 'text-muted hover:bg-elevated hover:text-fg',
+              active ? 'bg-brand/12 font-medium text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg',
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />

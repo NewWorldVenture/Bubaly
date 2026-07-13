@@ -103,7 +103,7 @@ export type StatRow = {
 /** The four "This Year" stat tiles, in display order. */
 export function memoryStats(counts: { photos: number; videos: number; albums: number; memories: number }): StatRow[] {
   return [
-    { label: 'Photos', value: counts.photos, icon: ImageIcon, tint: 'bg-brand/10 text-brand' },
+    { label: 'Photos', value: counts.photos, icon: ImageIcon, tint: 'bg-brand/10 text-brand-text' },
     { label: 'Videos', value: counts.videos, icon: Video, tint: 'bg-violet-500/10 text-violet-500' },
     { label: 'Albums', value: counts.albums, icon: LayoutGrid, tint: 'bg-amber-500/10 text-amber-500' },
     { label: 'Memories Added', value: counts.memories, icon: BookOpen, tint: 'bg-emerald-500/10 text-emerald-500' },

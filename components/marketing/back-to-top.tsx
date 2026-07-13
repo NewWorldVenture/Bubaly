@@ -59,7 +59,7 @@ export function BackToTop({ threshold = 400 }: { threshold?: number }) {
         'group fixed right-5 z-40 grid h-11 w-11 place-items-center rounded-full',
         'border border-border bg-surface/85 text-fg shadow-lg backdrop-blur',
         'transition-all duration-300 ease-out',
-        'hover:-translate-y-0.5 hover:border-brand/50 hover:bg-elevated hover:text-brand',
+        'hover:-translate-y-0.5 hover:border-brand/50 hover:bg-elevated hover:text-brand-text',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
         'motion-reduce:transition-none motion-reduce:hover:translate-y-0',
         raised ? 'bottom-28 sm:bottom-24' : 'bottom-6',

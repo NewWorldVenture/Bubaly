@@ -119,7 +119,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
         <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
           <div className="space-y-5">
             <div className="grid-stats">
-              <StatCard icon={FileText} label="Total items" value={docs.length} tone="bg-brand/10 text-brand" />
+              <StatCard icon={FileText} label="Total items" value={docs.length} tone="bg-brand/10 text-brand-text" />
               <StatCard icon={HardDrive} label="Storage used" value={fmtBytes(totalBytes)} tone="bg-success/10 text-success" />
               <StatCard icon={FolderKanban} label="Categories" value={categories.length} tone="bg-accent/10 text-accent" />
               <StatCard icon={Clock} label="Added this week" value={recentUploads} tone="bg-warning/10 text-warning" />

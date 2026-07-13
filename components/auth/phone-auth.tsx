@@ -107,7 +107,7 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
         {resendIn > 0 ? (
           <span>Resend code in {formatCountdown(resendIn)}</span>
         ) : (
-          <button type="button" onClick={() => send(true)} disabled={sending} className="font-medium text-brand hover:underline disabled:opacity-60">
+          <button type="button" onClick={() => send(true)} disabled={sending} className="font-medium text-brand-text hover:underline disabled:opacity-60">
             {sending ? <Loader2 className="inline h-4 w-4 animate-spin" /> : 'Resend code'}
           </button>
         )}

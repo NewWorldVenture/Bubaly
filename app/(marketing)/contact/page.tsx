@@ -20,7 +20,7 @@ export default function ContactPage() {
             { icon: Shield, title: 'Privacy', body: 'Your message is sent securely and never shared.' },
           ].map((i) => (
             <div key={i.title} className="flex gap-4">
-              <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+              <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand-text">
                 <i.icon className="h-5 w-5" />
               </div>
               <div>

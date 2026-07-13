@@ -35,7 +35,7 @@ export default async function MigratePage() {
           { icon: Import, title: 'Nothing left behind', body: 'Events, tasks, grocery lists and notes all come across.' },
         ].map((c) => (
           <div key={c.title} className="rounded-2xl border border-border bg-surface/40 p-4">
-            <div className="flex items-center gap-2"><c.icon className="h-5 w-5 text-brand" /><p className="font-semibold">{c.title}</p></div>
+            <div className="flex items-center gap-2"><c.icon className="h-5 w-5 text-brand-text" /><p className="font-semibold">{c.title}</p></div>
             <p className="mt-1 text-sm text-muted">{c.body}</p>
           </div>
         ))}

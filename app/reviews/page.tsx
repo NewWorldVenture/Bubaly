@@ -49,7 +49,7 @@ export default async function ReviewsWallPage() {
               <p className="mt-2 text-xs text-muted">— {r.author_name || 'A Bubaly family'}</p>
               {r.reply && (
                 <div className="mt-3 rounded-lg border border-border bg-elevated/50 p-2 text-xs">
-                  <p className="font-medium text-brand">Bubaly replied</p>
+                  <p className="font-medium text-brand-text">Bubaly replied</p>
                   <p className="mt-0.5 text-muted">{r.reply}</p>
                 </div>
               )}

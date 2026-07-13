@@ -33,7 +33,7 @@ export default async function ReputationPage() {
 
       {/* Testimonials */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Quote className="h-4 w-4 text-brand" /> Testimonials</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><Quote className="h-4 w-4 text-brand-text" /> Testimonials</h2>
         <form action={saveTestimonialAction} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input name="author_name" required placeholder="Author name" className={inputCls} />
           <input name="author_role" placeholder="Role (e.g. Mom of 3)" className={inputCls} />
@@ -77,7 +77,7 @@ export default async function ReputationPage() {
 
       {/* Case studies */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><BookOpenCheck className="h-4 w-4 text-brand" /> Case studies</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><BookOpenCheck className="h-4 w-4 text-brand-text" /> Case studies</h2>
         <form action={saveCaseStudyAction} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input name="title" required placeholder="Title" className={`${inputCls} lg:col-span-2`} />
           <input name="customer_name" placeholder="Customer" className={inputCls} />

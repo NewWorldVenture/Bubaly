@@ -121,7 +121,7 @@ export function CompleteSetupForm({
                   on ? 'border-brand bg-brand/10 text-fg' : 'border-border bg-bg/40 text-muted hover:border-brand/40')}>
                 <span className="text-base">{g.icon}</span>
                 <span className="flex-1 truncate font-medium">{g.label}</span>
-                {on && <Check className="h-4 w-4 text-brand" />}
+                {on && <Check className="h-4 w-4 text-brand-text" />}
               </button>
             );
           })}

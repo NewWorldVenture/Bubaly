@@ -135,7 +135,7 @@ function GoalCard({ goal, canManage, onFund }: { goal: GoalView; canManage: bool
                 </p>
               )}
               {forecastLabel && (
-                <p className="flex items-center gap-1 text-[10px] font-medium text-brand">
+                <p className="flex items-center gap-1 text-[10px] font-medium text-brand-text">
                   <TrendingUp className="h-3 w-3" />
                   {forecastLabel}
                 </p>
@@ -164,7 +164,7 @@ function GoalCard({ goal, canManage, onFund }: { goal: GoalView; canManage: bool
           />
         </div>
         <div className="mt-1.5 flex items-center justify-between">
-          <p className={cn('text-[11px] font-semibold', reached ? 'text-emerald-500' : 'text-brand')}>
+          <p className={cn('text-[11px] font-semibold', reached ? 'text-emerald-500' : 'text-brand-text')}>
             {reached ? '🎉 Goal reached!' : `${pct}% there`}
           </p>
           {!reached && remaining > 0 && (
@@ -218,7 +218,7 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
               {GOAL_KINDS.map((k) => (
                 <button key={k.value} type="button" onClick={() => setKind(k.value)}
                   className={cn('flex flex-col items-center gap-0.5 rounded-xl border p-2 text-xs transition',
-                    kind === k.value ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:border-brand/40')}>
+                    kind === k.value ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40')}>
                   <span className="text-base">{k.emoji}</span>
                   <span className="text-[10px]">{k.label}</span>
                 </button>
@@ -300,13 +300,13 @@ function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void 
         <div className="flex flex-wrap gap-2">
           {[5, 10, 25, Math.ceil(remaining / 100)].filter((v, i, a) => v > 0 && a.indexOf(v) === i).slice(0, 4).map((q) => (
             <button key={q} type="button" onClick={() => setAmount(String(q))}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand transition">
+              className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand-text transition">
               ${q}
             </button>
           ))}
           {remaining > 0 && (
             <button type="button" onClick={() => setAmount((remaining / 100).toFixed(2))}
-              className="rounded-lg border border-brand/40 px-3 py-1.5 text-sm text-brand hover:bg-brand/5 transition">
+              className="rounded-lg border border-brand/40 px-3 py-1.5 text-sm text-brand-text hover:bg-brand/5 transition">
               Full remaining
             </button>
           )}

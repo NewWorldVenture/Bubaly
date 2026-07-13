@@ -116,7 +116,7 @@ export function NotificationsModule() {
                 onClick={() => !n.is_read && markRead(n.id)}
               >
                 <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-surface/60">
-                  <Bell className={cn('h-4 w-4', n.is_read ? 'text-muted' : 'text-brand')} />
+                  <Bell className={cn('h-4 w-4', n.is_read ? 'text-muted' : 'text-brand-text')} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className={cn('text-sm', !n.is_read && 'font-semibold')}>{n.title}</p>

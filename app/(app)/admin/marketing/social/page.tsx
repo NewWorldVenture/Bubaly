@@ -34,7 +34,7 @@ export default async function SocialPage() {
                   <span className="text-xs text-muted">{p.scheduled_at ? fmtDate(p.scheduled_at) : 'Unscheduled'} · {p.status}</span>
                 </div>
                 <p className="text-sm">{p.content}</p>
-                {p.link && <p className="truncate text-xs text-brand">{p.link}</p>}
+                {p.link && <p className="truncate text-xs text-brand-text">{p.link}</p>}
               </Card>
             ))
           )}

@@ -39,7 +39,7 @@ function CreateRow({ member }: { member: AccessMember }) {
   if (!open) {
     return (
       <button onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand/10">
+        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-brand-text transition hover:bg-brand/10">
         <KeyRound className="h-3.5 w-3.5" /> Create login
       </button>
     );
@@ -86,7 +86,7 @@ function ResetRow({ member }: { member: AccessMember }) {
         </>
       ) : (
         <button onClick={() => setOpen(true)}
-          className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:text-brand">
+          className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:text-brand-text">
           <RefreshCw className="h-3.5 w-3.5" /> Reset PIN
         </button>
       )}

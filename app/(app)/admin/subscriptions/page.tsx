@@ -144,14 +144,14 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
                 <p className="mt-1 text-xs text-muted">{p.seats === 'Unlimited' ? 'Unlimited members' : `Up to ${p.seats} members`}</p>
                 <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
                   <span className="text-sm font-medium">{(countsByPlan.get(p.id) ?? 0).toLocaleString()} active</span>
-                  <a href={`/admin/users?tab=all&plan=${p.id}`} className="text-xs font-medium text-brand hover:underline">View subscribers →</a>
+                  <a href={`/admin/users?tab=all&plan=${p.id}`} className="text-xs font-medium text-brand-text hover:underline">View subscribers →</a>
                 </div>
               </Card>
             ))}
           </div>
 
           <div className="grid-stats">
-            <StatCard icon={Users} label="Active subscriptions" value={activeSubs.length.toLocaleString()} tone="bg-brand/10 text-brand" />
+            <StatCard icon={Users} label="Active subscriptions" value={activeSubs.length.toLocaleString()} tone="bg-brand/10 text-brand-text" />
             <StatCard icon={DollarSign} label="MRR" value={fmtMoney(mrr)} tone="bg-success/10 text-success" />
             <StatCard icon={DollarSign} label="ARR" value={fmtMoney(arr)} tone="bg-accent/10 text-accent" />
             <StatCard icon={TrendingDown} label="Churn (30d)" value={`${churnRate.toFixed(1)}%`} tone="bg-danger/10 text-danger" />
@@ -244,7 +244,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
                   <span className="font-medium">{fmtMoney(inv.amountPaid)}</span>
                   <span className="text-xs text-muted">{fmtDate(new Date(inv.created * 1000).toISOString(), 'MMM d, yyyy')}</span>
                   {inv.hostedUrl && (
-                    <a href={inv.hostedUrl} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs font-medium text-brand hover:underline">
+                    <a href={inv.hostedUrl} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs font-medium text-brand-text hover:underline">
                       View <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   )}

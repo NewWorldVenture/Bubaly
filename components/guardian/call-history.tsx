@@ -101,7 +101,7 @@ export function CallHistory({ communications }: { communications: Communication[
               onClick={() => setFilter(f)}
               className={cn(
                 'rounded-xl border px-3 py-2 text-xs font-medium capitalize transition',
-                filter === f ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:border-brand/40',
+                filter === f ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40',
               )}
             >
               {f}
@@ -196,7 +196,7 @@ export function CallHistory({ communications }: { communications: Communication[
                           href={comm.call_recording_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-2 rounded-lg bg-brand/10 px-3 py-2 text-xs font-medium text-brand hover:bg-brand/20 transition w-fit"
+                          className="flex items-center gap-2 rounded-lg bg-brand/10 px-3 py-2 text-xs font-medium text-brand-text hover:bg-brand/20 transition w-fit"
                         >
                           <Play className="h-3.5 w-3.5" /> Play Recording
                         </a>

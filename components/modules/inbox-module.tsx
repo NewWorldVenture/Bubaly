@@ -163,7 +163,7 @@ export function InboxModule() {
                   📄 Paperwork Inbox
                 </Link>
                 <button onClick={() => setShowAiImport(true)}
-                  className="flex items-center gap-1.5 rounded-lg bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand hover:bg-brand/20 transition">
+                  className="flex items-center gap-1.5 rounded-lg bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
                   <Sparkles className="h-3.5 w-3.5" /> AI Import
                 </button>
                 <Button onClick={() => setShowAdd(true)}>
@@ -175,7 +175,7 @@ export function InboxModule() {
 
           <div className="grid-stats">
             {[
-              { label: 'Total',    value: comms.filter(c => c.status !== 'archived').length, icon: '💬', color: 'text-brand' },
+              { label: 'Total',    value: comms.filter(c => c.status !== 'archived').length, icon: '💬', color: 'text-brand-text' },
               { label: 'Unread',   value: unreadCount,                                        icon: '🔵', color: 'text-blue-400' },
               { label: 'School',   value: comms.filter(c => c.channel === 'school' || c.category === 'school').length, icon: '📚', color: 'text-amber-400' },
               { label: 'Urgent',   value: comms.filter(c => c.priority === 'urgent').length,  icon: '⚡', color: 'text-red-400' },
@@ -216,13 +216,13 @@ export function InboxModule() {
             {filtered.length === 0 ? (
               <div className="flex flex-col items-center py-16 text-center">
                 <div className="mb-4 grid h-16 w-16 place-items-center rounded-full bg-brand/10">
-                  <MessageSquare className="h-7 w-7 text-brand opacity-60" />
+                  <MessageSquare className="h-7 w-7 text-brand-text opacity-60" />
                 </div>
                 <p className="text-sm font-semibold">No messages here</p>
                 <p className="mt-1 text-xs text-muted">Log a message or use AI Import to add one.</p>
                 <div className="mt-4 flex gap-2">
                   <button onClick={() => setShowAiImport(true)}
-                    className="flex items-center gap-1.5 rounded-lg bg-brand/10 px-4 py-2 text-xs font-semibold text-brand hover:bg-brand/20 transition">
+                    className="flex items-center gap-1.5 rounded-lg bg-brand/10 px-4 py-2 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
                     <Sparkles className="h-3.5 w-3.5" /> AI Import
                   </button>
                   <button onClick={() => setShowAdd(true)}
@@ -501,8 +501,8 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
         {comm.summary && (
           <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
             <div className="flex items-center gap-1.5 mb-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-brand" />
-              <span className="text-[10px] font-semibold text-brand uppercase tracking-wide">AI Summary</span>
+              <Sparkles className="h-3.5 w-3.5 text-brand-text" />
+              <span className="text-[10px] font-semibold text-brand-text uppercase tracking-wide">AI Summary</span>
             </div>
             <p className="text-xs leading-relaxed text-fg/80">{comm.summary}</p>
           </div>
@@ -540,11 +540,11 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
           <div className="rounded-xl border border-border bg-surface/40 p-3">
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <Reply className="h-3.5 w-3.5 text-brand" />
+                <Reply className="h-3.5 w-3.5 text-brand-text" />
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">AI Reply Agent</span>
               </div>
               <button onClick={generateReply} disabled={drafting}
-                className="flex items-center gap-1 rounded-md bg-brand/10 px-2 py-1 text-[10px] font-semibold text-brand hover:bg-brand/20 transition disabled:opacity-60">
+                className="flex items-center gap-1 rounded-md bg-brand/10 px-2 py-1 text-[10px] font-semibold text-brand-text hover:bg-brand/20 transition disabled:opacity-60">
                 {drafting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
                 {drafting ? 'Drafting…' : draft ? 'Redraft' : 'Draft reply'}
               </button>
@@ -555,7 +555,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
               className="w-full resize-none rounded-lg border border-border bg-background/60 p-2.5 text-xs leading-relaxed placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
             {draft && (
               <div className="mt-2 flex items-center justify-end gap-2">
-                <button onClick={copyDraft} className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium hover:border-brand/40 hover:text-brand transition">
+                <button onClick={copyDraft} className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium hover:border-brand/40 hover:text-brand-text transition">
                   {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />} {copied ? 'Copied' : 'Copy'}
                 </button>
                 <button onClick={logReply} disabled={sendingReply}
@@ -752,8 +752,8 @@ function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
           <div className="space-y-4">
             <div className="rounded-xl border border-brand/20 bg-brand/5 p-4 space-y-2">
               <div className="flex items-center gap-1.5 mb-1">
-                <Sparkles className="h-3.5 w-3.5 text-brand" />
-                <span className="text-[10px] font-semibold text-brand uppercase tracking-wide">AI Extracted</span>
+                <Sparkles className="h-3.5 w-3.5 text-brand-text" />
+                <span className="text-[10px] font-semibold text-brand-text uppercase tracking-wide">AI Extracted</span>
               </div>
               <div className="text-sm font-medium">{result.subject}</div>
               <div className="text-xs text-muted">{result.summary}</div>

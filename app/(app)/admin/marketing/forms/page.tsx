@@ -40,7 +40,7 @@ export default async function FormsPage() {
                   <p className="mt-1 text-xs text-muted">{fields.map((x) => x.label).join(', ') || 'No fields'}</p>
                   <div className="mt-2 flex items-center gap-3 text-xs">
                     {active && (
-                      <a href={`/f/${f.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand hover:underline">
+                      <a href={`/f/${f.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline">
                         <ExternalLink className="h-3 w-3" /> View public form
                       </a>
                     )}

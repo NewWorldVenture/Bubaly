@@ -262,8 +262,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       {/* ── Insurance ─────────────────────────────────────── */}
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4 text-brand" /> Insurance Cards</h2>
-          {canEdit && <button onClick={() => setPolicyForm({ ...blankPolicy })} className="text-xs font-semibold text-brand">+ Add insurance</button>}
+          <h2 className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> Insurance Cards</h2>
+          {canEdit && <button onClick={() => setPolicyForm({ ...blankPolicy })} className="text-xs font-semibold text-brand-text">+ Add insurance</button>}
         </div>
         {policies.length === 0 ? (
           <EmptyState icon={ShieldCheck} title="No insurance on file" description={canEdit ? `Add a ${title.toLowerCase()} insurance plan and snap a photo of the card.` : 'No insurance has been added yet.'} action={canEdit ? <Button onClick={() => setPolicyForm({ ...blankPolicy })} className="btn-cta"><Plus className="h-4 w-4" /> Add Insurance</Button> : undefined} />
@@ -310,8 +310,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       {/* ── Providers ─────────────────────────────────────── */}
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 font-semibold"><Icon className="h-4 w-4 text-brand" /> {providerWord}s</h2>
-          {canEdit && <button onClick={() => setProviderForm({ ...blankProvider })} className="text-xs font-semibold text-brand">+ Add {providerWord.toLowerCase()}</button>}
+          <h2 className="flex items-center gap-2 font-semibold"><Icon className="h-4 w-4 text-brand-text" /> {providerWord}s</h2>
+          {canEdit && <button onClick={() => setProviderForm({ ...blankProvider })} className="text-xs font-semibold text-brand-text">+ Add {providerWord.toLowerCase()}</button>}
         </div>
         {providerGroups.length === 0 ? (
           <EmptyState icon={Icon} title={`No ${providerWord.toLowerCase()}s yet`} description={canEdit ? `Add your family's ${providerWord.toLowerCase()}s and generate a printable info file.` : 'No providers have been added yet.'} action={canEdit ? <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-cta"><Plus className="h-4 w-4" /> Add {providerWord}</Button> : undefined} />
@@ -321,7 +321,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
               <div key={g.key} className="rounded-xl border border-border p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    {g.member ? <Avatar name={g.label} color={g.color} size={28} /> : <div className="grid h-7 w-7 place-items-center rounded-full bg-brand/15 text-brand"><Stethoscope className="h-4 w-4" /></div>}
+                    {g.member ? <Avatar name={g.label} color={g.color} size={28} /> : <div className="grid h-7 w-7 place-items-center rounded-full bg-brand/15 text-brand-text"><Stethoscope className="h-4 w-4" /></div>}
                     <span className="text-sm font-semibold">{g.label}</span>
                   </div>
                   <button onClick={() => setInfoSheet({ member: g.member, items: g.items })} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-muted hover:text-fg">
@@ -335,7 +335,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                         <p className="truncate text-sm font-semibold">{p.name}{p.is_primary && <span className="ml-2 text-[10px] font-bold text-emerald-300">PRIMARY</span>}</p>
                         <p className="truncate text-xs text-muted">{[p.specialty, p.practice_name].filter(Boolean).join(' · ') || providerWord}</p>
                       </div>
-                      {p.phone && <a href={`tel:${p.phone}`} className="inline-flex items-center gap-1 text-xs text-brand"><Phone className="h-3 w-3" />{p.phone}</a>}
+                      {p.phone && <a href={`tel:${p.phone}`} className="inline-flex items-center gap-1 text-xs text-brand-text"><Phone className="h-3 w-3" />{p.phone}</a>}
                       {canEdit && (
                         <div className="flex items-center gap-1.5">
                           <button onClick={() => setProviderForm({ id: p.id, member_id: p.member_id ?? '', name: p.name, specialty: p.specialty ?? '', practice_name: p.practice_name ?? '', phone: p.phone ?? '', fax: p.fax ?? '', email: p.email ?? '', address: p.address ?? '', is_primary: p.is_primary, notes: p.notes ?? '' })} className="text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
@@ -354,7 +354,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       {/* ── Medical Profiles ──────────────────────────────── */}
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 font-semibold"><ClipboardList className="h-4 w-4 text-brand" /> Health Profiles</h2>
+          <h2 className="flex items-center gap-2 font-semibold"><ClipboardList className="h-4 w-4 text-brand-text" /> Health Profiles</h2>
         </div>
         <div className="grid max-h-[36rem] gap-3 overflow-y-auto sm:grid-cols-2">
           {members.map((m) => {

@@ -31,7 +31,7 @@ export function FollowButton({ storeId, following: initial, className }: { store
       aria-busy={pending}
       className={cn(
         'rounded-lg border px-2.5 py-1 text-xs font-medium transition disabled:opacity-60',
-        following ? 'border-border bg-elevated text-muted' : 'border-brand/40 bg-brand/10 text-brand hover:bg-brand/20',
+        following ? 'border-border bg-elevated text-muted' : 'border-brand/40 bg-brand/10 text-brand-text hover:bg-brand/20',
         className,
       )}
     >

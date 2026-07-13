@@ -138,7 +138,7 @@ function PromptCard({ onWrite }: { onWrite: (prompt: string) => void }) {
 
   return (
     <div className="mb-5 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-5">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-brand">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-brand-text">
         <Sparkles className="h-3.5 w-3.5" /> Today&apos;s reflection
       </div>
       <p className="mt-2 text-base font-semibold leading-relaxed">{prompt}</p>
@@ -199,7 +199,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
       <form onSubmit={onSubmit} className="space-y-4">
         {initialPrompt && (
           <p className="flex items-start gap-1.5 rounded-xl bg-surface/60 p-3 text-sm italic text-muted">
-            <Quote className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-brand" /> {initialPrompt}
+            <Quote className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-brand-text" /> {initialPrompt}
           </p>
         )}
 
@@ -226,7 +226,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
             {speech.supported && (
               <button type="button" onClick={toggleMic}
                 className={cn('flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition',
-                  speech.listening ? 'bg-rose-500/10 text-rose-500' : 'text-brand hover:bg-brand/10')}>
+                  speech.listening ? 'bg-rose-500/10 text-rose-500' : 'text-brand-text hover:bg-brand/10')}>
                 {speech.listening ? <><MicOff className="h-3 w-3" /> Stop</> : <><Mic className="h-3 w-3" /> Speak</>}
               </button>
             )}

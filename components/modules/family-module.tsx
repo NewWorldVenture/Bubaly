@@ -203,7 +203,7 @@ export function FamilyModule() {
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold">{famName}</h2>
                 {planLevel > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-0.5 text-xs font-semibold text-brand">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-0.5 text-xs font-semibold text-brand-text">
                     <Sparkles className="h-3 w-3" /> {planName}
                   </span>
                 )}
@@ -213,7 +213,7 @@ export function FamilyModule() {
               </p>
             </div>
             {canManage && (
-              <button onClick={() => setEditOpen(true)} className="flex items-center gap-1 text-sm font-semibold text-brand hover:underline">
+              <button onClick={() => setEditOpen(true)} className="flex items-center gap-1 text-sm font-semibold text-brand-text hover:underline">
                 <Edit3 className="h-3.5 w-3.5" /> Edit Family Profile
               </button>
             )}
@@ -271,7 +271,7 @@ export function FamilyModule() {
             </div>
           )}
           {activeMembers.length > 12 && (
-            <button onClick={() => setShowAllMembers((v) => !v)} className="mt-3 w-full text-center text-sm font-semibold text-brand hover:underline">
+            <button onClick={() => setShowAllMembers((v) => !v)} className="mt-3 w-full text-center text-sm font-semibold text-brand-text hover:underline">
               {showAllMembers ? 'Show fewer' : `View all ${activeMembers.length} members`}
             </button>
           )}
@@ -287,7 +287,7 @@ export function FamilyModule() {
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">Family Calendar</h2>
-              <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand hover:underline">View Calendar</Link>
+              <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">View Calendar</Link>
             </div>
             {events.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted">Nothing scheduled yet.</p>
@@ -297,7 +297,7 @@ export function FamilyModule() {
                   const who = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
                   return (
                     <Link key={e.id} href="/dashboard/calendar" className="flex items-center gap-3 rounded-xl px-1.5 py-1.5 hover:bg-elevated">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand"><CalendarIcon className="h-4 w-4" /></span>
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text"><CalendarIcon className="h-4 w-4" /></span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{e.title}</p>
                         <p className="truncate text-xs text-muted">{fmtRelDay(e.starts_at)}{!e.all_day ? ` · ${fmtTime(e.starts_at)}` : ' · All Day'}</p>
@@ -308,13 +308,13 @@ export function FamilyModule() {
                 })}
               </div>
             )}
-            <Link href="/dashboard/calendar" className="mt-3 flex items-center justify-center gap-1 text-sm font-semibold text-brand hover:underline">View Full Calendar</Link>
+            <Link href="/dashboard/calendar" className="mt-3 flex items-center justify-center gap-1 text-sm font-semibold text-brand-text hover:underline">View Full Calendar</Link>
           </div>
 
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">Family Highlights</h2>
-              <Link href="/dashboard/memories" className="flex items-center gap-0.5 text-xs font-semibold text-brand hover:underline">View all <ChevronRight className="h-3.5 w-3.5" /></Link>
+              <Link href="/dashboard/memories" className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">View all <ChevronRight className="h-3.5 w-3.5" /></Link>
             </div>
             {highlights.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted">No highlights yet.</p>
@@ -336,7 +336,7 @@ export function FamilyModule() {
                 ))}
               </div>
             )}
-            <Link href="/dashboard/memories/create" className="mt-3 flex items-center justify-center gap-1 text-sm font-semibold text-brand hover:underline"><Plus className="h-3.5 w-3.5" /> Add Memory</Link>
+            <Link href="/dashboard/memories/create" className="mt-3 flex items-center justify-center gap-1 text-sm font-semibold text-brand-text hover:underline"><Plus className="h-3.5 w-3.5" /> Add Memory</Link>
           </div>
         </div>
 
@@ -351,7 +351,7 @@ export function FamilyModule() {
                   <p className="text-sm font-semibold">{c.label}</p>
                   <p className="text-xs text-muted">{c.count != null ? `${c.count} ${c.unit}` : 'View'}</p>
                 </div>
-                <span className="text-xs font-semibold text-brand">View →</span>
+                <span className="text-xs font-semibold text-brand-text">View →</span>
               </Link>
             ))}
           </div>
@@ -364,10 +364,10 @@ export function FamilyModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Family Info</h2>
-            {canManage && <button onClick={() => setEditOpen(true)} className="text-xs font-semibold text-brand hover:underline">Edit</button>}
+            {canManage && <button onClick={() => setEditOpen(true)} className="text-xs font-semibold text-brand-text hover:underline">Edit</button>}
           </div>
           <div className="space-y-3.5">
-            <InfoRow icon={Users} tint="bg-brand/10 text-brand" label="Family Name" value={famName} />
+            <InfoRow icon={Users} tint="bg-brand/10 text-brand-text" label="Family Name" value={famName} />
             <InfoRow icon={Home} tint="bg-blue-500/10 text-blue-400" label="Address" value={family?.address ?? 'Not set'} />
             <InfoRow icon={Clock} tint="bg-emerald-500/10 text-emerald-400" label="Time Zone" value={family?.timezone ?? 'UTC'} />
             <InfoRow icon={CreditCard} tint="bg-orange-500/10 text-orange-400" label="Subscription"
@@ -389,7 +389,7 @@ export function FamilyModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Upcoming Birthdays</h2>
-            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand hover:underline">View all</Link>
+            <Link href="/dashboard/calendar" className="text-xs font-semibold text-brand-text hover:underline">View all</Link>
           </div>
           {birthdays.length === 0 ? (
             <p className="py-2 text-center text-sm text-muted">No birthdays on file.</p>
@@ -407,7 +407,7 @@ export function FamilyModule() {
               ))}
             </div>
           )}
-          <Link href="/dashboard/calendar" className="mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-brand hover:underline"><Cake className="h-3.5 w-3.5" /> Add to Calendar</Link>
+          <Link href="/dashboard/calendar" className="mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-brand-text hover:underline"><Cake className="h-3.5 w-3.5" /> Add to Calendar</Link>
         </div>
 
         {/* Quick Actions */}

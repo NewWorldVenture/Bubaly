@@ -32,7 +32,7 @@ export default async function SurveysPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2">
-        <Gauge className="h-5 w-5 text-brand" />
+        <Gauge className="h-5 w-5 text-brand-text" />
         <div>
           <h2 className="text-base font-bold">Surveys — NPS · CSAT · CES</h2>
           <p className="text-xs text-muted">Measure loyalty, satisfaction, and effort. Share a link and watch scores roll in.</p>

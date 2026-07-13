@@ -40,7 +40,7 @@ export default async function SyncAccountsPage() {
           return (
             <Card key={p}>
               <div className="flex items-start gap-3">
-                <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand"><Plug className="h-5 w-5" /></div>
+                <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand-text"><Plug className="h-5 w-5" /></div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold">{PROVIDER_LABELS[p]}</p>
@@ -58,7 +58,7 @@ export default async function SyncAccountsPage() {
                   </div>
                 </div>
               </div>
-              <Link href={`/dashboard/sync/accounts/${p}`} className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline">
+              <Link href={`/dashboard/sync/accounts/${p}`} className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand-text hover:underline">
                 {account ? 'Manage' : 'Set up'} <ChevronRight className="h-4 w-4" />
               </Link>
             </Card>

@@ -35,7 +35,7 @@ function LinkRow({ row }: { row: Row }) {
       {...(row.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
       className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-elevated"
     >
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text">
         <Icon className="h-5 w-5" />
       </span>
       <span className="min-w-0 flex-1">

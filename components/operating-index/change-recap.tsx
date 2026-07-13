@@ -32,7 +32,7 @@ export function ChangeRecap({
   return (
     <section className={cn('rounded-2xl border border-border bg-surface/40 p-4 sm:p-5', className)}>
       <div className="mb-2 flex items-center gap-2">
-        <Moon className="h-4 w-4 text-brand" />
+        <Moon className="h-4 w-4 text-brand-text" />
         <h2 className="text-sm font-semibold">{title}</h2>
       </div>
       <p className="text-sm text-fg">{change.headline}</p>

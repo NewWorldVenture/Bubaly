@@ -139,7 +139,7 @@ export function PlatformBadges() {
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-      <span className="w-full text-[10px] text-white/40">Designed for</span>
+      <span className="w-full text-[10px] text-white/55">Designed for</span>
       {platforms.map(({ icon: Icon, label }) => (
         <span key={label} className="flex items-center gap-1.5 text-[10px] text-white/55">
           <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -160,7 +160,7 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
   ];
 
   return (
-    <div className={cn('dark relative mx-auto isolate', className)}>
+    <div aria-hidden="true" className={cn('dark relative mx-auto isolate', className)}>
       <div className="pointer-events-none absolute -inset-16 -z-20 rounded-full bg-violet-600/25 blur-[70px]" />
       <div className="pointer-events-none absolute -right-36 top-[24%] -z-10 h-80 w-80 rounded-full border-[3px] border-violet-500/85 shadow-[0_0_65px_rgba(124,77,255,0.82),inset_0_0_65px_rgba(124,77,255,0.3)] sm:-right-48 sm:h-[430px] sm:w-[430px]" />
 
@@ -184,7 +184,7 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[14px] font-bold text-white">Good Morning, Sarah! <span className="text-amber-300">☀</span></p>
-                <p className="text-[10px] text-white/45">Thursday, May 16</p>
+                <p className="text-[10px] text-white/55">Thursday, May 16</p>
               </div>
               <div className="relative shrink-0">
                 <FaceAvatar index={2} className="h-9 w-9 border border-white/20" />
@@ -212,7 +212,7 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
                 <div key={label} className="rounded-lg border border-white/[0.07] bg-white/[0.035] px-1 py-2 text-center">
                   <Icon className={cn('mx-auto mb-1 h-3.5 w-3.5', color)} />
                   <p className={cn('text-[13px] font-bold', color)}>{value}</p>
-                  <p className="mt-0.5 text-[8px] leading-tight text-white/45">{label}</p>
+                  <p className="mt-0.5 text-[8px] leading-tight text-white/55">{label}</p>
                 </div>
               ))}
             </div>
@@ -229,16 +229,16 @@ export function HeroPhoneMockup({ className }: { className?: string }) {
                     <span className={cn('shrink-0 rounded-full p-[2px]', color)}><FaceAvatar index={avatar} className="h-6 w-6" /></span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[10px] font-semibold text-white">{title}</p>
-                      <p className="text-[9px] text-white/45">{person}</p>
+                      <p className="text-[9px] text-white/55">{person}</p>
                     </div>
-                    <span className="shrink-0 text-[9px] text-white/40">{time}</span>
+                    <span className="shrink-0 text-[9px] text-white/55">{time}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Bottom nav */}
-            <div className="mt-auto flex items-end justify-around border-t border-white/8 pt-3 text-[7px] text-white/35">
+            <div className="mt-auto flex items-end justify-around border-t border-white/8 pt-3 text-[7px] text-white/55">
               <span className="flex flex-col items-center gap-1 text-violet-400"><Home className="h-4 w-4" />Home</span>
               <span className="flex flex-col items-center gap-1"><CalendarDays className="h-4 w-4" />Calendar</span>
               <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-r from-blue-500 to-violet-600 text-brand-fg">
@@ -301,7 +301,7 @@ export function ProductMockup() {
                 {['Math Test', 'Doctor Appointment', 'Field Trip'].map((item) => (
                   <div key={item} className="py-2 text-xs">
                     <p className="font-semibold">{item}</p>
-                    <p className="text-white/45">This week</p>
+                    <p className="text-white/55">This week</p>
                   </div>
                 ))}
               </MiniPanel>
@@ -310,7 +310,7 @@ export function ProductMockup() {
                   <div key={item} className="flex items-center gap-2 py-2 text-xs">
                     <span className="h-6 w-6 rounded-full bg-gradient-to-br from-amber-200 to-rose-300" />
                     <span className="flex-1">{item}</span>
-                    <Circle className="h-4 w-4 text-white/35" />
+                    <Circle className="h-4 w-4 text-white/55" />
                   </div>
                 ))}
               </MiniPanel>
@@ -358,7 +358,7 @@ export function PhoneMockup({ className }: { className?: string }) {
           {items.map((item, index) => (
             <div key={item} className="flex justify-between border-l-2 border-violet-500 py-1.5 pl-2 text-[10px]">
               <span>{item}</span>
-              <span className="text-white/45">{['8:00 AM', '10:00 AM', '4:30 PM', '7:00 PM'][index]}</span>
+              <span className="text-white/55">{['8:00 AM', '10:00 AM', '4:30 PM', '7:00 PM'][index]}</span>
             </div>
           ))}
         </MiniPanel>
@@ -366,7 +366,7 @@ export function PhoneMockup({ className }: { className?: string }) {
           {['Tidy Living Room', 'Take Out Trash'].map((item) => (
             <div key={item} className="flex items-center justify-between py-1.5 text-[10px]">
               <span>{item}</span>
-              <Circle className="h-3 w-3 text-white/35" />
+              <Circle className="h-3 w-3 text-white/55" />
             </div>
           ))}
         </MiniPanel>
@@ -480,7 +480,7 @@ export function DeviceShowcase() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-5">
         {devices.map((device) => (
           <div key={device} className="device-card group flex flex-col items-center gap-3">
-            <DeviceArtwork device={device} />
+            <div aria-hidden="true" className="dark"><DeviceArtwork device={device} /></div>
             <span className="text-sm font-medium text-[rgb(var(--canvas-fg)/0.75)] transition group-hover:text-[rgb(var(--canvas-fg))]">{device}</span>
           </div>
         ))}
@@ -561,7 +561,7 @@ function TasksScreen() {
             ) : (
               <Circle className="h-2 w-2 shrink-0 text-white/25" />
             )}
-            <span className={cn('text-[4.5px]', done ? 'text-white/40 line-through' : 'text-white/80')}>{text}</span>
+            <span className={cn('text-[4.5px]', done ? 'text-white/55 line-through' : 'text-white/80')}>{text}</span>
           </div>
         ))}
       </div>
@@ -590,7 +590,7 @@ function DashboardScreen() {
         ].map(({ value, label, color }) => (
           <div key={label} className="rounded-md bg-white/[0.06] px-0.5 py-1 text-center">
             <p className={cn('text-[7px] font-bold', color)}>{value}</p>
-            <p className="text-[4px] text-white/40">{label}</p>
+            <p className="text-[4px] text-white/55">{label}</p>
           </div>
         ))}
       </div>
@@ -617,7 +617,7 @@ function DashboardScreen() {
           ].map(({ text, done }) => (
             <div key={text} className="flex items-center gap-1 rounded-sm bg-white/[0.04] px-1 py-0.5">
               <span className={cn('h-1 w-1 shrink-0 rounded-full', done ? 'bg-emerald-400' : 'bg-white/20')} />
-              <span className={cn('text-[4px]', done ? 'text-white/40' : 'text-white/70')}>{text}</span>
+              <span className={cn('text-[4px]', done ? 'text-white/55' : 'text-white/70')}>{text}</span>
             </div>
           ))}
         </div>
@@ -648,7 +648,7 @@ function WebAppScreen() {
             ].map(({ v, l, c }) => (
               <div key={l} className="rounded-sm bg-white/[0.06] py-0.5 text-center">
                 <p className={cn('text-[5px] font-bold', c)}>{v}</p>
-                <p className="text-[3px] text-white/40">{l}</p>
+                <p className="text-[3px] text-white/55">{l}</p>
               </div>
             ))}
           </div>
@@ -791,7 +791,7 @@ export function MiniCalendar() {
         <span>May 2024</span>
         <span>+</span>
       </div>
-      <div className="grid grid-cols-7 gap-1 text-center text-[9px] text-white/40">
+      <div className="grid grid-cols-7 gap-1 text-center text-[9px] text-white/55">
         {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => <span key={d}>{d}</span>)}
         {Array.from({ length: 28 }).map((_, index) => (
           <span key={index} className={cn('rounded-md py-1', [8, 9, 10, 14].includes(index) && 'bg-violet-600/50 text-white')}>
@@ -808,7 +808,7 @@ export function CheckList({ items, color = 'text-emerald-400' }: { items: string
     <div className="space-y-3 text-sm">
       {items.map((item, index) => (
         <div key={item} className="flex items-center gap-3">
-          {index < 2 ? <CheckCircle2 className={cn('h-5 w-5', color)} /> : <Circle className="h-5 w-5 text-white/35" />}
+          {index < 2 ? <CheckCircle2 className={cn('h-5 w-5', color)} /> : <Circle className="h-5 w-5 text-white/55" />}
           <span>{item}</span>
         </div>
       ))}
@@ -843,7 +843,7 @@ export function ManifestoBand() {
     <section className="relative overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-violet-500/[0.06] via-transparent to-blue-500/[0.05] px-6 py-14 sm:px-10 sm:py-20">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
       <div className="mx-auto max-w-3xl text-center">
-        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Our Manifesto</span>
+        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">Our Manifesto</span>
 
         <p className="mx-auto mt-6 max-w-2xl text-balance text-xl font-medium leading-snug text-white/75 sm:text-2xl sm:leading-snug">
           Life isn&apos;t meant to be spent coordinating schedules, answering emails, filling out forms,
@@ -864,7 +864,7 @@ export function ManifestoBand() {
         </p>
 
         <div className="mt-10">
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-white/45">Our mission is simple</p>
+          <p className="text-sm font-medium uppercase tracking-[0.18em] text-white/55">Our mission is simple</p>
           <p className="mt-3 text-2xl font-extrabold tracking-tight sm:text-3xl">
             Less Managing Life. <GradientText>More Living It.</GradientText>
           </p>

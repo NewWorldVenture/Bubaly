@@ -322,7 +322,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
               <span className="text-xs text-muted">This Week</span>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <OverviewStat icon={TicketCheck} label="Total"       value={total}      color="text-brand    bg-brand/10" />
+              <OverviewStat icon={TicketCheck} label="Total"       value={total}      color="text-brand-text    bg-brand/10" />
               <OverviewStat icon={Circle}      label="Open"        value={openCount}  color="text-blue-400 bg-blue-500/10" />
               <OverviewStat icon={Clock}       label="In Progress" value={inProgress} color="text-orange-400 bg-orange-500/10" />
               <OverviewStat icon={Circle}      label="Pending"     value={pending}    color="text-yellow-400 bg-yellow-500/10" />
@@ -354,7 +354,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
                 </li>
               ))}
             </ul>
-            <a href="/admin/support-tickets?tab=all" className="mt-4 flex items-center gap-1 text-xs text-brand hover:underline">
+            <a href="/admin/support-tickets?tab=all" className="mt-4 flex items-center gap-1 text-xs text-brand-text hover:underline">
               View all categories →
             </a>
           </Card>

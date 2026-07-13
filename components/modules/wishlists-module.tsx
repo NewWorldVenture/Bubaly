@@ -167,7 +167,7 @@ export function WishlistsModule() {
             return (
               <div key={w.id} className={cn('rounded-2xl border p-4 flex flex-col', w.is_purchased && !isOwnList ? 'border-border bg-surface/30 opacity-75' : 'border-border bg-surface/50')}>
                 <div className="flex items-start justify-between gap-2">
-                  <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand flex-shrink-0"><Gift className="h-5 w-5" /></div>
+                  <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand-text flex-shrink-0"><Gift className="h-5 w-5" /></div>
                   <div className="flex items-center gap-1.5">
                     <span className={cn('text-[10px] uppercase tracking-wide rounded border px-1.5 py-0.5 inline-flex items-center gap-1', PRIORITY_STYLES[w.priority])}>
                       {w.priority === 'high' && <Star className="h-3 w-3 fill-current" />}{WISH_PRIORITY_LABELS[w.priority]}
@@ -184,7 +184,7 @@ export function WishlistsModule() {
                 {w.notes && <p className="mt-0.5 text-sm text-muted flex-1">{w.notes}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                   {w.price != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{w.price}</span>}
-                  {w.url && <a href={w.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand hover:underline"><ExternalLink className="h-3.5 w-3.5" />View</a>}
+                  {w.url && <a href={w.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />View</a>}
                 </div>
 
                 {/* Gift coordination (hidden from owner) */}

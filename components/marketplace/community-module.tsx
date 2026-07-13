@@ -64,7 +64,7 @@ export function CommunityModule({
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
       <header>
         <h1 className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
-          <Users className="h-6 w-6 text-brand" /> Community Circles
+          <Users className="h-6 w-6 text-brand-text" /> Community Circles
         </h1>
         <p className="mt-1 max-w-xl text-sm text-muted">
           Share listings beyond your household — the class, the team, the street.
@@ -108,7 +108,7 @@ export function CommunityModule({
             className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-bg px-3 font-mono text-sm uppercase outline-none focus:border-brand"
           />
           <button type="submit" disabled={pending || !migrated}
-            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-brand/40 px-3.5 text-sm font-bold text-brand transition hover:bg-brand/10 disabled:opacity-50">
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-brand/40 px-3.5 text-sm font-bold text-brand-text transition hover:bg-brand/10 disabled:opacity-50">
             Join
           </button>
         </form>
@@ -123,7 +123,7 @@ export function CommunityModule({
               onClick={() => setSelected(c.id)}
               className={cn(
                 'inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-xs font-bold transition',
-                selected === c.id ? 'border-brand bg-brand/15 text-brand' : 'border-border text-muted hover:bg-elevated',
+                selected === c.id ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted hover:bg-elevated',
               )}
             >
               <span aria-hidden>{c.emoji}</span> {c.name}
@@ -168,7 +168,7 @@ export function CommunityModule({
 
           {/* Share picker */}
           <div className="flex flex-col gap-2 rounded-2xl border border-brand/25 bg-brand/[0.04] p-3 sm:flex-row sm:items-center">
-            <Share2 className="hidden h-4 w-4 shrink-0 text-brand sm:block" />
+            <Share2 className="hidden h-4 w-4 shrink-0 text-brand-text sm:block" />
             <select
               value={shareId}
               onChange={(e) => setShareId(e.target.value)}
@@ -204,7 +204,7 @@ export function CommunityModule({
               {feed.map((f) => (
                 <article key={`${f.circleId}-${f.listing.id}`} className="rounded-2xl border border-border bg-surface p-4">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="rounded-md bg-brand/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">
+                    <span className="rounded-md bg-brand/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-text">
                       {KIND_LABELS[f.listing.kind as ListingKind] ?? f.listing.kind}
                     </span>
                     <span className="rounded-full bg-elevated px-2 py-0.5 text-[10px] font-bold text-muted">
@@ -215,7 +215,7 @@ export function CommunityModule({
                     )}
                   </div>
                   <p className="mt-1.5 text-sm font-bold leading-snug">{f.listing.title}</p>
-                  <p className="mt-0.5 text-sm font-semibold text-brand">
+                  <p className="mt-0.5 text-sm font-semibold text-brand-text">
                     {priceLabel(f.listing.kind as ListingKind, f.listing.price_cents ?? 0, (f.listing.rent_period ?? null) as RentPeriod | null) || '—'}
                   </p>
                   <div className="mt-2 flex items-center gap-2 border-t border-border/50 pt-2">
@@ -242,7 +242,7 @@ export function CommunityModule({
       ) : (
         migrated && circles.length === 0 && (
           <div className="mt-6 rounded-2xl border border-dashed border-border p-8 text-center">
-            <Sparkles className="mx-auto h-8 w-8 text-brand/60" />
+            <Sparkles className="mx-auto h-8 w-8 text-brand-text/60" />
             <p className="mt-2 text-sm font-semibold">Your family isn&apos;t in a circle yet</p>
             <p className="mx-auto mt-1 max-w-sm text-xs text-muted">
               Start one for your street, class or team and share the invite code — or paste a code a friend sent you.

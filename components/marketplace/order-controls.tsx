@@ -68,7 +68,7 @@ export function ReviewForm({ orderId }: { orderId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-lg border border-brand/40 bg-brand/10 px-2 py-1 text-xs font-medium text-brand hover:bg-brand/20"
+        className="inline-flex items-center gap-1 rounded-lg border border-brand/40 bg-brand/10 px-2 py-1 text-xs font-medium text-brand-text hover:bg-brand/20"
       >
         <Star className="h-3 w-3" /> Leave a review
       </button>

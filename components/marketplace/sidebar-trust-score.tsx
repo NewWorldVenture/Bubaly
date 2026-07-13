@@ -48,7 +48,7 @@ export function SidebarTrustScore() {
     <div className="rounded-xl border border-border bg-surface/60 p-3">
       <p className="text-xs font-semibold">Your Trust Score</p>
       <div className="mt-1.5 flex items-center gap-2.5">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border-2 border-brand/40 bg-brand/10 text-sm font-bold text-brand">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border-2 border-brand/40 bg-brand/10 text-sm font-bold text-brand-text">
           {t.stars.toFixed(1)}
         </span>
         <div className="min-w-0">

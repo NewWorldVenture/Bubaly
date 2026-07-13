@@ -1,15 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { PUBLIC_ROUTES } from './public-routes';
 
 // The mobile-foundation pass called this "the single most valuable next step":
 // assert no route scrolls horizontally at real device widths. Public routes run
 // today (no auth needed); extend PUBLIC_ROUTES → authed routes once CI has a
 // Supabase login. Resizing the viewport (no reload) is enough to surface CSS
 // overflow, so each route costs one navigation.
-const PUBLIC_ROUTES = [
-  '/', '/pricing', '/features', '/how-it-works', '/security',
-  '/faq', '/ai', '/mobile', '/blog', '/contact', '/login', '/signup',
-];
-
 // Phone (smallest supported), modern phone, tablet portrait, small laptop.
 const WIDTHS = [320, 390, 768, 1024];
 

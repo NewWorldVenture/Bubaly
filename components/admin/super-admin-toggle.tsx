@@ -20,7 +20,7 @@ export function SuperAdminToggle({ email, isAdmin, locked }: { email: string; is
 
   if (locked) {
     return (
-      <span title="Set via code / SUPER_ADMIN_EMAILS env" className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand/80">
+      <span title="Set via code / SUPER_ADMIN_EMAILS env" className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text/80">
         <ShieldCheck className="h-3.5 w-3.5" /> Admin (code)
       </span>
     );

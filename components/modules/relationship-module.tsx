@@ -294,7 +294,7 @@ export function RelationshipModule() {
       {digest && (
         <div className="mb-6 rounded-2xl border border-brand/30 bg-brand/5 p-5">
           <div className="flex items-start gap-3">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand"><Sparkles className="h-5 w-5" /></div>
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text"><Sparkles className="h-5 w-5" /></div>
             <div className="flex-1">
               {digest.headline && <p className="font-semibold">{digest.headline}</p>}
               {digest.prompts.length > 0 && (
@@ -314,7 +314,7 @@ export function RelationshipModule() {
                     <p className="text-sm font-medium">{idea.title}{idea.estimatedPrice ? <span className="ml-1 text-xs text-muted">· {idea.estimatedPrice}</span> : null}</p>
                     {idea.reason && <p className="mt-0.5 text-xs text-muted">{idea.reason}</p>}
                   </div>
-                  <button onClick={() => saveAiGift(idea)} className="shrink-0 rounded-lg bg-brand/10 px-2.5 py-1.5 text-xs font-semibold text-brand hover:bg-brand/20" aria-label="Save gift idea">
+                  <button onClick={() => saveAiGift(idea)} className="shrink-0 rounded-lg bg-brand/10 px-2.5 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20" aria-label="Save gift idea">
                     <Plus className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -364,7 +364,7 @@ export function RelationshipModule() {
                   <p className="text-sm text-muted">{fmtDate(raw.event_date)}{ms ? ` · ${ms}` : ''}</p>
                   {raw.location && <p className="mt-0.5 flex items-center gap-1 text-xs text-muted"><MapPin className="h-3 w-3" />{raw.location}</p>}
                   <div className="mt-3 flex items-center gap-1.5">
-                    <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold', due ? 'bg-brand/15 text-brand' : 'bg-elevated text-muted')}>
+                    <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold', due ? 'bg-brand/15 text-brand-text' : 'bg-elevated text-muted')}>
                       {due && <Bell className="h-3 w-3" />} {formatCountdown(u.days)}
                     </span>
                   </div>
@@ -403,7 +403,7 @@ export function RelationshipModule() {
                 {(['all', ...GIFT_STATUS.map((s) => s.value)] as const).map((f) => (
                   <button key={f} onClick={() => setGiftFilter(f)}
                     className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
-                      giftFilter === f ? 'border-brand bg-brand/10 text-brand' : 'border-border text-muted hover:text-fg')}>
+                      giftFilter === f ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:text-fg')}>
                     {f === 'all' ? 'All' : GIFT_STATUS.find((s) => s.value === f)?.label}
                   </button>
                 ))}
@@ -416,9 +416,9 @@ export function RelationshipModule() {
             {visibleGifts.map((g) => (
               <div key={g.id} className="flex flex-col rounded-2xl border border-border bg-surface/50 p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand"><Gift className="h-5 w-5" /></div>
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text"><Gift className="h-5 w-5" /></div>
                   <div className="flex items-center gap-1">
-                    {g.source === 'ai' && <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[10px] text-brand">AI</span>}
+                    {g.source === 'ai' && <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[10px] text-brand-text">AI</span>}
                     {g.source === 'wishlist' && <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">Wishlist</span>}
                     <button onClick={() => openEditGift(g)} aria-label="Edit" className="rounded p-1 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                     <button onClick={() => removeGift(g)} aria-label="Remove" className="rounded p-1 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
@@ -429,7 +429,7 @@ export function RelationshipModule() {
                 {g.for_name && <p className="mt-0.5 text-xs text-muted">For {g.for_name}{g.occasion ? ` · ${g.occasion}` : ''}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                   {g.price_cents != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{dollars(g.price_cents)?.replace('$', '')}</span>}
-                  {g.url && <a href={g.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand hover:underline"><ExternalLink className="h-3.5 w-3.5" /> View</a>}
+                  {g.url && <a href={g.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" /> View</a>}
                 </div>
                 <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
                   {g.status === 'purchased' || g.status === 'given'
