@@ -6,8 +6,8 @@
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
-  `0181_guardian_callback_replay.sql`.
-- SQL files: 314.
+  `0181_guardian_callback_replay.sql`, and `0182_stripe_webhook_claims.sql`.
+- SQL files: 315.
 - Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
   not a claim that every object exists in the live database.
@@ -57,7 +57,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
- 2. Apply the full migration chain through `0181` and run `npm run db:audit:schema` and
+ 2. Apply the full migration chain through `0182` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
@@ -113,8 +113,9 @@ Notification generation and test-push dispatch use family/user buckets before se
 and push delivery, limiting repeated fan-out work.
 
 - Current live schema audit: all 8 pre-0180 table probes pass; `resend_webhook_events` and
-  `guardian_callback_events` are missing until migrations 0180 and 0181 are applied. The live Auth
-  Admin users probe still returns HTTP 500 and remains a launch blocker.
+  `guardian_callback_events` and `stripe_webhook_events.processing_started_at` are missing until
+  migrations 0180 through 0182 are applied. The live Auth Admin users probe still returns HTTP 500 and
+  remains a launch blocker.
 
 Public service-role ingestion now uses `rate_limit_hit` through the shared request guard for contact,
 marketing forms, exit-intent, landing-page, visitor-intelligence, and A/B writes. Durable enforcement
@@ -142,3 +143,8 @@ no client policies; only the service-role webhook path can read or write the eve
 The public unsubscribe endpoint now uses `rate_limit_hit` before its service-role suppression upsert,
 bounds the signed email/token inputs, escapes HTML output, and fails closed in production if no signing
 secret is configured. The existing HMAC token tests now cover the missing-production-secret case.
+
+Stripe webhook claims now distinguish active concurrent deliveries from failed or stale abandoned rows.
+Migration `0182_stripe_webhook_claims.sql` adds the processing timestamp and index required for that
+conditional recovery. Each worker also carries an ownership token so an older worker cannot overwrite a
+newer reclaimed claim; payload and configuration boundaries are enforced before signature processing.

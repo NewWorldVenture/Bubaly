@@ -33,4 +33,11 @@ describe('forward-only production migration reconciliation', () => {
       expect(audit).toContain(table);
     }
   });
+
+  it('adds a processing claim timestamp to the Stripe replay ledger', () => {
+    const sql = readFileSync(resolve(root, 'supabase', 'migrations', '0182_stripe_webhook_claims.sql'), 'utf8');
+    expect(sql).toContain('alter table public.stripe_webhook_events');
+    expect(sql).toContain('add column if not exists processing_started_at timestamptz');
+    expect(sql).toContain('add column if not exists claim_token text');
+  });
 });

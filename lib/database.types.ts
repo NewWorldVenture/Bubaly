@@ -844,9 +844,9 @@ export interface Database {
         Partial<{ name: string; description: string | null; preview_url: string | null; stripe_personalization_design_id: string | null; status: string; is_active: boolean; sort_order: number }>
       >;
       stripe_webhook_events: T<
-        { id: string; stripe_event_id: string; type: string; status: string; error: string | null; payload_summary: Json; created_at: string },
-        { id?: string; stripe_event_id: string; type: string; status?: string; error?: string | null; payload_summary?: Json },
-        Partial<{ status: string; error: string | null }>
+        { id: string; stripe_event_id: string; type: string; status: string; error: string | null; payload_summary: Json; processing_started_at: string | null; claim_token: string | null; created_at: string },
+        { id?: string; stripe_event_id: string; type: string; status?: string; error?: string | null; payload_summary?: Json; processing_started_at?: string | null; claim_token?: string | null },
+        Partial<{ status: string; error: string | null; processing_started_at: string | null; claim_token: string | null }>
       >;
       dashboard_layouts: T<
         { id: string; family_id: string; user_id: string | null; scope: 'user' | 'family'; device_context: 'all' | 'mobile' | 'tablet' | 'desktop'; feature_keys: string[]; is_active: boolean; created_by: string | null; updated_by: string | null; metadata: Json; deleted_at: string | null } & Stamps,

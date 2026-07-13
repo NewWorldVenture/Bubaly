@@ -42,20 +42,42 @@ const results = await Promise.all(expected.map(async ([table, migration]) => {
   }
 }));
 
-for (const result of results) {
+const columnChecks = [
+  ['stripe_webhook_events.processing_started_at', '0182_stripe_webhook_claims.sql', 'stripe_webhook_events?select=processing_started_at'],
+];
+const columnResults = await Promise.all(columnChecks.map(async ([table, migration, resource]) => {
+  try {
+    const response = await fetch(`${url}/rest/v1/${resource}&limit=0`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    });
+    return { table, migration, status: response.status, ok: response.ok };
+  } catch (error) {
+    return {
+      table,
+      migration,
+      status: 0,
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}));
+
+const schemaResults = [...results, ...columnResults];
+
+for (const result of schemaResults) {
   if (result.ok) {
     console.log(`OK      ${result.table}`);
-  } else if (result.status === 404) {
+  } else if (result.status === 404 || (result.table.includes('.') && result.status === 400)) {
     console.error(`MISSING ${result.table} (${result.migration})`);
   } else {
     console.error(`ERROR   ${result.table} (HTTP ${result.status || 'network'})${result.error ? `: ${result.error}` : ''}`);
   }
 }
 
-const failures = results.filter((result) => !result.ok);
+const failures = schemaResults.filter((result) => !result.ok);
 if (failures.length > 0) {
   console.error(`\nSchema audit failed: ${failures.length} required table${failures.length === 1 ? '' : 's'} unavailable.`);
   process.exit(1);
 }
 
-console.log(`\nSchema audit passed: ${results.length} required tables available.`);
+console.log(`\nSchema audit passed: ${schemaResults.length} required schema checks available.`);

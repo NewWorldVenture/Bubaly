@@ -2,7 +2,8 @@
 //
 // Two jobs:
 //   1) Idempotency — every Stripe event id is recorded before processing so a
-//      retried delivery is a no-op (recordEvent returns false on duplicate).
+//      active claims are a no-op for concurrent deliveries; failed or abandoned
+//      claims can be recovered with an ownership token.
 //   2) Real-time card authorization — when Stripe asks "approve this purchase?",
 //      we decide synchronously against the child's SPEND balance in the immutable
 //      ledger and approve/decline. Capture later posts the debit.
@@ -11,41 +12,94 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type Stripe from 'stripe';
+import { randomUUID } from 'node:crypto';
 import { getStripe } from '@/lib/stripe';
 import { reserveCardAuth, releaseCardHold, debitCardSpend } from '@/lib/wallet/server';
 
 type DB = SupabaseClient<Database>;
+const STALE_EVENT_MS = 10 * 60 * 1000;
 
 /**
  * Record the event for idempotency, replay-safely (audit PAY-2). Inserts the id
- * with status 'processing'. Returns 'fresh' when the caller should process it —
- * either the first delivery, or a re-delivery of an event whose prior handling
- * did NOT complete (still 'processing' or 'error'), so a failed handler is
- * retried rather than silently dropped. Only a fully 'processed' event is a true
- * duplicate. All money handlers are idempotent, so reprocessing is safe.
+ * with status 'processing'. Returns 'fresh' for the first delivery, a failed
+ * delivery, or a stale abandoned claim. An active concurrent delivery and a
+ * fully 'processed' event both return 'duplicate'.
  */
-export async function recordEvent(supabase: DB, event: Stripe.Event): Promise<'fresh' | 'duplicate'> {
+export type StripeEventClaim = { outcome: 'fresh' | 'duplicate'; claimToken?: string };
+
+export async function recordEvent(supabase: DB, event: Stripe.Event): Promise<StripeEventClaim> {
+  const now = new Date().toISOString();
+  const claimToken = randomUUID();
   const { error } = await supabase.from('stripe_webhook_events').insert({
     stripe_event_id: event.id, type: event.type, status: 'processing',
     payload_summary: { account: (event as { account?: string }).account ?? null, created: event.created },
+    processing_started_at: now,
+    claim_token: claimToken,
   });
-  if (!error) return 'fresh';
-  // Row already exists — a duplicate only if the earlier delivery fully processed.
-  const { data } = await supabase
-    .from('stripe_webhook_events').select('status').eq('stripe_event_id', event.id).maybeSingle();
-  return data?.status === 'processed' ? 'duplicate' : 'fresh';
+  if (!error) return { outcome: 'fresh', claimToken };
+  // A unique conflict means another delivery owns or previously owned the claim.
+  if (error.code !== '23505') throw new Error('Stripe webhook event ledger unavailable');
+
+  // Do not let concurrent deliveries process the same active claim. A failed
+  // or stale claim is reclaimed with a conditional update so only one retry wins.
+  const { data: prior, error: readError } = await supabase
+    .from('stripe_webhook_events')
+    .select('status, processing_started_at, claim_token, created_at')
+    .eq('stripe_event_id', event.id)
+    .maybeSingle();
+  if (readError || !prior) throw new Error('Stripe webhook event ledger unavailable');
+  if (prior.status === 'processed') return { outcome: 'duplicate' };
+
+  if (prior.status === 'error') {
+    const { data: claimed, error: claimError } = await supabase
+      .from('stripe_webhook_events')
+      .update({ status: 'processing', error: null, processing_started_at: now, claim_token: claimToken })
+      .eq('stripe_event_id', event.id)
+      .eq('status', 'error')
+      .select('stripe_event_id')
+      .maybeSingle();
+    if (claimError) throw new Error('Stripe webhook event ledger unavailable');
+    return claimed ? { outcome: 'fresh', claimToken } : { outcome: 'duplicate' };
+  }
+
+  if (prior.status === 'processing') {
+    const startedAt = prior.processing_started_at ?? prior.created_at;
+    const age = Date.now() - new Date(startedAt).getTime();
+    if (Number.isFinite(age) && age >= STALE_EVENT_MS) {
+      let claim = supabase
+        .from('stripe_webhook_events')
+        .update({ status: 'processing', error: null, processing_started_at: now, claim_token: claimToken })
+        .eq('stripe_event_id', event.id)
+        .eq('status', 'processing');
+      claim = prior.processing_started_at
+        ? claim.eq('processing_started_at', prior.processing_started_at)
+        : claim.is('processing_started_at', null);
+      claim = prior.claim_token
+        ? claim.eq('claim_token', prior.claim_token)
+        : claim.is('claim_token', null);
+      const { data: reclaimed, error: reclaimError } = await claim
+        .select('stripe_event_id')
+        .maybeSingle();
+      if (reclaimError) throw new Error('Stripe webhook event ledger unavailable');
+      return reclaimed ? { outcome: 'fresh', claimToken } : { outcome: 'duplicate' };
+    }
+  }
+
+  return { outcome: 'duplicate' };
 }
 
 /** Mark an event as fully processed (so future deliveries short-circuit). */
-export async function markEventProcessed(supabase: DB, eventId: string): Promise<void> {
+export async function markEventProcessed(supabase: DB, eventId: string, claimToken: string): Promise<void> {
   await supabase.from('stripe_webhook_events')
-    .update({ status: 'processed', error: null }).eq('stripe_event_id', eventId);
+    .update({ status: 'processed', error: null, processing_started_at: null, claim_token: null })
+    .eq('stripe_event_id', eventId).eq('claim_token', claimToken);
 }
 
 /** Mark an event as errored (kept reprocessable; the route returns 500 to retry). */
-export async function markEventError(supabase: DB, eventId: string, message: string): Promise<void> {
+export async function markEventError(supabase: DB, eventId: string, message: string, claimToken: string): Promise<void> {
   await supabase.from('stripe_webhook_events')
-    .update({ status: 'error', error: message }).eq('stripe_event_id', eventId);
+    .update({ status: 'error', error: message.slice(0, 1000), processing_started_at: null, claim_token: null })
+    .eq('stripe_event_id', eventId).eq('claim_token', claimToken);
 }
 
 /** Look up the card + family for an authorization, by Stripe card id. */

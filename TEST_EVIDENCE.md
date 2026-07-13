@@ -161,3 +161,16 @@ Audit date: 2026-07-13
 - Agentic chat input regression covers malformed UUIDs, blank messages, trimming, and the 8,000-character bound.
 - Voice AI regression covers local/durable limiter behavior before paid transcription and speech calls.
 - Calendar feed regression covers URL-safe token bounds before service-role reads.
+
+## Audit Update - 2026-07-13 (Stripe webhook claim serialization)
+
+- `npm.cmd test`: 311 files and 2,576 tests passed.
+- `npm.cmd test -- tests/stripe-webhook-replay-contract.test.ts tests/production-migration-contract.test.ts`:
+  2 files, 14 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- Stripe billing and money webhooks now bound payloads, fail closed on missing configuration or event
+  ledger storage, and serialize active claims through migration `0182_stripe_webhook_claims.sql`; claim
+  ownership tokens prevent older workers from overwriting a reclaimed event.
+- Live schema audit reports the expected missing `processing_started_at` column until migration `0182`
+  is applied.

@@ -2437,3 +2437,25 @@ roadmap entries and user worktree changes are preserved.
   build, and public E2E passed. Live migration application remains pending.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0203 - Stripe event replay ledger allowed concurrent active claims
+
+- Status: [x] Completed in code; production enforcement requires migration `0182` to be applied.
+- Severity: P1
+- Category: Stripe webhook concurrency / billing and money idempotency
+- Feature: Stripe billing and Bubaly Money webhook processing
+- File or files: `lib/stripe/webhook.ts`, `app/api/webhooks/stripe/route.ts`,
+  `app/api/webhooks/money/route.ts`, `supabase/migrations/0182_stripe_webhook_claims.sql`,
+  `tests/stripe-webhook-replay-contract.test.ts`
+- Database objects: `stripe_webhook_events`
+- Description: A unique Stripe event row prevented duplicate records, but concurrent deliveries that
+  observed `processing` were both treated as fresh and could run the same downstream side effects.
+- User impact: Billing state, referral crediting, automation, and money-event handlers could be invoked
+  more than once during concurrent provider retries.
+- Resolution: Added conditional active/stale claim handling, explicit non-duplicate storage failures,
+  per-worker ownership tokens, payload/configuration bounds, and a ten-minute abandoned-claim recovery
+  timestamp. Completion/error updates are restricted to the worker that owns the claim.
+- Tests performed: Stripe replay contract, migration contract, issuing authorization tests, full suite,
+  typecheck, lint, build, and public E2E passed. Live migration application remains pending.
+- Verified by: Codex
+- Date completed: 2026-07-13

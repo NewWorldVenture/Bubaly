@@ -15,12 +15,20 @@ import {
 import { syncConnectedAccount } from '@/lib/stripe/connect';
 
 export const runtime = 'nodejs';
+const MAX_WEBHOOK_BODY_BYTES = 256_000;
 
 export async function POST(req: NextRequest) {
+  const contentLength = Number(req.headers.get('content-length') ?? '');
+  if (Number.isFinite(contentLength) && contentLength > MAX_WEBHOOK_BODY_BYTES) {
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+  }
   const body = await req.text();
+  if (Buffer.byteLength(body, 'utf8') > MAX_WEBHOOK_BODY_BYTES) {
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+  }
   const sig = req.headers.get('stripe-signature') ?? '';
   const secret = process.env.STRIPE_MONEY_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET || '';
-  if (!secret) return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
+  if (!secret) return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 });
 
   let event: Stripe.Event;
   try {
@@ -40,10 +48,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
-  // Everything else is deduped. A re-delivery of an event that never finished
-  // processing is treated as fresh so a failed handler is retried, not dropped.
-  const outcome = await recordEvent(supabase, event);
-  if (outcome === 'duplicate') return NextResponse.json({ received: true, duplicate: true });
+  // Everything else is deduped. Failed or abandoned claims can be retried, while
+  // an active concurrent delivery is acknowledged without repeating side effects.
+  let claimToken = '';
+  try {
+    const claim = await recordEvent(supabase, event);
+    if (claim.outcome === 'duplicate') return NextResponse.json({ received: true, duplicate: true });
+    claimToken = claim.claimToken ?? '';
+  } catch {
+    return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+  }
+  if (!claimToken) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
 
   try {
     switch (event.type) {
@@ -65,13 +80,13 @@ export async function POST(req: NextRequest) {
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    await markEventError(supabase, event.id, message);
+    await markEventError(supabase, event.id, message, claimToken);
     console.error('[money webhook] handler error', event.type, e);
     // Return 500 so Stripe retries; recordEvent keeps errored events reprocessable
     // and the money handlers are idempotent, so the retry settles correctly.
     return NextResponse.json({ error: 'handler_failed' }, { status: 500 });
   }
 
-  await markEventProcessed(supabase, event.id);
+  await markEventProcessed(supabase, event.id, claimToken);
   return NextResponse.json({ received: true });
 }

@@ -8,6 +8,7 @@ import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import type Stripe from 'stripe';
 
 export const runtime = 'nodejs';
+const MAX_WEBHOOK_BODY_BYTES = 256_000;
 
 async function upsertSubscription(supabase: ReturnType<typeof createServiceClient>, sub: Stripe.Subscription) {
   const familyId = sub.metadata.family_id;
@@ -56,9 +57,17 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
 }
 
 export async function POST(req: NextRequest) {
+  const contentLength = Number(req.headers.get('content-length') ?? '');
+  if (Number.isFinite(contentLength) && contentLength > MAX_WEBHOOK_BODY_BYTES) {
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+  }
   const body = await req.text();
+  if (Buffer.byteLength(body, 'utf8') > MAX_WEBHOOK_BODY_BYTES) {
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+  }
   const sig = req.headers.get('stripe-signature') ?? '';
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? '';
+  if (!webhookSecret) return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 });
 
   let event: Stripe.Event;
   try {
@@ -73,8 +82,16 @@ export async function POST(req: NextRequest) {
   // PAY-4: dedup by Stripe event id so a re-delivered event isn't processed
   // twice (reuses the replay-safe store from PAY-2). A fully-processed event
   // short-circuits; a prior failed/unfinished one is reprocessed.
-  if ((await recordEvent(supabase, event)) === 'duplicate') {
-    return NextResponse.json({ received: true, duplicate: true });
+  let claimToken = '';
+  try {
+    const claim = await recordEvent(supabase, event);
+    if (claim.outcome === 'duplicate') {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    claimToken = claim.claimToken ?? '';
+    if (!claimToken) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+  } catch {
+    return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
   }
 
   try {
@@ -122,11 +139,11 @@ export async function POST(req: NextRequest) {
     // Leave the event reprocessable and return 500 so Stripe retries it, rather
     // than 200'ing on a dropped subscription update.
     const message = err instanceof Error ? err.message : String(err);
-    await markEventError(supabase, event.id, message);
+    await markEventError(supabase, event.id, message, claimToken);
     console.error('[stripe webhook] handler error', message);
     return NextResponse.json({ error: 'handler failed' }, { status: 500 });
   }
 
-  await markEventProcessed(supabase, event.id);
+  await markEventProcessed(supabase, event.id, claimToken);
   return NextResponse.json({ received: true });
 }
