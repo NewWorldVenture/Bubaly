@@ -184,3 +184,7 @@ not require a database migration.
 The 600-record production-readiness seed now requires the configured anchored account to resolve to a
 family. It no longer falls back to the first family in the database, preventing accidental fixture writes
 to an unrelated household. The seed remains idempotent and does not write Auth users.
+
+The `SEED_ALL.sql` master entrypoint now performs the same anchored-account preflight before executing
+its legacy sections. This protects the one-paste production fixture workflow even where individual
+operator-scoped seed files retain their own historical resolution logic.

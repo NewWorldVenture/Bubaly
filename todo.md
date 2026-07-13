@@ -2653,3 +2653,21 @@ roadmap entries and user worktree changes are preserved.
   lint, build, and public E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0211 - Master seed could execute legacy sections after an anchor miss
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Production data safety / master seed scope
+- Feature: One-paste `SEED_ALL.sql` workflow
+- File or files: `supabase/SEED_ALL.sql`, `tests/master-seed-scope.test.ts`
+- Description: The master seed embedded many legacy sections that independently fell back to the oldest
+  family when the designated account was absent.
+- User impact: A one-paste service-role seed run could write realistic fixtures to an unrelated household.
+- Root cause: The master entrypoint had no preflight target assertion before executing its sections.
+- Resolution: Added an anchored-account preflight before `seed_core_content.sql`; missing targets abort the
+  entire master workflow before any section can write. The existing idempotent seed packs remain intact.
+- Tests performed: Master seed scope, production-readiness seed, seed safety, full suite, typecheck, lint,
+  build, and public E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

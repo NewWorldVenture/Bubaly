@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd test` | PASS: 317 files, 2,605 tests |
+| `npm.cmd test` | PASS: 318 files, 2,607 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 234 generated pages |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
 | `npm.cmd test -- tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts` | PASS: 2 files, 4 tests |
@@ -94,6 +94,17 @@ Audit date: 2026-07-13
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
 - Public service-role ingestion contract now covers contact, forms, exit-intent, landing-page,
   visitor-intelligence, and A/B routes using the shared durable request guard.
+
+## Audit Update - 2026-07-13 (master seed scope preflight)
+
+- `npm.cmd exec vitest run tests/master-seed-scope.test.ts tests/production-readiness-seed.test.ts tests/seed-data-safety-contract.test.ts`: 3 files, 7 tests passed.
+- `npm.cmd exec vitest run`: 318 files, 2,607 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 234 pages generated.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e`: 51 passed, 1 intentional authenticated test skipped.
+- `supabase/SEED_ALL.sql` now checks the anchored account before its first section, so a missing target
+  aborts the full one-paste workflow before any service-role seed write.
 
 ## Audit Update - 2026-07-13 (model/provider request budgets)
 

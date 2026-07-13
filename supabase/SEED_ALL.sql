@@ -15,13 +15,33 @@
 -- ============================================================================
 -- Runs all 61 paste-ready, idempotent seeds in dependency order (core content
 -- first — it creates the to-do/grocery lists later seeds reuse). Each resolves
--- the family by email (newworldventurellc@gmail.com, falls back to the oldest
--- family) and clears its own sentinel rows first, so re-running never dupes.
+-- the family from the anchored account before any section runs; each seed clears
+-- its own sentinel rows first, so re-running never dupes.
 -- Schema-drift safe: every surface is guarded on its own table existing
 -- (to_regclass), so a database that is behind on a migration seeds every OTHER
 -- surface and skips only the missing one — the script never aborts partway.
 -- Where: Supabase → SQL Editor → paste → Run.
 -- ============================================================================
+
+-- Master-scope preflight: every section below is service-role SQL and many
+-- sections contain legacy family resolution. Fail before any write if the
+-- designated seed account is not present; never guess a household.
+do $$
+declare
+  v_email text := 'newworldventurellc@gmail.com';
+  v_family uuid;
+begin
+  select f.id into v_family
+  from public.families f
+  join public.family_members fm on fm.family_id = f.id
+  join auth.users u on u.id = fm.user_id
+  where lower(u.email) = lower(v_email)
+  limit 1;
+
+  if v_family is null then
+    raise exception 'Master seed requires the anchored account %.', v_email;
+  end if;
+end $$;
 
 -- ==================== seed_core_content.sql ====================
 -- ============================================================================
