@@ -75,3 +75,6 @@ pending migration is applied in an authorized Supabase environment.
 
 Public gift-link reads now guard child and family lookups with `gift_links.is_active`; revoked
 capabilities do not disclose identifying names through service-role reads.
+
+Guardian screening callback updates now enforce sequential bounded turns before mutating
+`guardian_screening_sessions`, `guardian_communications`, or `notifications`.

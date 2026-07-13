@@ -13,6 +13,7 @@ import {
 import { formatPhone } from '@/lib/guardian/phone';
 import { detectScamFromText } from '@/lib/guardian/scam';
 import type { MemberProfile } from '@/lib/guardian/pipeline';
+import { isNextScreeningTurn } from '@/lib/guardian/screening-turn';
 
 export const runtime = 'nodejs';
 
@@ -50,6 +51,16 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (!session || (session as { status: string }).status !== 'active') {
+    return twimlResponse(wrapTwiml(
+      twimlSay('Thank you for calling. Goodbye.'),
+      twimlHangup(),
+    ));
+  }
+
+  // Reject stale, skipped, malformed, or over-limit callbacks before any AI
+  // work or service-role reads can be repeated by a Twilio retry/replay.
+  const storedTurn = Number((session as { turn?: number }).turn ?? 0);
+  if (!isNextScreeningTurn(storedTurn, turn)) {
     return twimlResponse(wrapTwiml(
       twimlSay('Thank you for calling. Goodbye.'),
       twimlHangup(),

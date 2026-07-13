@@ -1843,7 +1843,7 @@ roadmap entries and user worktree changes are preserved.
 
 - 348 `page.tsx` route files.
 - 193 Supabase migration files and 309 SQL files under `supabase`.
-- 300 test files after the audit's regression contracts.
+- 301 test files after the audit's regression contracts.
 - 2,054 repository files returned by the initial source inventory (excluding node_modules, dist, and build).
 - Detailed route, database, feature, architecture, security, testing, and journey inventories already
   exist in the root documentation and will be reconciled with this session's command evidence.
@@ -1896,7 +1896,7 @@ roadmap entries and user worktree changes are preserved.
 
 - [x] Typecheck: `npm.cmd run typecheck` passed.
 - [x] Lint: `npm.cmd run lint` passed with only the known Next.js `next lint` deprecation notice.
-- [x] Unit tests: `npm.cmd test` passed, 300 files and 2,543 tests.
+- [x] Unit tests: `npm.cmd test` passed, 301 files and 2,544 tests.
 - [x] Credential-safety regression: all seed scripts load access only from environment; no literal
   `sb_secret_*` credential remains in runtime/source SQL.
 - [x] Production build: `npm.cmd run build` passed; 233 static pages generated.
@@ -2045,5 +2045,32 @@ roadmap entries and user worktree changes are preserved.
   and the existing inactive-link message.
 - Tests performed: `npm.cmd test -- tests/public-gift-privacy-contract.test.ts` passed; typecheck and
   lint passed. The contract proves all identifying lookups are behind the active-link guard.
+- Verified by: Codex
+- Date completed: 2026-07-13
+
+### TODO-0186 - Guardian screening callbacks accepted stale turn values
+
+- Status: [x] Completed in code and covered by regression test.
+- Severity: P1
+- Category: Reliability / replay resistance / AI cost control
+- Feature: Guardian AI call screening
+- Route: `/api/guardian/screen`
+- File or files: `app/api/guardian/screen/route.ts`, `lib/guardian/screening-turn.ts`,
+  `tests/guardian-screening-turn.test.ts`
+- Database objects: `guardian_screening_sessions`, `guardian_communications`, `notifications`
+- Description: A validly signed Twilio callback was accepted based only on the session's active
+  status. Replayed, stale, skipped, or over-limit `turn` values could rerun screening work and
+  duplicate state changes or family notifications.
+- User impact: A caller session could produce repeated AI responses, duplicate notifications, or
+  inconsistent conversation history when Twilio retried or callbacks arrived out of order.
+- Security impact: Twilio signature validation authenticates the provider but does not itself provide
+  application-level replay or ordering protection.
+- Root cause: The callback did not enforce the persisted session turn as the next bounded turn.
+- Resolution: Added `isNextScreeningTurn` and reject any turn other than `current + 1`, including
+  malformed values and turns beyond the five-turn limit, before AI work and additional service-role
+  reads. Existing Twilio signature validation remains in place.
+- Tests performed: Focused guardian and gift regression tests passed; typecheck and lint passed.
+- Evidence: `tests/guardian-screening-turn.test.ts` covers initial/sequential acceptance, stale and
+  skipped rejection, maximum-turn rejection, and malformed input rejection.
 - Verified by: Codex
 - Date completed: 2026-07-13
