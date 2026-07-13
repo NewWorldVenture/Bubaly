@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 338 files, 2,692 tests |
+| `npm.cmd exec vitest run` | PASS: 339 files, 2,701 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 235 generated pages |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line` | PASS: 51 of 52 tests; 1 intentional auth skip |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
@@ -20,6 +20,15 @@ Audit date: 2026-07-13
 | `git diff --check` | PASS |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` | PASS: 51, skipped 1 |
 | `npm.cmd audit --omit=dev --audit-level=high` | Reports 2 moderate advisories, no fix available |
+
+## Audit Update - 2026-07-13 (post-rebase seller cockpit baseline)
+
+- `npm.cmd exec vitest run`: 339 files and 2,701 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 235 pages generated, including dynamic `/marketplace/selling`.
+- `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional authenticated test skipped.
+- This snapshot was rerun after rebasing the child-login hardening onto the current `origin/main`, which includes the marketplace Seller Cockpit.
 
 ## Browser Coverage
 
