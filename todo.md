@@ -1768,3 +1768,26 @@ stones found + fixed this pass:
 - **Owner to flip live**: enable Issuing on the platform account, switch the
   stripe_issuing_enabled / stripe_connect_enabled feature flags, point a second webhook at
   /api/webhooks/money (secret above). Everything else is done.
+
+### 📋 Master autonomous-build prompt — execution record (2026-07-13)
+Owner supplied the full-platform "MASTER AUTONOMOUS BUILD PROMPT". Most phases were already
+executed across this session's lanes with evidence (Phases 1–2: 136-page audit + competitor
+matrices; Phase 3: mobile-first throughout; Phase 5: AI layers incl. the parallel lane's AI-Assist
+batches + paperwork draft-reply (verified on main); Phase 6: Supabase wiring + RLS model (0118
+universal enable + family policies); Phase 12: security passes; Phase 13/19: build/tsc/eslint/
+vitest enforced per push). This pass closed the prompt's outstanding requirements:
+- [x] **Documentation ledger created (10 files, grounded, generated from the repo where possible):**
+  `route-inventory.md` (348 page routes w/ access class), `database-map.md` (418 tables w/ the
+  correct 0118 universal-RLS model), `feature-inventory.md` (133 features → direct table deps),
+  `architecture.md`, `security-review.md` (consolidated fixes + residual risks),
+  `production-readiness.md` (green-locally vs human-owned launch gate), `testing-plan.md`
+  (coverage + the 3 honest gaps: E2E, RLS-as-CI, visual regression), `user-journeys.md`,
+  `audit.md` (pointer ledger), `change-log.md` (65 session commits).
+- [x] **Final-validation anti-pattern sweep re-run on the merged tree**: clean — no TODO/FIXME
+  beyond documented TODO(keys) adapter markers, no "not implemented"/mock/fake in prod paths,
+  no console.log leftovers, no committed secrets (the one `sk_live_` hit is an input placeholder).
+- [x] **Fixed a CI-blocking type error a parallel lane introduced**: `vitest.config.ts` carried an
+  `oxc` key that isn't in this Vitest version's types — every `tsc --noEmit` failed. Removed
+  (inert: the test glob is .ts-only); 2508 tests still green.
+- Honest deferrals per the prompt's own priority rules: E2E suite (needs CI Supabase login —
+  open item #24), RLS CI matrix, visual regression — scoped in `testing-plan.md`.
