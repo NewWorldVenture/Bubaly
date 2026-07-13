@@ -3133,3 +3133,21 @@ roadmap entries and user worktree changes are preserved.
   and public Playwright/axe E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0229 - Marketplace returns seed was destructive and created synthetic members
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Seed safety / tenant isolation
+- Feature: Marketplace rent/borrow returns fixture pack
+- File or files: `supabase/seed_marketplace_returns.sql`, `supabase/SEED_ALL.sql`,
+  `tests/seed-data-safety-contract.test.ts`
+- Description: The returns seed used random IDs, deleted tagged listings and orders on rerun, selected
+  a fallback family, and created a stand-in member when the fixture family was incomplete.
+- Resolution: The seed now requires the anchored account and two existing active members, fails closed
+  when migration `0192` or `returned_at` is missing, and uses deterministic conflict-safe inserts with
+  no deletes or synthetic users.
+- Tests performed: Returns/seed safety contracts, full Vitest suite, typecheck, lint, production build,
+  and public Playwright/axe E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

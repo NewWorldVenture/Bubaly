@@ -60,11 +60,30 @@ describe('seed data safety', () => {
     expect(end).toBeGreaterThan(start);
     const masterSection = master.slice(start, end);
     for (const sql of [seed, masterSection]) {
-      expect(sql).toContain('requires the anchored account');
+      expect(sql).toMatch(/requires the anchored account/i);
       expect(sql).not.toMatch(/delete\s+from\s+public\.marketplace_(?:handoffs|orders|listings)/i);
       expect(sql).not.toContain('Pickup Pat');
       expect(sql).toContain("md5('familyos-seed-handoff-listing-' || i)::uuid");
       expect(sql).toContain('on conflict (order_id) do nothing');
+    }
+  });
+
+  it('keeps the marketplace returns seed fail-closed and conflict-safe', () => {
+    const seed = readFileSync(resolve(supabaseDir, 'seed_marketplace_returns.sql'), 'utf8');
+    const master = readFileSync(resolve(supabaseDir, 'SEED_ALL.sql'), 'utf8');
+    const marker = 'seed_marketplace_returns.sql';
+    const start = master.indexOf(marker);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const nextSection = master.indexOf('\n-- ==================== ', start + marker.length);
+    const masterSection = master.slice(start, nextSection > start ? nextSection : master.length);
+    for (const sql of [seed, masterSection]) {
+      expect(sql).toMatch(/requires the anchored account/i);
+      expect(sql).toContain('returned_at is missing; apply migration 0192 first');
+      expect(sql).not.toMatch(/delete\s+from\s+public\.marketplace_(?:orders|listings)/i);
+      expect(sql).not.toContain('Pickup Pat');
+      expect(sql).toContain("md5('familyos-seed-returns-listing-' || i)::uuid");
+      expect(sql).toContain("md5('familyos-seed-returns-order-' || i)::uuid");
+      expect(sql).toContain('on conflict (id) do nothing');
     }
   });
 });

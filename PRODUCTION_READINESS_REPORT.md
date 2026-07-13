@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,679 unit tests, builds all 234 Next.js build
+tree compiles, passes lint and type checking, passes 2,688 unit tests, builds all 235 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles, but the new migration has not been applied to a
 live database by this audit.
@@ -16,9 +16,9 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 - 348 `page.tsx` route files.
 - 100 API route handlers.
-- 193 migrations at audit start; additive repair migrations through `0191` are now present.
-- 315 SQL files under `supabase`.
-- 334 unit-test files and 2,679 passing tests.
+- 193 migrations at audit start; additive repair migrations through `0192` are now present.
+- 330 SQL files under `supabase`.
+- 335 unit-test files and 2,688 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -74,6 +74,8 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   proposals, confirmations, calendar placement, and code-based completion.
 - Added migration `0191_marketplace_price_history.sql` and price-drop history/watch support for
   marketplace item pages.
+- Added migration `0192_marketplace_returns.sql` and return-state tracking, overdue reminders, and
+  rent/borrow return workflows for marketplace orders.
 - Replaced raw Supabase error responses in public A/B, landing-page, and exit-intent metric routes with
   generic client messages and server-side diagnostics.
 - Extended the same database-error boundary to authenticated calendar, meal, vacation, event, and
@@ -83,6 +85,9 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   failures instead of raw Supabase messages.
 - Repaired the remote marketplace hand-off seed to be fail-closed and additive: it now requires the
   anchored account and two existing members, uses deterministic IDs, and never deletes or creates users.
+- Repaired the marketplace returns seed in both standalone and `SEED_ALL.sql` forms: it now requires
+  the anchored account plus two existing active members, fails closed when `0192` is absent, uses
+  deterministic IDs with conflict-safe inserts, and never deletes rows or creates synthetic members.
 - Hardened the public unsubscribe endpoint with shared request limits, bounded token input, escaped
   HTML output, and production fail-closed secret handling.
 - Preserved active family membership checks and tightened listing-share deletion to the owning family
@@ -123,12 +128,12 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,679 tests / 334 files | `npm.cmd exec vitest run` |
-| Production build | PASS, 234 generated pages | `npm.cmd run build` |
+| Unit tests | PASS, 2,688 tests / 335 files | `npm.cmd exec vitest run` |
+| Production build | PASS, 235 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
 | Mobile overflow E2E | PASS at 320, 390, 768, and 1024 widths | Playwright |
-| Migration/seed contract | PASS, 20 focused tests | targeted Vitest run |
+| Migration/seed contract | PASS, 26 focused tests | targeted Vitest run |
 | Schema probe | BLOCKED/FAIL | 10 live table/ledger probes pass; Stripe claim columns required by 0189 are missing |
 | Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
@@ -137,7 +142,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 
 ## Remaining Launch Blockers
 
-1. Apply migrations through `0191_marketplace_price_history.sql` in the intended environment and
+1. Apply migrations through `0192_marketplace_returns.sql` in the intended environment and
    rerun schema plus cross-family RLS and negotiation allow/deny probes.
 2. Diagnose the live Supabase Auth Admin 500 in Supabase/GoTrue/Postgres logs and rerun the Auth audit.
 3. Resolve or formally accept the PostCSS advisory after reviewing the next compatible Next.js release.

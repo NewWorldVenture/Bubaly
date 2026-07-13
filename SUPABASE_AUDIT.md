@@ -12,8 +12,9 @@
   `0187_harden_marketplace_negotiations.sql`, and
   `0188_harden_trigger_function_security.sql`,
   `0189_reconcile_stripe_webhook_claims.sql`, and
-  `0190_marketplace_handoffs.sql`, and `0191_marketplace_price_history.sql`.
-- SQL files: 315.
+  `0190_marketplace_handoffs.sql`, `0191_marketplace_price_history.sql`, and
+  `0192_marketplace_returns.sql`.
+- SQL files: 330.
 - Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
   not a claim that every object exists in the live database.
@@ -79,7 +80,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
-2. Apply the remaining migrations through `0191` and run `npm run db:audit:schema` and
+2. Apply the remaining migrations through `0192` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
@@ -213,3 +214,11 @@ to an unrelated household. The seed remains idempotent and does not write Auth u
 The `SEED_ALL.sql` master entrypoint now performs the same anchored-account preflight before executing
 its legacy sections. This protects the one-paste production fixture workflow even where individual
 operator-scoped seed files retain their own historical resolution logic.
+
+## Audit Update - 2026-07-13 (marketplace returns seed safety)
+
+The new returns fixture pack now fails closed when migration `0192` or the required `returned_at`
+column is unavailable. It resolves the anchored account and two existing active members, uses
+deterministic listing and order IDs with `ON CONFLICT DO NOTHING`, and performs no cleanup deletes or
+synthetic-member inserts. The standalone seed and its embedded `SEED_ALL.sql` section are covered by
+the seed safety contract tests.
