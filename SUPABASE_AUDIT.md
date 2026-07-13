@@ -221,6 +221,10 @@ operator-scoped seed files retain their own historical resolution logic.
 queries. A failed read raises a generic temporary-unavailable error and logs the diagnostic server-side;
 it is never treated as an empty membership result that could trigger service-role family provisioning.
 
+Public review, survey, and gift server actions now call the shared `rate_limit_hit` guard through
+`enforceRequestRateLimit` before their service-role writes. Runtime payload extraction accepts only
+expected string/number shapes, so server-action calls cannot trigger unchecked `.trim()` failures.
+
 ## Audit Update - 2026-07-13 (marketplace returns seed safety)
 
 The new returns fixture pack now fails closed when migration `0192` or the required `returned_at`

@@ -1,7 +1,10 @@
 'use server';
 
+import { headers } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clampGiftAmountCents } from '@/lib/wallet/gift';
+import { clientIp } from '@/lib/server/rate-limit';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 type Result = { ok: boolean; error?: string };
 
@@ -12,14 +15,17 @@ type Result = { ok: boolean; error?: string };
 export async function submitGiftPledgeAction(input: {
   token: string; giverName: string; amountCents: number; message?: string; giverEmail?: string;
 }): Promise<Result> {
-  const token = (input.token ?? '').trim();
-  const giverName = (input.giverName ?? '').trim().slice(0, 80);
-  const amount = clampGiftAmountCents(input.amountCents);
+  const payload = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  const token = typeof payload.token === 'string' ? payload.token.trim().slice(0, 200) : '';
+  const giverName = typeof payload.giverName === 'string' ? payload.giverName.trim().slice(0, 80) : '';
+  const amount = clampGiftAmountCents(Number(payload.amountCents));
   if (!token) return { ok: false, error: 'Invalid gift link.' };
   if (!giverName) return { ok: false, error: 'Please enter your name.' };
   if (amount === null) return { ok: false, error: 'Enter an amount between $1 and $1,000.' };
 
   const supabase = createServiceClient();
+  const limited = await enforceRequestRateLimit(supabase, `gift:${clientIp(await headers())}`, { limit: 10 });
+  if (!limited.ok) return { ok: false, error: 'Too many gift attempts. Please try again shortly.' };
 
   const { data: link } = await supabase
     .from('gift_links')
@@ -39,9 +45,9 @@ export async function submitGiftPledgeAction(input: {
     gift_link_id: link.id,
     child_wallet_id: link.child_wallet_id,
     giver_name: giverName,
-    giver_email: (input.giverEmail ?? '').trim().slice(0, 200) || null,
+    giver_email: typeof payload.giverEmail === 'string' ? payload.giverEmail.trim().slice(0, 200) || null : null,
     amount_cents: amount,
-    message: (input.message ?? '').trim().slice(0, 500) || null,
+    message: typeof payload.message === 'string' ? payload.message.trim().slice(0, 500) || null : null,
     occasion: link.occasion,
     status: 'pending',
   });

@@ -1,6 +1,9 @@
 'use server';
 
+import { headers } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase/server';
+import { clientIp } from '@/lib/server/rate-limit';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 /**
  * Public review submission — NO auth. Writes via the service-role client (reviews
@@ -14,11 +17,15 @@ export async function submitReviewAction(input: {
   name?: string;
   email?: string;
 }): Promise<{ ok: boolean; error?: string }> {
-  const rating = Math.round(Number(input.rating));
+  const payload = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  const supabase = createServiceClient();
+  const limited = await enforceRequestRateLimit(supabase, `review:${clientIp(await headers())}`, { limit: 5 });
+  if (!limited.ok) return { ok: false, error: 'Too many review attempts. Please try again shortly.' };
+
+  const rating = Math.round(Number(payload.rating));
   if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
     return { ok: false, error: 'Please choose a star rating.' };
   }
-  const supabase = createServiceClient();
   const { data: settings } = await supabase
     .from('reputation_settings').select('auto_approve_min').eq('singleton', true).maybeSingle();
 
@@ -27,10 +34,10 @@ export async function submitReviewAction(input: {
 
   const { error } = await supabase.from('reviews').insert({
     rating,
-    title: input.title?.trim()?.slice(0, 160) || null,
-    body: input.body?.trim()?.slice(0, 4000) || null,
-    author_name: input.name?.trim()?.slice(0, 120) || null,
-    author_email: input.email?.trim()?.slice(0, 200) || null,
+    title: typeof payload.title === 'string' ? payload.title.trim().slice(0, 160) || null : null,
+    body: typeof payload.body === 'string' ? payload.body.trim().slice(0, 4000) || null : null,
+    author_name: typeof payload.name === 'string' ? payload.name.trim().slice(0, 120) || null : null,
+    author_email: typeof payload.email === 'string' ? payload.email.trim().slice(0, 200) || null : null,
     source: 'internal',
     status,
   });

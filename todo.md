@@ -3169,3 +3169,21 @@ roadmap entries and user worktree changes are preserved.
   public Playwright/axe E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0231 - Public review, survey, and gift actions lacked abuse and payload bounds
+
+- Status: [x] Completed in code; no migration required.
+- Severity: P1
+- Category: Public service-role side effects / abuse resistance
+- Feature: Public reviews, surveys, and gift pledges
+- File or files: `app/reviews/new/actions.ts`, `app/s/[slug]/actions.ts`, `app/gift/actions.ts`,
+  `tests/public-server-action-safety.test.ts`
+- Description: Unauthenticated server actions wrote through the service-role client without the shared
+  durable IP limiter and trusted TypeScript-only string fields, allowing abusive write volume and runtime
+  exceptions from hostile payload shapes.
+- Resolution: Added durable IP limits before public writes and normalized strings/numbers only when their
+  runtime types are valid, with bounded lengths preserved for stored fields.
+- Tests performed: Public server-action contracts, public side-effect limiter contracts, full Vitest suite,
+  typecheck, lint, production build, and public Playwright/axe E2E.
+- Verified by: Codex
+- Date completed: 2026-07-13

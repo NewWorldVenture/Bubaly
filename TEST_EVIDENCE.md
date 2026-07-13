@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 336 files, 2,689 tests |
+| `npm.cmd exec vitest run` | PASS: 337 files, 2,691 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 235 generated pages |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line` | PASS: 51 of 52 tests; 1 intentional auth skip |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
@@ -40,6 +40,17 @@ Audit date: 2026-07-13
 - `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional authenticated test skipped.
 - `getUserContext()` now distinguishes failed Supabase reads from a genuinely empty family and will not
   enter automatic service-role provisioning after a membership, family, or preference query error.
+
+## Audit Update - 2026-07-13 (public server-action side effects)
+
+- `npm.cmd exec vitest run tests/public-server-action-safety.test.ts tests/public-side-effect-rate-limit.test.ts tests/marketing-consent-safety.test.ts`: 3 files, 5 tests passed.
+- `npm.cmd exec vitest run`: 337 files and 2,691 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 235 pages generated.
+- `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional authenticated test skipped.
+- Public review, survey, and gift actions now use the shared durable IP limiter and ignore hostile
+  non-string payload fields instead of calling string methods on untrusted values.
 
 ## Database Evidence
 
