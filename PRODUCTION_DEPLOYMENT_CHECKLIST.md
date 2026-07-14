@@ -15,6 +15,9 @@
 - [ ] Run isolated RLS allow/deny tests for family boundaries and marketplace circles.
 - [ ] Confirm all storage buckets, object policies, RPC grants, trigger functions, and realtime tables.
 - [ ] Inspect and resolve the current Auth Admin `Database error finding users` before launch.
+- [ ] Exercise onboarding with a forced failure in an isolated environment; confirm the required write
+      returns a sanitized failure and the retry resumes the `wizard/in_progress` run without duplicate
+      family provisioning.
 
 ## Environment and Integrations
 

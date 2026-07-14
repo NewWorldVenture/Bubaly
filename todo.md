@@ -3458,6 +3458,35 @@ roadmap entries and user worktree changes are preserved.
 - Verified by: Codex
 - Date completed: 2026-07-14
 
+### TODO-0240 - Onboarding finalize could report success after required writes failed
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Onboarding reliability / data integrity / error handling
+- Feature: Guided onboarding and family provisioning
+- File or files: `app/onboarding/actions.ts`, `lib/validation.ts`,
+  `tests/onboarding-failure-safety.test.ts`
+- Database objects: `families`, `family_members`, `subscriptions`, `user_preferences`,
+  `family_onboarding`, `invites`, `calendar_events`, `onboarding_imports`, `onboarding_progress`
+- Description: The finalize action logged failures from required service-role writes and continued,
+  then returned success. A user could therefore land in a partially provisioned family with missing
+  membership details, entitlements, invitations, imported calendar data, or completion state. Its old
+  membership idempotency guard could also skip repair on a retry after a family row already existed.
+- Resolution: Required provisioning writes now fail closed with server-side diagnostics and sanitized
+  user-facing errors. Onboarding progress is marked `wizard/in_progress` before family creation or
+  resume, allowing a later submission to continue an incomplete run while preserving completed or
+  invite-accepted memberships. Runtime payload schemas now bound calendar text and validate profile,
+  managed-member, and invite actions. Create-family, profile, reset, and standalone details/member/invite
+  actions now check their required writes as well.
+- Product decision: Welcome email and CRM/automation side effects remain best-effort because they do not
+  determine whether the user's account or family state is complete.
+- Tests performed: focused onboarding/error-boundary suites, full Vitest, typecheck, lint, dependency
+  audit, migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/onboarding-failure-safety.test.ts` proves bounded runtime payloads and guards against
+  required finalize paths reverting to log-and-continue behavior.
+- Verified by: Codex
+- Date completed: 2026-07-14
+
 ### TODO-0239 - Admin, Trust Engine, and wallet actions exposed raw failure details
 
 - Status: [x] Completed in code and covered by regression tests.

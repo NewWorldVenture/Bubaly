@@ -2,9 +2,27 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Onboarding provisioning failure safety
+
+- `npm.cmd exec vitest run tests/onboarding-failure-safety.test.ts tests/onboarding-profile.test.ts tests/db-errors.test.ts`: 3 files, 27 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd run build`: passed; 235 pages generated. Known warnings remain for the Supabase Edge
+  Runtime import and webpack cache serialization of large strings.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional
+  authenticated test skipped out of 52.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: passed; 210 numbered SQL files, 17 explicit historical duplicate
+  prefixes, next available version `0195`.
+- `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
+- `npm.cmd run db:audit:auth`: public auth health passed; Admin users returned HTTP 500,
+  error ID `019f60b7-f27b-730c-9f17-b437fdcb67b8`.
+- Required onboarding writes now return sanitized failures instead of logging and continuing; the
+  retry marker is written before family creation/resume and completion remains idempotent.
+
 ## Latest Audit Update - Server-action error boundaries and signal fail-closed behavior
 
-- `npm.cmd exec vitest run`: 349 files, 2,773 tests passed after rebasing onto the latest `main`.
+- `npm.cmd exec vitest run`: 350 files, 2,775 tests passed after the onboarding repair.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
 - `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.

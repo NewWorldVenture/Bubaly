@@ -74,6 +74,17 @@ export const inviteSchema = z.object({
   role: z.enum(['adult', 'teen', 'caregiver', 'guest']),
 });
 
+export const inviteMemberActionSchema = inviteSchema.extend({
+  familyId: z.string().uuid('Missing family'),
+});
+
+export const localMemberActionSchema = z.object({
+  familyId: z.string().uuid('Missing family'),
+  displayName: z.string().trim().min(1, 'Name is required').max(60),
+  role: z.enum(['child', 'teen', 'adult']),
+  color: z.string().trim().max(9).optional(),
+});
+
 // A family member captured during onboarding. `local` = managed profile with NO
 // email/login (any role, so parents can add kids, grandparents, caregivers who
 // don't have an email); `invite` = an email join link will be sent.
@@ -134,6 +145,22 @@ export const importedEventSchema = z.object({
 export const onboardingCalendarImportSchema = z.object({
   source: z.enum(['ics', 'paste', 'url', 'demo', '']).optional().default(''),
   events: z.array(importedEventSchema).max(1000).optional().default([]),
+});
+
+export const previewCalendarImportSchema = z.object({
+  source: z.enum(['paste', 'demo']),
+  icsText: z.string().max(200_000).optional(),
+});
+
+export const completeProfileOnboardingSchema = z.object({
+  firstName: z.string().trim().min(1, 'Please add your name.').max(60),
+  age: z.preprocess(
+    (value) => value === '' ? null : value,
+    z.coerce.number().int().min(1).max(120).nullable().optional(),
+  ),
+  avatarUrl: z.string().max(5000).optional(),
+  color: z.string().trim().max(9).optional(),
+  pin: z.string().regex(/^\d{4}$/, 'Your PIN must be 4 digits.').optional(),
 });
 
 // The ENTIRE onboarding journey, committed in one atomic server action only when

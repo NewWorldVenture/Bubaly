@@ -20,6 +20,18 @@
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
   not a claim that every object exists in the live database.
 
+### Onboarding write-path audit
+
+The guided onboarding finalize action uses a server-side service-role client after authenticating the
+caller with the cookie-bound session. The required writes to `families`, `family_members`,
+`subscriptions`, `user_preferences`, `family_onboarding`, `invites`, `calendar_events`, and
+`onboarding_imports` now check errors and return sanitized failures. `onboarding_progress` records a
+`wizard/in_progress` marker before provisioning so retries can resume an incomplete run. Welcome email,
+CRM contact, and automation writes remain best-effort by product decision and are not used as proof that
+core family state was committed. The action still performs sequential writes rather than a database
+transaction; launch verification should exercise retry behavior and inspect for any duplicate imported
+rows in an isolated environment.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:
@@ -103,7 +115,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 - `npm.cmd run db:audit:schema` passed all 11 required live schema checks, including the
   `stripe_webhook_events` claim columns previously missing from the live response.
 - `npm.cmd run db:audit:auth` still passes public Auth health but returns HTTP 500 from the Admin users
-endpoint (`Database error finding users`, latest error id `019f609e-85b7-7499-b91d-8c7dcce8354e`).
+endpoint (`Database error finding users`, latest error id `019f60b7-f27b-730c-9f17-b437fdcb67b8`).
 - The schema result confirms object availability only; migration-history verification and authenticated
   RLS allow/deny tests still require an authorized isolated environment.
 
