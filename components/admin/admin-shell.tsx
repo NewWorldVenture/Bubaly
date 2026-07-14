@@ -56,7 +56,7 @@ export function AdminShell({
       {/* Desktop sidebar */}
       <aside className="hidden w-sidebar shrink-0 flex-col border-r border-border/60 bg-surface/30 lg:flex">
         <div className="px-5 py-5">
-          <Logo href="/admin" />
+          <Logo href="/home" />
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
           {ADMIN_NAV.map((item) => {
@@ -92,7 +92,7 @@ export function AdminShell({
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
         <header className="app-topbar sticky top-0 z-30 flex items-center gap-3 border-b border-border/60 bg-bg/85 px-4 backdrop-blur-xl sm:gap-4 sm:px-6">
-          <Link href="/admin" className="lg:hidden">
+          <Link href="/home" className="lg:hidden">
             <LogoMark className="h-9 w-16" />
           </Link>
           <span className="hidden items-center gap-1 rounded-full border border-brand/25 bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand-text sm:inline-flex">
