@@ -3664,3 +3664,23 @@ roadmap entries and user worktree changes are preserved.
   migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0247 - Wallet and Stripe Money actions exposed raw financial failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Financial reliability / error handling / data integrity
+- Feature: Wallet hub, Stripe Treasury, card issuing, and card reveal
+- File or files: `app/(app)/wallet/hub-actions.ts`, `app/(app)/money/actions.ts`,
+  `tests/wallet-money-action-boundaries.test.ts`
+- Description: Wallet and Stripe actions returned raw database/provider messages and several required
+  account, card, wallet, and member reads were ignored before financial mutations. Audit-write failures
+  also risked turning a successful external operation into a client-visible failure that could be retried.
+- Resolution: Financial actions now log diagnostics server-side, return stable failures, fail closed on
+  prerequisite reads, and treat post-effect audit writes as observable best-effort.
+- Tests performed: Focused wallet/money and database-error tests, full Vitest, typecheck, lint,
+  dependency audit, migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/wallet-money-action-boundaries.test.ts` rejects raw action failures and verifies
+  required-read checks plus best-effort audit logging.
+- Verified by: Codex
+- Date completed: 2026-07-14

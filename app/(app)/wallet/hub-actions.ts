@@ -6,8 +6,14 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import type { AccountType } from '@/lib/database.types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
+
+function actionFailure(operation: string, error: unknown): Result {
+  console.error(`[wallet-hub] ${operation} failed`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
 
 const ACCOUNT_TYPES: AccountType[] = ['checking', 'savings', 'credit', 'investment', 'retirement'];
 const CARD_BRANDS = ['visa', 'mastercard', 'amex', 'discover', 'other'];
@@ -37,7 +43,7 @@ export async function addAccountAction(input: Record<string, unknown>): Promise<
     balance: dollars(input.balance),
     created_by: ctx.user.id,
   });
-  return error ? { ok: false, error: error.message } : { ok: true };
+  return error ? actionFailure('add the account', error) : { ok: true };
 }
 
 export async function addCardAction(input: Record<string, unknown>): Promise<Result> {
@@ -55,7 +61,7 @@ export async function addCardAction(input: Record<string, unknown>): Promise<Res
     color: str(input.color, 16) || null,
     created_by: ctx.user.id,
   });
-  return error ? { ok: false, error: error.message } : { ok: true };
+  return error ? actionFailure('add the card', error) : { ok: true };
 }
 
 export async function addPassAction(input: Record<string, unknown>): Promise<Result> {
@@ -71,7 +77,7 @@ export async function addPassAction(input: Record<string, unknown>): Promise<Res
     member_no: str(input.member_no, 60) || null,
     created_by: ctx.user.id,
   });
-  return error ? { ok: false, error: error.message } : { ok: true };
+  return error ? actionFailure('add the pass', error) : { ok: true };
 }
 
 export async function addRewardAction(input: Record<string, unknown>): Promise<Result> {
@@ -88,7 +94,7 @@ export async function addRewardAction(input: Record<string, unknown>): Promise<R
     program: str(input.program, 80) || null,
     created_by: ctx.user.id,
   });
-  return error ? { ok: false, error: error.message } : { ok: true };
+  return error ? actionFailure('add the reward', error) : { ok: true };
 }
 
 export async function addTransactionAction(input: Record<string, unknown>): Promise<Result> {
@@ -107,7 +113,7 @@ export async function addTransactionAction(input: Record<string, unknown>): Prom
     date: typeof input.date === 'string' && input.date ? input.date : new Date().toISOString().slice(0, 10),
     created_by: ctx.user.id,
   });
-  return error ? { ok: false, error: error.message } : { ok: true };
+  return error ? actionFailure('add the transaction', error) : { ok: true };
 }
 
 const DELETABLE = new Set(['wallet_cards', 'wallet_passes', 'wallet_rewards', 'financial_accounts', 'transactions']);
@@ -118,5 +124,5 @@ export async function deleteWalletRowAction(input: { table: string; id: string }
   const supabase = await createServer();
   // RLS ensures the row belongs to the caller's family; scope the delete to the id.
   const { error } = await supabase.from(input.table as never).delete().eq('id', input.id);
-  return error ? { ok: false, error: error.message } : { ok: true };
+  return error ? actionFailure('delete the wallet item', error) : { ok: true };
 }

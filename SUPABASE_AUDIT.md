@@ -93,6 +93,14 @@ updates both completion states in one transaction. Public and anonymous executio
 authenticated callers can execute it. Isolated verification must still exercise concurrent completion,
 wrong-code rejection, and cross-family denial after applying the migration.
 
+### Wallet and Stripe Money action boundary audit
+
+Wallet hub mutations and Stripe Money actions now log unexpected Supabase/provider details on the
+server and return stable user-facing failures. Required connected-account, card, wallet, and member
+reads are checked before dependent money mutations, so an unreadable prerequisite cannot be treated as
+absent or safe to overwrite. Audit inserts after successful external effects remain observable
+best-effort; their failure is logged without replaying or falsely failing the completed money operation.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

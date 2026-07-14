@@ -19,8 +19,18 @@ import { clampSpendLimitCents, normalizeSpendWindow, normalizeBlockedCategories 
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
 import { getStripe } from '@/lib/stripe';
 import { effectivePublishableKey } from '@/lib/stripe/settings';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
+
+function actionFailure<T = unknown>(operation: string, error: unknown): Result<T> {
+  console.error(`[money-action] ${operation} failed`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
+
+function logAuditFailure(operation: string, error: unknown): void {
+  console.error(`[money-audit] ${operation} was not recorded`, error);
+}
 
 async function origin(): Promise<string> {
   const h = await headers();
@@ -49,7 +59,7 @@ export async function startConnectOnboardingAction(): Promise<Result<{ url: stri
     revalidatePath('/wallet/cards');
     return { ok: true, data: { url } };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not start onboarding.' };
+    return actionFailure('start Stripe onboarding', e);
   }
 }
 
@@ -58,15 +68,16 @@ export async function refreshConnectStatusAction(): Promise<Result> {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can do this.' };
   const svc = createServiceClient();
-  const { data: acct } = await svc.from('stripe_connected_accounts')
+  const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
     .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
+  if (acctError) return actionFailure('load the connected account', acctError);
   if (!acct) return { ok: false, error: 'No account to refresh yet.' };
   try {
     await syncConnectedAccount(svc, ctx.active.familyId, acct.stripe_account_id);
     revalidatePath('/wallet/cards');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not refresh status.' };
+    return actionFailure('refresh Stripe onboarding', e);
   }
 }
 
@@ -77,8 +88,9 @@ export async function activateTreasuryAction(): Promise<Result> {
   const svc = createServiceClient();
   const caps = await getMoneyCapabilities(svc);
   if (!caps.treasury) return { ok: false, error: 'This feature is not available yet.' };
-  const { data: acct } = await svc.from('stripe_connected_accounts')
+  const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
     .select('id, stripe_account_id, treasury_enabled').eq('family_id', ctx.active.familyId).maybeSingle();
+  if (acctError) return actionFailure('load the Treasury account', acctError);
   if (!acct?.treasury_enabled) return { ok: false, error: 'Finish account setup first.' };
   try {
     await ensureFinancialAccount(svc, {
@@ -87,7 +99,7 @@ export async function activateTreasuryAction(): Promise<Result> {
     revalidatePath('/wallet/cards');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not open the account.' };
+    return actionFailure('open the Treasury account', e);
   }
 }
 
@@ -102,10 +114,12 @@ export async function issueCardAction(input: {
   if (!caps.issuing) return { ok: false, error: 'Cards are not available yet.' };
   if (input.type === 'physical' && !caps.physicalCards) return { ok: false, error: 'Physical cards are not available yet.' };
 
-  const [{ data: acct }, { data: wallet }] = await Promise.all([
+  const [{ data: acct, error: acctError }, { data: wallet, error: walletError }] = await Promise.all([
     svc.from('stripe_connected_accounts').select('stripe_account_id, card_issuing_enabled').eq('family_id', ctx.active.familyId).maybeSingle(),
     svc.from('child_wallets').select('id, member_id').eq('family_id', ctx.active.familyId).eq('id', input.childWalletId).maybeSingle(),
   ]);
+  if (acctError) return actionFailure('load card-issuing capabilities', acctError);
+  if (walletError) return actionFailure('load the child wallet', walletError);
   if (!acct?.card_issuing_enabled) return { ok: false, error: 'Finish account setup first.' };
   if (!wallet) return { ok: false, error: 'Child wallet not found.' };
 
@@ -118,7 +132,8 @@ export async function issueCardAction(input: {
   });
   if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
 
-  const { data: member } = await svc.from('family_members').select('display_name').eq('id', wallet.member_id).maybeSingle();
+  const { data: member, error: memberError } = await svc.from('family_members').select('display_name').eq('id', wallet.member_id).maybeSingle();
+  if (memberError) return actionFailure('load the cardholder profile', memberError);
 
   try {
     const { rowId: cardholderRowId, stripeCardholderId } = await ensureCardholder(svc, {
@@ -130,14 +145,15 @@ export async function issueCardAction(input: {
       accountId: acct.stripe_account_id, type: input.type,
       spendLimitCents: input.spendLimitCents, spendWindow: input.spendWindow, userId: ctx.user.id,
     });
-    await svc.from('wallet_audit_logs').insert({
+    const { error: auditError } = await svc.from('wallet_audit_logs').insert({
       family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_issued',
       entity_type: 'stripe_issuing_cards', entity_id: rowId, detail: `${input.type} card issued`,
     });
+    if (auditError) logAuditFailure('card issuance', auditError);
     revalidatePath('/wallet');
     return { ok: true, data: { cardId: rowId } };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not issue the card.' };
+    return actionFailure('issue the card', e);
   }
 }
 
@@ -146,25 +162,28 @@ export async function setCardFrozenAction(input: { cardId: string; frozen: boole
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: 'Only parents can do this.' };
   const svc = createServiceClient();
-  const { data: card } = await svc.from('stripe_issuing_cards')
+  const { data: card, error: cardError } = await svc.from('stripe_issuing_cards')
     .select('id, stripe_card_id').eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle();
+  if (cardError) return actionFailure('load the card', cardError);
   if (!card) return { ok: false, error: 'Card not found.' };
-  const { data: acct } = await svc.from('stripe_connected_accounts')
+  const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
     .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
+  if (acctError) return actionFailure('load the connected account', acctError);
   if (!acct) return { ok: false, error: 'No account configured.' };
   try {
     await setCardFrozen(svc, {
       familyId: ctx.active.familyId, cardRowId: card.id, stripeCardId: card.stripe_card_id,
       accountId: acct.stripe_account_id, frozen: input.frozen,
     });
-    await svc.from('wallet_audit_logs').insert({
+    const { error: auditError } = await svc.from('wallet_audit_logs').insert({
       family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: input.frozen ? 'card_frozen' : 'card_unfrozen',
       entity_type: 'stripe_issuing_cards', entity_id: card.id,
     });
+    if (auditError) logAuditFailure('card freeze change', auditError);
     revalidatePath('/wallet');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not update the card.' };
+    return actionFailure('update the card', e);
   }
 }
 
@@ -178,11 +197,13 @@ export async function updateCardControlsAction(input: {
   const caps = await getMoneyCapabilities(svc);
   if (!caps.issuing) return { ok: false, error: 'Cards are not available yet.' };
 
-  const { data: card } = await svc.from('stripe_issuing_cards')
+  const { data: card, error: cardError } = await svc.from('stripe_issuing_cards')
     .select('id, stripe_card_id').eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle();
+  if (cardError) return actionFailure('load the card', cardError);
   if (!card) return { ok: false, error: 'Card not found.' };
-  const { data: acct } = await svc.from('stripe_connected_accounts')
+  const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
     .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
+  if (acctError) return actionFailure('load the connected account', acctError);
   if (!acct) return { ok: false, error: 'No account configured.' };
 
   // Normalize all inputs server-side so a bad client can't set out-of-range values.
@@ -195,15 +216,16 @@ export async function updateCardControlsAction(input: {
       familyId: ctx.active.familyId, cardRowId: card.id, stripeCardId: card.stripe_card_id,
       accountId: acct.stripe_account_id, spendLimitCents, spendWindow, blockedCategories,
     });
-    await svc.from('wallet_audit_logs').insert({
+    const { error: auditError } = await svc.from('wallet_audit_logs').insert({
       family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_controls_updated',
       entity_type: 'stripe_issuing_cards', entity_id: card.id,
       metadata: { spendLimitCents, spendWindow, blockedCount: blockedCategories.length },
     });
+    if (auditError) logAuditFailure('card controls update', auditError);
     revalidatePath('/wallet');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not update controls.' };
+    return actionFailure('update card controls', e);
   }
 }
 
@@ -224,12 +246,14 @@ export async function createCardRevealAction(input: {
   if (!caps.issuing) return { ok: false, error: 'Cards are not available yet.' };
   if (!input.nonce?.trim()) return { ok: false, error: 'Missing reveal session.' };
 
-  const [{ data: card }, { data: acct }] = await Promise.all([
+  const [{ data: card, error: cardError }, { data: acct, error: acctError }] = await Promise.all([
     svc.from('stripe_issuing_cards').select('id, stripe_card_id')
       .eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle(),
     svc.from('stripe_connected_accounts').select('stripe_account_id')
       .eq('family_id', ctx.active.familyId).maybeSingle(),
   ]);
+  if (cardError) return actionFailure('load the card', cardError);
+  if (acctError) return actionFailure('load the connected account', acctError);
   if (!card) return { ok: false, error: 'Card not found.' };
   if (!acct) return { ok: false, error: 'No account configured.' };
 
@@ -241,10 +265,11 @@ export async function createCardRevealAction(input: {
       { issuing_card: card.stripe_card_id, nonce: input.nonce },
       { apiVersion: '2026-05-27.dahlia', stripeAccount: acct.stripe_account_id },
     );
-    await svc.from('wallet_audit_logs').insert({
+    const { error: auditError } = await svc.from('wallet_audit_logs').insert({
       family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_revealed',
       entity_type: 'stripe_issuing_cards', entity_id: card.id,
     });
+    if (auditError) logAuditFailure('card reveal', auditError);
     return {
       ok: true,
       data: {
@@ -255,7 +280,7 @@ export async function createCardRevealAction(input: {
       },
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not start the reveal session.' };
+    return actionFailure('start the card reveal session', e);
   }
 }
 

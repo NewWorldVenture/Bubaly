@@ -2,10 +2,17 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Wallet and Stripe Money action boundaries
+
+- `npm.cmd test -- --run tests/wallet-money-action-boundaries.test.ts tests/db-errors.test.ts`: 2 files, 14 tests passed.
+- Wallet hub and Stripe Money actions now log unexpected database/provider details server-side and return
+  stable user-facing failures. Required account, card, wallet, and member reads fail closed before money
+  mutations, while audit inserts remain observable best-effort after successful external effects.
+
 ## Latest Audit Update - Marketplace and Feedback action boundaries
 
 - `npm.cmd test -- --run tests/migration-version-safety.test.ts tests/guardian-action-error-boundaries.test.ts tests/marketplace-feedback-action-boundaries.test.ts`: 3 files, 9 tests passed.
-- `npm.cmd exec vitest run`: 356 files, 2,808 tests passed.
+- `npm.cmd exec vitest run`: 357 files, 2,810 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
 - `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
