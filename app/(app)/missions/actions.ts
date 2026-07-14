@@ -142,15 +142,28 @@ async function finalizeApproval(
   const points = args.pointsOverride ?? reward.points;
   const cashCents = args.cashOverride ?? reward.cashCents;
 
-  await supabase.from('chore_assignments').update({
+  const { data: approvedAssignment, error: approvalError } = await supabase.from('chore_assignments').update({
     status: 'approved', approved_at: new Date().toISOString(), approved_by: args.actorId,
     points_awarded: points, cash_awarded_cents: cashCents,
-  }).eq('id', args.assignment.id as string);
+  }).eq('id', args.assignment.id as string).eq('family_id', args.familyId).select('id').single();
+  if (approvalError || !approvedAssignment) throw new Error('Could not save chore approval');
 
-  await applyCompletionRewards(supabase, {
-    familyId: args.familyId, memberId: args.assignment.member_id as string,
-    difficulty: ((args.chore.difficulty as Difficulty) ?? 'medium'), qualityScore: args.score,
-  });
+  try {
+    await applyCompletionRewards(supabase, {
+      familyId: args.familyId, memberId: args.assignment.member_id as string,
+      difficulty: ((args.chore.difficulty as Difficulty) ?? 'medium'), qualityScore: args.score,
+    });
+  } catch (error) {
+    const { error: rollbackError } = await supabase.from('chore_assignments').update({
+      status: args.assignment.status,
+      approved_at: args.assignment.approved_at,
+      approved_by: args.assignment.approved_by,
+      points_awarded: args.assignment.points_awarded,
+      cash_awarded_cents: args.assignment.cash_awarded_cents,
+    } as never).eq('id', args.assignment.id as string).eq('family_id', args.familyId);
+    if (rollbackError) console.error('[chore approval] assignment rollback failed', rollbackError);
+    throw error instanceof Error ? error : new Error('Could not apply chore rewards');
+  }
 
   await logChoreEvent(supabase, {
     familyId: args.familyId, assignmentId: args.assignment.id as string, submissionId: args.submissionId,

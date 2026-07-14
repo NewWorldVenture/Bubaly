@@ -255,6 +255,15 @@ reminders and grocery rows are captured by ID, and are removed when the correspo
 be persisted, preventing a hidden side effect without an undoable suggestion. Digital Twin trait writes
 remain explicitly best-effort enhancement metadata and are now logged when Supabase rejects them.
 
+### Chore reward persistence boundary audit
+
+Chore progress lookup and updates are now family-scoped and checked, approved-history reads fail closed,
+and badge reads no longer treat Supabase errors as an empty award set. Badge writes use the unique
+`member_id,badge_id` key with an idempotent upsert and return only rows actually inserted. If history or
+badge persistence fails after XP changes, the prior progress values are restored. The approval finalizer
+checks the assignment update and restores its original reward/status fields when gamification fails;
+approval audit events remain best-effort by design and log rejected writes server-side.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

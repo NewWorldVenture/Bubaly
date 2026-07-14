@@ -4184,3 +4184,22 @@ roadmap entries and user worktree changes are preserved.
   failure and guards side-effect cleanup contracts.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0268 - Chore rewards could report approval after partial gamification persistence failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Family missions / data integrity / error handling
+- Feature: Chore approval, XP progress, and badge awards
+- File or files: `lib/chores/server.ts`, `app/(app)/missions/actions.ts`,
+  `tests/chore-reward-persistence.test.ts`
+- Description: Progress updates, approved-history reads, and member badge writes were unchecked; a reward
+  failure could leave XP partial or an assignment approved without its gamification state.
+- Resolution: Required reads/writes now fail closed, badge awards use idempotent upserts, progress is restored
+  after downstream failure, and the approval finalizer restores the original assignment reward/status fields.
+- Tests performed: Focused chore reward persistence tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/chore-reward-persistence.test.ts` covers lookup/write/history/badge failures, rollback,
+  idempotent badge results, and approval rollback wiring.
+- Verified by: Codex
+- Date completed: 2026-07-14

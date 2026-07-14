@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Chore reward persistence boundaries
+
+- `npm.cmd exec vitest run tests/chore-reward-persistence.test.ts`: 1 file, 6 tests passed.
+- `npm.cmd exec vitest run`: 381 files, 2,925 tests passed.
+- `npm.cmd run typecheck` and `npm.cmd run lint`: passed; only the existing Next.js deprecation notice remains.
+- Dependency audit: 0 vulnerabilities. Migration filename audit: 219 numbered SQL files, next version
+  `0204`, with the known historical duplicate prefixes unchanged. Live schema audit: 11 of 11 probes passed.
+- Clean `npm.cmd run build`: passed; 250 static pages generated. Public Playwright/axe/overflow E2E:
+  51 passed, 1 intentional authenticated skip out of 52 tests.
+- Chore XP and badge writes now fail closed, use family-scoped checks and idempotent badge upserts, restore
+  prior progress after downstream failure, and roll approved assignments back when rewards cannot apply.
+
 ## Latest Audit Update - Family Autopilot persistence boundaries
 
 - `npm.cmd exec vitest run tests/autopilot-persistence-boundaries.test.ts`: 1 file, 4 tests passed.

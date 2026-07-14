@@ -16,15 +16,28 @@ function todayISO(): string {
 
 /** Get-or-create the member's progress row. */
 export async function ensureProgress(supabase: DB, familyId: string, memberId: string): Promise<Progress> {
-  const { data: existing } = await supabase.from('kid_progress').select('*').eq('member_id', memberId).maybeSingle();
+  const { data: existing, error: lookupError } = await supabase
+    .from('kid_progress').select('*').eq('family_id', familyId).eq('member_id', memberId).maybeSingle();
+  if (lookupError) throw new Error('Could not read chore progress');
   if (existing) return existing;
   const { data, error } = await supabase
     .from('kid_progress')
     .insert({ family_id: familyId, member_id: memberId })
     .select('*')
     .single();
-  if (error || !data) throw new Error(error?.message ?? 'Could not create progress');
+  if (error || !data) throw new Error('Could not create chore progress');
   return data;
+}
+
+async function restoreProgress(supabase: DB, progress: Progress): Promise<void> {
+  const { error } = await supabase.from('kid_progress').update({
+    xp: progress.xp,
+    level: progress.level,
+    current_streak: progress.current_streak,
+    longest_streak: progress.longest_streak,
+    last_activity: progress.last_activity,
+  }).eq('id', progress.id).eq('family_id', progress.family_id);
+  if (error) console.error('[chore rewards] progress rollback failed', error);
 }
 
 export type CompletionResult = { xp: number; level: number; leveledUp: boolean; streak: number; newBadges: string[] };
@@ -48,41 +61,55 @@ export async function applyCompletionRewards(
   const streak = nextStreak(progress.current_streak, progress.last_activity, today);
   const longest = Math.max(progress.longest_streak, streak);
 
-  await supabase
+  const { data: updatedProgress, error: progressError } = await supabase
     .from('kid_progress')
     .update({ xp, level, current_streak: streak, longest_streak: longest, last_activity: today })
-    .eq('member_id', opts.memberId);
+    .eq('id', progress.id).eq('family_id', opts.familyId).select('id').single();
+  if (progressError || !updatedProgress) throw new Error('Could not save chore progress');
 
-  // Count this member's approved chores to drive count-based badges.
-  const { count } = await supabase
-    .from('chore_assignments')
-    .select('id', { count: 'exact', head: true })
-    .eq('member_id', opts.memberId)
-    .eq('status', 'approved');
-  const approvedCount = count ?? 0;
+  try {
+    // Count this member's approved chores to drive count-based badges.
+    const { count, error: historyError } = await supabase
+      .from('chore_assignments')
+      .select('id', { count: 'exact', head: true })
+      .eq('family_id', opts.familyId)
+      .eq('member_id', opts.memberId)
+      .eq('status', 'approved');
+    if (historyError) throw new Error('Could not read chore history');
+    const approvedCount = count ?? 0;
 
-  const earn: string[] = [];
-  if (approvedCount >= 1) earn.push('first_chore');
-  if (approvedCount >= 10) earn.push('ten_done');
-  if (streak >= 3) earn.push('streak_3');
-  if (streak >= 7) earn.push('streak_7');
-  if (opts.qualityScore === 100) earn.push('perfect_score');
-  if (level >= 5) earn.push('level_5');
+    const earn: string[] = [];
+    if (approvedCount >= 1) earn.push('first_chore');
+    if (approvedCount >= 10) earn.push('ten_done');
+    if (streak >= 3) earn.push('streak_3');
+    if (streak >= 7) earn.push('streak_7');
+    if (opts.qualityScore === 100) earn.push('perfect_score');
+    if (level >= 5) earn.push('level_5');
 
-  const newBadges = await awardBadges(supabase, opts.familyId, opts.memberId, earn);
+    const newBadges = await awardBadges(supabase, opts.familyId, opts.memberId, earn);
 
-  return { xp, level, leveledUp: level > prevLevel, streak, newBadges };
+    return { xp, level, leveledUp: level > prevLevel, streak, newBadges };
+  } catch {
+    await restoreProgress(supabase, progress);
+    throw new Error('Could not apply chore rewards');
+  }
 }
 
 /** Insert any not-yet-earned badges; returns the ids actually newly awarded. */
 export async function awardBadges(supabase: DB, familyId: string, memberId: string, badgeIds: string[]): Promise<string[]> {
   if (badgeIds.length === 0) return [];
-  const { data: have } = await supabase.from('member_badges').select('badge_id').eq('member_id', memberId);
+  const { data: have, error: lookupError } = await supabase
+    .from('member_badges').select('badge_id').eq('family_id', familyId).eq('member_id', memberId);
+  if (lookupError) throw new Error('Could not read earned badges');
   const owned = new Set((have ?? []).map((b) => b.badge_id));
   const toAdd = [...new Set(badgeIds)].filter((id) => !owned.has(id));
   if (toAdd.length === 0) return [];
-  await supabase.from('member_badges').insert(toAdd.map((badge_id) => ({ family_id: familyId, member_id: memberId, badge_id })));
-  return toAdd;
+  const { data: inserted, error: insertError } = await supabase.from('member_badges').upsert(
+    toAdd.map((badge_id) => ({ family_id: familyId, member_id: memberId, badge_id })),
+    { onConflict: 'member_id,badge_id', ignoreDuplicates: true },
+  ).select('badge_id');
+  if (insertError) throw new Error('Could not save earned badges');
+  return (inserted ?? []).map((badge) => badge.badge_id);
 }
 
 /** Convenience: log an approval-audit event (best-effort). */
@@ -95,7 +122,7 @@ export async function logChoreEvent(
   },
 ): Promise<void> {
   try {
-    await supabase.from('chore_approval_events').insert({
+    const { error } = await supabase.from('chore_approval_events').insert({
       family_id: e.familyId,
       assignment_id: e.assignmentId ?? null,
       submission_id: e.submissionId ?? null,
@@ -105,6 +132,7 @@ export async function logChoreEvent(
       cash_cents: e.cashCents ?? null,
       note: e.note ?? null,
     });
+    if (error) console.error('[chore event] failed to log', error);
   } catch (err) {
     console.error('[chore event] failed to log', err);
   }
