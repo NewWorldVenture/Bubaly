@@ -2,6 +2,14 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Generic sync item persistence boundaries
+
+- `npm.cmd exec vitest run tests/sync-generic-item-persistence.test.ts`: 1 file, 3 tests passed.
+- `npm.cmd exec vitest run`: 374 files, 2,885 tests passed.
+- `npm.cmd run typecheck`: passed.
+- Generic provider calendar/task pulls and pushes now fail closed when local rows, mappings, conflicts,
+  deletes, updates, creations, or cursors are not persisted before counts are incremented.
+
 ## Latest Audit Update - Sync job lifecycle persistence boundaries
 
 - `npm.cmd exec vitest run tests/sync-job-persistence-boundaries.test.ts`: 1 file, 3 tests passed.

@@ -4074,3 +4074,22 @@ roadmap entries and user worktree changes are preserved.
   refresh-write contracts across both engines.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0263 - Generic sync item writes could increment counts after persistence failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Integrations / synchronization reliability / data integrity
+- Feature: Provider-agnostic calendar and task pull/push reconciliation
+- File or files: `lib/sync/persistence.ts`, `lib/sync/engine/generic.ts`,
+  `tests/sync-generic-item-persistence.test.ts`
+- Description: Generic sync treated failed mapping/local-row reads as absent state and incremented
+  imported/exported/conflict counts after unchecked creation, update, deletion, mapping, conflict, or cursor writes.
+- Resolution: A shared `requireSyncWrite` guard now fails closed for all generic pull/push state transitions,
+  and count increments occur only after local and mapping persistence succeeds.
+- Tests performed: Focused generic-item boundary tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/sync-generic-item-persistence.test.ts` guards pull/push mappings, local transitions,
+  conflict rows, cursor persistence, and the shared fail-closed helper.
+- Verified by: Codex
+- Date completed: 2026-07-14
