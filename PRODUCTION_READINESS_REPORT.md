@@ -79,6 +79,10 @@ Latest repair increment (2026-07-14): Marketplace Reports and both Support Ticke
 required Supabase reads and render retryable failure states instead of presenting an empty queue when the
 database is unavailable.
 
+Latest repair increment (2026-07-14): Competitive Intelligence, CRM, and Proposals marketing actions
+now check every insert, update, and delete result, require affected target rows, and route unexpected
+failures through the shared sanitized marketing boundary before audit logging or revalidation.
+
 Latest repair increment (2026-07-14): Marketplace hand-off completion now uses a member-authorized,
 row-locked transaction so the confirmation code, hand-off status, and order status cannot diverge under
 concurrent completion or a partial write failure.

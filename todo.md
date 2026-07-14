@@ -3542,6 +3542,26 @@ roadmap entries and user worktree changes are preserved.
 - Verified by: Codex
 - Date completed: 2026-07-14
 
+### TODO-0253 - Competitive, CRM, and Proposal marketing writes ignored Supabase failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Marketing admin reliability / data integrity
+- Feature: Competitive Intelligence, CRM, and Proposals
+- File or files: `app/(app)/admin/marketing/competitive/actions.ts`,
+  `app/(app)/admin/marketing/crm/actions.ts`, `app/(app)/admin/marketing/proposals/actions.ts`,
+  `tests/marketing-competitive-crm-proposals-boundaries.test.ts`
+- Description: Several privileged marketing inserts, updates, and deletes ignored Supabase errors and
+  could log/revalidate as if a mutation succeeded, including mutations against missing target rows.
+- Resolution: Every write now checks its error and affected row, and unexpected failures use the shared
+  sanitized marketing action boundary before audit logging or revalidation.
+- Tests performed: Focused marketing boundary tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/marketing-competitive-crm-proposals-boundaries.test.ts` guards sanitized failures,
+  insert checks, and update/delete target checks across all three clusters.
+- Verified by: Codex
+- Date completed: 2026-07-14
+
 ### TODO-0245 - Marketplace and Feedback actions exposed raw or unchecked failures
 
 - Status: [x] Completed in code and covered by regression tests.

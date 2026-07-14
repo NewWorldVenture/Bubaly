@@ -148,6 +148,13 @@ log diagnostics server-side before rendering a retryable, stable error state. A 
 can no longer be presented as an empty moderation or support queue, which could otherwise lead an admin to
 miss safety reports or customer requests.
 
+### Competitive, CRM, and Proposals action boundary audit
+
+The Competitive Intelligence, CRM, and Proposals Super Admin actions now check every insert, update, and
+delete result and require a returned target row for existing-record mutations. Unexpected Supabase errors
+are routed through `marketingActionFailure`, which logs server-side diagnostics and exposes only a stable
+message before audit logging or path revalidation can run.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { LEAD_STATUSES, LIFECYCLE_STAGES, DEAL_STAGES, type LeadStatus, type LifecycleStage, type DealStage } from '@/lib/marketing/crm';
 
 function s(fd: FormData, k: string): string | null {
@@ -29,18 +29,21 @@ export async function saveContactAction(formData: FormData) {
   };
 
   if (id) {
-    await supabase.from('crm_contacts').update(row).eq('id', id);
+    const { data, error } = await supabase.from('crm_contacts').update(row).eq('id', id).select('id').maybeSingle();
+    if (error || !data) marketingActionFailure('update the CRM contact', error ?? new Error('CRM contact not found'));
     await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'crm_contact', resourceId: id });
   } else {
-    const { data } = await supabase.from('crm_contacts').insert({ ...row, created_by: actorId }).select('id').single();
-    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'crm_contact', resourceId: data?.id ?? null });
+    const { data, error } = await supabase.from('crm_contacts').insert({ ...row, created_by: actorId }).select('id').single();
+    if (error || !data) marketingActionFailure('create the CRM contact', error ?? new Error('No CRM contact was created'));
+    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'crm_contact', resourceId: data.id });
   }
   revalidatePath('/admin/marketing/crm');
 }
 
 export async function deleteContactAction(id: string) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('crm_contacts').delete().eq('id', id);
+  const { data, error } = await supabase.from('crm_contacts').delete().eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('delete the CRM contact', error ?? new Error('CRM contact not found'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'crm_contact', resourceId: id });
   revalidatePath('/admin/marketing/crm');
 }
@@ -64,11 +67,13 @@ export async function saveDealAction(formData: FormData) {
   };
 
   if (id) {
-    await supabase.from('crm_deals').update(row).eq('id', id);
+    const { data, error } = await supabase.from('crm_deals').update(row).eq('id', id).select('id').maybeSingle();
+    if (error || !data) marketingActionFailure('update the CRM deal', error ?? new Error('CRM deal not found'));
     await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'crm_deal', resourceId: id });
   } else {
-    const { data } = await supabase.from('crm_deals').insert({ ...row, created_by: actorId }).select('id').single();
-    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'crm_deal', resourceId: data?.id ?? null });
+    const { data, error } = await supabase.from('crm_deals').insert({ ...row, created_by: actorId }).select('id').single();
+    if (error || !data) marketingActionFailure('create the CRM deal', error ?? new Error('No CRM deal was created'));
+    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'crm_deal', resourceId: data.id });
   }
   revalidatePath('/admin/marketing/pipeline');
 }
@@ -77,14 +82,16 @@ export async function saveDealAction(formData: FormData) {
 export async function setDealStageAction(id: string, stage: string) {
   if (!DEAL_STAGES.includes(stage as DealStage)) return;
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('crm_deals').update({ stage }).eq('id', id);
+  const { data, error } = await supabase.from('crm_deals').update({ stage }).eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('move the CRM deal', error ?? new Error('CRM deal not found'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'crm_deal', resourceId: id, metadata: { stage } });
   revalidatePath('/admin/marketing/pipeline');
 }
 
 export async function deleteDealAction(id: string) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('crm_deals').delete().eq('id', id);
+  const { data, error } = await supabase.from('crm_deals').delete().eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('delete the CRM deal', error ?? new Error('CRM deal not found'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'crm_deal', resourceId: id });
   revalidatePath('/admin/marketing/pipeline');
 }

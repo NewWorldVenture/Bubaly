@@ -2,6 +2,14 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Competitive, CRM, and Proposals action boundaries
+
+- `npm.cmd exec vitest run tests/marketing-competitive-crm-proposals-boundaries.test.ts`: 1 file, 3 tests passed.
+- `npm.cmd exec vitest run`: 363 files, 2,827 tests passed.
+- Competitive Intelligence, CRM, and Proposals inserts, updates, and deletes now check Supabase errors
+  and affected rows before audit logging or revalidation. Unexpected failures use the shared sanitized
+  marketing action boundary.
+
 ## Latest Audit Update - Admin read-path integrity
 
 - `npm.cmd exec vitest run tests/admin-read-boundaries.test.ts`: 1 file, 3 tests passed.

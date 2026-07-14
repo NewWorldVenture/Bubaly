@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { isQuoteStatus, type QuoteStatus } from '@/lib/marketing/quotes';
 
 function s(fd: FormData, k: string): string | null {
@@ -27,11 +27,13 @@ export async function saveQuoteAction(formData: FormData) {
   };
 
   if (id) {
-    await supabase.from('crm_quotes').update(row).eq('id', id);
+    const { data, error } = await supabase.from('crm_quotes').update(row).eq('id', id).select('id').maybeSingle();
+    if (error || !data) marketingActionFailure('update the CRM quote', error ?? new Error('CRM quote not found'));
     await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'crm_quote', resourceId: id });
   } else {
-    const { data } = await supabase.from('crm_quotes').insert({ ...row, created_by: actorId }).select('id').single();
-    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'crm_quote', resourceId: data?.id ?? null });
+    const { data, error } = await supabase.from('crm_quotes').insert({ ...row, created_by: actorId }).select('id').single();
+    if (error || !data) marketingActionFailure('create the CRM quote', error ?? new Error('No CRM quote was created'));
+    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'crm_quote', resourceId: data.id });
   }
   revalidatePath('/admin/marketing/proposals');
 }
@@ -44,14 +46,16 @@ export async function setQuoteStatusAction(id: string, status: string) {
   const patch: { status: QuoteStatus; sent_at?: string; responded_at?: string } = { status };
   if (status === 'sent') patch.sent_at = now;
   if (status === 'accepted' || status === 'declined') patch.responded_at = now;
-  await supabase.from('crm_quotes').update(patch).eq('id', id);
+  const { data, error } = await supabase.from('crm_quotes').update(patch).eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('update the CRM quote status', error ?? new Error('CRM quote not found'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'crm_quote', resourceId: id, metadata: { status } });
   revalidatePath('/admin/marketing/proposals');
 }
 
 export async function deleteQuoteAction(id: string) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('crm_quotes').delete().eq('id', id);
+  const { data, error } = await supabase.from('crm_quotes').delete().eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('delete the CRM quote', error ?? new Error('CRM quote not found'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'crm_quote', resourceId: id });
   revalidatePath('/admin/marketing/proposals');
 }
