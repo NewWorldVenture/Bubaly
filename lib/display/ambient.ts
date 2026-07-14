@@ -65,13 +65,18 @@ export function ambientTheme(theme: ThemeChoice, now: Date): AmbientTheme {
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 export type TempUnit = 'F' | 'C';
+export type BackgroundMode = 'gradient' | 'photos';
+export const IDLE_OPTIONS = [0, 2, 5, 10] as const; // minutes; 0 = photo frame off
+
 export type DisplaySettings = {
   clock24: boolean;
   seconds: boolean;
   tempUnit: TempUnit;
   theme: ThemeChoice;
-  ambient: boolean;     // time-of-day background wash
-  screensaver: boolean; // gentle burn-in drift for always-on panels
+  ambient: boolean;       // time-of-day background wash
+  screensaver: boolean;   // gentle burn-in drift for always-on panels
+  background: BackgroundMode; // gradient wash vs rotating family photos
+  idleMinutes: number;    // minutes of no interaction → photo-frame; 0 = off
 };
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -81,6 +86,8 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   theme: 'auto',
   ambient: true,
   screensaver: true,
+  background: 'gradient',
+  idleMinutes: 5,
 };
 
 /** Coerce an untrusted JSON blob into a valid DisplaySettings (defaults win). */
@@ -89,6 +96,9 @@ export function normalizeSettings(raw: unknown): DisplaySettings {
   const bool = (v: unknown, d: boolean) => typeof v === 'boolean' ? v : d;
   const theme = THEME_OPTIONS.includes(r.theme as ThemeChoice) ? r.theme as ThemeChoice : DEFAULT_DISPLAY_SETTINGS.theme;
   const tempUnit: TempUnit = r.tempUnit === 'C' || r.tempUnit === 'F' ? r.tempUnit : DEFAULT_DISPLAY_SETTINGS.tempUnit;
+  const background: BackgroundMode = r.background === 'photos' || r.background === 'gradient' ? r.background : DEFAULT_DISPLAY_SETTINGS.background;
+  const idleMinutes = (IDLE_OPTIONS as readonly number[]).includes(r.idleMinutes as number)
+    ? r.idleMinutes as number : DEFAULT_DISPLAY_SETTINGS.idleMinutes;
   return {
     clock24: bool(r.clock24, DEFAULT_DISPLAY_SETTINGS.clock24),
     seconds: bool(r.seconds, DEFAULT_DISPLAY_SETTINGS.seconds),
@@ -96,6 +106,8 @@ export function normalizeSettings(raw: unknown): DisplaySettings {
     theme,
     ambient: bool(r.ambient, DEFAULT_DISPLAY_SETTINGS.ambient),
     screensaver: bool(r.screensaver, DEFAULT_DISPLAY_SETTINGS.screensaver),
+    background,
+    idleMinutes,
   };
 }
 
@@ -167,4 +179,64 @@ export function countdownLabel(startsAt: string, now: Date): string {
   const sameDay = d.toDateString() === now.toDateString();
   const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   return sameDay ? time : `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${time}`;
+}
+
+// ── Kitchen timers ───────────────────────────────────────────────────────────
+export type TimerPreset = { label: string; emoji: string; seconds: number };
+
+/** One-tap presets for the Timers widget — the things a kitchen actually times. */
+export const TIMER_PRESETS: TimerPreset[] = [
+  { label: 'Soft eggs',  emoji: '🥚', seconds: 6 * 60 },
+  { label: 'Hard eggs',  emoji: '🥚', seconds: 10 * 60 },
+  { label: 'Pasta',      emoji: '🍝', seconds: 10 * 60 },
+  { label: 'Rice',       emoji: '🍚', seconds: 18 * 60 },
+  { label: 'Pizza',      emoji: '🍕', seconds: 12 * 60 },
+  { label: 'Cookies',    emoji: '🍪', seconds: 11 * 60 },
+  { label: 'Tea',        emoji: '🍵', seconds: 4 * 60 },
+  { label: 'Homework',   emoji: '📚', seconds: 25 * 60 },
+];
+
+/** "6:00", "0:42", "1:02:03" — clock-style duration for a countdown. */
+export function formatDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+  return `${m}:${sec.toString().padStart(2, '0')}`;
+}
+
+// ── Hints ticker (Echo-style rotating suggestions) ───────────────────────────
+export type HintFacts = {
+  nextEvent?: { title: string; startsAt: string } | null;
+  dinner?: string | null;
+  groceryCount?: number;
+  choresDue?: number;
+  birthdays?: { name: string; date: string }[];
+  remindersDue?: number;
+};
+
+/** Build the rotating bottom-bar hints from today's data. Pure + deterministic:
+ *  facts in, ordered strings out (most actionable first). Empty facts → helpful
+ *  evergreen tips so the bar never goes blank. */
+export function buildHints(facts: HintFacts, now: Date): string[] {
+  const hints: string[] = [];
+  if (facts.nextEvent) {
+    hints.push(`📅 Next: ${facts.nextEvent.title} · ${countdownLabel(facts.nextEvent.startsAt, now)}`);
+  }
+  if (facts.dinner) hints.push(`🍽️ Dinner tonight: ${facts.dinner}`);
+  if (facts.choresDue && facts.choresDue > 0) {
+    hints.push(`✅ ${facts.choresDue} ${facts.choresDue === 1 ? 'chore' : 'chores'} due today — who's on it?`);
+  }
+  if (facts.groceryCount && facts.groceryCount > 0) {
+    hints.push(`🛒 ${facts.groceryCount} ${facts.groceryCount === 1 ? 'item' : 'items'} on the grocery list`);
+  }
+  for (const b of facts.birthdays ?? []) hints.push(`🎂 ${b.name}'s birthday is ${b.date}`);
+  if (facts.remindersDue && facts.remindersDue > 0) {
+    hints.push(`🔔 ${facts.remindersDue} ${facts.remindersDue === 1 ? 'reminder' : 'reminders'} coming up`);
+  }
+  if (hints.length === 0) {
+    hints.push('✨ All clear — enjoy the quiet', '⏱️ Tap Timers to start a kitchen timer', '✏️ Tap the pencil to customize this display');
+  }
+  return hints;
 }

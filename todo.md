@@ -215,6 +215,35 @@ against migrations + `database.types.ts`; FK targets checked so nothing silently
 
 ---
 
+## 📺 KITCHEN DISPLAY V2 — ECHO-SHOW-GRADE (Amazon look & feel) — DONE (2026-07-14)
+
+Owner ask: take `/display` industry-leading — Amazon look and feel, seed data built in, better than
+Skylight/Hearth. Built on top of the v1 ambient shell (below):
+
+- **Kitchen Timers widget** (`components/display/kitchen-timers.tsx`) — the feature wall-calendar
+  competitors lack: multiple concurrent countdowns from one-tap presets (eggs/pasta/rice/pizza/tea/
+  homework…) or custom minutes, Web-Audio chime + flashing card on done, progress fill, localStorage
+  persistence keyed on absolute end-times (survives the 120s auto-refresh and full reloads). In the
+  default tile layout.
+- **Photo-ambient background** (Echo Show signature): `settings.background = 'photos'` renders a slow
+  45s-crossfade of `family_photos` (recipe photos as fallback) behind a readability scrim, replacing the
+  gradient wash. Selectable in the settings panel (Ambient/Photos).
+- **Idle photo frame** (`photo-frame.tsx`): after `settings.idleMinutes` (Off/2/5/10, default 5) with no
+  interaction the screen fades to a full-bleed family-photo slideshow with the big clock + "Next: …"
+  line; any touch/mouse/key wakes it. Gradient stand-in when the family has no photos yet.
+- **Echo-style hints ticker** (`hints-ticker.tsx` + pure `buildHints` in the engine): a rotating bottom
+  pill — "📅 Next: Piano · in 25 min", "🍽️ Dinner tonight: Chicken Tacos", "🛒 12 items on the grocery
+  list", "🎂 Sarah's birthday Jul 20" — crossfading every 8s, evergreen tips when there's nothing due.
+- **Engine** additions (+8 tests → 31): `TIMER_PRESETS`, `formatDuration`, `buildHints`, settings keys
+  `background`/`idleMinutes` (normalized, validated). No new migration — the 0200 `settings` blob holds
+  the new keys.
+- **Seed** `[seed:display]` in `SEED_ALL.sql` — **NOW-RELATIVE** (current_date-based) so the display is
+  alive whenever it's run: 6 curated events today (dentist 10am, piano 1pm, soccer 4:30…) + 200 upcoming,
+  60 chores + assignments (12 due today), today's 4-meal plan + 14 dinner nights, 60 realistic groceries,
+  40 reminders, 6 pinned fridge notes, 10 photo recipes (drives the hero), 24 family photos (drives the
+  photo bg + frame) ≈ 502 rows. PG16-verified ×2 (idempotent), counts asserted.
+- **Verified** tsc 0 · eslint 0 · vitest 2858 green · `next build` green (`/display` 16.6 kB).
+
 ## 📺 KITCHEN DISPLAY — WORLD-CLASS BUILD-OUT — DONE (2026-07-14)
 
 Owner ask: fully build out the Amazon/Echo-Show-style Kitchen Display (`/display`) — make it world-class.

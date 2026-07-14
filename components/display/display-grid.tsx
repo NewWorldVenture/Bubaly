@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   Calendar, CheckCircle2, ShoppingCart, UtensilsCrossed, Cake, Bell, StickyNote,
   Users, CloudSun, Clock, Sparkles, Pencil, Plus, Trash2, ArrowUp, ArrowDown, Check, X,
-  Maximize2, Minimize2, Settings2, Sun, Moon, ArrowRight,
+  Maximize2, Minimize2, Settings2, Sun, Moon, ArrowRight, Timer as TimerIcon,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
@@ -13,11 +13,15 @@ import { Avatar } from '@/components/ui/avatar';
 import { fmtTime } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
-  ambientTheme, greeting, dayPart, nowAndNext, countdownLabel, normalizeSettings,
-  DEFAULT_DISPLAY_SETTINGS, THEME_OPTIONS, type DisplaySettings, type ThemeChoice,
+  ambientTheme, greeting, dayPart, nowAndNext, countdownLabel, normalizeSettings, buildHints,
+  DEFAULT_DISPLAY_SETTINGS, THEME_OPTIONS, IDLE_OPTIONS,
+  type DisplaySettings, type ThemeChoice,
 } from '@/lib/display/ambient';
 import { AmbientClock } from './ambient-clock';
 import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weather';
+import { KitchenTimers } from './kitchen-timers';
+import { PhotoFrame } from './photo-frame';
+import { HintsTicker } from './hints-ticker';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Ev = { id: string; title: string; starts_at: string; all_day: boolean; location: string | null; assignee_id: string | null };
@@ -35,18 +39,20 @@ export type DisplayData = {
   birthdays: { name: string; date: string }[];
   notes: { id: string; title: string | null; body: string }[];
   featured: FeaturedItem[];
+  photos: string[];
   calendar: { year: number; month: number; today: number; eventDays: number[] };
 };
 
 export type WidgetKey =
   | 'clock' | 'weather' | 'schedule' | 'upcoming' | 'calendar' | 'chores'
-  | 'meals' | 'grocery' | 'members' | 'reminders' | 'birthdays' | 'featured' | 'notes';
+  | 'meals' | 'grocery' | 'members' | 'reminders' | 'birthdays' | 'featured' | 'notes' | 'timers';
 
 type TileSize = 'sm' | 'md' | 'lg' | 'wide' | 'hero';
 export type Tile = { id: string; widget: WidgetKey; size: TileSize };
 
 export const WIDGETS: { key: WidgetKey; label: string; icon: typeof Calendar }[] = [
   { key: 'featured', label: 'Featured', icon: Sparkles },
+  { key: 'timers', label: 'Kitchen Timers', icon: TimerIcon },
   { key: 'schedule', label: "Today's Schedule", icon: Calendar },
   { key: 'upcoming', label: 'Upcoming Events', icon: Calendar },
   { key: 'calendar', label: 'Month Calendar', icon: Calendar },
@@ -74,12 +80,13 @@ const sizeClass = (s: TileSize) => SIZES.find((x) => x.key === s)?.cls ?? SIZES[
 export const DEFAULT_TILES: Tile[] = [
   { id: 't1', widget: 'featured', size: 'hero' },
   { id: 't2', widget: 'schedule', size: 'md' },
-  { id: 't3', widget: 'calendar', size: 'md' },
+  { id: 't3', widget: 'timers', size: 'md' },
   { id: 't4', widget: 'weather', size: 'sm' },
   { id: 't5', widget: 'meals', size: 'sm' },
   { id: 't6', widget: 'chores', size: 'sm' },
   { id: 't7', widget: 'grocery', size: 'sm' },
-  { id: 't8', widget: 'members', size: 'wide' },
+  { id: 't8', widget: 'calendar', size: 'md' },
+  { id: 't9', widget: 'members', size: 'wide' },
 ];
 
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
@@ -125,6 +132,7 @@ function WidgetBody({ widget, data, memberById, now }: {
   switch (widget) {
     case 'clock': return <AmbientClock clock24={false} seconds={false} />;
     case 'weather': return <WeatherTile />;
+    case 'timers': return <KitchenTimers />;
     case 'featured': return <FeaturedWidget list={data.featured} familyName={data.familyName} />;
 
     case 'schedule': {
@@ -338,18 +346,57 @@ function SettingsPanel({ settings, onChange }: { settings: DisplaySettings; onCh
             <button className={cn(seg, settings.tempUnit === 'C' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ tempUnit: 'C' })}>°C</button>
           </div>
         </div>
-        {/* Theme */}
+        {/* Background: ambient gradient vs family photos */}
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white">
+          <span className="text-sm">Background</span>
+          <div className="flex gap-1 rounded-lg bg-black/20 p-0.5">
+            <button className={cn(seg, settings.background === 'gradient' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ background: 'gradient' })}>Ambient</button>
+            <button className={cn(seg, settings.background === 'photos' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ background: 'photos' })}>Photos</button>
+          </div>
+        </div>
+        {/* Gradient theme */}
         <label className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
-          Background
+          Color mood
           <select value={settings.theme} onChange={(e) => onChange({ theme: e.target.value as ThemeChoice })}
             className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm capitalize text-white">
             {THEME_OPTIONS.map((t) => <option key={t} value={t} className="bg-slate-900">{t === 'auto' ? 'Auto (time of day)' : t}</option>)}
+          </select>
+        </label>
+        {/* Photo frame idle */}
+        <label className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
+          Photo frame
+          <select value={settings.idleMinutes} onChange={(e) => onChange({ idleMinutes: Number(e.target.value) })}
+            className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm text-white">
+            {IDLE_OPTIONS.map((m) => <option key={m} value={m} className="bg-slate-900">{m === 0 ? 'Off' : `After ${m} min idle`}</option>)}
           </select>
         </label>
         <Toggle on={settings.seconds} onChange={(v) => onChange({ seconds: v })} label="Show seconds" />
         <Toggle on={settings.ambient} onChange={(v) => onChange({ ambient: v })} label="Ambient wash" />
         <Toggle on={settings.screensaver} onChange={(v) => onChange({ screensaver: v })} label="Burn-in protection" />
       </div>
+    </div>
+  );
+}
+
+// ── Photo-ambient backdrop (Amazon Echo Show look) ───────────────────────────
+function PhotoBackdrop({ photos }: { photos: string[] }) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (photos.length < 2) return;
+    const id = setInterval(() => setI((v) => (v + 1) % photos.length), 45_000);
+    return () => clearInterval(id);
+  }, [photos.length]);
+  return (
+    <div aria-hidden className="fixed inset-0 -z-10 bg-black">
+      {photos.map((p, idx) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img key={p} src={p} alt=""
+          className="absolute inset-0 h-full w-full object-cover transition-opacity duration-[4000ms]"
+          style={{ opacity: idx === i ? 1 : 0 }} />
+      ))}
+      {/* Heavy scrim keeps tiles readable over any photo. */}
+      <div className="absolute inset-0 bg-black/60" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/50" />
     </div>
   );
 }
@@ -389,6 +436,20 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
 
   const theme = ambientTheme(settings.theme, now);
   const part = dayPart(now);
+  const photoBg = settings.background === 'photos' && data.photos.length > 0;
+
+  // Echo-style bottom hints, recomputed as the clock ticks.
+  const { next: nextEv } = nowAndNext(data.events, now);
+  const hints = useMemo(() => buildHints({
+    nextEvent: nextEv ? { title: nextEv.title, startsAt: nextEv.starts_at } : null,
+    dinner: data.meals.find((m) => m.type === 'dinner')?.name ?? null,
+    groceryCount: data.grocery.count,
+    choresDue: data.chores.length,
+    birthdays: data.birthdays,
+    remindersDue: data.reminders.length,
+  }, now), [nextEv, data.meals, data.grocery.count, data.chores.length, data.birthdays, data.reminders.length, now]);
+
+  const frameNextLine = nextEv ? `Next: ${nextEv.title} · ${countdownLabel(nextEv.starts_at, now)}` : null;
 
   function update(id: string, patch: Partial<Tile>) { setTiles((t) => t.map((x) => x.id === id ? { ...x, ...patch } : x)); }
   function remove(id: string) { setTiles((t) => t.filter((x) => x.id !== id)); }
@@ -419,13 +480,19 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
   return (
     <DisplayWeatherProvider unit={settings.tempUnit}>
       <style>{DRIFT_CSS}</style>
-      {/* Ambient background */}
-      <div className="fixed inset-0 -z-10 bg-[#0b1020]" style={settings.ambient ? { backgroundImage: theme.gradient } : undefined} />
-      {settings.ambient && (
-        <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 opacity-40">
-          <div className="absolute -left-24 top-10 h-72 w-72 rounded-full blur-3xl" style={{ background: theme.glow }} />
-          <div className="absolute -right-16 bottom-0 h-80 w-80 rounded-full blur-3xl" style={{ background: theme.glow }} />
-        </div>
+      {/* Background — Echo-Show photo ambience, or the time-of-day gradient wash */}
+      {photoBg ? (
+        <PhotoBackdrop photos={data.photos} />
+      ) : (
+        <>
+          <div className="fixed inset-0 -z-10 bg-[#0b1020]" style={settings.ambient ? { backgroundImage: theme.gradient } : undefined} />
+          {settings.ambient && (
+            <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 opacity-40">
+              <div className="absolute -left-24 top-10 h-72 w-72 rounded-full blur-3xl" style={{ background: theme.glow }} />
+              <div className="absolute -right-16 bottom-0 h-80 w-80 rounded-full blur-3xl" style={{ background: theme.glow }} />
+            </div>
+          )}
+        </>
       )}
 
       <div
@@ -523,12 +590,25 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
           ))}
         </div>
 
-        {/* Footer band */}
-        <p className="mt-6 flex items-center justify-center gap-2 text-center text-xs text-white/40">
+        {/* Footer band (padded clear of the hints ticker) */}
+        <p className="mb-12 mt-6 flex items-center justify-center gap-2 text-center text-xs text-white/40">
           <Sparkles className="h-3.5 w-3.5" /> {data.familyName} · Bubaly Kitchen Display
           {!editing && <button onClick={() => setEditing(true)} className="ml-1 inline-flex items-center gap-1 text-white/60 hover:text-white">Customize <ArrowRight className="h-3 w-3" /></button>}
         </p>
       </div>
+
+      {/* Echo-style rotating hints, pinned to the bottom */}
+      {!editing && <HintsTicker hints={hints} />}
+
+      {/* Idle photo frame (family photos + clock) — wakes on any interaction */}
+      {!editing && (
+        <PhotoFrame
+          photos={data.photos}
+          idleMinutes={settings.idleMinutes}
+          clock24={settings.clock24}
+          nextLine={frameNextLine}
+        />
+      )}
     </DisplayWeatherProvider>
   );
 }

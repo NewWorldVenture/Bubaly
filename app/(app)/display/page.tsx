@@ -37,6 +37,7 @@ export default async function KitchenDisplayPage() {
     { data: featuredRecipe },
     { data: monthEvents },
     { data: layoutRow },
+    { data: photoRows },
   ] = await Promise.all([
     supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id')
@@ -57,6 +58,9 @@ export default async function KitchenDisplayPage() {
     supabase.from('calendar_events').select('starts_at')
       .eq('family_id', familyId).gte('starts_at', monthStart.toISOString()).lt('starts_at', monthEnd.toISOString()),
     supabase.from('display_layouts').select('tiles, settings').eq('family_id', familyId).maybeSingle(),
+    supabase.from('family_photos').select('url, thumbnail_url')
+      .eq('family_id', familyId).not('url', 'is', null)
+      .order('taken_at', { ascending: false, nullsFirst: false }).limit(24),
   ]);
 
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
@@ -103,6 +107,12 @@ export default async function KitchenDisplayPage() {
     birthdays,
     notes: (notes ?? []).map((n) => ({ id: n.id, title: n.title, body: n.body })),
     featured: (featuredRecipe ?? []).map((r) => ({ name: r.name, category: r.category, imageUrl: r.photo_url })),
+    // Photo ambience: family photos first, recipe photos as a fallback so the
+    // photo background/frame works even before the family uploads pictures.
+    photos: [
+      ...(photoRows ?? []).map((p) => p.url).filter((u): u is string => Boolean(u)),
+      ...(featuredRecipe ?? []).map((r) => r.photo_url).filter((u): u is string => Boolean(u)),
+    ].slice(0, 24),
     calendar: { year: now.getFullYear(), month: now.getMonth(), today: now.getDate(), eventDays },
   };
 

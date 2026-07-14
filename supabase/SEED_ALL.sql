@@ -6736,3 +6736,210 @@ end $$;
 --   select count(*) from feedback_ideas where body like '%[seed:feedback]%';                 -- up to 500
 --   select status, count(*) from feedback_ideas where body like '%[seed:feedback]%' group by 1 order by 1;
 --   select sum(vote_count), sum(comment_count) from feedback_ideas where body like '%[seed:feedback]%';
+
+-- ============================================================================
+-- Kitchen Display (0200 settings; /display) — make the always-on screen look
+-- ALIVE today. Everything here is NOW-RELATIVE (current_date-based) so the
+-- display's "Today's Schedule", Now & Next strip, meals, chores, groceries,
+-- hints ticker, photo background and photo-frame screensaver all render at
+-- full volume no matter when the seed is run. ~590 rows. Marker: [seed:display]
+-- (notes/description/caption; groceries use category 'seed-display').
+-- Idempotent: each section deletes its own marker rows first.
+-- ============================================================================
+do $$
+declare
+  v_email     text := 'newworldventurellc@gmail.com';
+  v_family    uuid;
+  v_members   uuid[];
+  v_groc_list uuid;
+  ev_titles   text[] := array['Soccer practice','Piano lesson','Dentist appointment','School pickup',
+                              'Playdate at the park','Grocery run','Swim class','Family game night',
+                              'Book club','Vet appointment','Haircuts','Team meeting','Karate',
+                              'Bake sale prep','Library visit','Date night'];
+  ev_locs     text[] := array['Community Center','School','Downtown','Home',null,'Riverside Park',null,'Main St'];
+  chore_ttl   text[] := array['Mow the lawn','Put away groceries','Wipe kitchen counters','Empty dishwasher',
+                              'Feed the dog','Take out recycling','Fold laundry','Water the plants',
+                              'Vacuum living room','Set the table','Clean bathroom sink','Sweep porch'];
+  groc        text[] := array['Milk','Eggs','Sourdough bread','Honeycrisp apples','Chicken thighs','Jasmine rice',
+                              'Penne pasta','Cheddar cheese','Bananas','Coffee beans','Greek yogurt','Salmon fillets',
+                              'Baby spinach','Cherry tomatoes','Tortillas','Black beans','Avocados','Limes',
+                              'Cilantro','Sour cream','Salsa','Olive oil','Butter','Orange juice','Cereal',
+                              'Peanut butter','Strawberry jam','Frozen peas','Ground turkey','Bell peppers'];
+  rem_ttl     text[] := array['Sign school permission slip','Refill dog food','Return library books',
+                              'Schedule oil change','Pay water bill','Order birthday gift','RSVP to the party',
+                              'Book summer camp','Renew museum pass','Pack swim bag'];
+  rec_names   text[] := array['Chicken Tacos','One-Pot Mac & Cheese','Sheet-Pan Salmon','Sunday Pancakes',
+                              'Veggie Stir-Fry','Slow-Cooker Chili','Margherita Pizza','Lemon Herb Chicken',
+                              'Beef & Broccoli','Berry Smoothie Bowls'];
+  dinners     text[] := array['Chicken Tacos','Spaghetti Night','Sheet-Pan Salmon','Homemade Pizza',
+                              'Slow-Cooker Chili','Stir-Fry Bowls','Burger Night','Breakfast-for-Dinner',
+                              'Beef & Broccoli','Soup & Grilled Cheese','Lemon Herb Chicken','Fish Sticks & Fries',
+                              'Quesadillas','Meatball Subs'];
+  v_meal      uuid;
+  i           int;
+begin
+  select f.id into v_family
+  from public.families f
+  join public.family_members fm on fm.family_id = f.id
+  join auth.users u on u.id = fm.user_id
+  where lower(u.email) = lower(v_email) limit 1;
+  if v_family is null then
+    raise notice 'Display seed requires the anchored account % — skipping.', v_email; return;
+  end if;
+  select array_agg(id) into v_members from (
+    select id from public.family_members where family_id = v_family and is_active = true order by created_at limit 8
+  ) m;
+
+  -- ── Calendar: 6 curated events TODAY + 200 across the next 45 days ─────────
+  if to_regclass('public.calendar_events') is not null then
+    delete from public.calendar_events where family_id = v_family and description like '%[seed:display]%';
+    insert into public.calendar_events (family_id, title, description, starts_at, ends_at, all_day, assignee_id, location) values
+      (v_family, 'Morning walk',           '[seed:display]', current_date + time '07:30', current_date + time '08:00', false, v_members[1], null),
+      (v_family, 'School drop-off',        '[seed:display]', current_date + time '08:15', null, false, v_members[2], 'School'),
+      (v_family, 'Dentist appointment',    '[seed:display]', current_date + time '10:00', current_date + time '11:00', false, v_members[2], 'Downtown'),
+      (v_family, 'Piano lesson',           '[seed:display]', current_date + time '13:00', current_date + time '14:00', false, v_members[3], 'Community Center'),
+      (v_family, 'Soccer practice',        '[seed:display]', current_date + time '16:30', current_date + time '18:00', false, v_members[4], 'Riverside Park'),
+      (v_family, 'Family dinner',          '[seed:display]', current_date + time '18:30', current_date + time '19:30', false, null, 'Home');
+    insert into public.calendar_events (family_id, title, description, starts_at, ends_at, all_day, assignee_id, location)
+    select v_family,
+      ev_titles[1 + (g.i % array_length(ev_titles,1))],
+      '[seed:display]',
+      (current_date + (1 + (g.i % 45)))::timestamp + time '08:00' + ((g.i % 10) * interval '1 hour'),
+      null, false,
+      v_members[1 + (g.i % array_length(v_members,1))],
+      ev_locs[1 + (g.i % array_length(ev_locs,1))]
+    from generate_series(1, 200) as g(i);
+  end if;
+
+  -- ── Chores: 12 due today + 48 across two weeks, assigned round-robin ───────
+  if to_regclass('public.chores') is not null and to_regclass('public.chore_assignments') is not null then
+    delete from public.chore_assignments a using public.chores c
+      where a.chore_id = c.id and c.family_id = v_family and c.description like '%[seed:display]%';
+    delete from public.chores where family_id = v_family and description like '%[seed:display]%';
+    with new_chores as (
+      insert into public.chores (family_id, title, description, points, priority, recurrence, due_at, requires_approval, is_active)
+      select v_family,
+        chore_ttl[1 + (g.i % array_length(chore_ttl,1))],
+        '[seed:display]',
+        5 + (g.i % 15),
+        (array['low','medium','high'])[1 + (g.i % 3)]::priority,
+        'none'::recurrence_freq,
+        case when g.i <= 12 then current_date + time '17:00' else (current_date + (g.i % 14))::timestamp + time '17:00' end,
+        false, true
+      from generate_series(1, 60) as g(i)
+      returning id
+    ), numbered as (select id, row_number() over () as rn from new_chores)
+    insert into public.chore_assignments (family_id, chore_id, member_id, status, due_at, points_awarded)
+    select v_family, nc.id,
+      v_members[1 + (nc.rn::int % array_length(v_members,1))],
+      (array['todo','todo','in_progress','submitted'])[1 + (nc.rn::int % 4)]::task_status,
+      case when nc.rn <= 12 then current_date + time '17:00' else (current_date + (nc.rn::int % 14))::timestamp + time '17:00' end,
+      0
+    from numbered nc;
+  end if;
+
+  -- ── Meals: today's full plan + 14 days of dinners ──────────────────────────
+  if to_regclass('public.meals') is not null and to_regclass('public.meal_plans') is not null then
+    delete from public.meal_plans p using public.meals m
+      where p.meal_id = m.id and m.family_id = v_family and m.notes like '%[seed:display]%';
+    delete from public.meals where family_id = v_family and notes like '%[seed:display]%';
+    -- Today: breakfast/lunch/dinner/snack.
+    for i in 1..4 loop
+      insert into public.meals (family_id, name, meal_type, notes)
+      values (v_family,
+        (array['Sunday Pancakes','Turkey Wraps','Chicken Tacos','Apple Slices & PB'])[i],
+        (array['breakfast','lunch','dinner','snack'])[i]::meal_type,
+        '[seed:display]')
+      returning id into v_meal;
+      insert into public.meal_plans (family_id, meal_id, plan_date, meal_type)
+      values (v_family, v_meal, current_date, (array['breakfast','lunch','dinner','snack'])[i]::meal_type);
+    end loop;
+    -- Next 14 nights of dinners.
+    for i in 1..14 loop
+      insert into public.meals (family_id, name, meal_type, notes)
+      values (v_family, dinners[1 + (i % array_length(dinners,1))], 'dinner'::meal_type, '[seed:display]')
+      returning id into v_meal;
+      insert into public.meal_plans (family_id, meal_id, plan_date, meal_type)
+      values (v_family, v_meal, current_date + i, 'dinner'::meal_type);
+    end loop;
+  end if;
+
+  -- ── Groceries: 60 realistic open items ─────────────────────────────────────
+  if to_regclass('public.grocery_items') is not null then
+    if to_regclass('public.grocery_lists') is not null then
+      select id into v_groc_list from public.grocery_lists where family_id = v_family and is_archived = false order by created_at limit 1;
+      if v_groc_list is null then insert into public.grocery_lists (family_id, name) values (v_family, 'Shopping List') returning id into v_groc_list; end if;
+    end if;
+    delete from public.grocery_items where family_id = v_family and category = 'seed-display';
+    insert into public.grocery_items (family_id, list_id, name, category, is_checked)
+    select v_family, v_groc_list,
+      groc[1 + ((g.i - 1) % array_length(groc,1))] || case when g.i > array_length(groc,1) then ' (x2)' else '' end,
+      'seed-display', (g.i % 9 = 0)
+    from generate_series(1, 60) as g(i);
+  end if;
+
+  -- ── Reminders: 40 over the next two weeks ──────────────────────────────────
+  if to_regclass('public.reminders') is not null then
+    delete from public.reminders where family_id = v_family and notes like '%[seed:display]%';
+    insert into public.reminders (family_id, title, notes, remind_at, is_done, member_id)
+    select v_family,
+      rem_ttl[1 + (g.i % array_length(rem_ttl,1))],
+      '[seed:display]',
+      (current_date + (g.i % 14))::timestamp + time '09:00' + ((g.i % 8) * interval '1 hour'),
+      false,
+      v_members[1 + (g.i % array_length(v_members,1))]
+    from generate_series(1, 40) as g(i);
+  end if;
+
+  -- ── Pinned notes: 6 fridge-door notes ──────────────────────────────────────
+  if to_regclass('public.notes') is not null then
+    delete from public.notes where family_id = v_family and body like '%[seed:display]%';
+    insert into public.notes (family_id, title, body, is_pinned, created_by) values
+      (v_family, 'WiFi guest password', 'sunflower-42 [seed:display]', true, null),
+      (v_family, 'Trash night',         'Bins out Thursday evening! [seed:display]', true, null),
+      (v_family, 'Babysitter',          'Maya — Sat 6pm, confirm Friday [seed:display]', true, null),
+      (v_family, 'Piano recital',       'Get flowers before the 24th [seed:display]', true, null),
+      (v_family, 'Allowance day',       'Sundays after chores are checked [seed:display]', true, null),
+      (v_family, 'Kindness challenge',  'One nice thing for someone every day this week 💛 [seed:display]', true, null);
+  end if;
+
+  -- ── Recipe book: 10 photo recipes (drives the rotating hero) ───────────────
+  if to_regclass('public.family_recipes') is not null then
+    delete from public.family_recipes where family_id = v_family and description like '%[seed:display]%';
+    insert into public.family_recipes
+      (family_id, name, description, category, servings, prep_time_mins, cook_time_mins, difficulty,
+       ingredients, instructions, photo_url, is_favorite, last_made_at)
+    select v_family,
+      rec_names[g.i],
+      'Family favorite. [seed:display]',
+      (array['dinner','dinner','dinner','breakfast','dinner','dinner','dinner','dinner','dinner','breakfast'])[g.i],
+      4, 10 + (g.i % 15), 15 + (g.i % 30),
+      (array['easy','medium'])[1 + (g.i % 2)],
+      '[]'::jsonb, '[]'::jsonb,
+      'https://picsum.photos/seed/bubaly-recipe-' || g.i || '/1600/900',
+      (g.i <= 4),
+      now() - ((g.i * 3) || ' days')::interval
+    from generate_series(1, 10) as g(i);
+  end if;
+
+  -- ── Family photos: 24 (drives the photo background + idle photo frame) ─────
+  if to_regclass('public.family_photos') is not null then
+    delete from public.family_photos where family_id = v_family and caption like '%[seed:display]%';
+    insert into public.family_photos (family_id, uploaded_by, storage_path, url, caption, taken_at)
+    select v_family, null,
+      v_family || '/seed/display/photo-' || g.i || '.jpg',
+      'https://picsum.photos/seed/bubaly-photo-' || g.i || '/1920/1080',
+      'Family moment #' || g.i || ' [seed:display]',
+      now() - ((g.i * 5) || ' days')::interval
+    from generate_series(1, 24) as g(i);
+  end if;
+
+  raise notice 'Kitchen Display seeded (now-relative) for family %', v_family;
+end $$;
+
+-- Verify:
+--   select count(*) from calendar_events where description like '%[seed:display]%';   -- 206
+--   select count(*) from chores where description like '%[seed:display]%';            -- 60
+--   select count(*) from grocery_items where category = 'seed-display';               -- 60
+--   select count(*) from family_photos where caption like '%[seed:display]%';         -- 24
+--   select count(*) from family_recipes where description like '%[seed:display]%';    -- 10

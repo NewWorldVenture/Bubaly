@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   dayPartForHour, dayPart, greeting, ambientTheme, THEME_OPTIONS,
   normalizeSettings, DEFAULT_DISPLAY_SETTINGS, formatClock, formatTemp, tempFromFahrenheit,
-  nowAndNext, countdownLabel, type TimedEvent,
+  nowAndNext, countdownLabel, formatDuration, buildHints, TIMER_PRESETS, IDLE_OPTIONS,
+  type TimedEvent,
 } from '@/lib/display/ambient';
 
 describe('dayPart', () => {
@@ -63,13 +64,18 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({})).toEqual(DEFAULT_DISPLAY_SETTINGS);
   });
   it('keeps valid fields and drops invalid ones', () => {
-    const s = normalizeSettings({ clock24: true, tempUnit: 'C', theme: 'aurora', ambient: false, seconds: true, screensaver: false, bogus: 1 });
-    expect(s).toEqual({ clock24: true, seconds: true, tempUnit: 'C', theme: 'aurora', ambient: false, screensaver: false });
+    const s = normalizeSettings({ clock24: true, tempUnit: 'C', theme: 'aurora', ambient: false, seconds: true, screensaver: false, background: 'photos', idleMinutes: 10, bogus: 1 });
+    expect(s).toEqual({ clock24: true, seconds: true, tempUnit: 'C', theme: 'aurora', ambient: false, screensaver: false, background: 'photos', idleMinutes: 10 });
   });
   it('coerces invalid enums to defaults', () => {
-    const s = normalizeSettings({ tempUnit: 'K', theme: 'rainbow' });
+    const s = normalizeSettings({ tempUnit: 'K', theme: 'rainbow', background: 'video', idleMinutes: 7 });
     expect(s.tempUnit).toBe('F');
     expect(s.theme).toBe('auto');
+    expect(s.background).toBe('gradient');
+    expect(s.idleMinutes).toBe(DEFAULT_DISPLAY_SETTINGS.idleMinutes);
+  });
+  it('idleMinutes accepts every published option including off', () => {
+    for (const v of IDLE_OPTIONS) expect(normalizeSettings({ idleMinutes: v }).idleMinutes).toBe(v);
   });
 });
 
@@ -157,5 +163,56 @@ describe('countdownLabel', () => {
   });
   it('empty for junk', () => {
     expect(countdownLabel('not-a-date', now)).toBe('');
+  });
+});
+
+describe('formatDuration', () => {
+  it('renders m:ss under an hour', () => {
+    expect(formatDuration(0)).toBe('0:00');
+    expect(formatDuration(42)).toBe('0:42');
+    expect(formatDuration(6 * 60)).toBe('6:00');
+    expect(formatDuration(599)).toBe('9:59');
+  });
+  it('renders h:mm:ss over an hour and clamps negatives', () => {
+    expect(formatDuration(3723)).toBe('1:02:03');
+    expect(formatDuration(-5)).toBe('0:00');
+  });
+});
+
+describe('TIMER_PRESETS', () => {
+  it('are all positive and labeled', () => {
+    for (const p of TIMER_PRESETS) {
+      expect(p.seconds).toBeGreaterThan(0);
+      expect(p.label.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('buildHints', () => {
+  const now = new Date('2026-07-14T10:00:00');
+  it('orders next event, dinner, chores, groceries, birthdays, reminders', () => {
+    const hints = buildHints({
+      nextEvent: { title: 'Piano lesson', startsAt: '2026-07-14T13:00:00' },
+      dinner: 'Chicken Tacos',
+      groceryCount: 12,
+      choresDue: 3,
+      birthdays: [{ name: 'Sarah', date: 'Jul 20' }],
+      remindersDue: 2,
+    }, now);
+    expect(hints[0]).toContain('Piano lesson');
+    expect(hints[1]).toContain('Chicken Tacos');
+    expect(hints[2]).toContain('3 chores');
+    expect(hints[3]).toContain('12 items');
+    expect(hints[4]).toContain("Sarah's birthday");
+    expect(hints[5]).toContain('2 reminders');
+  });
+  it('singularizes counts of one', () => {
+    const hints = buildHints({ groceryCount: 1, choresDue: 1, remindersDue: 1 }, now).join(' ');
+    expect(hints).toContain('1 chore due');
+    expect(hints).toContain('1 item on');
+    expect(hints).toContain('1 reminder coming');
+  });
+  it('falls back to evergreen tips when there is nothing to say', () => {
+    expect(buildHints({}, now).length).toBeGreaterThanOrEqual(3);
   });
 });
