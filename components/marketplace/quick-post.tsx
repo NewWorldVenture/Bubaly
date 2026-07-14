@@ -19,6 +19,7 @@ import {
   type ListingCategory, type ListingCondition, type ListingKind,
 } from '@/lib/marketplace/listings';
 import { draftListing, suggestPriceCents, type Comparable, type QuickDraft } from '@/lib/marketplace/quick-post';
+import { PhotoUpload } from '@/components/marketplace/photo-upload';
 import { cn } from '@/lib/utils/cn';
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as ListingCategory[];
@@ -35,6 +36,7 @@ export function QuickPost({ className }: { className?: string }) {
   const [input, setInput] = useState('');
   const [draft, setDraft] = useState<QuickDraft | null>(null);
   const [price, setPrice] = useState('');
+  const [photo, setPhoto] = useState('');
   const [posting, setPosting] = useState(false);
   const [comps, setComps] = useState<Comparable[] | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -71,7 +73,7 @@ export function QuickPost({ className }: { className?: string }) {
   };
 
   const reset = () => {
-    setDraft(null); setInput(''); setPrice(''); setStartedAt(null); setElapsed(0);
+    setDraft(null); setInput(''); setPrice(''); setPhoto(''); setStartedAt(null); setElapsed(0);
   };
 
   const suggested = draft && kindHasPrice(draft.kind)
@@ -95,6 +97,7 @@ export function QuickPost({ className }: { className?: string }) {
       condition: draft.condition,
       price_cents: priced ? dollarsToCents(price) : 0,
       location: draft.location,
+      photo_url: photo.trim() || null,
     });
     setPosting(false);
     if (error) { toastError(describeDbError(error)); return; }
@@ -164,6 +167,8 @@ export function QuickPost({ className }: { className?: string }) {
             aria-label="Title"
             className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm font-semibold outline-none focus:border-brand"
           />
+
+          <PhotoUpload value={photo} onChange={setPhoto} userId={userId} />
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <select

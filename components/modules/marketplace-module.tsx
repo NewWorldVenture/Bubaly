@@ -19,6 +19,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { ListingImage } from '@/components/marketplace/listing-image';
 import { cn } from '@/lib/utils/cn';
+import { PhotoUpload } from '@/components/marketplace/photo-upload';
 import {
   KIND_LABELS, KIND_ORDER, CATEGORY_LABELS, CONDITION_LABELS, RENT_PERIOD_LABELS,
   kindHasPrice, priceLabel, dollarsToCents, filterListings, availableCount,
@@ -389,13 +390,9 @@ export function MarketplaceModule({
             </Field>
           </div>
 
-          <Field label="Photo URL">
-            {(id) => <Input id={id} value={form.photo_url} onChange={(e) => setForm((f) => ({ ...f, photo_url: e.target.value }))} placeholder="https://… (a photo makes it sell faster)" />}
+          <Field label="Photo">
+            {() => <PhotoUpload value={form.photo_url} onChange={(url) => setForm((f) => ({ ...f, photo_url: url }))} userId={userId} />}
           </Field>
-          {form.photo_url.trim() && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={form.photo_url} alt="Listing preview" className="h-40 w-full rounded-lg object-cover" />
-          )}
 
           <Field label="Details">
             {(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Size, age, why you're passing it on…" />}
