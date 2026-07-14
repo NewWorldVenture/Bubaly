@@ -46,6 +46,32 @@ describe('buildFrontDoor', () => {
 });
 
 describe('mergeHandled', () => {
+  it('lists autopilot first, then agent actions, tagging source + prefixed ids', () => {
+    const merged = mergeHandled(
+      [{ id: 'a1', title: 'Reordered milk', kind: 'groceries' }],
+      [{ id: 'g1', title: 'Resolved a calendar conflict', agent: 'scheduler' }],
+    );
+    expect(merged).toEqual([
+      { id: 'ap:a1', title: 'Reordered milk', kind: 'groceries', source: 'autopilot' },
+      { id: 'ag:g1', title: 'Resolved a calendar conflict', kind: 'scheduler', source: 'agent' },
+    ]);
+  });
+  it('collapses a duplicate title surfaced by both systems (autopilot wins)', () => {
+    const merged = mergeHandled(
+      [{ id: 'a1', title: 'Filed the field-trip form' }],
+      [{ id: 'g1', title: 'filed the field-trip form', agent: 'assistant' }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].source).toBe('autopilot');
+  });
+  it('caps the merged list', () => {
+    const ap = Array.from({ length: 10 }, (_, i) => ({ id: `a${i}`, title: `auto ${i}` }));
+    const ag = Array.from({ length: 10 }, (_, i) => ({ id: `g${i}`, title: `agent ${i}` }));
+    expect(mergeHandled(ap, ag, 6)).toHaveLength(6);
+  });
+});
+
+describe('mergeHandled', () => {
   it('puts autopilot (undoable) first, then agent actions, with source tags', () => {
     const merged = mergeHandled(
       [{ id: '1', title: 'Reordered milk', kind: 'groceries' }],
