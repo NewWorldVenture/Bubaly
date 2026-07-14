@@ -3,7 +3,7 @@
 ## Automated gates
 
 - `npm run typecheck`, `npm run lint`, `npm test`, `npm audit`, and `npm run build` are
-  required in CI. The current baseline is 345 unit-test files, 2,729 tests, and 235
+  required in CI. The current baseline is 346 unit-test files, 2,732 tests, and 235
   generated pages.
 - `npm run test:e2e` covers 52 browser checks: public route rendering, responsive
   overflow, dark/light automated accessibility, anonymous protection, and an

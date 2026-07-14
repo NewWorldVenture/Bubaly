@@ -28,6 +28,9 @@ jobs:
       - name: Dependency audit
         run: npm audit --omit=dev --audit-level=moderate
 
+      - name: Migration filename audit
+        run: npm run db:audit:migrations
+
       - name: Typecheck
         run: npm run typecheck
 

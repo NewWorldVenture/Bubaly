@@ -2,13 +2,28 @@
 
 Audit date: 2026-07-13
 
+## Latest Audit Update - Migration history guard
+
+- `npm.cmd run db:audit:migrations`: passed; 209 numbered SQL files, 17 explicit historical duplicate
+  prefixes, next available version `0194`.
+- `npm.cmd exec vitest run`: 346 files, 2,732 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed; 235 pages generated.
+- `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional
+  authenticated test skipped out of 52.
+- `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
+- `npm.cmd run db:audit:auth`: public health passed; Admin users still returned HTTP 500,
+  error ID `019f5dfd-43b2-7bc9-9afd-c2e5f3b02eb1`.
+
 ## Passing Checks
 
 | Command | Result |
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 345 files, 2,729 tests |
+| `npm.cmd exec vitest run` | PASS: 346 files, 2,732 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 235 generated pages |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line` | PASS: 51 of 52 tests; 1 intentional auth skip |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
@@ -20,6 +35,7 @@ Audit date: 2026-07-13
 | `git diff --check` | PASS |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` | PASS: 51, skipped 1 |
 | `npm.cmd audit --omit=dev --audit-level=moderate` | PASS: 0 vulnerabilities after the scoped PostCSS override |
+| `npm.cmd run db:audit:migrations` | PASS: 17 known historical duplicate prefixes are explicit; next available version `0194` |
 
 ## Audit Update - 2026-07-13 (post-rebase seller cockpit baseline)
 

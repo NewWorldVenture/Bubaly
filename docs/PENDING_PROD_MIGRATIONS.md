@@ -97,12 +97,15 @@ a superset apply harmless.
 
 ## ⚠️ Note for whoever maintains the migration folder
 
-Several version prefixes are **duplicated** by parallel work streams:
-`0108` (`album_highlight_kind`, `messages_enhance`), `0109`
-(`documents_favorite`, `finance_rls_repair`, `user_preferences_rls_repair`), and
-`0110` (`family_profile`, `transactions_member`). Supabase orders by full
-filename so this still applies deterministically, but a future migration should
-**not** reuse a taken prefix. Next free number: **0194**.
+Several version prefixes are **duplicated** by parallel work streams. They are
+preserved as historical filenames because renaming one after production has
+recorded it can create migration drift. The complete known set is enforced by
+`npm run db:audit:migrations` and includes: `0010`, `0026`, `0042`, `0043`,
+`0073`, `0080`, `0089`, `0090`, `0095`, `0098`, `0105`, `0108`, `0109`,
+`0110`, `0137`, `0138`, and `0142`. Supabase orders colliding files by their
+full filename in the SQL-editor bundle, but a future migration must not reuse a
+taken prefix. Next free number: **0194**. `npm run db:push` runs this guard
+before contacting Supabase and fails if a new or changed collision appears.
 
 ## Environment variables (set alongside the migrations)
 

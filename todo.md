@@ -3348,3 +3348,27 @@ roadmap entries and user worktree changes are preserved.
   typecheck, lint, production build, and public E2E.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0236 - Migration folder contained undocumented historical version collisions
+
+- Status: [x] Completed in code; historical collisions remain intentionally preserved.
+- Severity: P2
+- Category: Deployment safety / migration history
+- Feature: Supabase migration application
+- File or files: `scripts/audit-migration-versions.mjs`, `package.json`, `.github/workflows/ci.yml`,
+  `tests/migration-version-safety.test.ts`, `docs/PENDING_PROD_MIGRATIONS.md`
+- Description: The migration folder contains 17 duplicate numeric prefixes from parallel work
+  streams, while the production handoff documented only three. Renaming historical files without
+  comparing the remote migration ledger could make an already-applied migration appear pending.
+- Resolution: Added a deterministic audit with an explicit allowlist for the known historical set.
+  `db:push` and CI now fail before contacting Supabase if a new collision is introduced or a known
+  collision changes. The historical files were not renamed because production migration history is
+  not currently accessible from this checkout.
+- Tests performed: Migration-version regression tests, direct audit CLI, full Vitest, typecheck,
+  lint, dependency audit, production build, and public Playwright/axe E2E.
+- Evidence: `npm run db:audit:migrations` passed with next available version `0194`; remote migration
+  ledger could not be queried because this checkout is not linked to a Supabase project.
+- Resolution note: A future owner-approved migration-history reconciliation may renumber or squash
+  these legacy files after comparing `supabase_migrations.schema_migrations` in every environment.
+- Verified by: Codex
+- Date completed: 2026-07-13

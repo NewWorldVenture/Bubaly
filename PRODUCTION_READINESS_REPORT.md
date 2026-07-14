@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,729 unit tests, builds all 235 Next.js build
+tree compiles, passes lint and type checking, passes 2,732 unit tests, builds all 235 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -12,13 +12,18 @@ Recommended decision: **NO-GO until full migration history/RLS behavior is verif
 Auth Admin 500 is diagnosed, and the exposed historical Supabase credential is rotated.** After
 those checks pass in an isolated environment, the posture can be reconsidered as Conditional Go.
 
+Latest audit increment (2026-07-13): migration filenames now have a deterministic preflight. The
+checkout contains 209 numbered migration files and 17 known historical duplicate prefixes; new or
+changed collisions fail CI and `db:push` before any database connection is attempted. The remote
+migration ledger remains unverified because this checkout is not linked to a Supabase project.
+
 ## Scope and Inventory
 
 - 352 `page.tsx` route files.
 - 102 API route handlers.
 - 209 migration files; additive repair migrations through `0193` are now present.
 - 332 SQL files under `supabase`.
-- 345 unit-test files and 2,729 passing tests.
+- 346 unit-test files and 2,732 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -76,6 +81,9 @@ those checks pass in an isolated environment, the posture can be reconsidered as
   marketplace item pages.
 - Added migration `0192_marketplace_returns.sql` and return-state tracking, overdue reminders, and
   rent/borrow return workflows for marketplace orders.
+- Added a migration filename preflight that preserves the known historical duplicate-prefix set,
+  fails on new or changed collisions, and runs before `db:push` and in CI. Historical files were not
+  renamed because the remote migration ledger is not accessible from this unlinked checkout.
 - Replaced raw Supabase error responses in public A/B, landing-page, and exit-intent metric routes with
   generic client messages and server-side diagnostics.
 - Extended the same database-error boundary to authenticated calendar, meal, vacation, event, and
@@ -141,14 +149,15 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,724 tests / 343 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,732 tests / 346 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 235 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
 | Mobile overflow E2E | PASS at 320, 390, 768, and 1024 widths | Playwright |
 | Migration/seed contract | PASS, 26 focused tests | targeted Vitest run |
+| Migration filename audit | PASS, 17 known historical duplicate prefixes; next `0194` | `npm.cmd run db:audit:migrations` |
 | Schema probe | PASS | 11 required live table/ledger probes available, including Stripe claim columns |
-| Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` |
+| Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f5dfd-43b2-7bc9-9afd-c2e5f3b02eb1`) |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
 | Dependency audit | PASS | 0 vulnerabilities after the scoped PostCSS override |
 | Live RLS attack tests | NOT RUN | requires isolated Supabase with migration applied |
@@ -156,6 +165,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 ## Remaining Launch Blockers
 
 1. Confirm migration history through `0193_marketplace_reports.sql` in the intended environment and
+   reconcile the 17 known historical duplicate prefixes before using automated migration push there;
    rerun cross-family RLS and negotiation allow/deny probes.
 2. Diagnose the live Supabase Auth Admin 500 in Supabase/GoTrue/Postgres logs and rerun the Auth audit.
 3. Run authenticated E2E and database RLS tests against an isolated local Supabase instance.

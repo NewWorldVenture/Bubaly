@@ -20,6 +20,17 @@
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
   not a claim that every object exists in the live database.
 
+### Migration filename history
+
+Static inspection found 17 duplicate numeric prefixes across the historical migration folder:
+`0010`, `0026`, `0042`, `0043`, `0073`, `0080`, `0089`, `0090`, `0095`, `0098`, `0105`, `0108`,
+`0109`, `0110`, `0137`, `0138`, and `0142`. These files were not renamed because the checkout is
+not linked to the production project and the applied migration ledger cannot be compared safely.
+`npm run db:audit:migrations` now makes the complete known set explicit, and `npm run db:push`
+plus CI fail before contacting Supabase if a new or changed collision appears. A production owner
+must reconcile the historical filenames against `supabase_migrations.schema_migrations` before
+declaring automated migration deployment fully verified.
+
 ## Schema and RLS
 
 The repository uses family-scoped access helpers such as `public.is_family_member` defined as pinned
@@ -92,9 +103,16 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 - `npm.cmd run db:audit:schema` passed all 11 required live schema checks, including the
   `stripe_webhook_events` claim columns previously missing from the live response.
 - `npm.cmd run db:audit:auth` still passes public Auth health but returns HTTP 500 from the Admin users
-  endpoint (`Database error finding users`, error id `019f5de7-9b16-78cc-9e87-d74ac923eb08`).
+  endpoint (`Database error finding users`, error id `019f5dfd-43b2-7bc9-9afd-c2e5f3b02eb1`).
 - The schema result confirms object availability only; migration-history verification and authenticated
   RLS allow/deny tests still require an authorized isolated environment.
+
+### Migration filename follow-up - 2026-07-13
+
+- Static migration inspection found 17 duplicate numeric prefixes, from `0010` through `0142`.
+- These historical files remain unchanged pending comparison with the target environment's migration
+  ledger. `npm.cmd run db:audit:migrations` passed with the complete known set explicit and next
+  available version `0194`.
 ## Audit Update - 2026-07-13
 
 Seed tooling no longer embeds a fixed household or creator identity. All six legacy service-role
