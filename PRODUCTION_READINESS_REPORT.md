@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-The tree compiles, passes lint and type checking, passes 2,857 unit tests, builds all 235 Next.js build
+The tree compiles, passes lint and type checking, passes 2,867 unit tests, builds all 235 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -95,6 +95,10 @@ Latest repair increment (2026-07-14): push campaigns now use an atomic draft/fai
 delivery, fail closed on device/profile/suppression reads, recover pre-delivery failures to `failed`,
 and check final persistence. Personalization rule mutations now check affected rows and errors.
 
+Latest repair increment (2026-07-14): testimonials, case studies, marketing videos, review moderation,
+review replies, and reputation settings now check Supabase errors and returned target rows before audit
+logging or revalidation; missing video assets remain validated input no-ops while asset read errors fail closed.
+
 Latest repair increment (2026-07-14): Marketplace hand-off completion now uses a member-authorized,
 row-locked transaction so the confirmation code, hand-off status, and order status cannot diverge under
 concurrent completion or a partial write failure.
@@ -105,7 +109,7 @@ concurrent completion or a partial write failure.
 - 102 API route handlers.
 - 216 migration files; additive repair migrations through `0200` are now present.
 - 338 SQL files under `supabase`.
-- 367 unit-test files and 2,857 passing tests.
+- 368 unit-test files and 2,867 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -235,7 +239,7 @@ concurrent completion or a partial write failure.
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,857 tests / 367 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,867 tests / 368 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 235 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |

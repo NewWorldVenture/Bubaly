@@ -177,6 +177,13 @@ concurrent administrators cannot reserve the same campaign. Personalization rule
 and soft deletes now require returned target rows and route unexpected failures through the sanitized
 marketing action boundary.
 
+### Reputation, video, and review action boundary audit
+
+Testimonials, case studies, marketing videos, review moderation/replies, and reputation settings now
+check inserts, updates, deletes, prerequisite asset reads, singleton upserts, and returned target rows.
+Unexpected failures use `marketingActionFailure` before audit logging or cache revalidation; a missing
+video asset remains an explicit invalid-input no-op rather than a database failure.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

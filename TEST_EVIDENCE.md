@@ -2,6 +2,17 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Reputation, video, and review action boundaries
+
+- `npm.cmd exec vitest run tests/marketing-reputation-video-review-boundaries.test.ts`: 1 file, 3 tests passed.
+- `npm.cmd exec vitest run`: 368 files, 2,867 tests passed.
+- `npm.cmd run typecheck`, `npm.cmd run lint`, dependency audit, migration audit, and live schema probes passed.
+- Clean `npm.cmd run build`: 235 routes generated. Public Playwright/axe/overflow E2E: 51 passed,
+  1 intentional authenticated test skipped out of 52.
+- Testimonials, case studies, marketing videos, review moderation/replies, and reputation settings now
+  check Supabase errors and affected rows before audit logging or revalidation. Missing video assets fail
+  as a validated no-op, while asset-read errors fail closed.
+
 ## Latest Audit Update - Marketing delivery and personalization boundaries
 
 - `npm.cmd exec vitest run tests/marketing-delivery-action-boundaries.test.ts`: 1 file, 2 tests passed.

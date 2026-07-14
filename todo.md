@@ -3929,3 +3929,24 @@ roadmap entries and user worktree changes are preserved.
   recovery, prerequisite checks, final persistence, and personalization target checks.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0257 - Reputation, video, and review writes ignored required results
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Marketing content reliability / publication integrity / error handling
+- Feature: Testimonials, case studies, marketing videos, reviews, and reputation settings
+- File or files: `app/(app)/admin/marketing/reputation/actions.ts`,
+  `app/(app)/admin/marketing/video/actions.ts`, `app/(app)/admin/marketing/reviews/actions.ts`,
+  `tests/marketing-reputation-video-review-boundaries.test.ts`
+- Description: Public-facing content and review controls could report success after failed writes,
+  missing targets, failed reputation singleton upserts, or failed video asset reads.
+- Resolution: All inserts, updates, deletes, publication changes, review replies, asset reads, and
+  singleton settings writes now check Supabase results and affected rows through the sanitized marketing
+  action boundary. Missing video assets remain validated input no-ops.
+- Tests performed: Focused reputation/video/review boundary tests, full Vitest, typecheck, lint,
+  dependency audit, migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/marketing-reputation-video-review-boundaries.test.ts` guards publication, target-row,
+  asset-read, review, and settings result checks.
+- Verified by: Codex
+- Date completed: 2026-07-14

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { parseVideoUrl } from '@/lib/marketing/video';
 import { parseTags } from '@/lib/marketing/assets';
 
@@ -24,13 +24,14 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
   let storage_path: string | null = null;
 
   if (assetId) {
-    const { data: asset } = await supabase
+    const { data: asset, error: assetError } = await supabase
       .from('marketing_assets')
       .select('storage_path')
       .eq('id', assetId)
       .eq('kind', 'video')
       .is('deleted_at', null)
       .maybeSingle();
+    if (assetError) marketingActionFailure('load the marketing video asset', assetError);
     if (!asset) return; // asset gone — no-op
     provider = 'upload';
     storage_path = asset.storage_path;
@@ -57,18 +58,21 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
   };
 
   if (id) {
-    await supabase.from('marketing_videos').update(row).eq('id', id);
+    const { data, error } = await supabase.from('marketing_videos').update(row).eq('id', id).select('id').maybeSingle();
+    if (error || !data) marketingActionFailure('update the marketing video', error ?? new Error('Marketing video not found.'));
     await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_video', resourceId: id });
   } else {
-    const { data } = await supabase.from('marketing_videos').insert({ ...row, created_by: actorId }).select('id').single();
-    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_video', resourceId: data?.id ?? null, metadata: { title, provider } });
+    const { data, error } = await supabase.from('marketing_videos').insert({ ...row, created_by: actorId }).select('id').single();
+    if (error || !data) marketingActionFailure('create the marketing video', error ?? new Error('The marketing video row was not returned after save.'));
+    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_video', resourceId: data.id, metadata: { title, provider } });
   }
   revalidatePath('/admin/marketing/video');
 }
 
 export async function toggleVideoPublishAction(id: string, publish: boolean): Promise<void> {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('marketing_videos').update({ status: publish ? 'published' : 'draft' }).eq('id', id);
+  const { data, error } = await supabase.from('marketing_videos').update({ status: publish ? 'published' : 'draft' }).eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('publish the marketing video', error ?? new Error('Marketing video not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_video', resourceId: id, metadata: { status: publish ? 'published' : 'draft' } });
   revalidatePath('/admin/marketing/video');
 }
@@ -76,7 +80,8 @@ export async function toggleVideoPublishAction(id: string, publish: boolean): Pr
 export async function deleteVideoAction(id: string): Promise<void> {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   // Soft-delete; any uploaded asset stays in the Asset Library (managed there).
-  await supabase.from('marketing_videos').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  const { data, error } = await supabase.from('marketing_videos').update({ deleted_at: new Date().toISOString() }).eq('id', id).is('deleted_at', null).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('delete the marketing video', error ?? new Error('Marketing video not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'marketing_video', resourceId: id });
   revalidatePath('/admin/marketing/video');
 }

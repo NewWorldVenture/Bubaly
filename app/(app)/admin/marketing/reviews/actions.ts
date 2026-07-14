@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { isReviewStatus } from '@/lib/marketing/reviews';
 
 function s(fd: FormData, k: string): string | null {
@@ -18,7 +18,8 @@ function num(fd: FormData, k: string): number | null {
 export async function moderateReviewAction(id: string, status: string) {
   if (!isReviewStatus(status)) return;
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('reviews').update({ status }).eq('id', id);
+  const { data, error } = await supabase.from('reviews').update({ status }).eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('moderate the review', error ?? new Error('Review not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'review', resourceId: id, metadata: { status } });
   revalidatePath('/admin/marketing/reviews');
 }
@@ -27,18 +28,21 @@ export async function replyToReviewAction(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const id = s(formData, 'id');
   if (!id) return;
-  await supabase.from('reviews').update({
+  const { data, error } = await supabase.from('reviews').update({
     reply: s(formData, 'reply'),
     replied_at: new Date().toISOString(),
     replied_by: actorId,
-  }).eq('id', id);
+  }).eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('reply to the review', error ?? new Error('Review not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'reply', resource: 'review', resourceId: id });
   revalidatePath('/admin/marketing/reviews');
 }
 
 export async function deleteReviewAction(id: string) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('reviews').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  const { data, error } = await supabase.from('reviews').update({ deleted_at: new Date().toISOString() })
+    .eq('id', id).is('deleted_at', null).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('delete the review', error ?? new Error('Review not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'review', resourceId: id });
   revalidatePath('/admin/marketing/reviews');
 }
@@ -59,7 +63,9 @@ export async function saveReputationSettingsAction(formData: FormData) {
     auto_approve_min: num(formData, 'auto_approve_min'),
     updated_by: actorId,
   };
-  await supabase.from('reputation_settings').upsert(row, { onConflict: 'singleton' });
+  const { data, error } = await supabase.from('reputation_settings').upsert(row, { onConflict: 'singleton' })
+    .select('singleton').single();
+  if (error || !data) marketingActionFailure('save reputation settings', error ?? new Error('Reputation settings were not returned after save.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'reputation_settings' });
   revalidatePath('/admin/marketing/reviews');
 }
