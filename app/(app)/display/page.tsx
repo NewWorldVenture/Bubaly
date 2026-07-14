@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { unstable_rethrow } from 'next/navigation';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { AutoRefresh } from '@/components/display/auto-refresh';
@@ -166,10 +167,48 @@ function formatBirthday(mmdd: string): string {
     : '';
 }
 
+/**
+ * Kiosk reconnect screen: rendered instead of throwing when the account-context
+ * queries hit a transient failure (getUserContext deliberately throws on those —
+ * fine for interactive pages, fatal for a wall display that refreshes every two
+ * minutes with nobody at the keyboard). AutoRefresh re-runs the page server-side
+ * until the context resolves again. The display/error.tsx boundary remains the
+ * backstop for anything unforeseen.
+ */
+function DisplayReconnect() {
+  return (
+    <>
+      <AutoRefresh seconds={15} />
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-[#0b1020] p-8 text-center text-white">
+        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-30">
+          <div className="absolute -left-24 top-10 h-72 w-72 rounded-full bg-violet-600/50 blur-3xl" />
+          <div className="absolute -right-16 bottom-0 h-80 w-80 rounded-full bg-blue-600/40 blur-3xl" />
+        </div>
+        <div className="relative">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/40">Bubaly Kitchen</p>
+          <h1 className="mt-3 text-3xl font-black sm:text-4xl">One moment…</h1>
+          <p className="mx-auto mt-3 max-w-sm text-sm text-white/55">
+            Reconnecting to your family space — the display will come right back.
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default async function KitchenDisplayPage() {
-  // requireFeature may redirect()/notFound() — that control flow must propagate,
-  // so it stays outside the resilient loader.
-  const ctx = await requireFeature('/display');
+  // requireFeature may redirect()/notFound() — that control flow MUST propagate
+  // (unstable_rethrow re-raises Next's internal signals). A genuine transient
+  // error (e.g. a blipped context query) renders the self-refreshing reconnect
+  // screen instead of hard-crashing the kiosk into the error boundary.
+  let ctx: Awaited<ReturnType<typeof requireFeature>>;
+  try {
+    ctx = await requireFeature('/display');
+  } catch (err) {
+    unstable_rethrow(err);
+    console.error('[display] context unavailable, rendering reconnect screen:', err);
+    return <DisplayReconnect />;
+  }
   const familyId = ctx.active.familyId;
   const familyName = ctx.active.family.name;
   const now = new Date();
