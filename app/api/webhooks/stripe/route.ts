@@ -30,13 +30,14 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
     'free';
 
   // Resolve billing_customer_id
-  const { data: bc } = await supabase
+  const { data: bc, error: billingCustomerError } = await supabase
     .from('billing_customers')
     .select('id')
     .eq('family_id', familyId)
     .maybeSingle();
+  if (billingCustomerError) throw new Error('Billing customer lookup failed');
 
-  await supabase.from('subscriptions').upsert(
+  const { error: subscriptionError } = await supabase.from('subscriptions').upsert(
     {
       family_id: familyId,
       billing_customer_id: bc?.id ?? null,
@@ -49,6 +50,7 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
     },
     { onConflict: 'family_id' },
   );
+  if (subscriptionError) throw new Error('Subscription persistence failed');
 
   // Credit a pending referral when a referred family first becomes paid.
   if (plan !== 'free' && (sub.status === 'active' || sub.status === 'trialing')) {
@@ -104,16 +106,18 @@ export async function POST(req: NextRequest) {
         // Ensure billing_customer row has the customer_ref
         const familyId = session.metadata?.family_id;
         if (familyId && session.customer) {
-          await supabase.from('billing_customers').upsert(
+          const { error: billingCustomerError } = await supabase.from('billing_customers').upsert(
             { family_id: familyId, provider: 'stripe', customer_ref: String(session.customer) },
             { onConflict: 'family_id' },
           );
+          if (billingCustomerError) throw new Error('Billing customer persistence failed');
         }
         // Close out the tracked checkout so the abandoned-checkout cron skips it.
-        await supabase
+        const { data: checkout, error: checkoutError } = await supabase
           .from('checkout_sessions')
           .update({ status: 'completed', completed_at: new Date().toISOString() })
-          .eq('session_id', session.id);
+          .eq('session_id', session.id).select('id').maybeSingle();
+        if (checkoutError || !checkout) throw new Error('Checkout persistence failed');
         // Fire event-driven "payment_completed" automation workflows (deduped by
         // the Stripe session id). Best-effort: never fail the webhook on it.
         try {
@@ -135,11 +139,20 @@ export async function POST(req: NextRequest) {
     // Leave the event reprocessable and return 500 so Stripe retries it, rather
     // than 200'ing on a dropped subscription update.
     const message = err instanceof Error ? err.message : String(err);
-    await markEventError(supabase, event.id, message, claimToken);
+    try {
+      await markEventError(supabase, event.id, message, claimToken);
+    } catch (markError) {
+      console.error('[stripe webhook] failed to record handler error', markError);
+    }
     console.error('[stripe webhook] handler error', message);
     return NextResponse.json({ error: 'handler failed' }, { status: 500 });
   }
 
-  await markEventProcessed(supabase, event.id, claimToken);
-  return NextResponse.json({ received: true });
+  try {
+    await markEventProcessed(supabase, event.id, claimToken);
+    return NextResponse.json({ received: true });
+  } catch (err) {
+    console.error('[stripe webhook] failed to finalize event', err);
+    return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
+  }
 }

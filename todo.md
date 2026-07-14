@@ -3994,3 +3994,24 @@ roadmap entries and user worktree changes are preserved.
   sanitization, lead-score failure handling, and admin audit wiring.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0260 - Payment and webhook persistence failures were acknowledged as success
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P0
+- Category: Payments / webhook reliability / data integrity
+- Feature: Stripe, Resend, and referral conversion webhooks
+- File or files: `app/api/webhooks/stripe/route.ts`, `lib/stripe/webhook.ts`,
+  `app/api/webhooks/resend/route.ts`, `lib/referrals/server.ts`,
+  `tests/webhook-persistence-boundaries.test.ts`
+- Description: Stripe subscription, checkout, and final event-ledger writes could fail without causing a
+  retryable response. Resend campaign counters, suppressions, and final event state had the same risk,
+  and referral conversion could report success after a lost update.
+- Resolution: Critical webhook and referral writes now check errors and returned rows, fail closed, and
+  return retryable responses where the provider should redeliver the event.
+- Tests performed: Focused webhook replay/persistence tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/webhook-persistence-boundaries.test.ts` guards Stripe finalization, Resend counters/
+  suppressions, and referral conversion result checks.
+- Verified by: Codex
+- Date completed: 2026-07-14

@@ -101,17 +101,23 @@ export async function POST(req: NextRequest) {
 
   const field = FIELD[event.type];
   if (!field) {
-    await supabase.from('resend_webhook_events').update({ status: 'processed', processed_at: new Date().toISOString() }).eq('svix_id', svixId);
+    const { data: processed, error: processedError } = await supabase.from('resend_webhook_events')
+      .update({ status: 'processed', processed_at: new Date().toISOString() })
+      .eq('svix_id', svixId).select('svix_id').maybeSingle();
+    if (processedError || !processed) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
     return NextResponse.json({ received: true });
   }
 
   const campaignId = event.data?.tags?.find((t) => t.name === 'campaign')?.value;
 
   if (campaignId) {
-    const { data: row } = await supabase.from('marketing_email_campaigns').select(field).eq('id', campaignId).maybeSingle();
+    const { data: row, error: campaignReadError } = await supabase.from('marketing_email_campaigns').select(field).eq('id', campaignId).maybeSingle();
+    if (campaignReadError) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
     if (row) {
       const current = (row as Record<string, number>)[field] ?? 0;
-      await supabase.from('marketing_email_campaigns').update({ [field]: current + 1 } as never).eq('id', campaignId);
+      const { data: updated, error: counterError } = await supabase.from('marketing_email_campaigns')
+        .update({ [field]: current + 1 } as never).eq('id', campaignId).select('id').maybeSingle();
+      if (counterError || !updated) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
     }
   }
 
@@ -120,7 +126,9 @@ export async function POST(req: NextRequest) {
     const tos = Array.isArray(event.data?.to) ? event.data!.to : event.data?.to ? [event.data.to] : [];
     const reason = event.type === 'email.bounced' ? 'bounce' : 'complaint';
     for (const to of tos) {
-      await supabase.from('marketing_suppressions').upsert({ email: String(to).toLowerCase(), reason, campaign_id: campaignId ?? null });
+      const { error: suppressionError } = await supabase.from('marketing_suppressions')
+        .upsert({ email: String(to).toLowerCase(), reason, campaign_id: campaignId ?? null });
+      if (suppressionError) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
     }
   }
 
@@ -143,9 +151,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await supabase.from('resend_webhook_events')
+  const { data: processed, error: processedError } = await supabase.from('resend_webhook_events')
     .update({ status: 'processed', processed_at: new Date().toISOString(), error: null })
-    .eq('svix_id', svixId);
+    .eq('svix_id', svixId).select('svix_id').maybeSingle();
+  if (processedError || !processed) return NextResponse.json({ error: 'Webhook storage unavailable' }, { status: 503 });
 
   return NextResponse.json({ received: true });
 }

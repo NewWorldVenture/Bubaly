@@ -90,16 +90,20 @@ export async function recordEvent(supabase: DB, event: Stripe.Event): Promise<St
 
 /** Mark an event as fully processed (so future deliveries short-circuit). */
 export async function markEventProcessed(supabase: DB, eventId: string, claimToken: string): Promise<void> {
-  await supabase.from('stripe_webhook_events')
+  const { data, error } = await supabase.from('stripe_webhook_events')
     .update({ status: 'processed', error: null, processing_started_at: null, claim_token: null })
-    .eq('stripe_event_id', eventId).eq('claim_token', claimToken);
+    .eq('stripe_event_id', eventId).eq('claim_token', claimToken)
+    .select('stripe_event_id').maybeSingle();
+  if (error || !data) throw new Error('Stripe webhook event finalization failed');
 }
 
 /** Mark an event as errored (kept reprocessable; the route returns 500 to retry). */
 export async function markEventError(supabase: DB, eventId: string, message: string, claimToken: string): Promise<void> {
-  await supabase.from('stripe_webhook_events')
+  const { data, error } = await supabase.from('stripe_webhook_events')
     .update({ status: 'error', error: message.slice(0, 1000), processing_started_at: null, claim_token: null })
-    .eq('stripe_event_id', eventId).eq('claim_token', claimToken);
+    .eq('stripe_event_id', eventId).eq('claim_token', claimToken)
+    .select('stripe_event_id').maybeSingle();
+  if (error || !data) throw new Error('Stripe webhook error state was not recorded');
 }
 
 /** Look up the card + family for an authorization, by Stripe card id. */

@@ -199,6 +199,13 @@ configuration upserts fail closed, public referral application no longer returns
 and lead-score recomputation checks source reads and score upserts before reporting success; the admin
 recompute path records a sanitized audit event.
 
+### Payment and webhook persistence boundary audit
+
+Stripe subscription, billing-customer, checkout, and event-ledger transitions now require successful
+Supabase results; a lost finalization or handler-error update produces a retryable response instead of
+acknowledging the event. Resend counter, suppression, and final ledger writes follow the same fail-closed
+pattern. Referral conversion now checks both its prerequisite read and status-guarded update.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

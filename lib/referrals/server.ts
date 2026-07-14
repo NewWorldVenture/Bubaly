@@ -119,14 +119,16 @@ export async function applyReferralCode(input: {
  * acts on a still-'signed_up' referral and is otherwise a no-op.
  */
 export async function markReferralConverted(service: DB, referredFamilyId: string): Promise<void> {
-  const { data: ref } = await service
+  const { data: ref, error: readError } = await service
     .from('referrals')
     .select('id, status')
     .eq('referred_family_id', referredFamilyId)
     .maybeSingle();
+  if (readError) throw new Error('Referral lookup failed');
   if (!ref || ref.status !== 'signed_up') return;
-  await service
+  const { data: updated, error } = await service
     .from('referrals')
     .update({ status: 'converted', converted_at: new Date().toISOString() })
-    .eq('id', ref.id);
+    .eq('id', ref.id).eq('status', 'signed_up').select('id').maybeSingle();
+  if (error || !updated) throw new Error('Referral conversion persistence failed');
 }

@@ -2,6 +2,15 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Payment and webhook persistence boundaries
+
+- `npm.cmd exec vitest run tests/webhook-persistence-boundaries.test.ts tests/stripe-webhook-replay-contract.test.ts tests/resend-webhook-replay-contract.test.ts`: 3 files, 8 tests passed.
+- `npm.cmd exec vitest run`: 371 files, 2,876 tests passed.
+- `npm.cmd run typecheck`: passed.
+- Stripe subscription, billing-customer, checkout, and event-ledger writes now fail closed and return
+  retryable responses when persistence is lost. Resend campaign counters, suppressions, and final event
+  ledger transitions now do the same. Referral conversion reads and writes are also checked.
+
 ## Latest Audit Update - Core marketing, referrals, and lead-score boundaries
 
 - `npm.cmd exec vitest run tests/marketing-core-referral-boundaries.test.ts tests/marketing-action-error-boundaries.test.ts tests/marketing-affiliates.test.ts`: 3 files, 10 tests passed.
