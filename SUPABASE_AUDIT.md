@@ -118,6 +118,14 @@ activate, and revoke operations. Unexpected Supabase failures are logged server-
 stable messages. The admin-row client now keeps the menu open on failure and shows a toast rather than
 assuming that an ignored mutation succeeded.
 
+### Support Ticket action boundary audit
+
+Support Ticket status transitions now re-check Super Admin access, validate the target identifier, check
+the update result and returned row, and return a stable failure before revalidation when the write fails.
+Ticket creation validates the subject, requester email, category, and priority, checks the insert result,
+and uses a collision-resistant ticket number rather than a concurrent count-derived sequence. The admin
+row client keeps its menu open and shows a toast when a transition fails.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

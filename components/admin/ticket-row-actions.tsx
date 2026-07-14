@@ -2,16 +2,27 @@
 
 import { useState, useTransition } from 'react';
 import { MoreHorizontal, CheckCircle, XCircle, RefreshCw, User } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 import { resolveTicketAction, closeTicketAction, reopenTicketAction } from '@/app/(app)/admin/support-tickets/actions';
 
 export function TicketRowActions({ ticketId, status }: { ticketId: string; status: string }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { success, error: toastError } = useToast();
 
-  function act(fn: (id: string) => Promise<void>) {
+  function act(fn: (id: string) => Promise<{ ok: boolean; error?: string }>) {
     startTransition(async () => {
-      await fn(ticketId);
-      setOpen(false);
+      try {
+        const result = await fn(ticketId);
+        if (!result.ok) {
+          toastError(result.error ?? 'Could not update that ticket.');
+          return;
+        }
+        success('Ticket status updated.');
+        setOpen(false);
+      } catch {
+        toastError('Could not update that ticket. Please try again.');
+      }
     });
   }
 

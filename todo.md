@@ -3481,6 +3481,27 @@ roadmap entries and user worktree changes are preserved.
 - Verified by: Codex
 - Date completed: 2026-07-14
 
+### TODO-0250 - Support Ticket mutations ignored failures and used count-derived ticket numbers
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Admin reliability / data integrity / error handling
+- Feature: Super Admin Support Tickets status controls and ticket creation
+- File or files: `app/(app)/admin/support-tickets/actions.ts`, `components/admin/ticket-row-actions.tsx`,
+  `tests/support-ticket-action-boundaries.test.ts`
+- Description: Support Ticket transitions and creation ignored Supabase failures, returned no result to
+  the caller, accepted unvalidated creation fields, and derived ticket numbers from count plus one,
+  which could collide when administrators created tickets concurrently.
+- Resolution: Support Ticket actions now validate privileged access and creation fields, check every
+  required write and returned target row, sanitize unexpected failures, surface failures in the client,
+  and generate collision-resistant ticket numbers.
+- Tests performed: Focused Support Ticket boundary test, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/support-ticket-action-boundaries.test.ts` verifies guards, target/write checks,
+  validation, collision-resistant numbering, and client feedback.
+- Verified by: Codex
+- Date completed: 2026-07-14
+
 ### TODO-0245 - Marketplace and Feedback actions exposed raw or unchecked failures
 
 - Status: [x] Completed in code and covered by regression tests.
