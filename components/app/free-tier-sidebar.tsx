@@ -9,7 +9,8 @@
 // member across devices, with localStorage as an offline cache.
 
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { Star, ListPlus, ListX } from 'lucide-react';
+import Link from 'next/link';
+import { Star, ListPlus, ListX, Lock } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
   SIDEBAR_FOOTER_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS,
@@ -189,9 +190,12 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
 
   if (!open) return null;
   return (
-    <Modal open onClose={onClose} title="All Services">
+    <Modal open onClose={onClose} title="All Services" className="sm:max-w-2xl lg:max-w-3xl">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3">
-        <p className="text-xs text-muted">⭐ pins a service to your sidebar. {inTierHrefs.length} in your plan.</p>
+        <p className="text-xs text-muted">
+          <Star className="mr-0.5 inline h-3 w-3 -translate-y-px fill-brand text-brand-text" /> pins a service to your
+          sidebar · <span className="font-semibold text-fg">{inTierHrefs.length}</span> in your plan
+        </p>
         <div className="flex gap-2">
           <button
             type="button" disabled={busy || inTierHrefs.length === 0}
@@ -210,41 +214,73 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
         </div>
       </div>
 
-      <div className="max-h-[62vh] space-y-5 overflow-y-auto pr-1">
+      <div className="max-h-[68vh] space-y-6 overflow-y-auto pr-0.5">
         {APP_NAV_GROUPS.map((group) => {
           const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager);
           if (resolved.length === 0) return null;
           return (
-            <div key={group.title} className="space-y-1">
-              <p className="px-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted/70">{group.title}</p>
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+            <section key={group.title} className="space-y-2">
+              <div className="flex items-baseline gap-2 px-0.5">
+                <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted/80">{group.title}</h3>
+                <span className="h-px flex-1 bg-border/50" aria-hidden />
+                <span className="text-[10px] font-semibold tabular-nums text-muted/50">{resolved.length}</span>
+              </div>
+              {/* Mobile-first: 2 roomy columns, 3 from sm. Labels wrap to 2 lines
+                  (no more cut-off names); the pin star sits in a reserved lane so
+                  it never overlaps the label. */}
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                 {resolved.map(({ item, locked }) => {
                   const pinnable = !locked && ALL_SERVICES_BY_HREF.has(item.href);
                   const isPinned = pinnable && pinned.has(item.href);
+                  const inner = (
+                    <>
+                      <item.icon className={cn('h-5 w-5 shrink-0', locked ? 'text-muted/45' : 'text-fg/80')} />
+                      <span className={cn('min-w-0 flex-1 text-left text-[13px] font-medium leading-tight line-clamp-2',
+                        locked ? 'text-muted/50' : 'text-fg')}>{item.label}</span>
+                      {locked && <Lock className="h-3.5 w-3.5 shrink-0 text-muted/45" />}
+                    </>
+                  );
                   return (
                     <ServiceTooltip key={item.href} label={item.label} description={descriptions[item.href] ?? ''}>
-                      <div className="relative">
-                        <div onClick={() => { if (!locked) onClose(); }}>
-                          <NavEntry item={item} variant="grid" locked={locked} onLocked={onLocked} />
-                        </div>
-                      {pinnable && (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={(e) => { e.stopPropagation(); onTogglePin(item.href); }}
-                          aria-label={isPinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
-                          title={isPinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
-                          className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-md text-muted/60 transition hover:bg-elevated hover:text-brand-text disabled:opacity-50"
-                        >
-                          <Star className={cn('h-3.5 w-3.5', isPinned && 'fill-brand text-brand-text')} />
-                        </button>
+                      <div className={cn(
+                        'group relative flex items-stretch rounded-xl border border-transparent transition',
+                        'hover:border-border hover:bg-elevated/50',
+                      )}>
+                        {locked ? (
+                          <button
+                            type="button" onClick={() => onLocked(item)}
+                            title={`${item.label} — upgrade to unlock`}
+                            className={cn('flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left', pinnable && 'pr-8')}
+                          >
+                            {inner}
+                          </button>
+                        ) : (
+                          <Link
+                            href={item.href} onClick={onClose}
+                            className={cn('flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2', pinnable && 'pr-8')}
+                          >
+                            {inner}
+                          </Link>
+                        )}
+                        {pinnable && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={(e) => { e.stopPropagation(); onTogglePin(item.href); }}
+                            aria-label={isPinned ? `Unpin ${item.label} from sidebar` : `Pin ${item.label} to sidebar`}
+                            aria-pressed={isPinned}
+                            title={isPinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
+                            className="absolute right-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-muted/50 transition hover:bg-elevated hover:text-brand-text disabled:opacity-50"
+                          >
+                            <Star className={cn('h-4 w-4', isPinned && 'fill-brand text-brand-text')} />
+                          </button>
                         )}
                       </div>
                     </ServiceTooltip>
                   );
                 })}
               </div>
-            </div>
+            </section>
           );
         })}
       </div>
