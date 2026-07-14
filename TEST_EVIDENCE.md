@@ -7,6 +7,9 @@ Audit date: 2026-07-14
 - `npm.cmd exec vitest run tests/sync-google-item-persistence.test.ts`: 1 file, 3 tests passed.
 - `npm.cmd exec vitest run`: 376 files, 2,897 tests passed.
 - `npm.cmd run typecheck`: passed.
+- Clean `npm.cmd run build`: passed; 249 static pages generated. Known webpack cache and Supabase
+  Edge Runtime warnings remain documented.
+- Public Playwright/axe/overflow E2E: 51 passed, 1 intentional authenticated skip out of 52 tests.
 - Google Calendar and Tasks pulls and pushes now fail closed when local rows, mappings, conflicts, deletes,
   updates, creations, or cursors are not persisted before sync counts are incremented.
 
