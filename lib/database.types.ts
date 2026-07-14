@@ -1173,6 +1173,12 @@ export interface Database {
         { id?: string; slug: string; title: string; excerpt?: string; author?: string; published_at?: string; reading_minutes?: number; tags?: string[]; category: string; featured?: boolean; accent_color?: string | null; hero_image_url?: string | null; hero_image_alt?: string | null; hero_image_credit?: string | null; body?: Json; published?: boolean },
         Partial<{ slug: string; title: string; excerpt: string; author: string; published_at: string; reading_minutes: number; tags: string[]; category: string; featured: boolean; accent_color: string | null; hero_image_url: string | null; hero_image_alt: string | null; hero_image_credit: string | null; body: Json; published: boolean }>
       >;
+      // ── Editable "All Services" tooltip overrides (0203) ──
+      service_descriptions: T<
+        { service_key: string; description: string; updated_by: string | null; created_at: string; updated_at: string },
+        { service_key: string; description?: string; updated_by?: string | null },
+        Partial<{ description: string; updated_by: string | null }>
+      >;
       // ── Blog engagement: anonymous ♥ per visitor + email subscribers (0201) ──
       blog_post_likes: T<
         { id: string; post_id: string; visitor_id: string; created_at: string },

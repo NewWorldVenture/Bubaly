@@ -26,6 +26,7 @@ import {
 } from '@/lib/navigation/customize';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
+import { ServiceTooltip, useServiceDescriptions } from '@/components/services/service-tooltip';
 import { cn } from '@/lib/utils/cn';
 import { loadSidebarPrefs, saveSidebarNavAction } from '@/app/(app)/dashboard/navigation-actions';
 import { useApp } from './app-context';
@@ -171,6 +172,7 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
 }) {
   const { planLevel, isSuperAdmin, featureTiers, role } = useApp();
   const manager = isManager(role);
+  const descriptions = useServiceDescriptions();
 
   // Every service the member's plan unlocks, across all groups (deduped).
   const inTierHrefs = useMemo(() => {
@@ -220,10 +222,11 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
                   const pinnable = !locked && ALL_SERVICES_BY_HREF.has(item.href);
                   const isPinned = pinnable && pinned.has(item.href);
                   return (
-                    <div key={item.href} className="relative">
-                      <div onClick={() => { if (!locked) onClose(); }}>
-                        <NavEntry item={item} variant="grid" locked={locked} onLocked={onLocked} />
-                      </div>
+                    <ServiceTooltip key={item.href} label={item.label} description={descriptions[item.href] ?? ''}>
+                      <div className="relative">
+                        <div onClick={() => { if (!locked) onClose(); }}>
+                          <NavEntry item={item} variant="grid" locked={locked} onLocked={onLocked} />
+                        </div>
                       {pinnable && (
                         <button
                           type="button"
@@ -235,8 +238,9 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
                         >
                           <Star className={cn('h-3.5 w-3.5', isPinned && 'fill-brand text-brand-text')} />
                         </button>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    </ServiceTooltip>
                   );
                 })}
               </div>

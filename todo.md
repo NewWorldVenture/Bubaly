@@ -27,6 +27,23 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 
 ---
 
+## ☑ SERVICE CATALOG TOOLTIPS — hover blurbs, super-admin editable (SHIPPED 2026-07-14)
+
+The **"All Services"** picker now shows a **hover/focus tooltip** describing what each of the ~115
+services offers. Copy defaults are versioned in code (`lib/services/descriptions.ts` — a crisp
+one-liner for every catalog service, coverage enforced by test) and a **super admin can override any
+of them at `/admin/services`** (grouped, searchable editor with live dirty-state, per-row Save/Reset,
+"Custom" badges). 100% Supabase-wired: **`0203_service_descriptions.sql`** stores overrides keyed by
+nav route (world-readable RLS, service-role writes); saves go through a super-admin-guarded server
+action; empty/unchanged values delete the row so it falls back to the default (lean table, trivial
+reset). Tooltips render **instantly** from the bundled defaults and lazily overlay overrides fetched
+once from public **`/api/services/descriptions`** (module-memoized). The tooltip is a single
+fixed-position portal card so it never clips inside the modal's scroll container; keyboard-accessible.
+`ServiceCatalog` added to the admin nav. Pure helpers tested (9); 2900 tests + `next build` green;
+migration PG16-verified idempotent ×2. ⚠️ apply `0203` to prod (see `docs/PENDING_PROD_MIGRATIONS.md`).
+
+---
+
 ## ☑ BLOG OVERHAUL — world-class articles + engagement (SHIPPED 2026-07-14)
 
 Every `/blog` cover-story stub is now a **complete, fun, fully-written article** — 20 posts

@@ -216,6 +216,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/tier-features', label: 'Tier & Features', icon: SlidersHorizontal },
   { href: '/admin/system', label: 'System Overview', icon: Activity },
   { href: '/admin/content', label: 'Content Management', icon: FolderKanban },
+  { href: '/admin/services', label: 'Service Catalog', icon: LayoutGrid },
   { href: '/admin/security', label: 'Security', icon: ShieldCheck },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
   { href: '/admin/onboarding', label: 'Onboarding Audit', icon: Rocket },
