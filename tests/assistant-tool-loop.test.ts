@@ -60,6 +60,6 @@ describe('OpenAIProvider.runTools — agentic tool loop', () => {
     }];
     const provider = new OpenAIProvider('gpt-4o', 'test-key');
     const result = await provider.runTools({ system: 's', messages: [{ role: 'user', content: 'x' }], tools });
-    expect(result.actions[0].result).toEqual({ ok: false, error: 'db down' });
+    expect(result.actions[0].result).toEqual({ ok: false, error: 'That assistant action could not be completed. Please try again.' });
   });
 });

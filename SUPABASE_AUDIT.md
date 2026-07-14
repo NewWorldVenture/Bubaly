@@ -101,6 +101,15 @@ reads are checked before dependent money mutations, so an unreadable prerequisit
 absent or safe to overwrite. Audit inserts after successful external effects remain observable
 best-effort; their failure is logged without replaying or falsely failing the completed money operation.
 
+### AI assistant action boundary audit
+
+The AI provider now catches tool executor exceptions, logs the diagnostic server-side, and returns a
+stable action failure instead of passing raw exception messages into the model or persisted tool results.
+The assistant chat route checks conversation initialization and every required family-context read before
+invoking tools. It checks the core message insert before emitting completion, while title metadata failures
+are logged separately as non-core presentation metadata. Super Admin AI configuration saves also sanitize
+unexpected persistence failures.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:
@@ -184,7 +193,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 - `npm.cmd run db:audit:schema` passed all 11 required live schema checks, including the
   `stripe_webhook_events` claim columns previously missing from the live response.
 - `npm.cmd run db:audit:auth` still passes public Auth health but returns HTTP 500 from the Admin users
-endpoint (`Database error finding users`, latest error id `019f6119-6145-7a7a-bc7d-7322d786b580`).
+endpoint (`Database error finding users`, latest error id `019f617e-363b-77ea-9e8a-db390083d810`).
 - The schema result confirms object availability only; migration-history verification and authenticated
   RLS allow/deny tests still require an authorized isolated environment.
 

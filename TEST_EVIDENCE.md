@@ -2,6 +2,14 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - AI assistant action boundaries
+
+- `npm.cmd test -- --run tests/ai-action-boundaries.test.ts tests/db-errors.test.ts`: 2 files, 15 tests passed.
+- `npm.cmd exec vitest run`: 358 files, 2,813 tests passed.
+- AI tool exceptions and Super Admin AI configuration failures now return stable messages with server-side
+  diagnostics. AI chat fails closed on conversation initialization and family-context reads, checks message
+  persistence before reporting completion, and exposes persistence status in the final stream event.
+
 ## Latest Audit Update - Wallet and Stripe Money action boundaries
 
 - `npm.cmd test -- --run tests/wallet-money-action-boundaries.test.ts tests/db-errors.test.ts`: 2 files, 14 tests passed.
@@ -12,7 +20,7 @@ Audit date: 2026-07-14
 ## Latest Audit Update - Marketplace and Feedback action boundaries
 
 - `npm.cmd test -- --run tests/migration-version-safety.test.ts tests/guardian-action-error-boundaries.test.ts tests/marketplace-feedback-action-boundaries.test.ts`: 3 files, 9 tests passed.
-- `npm.cmd exec vitest run`: 357 files, 2,810 tests passed.
+- `npm.cmd exec vitest run`: 358 files, 2,813 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
 - `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
@@ -24,7 +32,7 @@ Audit date: 2026-07-14
   prefixes, next available version `0200`.
 - `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
 - `npm.cmd run db:audit:auth`: public Auth health passed; Admin users returned HTTP 500, latest error
-  ID `019f6119-6145-7a7a-bc7d-7322d786b580`.
+  ID `019f617e-363b-77ea-9e8a-db390083d810`.
 - Marketplace and Feedback actions now log unexpected database failures server-side and return stable
   messages; required reads fail closed before mutations, including saved searches, offers, orders, votes,
   and hand-offs. Expected duplicate and domain outcomes remain explicit.

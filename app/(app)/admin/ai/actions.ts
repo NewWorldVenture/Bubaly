@@ -5,6 +5,7 @@ import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { setAIConfig } from '@/lib/ai/settings';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
+import { describeActionError } from '@/lib/supabase/errors';
 
 export async function saveAIConfigAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const user = await getUser();
@@ -17,7 +18,8 @@ export async function saveAIConfigAction(formData: FormData): Promise<{ ok: bool
   try {
     await setAIConfig(createServiceClient(), { provider: 'openai', model, openaiKey }, user.id);
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save' };
+    console.error('[admin-ai] config save failed', e);
+    return { ok: false, error: describeActionError(e, 'Could not save AI settings.') };
   }
   revalidatePath('/admin/ai');
   return { ok: true };

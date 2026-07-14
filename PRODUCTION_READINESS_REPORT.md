@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-The tree compiles, passes lint and type checking, passes 2,810 unit tests, builds all 235 Next.js build
+The tree compiles, passes lint and type checking, passes 2,813 unit tests, builds all 235 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -13,7 +13,7 @@ Auth Admin 500 is diagnosed, and the exposed historical Supabase credential is r
 those checks pass in an isolated environment, the posture can be reconsidered as Conditional Go.
 
 Latest audit increment (2026-07-14): migration filenames now have a deterministic preflight. The
-checkout contains 214 numbered migration files and 17 known historical duplicate prefixes; new or
+checkout contains 215 numbered migration files and 17 known historical duplicate prefixes; new or
 changed collisions fail CI and `db:push` before any database connection is attempted. The remote
 migration ledger remains unverified because this checkout is not linked to a Supabase project.
 
@@ -58,6 +58,10 @@ Latest repair increment (2026-07-14): Wallet hub and Stripe Money actions now sa
 database/provider failures, fail closed on required account, card, wallet, and member reads, and log
 audit-write failures without replaying a successful external money operation.
 
+Latest repair increment (2026-07-14): AI tool failures and Super Admin AI configuration errors now use
+stable user-facing messages with server-side diagnostics. AI chat fails closed on required conversation
+and family-context reads, checks message persistence, and reports when the response was not saved.
+
 Latest repair increment (2026-07-14): Marketplace hand-off completion now uses a member-authorized,
 row-locked transaction so the confirmation code, hand-off status, and order status cannot diverge under
 concurrent completion or a partial write failure.
@@ -68,7 +72,7 @@ concurrent completion or a partial write failure.
 - 102 API route handlers.
 - 215 migration files; additive repair migrations through `0199` are now present.
 - 338 SQL files under `supabase`.
-- 357 unit-test files and 2,810 passing tests.
+- 358 unit-test files and 2,813 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -198,7 +202,7 @@ concurrent completion or a partial write failure.
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,810 tests / 357 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,813 tests / 358 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 235 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
@@ -206,7 +210,7 @@ concurrent completion or a partial write failure.
 | Migration/seed contract | PASS, 30 focused tests | targeted Vitest run |
 | Migration filename audit | PASS, 17 known historical duplicate prefixes; next `0200` | `npm.cmd run db:audit:migrations` |
 | Schema probe | PASS | 11 required live table/ledger probes available, including Stripe claim columns |
-| Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f6119-6145-7a7a-bc7d-7322d786b580`) |
+| Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f617e-363b-77ea-9e8a-db390083d810`) |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
 | Dependency audit | PASS | 0 vulnerabilities after the scoped PostCSS override |
 | Live RLS attack tests | NOT RUN | requires isolated Supabase with migration applied |

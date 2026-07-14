@@ -3684,3 +3684,24 @@ roadmap entries and user worktree changes are preserved.
   required-read checks plus best-effort audit logging.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0248 - AI assistant could expose tool failures and report unsaved turns as complete
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: AI safety / data integrity / error handling
+- Feature: AI assistant tool loop, chat persistence, and Super Admin AI settings
+- File or files: `lib/ai/provider.ts`, `app/api/ai/chat/route.ts`, `app/(app)/admin/ai/actions.ts`,
+  `tests/ai-action-boundaries.test.ts`, `tests/assistant-tool-loop.test.ts`
+- Description: Exceptions thrown by assistant tools were returned verbatim to the model and persisted
+  in tool results. AI chat ignored conversation/context read failures and message-write failures, so it
+  could act on incomplete family state or report a completed turn that was not saved.
+- Resolution: Tool and admin failures now use stable messages with server-side diagnostics. AI chat fails
+  closed on required initialization/context reads, checks the core message insert, and reports persistence
+  status in its completion event; non-core title metadata failures remain logged independently.
+- Tests performed: Focused AI boundary, tool-loop, and database-error tests, full Vitest, typecheck, lint,
+  dependency audit, migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/ai-action-boundaries.test.ts` verifies sanitized tool/admin failures, fail-closed context
+  reads, and checked persistence; the tool-loop test verifies thrown tool errors remain non-fatal and sanitized.
+- Verified by: Codex
+- Date completed: 2026-07-14

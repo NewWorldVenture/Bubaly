@@ -9,6 +9,7 @@ import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { rateLimit } from '@/lib/server/rate-limit';
 import { parseAIChatRequest } from '@/lib/ai/chat-request';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { describeActionError } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -57,20 +58,35 @@ export async function POST(req: NextRequest) {
 
     // Ensure the conversation row exists (the client generates its UUID up front)
     // so the ai_messages FK is satisfied and history accumulates.
-    await supabase.from('ai_conversations').upsert(
+    const { error: conversationUpsertError } = await supabase.from('ai_conversations').upsert(
       { id: conversationId, family_id: familyId, user_id: ctx.user.id },
       { onConflict: 'id', ignoreDuplicates: true },
     );
+    if (conversationUpsertError) {
+      console.error('[ai-chat] conversation initialization failed', conversationUpsertError);
+      return NextResponse.json({ error: describeActionError(conversationUpsertError, 'Could not start this conversation.') }, { status: 500 });
+    }
 
     // Conversation history (text turns), plus a live family snapshot.
     const nowIso = new Date().toISOString();
-    const [{ data: history }, { data: members }, { data: events }, { data: chores }, { data: meals }] = await Promise.all([
+    const [
+      { data: history, error: historyError },
+      { data: members, error: membersError },
+      { data: events, error: eventsError },
+      { data: chores, error: choresError },
+      { data: meals, error: mealsError },
+    ] = await Promise.all([
       supabase.from('ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(40),
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
       supabase.from('calendar_events').select('title, starts_at, category').eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(12),
       supabase.from('chore_assignments').select('status').eq('family_id', familyId).in('status', ['todo', 'in_progress']),
       supabase.from('meals').select('name, meal_type').eq('family_id', familyId).limit(5),
     ]);
+    const contextError = historyError ?? membersError ?? eventsError ?? choresError ?? mealsError;
+    if (contextError) {
+      console.error('[ai-chat] family context load failed', contextError);
+      return NextResponse.json({ error: describeActionError(contextError, 'Could not load the family assistant context.') }, { status: 500 });
+    }
 
     const memberRows = (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name }));
     const fmtDate = (iso: string) => {
@@ -156,24 +172,34 @@ export async function POST(req: NextRequest) {
         const assistantContent = content.trim() || (actions.length ? 'Done — I’ve updated that for you.' : 'I’m not sure how to help with that yet.');
 
         // Persist both turns + the structured actions, then finish the conversation.
-        try {
-          await supabase.from('ai_messages').insert([
+        let persistenceError: unknown = null;
+        const { error: messageInsertError } = await supabase.from('ai_messages').insert([
             { family_id: familyId, conversation_id: conversationId, role: 'user', content: message },
             {
               family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent,
               tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_calls']) : null,
               tool_results: actions.length ? (actions.map((a) => a.result) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_results']) : null,
             },
-          ]);
-          const { data: conv } = await supabase.from('ai_conversations').select('title').eq('id', conversationId).maybeSingle();
-          const patch: Database['public']['Tables']['ai_conversations']['Update'] = { model: provider.model };
-          if (!conv?.title || conv.title === 'New conversation') patch.title = message.slice(0, 60);
-          await supabase.from('ai_conversations').update(patch).eq('id', conversationId);
-        } catch (err) {
-          console.error('AI persist error:', err);
+        ]);
+        if (messageInsertError) {
+          persistenceError = messageInsertError;
+          console.error('[ai-chat] message persistence failed', messageInsertError);
+        } else {
+          const { data: conv, error: titleReadError } = await supabase.from('ai_conversations').select('title').eq('id', conversationId).maybeSingle();
+          if (titleReadError) {
+            console.error('[ai-chat] conversation title read failed', titleReadError);
+          } else {
+            const patch: Database['public']['Tables']['ai_conversations']['Update'] = { model: provider.model };
+            if (!conv?.title || conv.title === 'New conversation') patch.title = message.slice(0, 60);
+            const { error: titleUpdateError } = await supabase.from('ai_conversations').update(patch).eq('id', conversationId);
+            if (titleUpdateError) console.error('[ai-chat] conversation metadata update failed', titleUpdateError);
+          }
+        }
+        if (persistenceError) {
+          send({ type: 'error', error: describeActionError(persistenceError, 'I generated a response, but could not save this conversation.') });
         }
 
-        send({ type: 'done', content: assistantContent });
+        send({ type: 'done', content: assistantContent, persisted: !persistenceError });
         controller.close();
       },
     });

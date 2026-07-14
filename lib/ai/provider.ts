@@ -2,6 +2,7 @@
 // Swap Anthropic / OpenAI / Gemini / local by implementing AIProvider.
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchExternal } from '@/lib/server/external-fetch';
+import { describeActionError } from '@/lib/supabase/errors';
 
 export type AITool = {
   name: string;
@@ -54,6 +55,11 @@ export type RunToolsInput = {
   /** Safety cap on tool-call rounds. Default 6. */
   maxRounds?: number;
 };
+
+function toolExecutionFailure(name: string, error: unknown): { ok: false; error: string } {
+  console.error(`[ai-tool] ${name} failed`, error);
+  return { ok: false, error: describeActionError(error, 'That assistant action could not be completed. Please try again.') };
+}
 
 /** Streamed events from an agentic run: text deltas + executed actions. */
 export type StreamEvent =
@@ -220,7 +226,7 @@ export class OpenAIProvider implements AIProvider {
         const tool = byName.get(call.function.name);
         let result: unknown;
         try { result = tool ? await tool.execute(args) : { ok: false, error: `Unknown tool ${call.function.name}` }; }
-        catch (e) { result = { ok: false, error: e instanceof Error ? e.message : 'Tool failed' }; }
+        catch (e) { result = toolExecutionFailure(call.function.name, e); }
         actions.push({ name: call.function.name, args, result });
         convo.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
       }
@@ -301,7 +307,7 @@ export class OpenAIProvider implements AIProvider {
         const tool = byName.get(c.name);
         let result: unknown;
         try { result = tool ? await tool.execute(args) : { ok: false, error: `Unknown tool ${c.name}` }; }
-        catch (e) { result = { ok: false, error: e instanceof Error ? e.message : 'Tool failed' }; }
+        catch (e) { result = toolExecutionFailure(c.name, e); }
         yield { type: 'action', name: c.name, args, result };
         convo.push({ role: 'tool', tool_call_id: c.id, content: JSON.stringify(result) });
       }
