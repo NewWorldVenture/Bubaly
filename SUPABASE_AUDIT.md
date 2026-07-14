@@ -110,6 +110,14 @@ invoking tools. It checks the core message insert before emitting completion, wh
 are logged separately as non-core presentation metadata. Super Admin AI configuration saves also sanitize
 unexpected persistence failures.
 
+### Admin Management action boundary audit
+
+The privileged Admin Management actions now independently verify Super Admin access, validate invite
+email and role input, check update/delete/upsert results, and require a target row for deactivate,
+activate, and revoke operations. Unexpected Supabase failures are logged server-side and converted to
+stable messages. The admin-row client now keeps the menu open on failure and shows a toast rather than
+assuming that an ignored mutation succeeded.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

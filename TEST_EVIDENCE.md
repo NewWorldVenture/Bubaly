@@ -2,10 +2,17 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Admin Management action boundaries
+
+- `npm.cmd test -- --run tests/admin-management-action-boundaries.test.ts`: 1 file, 2 tests passed.
+- `npm.cmd exec vitest run`: 359 files, 2,815 tests passed.
+- Admin deactivate, activate, revoke, and invite mutations now validate inputs, check every database
+  result and target row, sanitize failures, and surface unsuccessful mutations in the client.
+
 ## Latest Audit Update - AI assistant action boundaries
 
 - `npm.cmd test -- --run tests/ai-action-boundaries.test.ts tests/db-errors.test.ts`: 2 files, 15 tests passed.
-- `npm.cmd exec vitest run`: 358 files, 2,813 tests passed.
+- `npm.cmd exec vitest run`: 359 files, 2,815 tests passed.
 - AI tool exceptions and Super Admin AI configuration failures now return stable messages with server-side
   diagnostics. AI chat fails closed on conversation initialization and family-context reads, checks message
   persistence before reporting completion, and exposes persistence status in the final stream event.

@@ -2,16 +2,27 @@
 
 import { useState, useTransition } from 'react';
 import { MoreHorizontal, UserX, UserCheck, ShieldOff } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 import { deactivateAdminAction, activateAdminAction, revokeAdminAction } from '@/app/(app)/admin/admins/actions';
 
 export function AdminRowActions({ adminId, status, email }: { adminId: string; status: string; email: string }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { success, error: toastError } = useToast();
 
-  function act(fn: (id: string) => Promise<void>) {
+  function act(fn: (id: string) => Promise<{ ok: boolean; error?: string }>) {
     startTransition(async () => {
-      await fn(adminId);
-      setOpen(false);
+      try {
+        const result = await fn(adminId);
+        if (!result.ok) {
+          toastError(result.error ?? 'Could not update admin access.');
+          return;
+        }
+        success('Admin access updated.');
+        setOpen(false);
+      } catch {
+        toastError('Could not update admin access. Please try again.');
+      }
     });
   }
 

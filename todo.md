@@ -3705,3 +3705,24 @@ roadmap entries and user worktree changes are preserved.
   reads, and checked persistence; the tool-loop test verifies thrown tool errors remain non-fatal and sanitized.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0249 - Admin Management mutations ignored privileged access failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Admin security / access integrity / error handling
+- Feature: Admin Management deactivate, activate, revoke, and invite controls
+- File or files: `app/(app)/admin/admins/actions.ts`, `components/admin/admin-row-actions.tsx`,
+  `tests/admin-management-action-boundaries.test.ts`
+- Description: Privileged admin-access mutations ignored database errors and missing target rows, while
+  the client closed the control as if the operation succeeded. Invitations also accepted unvalidated
+  email and role values.
+- Resolution: Admin actions now re-check Super Admin access, validate email/role input, check all writes
+  and target rows, sanitize unexpected failures, and return explicit results. The client surfaces errors
+  and only closes the menu after a confirmed success.
+- Tests performed: Focused Admin Management boundary test, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/admin-management-action-boundaries.test.ts` verifies privileged guards, result checks,
+  invitation validation, and client failure feedback.
+- Verified by: Codex
+- Date completed: 2026-07-14
