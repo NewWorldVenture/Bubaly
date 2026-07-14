@@ -18,12 +18,14 @@ const RESOLVED = new Set(['dismissed', 'snoozed', 'executed', 'approved', 'auto_
 
 /** Get-or-create the family's active shopping list (mirrors lib/capture/save). */
 async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: string | null): Promise<string | null> {
-  const { data: existing } = await supabase.from('grocery_lists').select('id')
+  const { data: existing, error: lookupError } = await supabase.from('grocery_lists').select('id')
     .eq('family_id', familyId).eq('is_archived', false)
     .order('created_at', { ascending: true }).limit(1).maybeSingle();
+  if (lookupError) throw new Error('Autopilot could not read the family shopping list');
   if (existing) return existing.id;
-  const { data: created } = await supabase.from('grocery_lists')
+  const { data: created, error: createError } = await supabase.from('grocery_lists')
     .insert({ family_id: familyId, name: 'Shopping List', created_by: userId }).select('id').maybeSingle();
+  if (createError || !created?.id) throw new Error('Autopilot could not create the family shopping list');
   return created?.id ?? null;
 }
 
@@ -36,10 +38,10 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
   const since60 = new Date(now.getTime() - 8 * 86400000).toISOString().slice(0, 10);
   const since90 = new Date(now.getTime() - 90 * 86400000).toISOString();
   const [
-    { data: renewals }, { data: appts }, { data: choreRows },
-    { data: members }, { data: groceries }, { data: apptReminders },
-    { data: events }, { data: subs }, { data: stress }, { data: meds },
-    { data: choreHistory }, { data: twinProfiles }, { data: mealPlans }, { data: insurance }, { data: wishlist }, { data: existing },
+    renewalsResult, apptsResult, choreRowsResult,
+    membersResult, groceriesResult, apptRemindersResult,
+    eventsResult, subsResult, stressResult, medsResult,
+    choreHistoryResult, twinProfilesResult, mealPlansResult, insuranceResult, wishlistResult, existingResult,
   ] = await Promise.all([
     supabase.from('renewals').select('id, title, expires_at, status').eq('family_id', familyId).eq('status', 'active').lte('expires_at', in30).limit(100),
     supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(50),
@@ -61,6 +63,32 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     supabase.from('wishlist_items').select('member_id, title, priority, is_purchased').eq('family_id', familyId).eq('is_purchased', false).limit(500),
     supabase.from('autopilot_suggestions').select('id, dedupe_key, status').eq('family_id', familyId).limit(500),
   ]);
+
+  const readResults = [
+    renewalsResult, apptsResult, choreRowsResult, membersResult, groceriesResult, apptRemindersResult,
+    eventsResult, subsResult, stressResult, medsResult, choreHistoryResult, twinProfilesResult,
+    mealPlansResult, insuranceResult, wishlistResult, existingResult,
+  ];
+  if (readResults.some((result) => result.error)) {
+    throw new Error('Autopilot could not read the required family data');
+  }
+
+  const renewals = renewalsResult.data;
+  const appts = apptsResult.data;
+  const choreRows = choreRowsResult.data;
+  const members = membersResult.data;
+  const groceries = groceriesResult.data;
+  const apptReminders = apptRemindersResult.data;
+  const events = eventsResult.data;
+  const subs = subsResult.data;
+  const stress = stressResult.data;
+  const meds = medsResult.data;
+  const choreHistory = choreHistoryResult.data;
+  const twinProfiles = twinProfilesResult.data;
+  const mealPlans = mealPlansResult.data;
+  const insurance = insuranceResult.data;
+  const wishlist = wishlistResult.data;
+  const existing = existingResult.data;
 
   const remindedAppt = new Set((apptReminders ?? []).map((r) => r.related_id).filter(Boolean) as string[]);
 
@@ -130,11 +158,13 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
       const existingProfile = profileByMember.get(t.memberId);
       if (existingProfile) {
         const merged = { ...(existingProfile.metadata as Record<string, unknown> ?? {}), autopilot_traits: t };
-        await supabase.from('family_digital_twin_profiles').update({ metadata: merged as never }).eq('id', existingProfile.id);
+        const { error: updateError } = await supabase.from('family_digital_twin_profiles').update({ metadata: merged as never }).eq('id', existingProfile.id);
+        if (updateError) console.error('[autopilot] trait update failed', updateError);
       } else {
-        await supabase.from('family_digital_twin_profiles').insert({
+        const { error: insertError } = await supabase.from('family_digital_twin_profiles').insert({
           family_id: familyId, member_id: t.memberId, metadata: { autopilot_traits: t } as never, created_by: userId,
         });
+        if (insertError) console.error('[autopilot] trait insert failed', insertError);
       }
     } catch {
       // non-fatal: trait persistence is an enhancement, not required for the scan
@@ -148,7 +178,8 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
   // 1) Clear stale OPEN suggestions whose signal disappeared this scan.
   const stale = (existing ?? []).filter((e) => e.status === 'open' && !draftKeys.has(e.dedupe_key)).map((e) => e.id);
   if (stale.length > 0) {
-    await supabase.from('autopilot_suggestions').delete().in('id', stale).eq('family_id', familyId);
+    const { error: staleError } = await supabase.from('autopilot_suggestions').delete().in('id', stale).eq('family_id', familyId);
+    if (staleError) throw new Error('Autopilot could not clear stale suggestions');
   }
 
   // 2) Insert genuinely-new drafts; auto-execute the safe high-confidence ones.
@@ -163,12 +194,14 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
 
     const isAuto = confidenceTier(d.confidence) === 'auto';
     let status: 'open' | 'auto_executed' = 'open';
+    let createdReminderId: string | null = null;
+    let createdGroceryIds: string[] = [];
 
     if (isAuto && d.actionType === 'create_reminder') {
       const at = (d.payload.at as string) ?? `${today}T09:00:00Z`;
       const relatedType = d.sourceKind === 'appointments' ? 'appointment'
         : d.sourceKind === 'calendar_events' ? 'event' : 'renewal';
-      const { error: remErr } = await supabase.from('reminders').insert({
+      const { data: reminder, error: remErr } = await supabase.from('reminders').insert({
         family_id: familyId,
         title: (d.payload.title as string) ?? d.title,
         remind_at: at,
@@ -176,8 +209,11 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
         related_type: relatedType,
         related_id: d.sourceId,
         created_by: userId,
-      });
-      if (!remErr) { status = 'auto_executed'; autoExecuted++; }
+      }).select('id').single();
+      if (!remErr && reminder?.id) {
+        createdReminderId = reminder.id;
+        status = 'auto_executed'; autoExecuted++;
+      }
     }
 
     // Moment prep: add snacks/supplies to the family's active shopping list —
@@ -187,15 +223,18 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
       if (items.length > 0) {
         const listId = await getOrCreateGroceryListId(supabase, familyId, userId);
         if (listId) {
-          const { error: gErr } = await supabase.from('grocery_items').insert(
+          const { data: groceryRows, error: gErr } = await supabase.from('grocery_items').insert(
             items.map((name) => ({ family_id: familyId, list_id: listId, name, created_by: userId })),
-          );
-          if (!gErr) { status = 'auto_executed'; autoExecuted++; }
+          ).select('id');
+          if (!gErr && groceryRows?.length === items.length) {
+            createdGroceryIds = groceryRows.map((row) => row.id);
+            status = 'auto_executed'; autoExecuted++;
+          }
         }
       }
     }
 
-    const { data: inserted } = await supabase.from('autopilot_suggestions').insert({
+    const { data: inserted, error: suggestionError } = await supabase.from('autopilot_suggestions').insert({
       family_id: familyId,
       member_id: d.memberId,
       kind: d.kind,
@@ -216,8 +255,22 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
       created_by: userId,
     }).select('id').single();
 
+    if (suggestionError || !inserted?.id) {
+      const cleanupErrors: unknown[] = [];
+      if (createdReminderId) {
+        const { error } = await supabase.from('reminders').delete().eq('id', createdReminderId).eq('family_id', familyId);
+        if (error) cleanupErrors.push(error);
+      }
+      if (createdGroceryIds.length > 0) {
+        const { error } = await supabase.from('grocery_items').delete().in('id', createdGroceryIds).eq('family_id', familyId);
+        if (error) cleanupErrors.push(error);
+      }
+      if (cleanupErrors.length > 0) console.error('[autopilot] side-effect cleanup failed', cleanupErrors);
+      throw new Error('Autopilot could not save the suggestion');
+    }
+
     // Ambient push/email for the things worth interrupting for.
-    if (inserted && (d.urgency >= 2 || status === 'auto_executed')) {
+    if (d.urgency >= 2 || status === 'auto_executed') {
       const { error: notifErr } = await supabase.from('notifications').insert({
         family_id: familyId,
         user_id: null, // whole family; managers receive it via the delivery pipeline

@@ -4165,3 +4165,22 @@ roadmap entries and user worktree changes are preserved.
   upload counts, stable marketplace errors, and Favorites update handling.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0267 - Autopilot could act on incomplete reads or strand auto-actions before suggestion persistence
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: AI automation / data integrity / error handling
+- Feature: Family Autopilot scan and cron execution
+- File or files: `lib/autopilot/scan.ts`, `tests/autopilot-persistence-boundaries.test.ts`
+- Description: Required family reads treated Supabase errors as empty state, stale-suggestion deletion and
+  shopping-list provisioning were unchecked, and auto-created reminders or groceries could survive a failed
+  `autopilot_suggestions` insert without an undoable record.
+- Resolution: Required reads fail closed; list/deletion writes are checked; auto-side effects are captured
+  and compensated when suggestion persistence fails; Digital Twin enhancement writes log rejected results.
+- Tests performed: Focused Autopilot persistence-boundary tests, full Vitest, typecheck, lint, dependency
+  audit, migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/autopilot-persistence-boundaries.test.ts` verifies no writes occur after a required read
+  failure and guards side-effect cleanup contracts.
+- Verified by: Codex
+- Date completed: 2026-07-14

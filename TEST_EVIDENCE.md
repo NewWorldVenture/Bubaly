@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Family Autopilot persistence boundaries
+
+- `npm.cmd exec vitest run tests/autopilot-persistence-boundaries.test.ts`: 1 file, 4 tests passed.
+- `npm.cmd exec vitest run`: 380 files, 2,919 tests passed.
+- `npm.cmd run typecheck` and `npm.cmd run lint`: passed; only the existing Next.js deprecation notice remains.
+- Dependency audit: 0 vulnerabilities. Migration filename audit: 219 numbered SQL files, next version
+  `0204`, with the known historical duplicate prefixes unchanged. Live schema audit: 11 of 11 probes passed.
+- Clean `npm.cmd run build`: passed; 250 static pages generated. Public Playwright/axe/overflow E2E:
+  51 passed, 1 intentional authenticated skip out of 52 tests.
+- Autopilot now fails closed when required family reads fail, checks stale-suggestion deletion and list
+  provisioning, and cleans up auto-created reminders or grocery rows if suggestion persistence fails.
+
 ## Latest Audit Update - Family media persistence boundaries
 
 - `npm.cmd exec vitest run tests/family-media-persistence.test.ts`: 1 file, 5 tests passed.

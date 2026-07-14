@@ -246,6 +246,15 @@ persisted; when that metadata write fails, the newly uploaded `family-media` obj
 failure is surfaced separately. Marketplace photo uploads use the same stable, non-sensitive storage error
 message rather than exposing raw provider details.
 
+### Family Autopilot persistence boundary audit
+
+The Autopilot scan now checks every required family-context read before building or reconciling
+suggestions; a transient Supabase read failure aborts the scan before any writes or stale-suggestion
+deletions. Shopping-list lookup/creation and stale-suggestion deletion are checked. Auto-created
+reminders and grocery rows are captured by ID, and are removed when the corresponding suggestion cannot
+be persisted, preventing a hidden side effect without an undoable suggestion. Digital Twin trait writes
+remain explicitly best-effort enhancement metadata and are now logged when Supabase rejects them.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:
