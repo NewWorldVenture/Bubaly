@@ -9,14 +9,32 @@ type DB = SupabaseClient<Database>;
 const KEY = 'feature_tiers';
 
 /** Raw admin overrides from app_settings (may be empty). */
-export async function getFeatureOverrides(supabase: DB): Promise<FeatureOverrides> {
-  const { data } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
-  const stored = (data?.value ?? {}) as Record<string, unknown>;
+function sanitizeOverrides(value: unknown): FeatureOverrides {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const stored = value as Record<string, unknown>;
   const clean: FeatureOverrides = {};
   for (const [k, v] of Object.entries(stored)) {
     if (FEATURE_CATALOG_BY_KEY[k] && typeof v === 'string' && isFeatureTier(v)) clean[k] = v;
   }
   return clean;
+}
+
+async function readFeatureOverrides(supabase: DB): Promise<FeatureOverrides> {
+  const { data, error } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
+  if (error) {
+    console.error('[feature-tiers] override read failed', error);
+    throw error;
+  }
+  return sanitizeOverrides(data?.value);
+}
+
+/** Public reads keep the catalog available during a transient settings outage. */
+export async function getFeatureOverrides(supabase: DB): Promise<FeatureOverrides> {
+  try {
+    return await readFeatureOverrides(supabase);
+  } catch {
+    return {};
+  }
 }
 
 /** Catalog defaults merged with admin overrides — the effective tier map. */
@@ -37,20 +55,22 @@ export async function setFeatureTier(supabase: DB, key: string, tier: FeatureTie
   const def = FEATURE_CATALOG_BY_KEY[key];
   if (!def || !isFeatureTier(tier)) return;
 
-  const overrides = await getFeatureOverrides(supabase);
+  const overrides = await readFeatureOverrides(supabase);
   if (tier === def.defaultTier) delete overrides[key];
   else overrides[key] = tier;
 
-  await supabase.from('app_settings').upsert(
+  const { error } = await supabase.from('app_settings').upsert(
     { key: KEY, value: overrides as Database['public']['Tables']['app_settings']['Insert']['value'] },
     { onConflict: 'key' },
   );
+  if (error) throw error;
 }
 
 /** Resets all overrides back to the catalog defaults. */
 export async function resetFeatureTiers(supabase: DB): Promise<void> {
-  await supabase.from('app_settings').upsert(
+  const { error } = await supabase.from('app_settings').upsert(
     { key: KEY, value: {} as Database['public']['Tables']['app_settings']['Insert']['value'] },
     { onConflict: 'key' },
   );
+  if (error) throw error;
 }

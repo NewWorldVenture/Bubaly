@@ -10,15 +10,18 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
+type AdminClient = ReturnType<typeof createServiceClient>;
+type AuthUser = NonNullable<Awaited<ReturnType<typeof getUser>>>;
+type GuardResult = { admin: AdminClient; user: AuthUser } | { ok: false; error: string };
 
 function actionFailure(error: unknown, fallback = 'Could not update that report.'): Result {
   console.error('[admin-marketplace-report] failed:', error);
   return { ok: false, error: describeActionError(error, fallback) };
 }
 
-async function guard() {
+async function guard(): Promise<GuardResult> {
   const user = await getUser();
-  if (!user || !(await isSuperAdmin())) throw new Error('Forbidden: admin only');
+  if (!user || !(await isSuperAdmin())) return { ok: false, error: 'Not authorized.' };
   return { admin: createServiceClient(), user };
 }
 
@@ -27,26 +30,39 @@ async function guard() {
 export async function resolveReportAction(
   input: { id: string; status: 'actioned' | 'dismissed'; resolution?: string; withdrawListing?: boolean },
 ): Promise<Result> {
-  const { admin, user } = await guard();
-  if (!input.id || !['actioned', 'dismissed'].includes(input.status)) {
+  const guarded = await guard();
+  if (!('admin' in guarded)) return guarded;
+  const id = input?.id?.trim();
+  if (!id || !['actioned', 'dismissed'].includes(input.status)) {
     return { ok: false, error: 'Invalid resolution.' };
   }
 
-  const { data: report } = await admin
-    .from('marketplace_reports').select('id, listing_id, status').eq('id', input.id).maybeSingle();
+  const { data: report, error: reportError } = await guarded.admin
+    .from('marketplace_reports').select('id, listing_id, status').eq('id', id).maybeSingle();
+  if (reportError) return actionFailure(reportError, 'Could not load that report.');
   if (!report) return { ok: false, error: 'Report not found.' };
 
-  const { error } = await admin.from('marketplace_reports').update({
-    status: input.status, resolution: input.resolution?.trim() || null,
-    reviewed_by: user.id, reviewed_at: new Date().toISOString(),
-  }).eq('id', input.id);
-  if (error) return actionFailure(error);
-
-  // Actioning a real problem can pull the listing immediately.
+  // Withdraw first so a failed safety write leaves the report open for retry.
   if (input.status === 'actioned' && input.withdrawListing && report.listing_id) {
-    await admin.from('marketplace_listings').update({ status: 'withdrawn' })
-      .eq('id', report.listing_id).in('status', ['available', 'pending']);
+    const { data: listing, error: listingError } = await guarded.admin
+      .from('marketplace_listings').select('id, status').eq('id', report.listing_id).maybeSingle();
+    if (listingError) return actionFailure(listingError, 'Could not load the reported listing.');
+    if (!listing) return { ok: false, error: 'Reported listing not found.' };
+    if (['available', 'pending'].includes(listing.status)) {
+      const { data: withdrawn, error: withdrawalError } = await guarded.admin
+        .from('marketplace_listings').update({ status: 'withdrawn' })
+        .eq('id', report.listing_id).in('status', ['available', 'pending']).select('id').maybeSingle();
+      if (withdrawalError) return actionFailure(withdrawalError, 'Could not withdraw the reported listing.');
+      if (!withdrawn) return { ok: false, error: 'The reported listing changed before it could be withdrawn.' };
+    }
   }
+
+  const { data: updated, error } = await guarded.admin.from('marketplace_reports').update({
+    status: input.status, resolution: input.resolution?.trim().slice(0, 1000) || null,
+    reviewed_by: guarded.user.id, reviewed_at: new Date().toISOString(),
+  }).eq('id', id).in('status', ['open', 'reviewing']).select('id').maybeSingle();
+  if (error) return actionFailure(error);
+  if (!updated) return { ok: false, error: 'Report not found or already resolved.' };
 
   revalidatePath('/admin/marketplace/reports');
   return { ok: true };
@@ -54,10 +70,15 @@ export async function resolveReportAction(
 
 /** Move an open report into 'reviewing' (claim it). */
 export async function startReviewAction(id: string): Promise<Result> {
-  const { admin, user } = await guard();
-  const { error } = await admin.from('marketplace_reports')
-    .update({ status: 'reviewing', reviewed_by: user.id }).eq('id', id).eq('status', 'open');
+  const guarded = await guard();
+  if (!('admin' in guarded)) return guarded;
+  const reportId = id.trim();
+  if (!reportId) return { ok: false, error: 'A report is required.' };
+  const { data, error } = await guarded.admin.from('marketplace_reports')
+    .update({ status: 'reviewing', reviewed_by: guarded.user.id }).eq('id', reportId).eq('status', 'open')
+    .select('id').maybeSingle();
   if (error) return actionFailure(error, 'Could not start that review.');
+  if (!data) return { ok: false, error: 'Report not found or already claimed.' };
   revalidatePath('/admin/marketplace/reports');
   return { ok: true };
 }

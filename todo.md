@@ -3502,6 +3502,26 @@ roadmap entries and user worktree changes are preserved.
 - Verified by: Codex
 - Date completed: 2026-07-14
 
+### TODO-0251 - Tier and marketplace moderation mutations ignored required Supabase results
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Admin reliability / safety moderation / data integrity
+- Feature: Tier & Features settings and Marketplace Reports moderation
+- File or files: `app/(app)/admin/tier-features/actions.ts`, `lib/server/feature-tiers.ts`,
+  `app/(app)/admin/marketplace/reports/actions.ts`, `tests/admin-tier-report-action-boundaries.test.ts`
+- Description: Tier settings ignored failed reads/upserts and accepted unknown keys, while report
+  moderation ignored required reads and listing-withdrawal failures and could resolve stale reports.
+- Resolution: Tier mutations now fail closed on read/write errors and validate catalog keys and tiers.
+  Report moderation checks all required results, rejects stale status transitions, and performs requested
+  safety withdrawal before marking the report resolved.
+- Tests performed: Focused boundary tests, full Vitest, typecheck, lint, dependency audit, migration audit,
+  live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/admin-tier-report-action-boundaries.test.ts` verifies privileged guards, read/write
+  checks, allowlists, target-row checks, withdrawal ordering, and stale-transition handling.
+- Verified by: Codex
+- Date completed: 2026-07-14
+
 ### TODO-0245 - Marketplace and Feedback actions exposed raw or unchecked failures
 
 - Status: [x] Completed in code and covered by regression tests.

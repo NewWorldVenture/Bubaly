@@ -126,6 +126,21 @@ Ticket creation validates the subject, requester email, category, and priority, 
 and uses a collision-resistant ticket number rather than a concurrent count-derived sequence. The admin
 row client keeps its menu open and shows a toast when a transition fails.
 
+### Tier & Features action boundary audit
+
+Tier overrides now distinguish safe public fallback reads from privileged mutation reads. A failed
+`app_settings` read aborts the read-modify-write instead of allowing an empty override map to overwrite
+existing configuration; upsert failures are checked and propagated to the sanitized admin action result.
+Feature keys and tier values are allowlisted before writes, and authorization failures are returned as
+stable messages.
+
+### Marketplace report moderation action boundary audit
+
+Super-admin report moderation now checks report reads, report target rows, listing reads, listing withdrawal
+writes, and stale report statuses. Requested safety withdrawal happens before report resolution, so a
+failed withdrawal leaves the report available for retry rather than recording an apparently complete
+moderation action. Unexpected Supabase details are logged server-side and sanitized for the UI.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

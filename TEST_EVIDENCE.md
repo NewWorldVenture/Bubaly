@@ -2,6 +2,24 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Tier & Marketplace moderation action boundaries
+
+- `npm.cmd exec vitest run tests/admin-tier-report-action-boundaries.test.ts`: 1 file, 4 tests passed.
+- `npm.cmd exec vitest run`: 361 files, 2,821 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed; 235 pages generated. Known warnings remain for the Supabase Edge
+  Runtime import and webpack cache serialization of large strings.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional
+  authenticated test skipped out of 52.
+- `npm.cmd run db:audit:migrations`: passed; 215 numbered SQL files, 17 explicit historical duplicate
+  prefixes, next available version `0200`.
+- `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
+- Tier settings now fail closed on failed reads/upserts and reject invalid feature/tier values. Marketplace
+  report moderation checks reads, target rows, withdrawal writes, and stale status transitions before
+  reporting success; safety withdrawal precedes report resolution.
+
 ## Latest Audit Update - Support Ticket action boundaries
 
 - `npm.cmd exec vitest run tests/support-ticket-action-boundaries.test.ts`: 1 file, 2 tests passed.
