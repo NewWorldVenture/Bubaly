@@ -224,6 +224,12 @@ The provider-agnostic calendar/task engine now checks local-row, mapping, confli
 creation, and cursor writes before incrementing imported/exported counters. Mapping and local lookup
 failures also abort the run instead of being treated as an absent mapping and creating duplicate state.
 
+### Google sync item persistence boundary audit
+
+Google Calendar and Tasks pulls and pushes now use the shared fail-closed persistence guard for local
+rows, mappings, conflicts, deletes, updates, creations, and cursors. Mapping/local lookup failures no
+longer become absent-state branches that can create duplicate rows or advance imported/exported counts.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

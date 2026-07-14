@@ -4093,3 +4093,21 @@ roadmap entries and user worktree changes are preserved.
   conflict rows, cursor persistence, and the shared fail-closed helper.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0264 - Google sync item writes could increment counts after persistence failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Integrations / synchronization reliability / data integrity
+- Feature: Google Calendar and Tasks pull/push reconciliation
+- File or files: `lib/sync/engine/google.ts`, `tests/sync-google-item-persistence.test.ts`
+- Description: Google sync treated failed mapping/local-row reads as absent state and advanced
+  imported/exported/conflict counts after unchecked creation, update, deletion, mapping, conflict, or cursor writes.
+- Resolution: Google Calendar/Tasks reconciliation now uses the shared `requireSyncWrite` guard for every
+  local/mapping state transition and increments counts only after persistence succeeds.
+- Tests performed: Focused Google-item boundary tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/sync-google-item-persistence.test.ts` guards Google pull/push mappings, local transitions,
+  conflict rows, cursor persistence, and shared guard usage.
+- Verified by: Codex
+- Date completed: 2026-07-14

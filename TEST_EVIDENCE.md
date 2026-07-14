@@ -2,6 +2,14 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Google sync item persistence boundaries
+
+- `npm.cmd exec vitest run tests/sync-google-item-persistence.test.ts`: 1 file, 3 tests passed.
+- `npm.cmd exec vitest run`: 376 files, 2,897 tests passed.
+- `npm.cmd run typecheck`: passed.
+- Google Calendar and Tasks pulls and pushes now fail closed when local rows, mappings, conflicts, deletes,
+  updates, creations, or cursors are not persisted before sync counts are incremented.
+
 ## Latest Audit Update - Generic sync item persistence boundaries
 
 - `npm.cmd exec vitest run tests/sync-generic-item-persistence.test.ts`: 1 file, 3 tests passed.
