@@ -2,12 +2,25 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Account and device-security action boundaries
+
+- `npm.cmd test -- --run tests/account-action-error-boundaries.test.ts`: 1 file, 2 tests passed.
+- `npm.cmd exec vitest run`: 352 files, 2,783 tests passed after the account/security repair.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: passed; 211 numbered SQL files, 17 explicit historical duplicate
+  prefixes, next available version `0196`.
+- `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
+- Account closure/reopen, family switching, dashboard preferences, profile synchronization, and App
+  Lock now check required Supabase reads and writes and return sanitized action failures.
+
 ## Latest Audit Update - Privileged marketing mutation boundaries
 
 - `npm.cmd exec vitest run tests/marketing-action-error-boundaries.test.ts tests/marketing-affiliates.test.ts tests/marketing-surveys.test.ts tests/db-errors.test.ts`: 4 files, 29 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
-- `npm.cmd exec vitest run`: 351 files, 2,781 tests passed after the marketing-admin repair.
+- `npm.cmd exec vitest run`: 352 files, 2,783 tests passed after the account/security repair.
 - `npm.cmd run build`: passed; 235 pages generated. Known warnings remain for the Supabase Edge
   Runtime import and webpack cache serialization of large strings.
 - `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional

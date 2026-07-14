@@ -3533,3 +3533,24 @@ roadmap entries and user worktree changes are preserved.
   migration filename audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0242 - Account and device-security actions exposed raw or unchecked failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Account reliability / error handling / data integrity
+- Feature: Account closure, family switching, dashboard preferences, profile updates, and App Lock
+- File or files: `app/(app)/account/actions.ts`, `app/(app)/actions.ts`,
+  `app/(app)/settings/app-lock-actions.ts`, `lib/server/profiles.ts`,
+  `tests/account-action-error-boundaries.test.ts`
+- Description: Several account actions returned raw Supabase messages. Family switching ignored its
+  preference upsert result, App Lock could overwrite preferences after a failed read, and profile
+  updates ignored family display-name synchronization failures.
+- Resolution: Account and device-security mutations now log diagnostics server-side, return sanitized
+  user-facing failures, check membership and preference reads, and fail closed on every required write.
+- Tests performed: Focused account boundary tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/account-action-error-boundaries.test.ts` rejects raw database-message returns and
+  proves the previously unchecked preference/profile paths have explicit failure branches.
+- Verified by: Codex
+- Date completed: 2026-07-14

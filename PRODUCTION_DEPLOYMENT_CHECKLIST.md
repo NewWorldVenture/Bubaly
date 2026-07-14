@@ -20,6 +20,8 @@
       family provisioning.
 - [ ] Exercise an isolated marketing-admin mutation failure; confirm the UI receives a stable failure
       and no success audit/revalidation/redirect is emitted after the Supabase write fails.
+- [ ] Exercise account closure/reopen, family switching, dashboard preference, profile, and App Lock
+      failures in isolation; confirm required reads and writes fail closed with sanitized messages.
 
 ## Environment and Integrations
 

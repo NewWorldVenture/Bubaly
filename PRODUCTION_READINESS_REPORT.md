@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,781 unit tests, builds all 235 Next.js build
+The tree compiles, passes lint and type checking, passes 2,783 unit tests, builds all 235 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -38,13 +38,17 @@ Latest repair increment (2026-07-14): privileged marketing mutations now fail cl
 revalidation, or redirect. Segment, campaign, content, email, SMS, social, advertising, automation,
 funnel, landing-page, form, settings, affiliate, payout, and survey writes all use sanitized failures.
 
+Latest repair increment (2026-07-14): account closure, family switching, dashboard preferences,
+profile updates, and App Lock now sanitize database failures and fail closed on required reads and
+writes. Profile synchronization no longer reports success when the linked family display name fails.
+
 ## Scope and Inventory
 
 - 352 `page.tsx` route files.
 - 102 API route handlers.
 - 211 migration files; additive repair migrations through `0195` are now present.
 - 332 SQL files under `supabase`.
-- 351 unit-test files and 2,781 passing tests.
+- 352 unit-test files and 2,783 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 

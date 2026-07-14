@@ -44,6 +44,16 @@ under `[marketing-action]` and replaced with stable action failures. `logMarketi
 best-effort by design because audit-write loss must not turn a successful business mutation into a false
 failure; operational monitoring should still alert on those log failures.
 
+### Account and device-security write-path audit
+
+Account closure/reopen uses the authenticated active-family context and now sanitizes service-role
+mutation failures. Family switching checks both the membership read and the preference upsert before
+revalidating the dashboard. Dashboard preference writes and App Lock settings use sanitized failures;
+App Lock refuses to overwrite `notification_prefs` when the existing-preferences read fails. The shared
+profile writer also checks the linked `family_members` display-name synchronization, so a partial profile
+save cannot be reported as successful. These actions remain server-side and do not expose raw Postgres
+messages to the browser.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

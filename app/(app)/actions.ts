@@ -5,6 +5,12 @@ import { createServer } from '@/lib/supabase/server';
 import { isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { profileUpdateSchema } from '@/lib/validation';
 import { saveUserProfile } from '@/lib/server/profiles';
+import { describeActionError } from '@/lib/supabase/errors';
+
+function actionFailure(operation: string, error: unknown): { ok: false; error: string } {
+  console.error(`[account-action] ${operation} failed`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
 
 /** Updates the signed-in user's account profile (name + contact phone). Keeps
  *  their family_members display name in sync with the first name. */
@@ -32,17 +38,19 @@ export async function setActiveFamilyAction(familyId: string): Promise<{ ok: boo
   if (!auth.user) return { ok: false, error: 'Not signed in' };
 
   // Verify membership before switching (defense in depth; RLS also guards reads).
-  const { data: member } = await supabase
+  const { data: member, error: memberError } = await supabase
     .from('family_members')
     .select('id')
     .eq('family_id', familyId)
     .eq('user_id', auth.user.id)
     .maybeSingle();
+  if (memberError) return actionFailure('verify family membership', memberError);
   if (!member) return { ok: false, error: 'Not a member of that family' };
 
-  await supabase
+  const { error } = await supabase
     .from('user_preferences')
     .upsert({ user_id: auth.user.id, active_family_id: familyId }, { onConflict: 'user_id' });
+  if (error) return actionFailure('switch active family', error);
 
   revalidatePath('/dashboard', 'layout');
   return { ok: true };
@@ -61,7 +69,7 @@ export async function setDefaultDashboardAction(
   const { error } = await supabase
     .from('user_preferences')
     .upsert({ user_id: auth.user.id, default_dashboard: view }, { onConflict: 'user_id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('set the default dashboard', error);
 
   revalidatePath('/dashboard', 'layout');
   return { ok: true };

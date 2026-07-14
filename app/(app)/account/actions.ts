@@ -7,8 +7,14 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { isAdmin } from '@/lib/constants/roles';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
+
+function actionFailure(operation: string, error: unknown): Result {
+  console.error(`[account-action] ${operation} failed`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
 
 export async function closeAccountAction(): Promise<Result> {
   const ctx = await requireUserContext();
@@ -18,7 +24,7 @@ export async function closeAccountAction(): Promise<Result> {
     .from('families')
     .update({ closed_at: new Date().toISOString() })
     .eq('id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('close the account', error);
   revalidatePath('/', 'layout');
   return { ok: true };
 }
@@ -31,7 +37,7 @@ export async function reopenAccountAction(): Promise<Result> {
     .from('families')
     .update({ closed_at: null })
     .eq('id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('reopen the account', error);
   revalidatePath('/', 'layout');
   return { ok: true };
 }

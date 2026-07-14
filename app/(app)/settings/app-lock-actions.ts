@@ -4,8 +4,14 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isAppLockConfig, type AppLockConfig } from '@/lib/security/app-lock';
 import type { Json } from '@/lib/database.types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
+
+function actionFailure(operation: string, error: unknown): Result {
+  console.error(`[app-lock-action] ${operation} failed`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
 
 /**
  * Persists (or clears) the App Lock config in user_preferences.notification_prefs.
@@ -21,11 +27,12 @@ export async function saveAppLockConfig(config: AppLockConfig | null): Promise<R
     return { ok: false, error: 'Invalid lock configuration' };
   }
 
-  const { data: prefs } = await supabase
+  const { data: prefs, error: prefsError } = await supabase
     .from('user_preferences')
     .select('notification_prefs')
     .eq('user_id', ctx.user.id)
     .maybeSingle();
+  if (prefsError) return actionFailure('load App Lock settings', prefsError);
 
   const np = ((prefs?.notification_prefs as Record<string, unknown> | null) ?? {});
   const next = { ...np };
@@ -36,6 +43,6 @@ export async function saveAppLockConfig(config: AppLockConfig | null): Promise<R
     .from('user_preferences')
     .upsert({ user_id: ctx.user.id, notification_prefs: next as Json }, { onConflict: 'user_id' });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('save App Lock settings', error);
   return { ok: true };
 }

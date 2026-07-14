@@ -1,6 +1,7 @@
 import 'server-only';
 import { createServiceClient } from '@/lib/supabase/server';
 import { joinName, normalizePhone } from '@/lib/onboarding/profile';
+import { describeActionError } from '@/lib/supabase/errors';
 
 /**
  * Writes the signed-in user's own profile (name + phone, optionally email) and
@@ -33,10 +34,20 @@ export async function saveUserProfile(
   if (input.avatarUrl !== undefined) row.avatar_url = input.avatarUrl || null;
 
   const { error } = await svc.from('profiles').upsert(row, { onConflict: 'id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    console.error('[profile-action] profile update failed', error);
+    return { ok: false, error: describeActionError(error, 'Could not update your profile.') };
+  }
 
   // Keep the user's family display name(s) in sync with their first name.
-  await svc.from('family_members').update({ display_name: input.firstName.trim() }).eq('user_id', userId);
+  const { error: memberError } = await svc
+    .from('family_members')
+    .update({ display_name: input.firstName.trim() })
+    .eq('user_id', userId);
+  if (memberError) {
+    console.error('[profile-action] family display name sync failed', memberError);
+    return { ok: false, error: describeActionError(memberError, 'Could not update your family profile.') };
+  }
 
   return { ok: true };
 }
