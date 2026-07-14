@@ -184,6 +184,13 @@ check inserts, updates, deletes, prerequisite asset reads, singleton upserts, an
 Unexpected failures use `marketingActionFailure` before audit logging or cache revalidation; a missing
 video asset remains an explicit invalid-input no-op rather than a database failure.
 
+### Experiments, exit-intent, and survey action boundary audit
+
+A/B experiment inserts, status transitions, and winner changes now check required reads, configured
+variant membership, and affected target rows. Exit-intent offer creation/toggles/deletion and survey
+status/deletion controls now check Supabase results before audit logging or cache revalidation, and
+unexpected failures use the sanitized marketing action boundary.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

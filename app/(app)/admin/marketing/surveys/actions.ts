@@ -50,8 +50,9 @@ export async function createSurveyAction(formData: FormData) {
 
 export async function setSurveyStatusAction(id: string, status: 'draft' | 'active' | 'closed') {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  const { error } = await supabase.from('surveys').update({ status }).eq('id', id);
-  if (error) marketingActionFailure('update the survey status', error);
+  const { data, error } = await supabase.from('surveys').update({ status }).eq('id', id).is('deleted_at', null)
+    .select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('update the survey status', error ?? new Error('Survey not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'survey', resourceId: id, metadata: { status } });
   revalidatePath('/admin/marketing/surveys');
   revalidatePath(`/admin/marketing/surveys/${id}`);
@@ -59,8 +60,9 @@ export async function setSurveyStatusAction(id: string, status: 'draft' | 'activ
 
 export async function deleteSurveyAction(id: string) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  const { error } = await supabase.from('surveys').update({ deleted_at: new Date().toISOString() }).eq('id', id);
-  if (error) marketingActionFailure('delete the survey', error);
+  const { data, error } = await supabase.from('surveys').update({ deleted_at: new Date().toISOString() })
+    .eq('id', id).is('deleted_at', null).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('delete the survey', error ?? new Error('Survey not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'survey', resourceId: id });
   revalidatePath('/admin/marketing/surveys');
   redirect('/admin/marketing/surveys');

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { normalizeTrigger } from '@/lib/marketing/exit-intent';
 import type { AudienceMatch } from '@/lib/marketing/personalization';
 import type { Json } from '@/lib/database.types';
@@ -43,7 +43,7 @@ export async function createExitIntentAction(formData: FormData): Promise<void> 
   });
   const priority = Number(s(formData, 'priority') ?? '0');
 
-  const { data } = await supabase.from('marketing_exit_intent').insert({
+  const { data, error } = await supabase.from('marketing_exit_intent').insert({
     name,
     headline,
     body: s(formData, 'body'),
@@ -55,20 +55,25 @@ export async function createExitIntentAction(formData: FormData): Promise<void> 
     status: s(formData, 'status') === 'paused' ? 'paused' : 'active',
     created_by: actorId,
   }).select('id').single();
-  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_exit_intent', resourceId: data?.id ?? null, metadata: { name } });
+  if (error || !data) marketingActionFailure('create the exit-intent offer', error ?? new Error('The exit-intent offer row was not returned after save.'));
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_exit_intent', resourceId: data.id, metadata: { name } });
   revalidatePath('/admin/marketing/exit-intent');
 }
 
 export async function toggleExitIntentAction(id: string, activate: boolean): Promise<void> {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('marketing_exit_intent').update({ status: activate ? 'active' : 'paused' }).eq('id', id);
+  const { data, error } = await supabase.from('marketing_exit_intent').update({ status: activate ? 'active' : 'paused' })
+    .eq('id', id).is('deleted_at', null).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('update the exit-intent offer', error ?? new Error('Exit-intent offer not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_exit_intent', resourceId: id, metadata: { status: activate ? 'active' : 'paused' } });
   revalidatePath('/admin/marketing/exit-intent');
 }
 
 export async function deleteExitIntentAction(id: string): Promise<void> {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('marketing_exit_intent').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  const { data, error } = await supabase.from('marketing_exit_intent').update({ deleted_at: new Date().toISOString() })
+    .eq('id', id).is('deleted_at', null).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('delete the exit-intent offer', error ?? new Error('Exit-intent offer not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'marketing_exit_intent', resourceId: id });
   revalidatePath('/admin/marketing/exit-intent');
 }

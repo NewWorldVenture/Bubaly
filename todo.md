@@ -3950,3 +3950,25 @@ roadmap entries and user worktree changes are preserved.
   asset-read, review, and settings result checks.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0258 - Experiment, exit-intent, and survey writes ignored required results
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Marketing experimentation / content delivery / error handling
+- Feature: A/B Experiments, Exit Intent, and Surveys
+- File or files: `app/(app)/admin/marketing/experiments/actions.ts`,
+  `app/(app)/admin/marketing/exit-intent/actions.ts`, `app/(app)/admin/marketing/surveys/actions.ts`,
+  `tests/marketing-experiment-exit-survey-boundaries.test.ts`
+- Description: Experiment inserts and control writes ignored returned rows, exposed raw database errors,
+  and accepted arbitrary winner keys. Exit-intent and survey controls could revalidate after failed or
+  missing-target updates.
+- Resolution: Experiment writes now use sanitized failures and target checks, winner selection validates
+  configured variants, and exit-intent/survey writes check errors and affected rows before audit logging
+  or revalidation.
+- Tests performed: Focused experiment/exit-intent/survey boundary tests, full Vitest, typecheck, lint,
+  dependency audit, migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/marketing-experiment-exit-survey-boundaries.test.ts` guards experiment target/winner
+  validation, exit-intent insert/target checks, and survey mutation result checks.
+- Verified by: Codex
+- Date completed: 2026-07-14

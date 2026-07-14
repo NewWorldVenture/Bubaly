@@ -2,6 +2,17 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Experiments, exit-intent, and survey boundaries
+
+- `npm.cmd exec vitest run tests/marketing-experiment-exit-survey-boundaries.test.ts`: 1 file, 3 tests passed.
+- `npm.cmd exec vitest run`: 369 files, 2,870 tests passed.
+- `npm.cmd run typecheck`, `npm.cmd run lint`, dependency audit, migration audit, and live schema probes passed.
+- Clean `npm.cmd run build`: 235 routes generated. Public Playwright/axe/overflow E2E: 51 passed,
+  1 intentional authenticated test skipped out of 52.
+- A/B experiments now request inserted rows, validate winner keys against configured variants, and
+  require active target rows. Exit-intent inserts/updates/deletes and survey status/deletion controls
+  now check errors and affected rows before audit logging or cache revalidation.
+
 ## Latest Audit Update - Reputation, video, and review action boundaries
 
 - `npm.cmd exec vitest run tests/marketing-reputation-video-review-boundaries.test.ts`: 1 file, 3 tests passed.
