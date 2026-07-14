@@ -32,6 +32,8 @@ function toolFailure(operation: string, error: unknown): { ok: false; error: str
   return { ok: false, error: `Could not ${operation}.` };
 }
 
+type ListResult = { id: string | null; error?: unknown };
+
 /** Resolve a member name (case-insensitive, prefix-friendly) to its id. */
 function resolveMember(ctx: AssistantCtx, name: unknown): string | null {
   const q = str(name).toLowerCase();
@@ -43,21 +45,23 @@ function resolveMember(ctx: AssistantCtx, name: unknown): string | null {
 }
 
 /** Get-or-create the family's default grocery list. */
-async function ensureGroceryList(supabase: DB, familyId: string, userId: string): Promise<string | null> {
-  const { data: existing } = await supabase.from('grocery_lists').select('id')
+async function ensureGroceryList(supabase: DB, familyId: string, userId: string): Promise<ListResult> {
+  const { data: existing, error: lookupError } = await supabase.from('grocery_lists').select('id')
     .eq('family_id', familyId).eq('is_archived', false).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (existing?.id) return existing.id;
-  const { data } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: userId }).select('id').single();
-  return data?.id ?? null;
+  if (lookupError) return { id: null, error: lookupError };
+  if (existing?.id) return { id: existing.id };
+  const { data, error: createError } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: userId }).select('id').single();
+  return data?.id ? { id: data.id } : { id: null, error: createError ?? new Error('Grocery list was not created') };
 }
 
 /** Get-or-create the family's default to-do list. */
-async function ensureTodoList(supabase: DB, familyId: string, userId: string): Promise<string | null> {
-  const { data: existing } = await supabase.from('todo_lists').select('id')
+async function ensureTodoList(supabase: DB, familyId: string, userId: string): Promise<ListResult> {
+  const { data: existing, error: lookupError } = await supabase.from('todo_lists').select('id')
     .eq('family_id', familyId).is('archived_at', null).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (existing?.id) return existing.id;
-  const { data } = await supabase.from('todo_lists').insert({ family_id: familyId, name: 'Tasks', created_by: userId }).select('id').single();
-  return data?.id ?? null;
+  if (lookupError) return { id: null, error: lookupError };
+  if (existing?.id) return { id: existing.id };
+  const { data, error: createError } = await supabase.from('todo_lists').insert({ family_id: familyId, name: 'Tasks', created_by: userId }).select('id').single();
+  return data?.id ? { id: data.id } : { id: null, error: createError ?? new Error('To-do list was not created') };
 }
 
 export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[] {
@@ -119,7 +123,12 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (error) return toolFailure('create the chore', error);
         const memberId = resolveMember(ctx, a.assignee);
         if (memberId) {
-          await supabase.from('chore_assignments').insert({ family_id: ctx.familyId, chore_id: chore.id, member_id: memberId, due_at: optStr(a.due_at) });
+          const { error: assignmentError } = await supabase.from('chore_assignments').insert({ family_id: ctx.familyId, chore_id: chore.id, member_id: memberId, due_at: optStr(a.due_at) });
+          if (assignmentError) {
+            const { error: rollbackError } = await supabase.from('chores').delete().eq('id', chore.id);
+            if (rollbackError) console.error('[assistant] chore rollback failed:', rollbackError);
+            return toolFailure('save the chore assignment', assignmentError);
+          }
         }
         return { ok: true, id: chore.id, summary: `Created chore “${title}”${memberId ? ` for ${str(a.assignee)}` : ''} (${points} pts).` };
       },
@@ -135,10 +144,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const name = str(a.item);
         if (!name) return { ok: false, error: 'item is required' };
-        const listId = await ensureGroceryList(supabase, ctx.familyId, ctx.userId);
-        if (!listId) return { ok: false, error: 'Could not open a grocery list' };
+        const list = await ensureGroceryList(supabase, ctx.familyId, ctx.userId);
+        if (list.error) return toolFailure('open a grocery list', list.error);
+        if (!list.id) return { ok: false, error: 'Could not open a grocery list' };
         const { error } = await supabase.from('grocery_items').insert({
-          family_id: ctx.familyId, list_id: listId, name, quantity: optStr(a.quantity), created_by: ctx.userId,
+          family_id: ctx.familyId, list_id: list.id, name, quantity: optStr(a.quantity), created_by: ctx.userId,
         });
         if (error) return toolFailure('add the grocery item', error);
         return { ok: true, summary: `Added ${name} to the grocery list.` };
@@ -159,10 +169,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const title = str(a.task);
         if (!title) return { ok: false, error: 'task is required' };
-        const listId = await ensureTodoList(supabase, ctx.familyId, ctx.userId);
-        if (!listId) return { ok: false, error: 'Could not open a to-do list' };
+        const list = await ensureTodoList(supabase, ctx.familyId, ctx.userId);
+        if (list.error) return toolFailure('open a to-do list', list.error);
+        if (!list.id) return { ok: false, error: 'Could not open a to-do list' };
         const { error } = await supabase.from('todo_items').insert({
-          family_id: ctx.familyId, list_id: listId, title, notes: optStr(a.notes),
+          family_id: ctx.familyId, list_id: list.id, title, notes: optStr(a.notes),
           due_date: optStr(a.due_date), assigned_to_id: resolveMember(ctx, a.assignee), created_by: ctx.userId,
         });
         if (error) return toolFailure('add the task', error);
@@ -214,10 +225,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const q = str(a.title);
         if (!q) return { ok: false, error: 'title is required' };
-        const { data: rows } = await supabase.from('family_reminders')
+        const { data: rows, error: lookupError } = await supabase.from('family_reminders')
           .select('id, title, notes, kind, priority, recurrence, remind_at, member_id, location_name')
           .eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${q}%`)
           .order('remind_at', { ascending: true, nullsFirst: false }).limit(1);
+        if (lookupError) return toolFailure('find the reminder', lookupError);
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
         const { error } = await supabase.from('family_reminders')
@@ -227,11 +239,17 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // safe regardless of the 0100 detail-columns migration state).
         const next = r.remind_at && r.recurrence !== 'none' ? nextRemindAt(r.remind_at, r.recurrence) : null;
         if (next) {
-          await supabase.from('family_reminders').insert({
+          const { error: nextError } = await supabase.from('family_reminders').insert({
             family_id: ctx.familyId, created_by: ctx.userId, title: r.title, notes: r.notes,
             kind: r.kind, priority: r.priority, recurrence: r.recurrence, location_name: r.location_name,
             member_id: r.member_id, remind_at: next, status: 'active',
           });
+          if (nextError) {
+            const { error: rollbackError } = await supabase.from('family_reminders')
+              .update({ status: 'active', completed_at: null }).eq('id', r.id);
+            if (rollbackError) console.error('[assistant] reminder rollback failed:', rollbackError);
+            return toolFailure('schedule the next reminder', nextError);
+          }
         }
         return { ok: true, summary: `Completed “${r.title}”${next ? ' — next one scheduled' : ''}.` };
       },
@@ -250,9 +268,10 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const q = str(a.title); const remind_at = str(a.remind_at);
         if (!q || !remind_at) return { ok: false, error: 'title and remind_at are required' };
-        const { data: rows } = await supabase.from('family_reminders')
+        const { data: rows, error: lookupError } = await supabase.from('family_reminders')
           .select('id, title').eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${q}%`)
           .order('remind_at', { ascending: true, nullsFirst: false }).limit(1);
+        if (lookupError) return toolFailure('find the reminder', lookupError);
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
         const { error } = await supabase.from('family_reminders').update({ remind_at }).eq('id', r.id);
@@ -337,9 +356,10 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const { data: assigns, error } = await q;
         if (error) return toolFailure('load open chores', error);
         const choreIds = [...new Set((assigns ?? []).map((x) => x.chore_id))];
-        const { data: chores } = choreIds.length
+        const { data: chores, error: choresError } = choreIds.length
           ? await supabase.from('chores').select('id, title, points').in('id', choreIds)
-          : { data: [] as { id: string; title: string; points: number }[] };
+          : { data: [] as { id: string; title: string; points: number }[], error: null };
+        if (choresError) return toolFailure('load chore details', choresError);
         const titleById = new Map((chores ?? []).map((c) => [c.id, c.title]));
         const nameById = new Map(ctx.members.map((m) => [m.id, m.display_name]));
         return { ok: true, chores: (assigns ?? []).map((x) => ({ title: titleById.get(x.chore_id) ?? 'Chore', who: nameById.get(x.member_id) ?? null, status: x.status, due_at: x.due_at })) };
@@ -350,10 +370,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       description: 'Get the items currently on the family grocery list (unchecked items).',
       input_schema: { type: 'object', properties: {} },
       execute: async () => {
-        const listId = await ensureGroceryList(supabase, ctx.familyId, ctx.userId);
-        if (!listId) return { ok: true, items: [] };
+        const list = await ensureGroceryList(supabase, ctx.familyId, ctx.userId);
+        if (list.error) return toolFailure('open a grocery list', list.error);
+        if (!list.id) return { ok: true, items: [] };
         const { data, error } = await supabase.from('grocery_items')
-          .select('name, quantity').eq('list_id', listId).eq('is_checked', false).order('created_at').limit(100);
+          .select('name, quantity').eq('list_id', list.id).eq('is_checked', false).order('created_at').limit(100);
         if (error) return toolFailure('load the grocery list', error);
         return { ok: true, items: (data ?? []).map((i) => ({ name: i.name, quantity: i.quantity })) };
       },
@@ -378,6 +399,8 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_checked', false),
           supabase.from('todo_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_done', false),
         ]);
+        const pendingError = [appr, ren, docs, dueRem, convEvents, signoff, grocery, todos].find((result) => result.error)?.error;
+        if (pendingError) return toolFailure('load pending decisions', pendingError);
         const { overdue, dueToday } = reminderAttention((dueRem.data ?? []) as { remind_at: string | null; status: string }[], now);
         const nameByMember = new Map(ctx.members.map((m) => [m.id, m.display_name]));
         const conflicts = detectConflicts((convEvents.data ?? []) as ConflictEvent[])
@@ -453,14 +476,16 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const title = str(a.event_title);
         if (!title) return { ok: false, error: 'event_title is required' };
-        const { data: events } = await supabase.from('calendar_events')
+        const { data: events, error: eventError } = await supabase.from('calendar_events')
           .select('id, title, starts_at')
           .eq('family_id', ctx.familyId).ilike('title', `%${title}%`)
           .order('starts_at', { ascending: false }).limit(1);
+        if (eventError) return toolFailure('find the event', eventError);
         if (!events?.length) return { ok: false, error: `No event matching "${title}" found.` };
         const event = events[0];
-        const { data: rsvps } = await supabase.from('event_rsvps')
+        const { data: rsvps, error: rsvpError } = await supabase.from('event_rsvps')
           .select('member_id, status').eq('event_id', event.id);
+        if (rsvpError) return toolFailure('load event RSVPs', rsvpError);
         const byId = new Map(ctx.members.map((m) => [m.id, m.display_name]));
         const grouped: Record<string, string[]> = { accepted: [], maybe: [], declined: [] };
         for (const r of rsvps ?? []) {
@@ -485,10 +510,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const title = str(a.event_title);
         const status = str(a.status);
         if (!title || !['accepted', 'maybe', 'declined'].includes(status)) return { ok: false, error: 'event_title and valid status required' };
-        const { data: events } = await supabase.from('calendar_events')
+        const { data: events, error: eventError } = await supabase.from('calendar_events')
           .select('id, title')
           .eq('family_id', ctx.familyId).ilike('title', `%${title}%`)
           .order('starts_at', { ascending: false }).limit(1);
+        if (eventError) return toolFailure('find the event', eventError);
         if (!events?.length) return { ok: false, error: `No event matching "${title}" found.` };
         const selfMember = ctx.members.find((m) => true);
         if (!selfMember) return { ok: false, error: 'Could not determine your member profile.' };

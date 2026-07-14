@@ -2,6 +2,14 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - AI assistant tool persistence boundaries
+
+- `npm.cmd exec vitest run tests/assistant-persistence-boundaries.test.ts tests/assistant-complete-reminder.test.ts tests/assistant-add-reminder.test.ts tests/assistant-tool-error-contract.test.ts`: 4 files, 11 tests passed.
+- `npm.cmd exec vitest run`: 377 files, 2,901 tests passed.
+- `npm.cmd run typecheck`: passed.
+- Assistant list reads now fail closed on Supabase errors. Multi-step chore and recurring-reminder actions
+  roll back their first write when the dependent persistence step fails.
+
 ## Latest Audit Update - Google sync item persistence boundaries
 
 - `npm.cmd exec vitest run tests/sync-google-item-persistence.test.ts`: 1 file, 3 tests passed.

@@ -230,6 +230,13 @@ Google Calendar and Tasks pulls and pushes now use the shared fail-closed persis
 rows, mappings, conflicts, deletes, updates, creations, and cursors. Mapping/local lookup failures no
 longer become absent-state branches that can create duplicate rows or advance imported/exported counts.
 
+### AI assistant persistence boundary audit
+
+AI assistant action tools use the family-scoped Supabase client and now fail closed when list lookups,
+secondary reads, assignments, or dependent reminder writes fail. Multi-step chore and recurring-reminder
+actions roll back their first write when the dependent row cannot be persisted, preventing the model from
+reporting a completed action while durable family state is incomplete.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

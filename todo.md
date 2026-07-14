@@ -4128,3 +4128,21 @@ roadmap entries and user worktree changes are preserved.
   conflict rows, cursor persistence, and shared guard usage.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0265 - AI assistant tools could report success after partial persistence failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: AI assistant / synchronization reliability / data integrity
+- Feature: AI assistant family action and read tools
+- File or files: `lib/assistant/tools.ts`, `tests/assistant-persistence-boundaries.test.ts`
+- Description: Assistant list reads treated Supabase failures as empty state, chore assignment writes were
+  ignored after chore creation, and recurring reminder completion could leave a completed source without its next occurrence.
+- Resolution: Assistant list and lookup reads now fail closed. Failed chore assignments roll back the new chore,
+  and failed recurring-reminder creation restores the source reminder to active before returning an error.
+- Tests performed: Focused assistant persistence/error-boundary tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/assistant-persistence-boundaries.test.ts` simulates list-read failures, assignment failure with
+  parent rollback, recurring-reminder failure with source rollback, and pending-decision read failure.
+- Verified by: Codex
+- Date completed: 2026-07-14
