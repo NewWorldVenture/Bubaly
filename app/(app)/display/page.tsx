@@ -2,43 +2,50 @@ import type { Metadata } from 'next';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { AutoRefresh } from '@/components/display/auto-refresh';
-import { DisplayShell, DEFAULT_TILES, resolveDisplaySettings, type DisplayData, type Tile } from '@/components/display/display-grid';
+import {
+  DisplayShell, DEFAULT_TILES, resolveDisplaySettings,
+  type DisplayData, type Tile,
+} from '@/components/display/display-grid';
+import type { DisplaySettings } from '@/lib/display/ambient';
 
 export const metadata: Metadata = { title: 'Kitchen Display', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
+type LoadedDisplay = { data: DisplayData; initialTiles: Tile[]; initialSettings: DisplaySettings };
+
+/** A complete, renderable DisplayData with no rows — the always-safe fallback. */
+function emptyDisplay(familyName: string, now: Date): DisplayData {
+  return {
+    familyName,
+    members: [], events: [], upcoming: [], chores: [], meals: [],
+    grocery: { items: [], count: 0 }, reminders: [], birthdays: [],
+    notes: [], featured: [], photos: [],
+    calendar: { year: now.getFullYear(), month: now.getMonth(), today: now.getDate(), eventDays: [] },
+  };
+}
+
 // Kitchen Display Mode is a Family Basic feature. Fully customizable grid of
 // widgets, with the layout persisted per-family in `display_layouts`.
-export default async function KitchenDisplayPage() {
-  const ctx = await requireFeature('/display');
-  const familyId = ctx.active.familyId;
-  const supabase = await createServer();
-
-  const now = new Date();
+//
+// This is an always-on kiosk surface: it must NEVER hard-crash into the error
+// boundary. Every read is best-effort — a single failing query (a table missing
+// on an un-migrated environment, an RLS edge, a transient outage) degrades that
+// one widget to empty rather than taking down the whole screen. All data loading
+// is wrapped so the page always renders, and query errors are logged for triage.
+async function loadDisplay(
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  familyId: string,
+  familyName: string,
+  now: Date,
+): Promise<LoadedDisplay> {
   const start = new Date(now); start.setHours(0, 0, 0, 0);
   const end = new Date(start); end.setDate(end.getDate() + 1);
   const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
   const todayDate = start.toISOString().slice(0, 10);
-
-  // Month bounds for the calendar widget.
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  const [
-    { data: members },
-    { data: events },
-    { data: upcoming },
-    { data: chores },
-    { data: mealRows },
-    { data: groceryItems },
-    { count: groceryCount },
-    { data: reminders },
-    { data: notes },
-    { data: featuredRecipe },
-    { data: monthEvents },
-    { data: layoutRow },
-    { data: photoRows },
-  ] = await Promise.all([
+  const results = await Promise.all([
     supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id')
       .eq('family_id', familyId).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).order('starts_at'),
@@ -63,7 +70,22 @@ export default async function KitchenDisplayPage() {
       .order('taken_at', { ascending: false, nullsFirst: false }).limit(24),
   ]);
 
-  const memberById = new Map((members ?? []).map((m) => [m.id, m]));
+  // Best-effort: log any per-query error so a partial outage is diagnosable in
+  // prod logs, but never let one failing widget crash the kiosk.
+  const labels = [
+    'members', 'events', 'upcoming', 'chores', 'mealPlans', 'grocery', 'groceryCount',
+    'reminders', 'notes', 'recipes', 'monthEvents', 'layout', 'photos',
+  ] as const;
+  results.forEach((r, i) => {
+    if (r.error) console.error(`[display] query "${labels[i]}" failed:`, r.error.message);
+  });
+
+  const [
+    { data: members }, { data: events }, { data: upcoming }, { data: chores },
+    { data: mealRows }, { data: groceryItems }, { count: groceryCount },
+    { data: reminders }, { data: notes }, { data: featuredRecipe },
+    { data: monthEvents }, { data: layoutRow }, { data: photoRows },
+  ] = results;
 
   // Resolve chore titles + today's meal names (no embedded joins in types).
   const choreIds = [...new Set((chores ?? []).map((c) => c.chore_id))];
@@ -84,19 +106,18 @@ export default async function KitchenDisplayPage() {
   const mmddEnd = in14.toISOString().slice(5, 10);
   const birthdays = (members ?? [])
     .filter((m) => {
-      if (!m.birthday) return false;
-      const bd = m.birthday.slice(5);
-      return mmddEnd >= mmddToday ? bd >= mmddToday && bd <= mmddEnd : bd >= mmddToday || bd <= mmddEnd;
+      const mmdd = birthdayMonthDay(m.birthday);
+      if (!mmdd) return false;
+      return mmddEnd >= mmddToday ? mmdd >= mmddToday && mmdd <= mmddEnd : mmdd >= mmddToday || mmdd <= mmddEnd;
     })
-    .map((m) => ({
-      name: m.display_name,
-      date: new Date(`2000-${m.birthday!.slice(5)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    }));
+    .map((m) => ({ name: m.display_name, date: formatBirthday(birthdayMonthDay(m.birthday)!) }));
 
-  const eventDays = [...new Set((monthEvents ?? []).map((e) => new Date(e.starts_at).getDate()))];
+  const eventDays = [...new Set((monthEvents ?? [])
+    .map((e) => new Date(e.starts_at).getDate())
+    .filter((d) => Number.isFinite(d)))];
 
   const data: DisplayData = {
-    familyName: ctx.active.family.name,
+    familyName,
     members: (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name, color: m.color, role: m.role })),
     events: events ?? [],
     upcoming: upcoming ?? [],
@@ -117,16 +138,64 @@ export default async function KitchenDisplayPage() {
   };
 
   const savedTiles = (layoutRow?.tiles as Tile[] | null) ?? null;
-  const initialTiles = savedTiles && savedTiles.length ? savedTiles : DEFAULT_TILES;
+  const initialTiles = Array.isArray(savedTiles) && savedTiles.length ? savedTiles : DEFAULT_TILES;
   const initialSettings = resolveDisplaySettings(layoutRow?.settings ?? null);
+
+  return { data, initialTiles, initialSettings };
+}
+
+/** Normalize a stored birthday (date, ISO timestamp, or MM-DD) to "MM-DD", or null. */
+function birthdayMonthDay(raw: string | null): string | null {
+  if (!raw) return null;
+  // Accept "YYYY-MM-DD", full ISO timestamps, or a bare "MM-DD".
+  const m = raw.match(/(?:^|\D)(\d{2})-(\d{2})(?=\D|$)/);
+  if (m) {
+    const mm = m[1], dd = m[2];
+    // Guard against catching a "YYYY-MM" tail: require the pair to be a real month/day.
+    if (Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31) return `${mm}-${dd}`;
+  }
+  const iso = raw.match(/^\d{4}-(\d{2})-(\d{2})/);
+  return iso ? `${iso[1]}-${iso[2]}` : null;
+}
+
+/** "05-15" → "May 15" (safe; returns "" on a malformed pair). */
+function formatBirthday(mmdd: string): string {
+  const d = new Date(`2000-${mmdd}T00:00:00`);
+  return Number.isFinite(d.getTime())
+    ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : '';
+}
+
+export default async function KitchenDisplayPage() {
+  // requireFeature may redirect()/notFound() — that control flow must propagate,
+  // so it stays outside the resilient loader.
+  const ctx = await requireFeature('/display');
+  const familyId = ctx.active.familyId;
+  const familyName = ctx.active.family.name;
+  const now = new Date();
+
+  let loaded: LoadedDisplay;
+  try {
+    const supabase = await createServer();
+    loaded = await loadDisplay(supabase, familyId, familyName, now);
+  } catch (err) {
+    // Absolute backstop: the kiosk still renders a clean, empty display rather
+    // than crashing into the app error boundary.
+    console.error('[display] fatal load error, rendering empty display:', err);
+    loaded = {
+      data: emptyDisplay(familyName, now),
+      initialTiles: DEFAULT_TILES,
+      initialSettings: resolveDisplaySettings(null),
+    };
+  }
 
   return (
     <>
       <AutoRefresh seconds={120} />
       <DisplayShell
-        initialTiles={initialTiles}
-        initialSettings={initialSettings}
-        data={data}
+        initialTiles={loaded.initialTiles}
+        initialSettings={loaded.initialSettings}
+        data={loaded.data}
         familyId={familyId}
         userId={ctx.user.id}
       />
