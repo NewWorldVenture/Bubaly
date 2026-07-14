@@ -1160,13 +1160,26 @@ missing-location events, colliding events for conflicts). Run it, then open
   deployed green.
 
 **Remaining to reach the full design vision (open):**
-- [ ] **Listing photo uploads** — render + URL capture + seed shipped (#277); still needs a Supabase
-  Storage bucket + policies (owner decision on storage) so owners can upload a file, not paste a URL.
-- [ ] **Real LLM marketplace assistant** — the rail panel routes to the bubaly assistant with prompt
-  chips today; a marketplace-tuned conversational flow ("is this a fair price?") is key-gated on the
-  LLM key (B3) and should route through the ONE assistant, not a second chat.
-- [ ] **"Post in under 60 seconds with AI"** — AI-drafted listing (title/category/price suggestion
-  from a photo or one sentence); LLM-key-gated (B3).
+- [x] **Listing photo uploads ✅ SHIPPED (2026-07-14).** Real file upload, not paste-a-URL.
+  Migration **`0194_marketplace_photos_bucket.sql`** — idempotent public **`marketplace-photos`**
+  Storage bucket (10 MB, image mimes) + 4 RLS policies (public read; insert/update/delete scoped to
+  the uploader's own `{user_id}/` folder), mirroring the proven avatars pattern (`0089`).
+  New **`components/marketplace/photo-upload.tsx`** — pick/drop an image → uploads to
+  `{userId}/{ts}-{rand}.{ext}` → public URL becomes `photo_url`; client-side mime + 10 MB validation,
+  **Remove** deletes the owned object (no storage leak on abandoned drafts), paste-URL fallback kept.
+  Wired into **both** composers (full `marketplace-module` form + the Post-in-60s `quick-post` draft).
+  Verified: tsc 0 · eslint 0 · vitest (quick-post 9 + listings 10). ⚠️ apply `0194` to prod (idempotent).
+- [x] **Real LLM marketplace assistant ✅ SHIPPED.** `components/marketplace/market-assistant.tsx`
+  (rendered on `/marketplace`) drives `askMarketAssistantAction` — a **two-tier** conversational flow
+  grounded in the family's live listings+offers snapshot: a deterministic engine (`answerMarketQuestion`,
+  works with **no key**, always returns real in-app links) with an **LLM tier layered on top** when
+  `isAIConfigured()`. Graceful degrade, no second chat surface — one assistant. (LLM tier lights up when
+  the owner provisions the LLM key per B3; the grounded engine ships value today.)
+- [x] **"Post in under 60 seconds with AI" ✅ SHIPPED.** `components/marketplace/quick-post.tsx`
+  (rendered on `/marketplace`) — one sentence → the deterministic `draftListing` engine fills
+  kind/category/condition/price/pickup/title/description (all editable), a price suggestion computed
+  from the family's own comparables, a live 60s stopwatch, and now a real photo upload (above). Inserts
+  straight into `marketplace_listings`. Instant, no key required. 9 tests.
 - [ ] **Secure payments** — real checkout/escrow is Stripe-gated (B3/owner); today amounts are
   recorded on orders and settled off-platform (family context makes this acceptable pre-keys).
 - [ ] **Geo "near me" distances** — needs the Maps key (B3); location is stored free-text today.
