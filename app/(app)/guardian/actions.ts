@@ -7,8 +7,31 @@ import { revalidatePath } from 'next/cache';
 import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
 import { runLearningForFamily } from '@/lib/guardian/learning-run';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type ActionResult<T = void> = { ok: true; data?: T } | { ok: false; error: string };
+
+function actionFailure<T = void>(operation: string, error: unknown): ActionResult<T> {
+  console.error(`[guardian-action] ${operation} failed`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
+
+function reviewResult(data: unknown): ActionResult {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return actionFailure('review the Guardian suggestion', new Error('Invalid review response'));
+  }
+  const result = data as { ok?: unknown; reason?: unknown };
+  if (result.ok === true) return { ok: true };
+  const messages: Record<string, string> = {
+    unauthenticated: 'Please sign in to continue.',
+    forbidden: 'Only a parent or guardian can review suggestions.',
+    invalid_decision: 'Choose approve or dismiss before continuing.',
+    not_found: 'Suggestion not found.',
+    already_reviewed: 'This suggestion was already reviewed.',
+    contact_not_found: 'The suggested contact could not be found.',
+  };
+  return { ok: false, error: messages[String(result.reason)] ?? 'Could not review the Guardian suggestion.' };
+}
 
 // ── Contacts ────────────────────────────────────────────────────────────────
 
@@ -54,10 +77,10 @@ export async function upsertContactAction(input: {
       .single() as typeof result;
   }
 
-  if (result.error) return { ok: false, error: result.error.message };
+  if (result.error) return actionFailure('save the Guardian contact', result.error);
   const id = (result.data as { id: string }).id;
 
-  await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
+  const { error: auditError } = await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
     family_id: familyId,
     actor_user_id: userId,
     actor: 'parent',
@@ -66,6 +89,7 @@ export async function upsertContactAction(input: {
     entity_id: id,
     detail: { trust_level: input.trust_level, name: input.name },
   });
+  if (auditError) console.error('[guardian-audit] contact write was not logged', auditError);
 
   revalidatePath('/guardian');
   revalidatePath('/guardian/contacts');
@@ -80,7 +104,7 @@ export async function deleteContactAction(contactId: string): Promise<ActionResu
     .delete()
     .eq('id', contactId)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('delete the Guardian contact', error);
   revalidatePath('/guardian/contacts');
   return { ok: true };
 }
@@ -99,9 +123,9 @@ export async function updateContactTrustAction(
     .eq('id', contactId)
     .eq('family_id', familyId);
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('update contact trust', error);
 
-  await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
+  const { error: auditError } = await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
     family_id: familyId,
     actor_user_id: ctx.user.id,
     actor: 'parent',
@@ -110,6 +134,7 @@ export async function updateContactTrustAction(
     entity_id: contactId,
     detail: { trust_level: trustLevel },
   });
+  if (auditError) console.error('[guardian-audit] trust update was not logged', auditError);
 
   revalidatePath('/guardian/contacts');
   revalidatePath('/guardian');
@@ -150,7 +175,7 @@ export async function upsertMemberProfileAction(input: {
   const { error } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
     .upsert(payload, { onConflict: 'family_id,member_id' });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('save the Guardian member profile', error);
 
   revalidatePath('/guardian/settings');
   revalidatePath('/guardian');
@@ -170,7 +195,7 @@ export async function updateContextAction(
     .eq('member_id', memberId)
     .eq('family_id', ctx.active.familyId);
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('update the Guardian context', error);
 
   revalidatePath('/guardian');
   return { ok: true };
@@ -205,12 +230,13 @@ export async function assignGuardianPhoneAction(input: {
 
   // Guard against assigning the same Guardian number to two members.
   if (phone) {
-    const { data: clash } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+    const { data: clash, error: clashError } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
       .select('member_id')
       .eq('family_id', familyId)
       .eq('guardian_phone', phone)
       .neq('member_id', input.member_id)
       .maybeSingle();
+    if (clashError) return actionFailure('check Guardian phone assignments', clashError);
     if (clash) return { ok: false, error: 'That number is already assigned to another family member.' };
   }
 
@@ -220,9 +246,9 @@ export async function assignGuardianPhoneAction(input: {
       { onConflict: 'family_id,member_id' },
     );
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('assign the Guardian phone', error);
 
-  await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
+  const { error: auditError } = await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
     family_id: familyId,
     actor_user_id: ctx.user.id,
     actor: 'parent',
@@ -230,6 +256,7 @@ export async function assignGuardianPhoneAction(input: {
     entity_type: 'guardian_member_profiles',
     detail: { member_id: input.member_id, guardian_phone: phone },
   });
+  if (auditError) console.error('[guardian-audit] phone assignment was not logged', auditError);
 
   revalidatePath('/guardian/settings');
   revalidatePath('/guardian');
@@ -282,10 +309,10 @@ export async function createRuleAction(input: {
     .select('id')
     .single();
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('create the Guardian routing rule', error);
   const id = (data as { id: string }).id;
 
-  await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
+  const { error: auditError } = await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
     family_id: familyId,
     actor_user_id: userId,
     actor: 'parent',
@@ -294,6 +321,7 @@ export async function createRuleAction(input: {
     entity_id: id,
     detail: { name: input.name, action_routing_mode: input.action_routing_mode },
   });
+  if (auditError) console.error('[guardian-audit] rule creation was not logged', auditError);
 
   revalidatePath('/guardian/rules');
   return { ok: true, data: { id } };
@@ -307,7 +335,7 @@ export async function toggleRuleAction(ruleId: string, isActive: boolean): Promi
     .update({ is_active: isActive })
     .eq('id', ruleId)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('update the Guardian routing rule', error);
   revalidatePath('/guardian/rules');
   return { ok: true };
 }
@@ -320,7 +348,7 @@ export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
     .delete()
     .eq('id', ruleId)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('delete the Guardian routing rule', error);
   revalidatePath('/guardian/rules');
   return { ok: true };
 }
@@ -344,62 +372,16 @@ export async function reviewSuggestionAction(
   decision: 'approved' | 'dismissed',
   note?: string,
 ): Promise<ActionResult> {
-  const ctx = await requireUserContext();
+  await requireUserContext();
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
-  const familyId = ctx.active.familyId;
-  const userId = ctx.user.id;
-
-  const { data: suggestion } = await (db.from('guardian_suggestions') as ReturnType<typeof supabase.from>)
-    .select('*')
-    .eq('id', suggestionId)
-    .eq('family_id', familyId)
-    .maybeSingle();
-
-  if (!suggestion) return { ok: false, error: 'Suggestion not found' };
-
-  await (db.from('guardian_suggestions') as ReturnType<typeof supabase.from>).update({
-    status: decision,
-    reviewed_by: userId,
-    reviewed_at: new Date().toISOString(),
-    review_note: note || null,
-  }).eq('id', suggestionId);
-
-  if (decision === 'approved') {
-    const s = suggestion as {
-      suggestion_type: string;
-      proposed_contact_id: string | null;
-      proposed_trust_level: TrustLevel | null;
-      proposed_rule_data: Record<string, unknown> | null;
-    };
-
-    if (s.suggestion_type === 'update_trust' && s.proposed_contact_id && s.proposed_trust_level) {
-      await (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
-        .update({ trust_level: s.proposed_trust_level, trust_override: true })
-        .eq('id', s.proposed_contact_id)
-        .eq('family_id', familyId);
-    }
-
-    if (s.suggestion_type === 'new_rule' && s.proposed_rule_data) {
-      await (db.from('guardian_routing_rules') as ReturnType<typeof supabase.from>).insert({
-        ...s.proposed_rule_data,
-        family_id: familyId,
-        ai_suggested: true,
-        approved_by: userId,
-        approved_at: new Date().toISOString(),
-      });
-    }
-
-    await (db.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
-      family_id: familyId,
-      actor_user_id: userId,
-      actor: 'parent',
-      action: 'suggestion.approved',
-      entity_type: 'guardian_suggestions',
-      entity_id: suggestionId,
-    });
-  }
-
+  const { data, error } = await supabase.rpc('guardian_review_suggestion', {
+    p_suggestion_id: suggestionId,
+    p_decision: decision,
+    p_note: note?.trim() || null,
+  });
+  if (error) return actionFailure('review the Guardian suggestion', error);
+  const result = reviewResult(data);
+  if (!result.ok) return result;
   revalidatePath('/guardian');
   return { ok: true };
 }
@@ -414,7 +396,7 @@ export async function acknowledgeEscalationAction(escalationId: string): Promise
     .update({ acknowledged_by: ctx.user.id, acknowledged_at: new Date().toISOString() })
     .eq('id', escalationId)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('acknowledge the Guardian escalation', error);
   revalidatePath('/guardian');
   return { ok: true };
 }

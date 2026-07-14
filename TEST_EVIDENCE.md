@@ -2,10 +2,23 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Atomic Guardian suggestion review
+
+- `npm.cmd test -- --run tests/guardian-action-error-boundaries.test.ts tests/migration-version-safety.test.ts`: 2 files, 5 tests passed.
+- `npm.cmd exec vitest run`: 354 files, 2,787 tests passed after the Guardian safety repair.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: passed; 213 numbered SQL files, 17 explicit historical duplicate
+  prefixes, next available version `0198`.
+- `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
+- Guardian suggestion review now applies proposed trust/routing changes, review state, and audit in
+  one manager-authorized transaction; remaining Guardian action reads and writes are checked or sanitized.
+
 ## Latest Audit Update - Atomic economy and simulated-investing decisions
 
 - `npm.cmd test -- --run tests/economy-invest-action-boundaries.test.ts tests/migration-version-safety.test.ts`: 2 files, 5 tests passed.
-- `npm.cmd exec vitest run`: 353 files, 2,785 tests passed after the atomic ledger-decision repair.
+- `npm.cmd exec vitest run`: 354 files, 2,787 tests passed after the Guardian safety repair.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
 - `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.

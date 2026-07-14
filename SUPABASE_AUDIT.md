@@ -4,7 +4,7 @@
 
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
-- Current migration files: 212, through `0196_atomic_economy_and_invest_decisions.sql`.
+- Current migration files: 213, through `0197_guardian_suggestion_review_transaction.sql`.
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
   `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
@@ -15,10 +15,11 @@
   `0189_reconcile_stripe_webhook_claims.sql`, and
   `0190_marketplace_handoffs.sql`, `0191_marketplace_price_history.sql`, `0192_marketplace_returns.sql`,
   `0193_marketplace_reports.sql`, `0194_marketplace_photos_bucket.sql`, and
-  `0195_dashboard_layout_upsert_constraint.sql`, and
-  `0196_atomic_economy_and_invest_decisions.sql`.
-- SQL files: 335.
-- Static counts: 1,180 policy declarations, 639 RLS enable statements, 97 function declarations,
+  `0195_dashboard_layout_upsert_constraint.sql`,
+  `0196_atomic_economy_and_invest_decisions.sql`, and
+  `0197_guardian_suggestion_review_transaction.sql`.
+- SQL files: 336.
+- Static counts: 1,180 policy declarations, 639 RLS enable statements, 98 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
   not a claim that every object exists in the live database.
 
@@ -64,6 +65,15 @@ redemption/order state, holding/stock changes, and wallet audit record in one tr
 layer uses the RPCs for approvals and checks errors on all remaining economy/invest reads and writes.
 The functions are revoked from `public` and `anon` and granted only to `authenticated`; isolated
 production verification must still exercise concurrent approvals after applying the migration.
+
+### Guardian suggestion review transaction audit
+
+Migration `0197_guardian_suggestion_review_transaction.sql` adds a manager-authorized RPC for
+approving or dismissing AI Guardian suggestions. It locks the suggestion, applies the proposed trust
+or routing change, updates review metadata, and writes the Guardian audit record in one transaction.
+The RPC is revoked from `public` and `anon` and granted only to `authenticated`; malformed proposed
+rule data is normalized to bounded, known routing fields. Isolated production verification must still
+exercise parent/child authorization and concurrent reviews after applying the migration.
 
 ### Migration filename history
 
@@ -137,7 +147,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
-2. Apply the remaining migrations through `0196` and run `npm run db:audit:schema` and
+2. Apply the remaining migrations through `0197` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
@@ -157,7 +167,7 @@ endpoint (`Database error finding users`, latest error id `019f60e4-438a-70e7-b9
 - Static migration inspection found 17 duplicate numeric prefixes, from `0010` through `0142`.
 - These historical files remain unchanged pending comparison with the target environment's migration
   ledger. `npm.cmd run db:audit:migrations` passed with the complete known set explicit and next
-  available version `0197`.
+  available version `0198`.
 
 ### Marketplace photo storage follow-up - 2026-07-13
 

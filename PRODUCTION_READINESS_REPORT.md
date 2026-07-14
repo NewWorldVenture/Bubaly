@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-The tree compiles, passes lint and type checking, passes 2,785 unit tests, builds all 235 Next.js build
+The tree compiles, passes lint and type checking, passes 2,787 unit tests, builds all 235 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -46,13 +46,17 @@ Latest repair increment (2026-07-14): family-economy redemptions and simulated-i
 now use authenticated, row-locking RPCs so ledger debits, stock/holding updates, order status, and
 audit records commit atomically. Request and direct-write failures are sanitized and checked.
 
+Latest repair increment (2026-07-14): Guardian suggestion approvals and dismissals now use a
+manager-authorized transaction that applies the proposed trust/routing change, review state, and
+audit record together. Guardian action failures are sanitized and phone-assignment reads are checked.
+
 ## Scope and Inventory
 
 - 352 `page.tsx` route files.
 - 102 API route handlers.
-- 212 migration files; additive repair migrations through `0196` are now present.
-- 335 SQL files under `supabase`.
-- 353 unit-test files and 2,785 passing tests.
+- 213 migration files; additive repair migrations through `0197` are now present.
+- 336 SQL files under `supabase`.
+- 354 unit-test files and 2,787 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -182,13 +186,13 @@ audit records commit atomically. Request and direct-write failures are sanitized
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,785 tests / 353 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,787 tests / 354 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 235 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
 | Mobile overflow E2E | PASS at 320, 390, 768, and 1024 widths | Playwright |
 | Migration/seed contract | PASS, 26 focused tests | targeted Vitest run |
-| Migration filename audit | PASS, 17 known historical duplicate prefixes; next `0197` | `npm.cmd run db:audit:migrations` |
+| Migration filename audit | PASS, 17 known historical duplicate prefixes; next `0198` | `npm.cmd run db:audit:migrations` |
 | Schema probe | PASS | 11 required live table/ledger probes available, including Stripe claim columns |
 | Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f60e4-438a-70e7-b98a-9810d7906575`) |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
@@ -197,7 +201,7 @@ audit records commit atomically. Request and direct-write failures are sanitized
 
 ## Remaining Launch Blockers
 
-1. Confirm migration history through `0196_atomic_economy_and_invest_decisions.sql` in the intended environment and
+1. Confirm migration history through `0197_guardian_suggestion_review_transaction.sql` in the intended environment and
    reconcile the 17 known historical duplicate prefixes before using automated migration push there;
    rerun cross-family RLS and negotiation allow/deny probes.
 2. Diagnose the live Supabase Auth Admin 500 in Supabase/GoTrue/Postgres logs and rerun the Auth audit.

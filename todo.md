@@ -3601,3 +3601,27 @@ roadmap entries and user worktree changes are preserved.
   row-lock contracts, atomic status transitions, and action-layer failure boundaries.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0244 - Guardian suggestion review could partially apply AI safety changes
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P0
+- Category: Child safety / authorization / data integrity / error handling
+- Feature: Guardian AI suggestions, contact trust, routing rules, and review audit
+- File or files: `supabase/migrations/0197_guardian_suggestion_review_transaction.sql`,
+  `app/(app)/guardian/actions.ts`, `lib/database.types.ts`,
+  `tests/guardian-action-error-boundaries.test.ts`
+- Database objects: `guardian_suggestions`, `guardian_contacts`, `guardian_routing_rules`,
+  `guardian_audit_log`
+- Description: Reviewing a suggestion updated the review row and then applied proposed trust/routing
+  changes through separate unchecked writes. Other Guardian actions exposed raw database messages and
+  ignored a phone-assignment read failure.
+- Resolution: Added a manager-authorized, row-locked review RPC that commits proposed changes, review
+  metadata, and the audit entry together. Guardian actions now sanitize database failures, check the
+  phone-assignment read, and surface audit-write diagnostics without claiming they are required state.
+- Tests performed: Focused Guardian boundary and migration tests, full Vitest, typecheck, lint,
+  dependency audit, migration audit, live schema probes, production build, and public E2E.
+- Evidence: `tests/guardian-action-error-boundaries.test.ts` verifies RPC authorization grants,
+  revocation, locking, atomic state transitions, and action-layer error boundaries.
+- Verified by: Codex
+- Date completed: 2026-07-14
