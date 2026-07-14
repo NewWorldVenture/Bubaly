@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { ShieldAlert } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ReportModeration } from '@/components/admin/report-moderation';
 import { reasonLabel, STATUS_LABELS, summarizeReports, type ReportStatus } from '@/lib/marketplace/reports';
 import { cn } from '@/lib/utils/cn';
@@ -22,11 +22,15 @@ const STATUS_CHIP: Record<string, string> = {
 export default async function AdminMarketplaceReportsPage() {
   const admin = createServiceClient();
 
-  const { data: reports } = await admin
+  const { data: reports, error: reportsError } = await admin
     .from('marketplace_reports')
     .select('id, listing_id, family_id, reason, details, status, resolution, created_at')
     .order('created_at', { ascending: false })
     .limit(300);
+  if (reportsError) {
+    console.error('[admin-marketplace-reports] report read failed', reportsError);
+    return <AdminReadError />;
+  }
 
   const rows = reports ?? [];
   const summary = summarizeReports(rows.map((r) => ({ status: r.status, reason: r.reason })));
@@ -34,10 +38,14 @@ export default async function AdminMarketplaceReportsPage() {
   // Enrich with listing titles + reporter family names (service role, all families).
   const listingIds = [...new Set(rows.map((r) => r.listing_id))];
   const familyIds = [...new Set(rows.map((r) => r.family_id))];
-  const [{ data: listings }, { data: families }] = await Promise.all([
-    listingIds.length ? admin.from('marketplace_listings').select('id, title, status').in('id', listingIds) : Promise.resolve({ data: [] }),
-    familyIds.length ? admin.from('families').select('id, name').in('id', familyIds) : Promise.resolve({ data: [] }),
+  const [{ data: listings, error: listingsError }, { data: families, error: familiesError }] = await Promise.all([
+    listingIds.length ? admin.from('marketplace_listings').select('id, title, status').in('id', listingIds) : Promise.resolve({ data: [], error: null }),
+    familyIds.length ? admin.from('families').select('id, name').in('id', familyIds) : Promise.resolve({ data: [], error: null }),
   ]);
+  if (listingsError || familiesError) {
+    console.error('[admin-marketplace-reports] report enrichment read failed', listingsError ?? familiesError);
+    return <AdminReadError />;
+  }
   const listingOf = new Map((listings ?? []).map((l) => [l.id, l]));
   const familyOf = new Map((families ?? []).map((f) => [f.id, f.name as string]));
 
@@ -95,6 +103,19 @@ export default async function AdminMarketplaceReportsPage() {
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+function AdminReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Marketplace reports</h1>
+        <p className="mt-1 text-sm text-muted">Community safety flags across every family.</p>
+      </div>
+      <ErrorState message="Could not load marketplace reports. Refresh and try again." />
+      <a href="/admin/marketplace/reports" className="text-sm font-medium text-brand-text underline">Refresh reports</a>
     </div>
   );
 }

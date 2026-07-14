@@ -2,10 +2,17 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Admin read-path integrity
+
+- `npm.cmd exec vitest run tests/admin-read-boundaries.test.ts`: 1 file, 3 tests passed.
+- `npm.cmd exec vitest run`: 363 files, 2,827 tests passed.
+- Marketplace Reports and both Support Ticket admin views now check required Supabase reads and render
+  a retryable error state instead of treating a failed query as an empty queue.
+
 ## Latest Audit Update - Tier & Marketplace moderation action boundaries
 
 - `npm.cmd exec vitest run tests/admin-tier-report-action-boundaries.test.ts`: 1 file, 4 tests passed.
-- `npm.cmd exec vitest run`: 361 files, 2,821 tests passed.
+- `npm.cmd exec vitest run`: 363 files, 2,827 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
 - `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.

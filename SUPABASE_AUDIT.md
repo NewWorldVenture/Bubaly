@@ -141,6 +141,13 @@ writes, and stale report statuses. Requested safety withdrawal happens before re
 failed withdrawal leaves the report available for retry rather than recording an apparently complete
 moderation action. Unexpected Supabase details are logged server-side and sanitized for the UI.
 
+### Admin read-path integrity audit
+
+Marketplace Reports and both Support Ticket admin views now check their required service-role reads and
+log diagnostics server-side before rendering a retryable, stable error state. A transient Supabase outage
+can no longer be presented as an empty moderation or support queue, which could otherwise lead an admin to
+miss safety reports or customer requests.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

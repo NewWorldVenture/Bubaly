@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { LifeBuoy, Inbox, Clock, CheckCircle2, Archive } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { TicketStatusControl } from '@/components/admin/ticket-status-control';
 import { fmtDate } from '@/lib/utils/format';
@@ -17,10 +17,14 @@ export default async function AdminSupportPage({ searchParams }: Params) {
   const sp = await searchParams;
   const supabase = createServiceClient();
 
-  const { data: tickets } = await supabase
+  const { data: tickets, error: ticketsError } = await supabase
     .from('support_tickets')
     .select('*')
     .order('created_at', { ascending: false });
+  if (ticketsError) {
+    console.error('[admin-support] ticket read failed', ticketsError);
+    return <AdminReadError />;
+  }
 
   const rows = tickets ?? [];
   const counts = { open: 0, pending: 0, resolved: 0, closed: 0 };
@@ -83,6 +87,19 @@ export default async function AdminSupportPage({ searchParams }: Params) {
           </ul>
         )}
       </Card>
+    </div>
+  );
+}
+
+function AdminReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Support Tickets</h1>
+        <p className="mt-1 text-sm text-muted">Messages from the contact form, with their full lifecycle managed here.</p>
+      </div>
+      <ErrorState message="Could not load support tickets. Refresh and try again." />
+      <a href="/admin/support" className="text-sm font-medium text-brand-text underline">Refresh tickets</a>
     </div>
   );
 }

@@ -3522,6 +3522,26 @@ roadmap entries and user worktree changes are preserved.
 - Verified by: Codex
 - Date completed: 2026-07-14
 
+### TODO-0252 - Admin queues treated failed Supabase reads as empty data
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Admin observability / safety queue integrity
+- Feature: Marketplace Reports and Support Ticket admin read paths
+- File or files: `app/(app)/admin/marketplace/reports/page.tsx`,
+  `app/(app)/admin/support-tickets/page.tsx`, `app/(app)/admin/support/page.tsx`,
+  `tests/admin-read-boundaries.test.ts`
+- Description: Required service-role reads were destructured without checking errors, so a database
+  outage rendered “No reports” or “No tickets” and hid operational work.
+- Resolution: Required reads and report enrichment queries now log diagnostics server-side and render a
+  stable retryable error state. Empty states are only used after successful reads.
+- Tests performed: Focused read-boundary tests, full Vitest, typecheck, lint, dependency audit, migration
+  audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/admin-read-boundaries.test.ts` verifies report enrichment and both ticket views reject
+  silent empty-state fallbacks.
+- Verified by: Codex
+- Date completed: 2026-07-14
+
 ### TODO-0245 - Marketplace and Feedback actions exposed raw or unchecked failures
 
 - Status: [x] Completed in code and covered by regression tests.

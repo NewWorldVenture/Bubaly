@@ -6,7 +6,7 @@ import {
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { TicketRowActions } from '@/components/admin/ticket-row-actions';
 import { StatusDonut } from '@/components/admin/status-donut';
@@ -69,10 +69,14 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key as TabKey) ?? 'all';
   const supabase = createServiceClient();
 
-  const { data: allTickets } = await supabase
+  const { data: allTickets, error: ticketsError } = await supabase
     .from('support_tickets')
     .select('*')
     .order('updated_at', { ascending: false });
+  if (ticketsError) {
+    console.error('[admin-support-tickets] ticket read failed', ticketsError);
+    return <AdminReadError />;
+  }
 
   const tickets = allTickets ?? [];
 
@@ -384,6 +388,19 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AdminReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Support Tickets</h1>
+        <p className="mt-1 text-sm text-muted">Manage and resolve customer support requests.</p>
+      </div>
+      <ErrorState message="Could not load support tickets. Refresh and try again." />
+      <a href="/admin/support-tickets" className="text-sm font-medium text-brand-text underline">Refresh tickets</a>
     </div>
   );
 }
