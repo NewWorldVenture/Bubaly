@@ -3487,6 +3487,33 @@ roadmap entries and user worktree changes are preserved.
 - Verified by: Codex
 - Date completed: 2026-07-14
 
+### TODO-0241 - Privileged marketing mutations could report success after failed writes
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Admin reliability / data integrity / error handling
+- Feature: Marketing administration, affiliates, payouts, and surveys
+- File or files: `lib/marketing/admin.ts`, `app/(app)/admin/marketing/actions.ts`,
+  `app/(app)/admin/marketing/affiliates/actions.ts`, `app/(app)/admin/marketing/surveys/actions.ts`,
+  `tests/marketing-action-error-boundaries.test.ts`
+- Database objects: `marketing_segments`, `marketing_campaigns`, `marketing_email_campaigns`,
+  `marketing_content_items`, `marketing_seo_keywords`, `marketing_aeo_questions`,
+  `marketing_sms_campaigns`, `marketing_social_posts`, `marketing_ad_campaigns`,
+  `marketing_automation_workflows`, `marketing_funnels`, `marketing_landing_pages`,
+  `marketing_forms`, `marketing_settings`, `affiliates`, `affiliate_referrals`, `surveys`
+- Description: Many service-role marketing actions ignored mutation errors, wrote an audit record,
+  revalidated the page, or redirected as if the operation succeeded. Affiliate payout and survey
+  controls had the same failure mode, and survey creation exposed the raw database message.
+- Resolution: Added one server-side diagnostic and sanitized failure helper. Every audited insert,
+  update, delete, and upsert now checks the Supabase response before auditing, revalidation, or redirect.
+  Auth guard failures now use stable user-facing messages instead of raw internal wording.
+- Tests performed: focused marketing action contracts, affiliate/survey unit tests, database error
+  sanitizer tests, typecheck, lint, full Vitest, production build, and public E2E.
+- Evidence: `tests/marketing-action-error-boundaries.test.ts` covers all audited mutation branches and
+  rejects raw database-error throws and log-and-continue patterns.
+- Verified by: Codex
+- Date completed: 2026-07-14
+
 ### TODO-0239 - Admin, Trust Engine, and wallet actions exposed raw failure details
 
 - Status: [x] Completed in code and covered by regression tests.

@@ -18,6 +18,8 @@
 - [ ] Exercise onboarding with a forced failure in an isolated environment; confirm the required write
       returns a sanitized failure and the retry resumes the `wizard/in_progress` run without duplicate
       family provisioning.
+- [ ] Exercise an isolated marketing-admin mutation failure; confirm the UI receives a stable failure
+      and no success audit/revalidation/redirect is emitted after the Supabase write fails.
 
 ## Environment and Integrations
 

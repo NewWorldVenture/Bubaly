@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
+import { describeActionError } from '@/lib/supabase/errors';
 import type { Database } from '@/lib/database.types';
 
 type DB = SupabaseClient<Database>;
@@ -17,10 +18,16 @@ export async function requireMarketingAdmin(): Promise<{
   actorEmail: string | null;
 }> {
   const user = await getUser();
-  if (!user) throw new Error('Not authenticated');
+  if (!user) throw new Error('Please sign in to continue.');
   const ok = await isSuperAdmin();
-  if (!ok) throw new Error('Forbidden: admin only');
+  if (!ok) throw new Error('You do not have permission to manage marketing settings.');
   return { supabase: createServiceClient(), actorId: user.id, actorEmail: user.email ?? null };
+}
+
+/** Fail a privileged mutation without exposing unclassified provider details. */
+export function marketingActionFailure(operation: string, error: unknown): never {
+  console.error(`[marketing-action] ${operation} failed`, error);
+  throw new Error(describeActionError(error, `Could not ${operation}.`));
 }
 
 export async function logMarketingAudit(

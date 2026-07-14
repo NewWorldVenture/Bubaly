@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import type { SegmentRules, Lifecycle } from '@/lib/marketing/customers';
 
 function str(v: FormDataEntryValue | null): string {
@@ -29,9 +29,8 @@ export async function createSegment(formData: FormData) {
   const { data, error } = await supabase.from('marketing_segments')
     .insert({ name, description: str(formData.get('description')) || null, kind: 'dynamic', rules: rules as never, created_by: actorId })
     .select('id').single();
-  if (!error && data) {
-    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_segment', resourceId: data.id, metadata: { name } });
-  }
+  if (error || !data) marketingActionFailure('create the marketing segment', error ?? new Error('No segment was created'));
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_segment', resourceId: data.id, metadata: { name } });
   revalidatePath('/admin/marketing/segments');
 }
 
@@ -39,7 +38,8 @@ export async function archiveSegment(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const id = str(formData.get('id'));
   if (!id) return;
-  await supabase.from('marketing_segments').update({ status: 'archived', deleted_at: new Date().toISOString(), updated_by: actorId }).eq('id', id);
+  const { error } = await supabase.from('marketing_segments').update({ status: 'archived', deleted_at: new Date().toISOString(), updated_by: actorId }).eq('id', id);
+  if (error) marketingActionFailure('archive the marketing segment', error);
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'archive', resource: 'marketing_segment', resourceId: id });
   revalidatePath('/admin/marketing/segments');
 }
@@ -64,7 +64,7 @@ export async function createCampaign(formData: FormData) {
     created_by: actorId,
   }).select('id').single();
 
-  if (error || !data) { revalidatePath('/admin/marketing/campaigns'); return; }
+  if (error || !data) marketingActionFailure('create the marketing campaign', error ?? new Error('No campaign was created'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_campaign', resourceId: data.id, metadata: { name } });
   revalidatePath('/admin/marketing/campaigns');
   redirect(`/admin/marketing/campaigns/${data.id}`);
@@ -75,7 +75,8 @@ export async function setCampaignStatus(formData: FormData) {
   const id = str(formData.get('id'));
   const status = str(formData.get('status'));
   if (!id || !status) return;
-  await supabase.from('marketing_campaigns').update({ status, updated_by: actorId }).eq('id', id);
+  const { error } = await supabase.from('marketing_campaigns').update({ status, updated_by: actorId }).eq('id', id);
+  if (error) marketingActionFailure('update the marketing campaign', error);
   await logMarketingAudit(supabase, { actorId, actorEmail, action: `status:${status}`, resource: 'marketing_campaign', resourceId: id });
   revalidatePath(`/admin/marketing/campaigns/${id}`);
   revalidatePath('/admin/marketing/campaigns');
@@ -85,7 +86,7 @@ export async function createEmailDraft(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const subject = str(formData.get('subject'));
   if (!subject) return;
-  const { data } = await supabase.from('marketing_email_campaigns').insert({
+  const { data, error } = await supabase.from('marketing_email_campaigns').insert({
     subject,
     preview_text: str(formData.get('preview_text')) || null,
     body_html: str(formData.get('body_html')) || '',
@@ -94,6 +95,7 @@ export async function createEmailDraft(formData: FormData) {
     status: 'draft',
     created_by: actorId,
   }).select('id').single();
+  if (error || !data) marketingActionFailure('create the email draft', error ?? new Error('No email draft was created'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_email_campaign', resourceId: data?.id ?? null, metadata: { subject } });
   revalidatePath('/admin/marketing/email');
 }
@@ -102,7 +104,7 @@ export async function createContentItem(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const title = str(formData.get('title'));
   if (!title) return;
-  const { data } = await supabase.from('marketing_content_items').insert({
+  const { data, error } = await supabase.from('marketing_content_items').insert({
     title,
     kind: str(formData.get('kind')) || 'blog',
     brief: str(formData.get('brief')) || null,
@@ -110,6 +112,7 @@ export async function createContentItem(formData: FormData) {
     publish_at: str(formData.get('publish_at')) || null,
     created_by: actorId,
   }).select('id').single();
+  if (error || !data) marketingActionFailure('create the content item', error ?? new Error('No content item was created'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_content_item', resourceId: data?.id ?? null, metadata: { title } });
   revalidatePath('/admin/marketing/content');
 }
@@ -118,13 +121,14 @@ export async function addKeyword(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const keyword = str(formData.get('keyword'));
   if (!keyword) return;
-  await supabase.from('marketing_seo_keywords').insert({
+  const { error } = await supabase.from('marketing_seo_keywords').insert({
     keyword,
     intent: str(formData.get('intent')) || null,
     target_path: str(formData.get('target_path')) || null,
     source: 'manual',
     created_by: actorId,
   });
+  if (error) marketingActionFailure('add the SEO keyword', error);
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_seo_keyword', metadata: { keyword } });
   revalidatePath('/admin/marketing/seo');
 }
@@ -133,13 +137,14 @@ export async function addAeoQuestion(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const question = str(formData.get('question'));
   if (!question) return;
-  await supabase.from('marketing_aeo_questions').insert({
+  const { error } = await supabase.from('marketing_aeo_questions').insert({
     question,
     answer: str(formData.get('answer')) || null,
     pattern: str(formData.get('pattern')) || null,
     entity: str(formData.get('entity')) || null,
     created_by: actorId,
   });
+  if (error) marketingActionFailure('add the AEO question', error);
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_aeo_question', metadata: { question } });
   revalidatePath('/admin/marketing/aeo');
 }
@@ -148,9 +153,10 @@ export async function createSmsDraft(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const message = str(formData.get('message'));
   if (!message) return;
-  const { data } = await supabase.from('marketing_sms_campaigns').insert({
+  const { data, error } = await supabase.from('marketing_sms_campaigns').insert({
     message, segment_id: str(formData.get('segment_id')) || null, status: 'draft', created_by: actorId,
   }).select('id').single();
+  if (error || !data) marketingActionFailure('create the SMS draft', error ?? new Error('No SMS draft was created'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_sms_campaign', resourceId: data?.id ?? null });
   revalidatePath('/admin/marketing/sms');
 }
@@ -159,10 +165,11 @@ export async function createSocialPost(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const content = str(formData.get('content'));
   if (!content) return;
-  const { data } = await supabase.from('marketing_social_posts').insert({
+  const { data, error } = await supabase.from('marketing_social_posts').insert({
     content, platform: str(formData.get('platform')) || 'instagram', link: str(formData.get('link')) || null,
     scheduled_at: str(formData.get('scheduled_at')) || null, status: str(formData.get('scheduled_at')) ? 'scheduled' : 'draft', created_by: actorId,
   }).select('id').single();
+  if (error || !data) marketingActionFailure('create the social post', error ?? new Error('No social post was created'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_social_post', resourceId: data?.id ?? null });
   revalidatePath('/admin/marketing/social');
 }
@@ -172,10 +179,11 @@ export async function createAdCampaign(formData: FormData) {
   const name = str(formData.get('name'));
   if (!name) return;
   const budgetDollars = Number(formData.get('budgetDollars') || 0);
-  const { data } = await supabase.from('marketing_ad_campaigns').insert({
+  const { data, error } = await supabase.from('marketing_ad_campaigns').insert({
     name, platform: str(formData.get('platform')) || 'meta', objective: str(formData.get('objective')) || null,
     budget_cents: budgetDollars > 0 ? Math.round(budgetDollars * 100) : 0, status: 'planned', created_by: actorId,
   }).select('id').single();
+  if (error || !data) marketingActionFailure('create the advertising campaign', error ?? new Error('No ad campaign was created'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_ad_campaign', resourceId: data?.id ?? null, metadata: { name } });
   revalidatePath('/admin/marketing/ads');
 }
@@ -185,11 +193,12 @@ export async function createAutomation(formData: FormData) {
   const name = str(formData.get('name'));
   if (!name) return;
   const actions = formData.getAll('actions').map(String);
-  const { data } = await supabase.from('marketing_automation_workflows').insert({
+  const { data, error } = await supabase.from('marketing_automation_workflows').insert({
     name, trigger: str(formData.get('trigger')) || 'customer_created',
     steps: actions.map((a, i) => ({ order: i + 1, action: a })) as never,
     status: 'draft', created_by: actorId,
   }).select('id').single();
+  if (error || !data) marketingActionFailure('create the automation workflow', error ?? new Error('No automation workflow was created'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_automation_workflow', resourceId: data?.id ?? null, metadata: { name } });
   revalidatePath('/admin/marketing/automation');
 }
@@ -199,7 +208,8 @@ export async function setAutomationStatus(formData: FormData) {
   const id = str(formData.get('id'));
   const status = str(formData.get('status'));
   if (!id || !status) return;
-  await supabase.from('marketing_automation_workflows').update({ status, updated_by: actorId }).eq('id', id);
+  const { error } = await supabase.from('marketing_automation_workflows').update({ status, updated_by: actorId }).eq('id', id);
+  if (error) marketingActionFailure('update the automation workflow', error);
   await logMarketingAudit(supabase, { actorId, actorEmail, action: `status:${status}`, resource: 'marketing_automation_workflow', resourceId: id });
   revalidatePath('/admin/marketing/automation');
 }
@@ -209,9 +219,10 @@ export async function createFunnel(formData: FormData) {
   const name = str(formData.get('name'));
   if (!name) return;
   const steps = str(formData.get('steps')).split('\n').map((s) => s.trim()).filter(Boolean);
-  const { data } = await supabase.from('marketing_funnels').insert({
+  const { data, error } = await supabase.from('marketing_funnels').insert({
     name, steps: steps.map((label, i) => ({ order: i + 1, label })) as never, created_by: actorId,
   }).select('id').single();
+  if (error || !data) marketingActionFailure('create the funnel', error ?? new Error('No funnel was created'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_funnel', resourceId: data?.id ?? null, metadata: { name } });
   revalidatePath('/admin/marketing/funnels');
 }
@@ -226,11 +237,12 @@ export async function createLandingPage(formData: FormData) {
   const metadata: Record<string, string> = {};
   if (ctaLabel) metadata.cta_label = ctaLabel;
   if (ctaHref) metadata.cta_href = ctaHref;
-  const { data } = await supabase.from('marketing_landing_pages').insert({
+  const { data, error } = await supabase.from('marketing_landing_pages').insert({
     title, slug, headline: str(formData.get('headline')) || null, subhead: str(formData.get('subhead')) || null,
     body: str(formData.get('body')) || null, status: 'draft', created_by: actorId,
     metadata,
   }).select('id').single();
+  if (error || !data) marketingActionFailure('create the landing page', error ?? new Error('No landing page was created'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_landing_page', resourceId: data?.id ?? null, metadata: { slug } });
   revalidatePath('/admin/marketing/landing-pages');
 }
@@ -241,9 +253,10 @@ export async function setLandingPublished(formData: FormData) {
   const id = str(formData.get('id'));
   if (!id) return;
   const publish = str(formData.get('publish')) === '1';
-  await supabase.from('marketing_landing_pages')
+  const { error } = await supabase.from('marketing_landing_pages')
     .update({ published: publish, status: publish ? 'published' : 'draft' })
     .eq('id', id);
+  if (error) marketingActionFailure('update the landing page', error);
   await logMarketingAudit(supabase, { actorId, actorEmail, action: publish ? 'publish' : 'unpublish', resource: 'marketing_landing_page', resourceId: id });
   revalidatePath('/admin/marketing/landing-pages');
 }
@@ -253,9 +266,10 @@ export async function createForm(formData: FormData) {
   const name = str(formData.get('name'));
   if (!name) return;
   const fields = str(formData.get('fields')).split(',').map((s) => s.trim()).filter(Boolean);
-  const { data } = await supabase.from('marketing_forms').insert({
+  const { data, error } = await supabase.from('marketing_forms').insert({
     name, fields: fields.map((label) => ({ label, key: label.toLowerCase().replace(/\s+/g, '_') })) as never, created_by: actorId,
   }).select('id').single();
+  if (error || !data) marketingActionFailure('create the marketing form', error ?? new Error('No form was created'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_form', resourceId: data?.id ?? null, metadata: { name } });
   revalidatePath('/admin/marketing/forms');
 }
@@ -265,9 +279,10 @@ export async function setFormStatus(formData: FormData) {
   const id = str(formData.get('id'));
   if (!id) return;
   const activate = str(formData.get('activate')) === '1';
-  await supabase.from('marketing_forms')
+  const { error } = await supabase.from('marketing_forms')
     .update({ status: activate ? 'active' : 'archived' })
     .eq('id', id);
+  if (error) marketingActionFailure('update the marketing form', error);
   await logMarketingAudit(supabase, { actorId, actorEmail, action: activate ? 'activate' : 'archive', resource: 'marketing_form', resourceId: id });
   revalidatePath('/admin/marketing/forms');
 }
@@ -277,7 +292,8 @@ export async function saveSetting(formData: FormData) {
   const key = str(formData.get('key'));
   if (!key) return;
   const value = str(formData.get('value'));
-  await supabase.from('marketing_settings').upsert({ key, value: { text: value } as never, updated_by: actorId });
+  const { error } = await supabase.from('marketing_settings').upsert({ key, value: { text: value } as never, updated_by: actorId });
+  if (error) marketingActionFailure('save the marketing setting', error);
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_setting', resourceId: key });
   revalidatePath('/admin/marketing/settings');
 }

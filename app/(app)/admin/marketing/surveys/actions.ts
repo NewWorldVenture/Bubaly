@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { SURVEY_TYPES, isSurveyType, generateSlug } from '@/lib/marketing/surveys';
 
 function s(fd: FormData, k: string): string | null {
@@ -42,7 +42,7 @@ export async function createSurveyAction(formData: FormData) {
     .select('id')
     .single();
 
-  if (error || !data) throw new Error(error?.message ?? 'Could not create survey');
+  if (error || !data) marketingActionFailure('create the survey', error ?? new Error('No survey was created'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'survey', resourceId: data.id, metadata: { type, name } });
   revalidatePath('/admin/marketing/surveys');
   redirect(`/admin/marketing/surveys/${data.id}`);
@@ -50,7 +50,8 @@ export async function createSurveyAction(formData: FormData) {
 
 export async function setSurveyStatusAction(id: string, status: 'draft' | 'active' | 'closed') {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('surveys').update({ status }).eq('id', id);
+  const { error } = await supabase.from('surveys').update({ status }).eq('id', id);
+  if (error) marketingActionFailure('update the survey status', error);
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'survey', resourceId: id, metadata: { status } });
   revalidatePath('/admin/marketing/surveys');
   revalidatePath(`/admin/marketing/surveys/${id}`);
@@ -58,7 +59,8 @@ export async function setSurveyStatusAction(id: string, status: 'draft' | 'activ
 
 export async function deleteSurveyAction(id: string) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('surveys').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  const { error } = await supabase.from('surveys').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  if (error) marketingActionFailure('delete the survey', error);
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'survey', resourceId: id });
   revalidatePath('/admin/marketing/surveys');
   redirect('/admin/marketing/surveys');

@@ -33,6 +33,17 @@ core family state was committed. The action still performs sequential writes rat
 transaction; launch verification should exercise retry behavior and inspect for any duplicate imported
 rows in an isolated environment.
 
+### Privileged marketing write-path audit
+
+Marketing administration authenticates the caller through `requireMarketingAdmin()` and then uses a
+server-only service-role client for cross-family administration. The audited segment, campaign, content,
+email, SMS, social, advertising, automation, funnel, landing-page, form, settings, affiliate, payout,
+and survey mutations now check every Supabase insert, update, delete, and upsert before recording the
+marketing audit event or telling Next.js to revalidate/redirect. Unclassified provider details are logged
+under `[marketing-action]` and replaced with stable action failures. `logMarketingAudit` remains
+best-effort by design because audit-write loss must not turn a successful business mutation into a false
+failure; operational monitoring should still alert on those log failures.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:
@@ -116,7 +127,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 - `npm.cmd run db:audit:schema` passed all 11 required live schema checks, including the
   `stripe_webhook_events` claim columns previously missing from the live response.
 - `npm.cmd run db:audit:auth` still passes public Auth health but returns HTTP 500 from the Admin users
-endpoint (`Database error finding users`, latest error id `019f60b7-f27b-730c-9f17-b437fdcb67b8`).
+endpoint (`Database error finding users`, latest error id `019f60ca-de39-7f6a-aa26-6c69ebc03519`).
 - The schema result confirms object availability only; migration-history verification and authenticated
   RLS allow/deny tests still require an authorized isolated environment.
 
