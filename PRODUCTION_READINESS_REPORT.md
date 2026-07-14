@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,732 unit tests, builds all 235 Next.js build
+tree compiles, passes lint and type checking, passes 2,735 unit tests, builds all 235 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -13,7 +13,7 @@ Auth Admin 500 is diagnosed, and the exposed historical Supabase credential is r
 those checks pass in an isolated environment, the posture can be reconsidered as Conditional Go.
 
 Latest audit increment (2026-07-13): migration filenames now have a deterministic preflight. The
-checkout contains 209 numbered migration files and 17 known historical duplicate prefixes; new or
+checkout contains 210 numbered migration files and 17 known historical duplicate prefixes; new or
 changed collisions fail CI and `db:push` before any database connection is attempted. The remote
 migration ledger remains unverified because this checkout is not linked to a Supabase project.
 
@@ -21,9 +21,9 @@ migration ledger remains unverified because this checkout is not linked to a Sup
 
 - 352 `page.tsx` route files.
 - 102 API route handlers.
-- 209 migration files; additive repair migrations through `0193` are now present.
+- 210 migration files; additive repair migrations through `0194` are now present.
 - 332 SQL files under `supabase`.
-- 346 unit-test files and 2,732 passing tests.
+- 346 unit-test files and 2,735 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -149,22 +149,22 @@ migration ledger remains unverified because this checkout is not linked to a Sup
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,732 tests / 346 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,735 tests / 346 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 235 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
 | Mobile overflow E2E | PASS at 320, 390, 768, and 1024 widths | Playwright |
 | Migration/seed contract | PASS, 26 focused tests | targeted Vitest run |
-| Migration filename audit | PASS, 17 known historical duplicate prefixes; next `0194` | `npm.cmd run db:audit:migrations` |
+| Migration filename audit | PASS, 17 known historical duplicate prefixes; next `0195` | `npm.cmd run db:audit:migrations` |
 | Schema probe | PASS | 11 required live table/ledger probes available, including Stripe claim columns |
-| Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f5dfd-43b2-7bc9-9afd-c2e5f3b02eb1`) |
+| Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f5e05-6d6c-7842-acfc-0a2bc357e97d`) |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
 | Dependency audit | PASS | 0 vulnerabilities after the scoped PostCSS override |
 | Live RLS attack tests | NOT RUN | requires isolated Supabase with migration applied |
 
 ## Remaining Launch Blockers
 
-1. Confirm migration history through `0193_marketplace_reports.sql` in the intended environment and
+1. Confirm migration history through `0194_marketplace_photos_bucket.sql` in the intended environment and
    reconcile the 17 known historical duplicate prefixes before using automated migration push there;
    rerun cross-family RLS and negotiation allow/deny probes.
 2. Diagnose the live Supabase Auth Admin 500 in Supabase/GoTrue/Postgres logs and rerun the Auth audit.

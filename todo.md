@@ -3366,7 +3366,7 @@ roadmap entries and user worktree changes are preserved.
   not currently accessible from this checkout.
 - Tests performed: Migration-version regression tests, direct audit CLI, full Vitest, typecheck,
   lint, dependency audit, production build, and public Playwright/axe E2E.
-- Evidence: `npm run db:audit:migrations` passed with next available version `0194`; remote migration
+- Evidence: `npm run db:audit:migrations` passed with next available version `0195`; remote migration
   ledger could not be queried because this checkout is not linked to a Supabase project.
 - Resolution note: A future owner-approved migration-history reconciliation may renumber or squash
   these legacy files after comparing `supabase_migrations.schema_migrations` in every environment.

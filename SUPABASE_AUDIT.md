@@ -4,7 +4,7 @@
 
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
-- Current migration files: 209, through `0193_marketplace_reports.sql`.
+- Current migration files: 210, through `0194_marketplace_photos_bucket.sql`.
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
   `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
@@ -14,7 +14,7 @@
   `0188_harden_trigger_function_security.sql`,
   `0189_reconcile_stripe_webhook_claims.sql`, and
   `0190_marketplace_handoffs.sql`, `0191_marketplace_price_history.sql`, `0192_marketplace_returns.sql`,
-  and `0193_marketplace_reports.sql`.
+  `0193_marketplace_reports.sql`, and `0194_marketplace_photos_bucket.sql`.
 - SQL files: 332.
 - Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
@@ -92,7 +92,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
-2. Apply the remaining migrations through `0193` and run `npm run db:audit:schema` and
+2. Apply the remaining migrations through `0194` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
@@ -103,7 +103,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 - `npm.cmd run db:audit:schema` passed all 11 required live schema checks, including the
   `stripe_webhook_events` claim columns previously missing from the live response.
 - `npm.cmd run db:audit:auth` still passes public Auth health but returns HTTP 500 from the Admin users
-  endpoint (`Database error finding users`, error id `019f5dfd-43b2-7bc9-9afd-c2e5f3b02eb1`).
+  endpoint (`Database error finding users`, error id `019f5e05-6d6c-7842-acfc-0a2bc357e97d`).
 - The schema result confirms object availability only; migration-history verification and authenticated
   RLS allow/deny tests still require an authorized isolated environment.
 
@@ -112,7 +112,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 - Static migration inspection found 17 duplicate numeric prefixes, from `0010` through `0142`.
 - These historical files remain unchanged pending comparison with the target environment's migration
   ledger. `npm.cmd run db:audit:migrations` passed with the complete known set explicit and next
-  available version `0194`.
+  available version `0195`.
 ## Audit Update - 2026-07-13
 
 Seed tooling no longer embeds a fixed household or creator identity. All six legacy service-role

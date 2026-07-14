@@ -4,9 +4,9 @@ Audit date: 2026-07-13
 
 ## Latest Audit Update - Migration history guard
 
-- `npm.cmd run db:audit:migrations`: passed; 209 numbered SQL files, 17 explicit historical duplicate
-  prefixes, next available version `0194`.
-- `npm.cmd exec vitest run`: 346 files, 2,732 tests passed.
+- `npm.cmd run db:audit:migrations`: passed; 210 numbered SQL files, 17 explicit historical duplicate
+  prefixes, next available version `0195`.
+- `npm.cmd exec vitest run`: 346 files, 2,735 tests passed after rebasing onto remote `main`.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
 - `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
@@ -15,7 +15,7 @@ Audit date: 2026-07-13
   authenticated test skipped out of 52.
 - `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
 - `npm.cmd run db:audit:auth`: public health passed; Admin users still returned HTTP 500,
-  error ID `019f5dfd-43b2-7bc9-9afd-c2e5f3b02eb1`.
+  error ID `019f5e05-6d6c-7842-acfc-0a2bc357e97d`.
 
 ## Passing Checks
 
@@ -35,7 +35,7 @@ Audit date: 2026-07-13
 | `git diff --check` | PASS |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` | PASS: 51, skipped 1 |
 | `npm.cmd audit --omit=dev --audit-level=moderate` | PASS: 0 vulnerabilities after the scoped PostCSS override |
-| `npm.cmd run db:audit:migrations` | PASS: 17 known historical duplicate prefixes are explicit; next available version `0194` |
+| `npm.cmd run db:audit:migrations` | PASS: 17 known historical duplicate prefixes are explicit; next available version `0195` |
 
 ## Audit Update - 2026-07-13 (post-rebase seller cockpit baseline)
 

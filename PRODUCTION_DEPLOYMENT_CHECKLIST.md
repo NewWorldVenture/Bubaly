@@ -10,7 +10,7 @@
 ## Database and Supabase
 
 - [ ] Back up the target database and confirm a tested restore path.
-- [ ] Apply migrations in order through `0193_marketplace_reports.sql`.
+- [ ] Run `npm run db:audit:migrations`, then apply migrations in order through `0194_marketplace_photos_bucket.sql`.
 - [ ] Run `npm run db:audit:schema` and `npm run db:audit:auth`.
 - [ ] Run isolated RLS allow/deny tests for family boundaries and marketplace circles.
 - [ ] Confirm all storage buckets, object policies, RPC grants, trigger functions, and realtime tables.
@@ -41,7 +41,7 @@
 ## Rollback
 
 - [ ] Keep the previous application deployment available for rollback.
-- [ ] If `0178` through `0193` causes unexpected behavior, stop feature exposure and use the tested migration rollback
+- [ ] If `0178` through `0194` causes unexpected behavior, stop feature exposure and use the tested migration rollback
   procedure; do not manually delete production data.
 - [ ] Restore database only through the approved backup/recovery process.
 - [ ] Re-run smoke tests and record the incident and recovery evidence.

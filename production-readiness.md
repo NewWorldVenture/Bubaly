@@ -3,7 +3,7 @@
 ## Automated gates
 
 - `npm run typecheck`, `npm run lint`, `npm test`, `npm audit`, and `npm run build` are
-  required in CI. The current baseline is 346 unit-test files, 2,732 tests, and 235
+  required in CI. The current baseline is 346 unit-test files, 2,735 tests, and 235
   generated pages.
 - `npm run test:e2e` covers 52 browser checks: public route rendering, responsive
   overflow, dark/light automated accessibility, anonymous protection, and an
@@ -21,7 +21,7 @@
    `/auth/v1/admin/users` to return HTTP 500. The migration removes only the two
    reserved synthetic patterns, aborts above 1,000 matches, and is idempotent.
    Run `npm run db:audit:auth` afterward to prove both Auth endpoints are healthy.
-2. Apply all pending migrations in order through `0193_marketplace_reports.sql`.
+2. Apply all pending migrations in order through `0194_marketplace_photos_bucket.sql`.
    `npm run db:audit:schema` is the authoritative capability check, but it does not
    replace migration-history verification.
 3. Verify production environment keys from `.env.example`, especially
