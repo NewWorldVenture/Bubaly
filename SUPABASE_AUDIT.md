@@ -288,6 +288,14 @@ has started so an uncertain external side effect is visible for review rather th
 exception details are logged server-side and replaced with a stable client message; usage events are checked
 and logged as best-effort operational telemetry after the core publish state is durable.
 
+### Social account, workspace, media, and access mutation audit
+
+Account disconnects, inbox comment resolution, media-library inserts, settings upserts, and access-role
+upserts now require a returned row and checked error before revalidation or successful completion. Media
+creation bounds titles, alt text, tags, and URL protocols. Access grants use `manage_access`, validate the
+role against the shared social-role matrix, and require the target user to be an active member of the
+current family, preventing cross-family or over-privileged role writes at the action boundary.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

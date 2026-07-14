@@ -11,6 +11,7 @@ import {
 import {
   extractHashtags, extractMentions, effectiveLength, type PostKind,
 } from '@/lib/social/content';
+import { isSocialRole } from '@/lib/social/roles';
 import { createTargets, runPublishNow } from '@/lib/social/publish';
 import type { PublishOutcome } from '@/lib/social/publish';
 
@@ -60,7 +61,7 @@ export async function connectAccountAction(formData: FormData) {
     created_by: userId,
     metadata: { needs_app_review: def.needsAppReview },
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error, 'Could not start the account connection.') };
   revalidatePath('/dashboard/social/accounts');
   return { ok: true, requiresSetup: !configured };
 }
@@ -68,13 +69,18 @@ export async function connectAccountAction(formData: FormData) {
 export async function disconnectAccountAction(accountId: string) {
   const { familyId: fid, userId } = await familyId();
   await requireSocialPermission(fid, 'connect_accounts');
+  if (!accountId.trim()) return { ok: false, error: 'Choose an account to disconnect.' };
   const supabase = await createServer();
-  await supabase
+  const { data, error } = await supabase
     .from('social_accounts')
     .update({ status: 'disconnected', deleted_at: new Date().toISOString(), updated_by: userId })
     .eq('id', accountId)
-    .eq('family_id', fid);
+    .eq('family_id', fid)
+    .select('id')
+    .single();
+  if (error || !data) return { ok: false, error: describeActionError(error, 'Could not disconnect that account.') };
   revalidatePath('/dashboard/social/accounts');
+  return { ok: true };
 }
 
 export type CreatePostResult = {
@@ -225,8 +231,16 @@ export async function retryPublishAction(postId: string): Promise<CreatePostResu
 export async function resolveCommentAction(id: string) {
   const { familyId: fid, userId } = await familyId();
   await requireSocialPermission(fid, 'view_feed');
+  if (!id.trim()) throw new Error('Choose a comment to resolve.');
   const supabase = await createServer();
-  await supabase.from('social_comments').update({ status: 'resolved', updated_by: userId }).eq('id', id).eq('family_id', fid);
+  const { data, error } = await supabase
+    .from('social_comments')
+    .update({ status: 'resolved', updated_by: userId })
+    .eq('id', id)
+    .eq('family_id', fid)
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(describeActionError(error, 'Could not resolve that comment.'));
   revalidatePath('/dashboard/social/inbox');
 }
 
@@ -236,13 +250,28 @@ export async function createMediaAction(formData: FormData) {
   const supabase = await createServer();
   const title = String(formData.get('title') ?? '').trim() || null;
   const url = String(formData.get('url') ?? '').trim() || null;
-  const kind = (String(formData.get('kind') ?? 'image')) as 'image' | 'video' | 'audio' | 'document' | 'thumbnail';
+  const kindValue = String(formData.get('kind') ?? 'image');
+  const mediaKinds = ['image', 'video', 'audio', 'document', 'thumbnail'] as const;
+  if (!(mediaKinds as readonly string[]).includes(kindValue)) throw new Error('Choose a supported media type.');
+  const kind = kindValue as typeof mediaKinds[number];
   const alt = String(formData.get('alt_text') ?? '').trim() || null;
   const tags = String(formData.get('tags') ?? '').split(',').map((t) => t.trim()).filter(Boolean);
-  await supabase.from('social_media_library').insert({
+  if (title && title.length > 200) throw new Error('Asset titles must be 200 characters or fewer.');
+  if (alt && alt.length > 500) throw new Error('Alt text must be 500 characters or fewer.');
+  if (tags.length > 20 || tags.some((tag) => tag.length > 80)) throw new Error('Use up to 20 tags, each 80 characters or fewer.');
+  if (url) {
+    try {
+      const parsedUrl = new URL(url);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('Unsupported URL protocol');
+    } catch {
+      throw new Error('Asset URLs must use http or https.');
+    }
+  }
+  const { data, error } = await supabase.from('social_media_library').insert({
     family_id: fid, user_id: userId, kind, title, url, alt_text: alt, tags,
     source: url ? 'upload' : 'prompt', status: url ? 'ready' : 'prompt_only', created_by: userId,
-  });
+  }).select('id').single();
+  if (error || !data) throw new Error(describeActionError(error, 'Could not save that media asset.'));
   revalidatePath('/dashboard/social/media-library');
 }
 
@@ -256,23 +285,37 @@ export async function updateSettingsAction(formData: FormData) {
   const signature = String(formData.get('signature') ?? '').trim() || null;
   const ai_tone = String(formData.get('ai_tone') ?? 'friendly');
   const default_platforms = formData.getAll('default_platforms').map(String).filter(isPlatform);
-  await supabase.from('social_settings').upsert(
+  if (!default_timezone.trim() || default_timezone.length > 80) throw new Error('Enter a valid timezone.');
+  if (ai_tone.length > 80) throw new Error('AI tone must be 80 characters or fewer.');
+  if (signature && signature.length > 300) throw new Error('Signature must be 300 characters or fewer.');
+  const { data, error } = await supabase.from('social_settings').upsert(
     { family_id: fid, default_timezone, require_approval, auto_hashtags, signature, ai_tone, default_platforms, updated_by: userId },
     { onConflict: 'family_id' },
-  );
+  ).select('id').single();
+  if (error || !data) throw new Error(describeActionError(error, 'Could not save social settings.'));
   revalidatePath('/dashboard/social/settings');
 }
 
 export async function grantAccessAction(formData: FormData) {
   const { familyId: fid, userId } = await familyId();
-  await requireSocialPermission(fid, 'manage_settings');
+  await requireSocialPermission(fid, 'manage_access');
   const supabase = await createServer();
   const targetUserId = String(formData.get('user_id') ?? '').trim();
   const role = String(formData.get('social_role') ?? 'read_only');
-  if (!targetUserId) return;
-  await supabase.from('social_access_permissions').upsert(
+  if (!targetUserId) throw new Error('Choose a family member.');
+  if (!isSocialRole(role)) throw new Error('Choose a valid social role.');
+  const { data: member, error: memberError } = await supabase
+    .from('family_members')
+    .select('id')
+    .eq('family_id', fid)
+    .eq('user_id', targetUserId)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (memberError || !member) throw new Error(describeActionError(memberError, 'That user is not an active family member.'));
+  const { data, error } = await supabase.from('social_access_permissions').upsert(
     { family_id: fid, user_id: targetUserId, social_role: role as never, granted_by: userId, created_by: userId, status: 'active' },
     { onConflict: 'family_id,user_id' },
-  );
+  ).select('id').single();
+  if (error || !data) throw new Error(describeActionError(error, 'Could not update social access.'));
   revalidatePath('/dashboard/social/settings');
 }

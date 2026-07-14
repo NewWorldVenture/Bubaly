@@ -4249,3 +4249,17 @@ roadmap entries and user worktree changes are preserved.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0272 - Social ancillary mutations could report success after ignored writes or over-broad access checks
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Social access control / data integrity / input validation
+- Feature: Social account, inbox, media-library, settings, and access-management actions
+- File or files: `app/(app)/dashboard/social/actions.ts`, `tests/social-action-persistence.test.ts`
+- Description: Disconnect, resolve, media, settings, and role-grant writes ignored returned errors; role grants used `manage_settings`, accepted arbitrary users/roles, and media URLs/text had no server-side bounds.
+- Resolution: Required mutations now check returned rows and errors, form actions fail with stable messages, role grants require `manage_access` plus an active current-family member and valid role, and media input is bounded with HTTP(S)-only URLs.
+- Tests performed: Focused social action/publish/role tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
+- Evidence: `tests/social-action-persistence.test.ts` guards mutation checks, input validation, and the manage-access/current-family boundary.
+- Verified by: Codex
+- Date completed: 2026-07-14

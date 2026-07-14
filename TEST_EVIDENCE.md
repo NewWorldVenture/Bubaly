@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Social account, workspace, media, and access mutation boundaries
+
+- `npm.cmd exec vitest run tests/social-action-persistence.test.ts tests/social-publish-persistence.test.ts tests/social-roles.test.ts`:
+  3 files, 18 tests passed.
+- `npm.cmd exec vitest run`: 385 files, 2,943 tests passed.
+- `npm.cmd run typecheck` and `npm.cmd run lint`: passed; only the existing Next.js deprecation notice remains.
+- Dependency audit: 0 vulnerabilities. Migration filename audit: 219 numbered SQL files, next version
+  `0204`, with the known historical duplicate prefixes unchanged. Live schema audit: 11 of 11 probes passed.
+- Clean `npm.cmd run build`: passed; 250 static pages generated. Public Playwright/axe/overflow E2E:
+  51 passed, 1 intentional authenticated skip out of 52 tests.
+- Account disconnect, inbox resolution, media creation, settings saves, and access grants now check
+  durable mutation results. Access grants require `manage_access`, an active family member, and a valid
+  social role; media URLs and text inputs are bounded and restricted to HTTP(S).
+
 ## Latest Audit Update - Social publishing persistence boundaries
 
 - `npm.cmd exec vitest run tests/social-publish-persistence.test.ts tests/social-content.test.ts tests/social-capabilities.test.ts`:
