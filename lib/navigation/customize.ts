@@ -27,8 +27,9 @@ export const SIDEBAR_NAV_EVENT = 'bubaly:sidebar-nav-changed';
 /** Per-parent map of the sub-pages a member wants, in order. */
 export type NavChildMap = Record<string, string[]>;
 
-/** Max primary destinations the sidebar will render. */
-export const MAX_SIDEBAR_NAV = 20;
+/** Max primary destinations the sidebar will render. Generous so a member can
+ *  "Pin all services in my plan" without truncation (the rail scrolls). */
+export const MAX_SIDEBAR_NAV = 200;
 
 /** Routes that can never appear in the customizable list (fixed chrome). */
 export const FIXED_NAV_ROUTES = new Set<string>([
@@ -67,6 +68,26 @@ export function sanitizeNavKeys(
     if (out.length >= max) break;
   }
   return out;
+}
+
+/**
+ * Add keys to a nav list (bulk "pin"): appends new keys after the current ones,
+ * de-duplicated, chrome-stripped, restricted to `validKeys`, capped. Order of
+ * existing pins is preserved; newly-pinned keys follow in `add` order.
+ */
+export function addNavKeys(
+  current: readonly string[],
+  add: readonly string[],
+  validKeys?: readonly string[],
+  max: number = MAX_SIDEBAR_NAV,
+): string[] {
+  return sanitizeNavKeys([...current, ...add], validKeys, max);
+}
+
+/** Remove keys from a nav list (bulk "unpin"). Order of the rest is preserved. */
+export function removeNavKeys(current: readonly string[], remove: readonly string[]): string[] {
+  const drop = new Set(remove);
+  return current.filter((k) => typeof k === 'string' && k && !drop.has(k));
 }
 
 /**

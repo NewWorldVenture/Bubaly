@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   sanitizeNavKeys, resolveNavKeys, resolveChildKeys, sanitizeChildMap, FIXED_NAV_ROUTES,
+  addNavKeys, removeNavKeys,
 } from '@/lib/navigation/customize';
 
 describe('sanitizeNavKeys', () => {
@@ -50,6 +51,29 @@ describe('resolveChildKeys', () => {
   });
   it('honors an explicit empty array (parent becomes a plain link)', () => {
     expect(resolveChildKeys({ '/p': [] }, '/p', catalog)).toEqual([]);
+  });
+});
+
+describe('addNavKeys (bulk pin)', () => {
+  it('appends new keys after existing ones, de-duped, order preserved', () => {
+    expect(addNavKeys(['/a', '/b'], ['/b', '/c', '/d'])).toEqual(['/a', '/b', '/c', '/d']);
+  });
+  it('strips chrome and restricts to the allowlist when given', () => {
+    for (const r of FIXED_NAV_ROUTES) {
+      expect(addNavKeys(['/a'], [r, '/b'])).toEqual(['/a', '/b']);
+    }
+    expect(addNavKeys(['/a'], ['/b', '/nope'], ['/a', '/b'])).toEqual(['/a', '/b']);
+  });
+  it('caps at max', () => {
+    expect(addNavKeys(['/a'], ['/b', '/c', '/d'], undefined, 2)).toEqual(['/a', '/b']);
+  });
+});
+
+describe('removeNavKeys (bulk unpin)', () => {
+  it('removes the given keys, preserving the rest in order', () => {
+    expect(removeNavKeys(['/a', '/b', '/c'], ['/b'])).toEqual(['/a', '/c']);
+    expect(removeNavKeys(['/a', '/b'], ['/a', '/b'])).toEqual([]);
+    expect(removeNavKeys(['/a', '/b'], [])).toEqual(['/a', '/b']);
   });
 });
 

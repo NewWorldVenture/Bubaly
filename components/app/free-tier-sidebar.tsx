@@ -1,38 +1,36 @@
 'use client';
 
-// The curated Free-tier desktop sidebar: a calm primary list, the user's pinned
-// shortcuts, an "All Services" launcher to the full catalog (where any service
-// can be ⭐-pinned to the sidebar), and a Settings / Help footer. The full
-// ~70-module catalog lives behind All Services (plan-gated with upgrade prompts)
-// so nothing is lost — it's just no longer overwhelming.
+// The curated desktop sidebar (used by every account). A calm primary list of
+// the member's pinned destinations, an "All Services" launcher to the full
+// catalog where ANY service in the member's plan can be ⭐-pinned to the rail
+// (individually, or all-at-once with "Pin all in my plan"), and a Settings /
+// Help footer. Pins ARE the sidebar list: they persist to Supabase
+// (user_preferences.notification_prefs.sidebarNav) so the rail follows the
+// member across devices, with localStorage as an offline cache.
 
-import { useEffect, useId, useMemo, useState } from 'react';
-import { Star } from 'lucide-react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { Star, ListPlus, ListX } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
   SIDEBAR_FOOTER_NAV, ALL_SERVICES_ICON, APP_NAV_GROUPS,
-  NAV_CATALOG_BY_HREF, NAV_CATALOG_KEYS, DEFAULT_SIDEBAR_NAV_KEYS,
+  ALL_SERVICES_BY_HREF, ALL_SERVICES_KEYS, DEFAULT_SIDEBAR_NAV_KEYS,
   NAV_CHILD_KEYS_BY_PARENT, isNavItemVisibleToRole, type NavItem,
 } from '@/lib/constants/navigation';
 import { isManager } from '@/lib/constants/roles';
+import { featureAccessByTier } from '@/lib/features/tiers';
 import {
   resolveNavKeys, sanitizeNavKeys, resolveChildKeys, sanitizeChildMap,
+  addNavKeys, removeNavKeys,
   SIDEBAR_NAV_STORAGE_KEY, SIDEBAR_NAV_CHILDREN_STORAGE_KEY, SIDEBAR_NAV_EVENT,
   type NavChildMap,
 } from '@/lib/navigation/customize';
-import { FEATURE_BY_KEY } from '@/lib/dashboard/registry';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
-import { saveDashboardLayoutAction } from '@/app/(app)/dashboard/customize-actions';
-import { loadSidebarPrefs } from '@/app/(app)/dashboard/navigation-actions';
+import { loadSidebarPrefs, saveSidebarNavAction } from '@/app/(app)/dashboard/navigation-actions';
 import { useApp } from './app-context';
 import { resolveItems, NavEntry, AiAssistantNavButton } from './nav-shared';
 import { SidebarAccount } from './sidebar-account';
-
-// Reverse map: nav route → registry feature key (only routes that ARE a
-// registry feature can be pinned, since pins persist as dashboard feature_keys).
-const KEY_BY_ROUTE = new Map(Object.values(FEATURE_BY_KEY).map((f) => [f.route, f.key]));
 
 /**
  * Live unread-messages count for the sidebar badge. Seeds from the server
@@ -42,10 +40,6 @@ const KEY_BY_ROUTE = new Map(Object.values(FEATURE_BY_KEY).map((f) => [f.route, 
  */
 function useLiveUnread(initial: number, familyId: string, userId: string): number {
   const [count, setCount] = useState(initial);
-  // Unique per component instance. The browser Supabase client is a singleton,
-  // and the desktop sidebar + the mobile drawer can both mount a FreeTierSidebar
-  // at once — two channels with the SAME topic on one client collide and throw
-  // ("tried to subscribe multiple times"), which broke the hamburger drawer.
   const channelId = useId();
   useEffect(() => { setCount(initial); }, [initial]);
 
@@ -86,20 +80,20 @@ function readCachedChildMap(): NavChildMap {
 }
 
 /**
- * The member's customized primary destinations AND per-group sub-pages
- * (Navigation Choices). Source of truth is Supabase
- * (user_preferences.notification_prefs.sidebarNav + .sidebarNavChildren via the
- * server action); localStorage is an instant/offline cache and a same-tab
- * `SIDEBAR_NAV_EVENT` keeps the live rail in sync the moment Settings saves.
- * Falls back to the curated default order until a saved layout loads.
+ * The member's pinned sidebar destinations (raw keys), the resolved NavItems to
+ * render, and a `persist` that saves a new pin list everywhere at once:
+ * optimistic state → localStorage cache → same-tab broadcast (so the mobile
+ * drawer's sidebar updates live) → Supabase (source of truth). Resolves against
+ * the FULL cross-tier catalog so a member can pin higher-tier modules their plan
+ * unlocks; payment-tier gating happens at render.
  */
-function useSidebarNav(): NavItem[] {
-  const [keys, setKeys] = useState<string[]>(() => {
+function useSidebarNav() {
+  const [keys, setKeysState] = useState<string[]>(() => {
     if (typeof window === 'undefined') return DEFAULT_SIDEBAR_NAV_KEYS;
     try {
       const raw = window.localStorage.getItem(SIDEBAR_NAV_STORAGE_KEY);
       if (raw) {
-        const cached = sanitizeNavKeys(JSON.parse(raw), NAV_CATALOG_KEYS);
+        const cached = sanitizeNavKeys(JSON.parse(raw), ALL_SERVICES_KEYS);
         if (cached.length) return cached;
       }
     } catch { /* ignore */ }
@@ -113,8 +107,8 @@ function useSidebarNav(): NavItem[] {
     loadSidebarPrefs().then(({ nav, children }) => {
       if (!active) return;
       if (nav != null) {
-        const clean = resolveNavKeys(nav, DEFAULT_SIDEBAR_NAV_KEYS, NAV_CATALOG_KEYS);
-        setKeys(clean);
+        const clean = resolveNavKeys(nav, DEFAULT_SIDEBAR_NAV_KEYS, ALL_SERVICES_KEYS);
+        setKeysState(clean);
         try { window.localStorage.setItem(SIDEBAR_NAV_STORAGE_KEY, JSON.stringify(clean)); } catch { /* ignore */ }
       }
       if (children != null) {
@@ -126,25 +120,36 @@ function useSidebarNav(): NavItem[] {
     return () => { active = false; };
   }, []);
 
-  // Live update when the Settings editor saves a new layout in this tab.
+  // Live update when a layout change is broadcast in this tab (Settings editor
+  // saving, or the other FreeTierSidebar instance pinning).
   useEffect(() => {
     const onChange = (e: Event) => {
       const detail = (e as CustomEvent<{ nav: string[]; children: NavChildMap }>).detail;
-      if (detail?.nav) setKeys(resolveNavKeys(detail.nav, DEFAULT_SIDEBAR_NAV_KEYS, NAV_CATALOG_KEYS));
+      if (detail?.nav) setKeysState(resolveNavKeys(detail.nav, DEFAULT_SIDEBAR_NAV_KEYS, ALL_SERVICES_KEYS));
       if (detail?.children) setChildMap(sanitizeChildMap(detail.children, NAV_CHILD_KEYS_BY_PARENT));
     };
     window.addEventListener(SIDEBAR_NAV_EVENT, onChange);
     return () => window.removeEventListener(SIDEBAR_NAV_EVENT, onChange);
   }, []);
 
-  return useMemo(
-    () => resolveNavKeys(keys, DEFAULT_SIDEBAR_NAV_KEYS, NAV_CATALOG_KEYS)
-      .map((href) => NAV_CATALOG_BY_HREF.get(href))
+  /** Save a new pin list: optimistic + cache + broadcast + Supabase. */
+  const persist = useCallback((next: string[]): Promise<{ ok: boolean; error?: string }> => {
+    const clean = sanitizeNavKeys(next, ALL_SERVICES_KEYS);
+    setKeysState(clean);
+    try { window.localStorage.setItem(SIDEBAR_NAV_STORAGE_KEY, JSON.stringify(clean)); } catch { /* ignore */ }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(SIDEBAR_NAV_EVENT, { detail: { nav: clean, children: childMap } }));
+    }
+    return saveSidebarNavAction({ keys: clean });
+  }, [childMap]);
+
+  const items = useMemo(
+    () => resolveNavKeys(keys, DEFAULT_SIDEBAR_NAV_KEYS, ALL_SERVICES_KEYS)
+      .map((href) => ALL_SERVICES_BY_HREF.get(href))
       .filter((i): i is NavItem => Boolean(i))
       .map((item) => {
         const childCatalog = item.children;
         if (!childCatalog || childCatalog.length === 0) return item;
-        // Override the group's sub-pages with the member's chosen order/subset.
         const byHref = new Map(childCatalog.map((c) => [c.href, c]));
         const children = resolveChildKeys(childMap, item.href, childCatalog.map((c) => c.href))
           .map((h) => byHref.get(h))
@@ -153,19 +158,57 @@ function useSidebarNav(): NavItem[] {
       }),
     [keys, childMap],
   );
+
+  return { items, keys, persist };
 }
 
-/** Full catalog of every module, grouped + plan-gated, with ⭐ pin toggles. */
-function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin }: {
+/** Full catalog of every module, grouped + plan-gated, with ⭐ pin toggles and a
+ *  "Pin all in my plan" / "Unpin all" header for the member's tier. */
+function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinAll, onUnpinAll, busy }: {
   open: boolean; onClose: () => void; onLocked: (item: NavItem) => void;
-  pinned: Set<string>; onTogglePin: (key: string) => void;
+  pinned: Set<string>; onTogglePin: (href: string) => void;
+  onPinAll: (hrefs: string[]) => void; onUnpinAll: (hrefs: string[]) => void; busy: boolean;
 }) {
   const { planLevel, isSuperAdmin, featureTiers, role } = useApp();
-  if (!open) return null;
   const manager = isManager(role);
+
+  // Every service the member's plan unlocks, across all groups (deduped).
+  const inTierHrefs = useMemo(() => {
+    const set = new Set<string>();
+    for (const group of APP_NAV_GROUPS) {
+      for (const { item, locked } of resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager)) {
+        if (!locked && ALL_SERVICES_BY_HREF.has(item.href)) set.add(item.href);
+      }
+    }
+    return [...set];
+  }, [featureTiers, planLevel, isSuperAdmin, manager]);
+
+  const allPinned = inTierHrefs.length > 0 && inTierHrefs.every((h) => pinned.has(h));
+
+  if (!open) return null;
   return (
     <Modal open onClose={onClose} title="All Services">
-      <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3">
+        <p className="text-xs text-muted">⭐ pins a service to your sidebar. {inTierHrefs.length} in your plan.</p>
+        <div className="flex gap-2">
+          <button
+            type="button" disabled={busy || inTierHrefs.length === 0}
+            onClick={() => onPinAll(inTierHrefs)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition hover:opacity-90 disabled:opacity-50"
+          >
+            <ListPlus className="h-3.5 w-3.5" /> Pin all in my plan
+          </button>
+          <button
+            type="button" disabled={busy || !inTierHrefs.some((h) => pinned.has(h))}
+            onClick={() => onUnpinAll(inTierHrefs)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50"
+          >
+            <ListX className="h-3.5 w-3.5" /> {allPinned ? 'Unpin all' : 'Unpin these'}
+          </button>
+        </div>
+      </div>
+
+      <div className="max-h-[62vh] space-y-5 overflow-y-auto pr-1">
         {APP_NAV_GROUPS.map((group) => {
           const resolved = resolveItems(group.items, featureTiers, planLevel, isSuperAdmin, manager);
           if (resolved.length === 0) return null;
@@ -174,20 +217,21 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin }: {
               <p className="px-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted/70">{group.title}</p>
               <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
                 {resolved.map(({ item, locked }) => {
-                  const key = !locked ? KEY_BY_ROUTE.get(item.href) : undefined;
-                  const isPinned = key ? pinned.has(key) : false;
+                  const pinnable = !locked && ALL_SERVICES_BY_HREF.has(item.href);
+                  const isPinned = pinnable && pinned.has(item.href);
                   return (
                     <div key={item.href} className="relative">
                       <div onClick={() => { if (!locked) onClose(); }}>
                         <NavEntry item={item} variant="grid" locked={locked} onLocked={onLocked} />
                       </div>
-                      {key && (
+                      {pinnable && (
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); onTogglePin(key); }}
+                          disabled={busy}
+                          onClick={(e) => { e.stopPropagation(); onTogglePin(item.href); }}
                           aria-label={isPinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
                           title={isPinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
-                          className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-md text-muted/60 transition hover:bg-elevated hover:text-brand-text"
+                          className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-md text-muted/60 transition hover:bg-elevated hover:text-brand-text disabled:opacity-50"
                         >
                           <Star className={cn('h-3.5 w-3.5', isPinned && 'fill-brand text-brand-text')} />
                         </button>
@@ -205,54 +249,52 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin }: {
 }
 
 export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => void }) {
-  const { familyId, userId, unreadMessages, role, isSuperAdmin } = useApp();
-  const { error: toastError } = useToast();
+  const { familyId, userId, unreadMessages, role, isSuperAdmin, planLevel, featureTiers } = useApp();
+  const { error: toastError, success } = useToast();
   const [allOpen, setAllOpen] = useState(false);
-  const [keys, setKeys] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
   const liveUnread = useLiveUnread(unreadMessages, familyId, userId);
-  const sidebarNav = useSidebarNav();
-  // Hide manager-only destinations (e.g. Kid Logins) from kids/teens/guests —
-  // their page guard would redirect them away anyway.
+  const { items: sidebarNav, keys, persist } = useSidebarNav();
   const manager = isManager(role);
+
+  // Render list: role-visible, payment-tier-gated (a pinned above-plan module
+  // renders locked with the upgrade prompt, never as a dead link). Hidden/off
+  // modules are dropped entirely.
   const primaryNav = useMemo(
     () => sidebarNav
       .filter((item) => isNavItemVisibleToRole(item, { isManager: manager, isSuperAdmin }))
-      .map((item) => (item.children
-        ? { ...item, children: item.children.filter((c) => isNavItemVisibleToRole(c, { isManager: manager, isSuperAdmin })) }
-        : item)),
-    [sidebarNav, manager, isSuperAdmin],
+      .map((item) => {
+        const access = featureAccessByTier(featureTiers[item.href], planLevel, isSuperAdmin);
+        const children = item.children?.filter((c) => isNavItemVisibleToRole(c, { isManager: manager, isSuperAdmin }));
+        return { item: children ? { ...item, children } : item, locked: access === 'locked', hidden: access === 'hidden' };
+      })
+      .filter((x) => !x.hidden),
+    [sidebarNav, manager, isSuperAdmin, planLevel, featureTiers],
   );
 
-  // Initial pinned set: the user's saved layout, else the family default.
-  useEffect(() => {
-    let active = true;
-    createClient()
-      .from('dashboard_layouts')
-      .select('feature_keys, scope, user_id')
-      .eq('family_id', familyId).is('deleted_at', null).in('scope', ['user', 'family'])
-      .then(({ data }) => {
-        if (!active) return;
-        const mine = data?.find((l) => l.scope === 'user' && l.user_id === userId);
-        const fam = data?.find((l) => l.scope === 'family');
-        setKeys(((mine?.feature_keys ?? fam?.feature_keys ?? []) as string[]));
-      });
-    return () => { active = false; };
-  }, [familyId, userId]);
+  const pinnedSet = useMemo(() => new Set(keys), [keys]);
 
-  const pinnedSet = useMemo(() => new Set(keys ?? []), [keys]);
+  const save = useCallback(async (next: string[], okMsg?: string) => {
+    setBusy(true);
+    const prev = keys;
+    const res = await persist(next);
+    setBusy(false);
+    if (!res.ok) { void persist(prev); toastError(res.error ?? 'Could not update your sidebar.'); return; }
+    if (okMsg) success(okMsg);
+  }, [keys, persist, toastError, success]);
 
-  async function togglePin(key: string) {
-    const current = keys ?? [];
-    const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
-    setKeys(next); // optimistic
-    // No deviceContext → device 'all', the same row the Home Quick Access uses,
-    // so pinned favorites stay in sync across the sidebar and the dashboard.
-    const res = await saveDashboardLayoutAction({ featureKeys: next });
-    if (!res.ok) {
-      setKeys(current); // revert
-      toastError(res.error ?? 'Could not update your shortcuts.');
-    }
-  }
+  const togglePin = useCallback((href: string) => {
+    const next = keys.includes(href) ? removeNavKeys(keys, [href]) : addNavKeys(keys, [href], ALL_SERVICES_KEYS);
+    void save(next);
+  }, [keys, save]);
+
+  const pinAll = useCallback((hrefs: string[]) => {
+    void save(addNavKeys(keys, hrefs, ALL_SERVICES_KEYS), `Pinned ${hrefs.length} services to your sidebar.`);
+  }, [keys, save]);
+
+  const unpinAll = useCallback((hrefs: string[]) => {
+    void save(removeNavKeys(keys, hrefs), 'Unpinned those services.');
+  }, [keys, save]);
 
   return (
     <>
@@ -262,14 +304,14 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
           <AiAssistantNavButton />
         </div>
 
-        {/* Primary destinations — customizable via Settings → Navigation Choices */}
+        {/* Primary destinations — the member's pinned services */}
         <div className="space-y-0.5">
-          {primaryNav.map((item) => (
+          {primaryNav.map(({ item, locked }) => (
             <NavEntry
               key={item.href}
               item={item}
               variant="list"
-              locked={false}
+              locked={locked}
               onLocked={onLocked}
               badge={item.href === '/dashboard/messages' ? liveUnread : undefined}
             />
@@ -308,6 +350,9 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
         onLocked={(i) => { setAllOpen(false); onLocked(i); }}
         pinned={pinnedSet}
         onTogglePin={togglePin}
+        onPinAll={pinAll}
+        onUnpinAll={unpinAll}
+        busy={busy}
       />
     </>
   );

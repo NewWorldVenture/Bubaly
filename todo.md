@@ -1453,6 +1453,27 @@ missing-location events, colliding events for conflicts). Run it, then open
   the verdict, and the "Similar: $X–$Y" range; nav entry (Deals, `Tag`). Verified: tsc · eslint ·
   **vitest (11 coach)** · `next build` (`/marketplace/deals`).
 
+- [x] **All Services → Pin any/ALL services to the sidebar ✅ SHIPPED (2026-07-13).** Owner request +
+  bug fix. Two parts:
+  - **Bug fix (the visible error toast):** `dashboard_layouts` pin/customize saves threw *"there is no
+    unique or exclusion constraint matching the ON CONFLICT specification"* — the 0089 unique indexes are
+    **partial** (`WHERE scope=… AND deleted_at IS NULL`), which supabase-js's bare column-list `onConflict`
+    can't target. **`0195_dashboard_layout_upsert_constraint.sql`** adds a non-partial
+    `UNIQUE NULLS NOT DISTINCT (family_id, user_id, device_context)` index (serves user layouts +
+    the family default, which coexist); `saveFamilyDefaultLayoutAction` now upserts on that key.
+    PG16-verified (reproduced the exact error, then both upserts succeed + coexist; idempotent ×2).
+  - **Feature:** the ⭐ in **All Services** now pins a service to the **sidebar rail itself**
+    (`user_preferences.notification_prefs.sidebarNav`, 100% Supabase via `saveSidebarNavAction`), not the
+    Home Quick-Access tiles — so pins actually appear in the rail. Keyed by **href**, so **every** in-plan
+    service is pinnable (fixes "only a few have the star"), and a **"Pin all in my plan" / "Unpin all"**
+    header bulk-pins the member's whole tier. New `ALL_SERVICES_CATALOG` (all tiers, superset of the
+    free-only `NAV_CATALOG`) resolves higher-tier pins; the rail **payment-tier-gates** at render
+    (`featureAccessByTier`) so a pinned above-plan module shows locked, never a dead link.
+    `MAX_SIDEBAR_NAV` raised 20→200; pure `addNavKeys`/`removeNavKeys` helpers (**+5 tests**). Live sync
+    across the desktop rail + mobile drawer via the `SIDEBAR_NAV_EVENT` broadcast + localStorage cache.
+    Verified: tsc · eslint · **vitest (18 nav-customize)** · `next build`.
+  - ⚠️ apply **`0195`** to prod (see `docs/PENDING_PROD_MIGRATIONS.md`) — coupled with this deploy.
+
 ### 2. Wallet — "Full family financial OS"  ◐ (already wired)
 Has `wallet_cards/passes/rewards` (0113), `/wallet` route, `lib/wallet/*`. Audit confirmed the
 surfaces read/write Supabase (10+ `.from()` calls, realtime). Remaining honest gaps:

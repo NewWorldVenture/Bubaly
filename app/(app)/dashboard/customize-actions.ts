@@ -93,8 +93,10 @@ export async function saveFamilyDefaultLayoutAction(input: { featureKeys: string
 
   const device = asDevice(input.deviceContext);
   const { error } = await supabase.from('dashboard_layouts').upsert(
+    // Targets the non-partial uq_dashboard_layout_upsert index (0195); family
+    // rows carry a NULL user_id, deduped via NULLS NOT DISTINCT.
     { family_id: familyId, user_id: null, scope: 'family', device_context: device, feature_keys: v.keys, is_active: true, created_by: userId, updated_by: userId, deleted_at: null },
-    { onConflict: 'family_id,device_context' },
+    { onConflict: 'family_id,user_id,device_context' },
   );
   if (error) return { ok: false, error: error.message };
 

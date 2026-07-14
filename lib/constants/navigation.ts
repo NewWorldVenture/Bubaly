@@ -348,6 +348,35 @@ export const NAV_CATALOG_BY_HREF: Map<string, NavItem> = new Map(NAV_CATALOG.map
 /** Every selectable route (the customization allowlist). */
 export const NAV_CATALOG_KEYS: string[] = NAV_CATALOG.map((i) => i.href);
 
+/**
+ * The FULL pin catalog: every role-appropriate service across ALL plan tiers
+ * (superset of NAV_CATALOG, which is free-only). Powers "pin any service in your
+ * plan to the sidebar" — a member can pin higher-tier modules their plan
+ * unlocks. Built exactly like NAV_CATALOG (PRIMARY_NAV keeps its expandable
+ * children; group items are leaves) but WITHOUT the free-only filter. Payment-
+ * tier gating happens at render time, so a pinned above-plan item shows locked.
+ */
+export const ALL_SERVICES_CATALOG: NavItem[] = (() => {
+  const out: NavItem[] = [];
+  const seen = new Set<string>();
+  const push = (item: NavItem) => {
+    if (seen.has(item.href) || FIXED_SIDEBAR_ROUTES.has(item.href)) return;
+    seen.add(item.href);
+    out.push(item);
+  };
+  for (const item of PRIMARY_NAV) push(item);
+  for (const group of APP_NAV_GROUPS) {
+    for (const item of group.items) push({ href: item.href, label: item.label, icon: item.icon, manage: item.manage, minLevel: item.minLevel });
+  }
+  return out;
+})();
+
+/** Route → item lookup across all tiers (for resolving pinned sidebar entries). */
+export const ALL_SERVICES_BY_HREF: Map<string, NavItem> = new Map(ALL_SERVICES_CATALOG.map((i) => [i.href, i]));
+
+/** Every pinnable route across all tiers (the sidebar-pin allowlist). */
+export const ALL_SERVICES_KEYS: string[] = ALL_SERVICES_CATALOG.map((i) => i.href);
+
 /** Default primary-sidebar layout (the curated order) as a list of routes. */
 export const DEFAULT_SIDEBAR_NAV_KEYS: string[] = PRIMARY_NAV.map((i) => i.href);
 
