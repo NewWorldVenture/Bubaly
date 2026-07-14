@@ -2,6 +2,19 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Child login throttle and provisioning persistence boundaries
+
+- `npm.cmd exec vitest run tests/child-login-persistence.test.ts tests/child-login-action-security.test.ts`:
+  2 files, 4 tests passed.
+- `npm.cmd exec vitest run`: 383 files, 2,932 tests passed.
+- `npm.cmd run typecheck` and `npm.cmd run lint`: passed; only the existing Next.js deprecation notice remains.
+- Dependency audit: 0 vulnerabilities. Migration filename audit: 219 numbered SQL files, next version
+  `0204`, with the known historical duplicate prefixes unchanged. Live schema audit: 11 of 11 probes passed.
+- Clean `npm.cmd run build`: passed; 250 static pages generated. Public Playwright/axe/overflow E2E:
+  51 passed, 1 intentional authenticated skip out of 52 tests.
+- Failed-attempt throttle writes now fail closed when durable persistence fails, and child-login provisioning
+  compensates Auth, member mapping, and child-login rows when active-family preference persistence fails.
+
 ## Latest Audit Update - Chore proof submission persistence boundaries
 
 - `npm.cmd exec vitest run tests/chore-proof-persistence.test.ts`: 1 file, 4 tests passed.

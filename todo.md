@@ -4221,3 +4221,17 @@ roadmap entries and user worktree changes are preserved.
   for upload, submission, validator, validation-row, and assignment failures.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0270 - Child login throttle/provisioning writes could leave authentication state partial
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Authentication / brute-force resistance / data integrity
+- Feature: Child username/PIN sign-in and parent child-login provisioning
+- File or files: `app/(auth)/actions.ts`, `app/(app)/family/child-login-actions.ts`, `tests/child-login-persistence.test.ts`
+- Description: Failed-attempt throttle upserts were ignored, allowing a write outage to remove the durable brute-force defense; child provisioning ignored active-family preference persistence after creating Auth/member/mapping state.
+- Resolution: Counter-write failures now fail closed with a temporary-unavailable response; preference failure rolls back mapping, member link, and Auth user.
+- Tests performed: Focused child-login persistence/security tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
+- Evidence: `tests/child-login-persistence.test.ts` guards throttle error handling, both failure paths, and provisioning compensation.
+- Verified by: Codex
+- Date completed: 2026-07-14

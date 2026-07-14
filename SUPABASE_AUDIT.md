@@ -272,6 +272,13 @@ submission row is deleted (cascading its validation row) and all uploaded paths 
 validation and assignment updates are checked before the action proceeds to approval or parent review,
 preventing a successful response from hiding an incomplete proof record.
 
+### Child login throttle and provisioning persistence boundary audit
+
+Public child PIN login now returns a temporary-unavailable response if failed-attempt counter persistence
+fails, so a degraded throttle table cannot silently remove brute-force protection. Parent child-login
+creation treats active-family preference persistence as required and compensates by deleting the mapping,
+unlinking the member, and deleting the new Auth user on failure; optional throttle reset remains non-core.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

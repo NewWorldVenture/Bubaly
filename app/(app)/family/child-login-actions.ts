@@ -66,8 +66,14 @@ export async function createChildLoginAction(input: {
   }
 
   // Set the child's active family so their context resolves on first sign-in.
-  await admin.from('user_preferences').upsert(
+  const { error: prefErr } = await admin.from('user_preferences').upsert(
     { user_id: childUserId, active_family_id: member.family_id }, { onConflict: 'user_id' });
+  if (prefErr) {
+    await admin.from('child_logins').delete().eq('user_id', childUserId);
+    await admin.from('family_members').update({ user_id: null }).eq('id', member.id);
+    await admin.auth.admin.deleteUser(childUserId);
+    return { ok: false, error: 'Could not finish setting up the login.' };
+  }
 
   // A username can be reused after an earlier child login was removed. Clear any
   // stale throttle row so the brand-new child doesn't inherit a leftover lockout

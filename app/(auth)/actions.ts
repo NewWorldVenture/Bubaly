@@ -91,8 +91,10 @@ export async function childSignInAction(input: { username: string; pin: string }
 
   const recordFailure = async () => {
     const next = registerFailure(tRow as ThrottleRow | null, now);
-    await admin.from('child_login_throttle').upsert(
+    const { error } = await admin.from('child_login_throttle').upsert(
       { username, ...next }, { onConflict: 'username' });
+    if (error) console.error('[child-login] failed-attempt counter write failed', error);
+    return !error;
   };
 
   const { data: rows, error: loginLookupError } = await admin.from('child_logins').select('username').ilike('username', username).limit(1);
@@ -101,14 +103,20 @@ export async function childSignInAction(input: { username: string; pin: string }
     return { ok: false, error: 'Kid sign-in is temporarily unavailable. Try again shortly.' };
   }
   const row = rows?.[0];
-  if (!row) { await recordFailure(); return { ok: false, error: 'That username or PIN isn’t right.' }; }
+  if (!row) {
+    if (!(await recordFailure())) return { ok: false, error: 'Kid sign-in is temporarily unavailable. Try again shortly.' };
+    return { ok: false, error: 'That username or PIN isn’t right.' };
+  }
 
   const supabase = await createServer(); // cookie-bound → sets the session on success
   const { error } = await supabase.auth.signInWithPassword({
     email: syntheticChildEmail(row.username),
     password: deriveChildPassword(sec, row.username, pin),
   });
-  if (error) { await recordFailure(); return { ok: false, error: 'That username or PIN isn’t right.' }; }
+  if (error) {
+    if (!(await recordFailure())) return { ok: false, error: 'Kid sign-in is temporarily unavailable. Try again shortly.' };
+    return { ok: false, error: 'That username or PIN isn’t right.' };
+  }
 
   // Success: wipe the throttle so a genuine kid never carries a stale lock.
   await admin.from('child_login_throttle').upsert(
