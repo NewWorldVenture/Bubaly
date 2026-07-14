@@ -155,6 +155,13 @@ delete result and require a returned target row for existing-record mutations. U
 are routed through `marketingActionFailure`, which logs server-side diagnostics and exposes only a stable
 message before audit logging or path revalidation can run.
 
+### Marketing asset and content publication action boundary audit
+
+Marketing asset uploads now check both storage and database results, remove failed uploads on row-write
+failure, and use the stored server-side path when deleting an asset. Content edits and blog publication
+now fail closed on required reads, blog upserts, content state updates, and unpublishing. All unexpected
+failures use `marketingActionFailure` before audit logging or cache revalidation.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

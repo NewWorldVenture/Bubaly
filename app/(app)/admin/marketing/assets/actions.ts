@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { assetKindFromMime, buildAssetPath, isAssetKind, parseTags, type AssetKind } from '@/lib/marketing/assets';
 
 const BUCKET = 'marketing-assets';
@@ -31,7 +31,7 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
     contentType: file.type || 'application/octet-stream',
     upsert: false,
   });
-  if (upErr) return; // bucket missing / dup — surfaced as no-op (page reload shows no new row)
+  if (upErr) marketingActionFailure('upload the marketing asset', upErr);
 
   const { data, error } = await supabase.from('marketing_assets').insert({
     id,
@@ -45,10 +45,11 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
     created_by: actorId,
   }).select('id').single();
 
-  if (error) {
+  if (error || !data) {
     // Roll back the orphaned upload so storage and the table stay consistent.
-    await supabase.storage.from(BUCKET).remove([path]);
-    return;
+    const { error: removeError } = await supabase.storage.from(BUCKET).remove([path]);
+    if (removeError) console.error('[marketing asset] rollback failed', removeError);
+    marketingActionFailure('save the marketing asset', error ?? new Error('The asset row was not returned after upload.'));
   }
 
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_asset', resourceId: data?.id ?? null, metadata: { name, kind } });
@@ -60,11 +61,12 @@ export async function updateAssetAction(formData: FormData): Promise<void> {
   const id = s(formData, 'id');
   if (!id) return;
   const name = s(formData, 'name');
-  await supabase.from('marketing_assets').update({
+  const { data, error } = await supabase.from('marketing_assets').update({
     ...(name ? { name } : {}),
     alt_text: s(formData, 'alt_text'),
     tags: parseTags(s(formData, 'tags')),
-  }).eq('id', id);
+  }).eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('update the marketing asset', error ?? new Error('Marketing asset not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_asset', resourceId: id });
   revalidatePath('/admin/marketing/assets');
 }
@@ -73,8 +75,16 @@ export async function deleteAssetAction(id: string, storagePath: string): Promis
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   // Remove the file to free storage, then soft-delete the row (keeps history for
   // future "where used" backrefs without leaving an orphaned object behind).
-  if (storagePath) await supabase.storage.from(BUCKET).remove([storagePath]);
-  await supabase.from('marketing_assets').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  const { data: asset, error: readError } = await supabase
+    .from('marketing_assets').select('id, storage_path').eq('id', id).is('deleted_at', null).maybeSingle();
+  if (readError || !asset) marketingActionFailure('find the marketing asset', readError ?? new Error('Marketing asset not found.'));
+  if (asset.storage_path || storagePath) {
+    const { error: removeError } = await supabase.storage.from(BUCKET).remove([asset.storage_path ?? storagePath]);
+    if (removeError) marketingActionFailure('remove the marketing asset file', removeError);
+  }
+  const { data, error } = await supabase.from('marketing_assets').update({ deleted_at: new Date().toISOString() })
+    .eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('delete the marketing asset', error ?? new Error('Marketing asset not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'marketing_asset', resourceId: id });
   revalidatePath('/admin/marketing/assets');
 }

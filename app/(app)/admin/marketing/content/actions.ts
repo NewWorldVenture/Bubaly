@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { buildBlogPost } from '@/lib/marketing/blog-publish';
 import type { Json } from '@/lib/database.types';
 
@@ -19,8 +19,9 @@ export async function updateContentAction(formData: FormData): Promise<void> {
   const id = s(formData, 'id');
   if (!id) return;
 
-  const { data: existing } = await supabase
+  const { data: existing, error: readError } = await supabase
     .from('marketing_content_items').select('metadata').eq('id', id).maybeSingle();
+  if (readError || !existing) marketingActionFailure('find the marketing content item', readError ?? new Error('Marketing content item not found.'));
   const meta = (existing?.metadata ?? {}) as Record<string, unknown>;
   const blog = (meta.blog ?? {}) as Record<string, unknown>;
 
@@ -38,12 +39,13 @@ export async function updateContentAction(formData: FormData): Promise<void> {
   };
 
   const status = s(formData, 'status');
-  await supabase.from('marketing_content_items').update({
+  const { data, error } = await supabase.from('marketing_content_items').update({
     body: s(formData, 'body'),
     status: status && STATUSES.includes(status) ? status : undefined,
     metadata: next as unknown as Json,
     updated_by: actorId,
-  }).eq('id', id);
+  }).eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('update the marketing content item', error ?? new Error('Marketing content item not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_content_item', resourceId: id });
   revalidatePath('/admin/marketing/content');
 }
@@ -56,28 +58,30 @@ export async function publishContentToBlogAction(formData: FormData): Promise<vo
   const id = s(formData, 'id');
   if (!id) return;
 
-  const { data: item } = await supabase
+  const { data: item, error: readError } = await supabase
     .from('marketing_content_items')
     .select('id, title, body, metadata')
     .eq('id', id)
     .is('deleted_at', null)
     .maybeSingle();
+  if (readError) marketingActionFailure('load the marketing content item', readError);
   if (!item || !item.body) return; // nothing to publish without a body
 
   const payload = buildBlogPost(item, new Date().toISOString());
-  const { error } = await supabase
+  const { data: post, error } = await supabase
     .from('blog_posts')
-    .upsert({ ...payload, body: payload.body as unknown as Json }, { onConflict: 'slug' });
-  if (error) return;
+    .upsert({ ...payload, body: payload.body as unknown as Json }, { onConflict: 'slug' }).select('slug').single();
+  if (error || !post) marketingActionFailure('publish the blog post', error ?? new Error('The blog post row was not returned.'));
 
   const meta = (item.metadata ?? {}) as Record<string, unknown>;
   const blog = (meta.blog ?? {}) as Record<string, unknown>;
-  await supabase.from('marketing_content_items').update({
+  const { data: updated, error: updateError } = await supabase.from('marketing_content_items').update({
     status: 'published',
     publish_at: payload.published_at,
     metadata: { ...meta, blog: { ...blog, slug: payload.slug } } as unknown as Json,
     updated_by: actorId,
-  }).eq('id', id);
+  }).eq('id', id).select('id').maybeSingle();
+  if (updateError || !updated) marketingActionFailure('mark the content item as published', updateError ?? new Error('Marketing content item not found.'));
 
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'publish', resource: 'blog_post', resourceId: payload.slug, metadata: { fromContentItem: id } });
   revalidatePath('/admin/marketing/content');
@@ -88,7 +92,9 @@ export async function publishContentToBlogAction(formData: FormData): Promise<vo
 /** Pull a published post from the public blog without deleting it. */
 export async function unpublishBlogPostAction(slug: string): Promise<void> {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('blog_posts').update({ published: false }).eq('slug', slug);
+  const { data, error } = await supabase.from('blog_posts').update({ published: false }).eq('slug', slug)
+    .select('slug').maybeSingle();
+  if (error || !data) marketingActionFailure('unpublish the blog post', error ?? new Error('Blog post not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'unpublish', resource: 'blog_post', resourceId: slug });
   revalidatePath('/admin/marketing/content');
   revalidatePath('/blog');

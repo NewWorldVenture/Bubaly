@@ -3830,3 +3830,24 @@ roadmap entries and user worktree changes are preserved.
   invitation validation, and client failure feedback.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0254 - Marketing asset and content writes ignored required results
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Marketing admin reliability / storage lifecycle / data integrity
+- Feature: Marketing Assets and Content publication
+- File or files: `app/(app)/admin/marketing/assets/actions.ts`,
+  `app/(app)/admin/marketing/content/actions.ts`, `tests/marketing-assets-content-boundaries.test.ts`
+- Description: Asset storage and database failures could be treated as no-ops, client-provided storage
+  paths were used for deletion, and content reads, blog upserts, and publish-state updates could fail
+  without preventing audit logging or revalidation.
+- Resolution: Asset and content actions now check required reads, storage operations, inserts, updates,
+  and target rows; failed asset-row writes roll back the uploaded object, and deletion uses the stored
+  path. Unexpected failures use the shared sanitized marketing boundary.
+- Tests performed: Focused asset/content boundary tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/marketing-assets-content-boundaries.test.ts` guards storage rollback, server-derived
+  deletion paths, target checks, content reads, blog upserts, and publish-state checks.
+- Verified by: Codex
+- Date completed: 2026-07-14

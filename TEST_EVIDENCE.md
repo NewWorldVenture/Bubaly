@@ -2,10 +2,21 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Marketing asset and content publication boundaries
+
+- `npm.cmd exec vitest run tests/marketing-assets-content-boundaries.test.ts`: 1 file, 2 tests passed.
+- `npm.cmd exec vitest run`: 364 files, 2,829 tests passed.
+- `npm.cmd run typecheck`, `npm.cmd run lint`, dependency audit, migration audit, and live schema probes passed.
+- Clean `npm.cmd run build`: 235 routes generated. Public Playwright/axe/overflow E2E: 51 passed,
+  1 intentional authenticated test skipped out of 52.
+- Marketing asset uploads now fail closed on storage/database errors, roll back failed rows, validate
+  server-derived storage paths on deletion, and check target rows. Content edits and blog publishing
+  now check required reads, upserts, updates, and unpublishing before audit logging or revalidation.
+
 ## Latest Audit Update - Competitive, CRM, and Proposals action boundaries
 
 - `npm.cmd exec vitest run tests/marketing-competitive-crm-proposals-boundaries.test.ts`: 1 file, 3 tests passed.
-- `npm.cmd exec vitest run`: 363 files, 2,827 tests passed.
+- `npm.cmd exec vitest run`: 364 files, 2,829 tests passed.
 - Competitive Intelligence, CRM, and Proposals inserts, updates, and deletes now check Supabase errors
   and affected rows before audit logging or revalidation. Unexpected failures use the shared sanitized
   marketing action boundary.
@@ -13,14 +24,14 @@ Audit date: 2026-07-14
 ## Latest Audit Update - Admin read-path integrity
 
 - `npm.cmd exec vitest run tests/admin-read-boundaries.test.ts`: 1 file, 3 tests passed.
-- `npm.cmd exec vitest run`: 363 files, 2,827 tests passed.
+- `npm.cmd exec vitest run`: 364 files, 2,829 tests passed.
 - Marketplace Reports and both Support Ticket admin views now check required Supabase reads and render
   a retryable error state instead of treating a failed query as an empty queue.
 
 ## Latest Audit Update - Tier & Marketplace moderation action boundaries
 
 - `npm.cmd exec vitest run tests/admin-tier-report-action-boundaries.test.ts`: 1 file, 4 tests passed.
-- `npm.cmd exec vitest run`: 363 files, 2,827 tests passed.
+- `npm.cmd exec vitest run`: 364 files, 2,829 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
 - `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
