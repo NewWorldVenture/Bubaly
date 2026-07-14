@@ -444,8 +444,21 @@ eslint/vitest/next build), ship to `main`.
     decision core: blocks on `needs_setup`/`not_connected`/`unsupported`, full→incremental once a cursor
     exists). Reference adapters `lib/connections/adapters/` — `google-calendar` + `gmail` — inert until
     `GOOGLE_OAUTH_*` keys land. Registry `adapterFor`/`syncableProviderIds`. 12 tests; tsc · eslint · build.
-  - **Remaining (owner-only):** provision provider OAuth keys → live Microsoft/Gmail/Calendar sync; the
-    next provider (Apple/CalDAV) drops into the same contract with no engine change.
+  - **Apple iCloud (CalDAV) adapter ✅ SHIPPED (2026-07-14).** The third provider, proving the contract
+    holds even for a NON-OAuth provider. `lib/sync/providers/apple.ts` implements the full
+    `SyncProviderAdapter` over iCloud CalDAV (RFC 4791): the Apple ID + app-specific password is packed
+    into the opaque engine token; `exchangeCode` validates it via a `current-user-principal` PROPFIND;
+    calendar sync uses CalDAV `sync-collection` (its sync-token IS the engine's cursor → incremental with
+    zero engine changes); events map through the already-tested `lib/sync/ics.ts` VEVENT parser/generator.
+    Reminders (VTODO) return a null default list, which the generic engine treats as "no task sync" —
+    calendar-only and honest, VTODO flagged as the one follow-up. Registered in `registry.ts`; key-gated
+    on `APPLE_SYNC_ENABLED` (owner opt-in for the credential-entry surface). **23 new pure tests**
+    (credential pack/unpack, CalDAV PROPFIND/sync-collection parsers, ICS round-trips, contract
+    conformance) + shared adapter suite updated — 88 sync tests green; tsc · eslint clean. No migration
+    (`apple` already in the `sync_provider` enum, 0018).
+  - **Remaining (owner-only):** provision provider OAuth keys → live Microsoft/Gmail/Calendar sync;
+    for Apple, set `APPLE_SYNC_ENABLED=true` + build the app-specific-password credential-entry page
+    (the adapter + engine are ready; only that opt-in UI + `/api/sync/apple/callback` remain).
 
 **Cross-cutting moat work (start now, threads through all phases):**
 - [x] **R10. Family Intelligence — the hard signals.** ✅ SHIPPED (2026-07-07). Four pure detectors in

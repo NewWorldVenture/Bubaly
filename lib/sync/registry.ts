@@ -12,10 +12,12 @@ import type { SyncProviderEnum } from '@/lib/database.types';
 import type { SyncProviderAdapter } from '@/lib/sync/adapter';
 import { googleAdapter } from '@/lib/sync/providers/google-adapter';
 import { microsoftAdapter } from '@/lib/sync/providers/microsoft';
+import { appleAdapter } from '@/lib/sync/providers/apple';
 
 const ADAPTERS: Partial<Record<SyncProviderEnum, SyncProviderAdapter>> = {
   google: googleAdapter,
   microsoft: microsoftAdapter,
+  apple: appleAdapter,
 };
 
 /** All registered adapters (regardless of whether their keys are configured). */

@@ -4,11 +4,13 @@ import { googleAdapter } from '@/lib/sync/providers/google-adapter';
 import {
   microsoftAdapter, msEventToRow, rowToMsEvent, msTaskToRow, rowToMsTask, type MsEvent, type MsTask,
 } from '@/lib/sync/providers/microsoft';
+import { appleAdapter } from '@/lib/sync/providers/apple';
 import { getAdapter, listAdapters, configuredAdapters, isProviderConfigured } from '@/lib/sync/registry';
 
 const ADAPTERS: [string, SyncProviderAdapter][] = [
   ['google', googleAdapter],
   ['microsoft', microsoftAdapter],
+  ['apple', appleAdapter],
 ];
 
 describe('adapter contract conformance', () => {
@@ -23,6 +25,7 @@ describe('adapter contract conformance', () => {
   it('each adapter declares the matching provider enum value', () => {
     expect(googleAdapter.provider).toBe('google');
     expect(microsoftAdapter.provider).toBe('microsoft');
+    expect(appleAdapter.provider).toBe('apple');
   });
 });
 
@@ -30,13 +33,13 @@ describe('registry', () => {
   it('resolves registered providers and returns null for the rest', () => {
     expect(getAdapter('google')).toBe(googleAdapter);
     expect(getAdapter('microsoft')).toBe(microsoftAdapter);
-    expect(getAdapter('apple')).toBeNull();
+    expect(getAdapter('apple')).toBe(appleAdapter);
     expect(getAdapter('amazon')).toBeNull();
   });
 
   it('lists all registered adapters', () => {
     const ids = listAdapters().map((a) => a.provider).sort();
-    expect(ids).toEqual(['google', 'microsoft']);
+    expect(ids).toEqual(['apple', 'google', 'microsoft']);
   });
 
   it('gates configured adapters on keys (none set in test env)', () => {
