@@ -17,6 +17,12 @@ Companion docs: `docs/FRICTION_BACKLOG.md` (what to fix next) and
 - [ ] **Nav** — entry in `lib/constants/navigation.ts` + Navigation Choices catalog.
 - [ ] **Verified** — `tsc`, `eslint`, `vitest`, `next build` all green.
 
+> **SEED CONVENTION (2026-07-14):** `supabase/SEED_ALL.sql` is **FROZEN** — do not
+> append to it. Each feature's seed goes in its own standalone `supabase/seed_<feature>.sql`
+> file, **≤ 1000 lines**, as a self-contained idempotent DO-block (resolve the anchored
+> family by email, delete own marker rows, re-insert). The five most recent seed sets are
+> bundled in `supabase/seed_recent_updates.sql`.
+
 Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 
 ---

@@ -1,4 +1,11 @@
 -- ============================================================================
+-- ⚠️ FROZEN — DO NOT APPEND NEW SEEDS HERE.
+--   New seed convention: each feature gets its own standalone supabase/seed_*.sql
+--   file, ≤ 1000 lines. This monolith is kept only so an older "one paste" run
+--   still works; it is no longer the place to add seeds.
+--   • Most recent shipped seed sets live in: supabase/seed_recent_updates.sql
+--   • Per-feature files: supabase/seed_<feature>.sql
+-- ============================================================================
 -- FamilyOS :: SEED_ALL_COMPLETE_SCHEMA_SAFE.sql
 -- Complete replacement generated from the supplied SEED_ALL script.
 --
