@@ -6,8 +6,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, WalletTxnType } from '@/lib/database.types';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
+
+function walletFailure(error: unknown, fallback: string): string {
+  console.error('[wallet] operation failed:', error);
+  return describeActionError(error, fallback);
+}
 
 export type CreditResult = { ok: boolean; error?: string; credited: number };
 
@@ -101,7 +107,7 @@ export async function debitCardSpend(supabase: DB, params: {
     })
     .select('id')
     .single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: walletFailure(error, 'Could not post that card spend.') };
 
   await supabase.from('wallet_audit_logs').insert({
     family_id: params.familyId, actor_user_id: null, action: 'card_spend',
@@ -155,7 +161,7 @@ export async function creditChildWallet(supabase: DB, params: {
   if (rows.length === 0) return { ok: false, error: 'Nothing to allocate', credited: 0 };
 
   const { error } = await supabase.from('wallet_transactions').insert(rows);
-  if (error) return { ok: false, error: error.message, credited: 0 };
+  if (error) return { ok: false, error: walletFailure(error, 'Could not credit that wallet.'), credited: 0 };
 
   await supabase.from('wallet_audit_logs').insert({
     family_id: params.familyId, actor_user_id: params.createdBy, action: `credit_${params.type}`,
@@ -216,7 +222,7 @@ export async function debitSpendBucket(supabase: DB, params: {
     created_by: params.createdBy, approved_by: params.requiresApproval ? null : (params.approvedBy ?? params.createdBy),
     metadata: (params.metadata ?? {}) as Database['public']['Tables']['wallet_transactions']['Insert']['metadata'],
   }).select('id').single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: walletFailure(error, 'Could not post that wallet debit.') };
 
   await supabase.from('wallet_audit_logs').insert({
     family_id: params.familyId, actor_user_id: params.createdBy, action: `debit_${params.type}`,

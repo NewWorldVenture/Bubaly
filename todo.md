@@ -3436,3 +3436,23 @@ roadmap entries and user worktree changes are preserved.
   filename audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0239 - Admin, Trust Engine, and wallet actions exposed raw failure details
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Error boundaries / privileged operations
+- Feature: Super Admin, Trust Engine, marketplace moderation, and Family Wallet actions
+- File or files: `app/(app)/admin/actions.ts`, `app/(app)/admin/marketplace/reports/actions.ts`,
+  `app/(app)/dashboard/trust/actions.ts`, `app/(app)/wallet/actions.ts`, `lib/wallet/server.ts`,
+  `lib/supabase/errors.ts`, `tests/server-action-error-boundaries.test.ts`
+- Description: Privileged server actions and wallet money-movement helpers returned raw Supabase or
+  provider messages to callers, exposing implementation details and producing inconsistent failure
+  handling across high-impact financial and administrative workflows.
+- Resolution: Added server-side diagnostic logging plus sanitized action failures across the audited
+  admin, moderation, Trust Engine, and wallet paths. Expected balance, policy, and duplicate-handle
+  messages remain intentional; unexpected database/provider details now become stable fallbacks.
+- Tests performed: Server-action boundary contracts, full Vitest, typecheck, lint, dependency audit,
+  migration filename audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Verified by: Codex
+- Date completed: 2026-07-14

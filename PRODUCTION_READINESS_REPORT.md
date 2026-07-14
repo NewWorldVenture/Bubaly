@@ -25,6 +25,10 @@ Latest repair increment (2026-07-14): audited server actions now replace unclass
 provider details with stable user-facing failures, and Family Intelligence fails closed when any source
 read or persistence step fails instead of deriving results from incomplete data.
 
+Latest repair increment (2026-07-14): extended the same boundary to super-admin mutations, marketplace
+moderation, Trust Engine decisions, and wallet money movement. Expected domain messages remain intact;
+unexpected Supabase/provider details are now logged server-side and replaced with stable fallbacks.
+
 ## Scope and Inventory
 
 - 352 `page.tsx` route files.
@@ -108,6 +112,8 @@ read or persistence step fails instead of deriving results from incomplete data.
   and gift server actions before their service-role writes.
 - Hardened child username/PIN sign-in with a durable IP-wide guard, hostile-input normalization, and
   fail-closed throttle and login lookup errors so degraded Supabase cannot remove brute-force controls.
+- Added sanitized failure boundaries across privileged admin, Trust Engine, marketplace moderation, and
+  wallet ledger actions, including card-spend, credit, and debit helpers.
 - Hardened the durable rate-limit boundary to fail closed on RPC errors, empty or malformed responses,
   and invalid retry windows; availability-first behavior now requires an explicit opt-in.
 - Bounded the local limiter's in-memory bucket map, normalized invalid limiter parameters, and accepted
@@ -167,7 +173,7 @@ read or persistence step fails instead of deriving results from incomplete data.
 | Migration/seed contract | PASS, 26 focused tests | targeted Vitest run |
 | Migration filename audit | PASS, 17 known historical duplicate prefixes; next `0195` | `npm.cmd run db:audit:migrations` |
 | Schema probe | PASS | 11 required live table/ledger probes available, including Stripe claim columns |
-| Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f605a-5f01-7f95-9a71-4950713e250e`) |
+| Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f609e-85b7-7499-b91d-8c7dcce8354e`) |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
 | Dependency audit | PASS | 0 vulnerabilities after the scoped PostCSS override |
 | Live RLS attack tests | NOT RUN | requires isolated Supabase with migration applied |

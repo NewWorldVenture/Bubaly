@@ -13,6 +13,8 @@ Audit date: 2026-07-14
 - `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
 - Server-action contracts now reject raw unclassified error messages, and signal detection checks all
   six source reads plus existing-signal reads and upserts before returning success.
+- The same contracts cover super-admin mutations, marketplace report moderation, Trust Engine decisions,
+  and wallet ledger actions; expected balance/conflict messages remain intentionally user-facing.
 
 ## Latest Audit Update - Migration history guard
 
@@ -27,7 +29,7 @@ Audit date: 2026-07-14
   authenticated test skipped out of 52.
 - `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
 - `npm.cmd run db:audit:auth`: public health passed; Admin users still returned HTTP 500,
-  error ID `019f605a-5f01-7f95-9a71-4950713e250e`.
+  error ID `019f609e-85b7-7499-b91d-8c7dcce8354e`.
 
 ## Audit Update - Marketplace photo storage lifecycle
 

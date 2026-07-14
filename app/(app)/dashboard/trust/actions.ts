@@ -7,8 +7,14 @@ import { isManager } from '@/lib/constants/roles';
 import { CAPABILITIES, TRUST_DOMAINS, type Capability } from '@/lib/trust/engine';
 import { runAction } from '@/lib/ai/actions';
 import type { Json } from '@/lib/database.types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
+
+function actionFailure(error: unknown, fallback = 'Could not update Trust Engine settings.'): Result {
+  console.error('[trust-action] failed:', error);
+  return { ok: false, error: describeActionError(error, fallback) };
+}
 
 const EFFECTS = ['allow', 'deny', 'require_approval', 'auto_approve'] as const;
 const APPROVAL_MODELS = ['single', 'two_parent', 'first_available', 'consensus', 'sequential'] as const;
@@ -70,10 +76,10 @@ export async function savePolicyAction(input: {
 
   if (input.id) {
     const { error: e } = await supabase.from('trust_policies').update(base).eq('id', input.id).eq('family_id', ctx.active.familyId);
-    if (e) return { ok: false, error: e.message };
+    if (e) return actionFailure(e, 'Could not update that policy.');
   } else {
     const { error: e } = await supabase.from('trust_policies').insert({ ...base, family_id: ctx.active.familyId, created_by: ctx.user.id });
-    if (e) return { ok: false, error: e.message };
+    if (e) return actionFailure(e, 'Could not create that policy.');
   }
   revalidatePath('/dashboard/trust');
   return { ok: true };
@@ -84,7 +90,7 @@ export async function togglePolicyAction(input: { id: string; enabled: boolean }
   if (!ctx) return { ok: false, error };
   const supabase = await createServer();
   const { error: e } = await supabase.from('trust_policies').update({ enabled: input.enabled }).eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (e) return { ok: false, error: e.message };
+  if (e) return actionFailure(e, 'Could not update that policy.');
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -94,7 +100,7 @@ export async function deletePolicyAction(input: { id: string }): Promise<Result>
   if (!ctx) return { ok: false, error };
   const supabase = await createServer();
   const { error: e } = await supabase.from('trust_policies').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (e) return { ok: false, error: e.message };
+  if (e) return actionFailure(e, 'Could not delete that policy.');
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -112,13 +118,13 @@ export async function setPermissionGrantAction(input: {
   if (input.effect === 'clear') {
     const { error: e } = await supabase.from('permission_grants').delete()
       .eq('family_id', ctx.active.familyId).eq('member_id', input.memberId).eq('domain', input.domain).eq('capability', input.capability);
-    if (e) return { ok: false, error: e.message };
+    if (e) return actionFailure(e, 'Could not clear that permission grant.');
   } else {
     const { error: e } = await supabase.from('permission_grants').upsert({
       family_id: ctx.active.familyId, member_id: input.memberId,
       domain: input.domain, capability: input.capability as Capability, effect: input.effect, created_by: ctx.user.id,
     }, { onConflict: 'family_id,member_id,domain,capability' });
-    if (e) return { ok: false, error: e.message };
+    if (e) return actionFailure(e, 'Could not save that permission grant.');
   }
   revalidatePath('/dashboard/trust');
   return { ok: true };
@@ -142,7 +148,7 @@ export async function createDelegationAction(input: {
     domains, reason: input.reason?.trim() || null,
     expires_at: expires.toISOString(), created_by: ctx.user.id,
   });
-  if (e) return { ok: false, error: e.message };
+  if (e) return actionFailure(e, 'Could not create that delegation.');
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -153,7 +159,7 @@ export async function revokeDelegationAction(input: { id: string }): Promise<Res
   const supabase = await createServer();
   const { error: e } = await supabase.from('trust_delegations').update({ revoked_at: new Date().toISOString() })
     .eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (e) return { ok: false, error: e.message };
+  if (e) return actionFailure(e, 'Could not revoke that delegation.');
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -190,7 +196,7 @@ export async function decideApprovalAction(input: { id: string; decision: 'appro
       ? { approvals: approvals as unknown as Json }
       : { approvals: approvals as unknown as Json, status, decided_by: memberId, decided_at: new Date().toISOString() },
   ).eq('id', input.id);
-  if (e) return { ok: false, error: e.message };
+  if (e) return actionFailure(e, 'Could not record that approval decision.');
 
   await supabase.from('trust_audit_logs').insert({
     family_id: ctx.active.familyId, actor_kind: 'member', actor_id: memberId,
@@ -239,7 +245,7 @@ export async function activateEmergencyAction(input: { kind: string; reason?: st
     family_id: ctx.active.familyId, kind, reason: input.reason?.trim() || null,
     activated_by: ctx.active.member.id, elevated_domains: domains.length ? domains : ['all'],
   });
-  if (e) return { ok: false, error: e.message };
+  if (e) return actionFailure(e, 'Could not activate emergency mode.');
 
   await supabase.from('trust_audit_logs').insert({
     family_id: ctx.active.familyId, actor_kind: 'member', actor_id: ctx.active.member.id,
@@ -257,7 +263,7 @@ export async function endEmergencyAction(input: { id: string }): Promise<Result>
   const { error: e } = await supabase.from('emergency_sessions')
     .update({ ended_at: new Date().toISOString(), ended_by: ctx.active.member.id })
     .eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (e) return { ok: false, error: e.message };
+  if (e) return actionFailure(e, 'Could not end emergency mode.');
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }

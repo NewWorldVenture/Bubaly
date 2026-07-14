@@ -8,11 +8,16 @@ describe('server action error boundaries', () => {
       'lib/family/actions.ts',
       'app/(app)/dashboard/family-signals/actions.ts',
       'lib/intelligence/hard-signals-server.ts',
+      'app/(app)/admin/actions.ts',
+      'app/(app)/admin/marketplace/reports/actions.ts',
+      'app/(app)/dashboard/trust/actions.ts',
+      'app/(app)/wallet/actions.ts',
+      'lib/wallet/server.ts',
     ];
 
     for (const path of sources) {
       const source = readFileSync(path, 'utf8');
-      expect(source).not.toMatch(/error:\s*(?:error|e|upErr|sourceError)\.message/);
+      expect(source).not.toMatch(/return[^\n]*error:\s*.*(?:error|e|upErr|sourceError|txnErr|wErr)\??\.message/);
       expect(source).toContain('describeActionError');
     }
   });

@@ -7,8 +7,14 @@
 import { revalidatePath } from 'next/cache';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
+
+function actionFailure(error: unknown, fallback = 'Could not update that report.'): Result {
+  console.error('[admin-marketplace-report] failed:', error);
+  return { ok: false, error: describeActionError(error, fallback) };
+}
 
 async function guard() {
   const user = await getUser();
@@ -34,7 +40,7 @@ export async function resolveReportAction(
     status: input.status, resolution: input.resolution?.trim() || null,
     reviewed_by: user.id, reviewed_at: new Date().toISOString(),
   }).eq('id', input.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error);
 
   // Actioning a real problem can pull the listing immediately.
   if (input.status === 'actioned' && input.withdrawListing && report.listing_id) {
@@ -51,7 +57,7 @@ export async function startReviewAction(id: string): Promise<Result> {
   const { admin, user } = await guard();
   const { error } = await admin.from('marketplace_reports')
     .update({ status: 'reviewing', reviewed_by: user.id }).eq('id', id).eq('status', 'open');
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not start that review.');
   revalidatePath('/admin/marketplace/reports');
   return { ok: true };
 }

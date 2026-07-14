@@ -11,10 +11,16 @@ import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { normalizeHandle, handleError } from '@/lib/wallet/pay-handle';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 const WALLET_TERMS_VERSION = '2026-06-25';
 
 type Result = { ok: boolean; error?: string };
+
+function actionFailure(error: unknown, fallback = 'Could not update the Family Wallet.'): Result {
+  console.error('[wallet-action] failed:', error);
+  return { ok: false, error: describeActionError(error, fallback) };
+}
 
 /** Default bucket set every child wallet is provisioned with. */
 const BUCKETS: { kind: 'spend' | 'save' | 'give' | 'invest'; label: string }[] = [
@@ -46,7 +52,7 @@ export async function activateFamilyWalletAction(): Promise<Result> {
     )
     .select('id')
     .single();
-  if (wErr) return { ok: false, error: wErr.message };
+  if (wErr) return actionFailure(wErr, 'Could not activate the Family Wallet.');
 
   // 2) record the disclosure acceptance (immutable audit)
   await supabase.from('compliance_disclosures').insert({
@@ -140,7 +146,7 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
   if (rows.length === 0) return { ok: false, error: 'Nothing to allocate.' };
 
   const { error: txErr } = await supabase.from('wallet_transactions').insert(rows);
-  if (txErr) return { ok: false, error: txErr.message };
+  if (txErr) return actionFailure(txErr, 'Could not add those funds.');
 
   await supabase.from('wallet_audit_logs').insert({
     family_id: familyId, actor_user_id: userId, action: 'funds_added', entity_type: 'child_wallets', entity_id: cw.id,
@@ -229,7 +235,7 @@ export async function saveAllowanceRuleAction(input: {
         .eq('id', input.id).eq('family_id', familyId)
     : await supabase.from('allowance_rules')
         .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not save that allowance.');
 
   revalidatePath('/wallet');
   return { ok: true };
@@ -242,7 +248,7 @@ export async function toggleAllowanceRuleAction(input: { id: string; isActive: b
   const supabase = await createServer();
   const { error } = await supabase.from('allowance_rules')
     .update({ is_active: input.isActive }).eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not update that allowance.');
   revalidatePath('/wallet/allowance');
   return { ok: true };
 }
@@ -319,7 +325,7 @@ export async function createGoalAction(input: {
     family_id: ctx.active.familyId, child_wallet_id: input.childWalletId ?? null,
     title, kind: input.kind ?? 'custom', target_cents: target, target_date: input.targetDate ?? null, created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not save that wallet goal.');
   revalidatePath('/wallet/goals');
   return { ok: true };
 }
@@ -365,7 +371,7 @@ export async function fundGoalAction(input: { goalId: string; amountCents: numbe
     type: 'goal_transfer', status: 'completed', direction: 'debit', amount_cents: amount,
     description: `Into goal: ${goal.title}`, related_type: 'wallet_goals', related_id: goal.id, created_by: ctx.user.id, approved_by: ctx.user.id,
   });
-  if (txErr) return { ok: false, error: txErr.message };
+  if (txErr) return actionFailure(txErr, 'Could not fund that goal.');
 
   const newSaved = goal.saved_cents + amount;
   await supabase.from('wallet_goals').update({
@@ -399,7 +405,7 @@ export async function createGiftLinkAction(input: {
     suggested_cents: input.suggestedCents && input.suggestedCents.length > 0 ? input.suggestedCents : undefined,
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not create that gift link.');
   revalidatePath('/wallet/gift');
   return { ok: true, token };
 }
@@ -445,7 +451,7 @@ export async function dismissGiftAction(input: { giftPaymentId: string }): Promi
   const supabase = await createServer();
   const { error } = await supabase.from('gift_payments')
     .update({ status: 'cancelled' }).eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not dismiss that gift.');
   revalidatePath('/wallet/gift');
   return { ok: true };
 }
@@ -472,13 +478,13 @@ export async function saveBabysitterAction(input: {
       name, phone: input.phone?.trim() || null, email: input.email?.trim() || null,
       rate_cents: input.rateCents ?? null, notes: input.notes?.trim() || null,
     }).eq('id', input.id).eq('family_id', familyId);
-    if (error) return { ok: false, error: error.message };
+    if (error) return actionFailure(error, 'Could not update that babysitter.');
   } else {
     const { error } = await supabase.from('babysitter_profiles').insert({
       family_id: familyId, name, phone: input.phone?.trim() || null, email: input.email?.trim() || null,
       rate_cents: input.rateCents ?? null, notes: input.notes?.trim() || null, created_by: ctx.user.id,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return actionFailure(error, 'Could not save that babysitter.');
   }
   revalidatePath('/wallet/babysitters');
   return { ok: true };
@@ -491,7 +497,7 @@ export async function archiveBabysitterAction(input: { id: string }): Promise<Re
   const supabase = await createServer();
   const { error } = await supabase.from('babysitter_profiles')
     .update({ is_active: false }).eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not archive that babysitter.');
   revalidatePath('/wallet/babysitters');
   return { ok: true };
 }
@@ -525,7 +531,7 @@ export async function recordBabysitterPaymentAction(input: {
     status: 'completed',
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not record that babysitter payment.');
 
   await supabase.from('wallet_audit_logs').insert({
     family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'babysitter_paid',
@@ -570,7 +576,7 @@ export async function saveWalletRuleAction(input: {
     require_approval_over_cents: input.requireApprovalOverCents,
     created_by: ctx.user.id,
   }, { onConflict: 'family_id,child_wallet_id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not save that wallet rule.');
 
   revalidatePath('/wallet/settings');
   return { ok: true };
@@ -612,7 +618,7 @@ export async function claimPayHandleAction(input: { id?: string; childWalletId: 
   if (error) {
     // Unique-violation fallback (race with the check above).
     if (error.code === '23505') return { ok: false, error: 'That Pay-ID is already taken — try another.' };
-    return { ok: false, error: error.message };
+    return actionFailure(error, 'Could not claim that Pay-ID.');
   }
 
   await supabase.from('wallet_audit_logs').insert({
@@ -630,7 +636,7 @@ export async function releasePayHandleAction(input: { id: string }): Promise<Res
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const { error } = await supabase.from('pay_handles').delete().eq('id', input.id).eq('family_id', familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not release that Pay-ID.');
   revalidatePath('/wallet/gift');
   return { ok: true };
 }
@@ -746,11 +752,11 @@ export async function decideSpendRequestAction(input: {
     }
     const { error: e } = await supabase.from('wallet_transactions')
       .update({ status: 'completed', approved_by: ctx.user.id }).eq('id', txn.id);
-    if (e) return { ok: false, error: e.message };
+    if (e) return actionFailure(e, 'Could not approve that spend request.');
   } else {
     const { error: e } = await supabase.from('wallet_transactions')
       .update({ status: 'cancelled' }).eq('id', txn.id);
-    if (e) return { ok: false, error: e.message };
+    if (e) return actionFailure(e, 'Could not reject that spend request.');
   }
 
   await supabase.from('parent_approvals').update({
@@ -852,7 +858,7 @@ export async function requestAllowanceAction(input: {
     amount_cents: amount, status: 'pending',
     requested_by: ctx.user.id, note: input.reason?.trim() || null,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not create that allowance request.');
 
   revalidatePath('/wallet');
   return { ok: true };

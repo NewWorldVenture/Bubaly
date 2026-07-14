@@ -13,8 +13,14 @@ import { stripeFromKey } from '@/lib/stripe';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
+
+function actionFailure(error: unknown, fallback = 'Could not complete that admin action.'): Result {
+  console.error('[admin-action] failed:', error);
+  return { ok: false, error: describeActionError(error, fallback) };
+}
 
 async function assertSuperAdmin(): Promise<Result> {
   if (!(await isSuperAdmin())) return { ok: false, error: 'Not authorized' };
@@ -50,7 +56,7 @@ export async function adminCreateUserAction(input: {
   const { data, error } = await supabase.auth.admin.inviteUserByEmail(parsedEmail.data, {
     redirectTo: `${APP_URL}/onboarding`,
   });
-  if (error || !data.user) return { ok: false, error: error?.message ?? 'Could not create user' };
+  if (error || !data.user) return error ? actionFailure(error, 'Could not create user.') : { ok: false, error: 'Could not create user.' };
 
   if (input.familyId) {
     const { error: memberError } = await supabase.from('family_members').insert({
@@ -59,7 +65,7 @@ export async function adminCreateUserAction(input: {
       role: input.role ?? 'adult',
       display_name: parsedEmail.data.split('@')[0],
     });
-    if (memberError) return { ok: false, error: `User created, but joining the family failed: ${memberError.message}` };
+    if (memberError) return actionFailure(memberError, 'User created, but joining the family failed.');
   }
 
   await adminAuditLog({
@@ -91,7 +97,7 @@ export async function adminCreateFamilyAction(input: {
   const { data: family, error } = await supabase.from('families').insert({
     name, timezone: input.timezone || 'UTC', created_by: owner.id,
   }).select('id').single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not create the family.');
 
   await adminAuditLog({ familyId: family.id, action: 'create', resource: 'families', resourceId: family.id, metadata: { name, owner_email: parsedEmail.data } });
   revalidatePath('/admin/users');
@@ -106,7 +112,7 @@ export async function adminRemoveMemberAction(memberId: string): Promise<Result>
   const supabase = createServiceClient();
   const { data: member, error } = await supabase.from('family_members')
     .update({ is_active: false }).eq('id', memberId).select('family_id, display_name').single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not remove that member.');
 
   await adminAuditLog({ familyId: member.family_id, action: 'remove', resource: 'family_members', resourceId: memberId, metadata: { display_name: member.display_name } });
   revalidatePath('/admin/users');
@@ -124,7 +130,7 @@ export async function adminUpdateMemberAction(memberId: string, input: { display
   const supabase = createServiceClient();
   const { data: member, error } = await supabase.from('family_members')
     .update({ display_name: displayName, role: input.role }).eq('id', memberId).select('family_id').single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not update that member.');
 
   await adminAuditLog({ familyId: member.family_id, action: 'update', resource: 'family_members', resourceId: memberId, metadata: { display_name: displayName, role: input.role } });
   revalidatePath('/admin/users');
@@ -158,11 +164,11 @@ export async function adminSetFamilyPlanAction(input: { familyId: string; plan: 
   if (existing) {
     const { error } = await supabase.from('subscriptions')
       .update({ plan, status: 'active' }).eq('id', existing.id);
-    if (error) return { ok: false, error: error.message };
+    if (error) return actionFailure(error, 'Could not update the family plan.');
   } else {
     const { error } = await supabase.from('subscriptions')
       .insert({ family_id: input.familyId, plan, status: 'active', seats: 1 });
-    if (error) return { ok: false, error: error.message };
+    if (error) return actionFailure(error, 'Could not create the family plan.');
   }
 
   await adminAuditLog({
@@ -198,10 +204,10 @@ export async function adminSetSuperAdminAction(input: { email: string; makeAdmin
   const supabase = createServiceClient();
   if (input.makeAdmin) {
     const { error } = await supabase.from('super_admins').upsert({ email }, { onConflict: 'email' });
-    if (error) return { ok: false, error: error.message };
+    if (error) return actionFailure(error, 'Could not update super-admin access.');
   } else {
     const { error } = await supabase.from('super_admins').delete().eq('email', email);
-    if (error) return { ok: false, error: error.message };
+    if (error) return actionFailure(error, 'Could not update super-admin access.');
   }
 
   await adminAuditLog({
@@ -246,7 +252,7 @@ export async function saveStripeSettingsAction(input: {
     service_fee_price_id: clean(input.serviceFeePriceId),
     updated_by: user?.id ?? null,
   }, { onConflict: 'id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not save Stripe settings.');
 
   // Audit without leaking secret values.
   await adminAuditLog({ familyId: null, action: 'update', resource: 'stripe_settings', resourceId: 'singleton', metadata: { enabled: input.enabled, service_fee_cents: feeCents, has_secret: Boolean(clean(input.secretKey)) } });
@@ -266,7 +272,7 @@ export async function testStripeConnectionAction(): Promise<Result<{ livemode: b
     const balance = await stripeFromKey(key).balance.retrieve();
     return { ok: true, data: { livemode: balance.livemode, currencies: balance.available.length } };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not connect to Stripe.' };
+    return actionFailure(e, 'Could not connect to Stripe.');
   }
 }
 
@@ -309,7 +315,7 @@ export async function adminRevokeInviteAction(inviteId: string): Promise<Result>
   const supabase = createServiceClient();
   const { data: invite, error } = await supabase.from('invites')
     .update({ status: 'revoked' }).eq('id', inviteId).select('family_id, email').single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not revoke that invite.');
 
   await adminAuditLog({ familyId: invite.family_id, action: 'revoke', resource: 'invites', resourceId: inviteId, metadata: { email: invite.email } });
   revalidatePath('/admin/users');
@@ -327,7 +333,7 @@ export async function adminGetDocumentUrlAction(storagePath: string): Promise<Re
 
   const supabase = createServiceClient();
   const { data, error } = await supabase.storage.from('documents').createSignedUrl(storagePath, 120);
-  if (error || !data) return { ok: false, error: error?.message ?? 'Could not create a link' };
+  if (error || !data) return error ? actionFailure(error, 'Could not create a document link.') : { ok: false, error: 'Could not create a document link.' };
   return { ok: true, data: { url: data.signedUrl } };
 }
 
@@ -340,7 +346,7 @@ export async function adminDeleteDocumentAction(documentId: string, storagePath:
   const { data: doc } = await supabase.from('documents').select('family_id, title').eq('id', documentId).maybeSingle();
   await supabase.storage.from('documents').remove([storagePath]);
   const { error } = await supabase.from('documents').delete().eq('id', documentId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not delete that document.');
 
   await adminAuditLog({ familyId: doc?.family_id ?? null, action: 'delete', resource: 'documents', resourceId: documentId, metadata: { title: doc?.title } });
   revalidatePath('/admin/content');
@@ -358,7 +364,7 @@ export async function adminSetUserBanAction(userId: string, banned: boolean): Pr
   const supabase = createServiceClient();
   // 'none' lifts a ban; a long duration is an effectively-indefinite ban (reversible).
   const { error } = await supabase.auth.admin.updateUserById(userId, { ban_duration: banned ? '876000h' : 'none' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not update that user.');
 
   await adminAuditLog({ familyId: null, action: banned ? 'ban' : 'unban', resource: 'users', resourceId: userId });
   revalidatePath('/admin/security');
@@ -377,7 +383,7 @@ export async function adminSendPasswordResetAction(email: string): Promise<Resul
   const { error } = await supabase.auth.resetPasswordForEmail(parsedEmail.data, {
     redirectTo: `${APP_URL}/login`,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not send the password reset.');
 
   await adminAuditLog({ familyId: null, action: 'password_reset', resource: 'users', metadata: { email: parsedEmail.data } });
   return { ok: true };
@@ -394,7 +400,7 @@ export async function adminUpdateTicketStatusAction(ticketId: string, status: Ti
 
   const supabase = createServiceClient();
   const { error } = await supabase.from('support_tickets').update({ status }).eq('id', ticketId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not update that support ticket.');
 
   await adminAuditLog({ familyId: null, action: 'update', resource: 'support_tickets', resourceId: ticketId, metadata: { status } });
   revalidatePath('/admin/support');
@@ -410,7 +416,7 @@ export async function adminToggleFeatureFlagAction(key: string, enabled: boolean
 
   const supabase = createServiceClient();
   const { error } = await supabase.from('feature_flags').update({ enabled }).eq('key', key);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure(error, 'Could not update that feature flag.');
 
   await adminAuditLog({ familyId: null, action: 'update', resource: 'feature_flags', resourceId: key, metadata: { enabled } });
   revalidatePath('/admin/wallet');

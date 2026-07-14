@@ -103,7 +103,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 - `npm.cmd run db:audit:schema` passed all 11 required live schema checks, including the
   `stripe_webhook_events` claim columns previously missing from the live response.
 - `npm.cmd run db:audit:auth` still passes public Auth health but returns HTTP 500 from the Admin users
-endpoint (`Database error finding users`, latest error id `019f605a-5f01-7f95-9a71-4950713e250e`).
+endpoint (`Database error finding users`, latest error id `019f609e-85b7-7499-b91d-8c7dcce8354e`).
 - The schema result confirms object availability only; migration-history verification and authenticated
   RLS allow/deny tests still require an authorized isolated environment.
 
@@ -284,3 +284,8 @@ Family Intelligence previously checked only the reminders read. It now checks al
 existing-signal read, and the signal upsert, returning a sanitized failure rather than deriving or
 reporting results from incomplete data. Regression coverage is in
 `tests/server-action-error-boundaries.test.ts` and `tests/db-errors.test.ts`.
+
+The same boundary now covers privileged super-admin mutations, marketplace report moderation, Trust
+Engine decisions, and Family Wallet ledger actions. Financial helpers retain intentional balance and
+duplicate-handle messages while unexpected Supabase/provider details are logged only on the server and
+replaced with stable fallbacks. No migration is required for this application-layer repair.
