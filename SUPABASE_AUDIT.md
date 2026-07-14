@@ -4,7 +4,7 @@
 
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
-- Current migration files: 213, through `0197_guardian_suggestion_review_transaction.sql`.
+- Current migration files: 215, through `0199_marketplace_handoff_completion.sql`.
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
   `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
@@ -17,10 +17,11 @@
   `0193_marketplace_reports.sql`, `0194_marketplace_photos_bucket.sql`, and
   `0195_dashboard_layout_upsert_constraint.sql`,
   `0196_atomic_economy_and_invest_decisions.sql`, and
-  `0197_guardian_suggestion_review_transaction.sql`.
-- SQL files: 336.
-- Static counts: 1,180 policy declarations, 639 RLS enable statements, 98 function declarations,
-  413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
+  `0197_feedback_ideas.sql`, `0198_guardian_suggestion_review_transaction.sql`, and
+  `0199_marketplace_handoff_completion.sql`.
+- SQL files: 338.
+- Static counts: 1,190 policy declarations, 642 RLS enable statements, 100 function declarations,
+  417 trigger declarations, and 65 `storage.objects` references. Counts are source-text counts,
   not a claim that every object exists in the live database.
 
 ### Onboarding write-path audit
@@ -68,12 +69,29 @@ production verification must still exercise concurrent approvals after applying 
 
 ### Guardian suggestion review transaction audit
 
-Migration `0197_guardian_suggestion_review_transaction.sql` adds a manager-authorized RPC for
+Migration `0198_guardian_suggestion_review_transaction.sql` adds a manager-authorized RPC for
 approving or dismissing AI Guardian suggestions. It locks the suggestion, applies the proposed trust
 or routing change, updates review metadata, and writes the Guardian audit record in one transaction.
 The RPC is revoked from `public` and `anon` and granted only to `authenticated`; malformed proposed
 rule data is normalized to bounded, known routing fields. Isolated production verification must still
 exercise parent/child authorization and concurrent reviews after applying the migration.
+
+### Marketplace and Feedback action boundary audit
+
+The user-facing Marketplace and Feedback server actions now use sanitized action failures with
+server-side diagnostics. Required reads for saved listings, followed stores, orders, offers, votes,
+and marketplace hand-offs are checked before dependent mutations; ignored read failures can no longer
+be mistaken for an absent row. Expected duplicate votes/shares/reviews and explicit circle/domain
+messages remain intentionally user-facing. The hand-off calendar insert remains best-effort by design,
+while required order and hand-off reads and state writes fail closed.
+
+### Marketplace hand-off completion transaction audit
+
+Migration `0199_marketplace_handoff_completion.sql` adds an authenticated RPC that locks the
+marketplace order and hand-off, verifies family membership and the normalized confirmation code, and
+updates both completion states in one transaction. Public and anonymous execution is revoked; only
+authenticated callers can execute it. Isolated verification must still exercise concurrent completion,
+wrong-code rejection, and cross-family denial after applying the migration.
 
 ### Migration filename history
 
@@ -147,7 +165,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
-2. Apply the remaining migrations through `0197` and run `npm run db:audit:schema` and
+2. Apply the remaining migrations through `0199` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
@@ -158,7 +176,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 - `npm.cmd run db:audit:schema` passed all 11 required live schema checks, including the
   `stripe_webhook_events` claim columns previously missing from the live response.
 - `npm.cmd run db:audit:auth` still passes public Auth health but returns HTTP 500 from the Admin users
-endpoint (`Database error finding users`, latest error id `019f60e4-438a-70e7-b98a-9810d7906575`).
+endpoint (`Database error finding users`, latest error id `019f6119-6145-7a7a-bc7d-7322d786b580`).
 - The schema result confirms object availability only; migration-history verification and authenticated
   RLS allow/deny tests still require an authorized isolated environment.
 
@@ -167,7 +185,7 @@ endpoint (`Database error finding users`, latest error id `019f60e4-438a-70e7-b9
 - Static migration inspection found 17 duplicate numeric prefixes, from `0010` through `0142`.
 - These historical files remain unchanged pending comparison with the target environment's migration
   ledger. `npm.cmd run db:audit:migrations` passed with the complete known set explicit and next
-  available version `0198`.
+  available version `0200`.
 
 ### Marketplace photo storage follow-up - 2026-07-13
 

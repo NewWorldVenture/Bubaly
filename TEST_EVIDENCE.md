@@ -2,6 +2,28 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Marketplace and Feedback action boundaries
+
+- `npm.cmd test -- --run tests/migration-version-safety.test.ts tests/guardian-action-error-boundaries.test.ts tests/marketplace-feedback-action-boundaries.test.ts`: 3 files, 9 tests passed.
+- `npm.cmd exec vitest run`: 356 files, 2,808 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed; 235 pages generated. Known warnings remain for the Supabase Edge
+  Runtime import and webpack cache serialization of large strings.
+- `$env:PLAYWRIGHT_SKIP_BUILD='1'; npm.cmd run test:e2e -- --reporter=line`: 51 passed, 1 intentional
+  authenticated test skipped out of 52.
+- `npm.cmd run db:audit:migrations`: passed; 215 numbered SQL files, 17 explicit historical duplicate
+  prefixes, next available version `0200`.
+- `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
+- `npm.cmd run db:audit:auth`: public Auth health passed; Admin users returned HTTP 500, latest error
+  ID `019f6119-6145-7a7a-bc7d-7322d786b580`.
+- Marketplace and Feedback actions now log unexpected database failures server-side and return stable
+  messages; required reads fail closed before mutations, including saved searches, offers, orders, votes,
+  and hand-offs. Expected duplicate and domain outcomes remain explicit.
+- Marketplace hand-off completion now locks the order and hand-off in one authenticated RPC, validates the
+  normalized code inside the transaction, and commits both completion states together.
+
 ## Latest Audit Update - Atomic Guardian suggestion review
 
 - `npm.cmd test -- --run tests/guardian-action-error-boundaries.test.ts tests/migration-version-safety.test.ts`: 2 files, 5 tests passed.

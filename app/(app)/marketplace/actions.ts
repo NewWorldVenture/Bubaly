@@ -7,10 +7,16 @@
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 
 const MARKETPLACE = '/marketplace';
+
+function actionFailure(operation: string, error: unknown): Result {
+  console.error(`[marketplace-action] ${operation} failed`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
 
 /** Set a match's status: dismissed (hide) or actioned (they connected). */
 export async function setMatchStatusAction(id: string, status: 'dismissed' | 'actioned'): Promise<Result> {
@@ -22,7 +28,7 @@ export async function setMatchStatusAction(id: string, status: 'dismissed' | 'ac
     .update({ status })
     .eq('id', id)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('update the match', error);
   revalidatePath(MARKETPLACE);
   return { ok: true };
 }
@@ -34,23 +40,24 @@ export async function toggleSaveAction(listingId: string): Promise<Result | { ok
   const supabase = await createServer();
   const memberId = ctx.active.member.id;
 
-  const { data: existing } = await supabase
+  const { data: existing, error: readError } = await supabase
     .from('marketplace_saves')
     .select('id')
     .eq('listing_id', listingId)
     .eq('member_id', memberId)
     .maybeSingle();
 
+  if (readError) return actionFailure('check the saved listing', readError);
   if (existing) {
     const { error } = await supabase.from('marketplace_saves').delete().eq('id', existing.id);
-    if (error) return { ok: false, error: error.message };
+    if (error) return actionFailure('remove the saved listing', error);
     revalidatePath(MARKETPLACE);
     return { ok: true, saved: false };
   }
   const { error } = await supabase.from('marketplace_saves').insert({
     family_id: ctx.active.familyId, listing_id: listingId, member_id: memberId,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('save the listing', error);
   revalidatePath(MARKETPLACE);
   return { ok: true, saved: true };
 }
@@ -62,23 +69,24 @@ export async function toggleFollowAction(storeId: string): Promise<Result | { ok
   const supabase = await createServer();
   const memberId = ctx.active.member.id;
 
-  const { data: existing } = await supabase
+  const { data: existing, error: readError } = await supabase
     .from('marketplace_follows')
     .select('id')
     .eq('store_id', storeId)
     .eq('member_id', memberId)
     .maybeSingle();
 
+  if (readError) return actionFailure('check the followed store', readError);
   if (existing) {
     const { error } = await supabase.from('marketplace_follows').delete().eq('id', existing.id);
-    if (error) return { ok: false, error: error.message };
+    if (error) return actionFailure('unfollow the store', error);
     revalidatePath(MARKETPLACE);
     return { ok: true, following: false };
   }
   const { error } = await supabase.from('marketplace_follows').insert({
     family_id: ctx.active.familyId, store_id: storeId, member_id: memberId,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('follow the store', error);
   revalidatePath(MARKETPLACE);
   return { ok: true, following: true };
 }
@@ -99,7 +107,7 @@ export async function upsertStoreAction(input: { name: string; tagline?: string;
     is_active: true,
     created_by: ctx.user.id,
   }, { onConflict: 'family_id,member_id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('save the storefront', error);
   revalidatePath(`${MARKETPLACE}/store`);
   revalidatePath(MARKETPLACE);
   return { ok: true };
@@ -118,19 +126,20 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const { data: order } = await supabase
+  const { data: order, error: orderError } = await supabase
     .from('marketplace_orders')
     .select('id, status')
     .eq('id', orderId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
+  if (orderError) return actionFailure('load the order', orderError);
   if (!order) return { ok: false, error: 'Order not found' };
   if (!(ORDER_FLOW[order.status] ?? []).includes(status)) {
     return { ok: false, error: `Can’t go from ${order.status} to ${status}` };
   }
 
   const { error } = await supabase.from('marketplace_orders').update({ status }).eq('id', orderId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('update the order', error);
   revalidatePath(`${MARKETPLACE}/orders`);
   return { ok: true };
 }
@@ -143,12 +152,13 @@ export async function leaveReviewAction(input: { orderId: string; rating: number
   const supabase = await createServer();
   const memberId = ctx.active.member.id;
 
-  const { data: order } = await supabase
+  const { data: order, error: orderError } = await supabase
     .from('marketplace_orders')
     .select('id, listing_id, buyer_member, seller_member, status')
     .eq('id', input.orderId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
+  if (orderError) return actionFailure('load the order', orderError);
   if (!order) return { ok: false, error: 'Order not found' };
   if (order.status !== 'completed') return { ok: false, error: 'Reviews open once the exchange completes' };
   const isBuyer = order.buyer_member === memberId;
@@ -167,7 +177,10 @@ export async function leaveReviewAction(input: { orderId: string; rating: number
     created_by: ctx.user.id,
   });
   if (error) {
-    return { ok: false, error: error.message.includes('uq_marketplace_reviews_order_side') || error.code === '23505' ? 'You already reviewed this exchange' : error.message };
+    if (error.message.includes('uq_marketplace_reviews_order_side') || error.code === '23505') {
+      return { ok: false, error: 'You already reviewed this exchange' };
+    }
+    return actionFailure('save the review', error);
   }
   revalidatePath(`${MARKETPLACE}/reviews`);
   revalidatePath(`${MARKETPLACE}/orders`);
@@ -186,25 +199,27 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
   const supabase = await createServer();
   const memberId = ctx.active.member.id;
 
-  const { data: listing } = await supabase
+  const { data: listing, error: listingError } = await supabase
     .from('marketplace_listings')
     .select('id, kind, status, member_id')
     .eq('id', listingId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
+  if (listingError) return actionFailure('load the listing', listingError);
   if (!listing) return { ok: false, error: 'Listing not found' };
   if (listing.member_id === memberId) return { ok: false, error: 'This is your own listing' };
   if (listing.status !== 'available' && listing.status !== 'pending') {
     return { ok: false, error: 'This listing is no longer open' };
   }
 
-  const { data: existing } = await supabase
+  const { data: existing, error: offerError } = await supabase
     .from('marketplace_offers')
     .select('id')
     .eq('listing_id', listingId)
     .eq('member_id', memberId)
     .eq('status', 'open')
     .maybeSingle();
+  if (offerError) return actionFailure('check existing offers', offerError);
   if (existing) return { ok: false, error: 'You already reached out about this' };
 
   // A DB trigger flips an available listing to 'pending' on insert; a partial
@@ -216,7 +231,7 @@ export async function makeOfferAction(listingId: string): Promise<Result> {
   });
   if (error) {
     if (error.code === '23505') return { ok: false, error: 'You already reached out about this' };
-    return { ok: false, error: error.message };
+    return actionFailure('send the offer', error);
   }
 
   revalidatePath(`${MARKETPLACE}/item/${listingId}`);

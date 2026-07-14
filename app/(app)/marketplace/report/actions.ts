@@ -8,8 +8,14 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isValidReason, canReport } from '@/lib/marketplace/reports';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
+
+function actionFailure(operation: string, error: unknown): Result {
+  console.error(`[marketplace-report] ${operation} failed`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
 
 export async function reportListingAction(
   input: { listingId: string; reason: string; details?: string },
@@ -36,7 +42,7 @@ export async function reportListingAction(
   if (error) {
     // Unique violation → they already have an open report on this listing.
     if (error.code === '23505') return { ok: false, error: 'You’ve already reported this — our team is on it.' };
-    return { ok: false, error: error.message };
+    return actionFailure('submit the report', error);
   }
 
   revalidatePath(`/marketplace/item/${input.listingId}`);

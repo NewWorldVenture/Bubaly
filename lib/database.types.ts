@@ -2339,6 +2339,7 @@ export interface Database {
       economy_decide_redemption: { Args: { p_redemption_id: string; p_approve: boolean; p_note?: string | null }; Returns: Json };
       invest_decide_order: { Args: { p_order_id: string; p_approve: boolean }; Returns: Json };
       guardian_review_suggestion: { Args: { p_suggestion_id: string; p_decision: string; p_note?: string | null }; Returns: Json };
+      marketplace_complete_handoff: { Args: { p_order_id: string; p_code: string }; Returns: Json };
     };
     Enums: {
       member_role: MemberRole;

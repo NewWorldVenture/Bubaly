@@ -6,12 +6,18 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { KIND_ORDER, CATEGORY_LABELS, type ListingKind, type ListingCategory } from '@/lib/marketplace/listings';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 
 const ALERTS = '/marketplace/alerts';
 const KINDS = new Set<string>(KIND_ORDER);
 const CATS = new Set<string>(Object.keys(CATEGORY_LABELS));
+
+function actionFailure(operation: string, error: unknown): Result {
+  console.error(`[marketplace-alerts] ${operation} failed`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
 
 export type CreateAlertInput = {
   label?: string;
@@ -43,7 +49,7 @@ export async function createSavedSearchAction(input: CreateAlertInput): Promise<
     query, kind, category, max_price_cents: maxPriceCents,
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('create the saved search', error);
   revalidatePath(ALERTS);
   return { ok: true };
 }
@@ -58,7 +64,7 @@ export async function deleteSavedSearchAction(id: string): Promise<Result> {
     .delete()
     .eq('id', id)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('delete the saved search', error);
   revalidatePath(ALERTS);
   return { ok: true };
 }
@@ -73,7 +79,7 @@ export async function markSearchSeenAction(id: string): Promise<Result> {
     .update({ last_seen_at: new Date().toISOString() })
     .eq('id', id)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('mark the saved search as seen', error);
   revalidatePath(ALERTS);
   return { ok: true };
 }

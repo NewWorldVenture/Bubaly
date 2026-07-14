@@ -4,8 +4,14 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { normalizeIdea, isFeedbackStatus, type IdeaDraft } from '@/lib/feedback/board';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
+
+function actionFailure(operation: string, error: unknown): Result {
+  console.error(`[feedback-action] ${operation} failed`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
 
 /** The display name to attribute a submission to (first name of the member). */
 function authorNameFor(ctx: Awaited<ReturnType<typeof requireUserContext>>): string {
@@ -35,7 +41,7 @@ export async function submitIdeaAction(draft: IdeaDraft): Promise<Result & { id?
     image_url: norm.value.imageUrl,
   }).select('id').single();
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('submit the idea', error);
   revalidatePath('/feedback');
   return { ok: true, id: data.id };
 }
@@ -47,15 +53,15 @@ export async function toggleVoteAction(ideaId: string): Promise<Result & { voted
 
   const { data: existing, error: readErr } = await supabase
     .from('feedback_votes').select('id').eq('idea_id', ideaId).eq('user_id', ctx.user.id).maybeSingle();
-  if (readErr) return { ok: false, error: readErr.message };
+  if (readErr) return actionFailure('check the vote', readErr);
 
   if (existing) {
     const { error } = await supabase.from('feedback_votes').delete().eq('id', existing.id);
-    if (error) return { ok: false, error: error.message };
+    if (error) return actionFailure('remove the vote', error);
   } else {
     const { error } = await supabase.from('feedback_votes').insert({ idea_id: ideaId, user_id: ctx.user.id });
     // A racing double-click can hit the unique index — treat as already-voted.
-    if (error && !/duplicate key/i.test(error.message)) return { ok: false, error: error.message };
+    if (error && error.code !== '23505' && !/duplicate key/i.test(error.message)) return actionFailure('save the vote', error);
   }
 
   const { data: idea } = await supabase.from('feedback_ideas').select('vote_count').eq('id', ideaId).maybeSingle();
@@ -79,7 +85,7 @@ export async function addCommentAction(input: { ideaId: string; body: string }):
     is_team: admin,
     body,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('add the comment', error);
   revalidatePath('/feedback');
   return { ok: true };
 }
@@ -96,7 +102,7 @@ export async function setIdeaStatusAction(input: { ideaId: string; status: strin
   const { error } = await svc.from('feedback_ideas')
     .update({ status: input.status, admin_note: note || null })
     .eq('id', input.ideaId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('update the idea status', error);
   revalidatePath('/feedback');
   return { ok: true };
 }

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const actions = readFileSync('app/(app)/guardian/actions.ts', 'utf8');
-const migration = readFileSync('supabase/migrations/0197_guardian_suggestion_review_transaction.sql', 'utf8');
+const migration = readFileSync('supabase/migrations/0198_guardian_suggestion_review_transaction.sql', 'utf8');
 
 describe('Guardian safety action boundaries', () => {
   it('sanitizes database failures and checks safety-state writes', () => {

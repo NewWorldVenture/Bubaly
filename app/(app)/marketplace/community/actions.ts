@@ -8,10 +8,16 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isValidJoinCode, normalizeJoinCode } from '@/lib/marketplace/community';
+import { describeActionError } from '@/lib/supabase/errors';
 
 const PATH = '/marketplace/community';
 
 type Result = { ok: true; id?: string } | { ok: false; error: string };
+
+function actionFailure(operation: string, error: unknown): Result {
+  console.error(`[marketplace-community] ${operation} failed`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
 
 export async function createCircleAction(name: string, emoji?: string): Promise<Result> {
   const trimmed = name.trim().slice(0, 60);
@@ -21,7 +27,7 @@ export async function createCircleAction(name: string, emoji?: string): Promise<
   const { data, error } = await sb.rpc('marketplace_create_circle', {
     p_family: ctx.active.familyId, p_name: trimmed, p_emoji: (emoji ?? '').trim().slice(0, 8) || undefined,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('create the circle', error);
   revalidatePath(PATH);
   return { ok: true, id: data ?? undefined };
 }
@@ -34,8 +40,8 @@ export async function joinCircleAction(code: string): Promise<Result> {
     p_family: ctx.active.familyId, p_code: normalizeJoinCode(code),
   });
   if (error) {
-    const msg = /no circle/i.test(error.message) ? 'No circle found with that code — double-check it' : error.message;
-    return { ok: false, error: msg };
+    if (/no circle/i.test(error.message)) return { ok: false, error: 'No circle found with that code — double-check it' };
+    return actionFailure('join the circle', error);
   }
   revalidatePath(PATH);
   return { ok: true, id: data ?? undefined };
@@ -48,7 +54,7 @@ export async function leaveCircleAction(circleId: string): Promise<Result> {
   const { error } = await sb.rpc('marketplace_leave_circle', {
     p_family: ctx.active.familyId, p_circle: circleId,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('leave the circle', error);
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -61,7 +67,7 @@ export async function shareListingAction(listingId: string, circleId: string): P
     listing_id: listingId, circle_id: circleId, family_id: ctx.active.familyId, created_by: ctx.user.id,
   });
   // The unique(listing, circle) constraint makes a double-share idempotent.
-  if (error && !/duplicate key/i.test(error.message)) return { ok: false, error: error.message };
+  if (error && error.code !== '23505' && !/duplicate key/i.test(error.message)) return actionFailure('share the listing', error);
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -75,7 +81,7 @@ export async function unshareListingAction(listingId: string, circleId: string):
     .eq('listing_id', listingId)
     .eq('circle_id', circleId)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('remove the shared listing', error);
   revalidatePath(PATH);
   return { ok: true };
 }

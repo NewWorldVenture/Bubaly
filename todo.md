@@ -3481,6 +3481,25 @@ roadmap entries and user worktree changes are preserved.
 - Verified by: Codex
 - Date completed: 2026-07-14
 
+### TODO-0245 - Marketplace and Feedback actions exposed raw or unchecked failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Error boundaries / data integrity / user-facing reliability
+- Feature: Marketplace saved listings, follows, offers, orders, hand-offs, circles, reports, alerts, and Feedback
+- File or files: `app/(app)/marketplace/actions.ts`, `app/(app)/marketplace/alerts/actions.ts`,
+  `app/(app)/marketplace/community/actions.ts`, `app/(app)/marketplace/report/actions.ts`,
+  `app/(app)/marketplace/handoff/actions.ts`, `app/(app)/marketplace/negotiations/actions.ts`,
+  `app/(app)/feedback/actions.ts`, `tests/marketplace-feedback-action-boundaries.test.ts`
+- Description: Several high-traffic server actions returned raw Supabase messages and treated failed
+  existence reads as empty results before performing dependent writes.
+- Resolution: Added server-side diagnostic logging and sanitized action failures, checked required reads
+  before mutation, and preserved explicit duplicate/conflict and domain messages for normal user guidance.
+- Tests performed: Focused boundary and migration tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Verified by: Codex
+- Date completed: 2026-07-14
+
 ### TODO-0240 - Onboarding finalize could report success after required writes failed
 
 - Status: [x] Completed in code and covered by regression tests.
@@ -3608,7 +3627,7 @@ roadmap entries and user worktree changes are preserved.
 - Severity: P0
 - Category: Child safety / authorization / data integrity / error handling
 - Feature: Guardian AI suggestions, contact trust, routing rules, and review audit
-- File or files: `supabase/migrations/0197_guardian_suggestion_review_transaction.sql`,
+- File or files: `supabase/migrations/0198_guardian_suggestion_review_transaction.sql`,
   `app/(app)/guardian/actions.ts`, `lib/database.types.ts`,
   `tests/guardian-action-error-boundaries.test.ts`
 - Database objects: `guardian_suggestions`, `guardian_contacts`, `guardian_routing_rules`,
@@ -3623,5 +3642,25 @@ roadmap entries and user worktree changes are preserved.
   dependency audit, migration audit, live schema probes, production build, and public E2E.
 - Evidence: `tests/guardian-action-error-boundaries.test.ts` verifies RPC authorization grants,
   revocation, locking, atomic state transitions, and action-layer error boundaries.
+- Verified by: Codex
+- Date completed: 2026-07-14
+
+### TODO-0246 - Marketplace hand-off completion could diverge from order state
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P0
+- Category: Marketplace integrity / concurrency / error handling
+- Feature: Marketplace pickup and hand-off completion
+- File or files: `supabase/migrations/0199_marketplace_handoff_completion.sql`,
+  `app/(app)/marketplace/handoff/actions.ts`, `lib/database.types.ts`,
+  `tests/marketplace-feedback-action-boundaries.test.ts`
+- Database objects: `marketplace_handoffs`, `marketplace_orders`
+- Description: Completing a pickup updated the hand-off first and then best-effort advanced the order,
+  allowing a failure or concurrent completion to leave the two records inconsistent.
+- Resolution: Added an authenticated, family-authorized, row-locking RPC that normalizes and verifies the
+  confirmation code and commits both status transitions in one transaction. The action maps stable domain
+  outcomes and no longer performs a second unchecked order write.
+- Tests performed: Focused Marketplace/migration tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
 - Verified by: Codex
 - Date completed: 2026-07-14
