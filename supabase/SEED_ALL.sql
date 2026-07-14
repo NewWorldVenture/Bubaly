@@ -6592,3 +6592,147 @@ end $$;
 --   select count(*) from marketplace_reports where details like '%[seed:report]%';                 -- up to 500
 --   select status, count(*) from marketplace_reports where details like '%[seed:report]%' group by 1 order by 1;
 --   select reason, count(*) from marketplace_reports where details like '%[seed:report]%' group by 1 order by 1;
+
+-- ============================================================================
+-- Feedback / Idea Board (0197) — a PLATFORM-WIDE product-feedback board.
+-- Seeds up to 500 ideas across every category + status, with realistic decayed
+-- vote counts, the anchored account's own votes on a subset (so upvotes render as
+-- "voted"), and a scattering of comments (a few from the Bubaly team). Idea/vote/
+-- comment counters are kept exact by the 0197 triggers. Marker: [seed:feedback].
+-- ============================================================================
+do $$
+declare
+  v_email    text := 'newworldventurellc@gmail.com';
+  v_user     uuid;
+  v_family   uuid;
+  authors    uuid[];
+  names      text[] := array['Jordan P.','Sam R.','Alex M.','Taylor W.','Casey L.','Riley B.',
+                             'Morgan D.','Jamie K.','Avery S.','Quinn H.','Devon T.','Harper N.',
+                             'A Bubaly family','The Nguyen family','The Patel family','The Garcia family'];
+  cats       text[] := array['calendar','tasks','meals','chores','finance','communication',
+                             'marketplace','ai_assistant','kids','health','mobile','other'];
+  impacts    text[] := array['nice_to_have','helpful','game_changer'];
+  auds       text[] := array['me','others','everyone'];
+  feats      text[] := array[
+    'Shared grocery list that syncs live','A morning family briefing','Smart chore reminders',
+    'One-tap meal planning','Auto-split recurring bills','Kid-friendly calendar view',
+    'Voice notes on tasks','Weekly spending digest','Family location check-ins',
+    'Recipe import from a link','A "who''s free" scheduler','Homework tracker for each kid',
+    'Automatic birthday reminders','Dark mode for the kids app','Offline access to the plan',
+    'Photo memories timeline','Allowance auto-payouts','A packing-list generator',
+    'Shared reading list','Meal-prep shopping mode','Pet care schedules','Medication reminders',
+    'A family "wins" board','Carpool coordination','Screen-time agreements','Vacation countdowns'];
+  benefits   text[] := array['so nothing slips through','to save us time each week',
+    'that everyone actually uses','without the nagging','for busy weeknights',
+    'the whole family can see','so plans stay in sync','to cut the mental load',
+    'that just works','before it becomes a fire drill'];
+  statuses   text[] := array['under_review','under_review','under_review','under_review',
+                             'planned','planned','in_progress','shipped','declined'];
+  problems   text[] := array[
+    'Right now we juggle this across three apps and a group text.',
+    'Things fall through the cracks when everyone''s busy.',
+    'It takes too many taps to do a simple thing.',
+    'We forget until the last minute, every time.',
+    'The kids can''t use the current version on their own.',
+    'There''s no single place we all look.'];
+  ids        uuid[];
+  new_id     uuid;
+  i          int;
+  st         text;
+  vc         int;
+  aid        uuid;
+  aname      text;
+begin
+  if to_regclass('public.feedback_ideas') is null then
+    raise notice 'feedback_ideas not present — apply migration 0197 first. Skipping.'; return;
+  end if;
+
+  select f.id, fm.user_id into v_family, v_user
+  from public.families f
+  join public.family_members fm on fm.family_id = f.id
+  join auth.users u on u.id = fm.user_id
+  where lower(u.email) = lower(v_email) limit 1;
+  if v_user is null then
+    -- Fall back to any real auth user so a partially-seeded DB still gets a board.
+    select id into v_user from auth.users order by created_at limit 1;
+  end if;
+  if v_user is null then raise notice 'No auth users — skipping feedback seed.'; return; end if;
+
+  -- Pool of real authors/voters (so author_id + vote FKs are always valid).
+  select array_agg(id) into authors from (select id from auth.users order by created_at limit 60) s;
+
+  -- Clean prior seed (cascades to its votes + comments).
+  delete from public.feedback_ideas where body like '%[seed:feedback]%';
+
+  for i in 1..500 loop
+    st  := statuses[1 + ((i - 1) % array_length(statuses, 1))];
+    -- Decayed "popularity": earlier ideas trend higher, with per-idea noise.
+    vc  := greatest(0, ((520 - i) / 4) + ((i * 7) % 41) - 12);
+    aid := authors[1 + ((i - 1) % array_length(authors, 1))];
+    aname := names[1 + ((i - 1) % array_length(names, 1))];
+
+    insert into public.feedback_ideas
+      (author_id, author_name, family_id, title, problem, body, category, impact, audience,
+       status, admin_note, vote_count, pinned, created_at)
+    values (
+      aid, aname,
+      case when i % 3 = 0 then v_family else null end,
+      feats[1 + ((i - 1) % array_length(feats, 1))] || ' ' || benefits[1 + ((i - 1) % array_length(benefits, 1))],
+      problems[1 + ((i - 1) % array_length(problems, 1))],
+      'It would help if Bubaly could handle this end to end. [seed:feedback]',
+      cats[1 + ((i - 1) % array_length(cats, 1))],
+      impacts[1 + ((i - 1) % array_length(impacts, 1))],
+      auds[1 + ((i - 1) % array_length(auds, 1))],
+      st,
+      case st when 'planned' then 'On the roadmap for an upcoming release.'
+              when 'in_progress' then 'Actively being built — thanks for the votes!'
+              when 'shipped' then 'Shipped 🎉 — thank you for the idea.'
+              when 'declined' then 'Not planned right now, but we''re keeping it in mind.'
+              else null end,
+      vc,
+      (i <= 2),  -- pin the top two
+      now() - ((i % 90) || ' days')::interval - ((i % 24) || ' hours')::interval);
+  end loop;
+
+  -- Collect the seeded ideas to attach votes + comments.
+  select array_agg(id order by created_at) into ids
+  from public.feedback_ideas where body like '%[seed:feedback]%';
+
+  -- The anchored user upvotes ~1 in 4 ideas (renders as "voted"; trigger bumps count).
+  for i in 1..array_length(ids, 1) loop
+    if i % 4 = 0 then
+      insert into public.feedback_votes (idea_id, user_id) values (ids[i], v_user)
+        on conflict (idea_id, user_id) do nothing;
+    end if;
+    -- A second distinct voter on every ~3rd idea, drawn from the author pool.
+    if i % 3 = 0 then
+      aid := authors[1 + ((i * 5) % array_length(authors, 1))];
+      if aid <> v_user then
+        insert into public.feedback_votes (idea_id, user_id) values (ids[i], aid)
+          on conflict (idea_id, user_id) do nothing;
+      end if;
+    end if;
+  end loop;
+
+  -- Comments on ~1 in 5 ideas; every ~15th gets a Bubaly-team reply.
+  for i in 1..array_length(ids, 1) loop
+    if i % 5 = 0 then
+      insert into public.feedback_comments (idea_id, author_id, author_name, is_team, body, created_at)
+      values (ids[i], authors[1 + (i % array_length(authors, 1))], names[1 + (i % array_length(names, 1))], false,
+              'Love this — we''d use it every single day.', now() - ((i % 30) || ' days')::interval);
+    end if;
+    if i % 15 = 0 then
+      insert into public.feedback_comments (idea_id, author_id, author_name, is_team, body, created_at)
+      values (ids[i], v_user, 'Bubaly Team', true,
+              'Great idea — we''re looking into how to make this happen. Keep the votes coming!',
+              now() - ((i % 20) || ' days')::interval);
+    end if;
+  end loop;
+
+  raise notice 'Seeded % feedback ideas (+ votes + comments).', array_length(ids, 1);
+end $$;
+
+-- Verify:
+--   select count(*) from feedback_ideas where body like '%[seed:feedback]%';                 -- up to 500
+--   select status, count(*) from feedback_ideas where body like '%[seed:feedback]%' group by 1 order by 1;
+--   select sum(vote_count), sum(comment_count) from feedback_ideas where body like '%[seed:feedback]%';

@@ -458,6 +458,21 @@ export interface Database {
         { id?: string; family_id: string; order_id?: string | null; listing_id?: string | null; reviewer_member?: string | null; reviewee_member?: string | null; role?: string; rating?: number; comment?: string | null; created_by?: string | null },
         Partial<{ role: string; rating: number; comment: string | null }>
       >;
+      feedback_ideas: T<
+        { id: string; author_id: string | null; author_name: string; family_id: string | null; title: string; problem: string | null; body: string | null; category: string; impact: string; audience: string; image_url: string | null; status: string; admin_note: string | null; vote_count: number; comment_count: number; pinned: boolean } & Stamps,
+        { id?: string; author_id?: string | null; author_name?: string; family_id?: string | null; title: string; problem?: string | null; body?: string | null; category?: string; impact?: string; audience?: string; image_url?: string | null; status?: string; admin_note?: string | null; vote_count?: number; comment_count?: number; pinned?: boolean },
+        Partial<{ title: string; problem: string | null; body: string | null; category: string; impact: string; audience: string; image_url: string | null; status: string; admin_note: string | null; pinned: boolean }>
+      >;
+      feedback_votes: T<
+        { id: string; idea_id: string; user_id: string; created_at: string },
+        { id?: string; idea_id: string; user_id: string },
+        Partial<{ idea_id: string; user_id: string }>
+      >;
+      feedback_comments: T<
+        { id: string; idea_id: string; author_id: string | null; author_name: string; is_team: boolean; body: string } & Stamps,
+        { id?: string; idea_id: string; author_id?: string | null; author_name?: string; is_team?: boolean; body: string },
+        Partial<{ author_name: string; is_team: boolean; body: string }>
+      >;
       voice_commands: T<
         { id: string; family_id: string; member_id: string | null; transcript: string; resolved_kind: string | null; action_table: string | null; action_count: number; status: string; created_by: string | null; created_at: string },
         { id?: string; family_id: string; member_id?: string | null; transcript: string; resolved_kind?: string | null; action_table?: string | null; action_count?: number; status?: string; created_by?: string | null },

@@ -373,7 +373,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {demo?.expiresAt && <DemoClockPill expiresAt={demo.expiresAt} />}
           <div className="flex-1" />
           <HeaderSearch />
-          <Link href="/dashboard/notifications" className="hidden h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg md:inline-flex">
+          <Link href="/feedback" aria-label="Share an idea" title="Share an idea" className="hidden h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg md:inline-flex">
             <Gift className="h-5 w-5" />
           </Link>
           <NotificationBell />

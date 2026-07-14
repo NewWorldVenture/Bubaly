@@ -215,6 +215,29 @@ against migrations + `database.types.ts`; FK targets checked so nothing silently
 
 ---
 
+## 💡 FEEDBACK / IDEA BOARD — DONE (2026-07-14)
+
+Owner ask: build a **new `/feedback` page** opened by the **Gift icon** in the home top bar, mirroring the
+"Let's make life easier—together" idea-board design 100%, fully Supabase-wired and production-ready.
+
+- **Schema** `0197_feedback_ideas.sql` (PG16-verified, idempotent ×2): `feedback_ideas` + `feedback_votes`
+  (one vote/user/idea) + `feedback_comments`, `SECURITY DEFINER` counter triggers keep `vote_count` /
+  `comment_count` exact. Platform-wide board (not family-scoped): authenticated read; insert-your-own;
+  delete-your-own vote; **no public UPDATE on ideas** — status is super-admin (service-role) only. Public
+  `feedback-attachments` Storage bucket (own-folder writes) for the drag/drop/browse image field.
+- **Types** added to `lib/database.types.ts`. **Pure engine** `lib/feedback/board.ts` (status/category/impact
+  metadata, roadmap pipeline, `normalizeIdea`, `sortIdeas` top/trending/new, `toggleVote`, tallies) + **17 tests**.
+- **Route** `app/(app)/feedback/page.tsx` (`requireUserContext`) — hero + winding-path motif, 3 mini-steps,
+  inline **Share-your-idea** form card (title/problem/idea/category/impact/audience/attachment), **Popular ideas**
+  upvote list with sort + status/category filters, expandable **comments**, super-admin roadmap-status control,
+  right rail (How it works + Status legend with live tallies), footer band. Server actions:
+  `submitIdeaAction` / `toggleVoteAction` / `addCommentAction` / `setIdeaStatusAction`.
+- **Nav** Gift icon in `components/app/app-shell.tsx` top bar now links `/feedback`.
+- **Seed** `SEED_ALL.sql` — **500** ideas + votes + comments (marker `[seed:feedback]`), decayed popularity,
+  all statuses, anchored-user votes + team replies. PG16-verified, idempotent.
+- **Verified** tsc 0 · eslint 0 · vitest 2794 green · `next build` green (`/feedback` 8.61 kB). Migration
+  doc row added (0197); next free number → **0198**.
+
 ## 🚀 INDUSTRY-FIRST CAPABILITIES — gap matrix vs. the codebase (owner directive, 2026-07-12)
 
 Owner shared 10 "features no competitor offers" and asked: capture them, gap-audit each against the
