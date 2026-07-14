@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { runSignalDetection } from '@/lib/intelligence/hard-signals-server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -28,7 +29,7 @@ export async function setSignalStatusAction(id: string, status: 'active' | 'ackn
   const { error } = await supabase.from('family_signals')
     .update({ status })
     .eq('id', id).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error, 'Could not update that signal.') };
   revalidatePath('/dashboard/family-signals');
   return { ok: true };
 }

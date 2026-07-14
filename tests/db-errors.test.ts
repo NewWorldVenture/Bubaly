@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { describeDbError, isMissingRelationError } from '@/lib/supabase/errors';
+import { describeActionError, describeDbError, isMissingRelationError } from '@/lib/supabase/errors';
 
 describe('describeDbError', () => {
   it('returns a fallback for nullish input', () => {
@@ -55,5 +55,13 @@ describe('isMissingRelationError', () => {
     expect(isMissingRelationError(null)).toBe(false);
     expect(isMissingRelationError({ code: '42501', message: 'permission denied' })).toBe(false);
     expect(isMissingRelationError({ message: 'duplicate key value' })).toBe(false);
+  });
+});
+
+describe('describeActionError', () => {
+  it('keeps actionable categories while hiding unclassified details', () => {
+    expect(describeActionError({ code: '42501', message: 'permission denied for table secrets' })).toMatch(/permission/i);
+    expect(describeActionError({ message: 'relation private_table does not exist' }, 'Could not save.')).toBe('Could not save.');
+    expect(describeActionError(new Error('provider token abc123 leaked'), 'Could not save.')).toBe('Could not save.');
   });
 });

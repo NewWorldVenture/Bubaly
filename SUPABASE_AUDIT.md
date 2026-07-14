@@ -103,7 +103,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 - `npm.cmd run db:audit:schema` passed all 11 required live schema checks, including the
   `stripe_webhook_events` claim columns previously missing from the live response.
 - `npm.cmd run db:audit:auth` still passes public Auth health but returns HTTP 500 from the Admin users
-  endpoint (`Database error finding users`, error id `019f5e14-723f-714a-9c00-a9d0a3937072`).
+endpoint (`Database error finding users`, latest error id `019f605a-5f01-7f95-9a71-4950713e250e`).
 - The schema result confirms object availability only; migration-history verification and authenticated
   RLS allow/deny tests still require an authorized isolated environment.
 
@@ -271,3 +271,16 @@ column is unavailable. It resolves the anchored account and two existing active 
 deterministic listing and order IDs with `ON CONFLICT DO NOTHING`, and performs no cleanup deletes or
 synthetic-member inserts. The standalone seed and its embedded `SEED_ALL.sql` section are covered by
 the seed safety contract tests.
+
+## Audit Update - 2026-07-14 (server-action boundaries and signal integrity)
+
+Several authenticated server actions returned raw Supabase messages, which could expose relation
+names, policy details, or provider diagnostics to a browser or model. The shared `describeActionError`
+boundary now preserves actionable permission/conflict/network categories and replaces unclassified
+details with stable fallbacks; callers log diagnostics server-side only. The AI meal action also fails
+before creating a plan row when its prerequisite meal insert fails.
+
+Family Intelligence previously checked only the reminders read. It now checks all six source reads, the
+existing-signal read, and the signal upsert, returning a sanitized failure rather than deriving or
+reporting results from incomplete data. Regression coverage is in
+`tests/server-action-error-boundaries.test.ts` and `tests/db-errors.test.ts`.

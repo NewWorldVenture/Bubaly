@@ -1,6 +1,18 @@
 # Test Evidence
 
-Audit date: 2026-07-13
+Audit date: 2026-07-14
+
+## Latest Audit Update - Server-action error boundaries and signal fail-closed behavior
+
+- `npm.cmd exec vitest run`: 349 files, 2,773 tests passed after rebasing onto the latest `main`.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: passed; 210 numbered SQL files, 17 explicit historical duplicate
+  prefixes, next available version `0195`.
+- `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
+- Server-action contracts now reject raw unclassified error messages, and signal detection checks all
+  six source reads plus existing-signal reads and upserts before returning success.
 
 ## Latest Audit Update - Migration history guard
 
@@ -15,7 +27,7 @@ Audit date: 2026-07-13
   authenticated test skipped out of 52.
 - `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
 - `npm.cmd run db:audit:auth`: public health passed; Admin users still returned HTTP 500,
-  error ID `019f5e14-723f-714a-9c00-a9d0a3937072`.
+  error ID `019f605a-5f01-7f95-9a71-4950713e250e`.
 
 ## Audit Update - Marketplace photo storage lifecycle
 

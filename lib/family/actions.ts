@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
+import { describeActionError } from '@/lib/supabase/errors';
 
 // Tables a member may write through these generic actions, with the columns
 // each accepts. family_id / created_by / updated_by are always set server-side.
@@ -38,6 +39,11 @@ const MANAGER_ONLY = new Set([
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
+function actionFailure(operation: string, error: unknown): ActionResult {
+  console.error(`[family-action] ${operation} failed:`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
+
 function pick(table: string, raw: Record<string, unknown>): Record<string, unknown> {
   const allowed = WRITABLE[table];
   const out: Record<string, unknown> = {};
@@ -64,7 +70,7 @@ export async function createFamilyRecord(
   };
   const { data, error } = await (supabase.from(table as any) as any)
     .insert(payload).select('id').single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('create that record', error);
   await supabase.from('audit_logs').insert({
     family_id: ctx.active.familyId, actor_id: ctx.user.id,
     action: 'create', resource: table, resource_id: data?.id ?? null,
@@ -87,7 +93,7 @@ export async function updateFamilyRecord(
   const payload = { ...pick(table, values), updated_by: ctx.user.id };
   const { error } = await (supabase.from(table as any) as any)
     .update(payload).eq('id', id).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('update that record', error);
   revalidatePath('/dashboard', 'layout');
   return { ok: true, id };
 }
@@ -101,7 +107,7 @@ export async function deleteFamilyRecord(table: string, id: string): Promise<Act
   const supabase = await createServer();
   const { error } = await (supabase.from(table as any) as any)
     .delete().eq('id', id).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('delete that record', error);
   revalidatePath('/dashboard', 'layout');
   return { ok: true, id };
 }
@@ -118,7 +124,7 @@ export async function setRecommendationStatus(
     .update({ status, updated_by: ctx.user.id })
     .eq('id', id)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('update that recommendation', error);
   revalidatePath('/dashboard', 'layout');
   return { ok: true, id };
 }
@@ -142,7 +148,7 @@ export async function resolveAutomationRun(
     })
     .eq('id', id)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionFailure('resolve that automation', error);
   await supabase.from('audit_logs').insert({
     family_id: ctx.active.familyId, actor_id: ctx.user.id,
     action: decision === 'approved' ? 'approve' : 'skip',

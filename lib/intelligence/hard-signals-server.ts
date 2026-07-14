@@ -13,6 +13,7 @@ import {
   buildHardSignals, type HardSignalInputs, type ReminderRow, type ChoreRow, type RoutineRow, type RoutineCompletion,
 } from './hard-signals';
 import type { BudgetRow, ExpenseRow } from '@/lib/operating-index/inputs';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 
@@ -47,7 +48,11 @@ export async function runSignalDetection(sb: DB, familyId: string, now: Date = n
     sb.from('budgets').select('category, amount, period').eq('family_id', familyId).limit(200),
     sb.from('transactions').select('category, amount, date').eq('family_id', familyId).eq('type', 'expense').gte('date', yearStart).limit(5000),
   ]);
-  if (reminders.error) return { ok: false, error: reminders.error.message, signals: 0 };
+  const sourceError = [reminders, events, choreRows, routines, budgetsRes, expensesRes].find((result) => result.error)?.error;
+  if (sourceError) {
+    console.error('[signals] source read failed:', sourceError);
+    return { ok: false, error: describeActionError(sourceError, 'Could not refresh family signals.'), signals: 0 };
+  }
 
   const nowMs = now.getTime();
   const reminderRows: ReminderRow[] = (reminders.data ?? []).map((r) => ({
@@ -90,8 +95,12 @@ export async function runSignalDetection(sb: DB, familyId: string, now: Date = n
   const signals = buildHardSignals(inputs, now);
 
   // ── Persist (preserve dismissals) ──
-  const { data: existing } = await sb.from('family_signals')
+  const { data: existing, error: existingError } = await sb.from('family_signals')
     .select('kind, subject_key, status').eq('family_id', familyId);
+  if (existingError) {
+    console.error('[signals] existing signal read failed:', existingError);
+    return { ok: false, error: describeActionError(existingError, 'Could not refresh family signals.'), signals: 0 };
+  }
   const dismissed = new Set((existing ?? []).filter((r) => r.status === 'dismissed').map((r) => `${r.kind}:${r.subject_key}`));
 
   const toUpsert = signals
@@ -106,7 +115,10 @@ export async function runSignalDetection(sb: DB, familyId: string, now: Date = n
   if (toUpsert.length > 0) {
     const { error: upErr } = await sb.from('family_signals')
       .upsert(toUpsert, { onConflict: 'family_id,kind,subject_key' });
-    if (upErr) return { ok: false, error: upErr.message, signals: 0 };
+    if (upErr) {
+      console.error('[signals] signal upsert failed:', upErr);
+      return { ok: false, error: describeActionError(upErr, 'Could not refresh family signals.'), signals: 0 };
+    }
   }
   return { ok: true, signals: toUpsert.length };
 }

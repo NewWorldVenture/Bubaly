@@ -4,8 +4,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import type { AITool } from './provider';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Ctx = { supabase: SupabaseClient<Database>; familyId: string; userId: string };
+
+function actionFailure(operation: string, error: unknown): { ok: false; error: string } {
+  console.error(`[ai-action] ${operation} failed:`, error);
+  return { ok: false, error: describeActionError(error, `Could not ${operation}.`) };
+}
 
 export const AI_TOOLS: AITool[] = [
   {
@@ -78,7 +84,7 @@ export async function runAction(
           ends_at: call.args.ends_at ?? null, category: call.args.category ?? 'general',
           location: call.args.location ?? null, description: call.args.description ?? null,
         }).select().single();
-        if (error) return { ok: false, error: error.message };
+        if (error) return actionFailure('add the calendar event', error);
         return { ok: true, data, summary: `Added "${call.args.title}" to the calendar.` };
       }
 
@@ -89,7 +95,7 @@ export async function runAction(
           family_id: familyId, created_by: userId,
           title: call.args.title, points: call.args.points ?? 10, due_at: call.args.due_at ?? null,
         }).select().single();
-        if (error) return { ok: false, error: error.message };
+        if (error) return actionFailure('create the chore', error);
         return { ok: true, data, summary: `Created chore "${call.args.title}".` };
       }
 
@@ -103,7 +109,7 @@ export async function runAction(
           recurrence: call.args.recurrence ?? 'none',
           notes: call.args.notes ?? null,
         }).select().single();
-        if (error) return { ok: false, error: error.message };
+        if (error) return actionFailure('set the reminder', error);
         return { ok: true, data, summary: `Reminder set: "${call.args.title}".` };
       }
 
@@ -129,21 +135,22 @@ export async function runAction(
           family_id: familyId, list_id: listId, created_by: userId,
           name: itemName, quantity: call.args.quantity ?? null,
         }).select().single();
-        if (error) return { ok: false, error: error.message };
+        if (error) return actionFailure('add the grocery item', error);
         return { ok: true, data, summary: `Added ${itemName} to the grocery list.` };
       }
 
       // ── Meal plan ───────────────────────────────────────────────────────────
       case 'create_meal_plan_entry': {
-        const { data: meal } = await supabase.from('meals').insert({
+        const { data: meal, error: mealError } = await supabase.from('meals').insert({
           family_id: familyId, created_by: userId, name: call.args.meal_name,
           meal_type: call.args.meal_type ?? 'dinner',
         }).select().single();
+        if (mealError || !meal?.id) return actionFailure('create the meal plan entry', mealError ?? new Error('Meal was not created'));
         const { data, error } = await supabase.from('meal_plans').insert({
           family_id: familyId, created_by: userId, meal_id: meal?.id,
           plan_date: call.args.plan_date, meal_type: call.args.meal_type ?? 'dinner',
         }).select().single();
-        if (error) return { ok: false, error: error.message };
+        if (error) return actionFailure('create the meal plan entry', error);
         return { ok: true, data, summary: `Planned "${call.args.meal_name}" for ${call.args.plan_date}.` };
       }
 
@@ -167,7 +174,7 @@ export async function runAction(
           family_id: familyId, list_id: listId, created_by: userId,
           title, notes: call.args.notes ?? null, due_date: call.args.due_date ?? null,
         }).select().single();
-        if (error) return { ok: false, error: error.message };
+        if (error) return actionFailure('add the to-do item', error);
         return { ok: true, data, summary: `Added "${title}" to the to-do list.` };
       }
 
@@ -179,7 +186,7 @@ export async function runAction(
           family_id: familyId, created_by: userId,
           title: call.args.title ?? null, body,
         }).select().single();
-        if (error) return { ok: false, error: error.message };
+        if (error) return actionFailure('save the note', error);
         return { ok: true, data, summary: 'Saved a family note.' };
       }
 
@@ -191,7 +198,7 @@ export async function runAction(
           family_id: familyId, created_by: userId,
           title, description: call.args.description ?? null, target_date: call.args.target_date ?? null,
         }).select().single();
-        if (error) return { ok: false, error: error.message };
+        if (error) return actionFailure('create the goal', error);
         return { ok: true, data, summary: `Created goal "${title}".` };
       }
 
@@ -208,14 +215,14 @@ export async function runAction(
           is_pinned: Boolean(call.args.pinned),
           author_member_id: members?.id ?? null,
         }).select().single();
-        if (error) return { ok: false, error: error.message };
+        if (error) return actionFailure('post the announcement', error);
         return { ok: true, data, summary: `Posted announcement: "${title}".` };
       }
 
       default:
-        return { ok: false, error: `Unknown action: ${call.name}` };
+        return { ok: false, error: 'That action is not available.' };
     }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Action failed' };
+    return actionFailure('complete the requested action', e);
   }
 }

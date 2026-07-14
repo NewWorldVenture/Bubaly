@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,739 unit tests, builds all 235 Next.js build
+tree compiles, passes lint and type checking, passes 2,773 unit tests, builds all 235 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -21,13 +21,17 @@ Latest repair increment (2026-07-13): marketplace photo uploads now have explici
 on replacement, failed listing saves, canceled drafts, quick-post resets, and listing deletion.
 External pasted URLs are never treated as bucket deletion targets.
 
+Latest repair increment (2026-07-14): audited server actions now replace unclassified database and
+provider details with stable user-facing failures, and Family Intelligence fails closed when any source
+read or persistence step fails instead of deriving results from incomplete data.
+
 ## Scope and Inventory
 
 - 352 `page.tsx` route files.
 - 102 API route handlers.
 - 210 migration files; additive repair migrations through `0194` are now present.
 - 332 SQL files under `supabase`.
-- 347 unit-test files and 2,739 passing tests.
+- 349 unit-test files and 2,773 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -155,7 +159,7 @@ External pasted URLs are never treated as bucket deletion targets.
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,739 tests / 347 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,773 tests / 349 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 235 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
@@ -163,7 +167,7 @@ External pasted URLs are never treated as bucket deletion targets.
 | Migration/seed contract | PASS, 26 focused tests | targeted Vitest run |
 | Migration filename audit | PASS, 17 known historical duplicate prefixes; next `0195` | `npm.cmd run db:audit:migrations` |
 | Schema probe | PASS | 11 required live table/ledger probes available, including Stripe claim columns |
-| Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f5e14-723f-714a-9c00-a9d0a3937072`) |
+| Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f605a-5f01-7f95-9a71-4950713e250e`) |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
 | Dependency audit | PASS | 0 vulnerabilities after the scoped PostCSS override |
 | Live RLS attack tests | NOT RUN | requires isolated Supabase with migration applied |

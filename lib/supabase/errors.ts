@@ -78,6 +78,16 @@ export function describeDbError(error: unknown, fallback = 'Something went wrong
   return raw.trim() || fallback;
 }
 
+/** Describe an error for a server-action/API response without exposing
+ * unclassified database or provider details to the browser or model. */
+export function describeActionError(error: unknown, fallback = 'Something went wrong. Please try again.'): string {
+  const described = describeDbError(error, fallback);
+  const raw = typeof error === 'object' && error !== null
+    ? String((error as { message?: unknown }).message ?? '').trim()
+    : typeof error === 'string' ? error.trim() : '';
+  return raw && described === raw ? fallback : described;
+}
+
 /**
  * True when an error means the table/column/relation isn't present yet — e.g. a
  * migration hasn't been applied to this database. PostgREST reports these as

@@ -3415,3 +3415,24 @@ roadmap entries and user worktree changes are preserved.
   boundary for all deletes.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0238 - Server actions exposed raw database/provider errors and signal reads failed open
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Error boundaries / data integrity
+- Feature: AI actions, family actions, and Family Intelligence refresh
+- File or files: `lib/supabase/errors.ts`, `lib/ai/actions.ts`, `lib/family/actions.ts`,
+  `app/(app)/dashboard/family-signals/actions.ts`, `lib/intelligence/hard-signals-server.ts`,
+  `tests/db-errors.test.ts`, `tests/server-action-error-boundaries.test.ts`
+- Description: Several authenticated server actions returned raw Supabase messages to the browser or
+  model. Family Intelligence also checked only the reminders query, so failures in its other source
+  reads could produce signals from incomplete data and report success.
+- Resolution: Added a server-action sanitizer that preserves actionable permission/conflict/network
+  guidance while replacing unclassified details with stable fallbacks and logging diagnostics only on
+  the server. All six signal source reads, the existing-signal read, and signal upsert now fail closed;
+  the AI meal action also stops when its prerequisite meal insert fails.
+- Tests performed: Error-boundary contracts, full Vitest, typecheck, lint, dependency audit, migration
+  filename audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Verified by: Codex
+- Date completed: 2026-07-14
