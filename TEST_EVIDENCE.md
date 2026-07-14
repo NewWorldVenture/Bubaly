@@ -15,7 +15,17 @@ Audit date: 2026-07-13
   authenticated test skipped out of 52.
 - `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
 - `npm.cmd run db:audit:auth`: public health passed; Admin users still returned HTTP 500,
-  error ID `019f5e05-6d6c-7842-acfc-0a2bc357e97d`.
+  error ID `019f5e14-723f-714a-9c00-a9d0a3937072`.
+
+## Audit Update - Marketplace photo storage lifecycle
+
+- Added `lib/storage/marketplace-photos.ts` to parse only same-project, UUID-owned marketplace
+  bucket URLs and perform storage cleanup through the authenticated client.
+- Marketplace quick-post and listing edit flows now clean uploaded objects after failed inserts,
+  canceled drafts, resets, replacements, and listing deletion.
+- `npm.cmd exec vitest run`: 347 files, 2,739 tests passed.
+- `npm.cmd run typecheck`, `npm.cmd run lint`, `npm.cmd run build`, and dependency audit passed.
+- Public Playwright/axe/overflow E2E: 51 passed, 1 intentional authenticated skip.
 
 ## Passing Checks
 

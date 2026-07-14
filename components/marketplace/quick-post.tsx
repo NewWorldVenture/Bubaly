@@ -20,6 +20,7 @@ import {
 } from '@/lib/marketplace/listings';
 import { draftListing, suggestPriceCents, type Comparable, type QuickDraft } from '@/lib/marketplace/quick-post';
 import { PhotoUpload } from '@/components/marketplace/photo-upload';
+import { removeMarketplacePhotoPath } from '@/lib/storage/marketplace-photos';
 import { cn } from '@/lib/utils/cn';
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as ListingCategory[];
@@ -37,6 +38,7 @@ export function QuickPost({ className }: { className?: string }) {
   const [draft, setDraft] = useState<QuickDraft | null>(null);
   const [price, setPrice] = useState('');
   const [photo, setPhoto] = useState('');
+  const [ownedPhotoPath, setOwnedPhotoPath] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
   const [comps, setComps] = useState<Comparable[] | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -72,7 +74,16 @@ export function QuickPost({ className }: { className?: string }) {
     setStartedAt((s) => s ?? Date.now());
   };
 
-  const reset = () => {
+  const cleanupPhoto = async (path = ownedPhotoPath) => {
+    if (!path) return;
+    const { error } = await removeMarketplacePhotoPath(createClient(), path);
+    if (error) toastError('The uploaded photo could not be cleaned up.');
+    setOwnedPhotoPath((current) => (current === path ? null : current));
+  };
+
+  const reset = ({ cleanup = true }: { cleanup?: boolean } = {}) => {
+    if (cleanup) void cleanupPhoto();
+    else setOwnedPhotoPath(null);
     setDraft(null); setInput(''); setPrice(''); setPhoto(''); setStartedAt(null); setElapsed(0);
   };
 
@@ -99,11 +110,16 @@ export function QuickPost({ className }: { className?: string }) {
       location: draft.location,
       photo_url: photo.trim() || null,
     });
+    if (error) {
+      await cleanupPhoto();
+      setPosting(false);
+      toastError(describeDbError(error));
+      return;
+    }
     setPosting(false);
-    if (error) { toastError(describeDbError(error)); return; }
     const secs = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : null;
     success(secs != null && secs <= 60 ? `Posted in ${secs}s ⚡` : 'Posted to the family marketplace');
-    reset();
+    reset({ cleanup: false });
   }
 
   const set = <K extends keyof QuickDraft>(key: K, value: QuickDraft[K]) =>
@@ -168,7 +184,12 @@ export function QuickPost({ className }: { className?: string }) {
             className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm font-semibold outline-none focus:border-brand"
           />
 
-          <PhotoUpload value={photo} onChange={setPhoto} userId={userId} />
+          <PhotoUpload
+            value={photo}
+            onChange={setPhoto}
+            onOwnedPathChange={setOwnedPhotoPath}
+            userId={userId}
+          />
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <select
@@ -243,7 +264,7 @@ export function QuickPost({ className }: { className?: string }) {
             </button>
             <button
               type="button"
-              onClick={reset}
+              onClick={() => reset()}
               disabled={posting}
               className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-border px-3 text-xs font-semibold text-muted transition hover:text-fg disabled:opacity-50"
             >

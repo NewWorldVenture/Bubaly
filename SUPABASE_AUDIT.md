@@ -103,7 +103,7 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 - `npm.cmd run db:audit:schema` passed all 11 required live schema checks, including the
   `stripe_webhook_events` claim columns previously missing from the live response.
 - `npm.cmd run db:audit:auth` still passes public Auth health but returns HTTP 500 from the Admin users
-  endpoint (`Database error finding users`, error id `019f5e05-6d6c-7842-acfc-0a2bc357e97d`).
+  endpoint (`Database error finding users`, error id `019f5e14-723f-714a-9c00-a9d0a3937072`).
 - The schema result confirms object availability only; migration-history verification and authenticated
   RLS allow/deny tests still require an authorized isolated environment.
 
@@ -113,6 +113,13 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 - These historical files remain unchanged pending comparison with the target environment's migration
   ledger. `npm.cmd run db:audit:migrations` passed with the complete known set explicit and next
   available version `0195`.
+
+### Marketplace photo storage follow-up - 2026-07-13
+
+- Migration `0194_marketplace_photos_bucket.sql` creates a public-read, authenticated-write bucket
+  with a 10 MB image allowlist and UUID-owned folder policies.
+- Application cleanup now targets only same-project public bucket URLs and relies on the Storage RLS
+  policy for the final caller ownership check. External pasted URLs are left untouched.
 ## Audit Update - 2026-07-13
 
 Seed tooling no longer embeds a fixed household or creator identity. All six legacy service-role

@@ -9,20 +9,25 @@
 import { useRef, useState } from 'react';
 import { ImagePlus, Loader2, X, Link2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import {
+  MARKETPLACE_PHOTOS_BUCKET,
+  removeMarketplacePhotoPath,
+  marketplacePhotoPathFromUrl,
+} from '@/lib/storage/marketplace-photos';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 
-const BUCKET = 'marketplace-photos';
 const MAX_BYTES = 10 * 1024 * 1024;
 const OK_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 
 export function PhotoUpload({
-  value, onChange, userId, className,
+  value, onChange, userId, className, onOwnedPathChange,
 }: {
   value: string;
   onChange: (url: string) => void;
   userId: string;
   className?: string;
+  onOwnedPathChange?: (path: string | null) => void;
 }) {
   const { error: toastError } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -40,20 +45,33 @@ export function PhotoUpload({
       const sb = createClient();
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
       const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { data, error } = await sb.storage.from(BUCKET).upload(path, file, { upsert: false, cacheControl: '31536000' });
+      const { data, error } = await sb.storage.from(MARKETPLACE_PHOTOS_BUCKET).upload(path, file, { upsert: false, cacheControl: '31536000' });
       if (error) { toastError(`Upload failed: ${error.message}`); return; }
       // Delete a previously-uploaded object we're replacing.
-      if (ownedPath) { void sb.storage.from(BUCKET).remove([ownedPath]); }
-      const { data: pub } = sb.storage.from(BUCKET).getPublicUrl(data.path);
+      const previousPath = ownedPath ?? marketplacePhotoPathFromUrl(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
+      if (previousPath && previousPath !== data.path) {
+        const { error: removeError } = await removeMarketplacePhotoPath(sb, previousPath);
+        if (removeError) toastError('The previous photo could not be cleaned up.');
+      }
+      const { data: pub } = sb.storage.from(MARKETPLACE_PHOTOS_BUCKET).getPublicUrl(data.path);
       setOwnedPath(data.path);
+      onOwnedPathChange?.(data.path);
       onChange(pub.publicUrl);
+    } catch {
+      toastError('Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
   }
 
-  function remove() {
-    if (ownedPath) { void createClient().storage.from(BUCKET).remove([ownedPath]); setOwnedPath(null); }
+  async function remove() {
+    const path = ownedPath ?? marketplacePhotoPathFromUrl(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
+    if (path) {
+      const { error } = await removeMarketplacePhotoPath(createClient(), path);
+      if (error) { toastError('The photo could not be removed.'); return; }
+    }
+    setOwnedPath(null);
+    onOwnedPathChange?.(null);
     onChange('');
   }
 
@@ -66,7 +84,7 @@ export function PhotoUpload({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={value.trim()} alt="Listing photo" className="h-44 w-full object-cover" referrerPolicy="no-referrer" />
           <button
-            type="button" onClick={remove}
+            type="button" onClick={() => void remove()}
             className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-lg bg-black/60 px-2 py-1 text-xs font-semibold text-white backdrop-blur transition hover:bg-black/80"
           >
             <X className="h-3.5 w-3.5" /> Remove

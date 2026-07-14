@@ -20,6 +20,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { ListingImage } from '@/components/marketplace/listing-image';
 import { cn } from '@/lib/utils/cn';
 import { PhotoUpload } from '@/components/marketplace/photo-upload';
+import { removeMarketplacePhotoPath, removeMarketplacePhotoUrl } from '@/lib/storage/marketplace-photos';
 import {
   KIND_LABELS, KIND_ORDER, CATEGORY_LABELS, CONDITION_LABELS, RENT_PERIOD_LABELS,
   kindHasPrice, priceLabel, dollarsToCents, filterListings, availableCount,
@@ -73,6 +74,7 @@ export function MarketplaceModule({
   const [q, setQ] = useState(initialQuery);
   const [modalOpen, setModalOpen] = useState(!!autoOpenPost);
   const [form, setForm] = useState(autoOpenPost ? { ...blank, kind: autoOpenPost } : blank);
+  const [ownedPhotoPath, setOwnedPhotoPath] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [offersFor, setOffersFor] = useState<Listing | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -99,8 +101,9 @@ export function MarketplaceModule({
   );
   const openOfferCount = (listingId: string) => openOffersFor(listingId, offers ?? []).length;
 
-  function openNew() { setForm(blank); setModalOpen(true); }
+  function openNew() { setOwnedPhotoPath(null); setForm(blank); setModalOpen(true); }
   function openEdit(l: Listing) {
+    setOwnedPhotoPath(null);
     setForm({
       id: l.id, title: l.title, description: l.description ?? '', kind: l.kind as ListingKind,
       category: l.category as ListingCategory, condition: (l.condition ?? '') as '' | ListingCondition,
@@ -109,6 +112,18 @@ export function MarketplaceModule({
       photo_url: l.photo_url ?? '',
     });
     setModalOpen(true);
+  }
+
+  async function cleanupOwnedPhoto(path = ownedPhotoPath) {
+    if (!path) return;
+    const { error } = await removeMarketplacePhotoPath(createClient(), path);
+    if (error) toastError('The uploaded photo could not be cleaned up.');
+    setOwnedPhotoPath((current) => (current === path ? null : current));
+  }
+
+  function closeModal() {
+    setModalOpen(false);
+    void cleanupOwnedPhoto();
   }
 
   async function save(e: React.FormEvent) {
@@ -132,8 +147,13 @@ export function MarketplaceModule({
       ? await sb.from('marketplace_listings').update(fields).eq('id', form.id)
       : await sb.from('marketplace_listings').insert({ ...fields, family_id: familyId, member_id: selfId, created_by: userId });
     setSaving(false);
-    if (err) { toastError(describeDbError(err)); return; }
+    if (err) {
+      await cleanupOwnedPhoto();
+      toastError(describeDbError(err));
+      return;
+    }
     success(form.id ? 'Listing updated' : 'Posted to the family marketplace');
+    setOwnedPhotoPath(null);
     setModalOpen(false);
   }
 
@@ -142,6 +162,10 @@ export function MarketplaceModule({
     const sb = createClient();
     const { error: err } = await sb.from('marketplace_listings').delete().eq('id', l.id);
     if (err) { toastError(describeDbError(err)); return; }
+    if (l.photo_url) {
+      const { error: photoError } = await removeMarketplacePhotoUrl(sb, l.photo_url);
+      if (photoError) toastError('Listing removed, but its uploaded photo could not be cleaned up.');
+    }
     success('Removed');
   }
 
@@ -337,7 +361,7 @@ export function MarketplaceModule({
       )}
 
       {/* Post / edit listing */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit listing' : 'Post a listing'}>
+      <Modal open={modalOpen} onClose={closeModal} title={form.id ? 'Edit listing' : 'Post a listing'}>
         <form onSubmit={save} className="space-y-4">
           <Field label="What is it?" required>
             {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Kids' balance bike" autoFocus />}
@@ -391,7 +415,12 @@ export function MarketplaceModule({
           </div>
 
           <Field label="Photo">
-            {() => <PhotoUpload value={form.photo_url} onChange={(url) => setForm((f) => ({ ...f, photo_url: url }))} userId={userId} />}
+            {() => <PhotoUpload
+              value={form.photo_url}
+              onChange={(url) => setForm((f) => ({ ...f, photo_url: url }))}
+              onOwnedPathChange={setOwnedPhotoPath}
+              userId={userId}
+            />}
           </Field>
 
           <Field label="Details">
@@ -399,7 +428,7 @@ export function MarketplaceModule({
           </Field>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={closeModal}>Cancel</Button>
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Post it'}</Button>
           </div>
         </form>

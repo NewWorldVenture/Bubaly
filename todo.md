@@ -3372,3 +3372,25 @@ roadmap entries and user worktree changes are preserved.
   these legacy files after comparing `supabase_migrations.schema_migrations` in every environment.
 - Verified by: Codex
 - Date completed: 2026-07-13
+
+### TODO-0237 - Marketplace photo uploads could become orphaned storage objects
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Storage lifecycle / production data safety
+- Feature: Marketplace listing photo uploads
+- File or files: `components/marketplace/photo-upload.tsx`, `components/marketplace/quick-post.tsx`,
+  `components/modules/marketplace-module.tsx`, `lib/storage/marketplace-photos.ts`,
+  `tests/marketplace-photo-storage.test.ts`
+- Description: A successful upload could remain in the public `marketplace-photos` bucket when the
+  listing insert failed, a draft was canceled/reset, a replacement was made, or a listing was deleted.
+  The database row and storage object could therefore diverge and abandoned media could accumulate.
+- Resolution: Added strict project-bucket/UUID-path parsing, shared cleanup helpers, and explicit
+  rollback hooks for failed saves, modal cancellation, quick-post reset, replacement, and listing
+  deletion. External pasted URLs are never treated as storage deletion targets.
+- Tests performed: Marketplace storage path and lifecycle contracts, full Vitest, typecheck, lint,
+  dependency audit, production build, live schema probes, and public Playwright/axe/overflow E2E.
+- Evidence: Focused storage tests pass; the storage policy remains the final cross-user authorization
+  boundary for all deletes.
+- Verified by: Codex
+- Date completed: 2026-07-13

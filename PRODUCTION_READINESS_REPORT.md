@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,735 unit tests, builds all 235 Next.js build
+tree compiles, passes lint and type checking, passes 2,739 unit tests, builds all 235 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -17,13 +17,17 @@ checkout contains 210 numbered migration files and 17 known historical duplicate
 changed collisions fail CI and `db:push` before any database connection is attempted. The remote
 migration ledger remains unverified because this checkout is not linked to a Supabase project.
 
+Latest repair increment (2026-07-13): marketplace photo uploads now have explicit storage cleanup
+on replacement, failed listing saves, canceled drafts, quick-post resets, and listing deletion.
+External pasted URLs are never treated as bucket deletion targets.
+
 ## Scope and Inventory
 
 - 352 `page.tsx` route files.
 - 102 API route handlers.
 - 210 migration files; additive repair migrations through `0194` are now present.
 - 332 SQL files under `supabase`.
-- 346 unit-test files and 2,735 passing tests.
+- 347 unit-test files and 2,739 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -81,6 +85,8 @@ migration ledger remains unverified because this checkout is not linked to a Sup
   marketplace item pages.
 - Added migration `0192_marketplace_returns.sql` and return-state tracking, overdue reminders, and
   rent/borrow return workflows for marketplace orders.
+- Added strict marketplace photo storage path parsing and cleanup rollback hooks for abandoned or
+  deleted listing media.
 - Added a migration filename preflight that preserves the known historical duplicate-prefix set,
   fails on new or changed collisions, and runs before `db:push` and in CI. Historical files were not
   renamed because the remote migration ledger is not accessible from this unlinked checkout.
@@ -149,7 +155,7 @@ migration ledger remains unverified because this checkout is not linked to a Sup
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,735 tests / 346 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,739 tests / 347 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 235 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
@@ -157,7 +163,7 @@ migration ledger remains unverified because this checkout is not linked to a Sup
 | Migration/seed contract | PASS, 26 focused tests | targeted Vitest run |
 | Migration filename audit | PASS, 17 known historical duplicate prefixes; next `0195` | `npm.cmd run db:audit:migrations` |
 | Schema probe | PASS | 11 required live table/ledger probes available, including Stripe claim columns |
-| Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f5e05-6d6c-7842-acfc-0a2bc357e97d`) |
+| Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f5e14-723f-714a-9c00-a9d0a3937072`) |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |
 | Dependency audit | PASS | 0 vulnerabilities after the scoped PostCSS override |
 | Live RLS attack tests | NOT RUN | requires isolated Supabase with migration applied |
