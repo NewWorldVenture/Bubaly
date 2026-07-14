@@ -44,9 +44,12 @@ export function PhotoUpload({
     try {
       const sb = createClient();
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-      const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const unique = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const path = `${userId}/${unique}.${ext}`;
       const { data, error } = await sb.storage.from(MARKETPLACE_PHOTOS_BUCKET).upload(path, file, { upsert: false, cacheControl: '31536000' });
-      if (error) { toastError(`Upload failed: ${error.message}`); return; }
+      if (error) { toastError('Upload failed. Please try again.'); return; }
       // Delete a previously-uploaded object we're replacing.
       const previousPath = ownedPath ?? marketplacePhotoPathFromUrl(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
       if (previousPath && previousPath !== data.path) {

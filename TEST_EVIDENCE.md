@@ -2,6 +2,19 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Family media persistence boundaries
+
+- `npm.cmd exec vitest run tests/family-media-persistence.test.ts`: 1 file, 5 tests passed.
+- `npm.cmd exec vitest run`: 379 files, 2,915 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the existing Next.js deprecation notice remains.
+- Dependency audit: 0 vulnerabilities. Migration filename audit: 219 numbered SQL files, next version
+  `0204`, with the known historical duplicate prefixes unchanged. Live schema audit: 11 of 11 probes passed.
+- Clean `npm.cmd run build`: passed; 250 static pages generated. Public Playwright/axe/overflow E2E:
+  51 passed, 1 intentional authenticated skip out of 52 tests.
+- Family-media uploads now prefer collision-resistant UUID paths, check metadata inserts before reporting
+  success, remove uploaded objects when metadata persistence fails, and use stable upload errors.
+
 ## Latest Audit Update - AI assistant tool persistence boundaries
 
 - `npm.cmd exec vitest run tests/assistant-persistence-boundaries.test.ts tests/assistant-complete-reminder.test.ts tests/assistant-add-reminder.test.ts tests/assistant-tool-error-contract.test.ts`: 4 files, 11 tests passed.

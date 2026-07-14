@@ -90,12 +90,15 @@ export function CreateMemory() {
     for (let i = 0; i < picks.length; i++) {
       const { file } = picks[i];
       const ext = file.name.split('.').pop() || 'jpg';
-      const path = `${familyId}/photos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const unique = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const path = `${familyId}/photos/${unique}.${ext}`;
       const { data: stored, error: upErr } = await supabase.storage
         .from('family-media')
         .upload(path, file, { upsert: false, cacheControl: '31536000' });
       if (upErr) {
-        toastError(`Couldn’t upload ${file.name}: ${upErr.message}`);
+        toastError(`Couldn’t upload ${file.name}. Please try again.`);
       } else {
         const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
         const { data: row, error: insErr } = await supabase.from('family_photos').insert({
@@ -110,9 +113,12 @@ export function CreateMemory() {
         }).select('id').single();
         if (insErr || !row) {
           toastError(describeDbError(insErr ?? { message: 'Could not save memory' }));
+          const { error: cleanupError } = await supabase.storage.from('family-media').remove([stored.path]);
+          if (cleanupError) toastError('The uploaded photo could not be cleaned up.');
         } else {
           // Mark it a favorite so it also shows in the Photos "Favorites" tab.
-          await supabase.from('family_photos').update({ is_favorite: true }).eq('id', row.id);
+          const { error: favoriteError } = await supabase.from('family_photos').update({ is_favorite: true }).eq('id', row.id);
+          if (favoriteError) toastError('The memory was saved, but could not be added to Favorites.');
           createdRows.push({ id: row.id, path: stored.path });
           saved++;
         }

@@ -4,7 +4,7 @@
 
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
-- Current migration files: 215, through `0199_marketplace_handoff_completion.sql`.
+- Current migration files: 219, through `0203_service_descriptions.sql`.
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
   `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
@@ -18,7 +18,8 @@
   `0195_dashboard_layout_upsert_constraint.sql`,
   `0196_atomic_economy_and_invest_decisions.sql`, and
   `0197_feedback_ideas.sql`, `0198_guardian_suggestion_review_transaction.sql`, and
-  `0199_marketplace_handoff_completion.sql`.
+  `0199_marketplace_handoff_completion.sql`, `0200_display_settings.sql`, `0201_blog_engagement.sql`,
+  `0202_blog_articles.sql`, and `0203_service_descriptions.sql`.
 - SQL files: 338.
 - Static counts: 1,190 policy declarations, 642 RLS enable statements, 100 function declarations,
   417 trigger declarations, and 65 `storage.objects` references. Counts are source-text counts,
@@ -236,6 +237,14 @@ AI assistant action tools use the family-scoped Supabase client and now fail clo
 secondary reads, assignments, or dependent reminder writes fail. Multi-step chore and recurring-reminder
 actions roll back their first write when the dependent row cannot be persisted, preventing the model from
 reporting a completed action while durable family state is incomplete.
+
+### Family media storage persistence boundary audit
+
+Create Memory and Photos uploads now prefer browser UUIDs for their storage paths with a deterministic
+fallback. The upload count and success path advance only after the corresponding `family_photos` row is
+persisted; when that metadata write fails, the newly uploaded `family-media` object is removed and cleanup
+failure is surfaced separately. Marketplace photo uploads use the same stable, non-sensitive storage error
+message rather than exposing raw provider details.
 
 ### Migration filename history
 

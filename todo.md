@@ -4146,3 +4146,22 @@ roadmap entries and user worktree changes are preserved.
   parent rollback, recurring-reminder failure with source rollback, and pending-decision read failure.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0266 - Family media uploads could orphan storage objects after metadata failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Storage / data integrity / error handling
+- Feature: Family Photos and Create Memory uploads
+- File or files: `components/memories/create-memory.tsx`, `components/modules/photos-module.tsx`,
+  `components/marketplace/photo-upload.tsx`, `tests/family-media-persistence.test.ts`
+- Description: Successful storage uploads could be left orphaned when the `family_photos` insert failed;
+  PhotosModule counted uploads without checking the row write, and upload toasts exposed raw storage errors.
+- Resolution: Family media metadata writes are checked before success counts; failed row writes remove the
+  object, storage errors use stable messages, favorite updates are surfaced, and upload paths prefer UUIDs.
+- Tests performed: Focused family-media contract tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/family-media-persistence.test.ts` guards UUID paths, failed-insert cleanup, checked
+  upload counts, stable marketplace errors, and Favorites update handling.
+- Verified by: Codex
+- Date completed: 2026-07-14

@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-The tree compiles, passes lint and type checking, passes 2,901 unit tests, builds all 249 static Next.js
+The tree compiles, passes lint and type checking, passes 2,915 unit tests, builds all 250 static Next.js
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -34,6 +34,10 @@ fail-closed local/mapping/conflict/cursor persistence guards before imported/exp
 
 Latest repair increment (2026-07-14): AI assistant list reads now fail closed on Supabase errors, and
 multi-step chore and recurring-reminder actions roll back their first write when dependent persistence fails.
+
+Latest repair increment (2026-07-14): family-media uploads now prefer collision-resistant UUID paths,
+check the `family_photos` metadata write before reporting success, remove uploaded objects when metadata
+persistence fails, and use stable client-facing upload errors.
 
 Latest repair increment (2026-07-14): onboarding finalization now fails closed on required provisioning
 writes instead of returning success after partial family setup. Runtime action payloads are bounded and
@@ -139,9 +143,9 @@ concurrent completion or a partial write failure.
 
 - 352 `page.tsx` route files.
 - 102 API route handlers.
-- 216 migration files; additive repair migrations through `0200` are now present.
+- 219 migration files; additive repair migrations through `0203` are now present.
 - 338 SQL files under `supabase`.
-- 377 unit-test files and 2,901 passing tests.
+- 379 unit-test files and 2,915 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -271,13 +275,13 @@ concurrent completion or a partial write failure.
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,901 tests / 377 files | `npm.cmd exec vitest run` |
-| Production build | PASS, 249 generated pages | `npm.cmd run build` |
+| Unit tests | PASS, 2,915 tests / 379 files | `npm.cmd exec vitest run` |
+| Production build | PASS, 250 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
 | Mobile overflow E2E | PASS at 320, 390, 768, and 1024 widths | Playwright |
 | Migration/seed contract | PASS, 30 focused tests | targeted Vitest run |
-| Migration filename audit | PASS, 17 known historical duplicate prefixes; next `0200` | `npm.cmd run db:audit:migrations` |
+| Migration filename audit | PASS, 17 known historical duplicate prefixes; next `0204` | `npm.cmd run db:audit:migrations` |
 | Schema probe | PASS | 11 required live table/ledger probes available, including Stripe claim columns |
 | Auth Admin probe | BLOCKED/FAIL | live GoTrue HTTP 500 `Database error finding users` (`019f617e-363b-77ea-9e8a-db390083d810`) |
 | Local Supabase migration | BLOCKED | Docker Desktop unavailable |

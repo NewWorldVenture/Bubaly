@@ -92,15 +92,18 @@ export function PhotosModule() {
       const isVideo = file.type.startsWith('video/');
       const ext = file.name.split('.').pop();
       const folder = isVideo ? 'videos' : 'photos';
-      const path = `${familyId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const unique = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const path = `${familyId}/${folder}/${unique}.${ext}`;
       const { data: stored, error: upErr } = await supabase.storage
         .from('family-media')
         .upload(path, file, { upsert: false, cacheControl: '31536000' });
       if (upErr) {
-        toastError(`Failed to upload ${file.name}: ${upErr.message}`);
+        toastError(`Failed to upload ${file.name}. Please try again.`);
       } else {
         const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
-        await supabase.from('family_photos').insert({
+        const { data: photo, error: insertError } = await supabase.from('family_photos').insert({
           family_id: familyId,
           album_id: activeAlbum?.id ?? null,
           uploaded_by: userId,
@@ -108,8 +111,14 @@ export function PhotosModule() {
           url: publicUrl,
           size_bytes: file.size,
           media_type: isVideo ? 'video' : 'image',
-        });
-        uploaded++;
+        }).select('id').single();
+        if (insertError || !photo) {
+          toastError('The file uploaded, but its library record could not be saved.');
+          const { error: cleanupError } = await supabase.storage.from('family-media').remove([stored.path]);
+          if (cleanupError) toastError('The uploaded file could not be cleaned up.');
+        } else {
+          uploaded++;
+        }
       }
       setUploadProgress({ done: i + 1, total: valid.length });
     }
