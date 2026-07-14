@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import type { AudienceMatch, PersonalizationVariant } from '@/lib/marketing/personalization';
 import type { Json } from '@/lib/database.types';
 
@@ -45,7 +45,7 @@ export async function createRuleAction(formData: FormData): Promise<void> {
   if (!name || !slot) return;
 
   const priority = Number(s(formData, 'priority') ?? '0');
-  const { data } = await supabase.from('marketing_personalization_rules').insert({
+  const { data, error } = await supabase.from('marketing_personalization_rules').insert({
     name,
     slot,
     match: buildMatch(formData) as unknown as Json,
@@ -54,20 +54,25 @@ export async function createRuleAction(formData: FormData): Promise<void> {
     status: s(formData, 'status') === 'paused' ? 'paused' : 'active',
     created_by: actorId,
   }).select('id').single();
-  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_personalization_rule', resourceId: data?.id ?? null, metadata: { name, slot } });
+  if (error || !data) marketingActionFailure('create the personalization rule', error ?? new Error('The personalization rule row was not returned after save.'));
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_personalization_rule', resourceId: data.id, metadata: { name, slot } });
   revalidatePath('/admin/marketing/personalization');
 }
 
 export async function toggleRuleStatusAction(id: string, activate: boolean): Promise<void> {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('marketing_personalization_rules').update({ status: activate ? 'active' : 'paused' }).eq('id', id);
+  const { data, error } = await supabase.from('marketing_personalization_rules')
+    .update({ status: activate ? 'active' : 'paused' }).eq('id', id).is('deleted_at', null).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('update the personalization rule', error ?? new Error('Personalization rule not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_personalization_rule', resourceId: id, metadata: { status: activate ? 'active' : 'paused' } });
   revalidatePath('/admin/marketing/personalization');
 }
 
 export async function deleteRuleAction(id: string): Promise<void> {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('marketing_personalization_rules').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  const { data, error } = await supabase.from('marketing_personalization_rules')
+    .update({ deleted_at: new Date().toISOString() }).eq('id', id).is('deleted_at', null).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('delete the personalization rule', error ?? new Error('Personalization rule not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'marketing_personalization_rule', resourceId: id });
   revalidatePath('/admin/marketing/personalization');
 }

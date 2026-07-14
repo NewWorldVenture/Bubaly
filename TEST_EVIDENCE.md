@@ -2,6 +2,17 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Marketing delivery and personalization boundaries
+
+- `npm.cmd exec vitest run tests/marketing-delivery-action-boundaries.test.ts`: 1 file, 2 tests passed.
+- `npm.cmd exec vitest run`: 367 files, 2,857 tests passed.
+- `npm.cmd run typecheck`, `npm.cmd run lint`, dependency audit, migration audit, and live schema probes passed.
+- Clean `npm.cmd run build`: 235 routes generated. Public Playwright/axe/overflow E2E: 51 passed,
+  1 intentional authenticated test skipped out of 52.
+- Push campaigns now claim only draft/failed rows before delivery, fail and mark campaigns when
+  prerequisite reads or delivery throw, and check final sent-state persistence. Personalization rule
+  inserts, updates, and deletes now check errors and affected rows before audit logging or revalidation.
+
 ## Latest Audit Update - Loyalty administration action boundaries
 
 - `npm.cmd exec vitest run tests/marketing-loyalty-action-boundaries.test.ts`: 1 file, 2 tests passed.

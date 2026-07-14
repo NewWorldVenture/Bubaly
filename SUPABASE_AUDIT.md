@@ -169,6 +169,14 @@ fulfillment and cancellation require a pending target row, prerequisite redempti
 points-engine exceptions are sanitized through `marketingActionFailure` before audit logging or cache
 revalidation.
 
+### Marketing delivery and personalization action boundary audit
+
+Push campaign creation, claiming, prerequisite reads, delivery failure recovery, final persistence, and
+soft deletion now check Supabase results. The claim is restricted to the current draft/failed status so
+concurrent administrators cannot reserve the same campaign. Personalization rule inserts, status changes,
+and soft deletes now require returned target rows and route unexpected failures through the sanitized
+marketing action boundary.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

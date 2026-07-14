@@ -3901,3 +3901,25 @@ roadmap entries and user worktree changes are preserved.
   pending redemption transitions, sanitized points failures, and failed-read handling.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0256 - Marketing delivery and personalization writes ignored required results
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Marketing delivery reliability / concurrency / error handling
+- Feature: Push campaigns and personalization rules
+- File or files: `app/(app)/admin/marketing/push/actions.ts`,
+  `app/(app)/admin/marketing/personalization/actions.ts`,
+  `tests/marketing-delivery-action-boundaries.test.ts`
+- Description: Push campaigns could be double-sent by concurrent administrators, remain stuck in
+  `sending` after prerequisite failures, and silently treat failed reads or final writes as success.
+  Personalization mutations also ignored failed writes and missing targets.
+- Resolution: Push campaigns now use a status-guarded claim, fail and recover pre-delivery errors,
+  check device/profile/suppression reads and final persistence, and validate soft deletion. Personalization
+  inserts, updates, and deletes now check errors and affected rows through the sanitized boundary.
+- Tests performed: Focused delivery boundary tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/marketing-delivery-action-boundaries.test.ts` guards campaign claiming, failure
+  recovery, prerequisite checks, final persistence, and personalization target checks.
+- Verified by: Codex
+- Date completed: 2026-07-14
