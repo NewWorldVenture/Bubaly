@@ -279,6 +279,15 @@ fails, so a degraded throttle table cannot silently remove brute-force protectio
 creation treats active-family preference persistence as required and compensates by deleting the mapping,
 unlinking the member, and deleting the new Auth user on failure; optional throttle reset remains non-core.
 
+### Social publishing persistence boundary audit
+
+Social publish jobs now fail closed when target/account reads, variant reads, job transitions, target state,
+publish-result rows, or final post state cannot be persisted. The action cleans up pre-publish post rows and
+cascade children when draft/variant/target/schedule setup fails, while preserving a post after a connector
+has started so an uncertain external side effect is visible for review rather than silently retried. Provider
+exception details are logged server-side and replaced with a stable client message; usage events are checked
+and logged as best-effort operational telemetry after the core publish state is durable.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

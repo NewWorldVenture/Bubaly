@@ -79,11 +79,12 @@ function makeConnector(platform: SocialPlatform): Connector {
       try {
         return await impl(input, process.env);
       } catch (err) {
+        console.error(`[social-publish] ${platform} connector failed`, err);
         return {
           ok: false,
           status: 'failed',
           errorCode: 'provider_error',
-          errorMessage: err instanceof Error ? err.message : 'Unknown provider error',
+          errorMessage: 'The provider could not confirm this post. Review the result and try again later.',
         };
       }
     },

@@ -4235,3 +4235,17 @@ roadmap entries and user worktree changes are preserved.
 - Evidence: `tests/child-login-persistence.test.ts` guards throttle error handling, both failure paths, and provisioning compensation.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0271 - Social publishing could report success after partial persistence failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Social publishing / external side effects / data integrity
+- Feature: Social Content Studio publish and schedule workflows
+- File or files: `lib/social/publish.ts`, `lib/social/connectors.ts`, `app/(app)/dashboard/social/actions.ts`, `tests/social-publish-persistence.test.ts`
+- Description: Required social target, variant, schedule, job, target-outcome, result, and post-state writes were ignored; setup failures could leave orphan posts, and provider exceptions could expose raw details.
+- Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
+- Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
+- Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
+- Verified by: Codex
+- Date completed: 2026-07-14
