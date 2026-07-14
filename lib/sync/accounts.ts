@@ -48,16 +48,17 @@ export async function connectAccount(admin: Admin, input: ConnectInput): Promise
     )
     .select('id')
     .single();
-  if (accErr || !account) throw new Error(`Failed to upsert sync account: ${accErr?.message}`);
+  if (accErr || !account) throw new Error('Failed to upsert sync account');
 
   // Preserve an existing refresh token when this consent didn't return a new one.
   let refreshEnc = encryptNullable(input.tokens.refreshToken);
   if (!refreshEnc) {
-    const { data: existing } = await admin
+    const { data: existing, error: existingError } = await admin
       .from('sync_tokens')
       .select('refresh_token_enc')
       .eq('account_id', account.id)
       .maybeSingle();
+    if (existingError) throw new Error('Failed to read the stored refresh token');
     refreshEnc = existing?.refresh_token_enc ?? null;
   }
 
@@ -77,10 +78,10 @@ export async function connectAccount(admin: Admin, input: ConnectInput): Promise
     },
     { onConflict: 'account_id' },
   );
-  if (tokErr) throw new Error(`Failed to store tokens: ${tokErr.message}`);
+  if (tokErr) throw new Error('Failed to store sync tokens');
 
   // Ensure a connection row exists for health/UI.
-  await admin.from('sync_connections').upsert(
+  const { data: connection, error: connectionError } = await admin.from('sync_connections').upsert(
     {
       account_id: account.id,
       user_id: input.userId,
@@ -94,7 +95,8 @@ export async function connectAccount(admin: Admin, input: ConnectInput): Promise
       updated_by: input.userId,
     },
     { onConflict: 'account_id' },
-  );
+  ).select('account_id').maybeSingle();
+  if (connectionError || !connection) throw new Error('Failed to persist the sync connection');
 
   return account.id;
 }
@@ -119,20 +121,22 @@ export async function getValidAccessToken(admin: Admin, accountId: string): Prom
   if (!tok.refresh_token_enc) throw new Error('Access token expired and no refresh token — reconnect required.');
   const refreshed = await refreshAccessToken(decryptSecret(tok.refresh_token_enc));
 
-  await admin
+  const { data: updated, error: updateError } = await admin
     .from('sync_tokens')
     .update({
       access_token_enc: encryptSecret(refreshed.accessToken),
       expires_at: new Date(refreshed.expiresAt).toISOString(),
       last_synced_at: new Date().toISOString(),
     })
-    .eq('account_id', accountId);
+    .eq('account_id', accountId).select('account_id').maybeSingle();
+  if (updateError || !updated) throw new Error('Failed to persist the refreshed sync token');
 
   return refreshed.accessToken;
 }
 
 /** Loads the decrypted refresh token (for revoke-on-disconnect). */
 export async function getRefreshToken(admin: Admin, accountId: string): Promise<string | null> {
-  const { data } = await admin.from('sync_tokens').select('refresh_token_enc').eq('account_id', accountId).maybeSingle();
+  const { data, error } = await admin.from('sync_tokens').select('refresh_token_enc').eq('account_id', accountId).maybeSingle();
+  if (error) throw new Error('Failed to read the stored refresh token');
   return data?.refresh_token_enc ? decryptSecret(data.refresh_token_enc) : null;
 }

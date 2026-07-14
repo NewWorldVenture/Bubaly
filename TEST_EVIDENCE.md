@@ -2,6 +2,14 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Sync account and token persistence boundaries
+
+- `npm.cmd exec vitest run tests/sync-account-persistence-boundaries.test.ts`: 1 file, 3 tests passed.
+- `npm.cmd exec vitest run`: 372 files, 2,879 tests passed.
+- `npm.cmd run typecheck`: passed.
+- Sync account creation now checks account, token, and connection writes; reconnects fail closed when
+  the existing refresh-token read fails, and token refresh only succeeds after encrypted persistence.
+
 ## Latest Audit Update - Payment and webhook persistence boundaries
 
 - `npm.cmd exec vitest run tests/webhook-persistence-boundaries.test.ts tests/stripe-webhook-replay-contract.test.ts tests/resend-webhook-replay-contract.test.ts`: 3 files, 8 tests passed.

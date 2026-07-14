@@ -4015,3 +4015,21 @@ roadmap entries and user worktree changes are preserved.
   suppressions, and referral conversion result checks.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0261 - Sync account lifecycle writes ignored required results
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Integrations / encrypted credential lifecycle / data integrity
+- Feature: Connected sync accounts and token refresh
+- File or files: `lib/sync/accounts.ts`, `tests/sync-account-persistence-boundaries.test.ts`
+- Description: Reconnects could overwrite a refresh token after a failed prerequisite read, connection
+  upserts were unchecked, and token refresh returned a new access token even when encrypted persistence failed.
+- Resolution: Account, token, and connection writes now require successful returned rows; prerequisite reads
+  and refresh persistence fail closed with stable server-side errors.
+- Tests performed: Focused sync-account boundary tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/sync-account-persistence-boundaries.test.ts` guards refresh-token read handling,
+  connection persistence, and refresh-write checks.
+- Verified by: Codex
+- Date completed: 2026-07-14

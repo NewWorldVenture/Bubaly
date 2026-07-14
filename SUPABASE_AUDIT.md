@@ -206,6 +206,12 @@ Supabase results; a lost finalization or handler-error update produces a retryab
 acknowledging the event. Resend counter, suppression, and final ledger writes follow the same fail-closed
 pattern. Referral conversion now checks both its prerequisite read and status-guarded update.
 
+### Sync account and token persistence boundary audit
+
+Sync account upserts, encrypted token writes, and connection-row upserts now require returned rows and
+fail closed on Supabase errors. Reconnects no longer replace a missing refresh token after an unreadable
+prerequisite row, and refreshed access tokens are not returned until their encrypted persistence succeeds.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:
