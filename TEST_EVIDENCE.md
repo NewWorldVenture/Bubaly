@@ -8,7 +8,7 @@ Audit date: 2026-07-13
 |---|---|
 | `npm.cmd run typecheck` | PASS |
 | `npm.cmd run lint` | PASS; Next.js reports the known `next lint` deprecation notice |
-| `npm.cmd exec vitest run` | PASS: 343 files, 2,724 tests |
+| `npm.cmd exec vitest run` | PASS: 345 files, 2,729 tests |
 | `npm.cmd run build` | PASS: Next.js 15.5.19, 235 generated pages |
 | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e -- --reporter=line` | PASS: 51 of 52 tests; 1 intentional auth skip |
 | `npm.cmd test -- tests/marketplace-circles-rls.test.ts tests/seed-data-safety-contract.test.ts tests/seed-tls-safety-contract.test.ts` | PASS: 3 files, 5 tests |
@@ -65,7 +65,7 @@ Audit date: 2026-07-13
 - Local limiter buckets now have bounded capacity, expired-bucket pruning, normalized parameters, and validated IP-derived keys.
 - `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
 - `npm.cmd run db:audit:auth`: public Auth health passed; Admin users still returned HTTP 500
-  (`019f5ddc-1628-7f7d-8012-88d97b82321b`).
+  (`019f5de7-9b16-78cc-9e87-d74ac923eb08`).
 
 ## Audit Update - 2026-07-13 (dependency advisory remediation)
 
@@ -84,7 +84,24 @@ Audit date: 2026-07-13
 - Full Vitest: 344 files, 2,725 tests passed. Typecheck, lint, build (235 pages), and public E2E (51
   passed, 1 intentional authenticated skip) passed. npm audit remains at 0 vulnerabilities.
 - Live schema audit passed all 11 required checks. Auth Admin still returns HTTP 500, latest error ID
-  `019f5ddc-1628-7f7d-8012-88d97b82321b`.
+  `019f5de7-9b16-78cc-9e87-d74ac923eb08`.
+
+## Audit Update - 2026-07-13 (CI gate enforcement)
+
+- GitHub Actions now runs `npm audit --omit=dev --audit-level=moderate` in the quality job.
+- The isolated Supabase E2E job now runs `npm run db:audit:auth` and `npm run db:audit:schema` before
+  browser tests.
+- `npm.cmd exec vitest run tests/production-readiness-workflow.test.ts`: 1 file, 2 tests passed.
+- Full local Vitest: 345 files, 2,727 tests passed. Typecheck, lint, npm audit (0 vulnerabilities),
+  and production build (235 pages) passed.
+
+## Audit Update - 2026-07-13 (post-rebase marketplace deals)
+
+- Rebased onto remote `main` commit `4a0fa966`, adding the marketplace Deals feed and related Price Coach
+  coverage.
+- Full Vitest: 345 files, 2,729 tests passed. Typecheck, lint, npm audit (0 vulnerabilities), and build
+  (235 pages) passed.
+- Public Playwright/axe/overflow E2E: 51 passed, 1 intentional authenticated skip.
 
 ## Browser Coverage
 

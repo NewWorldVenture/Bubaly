@@ -5,12 +5,12 @@
 - [ ] Review `todo.md`, `PRODUCTION_READINESS_REPORT.md`, and `SUPABASE_AUDIT.md`.
 - [ ] Confirm the intended branch and commit; do not deploy with unrelated worktree changes.
 - [ ] Run typecheck, lint, unit tests, build, and public E2E checks.
-- [ ] Review `npm audit` output and record the PostCSS advisory decision.
+- [ ] Run `npm audit --omit=dev --audit-level=moderate` and require 0 vulnerabilities.
 
 ## Database and Supabase
 
 - [ ] Back up the target database and confirm a tested restore path.
-- [ ] Apply migrations in order through `0192_marketplace_returns.sql`.
+- [ ] Apply migrations in order through `0193_marketplace_reports.sql`.
 - [ ] Run `npm run db:audit:schema` and `npm run db:audit:auth`.
 - [ ] Run isolated RLS allow/deny tests for family boundaries and marketplace circles.
 - [ ] Confirm all storage buckets, object policies, RPC grants, trigger functions, and realtime tables.
@@ -41,7 +41,7 @@
 ## Rollback
 
 - [ ] Keep the previous application deployment available for rollback.
-- [ ] If `0178` through `0192` causes unexpected behavior, stop feature exposure and use the tested migration rollback
+- [ ] If `0178` through `0193` causes unexpected behavior, stop feature exposure and use the tested migration rollback
   procedure; do not manually delete production data.
 - [ ] Restore database only through the approved backup/recovery process.
 - [ ] Re-run smoke tests and record the incident and recovery evidence.

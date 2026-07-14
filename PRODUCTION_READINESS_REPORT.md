@@ -3,7 +3,7 @@
 ## Executive Summary
 
 FamilyOS is in a strong local validation state, but it is not proven production-ready. The current
-tree compiles, passes lint and type checking, passes 2,724 unit tests, builds all 235 Next.js build
+tree compiles, passes lint and type checking, passes 2,729 unit tests, builds all 235 Next.js build
 routes, and passes 51 public/mobile/accessibility E2E checks from 52 collected tests. The audit also found and repaired a
 real RLS recursion defect in marketplace circles. The latest live schema audit now passes all 11
 required probes, but authenticated RLS behavior and Auth Admin health remain unverified.
@@ -18,7 +18,7 @@ those checks pass in an isolated environment, the posture can be reconsidered as
 - 102 API route handlers.
 - 209 migration files; additive repair migrations through `0193` are now present.
 - 332 SQL files under `supabase`.
-- 343 unit-test files and 2,724 passing tests.
+- 345 unit-test files and 2,729 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -380,7 +380,24 @@ rotation, pending migration, Auth Admin 500, or local Docker blockers.
 - Full Vitest passed: 344 files and 2,725 tests. Typecheck, lint, audit (0 vulnerabilities), build (235
   pages), and public Playwright/axe/overflow E2E (51 passed, 1 intentional auth skip) also passed.
 - `npm.cmd run db:audit:schema`: 11 required live schema checks passed. `npm.cmd run db:audit:auth` still
-  fails only on the live Admin users endpoint with HTTP 500 (`019f5ddc-1628-7f7d-8012-88d97b82321b`).
+  fails only on the live Admin users endpoint with HTTP 500 (`019f5de7-9b16-78cc-9e87-d74ac923eb08`).
+
+## Audit Update - 2026-07-13 (CI gate enforcement)
+
+- GitHub Actions now runs `npm audit --omit=dev --audit-level=moderate` in the quality job.
+- The isolated Supabase E2E job now runs both `npm run db:audit:auth` and `npm run db:audit:schema`
+  before browser tests.
+- `npm.cmd exec vitest run tests/production-readiness-workflow.test.ts`: 1 file, 2 tests passed.
+- Full local validation after the workflow/documentation update: 345 test files and 2,727 tests passed,
+  typecheck, lint, npm audit (0 vulnerabilities), and build (235 pages) passed.
+
+## Audit Update - 2026-07-13 (post-rebase marketplace deals)
+
+- Rebased onto remote `main` commit `4a0fa966`, which adds the marketplace Deals feed and related
+  Price Coach coverage.
+- Full Vitest passed: 345 files and 2,729 tests. Typecheck, lint, npm audit (0 vulnerabilities), and
+  production build (235 pages) passed.
+- Public Playwright/axe/overflow E2E passed: 51 of 52 tests, with the intentional authenticated test skip.
 
 The public gift capability flow was also hardened: inactive or revoked gift URLs no longer perform
 service-role lookups or disclose child/family names. A regression contract covers the privacy boundary.

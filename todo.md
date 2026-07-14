@@ -2135,7 +2135,7 @@ roadmap entries and user worktree changes are preserved.
   returned HTTP 200; authenticated cross-family RLS attack tests remain pending.
 - [!] Live Auth Admin probe remains blocked by Supabase HTTP 500.
 - [!] Local migration/RLS validation remains blocked until Docker Desktop is available.
-- [!] Dependency advisory remains unresolved because npm reports no available PostCSS fix.
+- [x] Dependency audit passes with 0 vulnerabilities after the scoped nested PostCSS override.
 
 - [x] Added `supabase/seed_production_readiness.sql`, an idempotent 600-record independence-ladder
   dataset with a contract test and no destructive/Auth writes.

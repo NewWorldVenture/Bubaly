@@ -25,6 +25,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=moderate
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -88,6 +91,9 @@ jobs:
 
       - name: Verify isolated Auth APIs
         run: npm run db:audit:auth
+
+      - name: Verify isolated schema capabilities
+        run: npm run db:audit:schema
 
       - name: Run E2E smoke tests
         run: npm run test:e2e
