@@ -10,7 +10,7 @@
 ## Database and Supabase
 
 - [ ] Back up the target database and confirm a tested restore path.
-- [ ] Run `npm run db:audit:migrations`, then apply migrations in order through `0195_dashboard_layout_upsert_constraint.sql`.
+- [ ] Run `npm run db:audit:migrations`, then apply migrations in order through `0196_atomic_economy_and_invest_decisions.sql`.
 - [ ] Run `npm run db:audit:schema` and `npm run db:audit:auth`.
 - [ ] Run isolated RLS allow/deny tests for family boundaries and marketplace circles.
 - [ ] Confirm all storage buckets, object policies, RPC grants, trigger functions, and realtime tables.
@@ -22,6 +22,8 @@
       and no success audit/revalidation/redirect is emitted after the Supabase write fails.
 - [ ] Exercise account closure/reopen, family switching, dashboard preference, profile, and App Lock
       failures in isolation; confirm required reads and writes fail closed with sanitized messages.
+- [ ] Exercise concurrent economy-redemption and simulated-investment approvals after applying `0196`;
+      confirm only one approval can debit/consume the same balance and each result has matching state.
 
 ## Environment and Integrations
 
@@ -48,7 +50,7 @@
 ## Rollback
 
 - [ ] Keep the previous application deployment available for rollback.
-- [ ] If `0178` through `0195` causes unexpected behavior, stop feature exposure and use the tested migration rollback
+- [ ] If `0178` through `0196` causes unexpected behavior, stop feature exposure and use the tested migration rollback
   procedure; do not manually delete production data.
 - [ ] Restore database only through the approved backup/recovery process.
 - [ ] Re-run smoke tests and record the incident and recovery evidence.

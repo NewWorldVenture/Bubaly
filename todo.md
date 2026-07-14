@@ -3554,3 +3554,27 @@ roadmap entries and user worktree changes are preserved.
   proves the previously unchecked preference/profile paths have explicit failure branches.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0243 - Economy and simulated-investing approvals could leave partial ledger state
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P0
+- Category: Financial data integrity / concurrency / error handling
+- Feature: Family Economy redemptions and educational simulated investing
+- File or files: `supabase/migrations/0196_atomic_economy_and_invest_decisions.sql`,
+  `app/(app)/economy/actions.ts`, `app/(app)/wallet/invest/actions.ts`,
+  `lib/database.types.ts`, `tests/economy-invest-action-boundaries.test.ts`
+- Database objects: `currency_transactions`, `economy_redemptions`, `economy_rewards`,
+  `wallet_transactions`, `invest_orders`, `invest_holdings`, `wallet_audit_logs`
+- Description: Approval actions wrote a token/cash ledger entry and then performed separate status,
+  holding, stock, and audit writes. A failure or concurrent approval could leave unmatched state or
+  overspend a balance; several surrounding reads and direct writes also ignored Supabase errors.
+- Resolution: Added authenticated, manager-checked, row-locking RPCs that commit each approval as one
+  transaction. Action adapters now map stable domain outcomes, sanitize provider failures, and check
+  every remaining required read/write.
+- Tests performed: Focused atomic-boundary and migration tests, full Vitest, typecheck, lint,
+  dependency audit, migration audit, live schema probes, production build, and public E2E.
+- Evidence: `tests/economy-invest-action-boundaries.test.ts` verifies the RPC grants/revocations,
+  row-lock contracts, atomic status transitions, and action-layer failure boundaries.
+- Verified by: Codex
+- Date completed: 2026-07-14

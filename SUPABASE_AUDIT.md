@@ -4,7 +4,7 @@
 
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
-- Current migration files: 211, through `0195_dashboard_layout_upsert_constraint.sql`.
+- Current migration files: 212, through `0196_atomic_economy_and_invest_decisions.sql`.
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
   `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
@@ -15,9 +15,10 @@
   `0189_reconcile_stripe_webhook_claims.sql`, and
   `0190_marketplace_handoffs.sql`, `0191_marketplace_price_history.sql`, `0192_marketplace_returns.sql`,
   `0193_marketplace_reports.sql`, `0194_marketplace_photos_bucket.sql`, and
-  `0195_dashboard_layout_upsert_constraint.sql`.
-- SQL files: 332.
-- Static counts: 1,180 policy declarations, 639 RLS enable statements, 95 function declarations,
+  `0195_dashboard_layout_upsert_constraint.sql`, and
+  `0196_atomic_economy_and_invest_decisions.sql`.
+- SQL files: 335.
+- Static counts: 1,180 policy declarations, 639 RLS enable statements, 97 function declarations,
   413 trigger declarations, and 59 `storage.objects` references. Counts are source-text counts,
   not a claim that every object exists in the live database.
 
@@ -53,6 +54,16 @@ App Lock refuses to overwrite `notification_prefs` when the existing-preferences
 profile writer also checks the linked `family_members` display-name synchronization, so a partial profile
 save cannot be reported as successful. These actions remain server-side and do not expose raw Postgres
 messages to the browser.
+
+### Economy and simulated-investing transaction audit
+
+Migration `0196_atomic_economy_and_invest_decisions.sql` adds authenticated, manager-checked RPCs
+for redemption decisions and simulated-investment fills. Each locks the pending request and its
+ledger/stock/holding rows before checking the balance, then commits the debit or wallet movement,
+redemption/order state, holding/stock changes, and wallet audit record in one transaction. The action
+layer uses the RPCs for approvals and checks errors on all remaining economy/invest reads and writes.
+The functions are revoked from `public` and `anon` and granted only to `authenticated`; isolated
+production verification must still exercise concurrent approvals after applying the migration.
 
 ### Migration filename history
 
@@ -126,18 +137,18 @@ The complete migration/source inventory remains in `database-map.md` and `securi
 ## Required Follow-up
 
 1. Start an isolated Supabase instance with Docker Desktop.
-2. Apply the remaining migrations through `0195` and run `npm run db:audit:schema` and
+2. Apply the remaining migrations through `0196` and run `npm run db:audit:schema` and
    `npm run db:audit:auth`.
 3. Test circle-owner, circle-member, non-member, cross-family listing, share insert, and share-delete
    allow/deny cases using separate authenticated users.
 4. Inspect the live Auth Admin 500 in Supabase logs before any production launch decision.
 
-### Current probe follow-up - 2026-07-13
+### Current probe follow-up - 2026-07-14
 
 - `npm.cmd run db:audit:schema` passed all 11 required live schema checks, including the
   `stripe_webhook_events` claim columns previously missing from the live response.
 - `npm.cmd run db:audit:auth` still passes public Auth health but returns HTTP 500 from the Admin users
-endpoint (`Database error finding users`, latest error id `019f60ca-de39-7f6a-aa26-6c69ebc03519`).
+endpoint (`Database error finding users`, latest error id `019f60e4-438a-70e7-b98a-9810d7906575`).
 - The schema result confirms object availability only; migration-history verification and authenticated
   RLS allow/deny tests still require an authorized isolated environment.
 
@@ -146,7 +157,7 @@ endpoint (`Database error finding users`, latest error id `019f60ca-de39-7f6a-aa
 - Static migration inspection found 17 duplicate numeric prefixes, from `0010` through `0142`.
 - These historical files remain unchanged pending comparison with the target environment's migration
   ledger. `npm.cmd run db:audit:migrations` passed with the complete known set explicit and next
-  available version `0196`.
+  available version `0197`.
 
 ### Marketplace photo storage follow-up - 2026-07-13
 

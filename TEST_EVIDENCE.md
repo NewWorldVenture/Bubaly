@@ -2,10 +2,25 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Atomic economy and simulated-investing decisions
+
+- `npm.cmd test -- --run tests/economy-invest-action-boundaries.test.ts tests/migration-version-safety.test.ts`: 2 files, 5 tests passed.
+- `npm.cmd exec vitest run`: 353 files, 2,785 tests passed after the atomic ledger-decision repair.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: passed; 212 numbered SQL files, 17 explicit historical duplicate
+  prefixes, next available version `0197`.
+- `npm.cmd run db:audit:schema`: passed all 11 required live schema checks.
+- `npm.cmd run db:audit:auth`: public Auth health passed; Admin users still returned HTTP 500,
+  latest error ID `019f60e4-438a-70e7-b98a-9810d7906575`.
+- Economy redemptions and simulated-investment fills now use authenticated, row-locking RPCs for
+  atomic ledger/order/holding/stock/audit updates; action-layer reads and direct writes are checked.
+
 ## Latest Audit Update - Account and device-security action boundaries
 
 - `npm.cmd test -- --run tests/account-action-error-boundaries.test.ts`: 1 file, 2 tests passed.
-- `npm.cmd exec vitest run`: 352 files, 2,783 tests passed after the account/security repair.
+- `npm.cmd exec vitest run`: 353 files, 2,785 tests passed after the atomic ledger-decision repair.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed; only the known Next.js `next lint` deprecation notice remains.
 - `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.

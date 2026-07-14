@@ -2321,6 +2321,8 @@ export interface Database {
       marketplace_close_auction: { Args: { p_listing_id: string; p_now?: string }; Returns: Json };
       marketplace_negotiation_offer: { Args: { p_listing: string; p_buyer_member: string; p_buyer_family: string; p_amount: number; p_message?: string | null }; Returns: Json };
       marketplace_negotiation_respond: { Args: { p_negotiation: string; p_action: string; p_amount?: number | null; p_message?: string | null }; Returns: Json };
+      economy_decide_redemption: { Args: { p_redemption_id: string; p_approve: boolean; p_note?: string | null }; Returns: Json };
+      invest_decide_order: { Args: { p_order_id: string; p_approve: boolean }; Returns: Json };
     };
     Enums: {
       member_role: MemberRole;
