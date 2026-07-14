@@ -359,6 +359,14 @@ eslint/vitest/next build), ship to `main`.
   band (no double `buildSnapshot`); `reasoningInsights(ctx)` and it share one rule set. **DONE: all 9
   surfaces** reason over the graph through one core (Calm · Chief of Staff · Briefing · Concierge ·
   Outcomes · Decisions · Prep-Plans · Playbook · FOI). Next: **R3** (auto-maintain the graph on-dirty).
+  **+ Fragility / bus-factor insight ✅ SHIPPED (2026-07-14).** New pure graph capability
+  `soleDependencies(index)` in `lib/graph/reason.ts` — detects when ONE person is the *only* connector
+  to a set of things (distinct from a hub, which is coordination LOAD; this is FRAGILITY / no backup).
+  Wired as a 4th `reasoningInsight` kind (`fragility`, `ShieldAlert` icon), escalating to `action`
+  severity when the week is stretched/overloaded: *"Mom is the only backup for 4 things — if she's
+  unavailable these have no backup."* The mental-load north-star made concrete. Added at the
+  graph/insights layer, so it lit up **all 9 surfaces** with zero per-surface changes. **+7 tests**
+  (soleDependencies bus-factor + fragility insight + threshold/severity); 2770 tests green; tsc·eslint.
 - [x] **R3. Auto-maintain the graph** ✅ — the `family_model_dirty` trigger (`0134`) flags changes;
   the graph now re-projects itself with no manual "Rebuild". Two layers: (1) the `model-refresh` cron
   already re-projects dirty families twice daily (backstop); (2) **new on-read auto-refresh** — every

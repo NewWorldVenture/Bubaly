@@ -2,13 +2,14 @@
 // Server-compatible (no hooks) so pages can compute `reasoningInsights` and pass
 // the rendered card straight into a client module as a node.
 import Link from 'next/link';
-import { Network, GitBranch, Zap, Link2Off } from 'lucide-react';
+import { Network, GitBranch, Zap, Link2Off, ShieldAlert } from 'lucide-react';
 import type { ReasoningInsight, ReasoningInsightKind } from '@/lib/reasoning/insights';
 
 const KIND_ICON: Record<ReasoningInsightKind, typeof Network> = {
   hub: GitBranch,
   ripple: Zap,
   coverage: Link2Off,
+  fragility: ShieldAlert,
 };
 
 export function RelationshipInsights({ insights }: { insights: ReasoningInsight[] }) {

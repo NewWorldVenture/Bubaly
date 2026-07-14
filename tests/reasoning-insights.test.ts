@@ -69,6 +69,46 @@ describe('reasoningInsights', () => {
   });
 });
 
+// Mom is the SOLE person linked to 4 things — a bus-factor risk (no backup).
+function fragilityGraph(): Graph {
+  return {
+    entities: [
+      { id: 'mom', kind: 'person' as const, name: 'Mom' },
+      { id: 'peds', kind: 'org' as const, name: 'Pediatrician' },
+      { id: 'ins', kind: 'org' as const, name: 'Insurance' },
+      { id: 'portal', kind: 'item' as const, name: 'School Portal' },
+      { id: 'dmv', kind: 'org' as const, name: 'DMV' },
+    ],
+    edges: [
+      { id: 'f1', sourceId: 'mom', targetId: 'peds', relation: 'manages', weight: 1 },
+      { id: 'f2', sourceId: 'mom', targetId: 'ins', relation: 'manages', weight: 1 },
+      { id: 'f3', sourceId: 'mom', targetId: 'portal', relation: 'manages', weight: 1 },
+      { id: 'f4', sourceId: 'mom', targetId: 'dmv', relation: 'manages', weight: 1 },
+    ],
+  };
+}
+
+describe('reasoningInsights — fragility (bus-factor)', () => {
+  it('flags the person who is the sole backup for several things', () => {
+    const ctx = assembleFamilyContext({ familyId: 'f', graph: fragilityGraph(), snapshot: snapshot() });
+    const frag = reasoningInsights(ctx).find((i) => i.kind === 'fragility');
+    expect(frag?.title).toBe('Mom is the only backup for 4 things');
+    expect(frag?.detail).toContain('DMV, Insurance, Pediatrician'); // first 3, alphabetical
+    expect(frag?.detail).toContain('+1 more');
+    expect(frag?.severity).toBe('attention'); // calm week
+  });
+
+  it('escalates fragility to an action when the week is overloaded', () => {
+    const frag = graphReasoningInsights(fragilityGraph(), 'overloaded').find((i) => i.kind === 'fragility');
+    expect(frag?.severity).toBe('action');
+  });
+
+  it('does not flag fragility when no person solely holds ≥3 things', () => {
+    const ctx = assembleFamilyContext({ familyId: 'f', graph: hubGraph(), snapshot: snapshot() });
+    expect(reasoningInsights(ctx).some((i) => i.kind === 'fragility')).toBe(false);
+  });
+});
+
 describe('graphReasoningInsights (graph + band, no snapshot)', () => {
   it('matches reasoningInsights for the same graph + band', () => {
     const g = hubGraph();

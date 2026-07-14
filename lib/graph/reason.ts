@@ -185,6 +185,42 @@ export function orphans(index: GraphIndex): GraphEntity[] {
   );
 }
 
+/**
+ * BUS-FACTOR / single-point-of-failure detection. A person is the SOLE connector
+ * to a "thing" when they are the *only* person linked to it — so if they are
+ * unavailable, that responsibility has no backup. This is deliberately distinct
+ * from `hubs` (raw degree = how much coordination flows through a node): a hub
+ * measures LOAD, this measures FRAGILITY (no redundancy). Things with zero people
+ * linked are "unowned" (a coverage gap, not a bus-factor risk) and are skipped;
+ * things with ≥2 people already have a backup and are skipped. Returns each person
+ * who solely holds ≥ `minDependents` things, most-loaded first (ties by name), with
+ * their dependents sorted by name for stable, testable output.
+ */
+export type SoleDependency = { person: GraphEntity; dependents: GraphEntity[] };
+
+export function soleDependencies(index: GraphIndex, opts: { minDependents?: number } = {}): SoleDependency[] {
+  const minDependents = opts.minDependents ?? 1;
+  const byPerson = new Map<string, GraphEntity[]>();
+  for (const entity of index.byId.values()) {
+    if (entity.kind === 'person') continue;
+    // Unique person-neighbours of this thing (both edge directions, de-duped).
+    const persons = new Map<string, GraphEntity>();
+    for (const n of neighbours(index, entity.id)) {
+      if (n.entity.kind === 'person') persons.set(n.entity.id, n.entity);
+    }
+    if (persons.size !== 1) continue; // 0 = unowned; ≥2 = already has a backup
+    const [only] = persons.values();
+    (byPerson.get(only.id) ?? byPerson.set(only.id, []).get(only.id)!).push(entity);
+  }
+  const out: SoleDependency[] = [];
+  for (const [pid, dependents] of byPerson) {
+    if (dependents.length < minDependents) continue;
+    dependents.sort((a, b) => a.name.localeCompare(b.name));
+    out.push({ person: index.byId.get(pid)!, dependents });
+  }
+  return out.sort((a, b) => b.dependents.length - a.dependents.length || a.person.name.localeCompare(b.person.name));
+}
+
 /** A one-line, human-readable rendering of a path ("Emma → plays → Soccer → at → Field"). */
 export function describePath(index: GraphIndex, path: GraphEntity[]): string {
   if (path.length === 0) return '';

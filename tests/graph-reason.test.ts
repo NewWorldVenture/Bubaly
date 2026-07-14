@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildIndex, neighbours, findPath, reachable, propagateImpact, hubs, orphans,
-  describePath, EMPTY_GRAPH, type Graph,
+  describePath, soleDependencies, EMPTY_GRAPH, type Graph,
 } from '@/lib/graph/reason';
 
 // A small household graph modelling the canonical chain:
@@ -124,6 +124,60 @@ describe('hubs + orphans', () => {
   it('finds unlinked entities', () => {
     const idx = buildIndex(g);
     expect(orphans(idx).map((e) => e.id)).toEqual(['lonely']);
+  });
+});
+
+describe('soleDependencies (bus-factor)', () => {
+  // Mom solely holds 3 things; Dad solely holds 1; carpool has both (backup);
+  // unowned has no person; the two people are not themselves dependents.
+  const busGraph: Graph = {
+    entities: [
+      { id: 'mom', kind: 'person', name: 'Mom' },
+      { id: 'dad', kind: 'person', name: 'Dad' },
+      { id: 'pediatrician', kind: 'org', name: 'Pediatrician' },
+      { id: 'insurance', kind: 'org', name: 'Insurance' },
+      { id: 'portal', kind: 'item', name: 'School Portal' },
+      { id: 'dentist', kind: 'org', name: 'Dentist' },
+      { id: 'carpool', kind: 'activity', name: 'Carpool' },
+      { id: 'unowned', kind: 'item', name: 'Unowned Thing' },
+    ],
+    edges: [
+      { id: 'b1', sourceId: 'mom', targetId: 'pediatrician', relation: 'manages', weight: 1 },
+      { id: 'b2', sourceId: 'mom', targetId: 'insurance', relation: 'manages', weight: 1 },
+      { id: 'b3', sourceId: 'portal', targetId: 'mom', relation: 'accessed_by', weight: 1 }, // incoming edge
+      { id: 'b4', sourceId: 'dad', targetId: 'dentist', relation: 'manages', weight: 1 },
+      { id: 'b5', sourceId: 'mom', targetId: 'carpool', relation: 'drives', weight: 1 },
+      { id: 'b6', sourceId: 'dad', targetId: 'carpool', relation: 'drives', weight: 1 }, // backup → not sole
+    ],
+  };
+
+  it('finds who is the sole backup, most-loaded first, dependents sorted', () => {
+    const idx = buildIndex(busGraph);
+    const sole = soleDependencies(idx);
+    expect(sole.map((s) => s.person.id)).toEqual(['mom', 'dad']);
+    expect(sole[0].dependents.map((d) => d.name)).toEqual(['Insurance', 'Pediatrician', 'School Portal']);
+    expect(sole[1].dependents.map((d) => d.id)).toEqual(['dentist']);
+  });
+
+  it('excludes shared things (a real backup exists) and unowned things', () => {
+    const idx = buildIndex(busGraph);
+    const all = soleDependencies(idx).flatMap((s) => s.dependents.map((d) => d.id));
+    expect(all).not.toContain('carpool'); // both parents → has backup
+    expect(all).not.toContain('unowned'); // no person linked
+  });
+
+  it('honours the minDependents threshold', () => {
+    const idx = buildIndex(busGraph);
+    const sole = soleDependencies(idx, { minDependents: 3 });
+    expect(sole.map((s) => s.person.id)).toEqual(['mom']); // Dad has only 1
+  });
+
+  it('returns [] for a graph with no people', () => {
+    const idx = buildIndex({
+      entities: [{ id: 'x', kind: 'item', name: 'X' }, { id: 'y', kind: 'org', name: 'Y' }],
+      edges: [{ id: 'e', sourceId: 'x', targetId: 'y', relation: 'r', weight: 1 }],
+    });
+    expect(soleDependencies(idx)).toEqual([]);
   });
 });
 

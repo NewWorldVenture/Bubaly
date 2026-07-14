@@ -9,12 +9,12 @@
 
 import { impactFrom, type FamilyContext } from '@/lib/reasoning/context';
 import {
-  buildIndex, hubs as graphHubs, orphans as graphOrphans, propagateImpact,
-  type Graph, type GraphEntity,
+  buildIndex, hubs as graphHubs, orphans as graphOrphans, propagateImpact, soleDependencies,
+  type Graph, type GraphEntity, type SoleDependency,
 } from '@/lib/graph/reason';
 import type { Band } from '@/lib/operating-index/score';
 
-export type ReasoningInsightKind = 'hub' | 'ripple' | 'coverage';
+export type ReasoningInsightKind = 'hub' | 'ripple' | 'coverage' | 'fragility';
 export type InsightSeverity = 'action' | 'attention' | 'info';
 
 export type ReasoningInsight = {
@@ -37,6 +37,8 @@ type InsightParts = {
   entityCount: number;
   /** outgoing impact blast-radius size from an entity. */
   rippleCountFor: (entityId: string) => number;
+  /** people who are the SOLE backup for things (bus-factor), most-loaded first. */
+  sole: SoleDependency[];
 };
 
 /** The shared rule set — one place, two entry points. */
@@ -89,6 +91,24 @@ function buildInsights(p: InsightParts): ReasoningInsight[] {
     });
   }
 
+  // 4) Fragility / bus-factor — one person is the SOLE backup for several things.
+  //    Distinct from a hub (that's coordination LOAD); this is "no redundancy":
+  //    if this person is unavailable, these responsibilities have nobody else.
+  //    The mental-load north-star made concrete — and more urgent when stretched.
+  const soleTop = p.sole[0];
+  if (soleTop && soleTop.dependents.length >= 3) {
+    const names = soleTop.dependents.slice(0, 3).map((d) => d.name).join(', ');
+    const more = soleTop.dependents.length > 3 ? `, +${soleTop.dependents.length - 3} more` : '';
+    out.push({
+      id: `fragility:${soleTop.person.id}`,
+      kind: 'fragility',
+      title: `${soleTop.person.name} is the only backup for ${soleTop.dependents.length} things`,
+      detail: `No one else is linked to ${names}${more}. If ${soleTop.person.name} is unavailable these have no backup — share or cross-link them.`,
+      href: GRAPH_HREF,
+      severity: band === 'stretched' || band === 'overloaded' ? 'action' : 'attention',
+    });
+  }
+
   return out;
 }
 
@@ -103,6 +123,7 @@ export function reasoningInsights(ctx: FamilyContext): ReasoningInsight[] {
     band: ctx.operatingIndex.band,
     entityCount: ctx.stats.entities,
     rippleCountFor: (id) => impactFrom(ctx, id).length,
+    sole: soleDependencies(ctx.graphIndex, { minDependents: 3 }),
   });
 }
 
@@ -120,5 +141,6 @@ export function graphReasoningInsights(graph: Graph, band: Band): ReasoningInsig
     band,
     entityCount: graph.entities.length,
     rippleCountFor: (id) => propagateImpact(index, id).length,
+    sole: soleDependencies(index, { minDependents: 3 }),
   });
 }
