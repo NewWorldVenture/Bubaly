@@ -1,5 +1,6 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -20,6 +21,26 @@ function intVal(fd: FormData, k: string): number | null {
   if (v === null) return null;
   const n = Number(v);
   return Number.isFinite(n) ? Math.round(n) : null;
+}
+
+type ChoreSupabase = Awaited<ReturnType<typeof createServer>>;
+
+async function cleanupProofMedia(supabase: ChoreSupabase, paths: string[]): Promise<void> {
+  if (!paths.length) return;
+  const { error } = await supabase.storage.from(BUCKET).remove(paths);
+  if (error) console.error('[chore proof] media cleanup failed', error);
+}
+
+async function cleanupSubmission(
+  supabase: ChoreSupabase,
+  familyId: string,
+  submissionId: string,
+  paths: string[],
+): Promise<void> {
+  const { error } = await supabase.from('chore_submissions').delete()
+    .eq('id', submissionId).eq('family_id', familyId);
+  if (error) console.error('[chore proof] submission cleanup failed', error);
+  await cleanupProofMedia(supabase, paths);
 }
 
 /** Resolve a chore's reward config into the pure ChoreReward shape. */
@@ -64,9 +85,12 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   for (const file of files.slice(0, 4)) {
     if (file.size > MAX_FILE) continue;
     const safe = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_').slice(-100);
-    const path = `${familyId}/${assignment.member_id}/${Date.now()}-${safe}`;
+    const path = `${familyId}/${assignment.member_id}/${randomUUID()}-${safe}`;
     const { error } = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
-    if (error) return { ok: false, error: `Upload failed: ${error.message}` };
+    if (error) {
+      await cleanupProofMedia(supabase, mediaPaths);
+      return { ok: false, error: 'Could not upload proof media.' };
+    }
     mediaPaths.push(path);
     if (VISION_TYPES.has(file.type)) {
       const buf = Buffer.from(await file.arrayBuffer());
@@ -86,22 +110,31 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
       kind: proofKind === 'none' ? 'none' : (proofKind as string), media_paths: mediaPaths, note, status: 'pending', created_by: ctx.user.id,
     })
     .select('id').single();
-  if (subErr || !submission) return { ok: false, error: 'Could not save your submission.' };
+  if (subErr || !submission) {
+    await cleanupProofMedia(supabase, mediaPaths);
+    return { ok: false, error: 'Could not save your submission.' };
+  }
 
   await logChoreEvent(supabase, { familyId, assignmentId, submissionId: submission.id, actorId: assignment.member_id, action: 'submit', note });
 
   // Run AI validation (degrades safely to parent review).
-  const verdict = await validateChoreSubmission({
-    choreTitle: chore.title,
-    instructions: chore.instructions ?? chore.description,
-    proofKind: proofKind as 'none' | 'photo' | 'video' | 'before_after',
-    difficulty: chore.difficulty,
-    safetyLevel: chore.safety_level,
-    kidNote: note,
-    images,
-  });
+  let verdict: Awaited<ReturnType<typeof validateChoreSubmission>>;
+  try {
+    verdict = await validateChoreSubmission({
+      choreTitle: chore.title,
+      instructions: chore.instructions ?? chore.description,
+      proofKind: proofKind as 'none' | 'photo' | 'video' | 'before_after',
+      difficulty: chore.difficulty,
+      safetyLevel: chore.safety_level,
+      kidNote: note,
+      images,
+    });
+  } catch {
+    await cleanupSubmission(supabase, familyId, submission.id, mediaPaths);
+    return { ok: false, error: 'Could not review your proof. Please try again.' };
+  }
 
-  await supabase.from('chore_ai_validations').insert({
+  const { error: validationError } = await supabase.from('chore_ai_validations').insert({
     family_id: familyId, submission_id: submission.id, status: verdict.status,
     quality_score: verdict.quality_score, confidence: verdict.confidence,
     recommended_reward_type: verdict.recommended_reward_type, recommended_reward_amount: verdict.recommended_reward_amount,
@@ -109,7 +142,18 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
     detected_issues: verdict.detected_issues, safety_flags: verdict.safety_flags,
     needs_parent_review: verdict.needs_parent_review, model: verdict.model, is_fallback: verdict.is_fallback,
   });
-  await supabase.from('chore_assignments').update({ ai_score: verdict.quality_score, submitted_at: new Date().toISOString() }).eq('id', assignmentId);
+  if (validationError) {
+    await cleanupSubmission(supabase, familyId, submission.id, mediaPaths);
+    return { ok: false, error: 'Could not save the proof review.' };
+  }
+
+  const { data: updatedAssignment, error: assignmentError } = await supabase.from('chore_assignments')
+    .update({ ai_score: verdict.quality_score, submitted_at: new Date().toISOString() })
+    .eq('id', assignmentId).eq('family_id', familyId).select('id').single();
+  if (assignmentError || !updatedAssignment) {
+    await cleanupSubmission(supabase, familyId, submission.id, mediaPaths);
+    return { ok: false, error: 'Could not update the chore submission.' };
+  }
   await logChoreEvent(supabase, { familyId, assignmentId, submissionId: submission.id, action: 'ai_validate', note: verdict.status });
 
   // Auto-approve only when the parent set a threshold and nothing needs a human.

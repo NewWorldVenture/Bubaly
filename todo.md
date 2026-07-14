@@ -4203,3 +4203,21 @@ roadmap entries and user worktree changes are preserved.
   idempotent badge results, and approval rollback wiring.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0269 - Chore proof uploads could orphan media after submission or AI persistence failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Family missions / storage / data integrity / error handling
+- Feature: Chore proof upload and AI validation workflow
+- File or files: `app/(app)/missions/actions.ts`, `tests/chore-proof-persistence.test.ts`
+- Description: Proof uploads used collision-prone paths, exposed raw storage errors, and could leave media
+  behind when the submission, validator, AI-validation, or assignment write failed.
+- Resolution: Server UUID paths and stable errors are used; cleanup removes uploaded media on every pre-review
+  failure and deletes the submission row when validation or assignment persistence cannot complete.
+- Tests performed: Focused chore proof persistence tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/chore-proof-persistence.test.ts` guards UUID paths, stable errors, and cleanup contracts
+  for upload, submission, validator, validation-row, and assignment failures.
+- Verified by: Codex
+- Date completed: 2026-07-14

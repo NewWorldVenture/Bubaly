@@ -264,6 +264,14 @@ badge persistence fails after XP changes, the prior progress values are restored
 checks the assignment update and restores its original reward/status fields when gamification fails;
 approval audit events remain best-effort by design and log rejected writes server-side.
 
+### Chore proof submission persistence boundary audit
+
+Proof uploads use server-generated UUID paths and never expose raw storage-provider messages. Uploads are
+removed when the submission row fails; if validation throws or its row/assignment persistence fails, the
+submission row is deleted (cascading its validation row) and all uploaded paths are removed. Required AI
+validation and assignment updates are checked before the action proceeds to approval or parent review,
+preventing a successful response from hiding an incomplete proof record.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

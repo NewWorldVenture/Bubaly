@@ -47,6 +47,10 @@ Latest repair increment (2026-07-14): chore XP and badge persistence now fails c
 write errors, restores the prior progress row after downstream failure, and rolls an approved assignment
 back when rewards cannot be applied.
 
+Latest repair increment (2026-07-14): chore proof uploads now use server UUID paths and stable errors;
+failed submission, validator, AI-validation, or assignment persistence cleans up both database rows and
+uploaded proof media.
+
 Latest repair increment (2026-07-14): onboarding finalization now fails closed on required provisioning
 writes instead of returning success after partial family setup. Runtime action payloads are bounded and
 validated, and an in-progress marker lets retries resume incomplete setup without re-running completed
@@ -153,7 +157,7 @@ concurrent completion or a partial write failure.
 - 102 API route handlers.
 - 219 migration files; additive repair migrations through `0203` are now present.
 - 338 SQL files under `supabase`.
-- 381 unit-test files and 2,925 passing tests.
+- 382 unit-test files and 2,929 passing tests.
 - Existing detailed inventories: `route-inventory.md`, `database-map.md`, `feature-inventory.md`,
   `architecture.md`, `security-review.md`, `testing-plan.md`, and `user-journeys.md`.
 
@@ -283,7 +287,7 @@ concurrent completion or a partial write failure.
 |---|---|---|
 | Typecheck | PASS | `npm.cmd run typecheck` |
 | Lint | PASS, with Next.js deprecation notice | `npm.cmd run lint` |
-| Unit tests | PASS, 2,925 tests / 381 files | `npm.cmd exec vitest run` |
+| Unit tests | PASS, 2,929 tests / 382 files | `npm.cmd exec vitest run` |
 | Production build | PASS, 250 generated pages | `npm.cmd run build` |
 | Public E2E | PASS, 51 of 52 tests; 1 intentional auth skip | `PLAYWRIGHT_SKIP_BUILD=1 npm.cmd run test:e2e` |
 | Accessibility E2E | PASS for public routes in dark and light modes | Playwright + axe |
