@@ -3851,3 +3851,24 @@ roadmap entries and user worktree changes are preserved.
   deletion paths, target checks, content reads, blog upserts, and publish-state checks.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0255 - Loyalty administration writes ignored required results
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Marketing admin reliability / points integrity / error handling
+- Feature: Loyalty settings, rewards, and redemption controls
+- File or files: `app/(app)/admin/marketing/loyalty/actions.ts`,
+  `tests/marketing-loyalty-action-boundaries.test.ts`
+- Description: Loyalty settings and reward writes ignored Supabase failures, redemption transitions did
+  not require an affected pending row, failed redemption reads could be treated as missing data, and
+  points-engine exceptions could cross the Super Admin action boundary unsanitized.
+- Resolution: Settings, reward, fulfillment, and cancellation writes now check errors and target rows;
+  redemption transitions are status-guarded, failed reads close the action, and points-engine failures
+  use the shared sanitized marketing boundary before audit logging or revalidation.
+- Tests performed: Focused loyalty boundary tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/marketing-loyalty-action-boundaries.test.ts` guards settings/reward result checks,
+  pending redemption transitions, sanitized points failures, and failed-read handling.
+- Verified by: Codex
+- Date completed: 2026-07-14

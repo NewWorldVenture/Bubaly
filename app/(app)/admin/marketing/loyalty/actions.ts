@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { awardPoints } from '@/lib/loyalty/server';
 import { REWARD_KINDS } from '@/lib/marketing/loyalty';
 
@@ -36,7 +36,9 @@ export async function saveLoyaltySettingsAction(formData: FormData) {
     tier_gold_at: num(formData, 'tier_gold_at') ?? 5000,
     updated_by: actorId,
   };
-  await supabase.from('loyalty_settings').upsert(row, { onConflict: 'singleton' });
+  const { data, error } = await supabase.from('loyalty_settings').upsert(row, { onConflict: 'singleton' })
+    .select('singleton').single();
+  if (error || !data) marketingActionFailure('save loyalty settings', error ?? new Error('Loyalty settings were not returned after save.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'loyalty_settings' });
   revalidatePath(PATH);
 }
@@ -60,18 +62,22 @@ export async function saveRewardAction(formData: FormData) {
     sort: num(formData, 'sort') ?? 0,
   };
   if (id) {
-    await supabase.from('loyalty_rewards').update(row).eq('id', id);
+    const { data, error } = await supabase.from('loyalty_rewards').update(row).eq('id', id).select('id').maybeSingle();
+    if (error || !data) marketingActionFailure('update the loyalty reward', error ?? new Error('Loyalty reward not found.'));
     await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'loyalty_reward', resourceId: id });
   } else {
-    const { data } = await supabase.from('loyalty_rewards').insert({ ...row, created_by: actorId }).select('id').single();
-    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'loyalty_reward', resourceId: data?.id ?? null });
+    const { data, error } = await supabase.from('loyalty_rewards').insert({ ...row, created_by: actorId }).select('id').single();
+    if (error || !data) marketingActionFailure('create the loyalty reward', error ?? new Error('The loyalty reward row was not returned after save.'));
+    await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'loyalty_reward', resourceId: data.id });
   }
   revalidatePath(PATH);
 }
 
 export async function deleteRewardAction(id: string) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  await supabase.from('loyalty_rewards').update({ deleted_at: new Date().toISOString(), is_active: false }).eq('id', id);
+  const { data, error } = await supabase.from('loyalty_rewards').update({ deleted_at: new Date().toISOString(), is_active: false })
+    .eq('id', id).is('deleted_at', null).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('delete the loyalty reward', error ?? new Error('Loyalty reward not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'loyalty_reward', resourceId: id });
   revalidatePath(PATH);
 }
@@ -81,12 +87,16 @@ export async function awardPointsAction(formData: FormData) {
   const familyId = s(formData, 'family_id');
   const points = num(formData, 'points');
   if (!familyId || !points || points === 0) return;
-  await awardPoints(supabase, familyId, points, {
-    kind: 'adjust',
-    source: 'manual',
-    reason: s(formData, 'reason') ?? 'Manual adjustment',
-    actorId,
-  });
+  try {
+    await awardPoints(supabase, familyId, points, {
+      kind: 'adjust',
+      source: 'manual',
+      reason: s(formData, 'reason') ?? 'Manual adjustment',
+      actorId,
+    });
+  } catch (error) {
+    marketingActionFailure('adjust loyalty points', error);
+  }
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'award', resource: 'loyalty_account', resourceId: familyId, metadata: { points } });
   revalidatePath(PATH);
 }
@@ -95,13 +105,14 @@ export async function fulfillRedemptionAction(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const id = s(formData, 'id');
   if (!id) return;
-  await supabase.from('loyalty_redemptions').update({
+  const { data, error } = await supabase.from('loyalty_redemptions').update({
     status: 'fulfilled',
     code: s(formData, 'code'),
     notes: s(formData, 'notes'),
     fulfilled_at: new Date().toISOString(),
     fulfilled_by: actorId,
-  }).eq('id', id);
+  }).eq('id', id).eq('status', 'pending').select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('fulfill the loyalty redemption', error ?? new Error('Redemption not found or already processed.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'fulfill', resource: 'loyalty_redemption', resourceId: id });
   revalidatePath(PATH);
 }
@@ -109,16 +120,24 @@ export async function fulfillRedemptionAction(formData: FormData) {
 export async function cancelRedemptionAction(id: string) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   // Look up the redemption to refund the points.
-  const { data: red } = await supabase.from('loyalty_redemptions').select('family_id, cost_points, status').eq('id', id).maybeSingle();
-  if (!red || red.status === 'cancelled') return;
-  await supabase.from('loyalty_redemptions').update({ status: 'cancelled' }).eq('id', id);
+  const { data: red, error: readError } = await supabase.from('loyalty_redemptions')
+    .select('family_id, cost_points, status').eq('id', id).maybeSingle();
+  if (readError) marketingActionFailure('load the loyalty redemption', readError);
+  if (!red || red.status !== 'pending') return;
+  const { data: cancelled, error: cancelError } = await supabase.from('loyalty_redemptions').update({ status: 'cancelled' })
+    .eq('id', id).eq('status', 'pending').select('id').maybeSingle();
+  if (cancelError || !cancelled) marketingActionFailure('cancel the loyalty redemption', cancelError ?? new Error('Redemption was already processed.'));
   if (red.cost_points > 0) {
-    await awardPoints(supabase, red.family_id, red.cost_points, {
-      kind: 'adjust',
-      source: 'redemption_refund',
-      reason: 'Redemption cancelled — points refunded',
-      actorId,
-    });
+    try {
+      await awardPoints(supabase, red.family_id, red.cost_points, {
+        kind: 'adjust',
+        source: 'redemption_refund',
+        reason: 'Redemption cancelled - points refunded',
+        actorId,
+      });
+    } catch (error) {
+      marketingActionFailure('refund loyalty points', error);
+    }
   }
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'cancel', resource: 'loyalty_redemption', resourceId: id });
   revalidatePath(PATH);

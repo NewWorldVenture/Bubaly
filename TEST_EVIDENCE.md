@@ -2,6 +2,17 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Loyalty administration action boundaries
+
+- `npm.cmd exec vitest run tests/marketing-loyalty-action-boundaries.test.ts`: 1 file, 2 tests passed.
+- `npm.cmd exec vitest run`: 366 files, 2,855 tests passed.
+- `npm.cmd run typecheck`, `npm.cmd run lint`, dependency audit, migration audit, and live schema probes passed.
+- Clean `npm.cmd run build`: 235 routes generated. Public Playwright/axe/overflow E2E: 51 passed,
+  1 intentional authenticated test skipped out of 52.
+- Loyalty settings, reward writes, fulfillment, and cancellation now check Supabase errors and target
+  rows before audit logging or revalidation. Redemption transitions are guarded by pending status,
+  failed reads close the action, and points-engine exceptions use the sanitized marketing boundary.
+
 ## Latest Audit Update - Marketing asset and content publication boundaries
 
 - `npm.cmd exec vitest run tests/marketing-assets-content-boundaries.test.ts`: 1 file, 2 tests passed.

@@ -162,6 +162,13 @@ failure, and use the stored server-side path when deleting an asset. Content edi
 now fail closed on required reads, blog upserts, content state updates, and unpublishing. All unexpected
 failures use `marketingActionFailure` before audit logging or cache revalidation.
 
+### Loyalty administration action boundary audit
+
+Super Admin loyalty settings and reward mutations now check write results and affected rows. Redemption
+fulfillment and cancellation require a pending target row, prerequisite redemption reads fail closed, and
+points-engine exceptions are sanitized through `marketingActionFailure` before audit logging or cache
+revalidation.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:
