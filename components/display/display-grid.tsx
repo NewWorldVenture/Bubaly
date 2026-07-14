@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   Calendar, CheckCircle2, ShoppingCart, UtensilsCrossed, Cake, Bell, StickyNote,
@@ -258,6 +258,33 @@ function WidgetBody({ widget, data, memberById, now }: {
 
 function Empty({ icon: Icon, text }: { icon: typeof Calendar; text: string }) {
   return <div className="flex h-full flex-col items-center justify-center py-4 text-center text-white/40"><Icon className="h-8 w-8 opacity-60" /><p className="mt-2 text-sm">{text}</p></div>;
+}
+
+/**
+ * Per-section error boundary — the kiosk's structural guarantee. A widget that
+ * throws on an unexpected data shape (a malformed date once crashed the whole
+ * display into an endless recover loop) degrades to a quiet placeholder while
+ * every other tile keeps working. Retries itself on the next data refresh
+ * (AutoRefresh remounts the tree with fresh props every two minutes).
+ */
+class WidgetBoundary extends Component<{ label?: string; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error: unknown) { console.error(`[display] widget "${this.props.label ?? 'section'}" crashed:`, error); }
+  componentDidUpdate(prev: { children: ReactNode }) {
+    // Fresh props (a new server render) → give the widget another chance.
+    if (this.state.failed && prev.children !== this.props.children) this.setState({ failed: false });
+  }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="flex h-full min-h-[60px] items-center justify-center text-center text-white/30">
+          <p className="text-sm">—</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
@@ -529,7 +556,9 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
 
         {/* Now & Next */}
         <div className="mt-5">
-          <NowNextStrip events={data.events} memberById={memberById} now={now} />
+          <WidgetBoundary label="now-next">
+            <NowNextStrip events={data.events} memberById={memberById} now={now} />
+          </WidgetBoundary>
         </div>
 
         {/* Editor toolbar */}
@@ -559,7 +588,9 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                 </div>
               )}
               <div className={cn(tile.widget === 'featured' ? 'h-full' : 'min-h-0')}>
-                <WidgetBody widget={tile.widget} data={data} memberById={memberById} now={now} />
+                <WidgetBoundary label={tile.widget}>
+                  <WidgetBody widget={tile.widget} data={data} memberById={memberById} now={now} />
+                </WidgetBoundary>
               </div>
 
               {editing && (
@@ -598,16 +629,18 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
       </div>
 
       {/* Echo-style rotating hints, pinned to the bottom */}
-      {!editing && <HintsTicker hints={hints} />}
+      {!editing && <WidgetBoundary label="hints"><HintsTicker hints={hints} /></WidgetBoundary>}
 
       {/* Idle photo frame (family photos + clock) — wakes on any interaction */}
       {!editing && (
-        <PhotoFrame
-          photos={data.photos}
-          idleMinutes={settings.idleMinutes}
-          clock24={settings.clock24}
-          nextLine={frameNextLine}
-        />
+        <WidgetBoundary label="photo-frame">
+          <PhotoFrame
+            photos={data.photos}
+            idleMinutes={settings.idleMinutes}
+            clock24={settings.clock24}
+            nextLine={frameNextLine}
+          />
+        </WidgetBoundary>
       )}
     </DisplayWeatherProvider>
   );
