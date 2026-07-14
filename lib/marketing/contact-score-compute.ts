@@ -87,32 +87,36 @@ export async function gatherContactSignals(
 
 /** Recompute + persist one contact's score. Returns the score (or null if it couldn't). */
 export async function recomputeContactScore(admin: Admin, contactId: string): Promise<number | null> {
-  const { data: contact } = await admin
+  const { data: contact, error: contactError } = await admin
     .from('crm_contacts').select('id, email, lifecycle_stage').eq('id', contactId).maybeSingle();
+  if (contactError) throw contactError;
   if (!contact) return null;
 
   const signals = await gatherContactSignals(admin, contact);
   const result = scoreContact(signals);
-  await admin.from('crm_lead_scores').upsert(
+  const { error } = await admin.from('crm_lead_scores').upsert(
     { contact_id: contactId, score: result.score, band: result.band, factors: result.factors as never, computed_at: new Date().toISOString() },
     { onConflict: 'contact_id' },
   );
+  if (error) throw error;
   return result.score;
 }
 
 /** Recompute a batch (most-recent contacts first). Returns how many were scored. */
 export async function recomputeAllContactScores(admin: Admin, limit = 1000): Promise<number> {
-  const { data: contacts } = await admin
+  const { data: contacts, error: contactsError } = await admin
     .from('crm_contacts').select('id, email, lifecycle_stage')
     .order('created_at', { ascending: false }).limit(limit);
+  if (contactsError) throw contactsError;
   let n = 0;
   for (const c of contacts ?? []) {
     const signals = await gatherContactSignals(admin, c);
     const result = scoreContact(signals);
-    await admin.from('crm_lead_scores').upsert(
+    const { error } = await admin.from('crm_lead_scores').upsert(
       { contact_id: c.id, score: result.score, band: result.band, factors: result.factors as never, computed_at: new Date().toISOString() },
       { onConflict: 'contact_id' },
     );
+    if (error) throw error;
     n++;
   }
   return n;

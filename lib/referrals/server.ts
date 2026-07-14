@@ -19,10 +19,11 @@ export async function getReferralConfig(supabase: DB): Promise<ReferralConfig> {
 
 /** Persist program config (admin only — caller must be gated). */
 export async function setReferralConfig(supabase: DB, config: ReferralConfig, actorId: string | null): Promise<void> {
-  await supabase.from('marketing_settings').upsert(
+  const { data, error } = await supabase.from('marketing_settings').upsert(
     { key: SETTINGS_KEY, value: config as unknown as Database['public']['Tables']['marketing_settings']['Insert']['value'], updated_by: actorId },
     { onConflict: 'key' },
-  );
+  ).select('key').maybeSingle();
+  if (error || !data) throw error ?? new Error('Referral program settings were not saved');
 }
 
 /**
@@ -108,7 +109,7 @@ export async function applyReferralCode(input: {
     referrer_reward_cents: config.referrerRewardCents,
     referred_reward_cents: config.referredRewardCents,
   });
-  if (error) return { ok: false, reason: error.message };
+  if (error) return { ok: false, reason: 'We could not apply that referral code right now. Please try again.' };
   return { ok: true };
 }
 

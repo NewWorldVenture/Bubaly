@@ -3972,3 +3972,25 @@ roadmap entries and user worktree changes are preserved.
   validation, exit-intent insert/target checks, and survey mutation result checks.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0259 - Core marketing, referral, and lead-score writes ignored required results
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Marketing admin reliability / referral integrity / error handling
+- Feature: Shared marketing controls, referrals, and lead scores
+- File or files: `app/(app)/admin/marketing/actions.ts`,
+  `app/(app)/admin/marketing/referrals/actions.ts`, `app/(app)/admin/marketing/lead-scores/actions.ts`,
+  `lib/referrals/server.ts`, `lib/marketing/contact-score-compute.ts`,
+  `tests/marketing-core-referral-boundaries.test.ts`
+- Description: Shared marketing updates could audit and revalidate after missing-target writes, SEO/AEO
+  inserts and settings upserts ignored returned rows, referral configuration ignored persistence errors,
+  public referral writes returned raw database messages, and lead-score recomputation ignored read/upsert failures.
+- Resolution: Marketing writes now require affected/returned rows, referral configuration and public referral
+  failures use stable messages, and lead-score reads/upserts fail closed through an audited admin boundary.
+- Tests performed: Focused core/referral boundary tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/marketing-core-referral-boundaries.test.ts` guards returned-row checks, referral error
+  sanitization, lead-score failure handling, and admin audit wiring.
+- Verified by: Codex
+- Date completed: 2026-07-14

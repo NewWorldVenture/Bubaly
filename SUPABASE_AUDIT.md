@@ -191,6 +191,14 @@ variant membership, and affected target rows. Exit-intent offer creation/toggles
 status/deletion controls now check Supabase results before audit logging or cache revalidation, and
 unexpected failures use the sanitized marketing action boundary.
 
+### Core marketing, referral, and lead-score action boundary audit
+
+Shared marketing segment, campaign, automation, landing-page, form, SEO, AEO, and settings writes now
+check Supabase errors and affected/returned rows before audit logging or cache revalidation. Referral
+configuration upserts fail closed, public referral application no longer returns raw database messages,
+and lead-score recomputation checks source reads and score upserts before reporting success; the admin
+recompute path records a sanitized audit event.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

@@ -38,8 +38,10 @@ export async function archiveSegment(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const id = str(formData.get('id'));
   if (!id) return;
-  const { error } = await supabase.from('marketing_segments').update({ status: 'archived', deleted_at: new Date().toISOString(), updated_by: actorId }).eq('id', id);
-  if (error) marketingActionFailure('archive the marketing segment', error);
+  const { data, error } = await supabase.from('marketing_segments')
+    .update({ status: 'archived', deleted_at: new Date().toISOString(), updated_by: actorId })
+    .eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('archive the marketing segment', error ?? new Error('Marketing segment not found'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'archive', resource: 'marketing_segment', resourceId: id });
   revalidatePath('/admin/marketing/segments');
 }
@@ -75,8 +77,9 @@ export async function setCampaignStatus(formData: FormData) {
   const id = str(formData.get('id'));
   const status = str(formData.get('status'));
   if (!id || !status) return;
-  const { error } = await supabase.from('marketing_campaigns').update({ status, updated_by: actorId }).eq('id', id);
-  if (error) marketingActionFailure('update the marketing campaign', error);
+  const { data, error } = await supabase.from('marketing_campaigns')
+    .update({ status, updated_by: actorId }).eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('update the marketing campaign', error ?? new Error('Marketing campaign not found'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: `status:${status}`, resource: 'marketing_campaign', resourceId: id });
   revalidatePath(`/admin/marketing/campaigns/${id}`);
   revalidatePath('/admin/marketing/campaigns');
@@ -121,15 +124,15 @@ export async function addKeyword(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const keyword = str(formData.get('keyword'));
   if (!keyword) return;
-  const { error } = await supabase.from('marketing_seo_keywords').insert({
+  const { data, error } = await supabase.from('marketing_seo_keywords').insert({
     keyword,
     intent: str(formData.get('intent')) || null,
     target_path: str(formData.get('target_path')) || null,
     source: 'manual',
     created_by: actorId,
-  });
-  if (error) marketingActionFailure('add the SEO keyword', error);
-  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_seo_keyword', metadata: { keyword } });
+  }).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('add the SEO keyword', error ?? new Error('No SEO keyword was created'));
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_seo_keyword', resourceId: data.id, metadata: { keyword } });
   revalidatePath('/admin/marketing/seo');
 }
 
@@ -137,15 +140,15 @@ export async function addAeoQuestion(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const question = str(formData.get('question'));
   if (!question) return;
-  const { error } = await supabase.from('marketing_aeo_questions').insert({
+  const { data, error } = await supabase.from('marketing_aeo_questions').insert({
     question,
     answer: str(formData.get('answer')) || null,
     pattern: str(formData.get('pattern')) || null,
     entity: str(formData.get('entity')) || null,
     created_by: actorId,
-  });
-  if (error) marketingActionFailure('add the AEO question', error);
-  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_aeo_question', metadata: { question } });
+  }).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('add the AEO question', error ?? new Error('No AEO question was created'));
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'marketing_aeo_question', resourceId: data.id, metadata: { question } });
   revalidatePath('/admin/marketing/aeo');
 }
 
@@ -208,8 +211,9 @@ export async function setAutomationStatus(formData: FormData) {
   const id = str(formData.get('id'));
   const status = str(formData.get('status'));
   if (!id || !status) return;
-  const { error } = await supabase.from('marketing_automation_workflows').update({ status, updated_by: actorId }).eq('id', id);
-  if (error) marketingActionFailure('update the automation workflow', error);
+  const { data, error } = await supabase.from('marketing_automation_workflows')
+    .update({ status, updated_by: actorId }).eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('update the automation workflow', error ?? new Error('Automation workflow not found'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: `status:${status}`, resource: 'marketing_automation_workflow', resourceId: id });
   revalidatePath('/admin/marketing/automation');
 }
@@ -253,10 +257,10 @@ export async function setLandingPublished(formData: FormData) {
   const id = str(formData.get('id'));
   if (!id) return;
   const publish = str(formData.get('publish')) === '1';
-  const { error } = await supabase.from('marketing_landing_pages')
+  const { data, error } = await supabase.from('marketing_landing_pages')
     .update({ published: publish, status: publish ? 'published' : 'draft' })
-    .eq('id', id);
-  if (error) marketingActionFailure('update the landing page', error);
+    .eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('update the landing page', error ?? new Error('Landing page not found'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: publish ? 'publish' : 'unpublish', resource: 'marketing_landing_page', resourceId: id });
   revalidatePath('/admin/marketing/landing-pages');
 }
@@ -279,10 +283,10 @@ export async function setFormStatus(formData: FormData) {
   const id = str(formData.get('id'));
   if (!id) return;
   const activate = str(formData.get('activate')) === '1';
-  const { error } = await supabase.from('marketing_forms')
+  const { data, error } = await supabase.from('marketing_forms')
     .update({ status: activate ? 'active' : 'archived' })
-    .eq('id', id);
-  if (error) marketingActionFailure('update the marketing form', error);
+    .eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('update the marketing form', error ?? new Error('Marketing form not found'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: activate ? 'activate' : 'archive', resource: 'marketing_form', resourceId: id });
   revalidatePath('/admin/marketing/forms');
 }
@@ -292,8 +296,10 @@ export async function saveSetting(formData: FormData) {
   const key = str(formData.get('key'));
   if (!key) return;
   const value = str(formData.get('value'));
-  const { error } = await supabase.from('marketing_settings').upsert({ key, value: { text: value } as never, updated_by: actorId });
-  if (error) marketingActionFailure('save the marketing setting', error);
-  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_setting', resourceId: key });
+  const { data, error } = await supabase.from('marketing_settings')
+    .upsert({ key, value: { text: value } as never, updated_by: actorId })
+    .select('key').maybeSingle();
+  if (error || !data) marketingActionFailure('save the marketing setting', error ?? new Error('Marketing setting was not saved'));
+  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_setting', resourceId: data.key });
   revalidatePath('/admin/marketing/settings');
 }

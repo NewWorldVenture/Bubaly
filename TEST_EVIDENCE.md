@@ -2,6 +2,16 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Core marketing, referrals, and lead-score boundaries
+
+- `npm.cmd exec vitest run tests/marketing-core-referral-boundaries.test.ts tests/marketing-action-error-boundaries.test.ts tests/marketing-affiliates.test.ts`: 3 files, 10 tests passed.
+- `npm.cmd exec vitest run`: 370 files, 2,873 tests passed.
+- `npm.cmd run typecheck`: passed.
+- Shared marketing admin updates now require affected target rows, SEO/AEO inserts and settings upserts
+  require returned records, referral configuration failures are sanitized, and public referral writes no
+  longer return raw database messages.
+- Lead-score recomputation now fails closed on contact reads/upserts and records a sanitized admin audit event.
+
 ## Latest Audit Update - Experiments, exit-intent, and survey boundaries
 
 - `npm.cmd exec vitest run tests/marketing-experiment-exit-survey-boundaries.test.ts`: 1 file, 3 tests passed.

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { setReferralConfig } from '@/lib/referrals/server';
 import { resolveReferralConfig } from '@/lib/referrals/core';
 
@@ -15,7 +15,11 @@ export async function saveReferralConfigAction(formData: FormData) {
     rewardLabel: String(formData.get('rewardLabel') || ''),
   });
 
-  await setReferralConfig(supabase, config, actorId);
+  try {
+    await setReferralConfig(supabase, config, actorId);
+  } catch (error) {
+    marketingActionFailure('save the referral program settings', error);
+  }
   await logMarketingAudit(supabase, {
     actorId, actorEmail, action: 'update', resource: 'referral_program', metadata: config,
   });
