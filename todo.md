@@ -4033,3 +4033,23 @@ roadmap entries and user worktree changes are preserved.
   connection persistence, and refresh-write checks.
 - Verified by: Codex
 - Date completed: 2026-07-14
+
+### TODO-0262 - Sync job lifecycle could report success without durable status
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Integrations / synchronization reliability / data integrity
+- Feature: Provider-agnostic and Google sync job lifecycle
+- File or files: `lib/sync/engine/generic.ts`, `lib/sync/engine/google.ts`,
+  `tests/sync-job-persistence-boundaries.test.ts`
+- Description: Sync job/run creation and completion updates were optional and unchecked, so provider work
+  could return counts while the durable job state remained missing or running. Generic token refresh also
+  ignored its persistence result.
+- Resolution: Both engines now fail closed on job/run creation and require successful run, job, connection,
+  and account finalization; generic token refresh requires encrypted persistence before returning.
+- Tests performed: Focused sync-job boundary tests, full Vitest, typecheck, lint, dependency audit,
+  migration audit, live schema probes, production build, and public Playwright/axe/overflow E2E.
+- Evidence: `tests/sync-job-persistence-boundaries.test.ts` guards creation, finalization, and generic
+  refresh-write contracts across both engines.
+- Verified by: Codex
+- Date completed: 2026-07-14

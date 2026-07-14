@@ -212,6 +212,12 @@ Sync account upserts, encrypted token writes, and connection-row upserts now req
 fail closed on Supabase errors. Reconnects no longer replace a missing refresh token after an unreadable
 prerequisite row, and refreshed access tokens are not returned until their encrypted persistence succeeds.
 
+### Sync job lifecycle persistence boundary audit
+
+The provider-agnostic and Google engines now require durable job/run creation before provider work and
+check returned rows for run, job, connection, and account success finalization. Generic-provider token
+refresh also fails closed when the encrypted token update is not persisted.
+
 ### Migration filename history
 
 Static inspection found 17 duplicate numeric prefixes across the historical migration folder:

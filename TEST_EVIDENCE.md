@@ -2,6 +2,14 @@
 
 Audit date: 2026-07-14
 
+## Latest Audit Update - Sync job lifecycle persistence boundaries
+
+- `npm.cmd exec vitest run tests/sync-job-persistence-boundaries.test.ts`: 1 file, 3 tests passed.
+- `npm.cmd exec vitest run`: 373 files, 2,882 tests passed.
+- `npm.cmd run typecheck`: passed.
+- Provider-agnostic and Google sync now require job/run creation and successful run, job, connection,
+  and account finalization; generic-provider token refresh also checks encrypted persistence.
+
 ## Latest Audit Update - Sync account and token persistence boundaries
 
 - `npm.cmd exec vitest run tests/sync-account-persistence-boundaries.test.ts`: 1 file, 3 tests passed.

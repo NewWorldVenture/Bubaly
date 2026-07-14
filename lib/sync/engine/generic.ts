@@ -49,12 +49,13 @@ async function getValidAccessToken(admin: Admin, accountId: string, adapter: Syn
 
   if (!tok.refresh_token_enc) throw new Error('Access token expired and no refresh token — reconnect required.');
   const refreshed = await adapter.refreshAccessToken(decryptSecret(tok.refresh_token_enc));
-  await admin.from('sync_tokens').update({
+  const { data: updatedToken, error: tokenError } = await admin.from('sync_tokens').update({
     access_token_enc: encryptSecret(refreshed.accessToken),
     refresh_token_enc: refreshed.refreshToken ? encryptSecret(refreshed.refreshToken) : tok.refresh_token_enc,
     expires_at: new Date(refreshed.expiresAt).toISOString(),
     last_synced_at: new Date().toISOString(),
-  }).eq('account_id', accountId);
+  }).eq('account_id', accountId).select('account_id').maybeSingle();
+  if (tokenError || !updatedToken) throw new Error('Failed to persist the refreshed sync token');
   return refreshed.accessToken;
 }
 
@@ -62,14 +63,16 @@ export async function runProviderSync(admin: Admin, account: Account, adapter: S
   const provider = adapter.provider;
   const result: RunResult = { imported: 0, exported: 0, skipped: 0, conflicts: 0 };
 
-  const { data: job } = await admin
+  const { data: job, error: jobError } = await admin
     .from('sync_jobs')
     .insert({ family_id: account.family_id, account_id: account.id, provider, kind: 'manual', status: 'running' })
     .select('id').single();
-  const { data: run } = await admin
+  if (jobError || !job) throw new Error('Sync job could not be created');
+  const { data: run, error: runError } = await admin
     .from('sync_job_runs')
-    .insert({ job_id: job?.id ?? '', family_id: account.family_id, provider, status: 'running' })
+    .insert({ job_id: job.id, family_id: account.family_id, provider, status: 'running' })
     .select('id').single();
+  if (runError || !run) throw new Error('Sync run could not be created');
   const startedAt = Date.now();
 
   try {
@@ -77,15 +80,25 @@ export async function runProviderSync(admin: Admin, account: Account, adapter: S
     await syncCalendar(admin, account, adapter, accessToken, result);
     await syncTasks(admin, account, adapter, accessToken, result);
 
-    if (run) await admin.from('sync_job_runs').update({
+    const { data: finishedRun, error: runFinishError } = await admin.from('sync_job_runs').update({
       status: 'succeeded', sync_status: 'synced',
       items_imported: result.imported, items_exported: result.exported,
       items_skipped: result.skipped, conflicts_found: result.conflicts,
       finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt,
-    }).eq('id', run.id);
-    if (job) await admin.from('sync_jobs').update({ status: 'succeeded', last_synced_at: new Date().toISOString() }).eq('id', job.id);
-    await admin.from('sync_connections').update({ health: 'healthy', sync_status: 'synced', last_error: null, last_synced_at: new Date().toISOString() }).eq('account_id', account.id);
-    await admin.from('sync_accounts').update({ sync_status: 'synced', last_synced_at: new Date().toISOString() }).eq('id', account.id);
+    }).eq('id', run.id).select('id').maybeSingle();
+    if (runFinishError || !finishedRun) throw new Error('Sync run finalization failed');
+    const { data: finishedJob, error: jobFinishError } = await admin.from('sync_jobs')
+      .update({ status: 'succeeded', last_synced_at: new Date().toISOString() })
+      .eq('id', job.id).select('id').maybeSingle();
+    if (jobFinishError || !finishedJob) throw new Error('Sync job finalization failed');
+    const { data: connection, error: connectionError } = await admin.from('sync_connections')
+      .update({ health: 'healthy', sync_status: 'synced', last_error: null, last_synced_at: new Date().toISOString() })
+      .eq('account_id', account.id).select('account_id').maybeSingle();
+    if (connectionError || !connection) throw new Error('Sync connection finalization failed');
+    const { data: accountRow, error: accountError } = await admin.from('sync_accounts')
+      .update({ sync_status: 'synced', last_synced_at: new Date().toISOString() })
+      .eq('id', account.id).select('id').maybeSingle();
+    if (accountError || !accountRow) throw new Error('Sync account finalization failed');
   } catch (e) {
     const msg = redact(e instanceof Error ? e.message : String(e));
     const status = e instanceof SyncApiError ? e.status : null;

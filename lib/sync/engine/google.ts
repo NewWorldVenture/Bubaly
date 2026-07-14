@@ -43,17 +43,19 @@ function redact(msg: string): string {
 export async function runGoogleSync(admin: Admin, account: Account): Promise<RunResult> {
   const result: RunResult = { imported: 0, exported: 0, skipped: 0, conflicts: 0 };
 
-  const { data: job } = await admin
+  const { data: job, error: jobError } = await admin
     .from('sync_jobs')
     .insert({ family_id: account.family_id, account_id: account.id, provider: 'google', kind: 'manual', status: 'running' })
     .select('id')
     .single();
+  if (jobError || !job) throw new Error('Sync job could not be created');
 
-  const { data: run } = await admin
+  const { data: run, error: runError } = await admin
     .from('sync_job_runs')
-    .insert({ job_id: job?.id ?? '', family_id: account.family_id, provider: 'google', status: 'running' })
+    .insert({ job_id: job.id, family_id: account.family_id, provider: 'google', status: 'running' })
     .select('id')
     .single();
+  if (runError || !run) throw new Error('Sync run could not be created');
   const startedAt = Date.now();
 
   try {
@@ -62,17 +64,25 @@ export async function runGoogleSync(admin: Admin, account: Account): Promise<Run
     await syncCalendar(admin, account, accessToken, result);
     await syncTasks(admin, account, accessToken, result);
 
-    if (run) {
-      await admin.from('sync_job_runs').update({
+    const { data: finishedRun, error: runFinishError } = await admin.from('sync_job_runs').update({
         status: 'succeeded', sync_status: 'synced',
         items_imported: result.imported, items_exported: result.exported,
         items_skipped: result.skipped, conflicts_found: result.conflicts,
         finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt,
-      }).eq('id', run.id);
-    }
-    if (job) await admin.from('sync_jobs').update({ status: 'succeeded', last_synced_at: new Date().toISOString() }).eq('id', job.id);
-    await admin.from('sync_connections').update({ health: 'healthy', sync_status: 'synced', last_error: null, last_synced_at: new Date().toISOString() }).eq('account_id', account.id);
-    await admin.from('sync_accounts').update({ sync_status: 'synced', last_synced_at: new Date().toISOString() }).eq('id', account.id);
+      }).eq('id', run.id).select('id').maybeSingle();
+    if (runFinishError || !finishedRun) throw new Error('Sync run finalization failed');
+    const { data: finishedJob, error: jobFinishError } = await admin.from('sync_jobs')
+      .update({ status: 'succeeded', last_synced_at: new Date().toISOString() })
+      .eq('id', job.id).select('id').maybeSingle();
+    if (jobFinishError || !finishedJob) throw new Error('Sync job finalization failed');
+    const { data: connection, error: connectionError } = await admin.from('sync_connections')
+      .update({ health: 'healthy', sync_status: 'synced', last_error: null, last_synced_at: new Date().toISOString() })
+      .eq('account_id', account.id).select('account_id').maybeSingle();
+    if (connectionError || !connection) throw new Error('Sync connection finalization failed');
+    const { data: accountRow, error: accountError } = await admin.from('sync_accounts')
+      .update({ sync_status: 'synced', last_synced_at: new Date().toISOString() })
+      .eq('id', account.id).select('id').maybeSingle();
+    if (accountError || !accountRow) throw new Error('Sync account finalization failed');
   } catch (e) {
     const msg = redact(e instanceof Error ? e.message : String(e));
     const status = e instanceof GoogleApiError ? e.status : null;
