@@ -1,20 +1,27 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
   Calendar, CheckCircle2, ShoppingCart, UtensilsCrossed, Cake, Bell, StickyNote,
   Users, CloudSun, Clock, Sparkles, Pencil, Plus, Trash2, ArrowUp, ArrowDown, Check, X,
-  LocateFixed, MapPin, Droplets,
+  Maximize2, Minimize2, Settings2, Sun, Moon, ArrowRight,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtTime } from '@/lib/utils/format';
-import { fetchForecast, reverseGeocode, weatherInfo, type Forecast } from '@/lib/weather/open-meteo';
 import { cn } from '@/lib/utils/cn';
+import {
+  ambientTheme, greeting, dayPart, nowAndNext, countdownLabel, normalizeSettings,
+  DEFAULT_DISPLAY_SETTINGS, THEME_OPTIONS, type DisplaySettings, type ThemeChoice,
+} from '@/lib/display/ambient';
+import { AmbientClock } from './ambient-clock';
+import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weather';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Ev = { id: string; title: string; starts_at: string; all_day: boolean; location: string | null; assignee_id: string | null };
+type FeaturedItem = { name: string; category: string | null; imageUrl: string | null };
 
 export type DisplayData = {
   familyName: string;
@@ -27,7 +34,7 @@ export type DisplayData = {
   reminders: { id: string; title: string; remind_at: string }[];
   birthdays: { name: string; date: string }[];
   notes: { id: string; title: string | null; body: string }[];
-  featured: { name: string; category: string | null; imageUrl: string | null } | null;
+  featured: FeaturedItem[];
   calendar: { year: number; month: number; today: number; eventDays: number[] };
 };
 
@@ -78,110 +85,79 @@ export const DEFAULT_TILES: Tile[] = [
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
 const uid = () => Math.random().toString(36).slice(2, 9);
 
-// ── Live widgets (client-only) ───────────────────────────────────────────────
-function ClockWidget() {
-  const [now, setNow] = useState<Date | null>(null);
-  useEffect(() => { setNow(new Date()); const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
-  if (!now) return null;
-  return (
-    <div className="flex h-full flex-col items-center justify-center text-center">
-      <p className="text-5xl font-black tabular-nums leading-none lg:text-6xl">{now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
-      <p className="mt-2 text-sm text-muted">{now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-    </div>
-  );
-}
-
-function WeatherWidget() {
-  const [f, setF] = useState<Forecast | null>(null);
-  const [place, setPlace] = useState<string>('');
-  const [state, setState] = useState<'loading' | 'denied' | 'ready'>('loading');
+// ── Rotating featured hero ───────────────────────────────────────────────────
+function FeaturedWidget({ list, familyName }: { list: FeaturedItem[]; familyName: string }) {
+  const [i, setI] = useState(0);
   useEffect(() => {
-    let cancelled = false;
-    if (typeof navigator === 'undefined' || !navigator.geolocation) { setState('denied'); return; }
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const [fc, g] = await Promise.all([fetchForecast(pos.coords.latitude, pos.coords.longitude, 4), reverseGeocode(pos.coords.latitude, pos.coords.longitude)]);
-        if (cancelled) return;
-        if (!fc) { setState('denied'); return; }
-        setF(fc); setPlace(g?.name ?? 'My location'); setState('ready');
-      },
-      () => { if (!cancelled) setState('denied'); },
-      { timeout: 8000, maximumAge: 600_000 },
-    );
-    return () => { cancelled = true; };
-  }, []);
-  if (state === 'loading') return <div className="h-full animate-pulse rounded-xl bg-elevated/40" />;
-  if (state === 'denied' || !f) return <div className="flex h-full flex-col items-center justify-center text-muted"><CloudSun className="h-8 w-8" /><p className="mt-2 text-sm">Enable location for weather</p></div>;
-  const info = weatherInfo(f.current.code, f.current.isDay);
+    if (list.length < 2) return;
+    const t = setInterval(() => setI((v) => (v + 1) % list.length), 12_000);
+    return () => clearInterval(t);
+  }, [list.length]);
+  const fr = list[i] ?? null;
   return (
-    <div className="flex h-full flex-col">
-      <p className="flex items-center gap-1 text-xs text-muted"><MapPin className="h-3 w-3" />{place}</p>
-      <div className="mt-1 flex items-center gap-3">
-        <span className="text-5xl">{info.icon}</span>
-        <div>
-          <p className="text-4xl font-black leading-none">{Math.round(f.current.temp)}°</p>
-          <p className="text-xs text-muted">{info.label}</p>
+    <div
+      className="relative -m-5 flex h-[calc(100%+2.5rem)] flex-col justify-end overflow-hidden rounded-[2rem] p-6 transition-[background-image] duration-1000"
+      style={fr?.imageUrl
+        ? { backgroundImage: `url(${fr.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+        : { background: 'linear-gradient(135deg,#7c3aed55,#2563eb44)' }}
+    >
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+      <div className="relative">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">{fr ? 'Featured Recipe' : 'Welcome home'}</p>
+        <p className="mt-1 text-4xl font-black leading-tight text-white lg:text-5xl">{fr?.name ?? familyName}</p>
+        {fr?.category && <p className="mt-1 text-sm capitalize text-white/70">{fr.category}</p>}
+      </div>
+      {list.length > 1 && (
+        <div className="absolute right-5 top-5 flex gap-1.5">
+          {list.map((_, idx) => (
+            <span key={idx} className={cn('h-1.5 rounded-full transition-all', idx === i ? 'w-5 bg-white' : 'w-1.5 bg-white/40')} />
+          ))}
         </div>
-      </div>
-      <div className="mt-auto flex justify-between gap-1 pt-3">
-        {f.daily.slice(1, 4).map((d) => (
-          <div key={d.date} className="text-center text-xs">
-            <p className="text-muted">{new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' })}</p>
-            <p className="text-lg">{weatherInfo(d.code).icon}</p>
-            <p className="font-semibold">{Math.round(d.tempMax)}°</p>
-          </div>
-        ))}
-      </div>
+      )}
     </div>
   );
 }
 
-// ── Static widget bodies (data-driven) ───────────────────────────────────────
-function WidgetBody({ widget, data, memberById }: {
-  widget: WidgetKey; data: DisplayData; memberById: Map<string, DisplayData['members'][number]>;
+// ── Widget bodies ─────────────────────────────────────────────────────────────
+function WidgetBody({ widget, data, memberById, now }: {
+  widget: WidgetKey; data: DisplayData; memberById: Map<string, DisplayData['members'][number]>; now: Date;
 }) {
   switch (widget) {
-    case 'clock': return <ClockWidget />;
-    case 'weather': return <WeatherWidget />;
+    case 'clock': return <AmbientClock clock24={false} seconds={false} />;
+    case 'weather': return <WeatherTile />;
+    case 'featured': return <FeaturedWidget list={data.featured} familyName={data.familyName} />;
 
-    case 'featured': {
-      const fr = data.featured;
-      return (
-        <div className="relative -m-5 flex h-[calc(100%+2.5rem)] flex-col justify-end overflow-hidden rounded-3xl p-6"
-          style={fr?.imageUrl ? { backgroundImage: `url(${fr.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background: 'linear-gradient(135deg,#7c3aed33,#2563eb22)' }}>
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-          <div className="relative">
-            <p className="text-xs font-semibold uppercase tracking-widest text-white/70">{fr ? 'Featured Recipe' : 'Bubaly'}</p>
-            <p className="mt-1 text-4xl font-black text-white">{fr?.name ?? data.familyName}</p>
-            {fr?.category && <p className="mt-1 text-sm text-white/70">{fr.category}</p>}
-          </div>
-        </div>
-      );
-    }
-
-    case 'schedule':
+    case 'schedule': {
+      const { current, next } = nowAndNext(data.events, now);
       return data.events.length ? (
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {data.events.slice(0, 7).map((e) => {
             const who = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
+            const isNow = current?.id === e.id;
+            const isNext = next?.id === e.id;
             return (
-              <li key={e.id} className="flex items-center gap-3">
-                <span className="w-16 shrink-0 text-sm font-bold tabular-nums text-violet-300">{e.all_day ? 'All day' : fmtTime(e.starts_at)}</span>
-                <span className="min-w-0 flex-1 truncate font-medium">{e.title}</span>
+              <li key={e.id} className={cn('flex items-center gap-3 rounded-xl px-2 py-1.5', isNow && 'bg-white/10')}>
+                <span className={cn('w-16 shrink-0 text-sm font-bold tabular-nums', isNow ? 'text-emerald-300' : 'text-violet-300')}>
+                  {e.all_day ? 'All day' : fmtTime(e.starts_at)}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-medium text-white">{e.title}</span>
+                {isNow && <span className="shrink-0 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">Now</span>}
+                {isNext && !isNow && <span className="shrink-0 text-[11px] text-white/50">{countdownLabel(e.starts_at, now)}</span>}
                 {who && <Avatar name={who.display_name} color={who.color} size={24} />}
               </li>
             );
           })}
         </ul>
       ) : <Empty icon={Calendar} text="Nothing scheduled today" />;
+    }
 
     case 'upcoming':
       return data.upcoming.length ? (
         <ul className="space-y-2">
           {data.upcoming.slice(0, 8).map((e) => (
             <li key={e.id} className="flex items-center gap-3 text-sm">
-              <span className="w-24 shrink-0 text-muted">{new Date(e.starts_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-              <span className="min-w-0 flex-1 truncate font-medium">{e.title}</span>
+              <span className="w-24 shrink-0 text-white/50">{new Date(e.starts_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+              <span className="min-w-0 flex-1 truncate font-medium text-white">{e.title}</span>
             </li>
           ))}
         </ul>
@@ -191,14 +167,14 @@ function WidgetBody({ widget, data, memberById }: {
 
     case 'chores':
       return data.chores.length ? (
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {data.chores.slice(0, 7).map((c) => {
             const who = memberById.get(c.member_id);
             return (
               <li key={c.id} className="flex items-center gap-2.5">
-                <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', c.status === 'submitted' ? 'bg-amber-400' : 'bg-elevated')} />
-                <span className="min-w-0 flex-1 truncate">{c.title}</span>
-                {who && <span className="shrink-0 text-xs text-muted">{who.display_name.split(' ')[0]}</span>}
+                <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', c.status === 'submitted' ? 'bg-amber-400' : 'bg-white/25')} />
+                <span className="min-w-0 flex-1 truncate text-white">{c.title}</span>
+                {who && <span className="shrink-0 text-xs text-white/50">{who.display_name.split(' ')[0]}</span>}
               </li>
             );
           })}
@@ -207,12 +183,12 @@ function WidgetBody({ widget, data, memberById }: {
 
     case 'meals':
       return data.meals.length ? (
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {data.meals.map((m) => (
             <li key={m.type} className="flex items-center gap-2.5">
               <span className="text-2xl">{MEAL_EMOJIS[m.type] ?? '🍽️'}</span>
-              <span className="capitalize text-muted">{m.type}:</span>
-              <span className="truncate font-semibold">{m.name}</span>
+              <span className="capitalize text-white/50">{m.type}</span>
+              <span className="truncate font-semibold text-white">{m.name}</span>
             </li>
           ))}
         </ul>
@@ -221,8 +197,8 @@ function WidgetBody({ widget, data, memberById }: {
     case 'grocery':
       return (
         <div className="flex h-full flex-col">
-          <p className="text-3xl font-black">{data.grocery.count}<span className="ml-1 text-base font-normal text-muted">items</span></p>
-          <ul className="mt-2 space-y-1 text-sm text-muted">
+          <p className="text-4xl font-black text-white">{data.grocery.count}<span className="ml-1.5 text-base font-normal text-white/50">items</span></p>
+          <ul className="mt-2 space-y-1 text-sm text-white/60">
             {data.grocery.items.slice(0, 5).map((g) => <li key={g.id} className="truncate">• {g.name}</li>)}
             {data.grocery.count === 0 && <li>List is empty</li>}
           </ul>
@@ -233,9 +209,9 @@ function WidgetBody({ widget, data, memberById }: {
       return (
         <div className="flex max-h-full flex-wrap gap-4 overflow-y-auto">
           {data.members.map((m) => (
-            <div key={m.id} className="flex flex-col items-center gap-1">
-              <Avatar name={m.display_name} color={m.color} size={44} />
-              <span className="text-xs">{m.display_name.split(' ')[0]}</span>
+            <div key={m.id} className="flex flex-col items-center gap-1.5">
+              <Avatar name={m.display_name} color={m.color} size={52} />
+              <span className="text-xs text-white/80">{m.display_name.split(' ')[0]}</span>
             </div>
           ))}
         </div>
@@ -245,7 +221,7 @@ function WidgetBody({ widget, data, memberById }: {
       return data.reminders.length ? (
         <ul className="space-y-2 text-sm">
           {data.reminders.slice(0, 7).map((r) => (
-            <li key={r.id} className="flex items-center gap-2"><Bell className="h-3.5 w-3.5 shrink-0 text-amber-300" /><span className="min-w-0 flex-1 truncate">{r.title}</span></li>
+            <li key={r.id} className="flex items-center gap-2"><Bell className="h-3.5 w-3.5 shrink-0 text-amber-300" /><span className="min-w-0 flex-1 truncate text-white">{r.title}</span></li>
           ))}
         </ul>
       ) : <Empty icon={Bell} text="No reminders due" />;
@@ -254,7 +230,7 @@ function WidgetBody({ widget, data, memberById }: {
       return data.birthdays.length ? (
         <ul className="space-y-2">
           {data.birthdays.map((b) => (
-            <li key={b.name} className="flex items-center gap-2"><Cake className="h-4 w-4 shrink-0 text-rose-300" /><span>{b.name}</span><span className="ml-auto text-xs text-muted">{b.date}</span></li>
+            <li key={b.name} className="flex items-center gap-2"><Cake className="h-4 w-4 shrink-0 text-rose-300" /><span className="text-white">{b.name}</span><span className="ml-auto text-xs text-white/50">{b.date}</span></li>
           ))}
         </ul>
       ) : <Empty icon={Cake} text="No birthdays this week" />;
@@ -263,7 +239,7 @@ function WidgetBody({ widget, data, memberById }: {
       return data.notes.length ? (
         <ul className="space-y-2 text-sm">
           {data.notes.slice(0, 5).map((n) => (
-            <li key={n.id}><p className="truncate font-medium">{n.title || 'Note'}</p><p className="truncate text-muted">{n.body}</p></li>
+            <li key={n.id}><p className="truncate font-medium text-white">{n.title || 'Note'}</p><p className="truncate text-white/50">{n.body}</p></li>
           ))}
         </ul>
       ) : <Empty icon={StickyNote} text="No pinned notes" />;
@@ -273,7 +249,7 @@ function WidgetBody({ widget, data, memberById }: {
 }
 
 function Empty({ icon: Icon, text }: { icon: typeof Calendar; text: string }) {
-  return <div className="flex h-full flex-col items-center justify-center py-4 text-center text-muted"><Icon className="h-8 w-8 opacity-40" /><p className="mt-2 text-sm">{text}</p></div>;
+  return <div className="flex h-full flex-col items-center justify-center py-4 text-center text-white/40"><Icon className="h-8 w-8 opacity-60" /><p className="mt-2 text-sm">{text}</p></div>;
 }
 
 function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
@@ -283,11 +259,11 @@ function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
   const eventSet = new Set(cal.eventDays);
   return (
     <div>
-      <p className="mb-2 text-center text-sm font-semibold">{new Date(cal.year, cal.month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+      <p className="mb-2 text-center text-sm font-semibold text-white">{new Date(cal.year, cal.month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
       <div className="grid grid-cols-7 gap-1 text-center text-[11px]">
-        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} className="text-muted">{d}</span>)}
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} className="text-white/40">{d}</span>)}
         {cells.map((d, i) => (
-          <span key={i} className={cn('relative grid h-7 place-items-center rounded-md', d === cal.today && 'bg-brand font-bold text-white', d && d !== cal.today && eventSet.has(d) && 'font-semibold')}>
+          <span key={i} className={cn('relative grid h-7 place-items-center rounded-md text-white/80', d === cal.today && 'bg-brand font-bold text-white', d && d !== cal.today && eventSet.has(d) && 'font-semibold text-white')}>
             {d ?? ''}
             {d && d !== cal.today && eventSet.has(d) && <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-brand" />}
           </span>
@@ -297,15 +273,122 @@ function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
   );
 }
 
-// ── Grid + editor ─────────────────────────────────────────────────────────────
-export function DisplayGrid({ initialTiles, data, familyId, userId }: {
-  initialTiles: Tile[]; data: DisplayData; familyId: string; userId: string;
+// ── Now & Next strip ──────────────────────────────────────────────────────────
+function NowNextStrip({ events, memberById, now }: {
+  events: Ev[]; memberById: Map<string, DisplayData['members'][number]>; now: Date;
+}) {
+  const { current, next } = nowAndNext(events, now);
+  if (!current && !next) return null;
+  const Cell = ({ label, ev, tone }: { label: string; ev: Ev; tone: string }) => {
+    const who = ev.assignee_id ? memberById.get(ev.assignee_id) : undefined;
+    return (
+      <div className="flex min-w-0 flex-1 items-center gap-4 rounded-3xl bg-white/5 p-4 backdrop-blur-md">
+        <span className={cn('shrink-0 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide', tone)}>{label}</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-2xl font-black text-white">{ev.title}</p>
+          <p className="text-sm text-white/60">
+            {ev.all_day ? 'All day' : `${fmtTime(ev.starts_at)} · ${countdownLabel(ev.starts_at, now)}`}
+            {ev.location ? ` · ${ev.location}` : ''}
+          </p>
+        </div>
+        {who && <Avatar name={who.display_name} color={who.color} size={40} />}
+      </div>
+    );
+  };
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row">
+      {current && <Cell label="Now" ev={current} tone="bg-emerald-400/20 text-emerald-300" />}
+      {next && <Cell label="Next" ev={next} tone="bg-violet-400/20 text-violet-200" />}
+    </div>
+  );
+}
+
+// ── Settings panel ────────────────────────────────────────────────────────────
+function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button type="button" onClick={() => onChange(!on)} aria-pressed={on}
+      className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
+      <span>{label}</span>
+      <span className={cn('relative h-5 w-9 rounded-full transition', on ? 'bg-brand' : 'bg-white/20')}>
+        <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all', on ? 'left-4' : 'left-0.5')} />
+      </span>
+    </button>
+  );
+}
+
+function SettingsPanel({ settings, onChange }: { settings: DisplaySettings; onChange: (patch: Partial<DisplaySettings>) => void }) {
+  const seg = 'rounded-lg px-3 py-1.5 text-sm font-semibold transition';
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <p className="mb-3 flex items-center gap-2 text-sm font-bold text-white"><Settings2 className="h-4 w-4" /> Display settings</p>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Clock format */}
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white">
+          <span className="text-sm">Clock</span>
+          <div className="flex gap-1 rounded-lg bg-black/20 p-0.5">
+            <button className={cn(seg, !settings.clock24 ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ clock24: false })}>12h</button>
+            <button className={cn(seg, settings.clock24 ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ clock24: true })}>24h</button>
+          </div>
+        </div>
+        {/* Temp unit */}
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white">
+          <span className="text-sm">Temperature</span>
+          <div className="flex gap-1 rounded-lg bg-black/20 p-0.5">
+            <button className={cn(seg, settings.tempUnit === 'F' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ tempUnit: 'F' })}>°F</button>
+            <button className={cn(seg, settings.tempUnit === 'C' ? 'bg-brand text-white' : 'text-white/60')} onClick={() => onChange({ tempUnit: 'C' })}>°C</button>
+          </div>
+        </div>
+        {/* Theme */}
+        <label className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
+          Background
+          <select value={settings.theme} onChange={(e) => onChange({ theme: e.target.value as ThemeChoice })}
+            className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-sm capitalize text-white">
+            {THEME_OPTIONS.map((t) => <option key={t} value={t} className="bg-slate-900">{t === 'auto' ? 'Auto (time of day)' : t}</option>)}
+          </select>
+        </label>
+        <Toggle on={settings.seconds} onChange={(v) => onChange({ seconds: v })} label="Show seconds" />
+        <Toggle on={settings.ambient} onChange={(v) => onChange({ ambient: v })} label="Ambient wash" />
+        <Toggle on={settings.screensaver} onChange={(v) => onChange({ screensaver: v })} label="Burn-in protection" />
+      </div>
+    </div>
+  );
+}
+
+// ── Shell ─────────────────────────────────────────────────────────────────────
+const DRIFT_CSS = `@keyframes displayDrift{0%,100%{transform:translate(0,0)}25%{transform:translate(7px,5px)}50%{transform:translate(-5px,9px)}75%{transform:translate(-7px,-5px)}}`;
+
+export function DisplayShell({ initialTiles, initialSettings, data, familyId, userId }: {
+  initialTiles: Tile[]; initialSettings: DisplaySettings; data: DisplayData; familyId: string; userId: string;
 }) {
   const { success, error: toastError } = useToast();
   const [tiles, setTiles] = useState<Tile[]>(initialTiles.length ? initialTiles : DEFAULT_TILES);
+  const [settings, setSettings] = useState<DisplaySettings>(initialSettings);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [now, setNow] = useState<Date>(() => new Date());
+  const [isFull, setIsFull] = useState(false);
   const memberById = useMemo(() => new Map(data.members.map((m) => [m.id, m])), [data.members]);
+
+  // Minute-granularity tick drives greeting, ambient theme, and now/next.
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    const onFs = () => setIsFull(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch { /* not supported / denied */ }
+  }
+
+  const theme = ambientTheme(settings.theme, now);
+  const part = dayPart(now);
 
   function update(id: string, patch: Partial<Tile>) { setTiles((t) => t.map((x) => x.id === id ? { ...x, ...patch } : x)); }
   function remove(id: string) { setTiles((t) => t.filter((x) => x.id !== id)); }
@@ -317,74 +400,140 @@ export function DisplayGrid({ initialTiles, data, familyId, userId }: {
     });
   }
   function add() { setTiles((t) => [...t, { id: uid(), widget: 'schedule', size: 'sm' }]); }
+  function resetDefault() { setTiles(DEFAULT_TILES.map((t) => ({ ...t, id: uid() }))); }
+  function cancel() { setTiles(initialTiles.length ? initialTiles : DEFAULT_TILES); setSettings(initialSettings); setEditing(false); }
 
   async function save() {
     setSaving(true);
     const supabase = createClient();
     const { error } = await supabase.from('display_layouts')
-      .upsert({ family_id: familyId, tiles: tiles as never, updated_by: userId }, { onConflict: 'family_id' });
+      .upsert({ family_id: familyId, tiles: tiles as never, settings: settings as never, updated_by: userId }, { onConflict: 'family_id' });
     setSaving(false);
     if (error) { toastError(error.message); return; }
-    success('Display layout saved'); setEditing(false);
+    success('Display saved'); setEditing(false);
   }
 
-  function resetDefault() { setTiles(DEFAULT_TILES.map((t) => ({ ...t, id: uid() }))); }
+  const dayIcon = part === 'night' || part === 'evening' ? Moon : Sun;
+  const DayIcon = dayIcon;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-end gap-2">
-        {editing ? (
-          <>
-            <button onClick={add} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-elevated"><Plus className="h-4 w-4" /> Add tile</button>
-            <button onClick={resetDefault} className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:bg-elevated">Reset</button>
-            <button onClick={() => { setTiles(initialTiles.length ? initialTiles : DEFAULT_TILES); setEditing(false); }} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-elevated"><X className="h-4 w-4" /> Cancel</button>
-            <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60"><Check className="h-4 w-4" /> {saving ? 'Saving…' : 'Save layout'}</button>
-          </>
-        ) : (
-          <button onClick={() => setEditing(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-elevated"><Pencil className="h-4 w-4" /> Edit layout</button>
-        )}
-      </div>
+    <DisplayWeatherProvider unit={settings.tempUnit}>
+      <style>{DRIFT_CSS}</style>
+      {/* Ambient background */}
+      <div className="fixed inset-0 -z-10 bg-[#0b1020]" style={settings.ambient ? { backgroundImage: theme.gradient } : undefined} />
+      {settings.ambient && (
+        <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 opacity-40">
+          <div className="absolute -left-24 top-10 h-72 w-72 rounded-full blur-3xl" style={{ background: theme.glow }} />
+          <div className="absolute -right-16 bottom-0 h-80 w-80 rounded-full blur-3xl" style={{ background: theme.glow }} />
+        </div>
+      )}
 
-      <div className="grid grid-cols-1 gap-4 lg:auto-rows-[150px] lg:grid-cols-6">
-        {tiles.map((tile) => (
-          <section key={tile.id} className={cn('relative min-h-[170px] overflow-hidden rounded-3xl border border-border bg-surface/40 p-5 lg:min-h-0', sizeClass(tile.size), editing && 'ring-1 ring-brand/40')}>
-            {tile.widget !== 'featured' && tile.widget !== 'clock' && (
-              <div className="mb-3 flex items-center gap-2 text-sm font-bold text-muted">
-                {(() => { const Icon = WIDGETS.find((w) => w.key === tile.widget)?.icon ?? Calendar; return <Icon className="h-4 w-4" />; })()}
-                {widgetLabel(tile.widget)}
-              </div>
-            )}
-            <div className={cn(tile.widget === 'featured' ? 'h-full' : 'min-h-0')}>
-              <WidgetBody widget={tile.widget} data={data} memberById={memberById} />
+      <div
+        className="min-h-dvh p-4 text-white sm:p-6 lg:p-8"
+        style={settings.screensaver && !editing ? { animation: 'displayDrift 100s ease-in-out infinite' } : undefined}
+      >
+        {/* Header chrome */}
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.25em] text-white/50">
+              <DayIcon className="h-3.5 w-3.5" /> Bubaly Kitchen
+            </p>
+            <h1 className="mt-1 truncate text-3xl font-black sm:text-4xl lg:text-5xl">{greeting(part, data.familyName)}</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <WeatherChip />
+            <AmbientClock clock24={settings.clock24} seconds={settings.seconds} />
+            <div className="flex items-center gap-1.5">
+              <button onClick={toggleFullscreen} title={isFull ? 'Exit fullscreen' : 'Fullscreen'}
+                className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20">
+                {isFull ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+              <button onClick={() => setEditing((v) => !v)} title="Edit display"
+                className={cn('grid h-10 w-10 place-items-center rounded-full transition', editing ? 'bg-brand text-white' : 'bg-white/10 text-white/80 hover:bg-white/20')}>
+                <Pencil className="h-4 w-4" />
+              </button>
+              <Link href="/dashboard" title="Exit display"
+                className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20">
+                <X className="h-4 w-4" />
+              </Link>
             </div>
+          </div>
+        </header>
 
-            {editing && (
-              <div className="absolute inset-0 flex flex-col justify-between bg-bg/85 p-3 backdrop-blur-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted">Tile</span>
-                  <div className="flex gap-1">
-                    <button onClick={() => move(tile.id, -1)} className="rounded p-1 hover:bg-elevated"><ArrowUp className="h-4 w-4" /></button>
-                    <button onClick={() => move(tile.id, 1)} className="rounded p-1 hover:bg-elevated"><ArrowDown className="h-4 w-4" /></button>
-                    <button onClick={() => remove(tile.id)} className="rounded p-1 text-danger hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+        {/* Now & Next */}
+        <div className="mt-5">
+          <NowNextStrip events={data.events} memberById={memberById} now={now} />
+        </div>
+
+        {/* Editor toolbar */}
+        {editing && (
+          <div className="mt-5 space-y-4">
+            <SettingsPanel settings={settings} onChange={(patch) => setSettings((s) => ({ ...s, ...patch }))} />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button onClick={add} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/10"><Plus className="h-4 w-4" /> Add tile</button>
+              <button onClick={resetDefault} className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70 hover:bg-white/10">Reset layout</button>
+              <button onClick={cancel} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/10"><X className="h-4 w-4" /> Cancel</button>
+              <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-60"><Check className="h-4 w-4" /> {saving ? 'Saving…' : 'Save'}</button>
+            </div>
+          </div>
+        )}
+
+        {/* Tile grid */}
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:auto-rows-[152px] lg:grid-cols-6">
+          {tiles.map((tile) => (
+            <section key={tile.id} className={cn(
+              'relative min-h-[172px] overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.06] p-5 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl lg:min-h-0',
+              sizeClass(tile.size), editing && 'ring-1 ring-brand/50',
+            )}>
+              {tile.widget !== 'featured' && tile.widget !== 'clock' && (
+                <div className="mb-3 flex items-center gap-2 text-sm font-bold text-white/60">
+                  {(() => { const Icon = WIDGETS.find((w) => w.key === tile.widget)?.icon ?? Calendar; return <Icon className="h-4 w-4" />; })()}
+                  {widgetLabel(tile.widget)}
+                </div>
+              )}
+              <div className={cn(tile.widget === 'featured' ? 'h-full' : 'min-h-0')}>
+                <WidgetBody widget={tile.widget} data={data} memberById={memberById} now={now} />
+              </div>
+
+              {editing && (
+                <div className="absolute inset-0 flex flex-col justify-between bg-black/75 p-3 backdrop-blur-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-white/60">Tile</span>
+                    <div className="flex gap-1">
+                      <button onClick={() => move(tile.id, -1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowUp className="h-4 w-4" /></button>
+                      <button onClick={() => move(tile.id, 1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowDown className="h-4 w-4" /></button>
+                      <button onClick={() => remove(tile.id)} className="rounded p-1 text-rose-300 hover:bg-white/10"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-xs text-white/60">Section
+                      <select value={tile.widget} onChange={(e) => update(tile.id, { widget: e.target.value as WidgetKey })} className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-slate-900 px-2 text-sm text-white">
+                        {WIDGETS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="block text-xs text-white/60">Size
+                      <select value={tile.size} onChange={(e) => update(tile.id, { size: e.target.value as TileSize })} className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-slate-900 px-2 text-sm text-white">
+                        {SIZES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                      </select>
+                    </label>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="block text-xs text-muted">Section
-                    <select value={tile.widget} onChange={(e) => update(tile.id, { widget: e.target.value as WidgetKey })} className="mt-1 h-9 w-full rounded-lg border border-border bg-surface px-2 text-sm">
-                      {WIDGETS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
-                    </select>
-                  </label>
-                  <label className="block text-xs text-muted">Size
-                    <select value={tile.size} onChange={(e) => update(tile.id, { size: e.target.value as TileSize })} className="mt-1 h-9 w-full rounded-lg border border-border bg-surface px-2 text-sm">
-                      {SIZES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                    </select>
-                  </label>
-                </div>
-              </div>
-            )}
-          </section>
-        ))}
+              )}
+            </section>
+          ))}
+        </div>
+
+        {/* Footer band */}
+        <p className="mt-6 flex items-center justify-center gap-2 text-center text-xs text-white/40">
+          <Sparkles className="h-3.5 w-3.5" /> {data.familyName} · Bubaly Kitchen Display
+          {!editing && <button onClick={() => setEditing(true)} className="ml-1 inline-flex items-center gap-1 text-white/60 hover:text-white">Customize <ArrowRight className="h-3 w-3" /></button>}
+        </p>
       </div>
-    </div>
+    </DisplayWeatherProvider>
   );
+}
+
+/** Back-compat helper for the settings blob coming off `display_layouts`. */
+export function resolveDisplaySettings(raw: unknown): DisplaySettings {
+  return normalizeSettings(raw ?? DEFAULT_DISPLAY_SETTINGS);
 }

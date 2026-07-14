@@ -215,6 +215,29 @@ against migrations + `database.types.ts`; FK targets checked so nothing silently
 
 ---
 
+## 📺 KITCHEN DISPLAY — WORLD-CLASS BUILD-OUT — DONE (2026-07-14)
+
+Owner ask: fully build out the Amazon/Echo-Show-style Kitchen Display (`/display`) — make it world-class.
+
+- **Migration** `0200_display_settings.sql` (PG16-verified, idempotent ×2): adds `settings jsonb` to
+  `display_layouts` so per-family display prefs (12/24h clock, seconds, °F/°C, background theme, ambient
+  wash, burn-in protection) persist next to the tile layout. Written by the existing family-scoped upsert.
+- **Pure engine** `lib/display/ambient.ts` (+24 tests): day-part detection, day-part greeting, time-of-day
+  ambient themes (auto + midnight/aurora/sunset/forest), `nowAndNext` event resolution, `countdownLabel`,
+  12/24h clock formatter, temperature formatting (C-in and °F-native), settings normalization.
+- **UI** — reworked the display into an always-on kitchen screen: ambient time-of-day background wash +
+  glow, header chrome (day-part greeting with family name, big live clock, live weather chip, Fullscreen +
+  Edit + Exit), a **Now & Next** strip (what's happening now / up next, big + glanceable with countdowns),
+  a **rotating featured-recipe hero**, glass tiles with white high-contrast type for across-the-room
+  reading (schedule "NOW" pill, weather 3-day strip, bigger member avatars), **burn-in-protection drift**
+  for always-on panels, and an in-place **display settings** panel. New: `components/display/ambient-clock.tsx`,
+  `components/display/display-weather.tsx` (shared geolocation weather: header chip + tile, remembers
+  location); rewrote `components/display/display-grid.tsx` → `DisplayShell`; `app/(app)/display/page.tsx`
+  now fetches up to 6 recipes for the rotating hero and passes settings. Weather is °F-native (open-meteo);
+  the °C toggle converts.
+- **Verified** tsc 0 · eslint 0 · vitest 2826 green · `next build` green (`/display` 13.7 kB). Migration doc
+  row added (0200); next free number → **0201**.
+
 ## 💡 FEEDBACK / IDEA BOARD — DONE (2026-07-14)
 
 Owner ask: build a **new `/feedback` page** opened by the **Gift icon** in the home top bar, mirroring the

@@ -1671,9 +1671,9 @@ export interface Database {
         Partial<{ name: string; admin1: string | null; country: string | null; latitude: number; longitude: number; is_default: boolean; sort_order: number }>
       >;
       display_layouts: T<
-        { id: string; family_id: string; tiles: Json; updated_by: string | null } & Stamps,
-        { id?: string; family_id: string; tiles?: Json; updated_by?: string | null },
-        Partial<{ tiles: Json; updated_by: string | null }>
+        { id: string; family_id: string; tiles: Json; settings: Json; updated_by: string | null } & Stamps,
+        { id?: string; family_id: string; tiles?: Json; settings?: Json; updated_by?: string | null },
+        Partial<{ tiles: Json; settings: Json; updated_by: string | null }>
       >;
       referral_codes: T<
         { id: string; family_id: string; code: string; created_by: string | null } & Stamps,

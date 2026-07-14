@@ -1,10 +1,8 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { X } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { AutoRefresh } from '@/components/display/auto-refresh';
-import { DisplayGrid, DEFAULT_TILES, type DisplayData, type Tile } from '@/components/display/display-grid';
+import { DisplayShell, DEFAULT_TILES, resolveDisplaySettings, type DisplayData, type Tile } from '@/components/display/display-grid';
 
 export const metadata: Metadata = { title: 'Kitchen Display', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -55,10 +53,10 @@ export default async function KitchenDisplayPage() {
       .lte('remind_at', in14.toISOString()).order('remind_at').limit(10),
     supabase.from('notes').select('id, title, body').eq('family_id', familyId).eq('is_pinned', true).order('updated_at', { ascending: false }).limit(6),
     supabase.from('family_recipes').select('name, category, photo_url').eq('family_id', familyId)
-      .order('is_favorite', { ascending: false }).order('last_made_at', { ascending: false, nullsFirst: false }).limit(1).maybeSingle(),
+      .order('is_favorite', { ascending: false }).order('last_made_at', { ascending: false, nullsFirst: false }).limit(6),
     supabase.from('calendar_events').select('starts_at')
       .eq('family_id', familyId).gte('starts_at', monthStart.toISOString()).lt('starts_at', monthEnd.toISOString()),
-    supabase.from('display_layouts').select('tiles').eq('family_id', familyId).maybeSingle(),
+    supabase.from('display_layouts').select('tiles, settings').eq('family_id', familyId).maybeSingle(),
   ]);
 
   const memberById = new Map((members ?? []).map((m) => [m.id, m]));
@@ -104,28 +102,24 @@ export default async function KitchenDisplayPage() {
     reminders: reminders ?? [],
     birthdays,
     notes: (notes ?? []).map((n) => ({ id: n.id, title: n.title, body: n.body })),
-    featured: featuredRecipe ? { name: featuredRecipe.name, category: featuredRecipe.category, imageUrl: featuredRecipe.photo_url } : null,
+    featured: (featuredRecipe ?? []).map((r) => ({ name: r.name, category: r.category, imageUrl: r.photo_url })),
     calendar: { year: now.getFullYear(), month: now.getMonth(), today: now.getDate(), eventDays },
   };
 
   const savedTiles = (layoutRow?.tiles as Tile[] | null) ?? null;
   const initialTiles = savedTiles && savedTiles.length ? savedTiles : DEFAULT_TILES;
+  const initialSettings = resolveDisplaySettings(layoutRow?.settings ?? null);
 
   return (
-    <div className="min-h-dvh bg-bg p-6 text-fg lg:p-10">
+    <>
       <AutoRefresh seconds={120} />
-
-      <header className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-widest text-brand-text">Bubaly</p>
-          <h1 className="mt-1 text-4xl font-black lg:text-5xl">{ctx.active.family.name}</h1>
-        </div>
-        <Link href="/dashboard" title="Exit display" className="grid h-10 w-10 place-items-center rounded-full border border-border text-muted transition hover:text-fg">
-          <X className="h-5 w-5" />
-        </Link>
-      </header>
-
-      <DisplayGrid initialTiles={initialTiles} data={data} familyId={familyId} userId={ctx.user.id} />
-    </div>
+      <DisplayShell
+        initialTiles={initialTiles}
+        initialSettings={initialSettings}
+        data={data}
+        familyId={familyId}
+        userId={ctx.user.id}
+      />
+    </>
   );
 }
