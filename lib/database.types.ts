@@ -1169,9 +1169,20 @@ export interface Database {
         Partial<{ email: string }>
       >;
       blog_posts: T<
-        { id: string; slug: string; title: string; excerpt: string; author: string; published_at: string; reading_minutes: number; tags: string[]; category: string; featured: boolean; accent_color: string | null; body: Json; published: boolean } & Stamps,
-        { id?: string; slug: string; title: string; excerpt?: string; author?: string; published_at?: string; reading_minutes?: number; tags?: string[]; category: string; featured?: boolean; accent_color?: string | null; body?: Json; published?: boolean },
-        Partial<{ slug: string; title: string; excerpt: string; author: string; published_at: string; reading_minutes: number; tags: string[]; category: string; featured: boolean; accent_color: string | null; body: Json; published: boolean }>
+        { id: string; slug: string; title: string; excerpt: string; author: string; published_at: string; reading_minutes: number; tags: string[]; category: string; featured: boolean; accent_color: string | null; hero_image_url: string | null; hero_image_alt: string | null; hero_image_credit: string | null; body: Json; published: boolean } & Stamps,
+        { id?: string; slug: string; title: string; excerpt?: string; author?: string; published_at?: string; reading_minutes?: number; tags?: string[]; category: string; featured?: boolean; accent_color?: string | null; hero_image_url?: string | null; hero_image_alt?: string | null; hero_image_credit?: string | null; body?: Json; published?: boolean },
+        Partial<{ slug: string; title: string; excerpt: string; author: string; published_at: string; reading_minutes: number; tags: string[]; category: string; featured: boolean; accent_color: string | null; hero_image_url: string | null; hero_image_alt: string | null; hero_image_credit: string | null; body: Json; published: boolean }>
+      >;
+      // ── Blog engagement: anonymous ♥ per visitor + email subscribers (0201) ──
+      blog_post_likes: T<
+        { id: string; post_id: string; visitor_id: string; created_at: string },
+        { id?: string; post_id: string; visitor_id: string; created_at?: string },
+        Partial<{ post_id: string; visitor_id: string }>
+      >;
+      blog_subscribers: T<
+        { id: string; email: string; status: string; source: string; visitor_id: string | null; unsubscribe_token: string; created_at: string; updated_at: string; unsubscribed_at: string | null },
+        { id?: string; email: string; status?: string; source?: string; visitor_id?: string | null; unsubscribe_token?: string; unsubscribed_at?: string | null },
+        Partial<{ email: string; status: string; source: string; visitor_id: string | null; unsubscribed_at: string | null }>
       >;
       // ── Support tickets (admin console only — full schema) ────────────────
       support_tickets: T<

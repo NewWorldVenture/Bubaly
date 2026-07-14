@@ -7,6 +7,8 @@ const nextConfig = {
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '*.supabase.co' },
+      // Blog hero photos — free-license Unsplash CDN images (0195/0196).
+      { protocol: 'https', hostname: 'images.unsplash.com' },
     ],
   },
   async redirects() {

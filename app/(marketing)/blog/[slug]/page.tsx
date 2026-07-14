@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, ArrowRight, BookOpen, Calendar, ChevronRight, Clock, User } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Calendar, ChevronRight, Clock, Mail, User } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { getAllPosts, getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory } from '@/lib/blog/posts';
+import { HeartButton } from '@/components/blog/heart-button';
+import { SubscribeForm } from '@/components/blog/subscribe-form';
 import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { ReadingProgress } from './reading-progress';
@@ -49,6 +52,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       title: post.title,
       description: post.excerpt,
       authors: [post.author],
+      ...(post.heroImageUrl
+        ? { images: [{ url: post.heroImageUrl, alt: post.heroImageAlt ?? post.title }] }
+        : {}),
     },
   };
 }
@@ -84,12 +90,36 @@ export default async function BlogPostPage({ params }: Params) {
         <div className="grid gap-10 lg:grid-cols-[1fr_280px]">
           {/* Main article */}
           <article className="min-w-0">
-            {/* Hero banner */}
-            <div className={cn('mb-8 flex h-48 items-end rounded-2xl bg-gradient-to-br p-6 sm:h-56', ACCENT_BG[post.category] ?? 'from-violet-600/20 to-blue-900/10')}>
-              <div className={cn('inline-block rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider', CATEGORY_COLORS[post.category])}>
-                {post.category}
+            {/* Hero photo */}
+            {post.heroImageUrl ? (
+              <figure className="mb-8">
+                <div className="relative h-56 overflow-hidden rounded-2xl sm:h-80">
+                  <Image
+                    src={post.heroImageUrl}
+                    alt={post.heroImageAlt ?? post.title}
+                    fill
+                    priority
+                    sizes="(min-width: 1024px) 800px, 100vw"
+                    className="object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+                  <div className={cn('absolute bottom-4 left-4 inline-block rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider backdrop-blur', CATEGORY_COLORS[post.category])}>
+                    {post.category}
+                  </div>
+                </div>
+                {post.heroImageCredit && (
+                  <figcaption className="mt-2 text-right text-[11px] text-white/30">
+                    Photo: {post.heroImageCredit}
+                  </figcaption>
+                )}
+              </figure>
+            ) : (
+              <div className={cn('mb-8 flex h-48 items-end rounded-2xl bg-gradient-to-br p-6 sm:h-56', ACCENT_BG[post.category] ?? 'from-violet-600/20 to-blue-900/10')}>
+                <div className={cn('inline-block rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider', CATEGORY_COLORS[post.category])}>
+                  {post.category}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Title & meta */}
             <h1 className="text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">{post.title}</h1>
@@ -104,6 +134,7 @@ export default async function BlogPostPage({ params }: Params) {
               <span className="flex items-center gap-1.5">
                 <Clock className="h-4 w-4" /> {post.readingMinutes} min read
               </span>
+              <HeartButton slug={post.slug} />
             </div>
 
             {/* Tags */}
@@ -138,8 +169,25 @@ export default async function BlogPostPage({ params }: Params) {
               )}
             </div>
 
+            {/* Did you enjoy it? ♥ + subscribe */}
+            <div className="rounded-2xl border border-white/8 bg-gradient-to-br from-violet-600/10 to-blue-900/10 p-6">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-4">
+                  <HeartButton slug={post.slug} />
+                  <p className="text-sm text-white/60">Enjoyed this one? Give it a heart.</p>
+                </div>
+              </div>
+              <div className="mt-5 border-t border-white/8 pt-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-violet-300" />
+                  <p className="text-sm font-bold">Get the next article in your inbox</p>
+                </div>
+                <SubscribeForm source="article" variant="inline" />
+              </div>
+            </div>
+
             {/* Author bio */}
-            <div className="border-t border-white/8 py-8">
+            <div className="mt-2 border-t border-white/8 py-8">
               <div className="flex items-start gap-4">
                 <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-violet-600/20">
                   <User className="h-7 w-7 text-violet-300" />
@@ -200,19 +248,35 @@ export default async function BlogPostPage({ params }: Params) {
                   <ul className="space-y-4">
                     {related.map((r) => (
                       <li key={r.slug}>
-                        <Link href={`/blog/${r.slug}`} className="group flex flex-col gap-1">
-                          <span className="text-sm font-semibold leading-snug transition group-hover:text-violet-200">{r.title}</span>
-                          <span className="flex items-center gap-2 text-[11px] text-white/40">
-                            <span>{fmtDate(r.date)}</span>
-                            <span>·</span>
-                            <span>{r.readingMinutes} min</span>
-                          </span>
+                        <Link href={`/blog/${r.slug}`} className="group flex gap-3">
+                          {r.heroImageUrl ? (
+                            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg">
+                              <Image src={r.heroImageUrl} alt={r.heroImageAlt ?? r.title} fill sizes="48px" className="object-cover" />
+                            </div>
+                          ) : (
+                            <div className={cn('h-12 w-12 shrink-0 rounded-lg bg-gradient-to-br', ACCENT_BG[r.category] ?? 'from-violet-600/20 to-blue-900/10')} />
+                          )}
+                          <div className="min-w-0">
+                            <span className="line-clamp-2 text-sm font-semibold leading-snug transition group-hover:text-violet-200">{r.title}</span>
+                            <span className="mt-0.5 flex items-center gap-2 text-[11px] text-white/40">
+                              <span>{fmtDate(r.date)}</span>
+                              <span>·</span>
+                              <span>{r.readingMinutes} min</span>
+                            </span>
+                          </div>
                         </Link>
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
+
+              {/* Subscribe */}
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
+                <h3 className="mb-1 text-sm font-bold">Never miss an article</h3>
+                <p className="mb-3 text-xs leading-5 text-white/55">New tips and stories for modern families, straight to your inbox.</p>
+                <SubscribeForm source="blog-sidebar" variant="card" />
+              </div>
 
               {/* Back to blog */}
               <Link href="/blog" className="flex items-center gap-2 text-sm font-semibold text-violet-300 hover:text-violet-200">

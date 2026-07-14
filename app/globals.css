@@ -446,6 +446,17 @@ body::before {
   50% { transform: perspective(1100px) translateY(-8px) rotateY(-5deg) rotateZ(2.5deg); }
 }
 
+/* Blog ♥ — a quick joyful pop when a like lands. */
+@keyframes heart-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.45); }
+  70% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+.animate-heart-pop {
+  animation: heart-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* Respect reduced-motion preferences. */
 @media (prefers-reduced-motion: reduce) {
   *,

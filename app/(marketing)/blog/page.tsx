@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowRight, BookOpen, Calendar, Clock, Mail, Search, Tag } from 'lucide-react';
-import { getAllPosts, getFeaturedPost, getPostsByCategory, ALL_CATEGORIES, type BlogCategory } from '@/lib/blog/posts';
+import Image from 'next/image';
+import { ArrowRight, BookOpen, Calendar, Clock, Mail, Tag } from 'lucide-react';
+import { getAllPosts, getFeaturedPost, getPostsByCategory, ALL_CATEGORIES, type BlogCategory, type BlogPost } from '@/lib/blog/posts';
 import { Container, GradientText, PageWrap } from '@/components/marketing/visual-mocks';
+import { SubscribeForm } from '@/components/blog/subscribe-form';
 import { cn } from '@/lib/utils/cn';
 import { BlogSearch } from './blog-search';
 
@@ -44,11 +46,32 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-type Props = { searchParams: Promise<{ category?: string }> };
+/** Hero photo with a graceful gradient fallback for image-less posts. */
+function PostImage({ post, sizes, className, priority }: { post: BlogPost; sizes: string; className?: string; priority?: boolean }) {
+  if (!post.heroImageUrl) {
+    return <div className={cn('bg-gradient-to-br', ACCENT_BG[post.category] ?? 'from-white/5 to-white/[0.02]', className)} />;
+  }
+  return (
+    <div className={cn('relative overflow-hidden', className)}>
+      <Image
+        src={post.heroImageUrl}
+        alt={post.heroImageAlt ?? post.title}
+        fill
+        sizes={sizes}
+        priority={priority}
+        className="object-cover transition duration-500 group-hover:scale-[1.04]"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
+    </div>
+  );
+}
+
+type Props = { searchParams: Promise<{ category?: string; unsubscribed?: string }> };
 
 export default async function BlogPage({ searchParams }: Props) {
   const params = await searchParams;
   const activeCategory = ALL_CATEGORIES.find((c) => c === params.category) ?? null;
+  const unsubscribed = params.unsubscribed === '1' ? 'done' : params.unsubscribed === 'invalid' ? 'invalid' : null;
 
   const [allPosts, featured] = await Promise.all([
     activeCategory ? getPostsByCategory(activeCategory) : getAllPosts(),
@@ -57,9 +80,9 @@ export default async function BlogPage({ searchParams }: Props) {
 
   const postsForGrid = activeCategory
     ? allPosts
-    : allPosts.filter((p) => !p.featured).slice(0, 9);
+    : allPosts.filter((p) => !p.featured);
 
-  const recentPosts = (activeCategory ? allPosts : allPosts).slice(0, 5);
+  const recentPosts = allPosts.slice(0, 5);
 
   const categoryCounts = new Map<string, number>();
   if (!activeCategory) {
@@ -70,6 +93,22 @@ export default async function BlogPage({ searchParams }: Props) {
 
   return (
     <PageWrap>
+      {/* Unsubscribe confirmation (arrives via /api/blog/unsubscribe redirect) */}
+      {unsubscribed && (
+        <Container className="pt-6">
+          <div className={cn(
+            'rounded-xl border px-4 py-3 text-sm font-semibold',
+            unsubscribed === 'done'
+              ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-300'
+              : 'border-amber-400/25 bg-amber-500/10 text-amber-300',
+          )} role="status">
+            {unsubscribed === 'done'
+              ? 'You’ve been unsubscribed from blog updates. Sorry to see you go — you can rejoin anytime below.'
+              : 'That unsubscribe link doesn’t look right. If you keep getting emails, contact support and we’ll sort it out.'}
+          </div>
+        </Container>
+      )}
+
       {/* Hero */}
       <Container className="pb-0 pt-16 lg:pt-20">
         <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
@@ -163,8 +202,9 @@ export default async function BlogPage({ searchParams }: Props) {
               <div className="mb-10">
                 <h2 className="mb-5 text-lg font-bold">Featured</h2>
                 <Link href={`/blog/${featured.slug}`} className="group block overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] transition hover:border-violet-400/30">
-                  <div className={cn('flex h-48 items-end bg-gradient-to-br p-6', ACCENT_BG[featured.category] ?? 'from-violet-600/20 to-blue-900/10')}>
-                    <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-violet-800 dark:border-violet-400/30 dark:bg-violet-500/20 dark:text-violet-200">
+                  <div className="relative h-56 sm:h-72">
+                    <PostImage post={featured} sizes="(min-width: 1024px) 640px, 100vw" className="absolute inset-0" priority />
+                    <div className="absolute bottom-4 left-4 inline-flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/30 px-3 py-1 text-xs font-bold uppercase tracking-wider text-violet-100 backdrop-blur">
                       Featured
                     </div>
                   </div>
@@ -202,7 +242,7 @@ export default async function BlogPage({ searchParams }: Props) {
                 {postsForGrid.map((post) => (
                   <Link key={post.slug} href={`/blog/${post.slug}`}
                     className="group flex flex-col overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] transition hover:border-violet-400/30 hover:-translate-y-0.5">
-                    <div className={cn('h-32 bg-gradient-to-br', ACCENT_BG[post.category] ?? 'from-white/5 to-white/[0.02]')} />
+                    <PostImage post={post} sizes="(min-width: 1024px) 300px, (min-width: 640px) 50vw, 100vw" className="h-36" />
                     <div className="flex flex-1 flex-col p-4">
                       <div className={cn('mb-2 inline-block self-start rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider', CATEGORY_COLORS[post.category])}>
                         {post.category}
@@ -221,14 +261,6 @@ export default async function BlogPage({ searchParams }: Props) {
                 ))}
               </div>
             )}
-
-            {!activeCategory && allPosts.length > 10 && (
-              <div className="mt-8 text-center">
-                <button className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-6 py-3 text-sm font-semibold text-white/70 transition hover:border-violet-400/40 hover:text-white">
-                  Load More Articles <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Sidebar */}
@@ -237,10 +269,10 @@ export default async function BlogPage({ searchParams }: Props) {
             <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
               <h3 className="mb-4 font-bold">Recent Posts</h3>
               <ul className="space-y-4">
-                {recentPosts.map((post, i) => (
+                {recentPosts.map((post) => (
                   <li key={post.slug}>
                     <Link href={`/blog/${post.slug}`} className="group flex gap-3">
-                      <div className={cn('h-12 w-12 shrink-0 rounded-lg bg-gradient-to-br', ACCENT_BG[post.category] ?? 'from-violet-600/20 to-blue-900/10')} />
+                      <PostImage post={post} sizes="48px" className="h-12 w-12 shrink-0 rounded-lg" />
                       <div className="min-w-0">
                         <p className="line-clamp-2 text-sm font-semibold leading-snug transition group-hover:text-violet-200">{post.title}</p>
                         <p className="mt-0.5 text-xs text-white/40">{fmtDate(post.date)}</p>
@@ -255,8 +287,7 @@ export default async function BlogPage({ searchParams }: Props) {
             <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
               <h3 className="mb-1 font-bold">Subscribe to Our Blog</h3>
               <p className="mb-4 text-xs leading-5 text-white/55">Get the latest tips and insights delivered to your inbox.</p>
-              <input className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm outline-none placeholder:text-white/35 focus:border-violet-400/50" placeholder="Enter your email" />
-              <button className="mt-3 w-full rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 py-2.5 text-sm font-bold shadow-glow">Subscribe</button>
+              <SubscribeForm source="blog-sidebar" variant="card" />
             </div>
 
             {/* Topics with counts */}
@@ -313,10 +344,7 @@ export default async function BlogPage({ searchParams }: Props) {
                 <p className="text-sm text-white/55">New tips, real stories, and helpful resources — straight to your inbox.</p>
               </div>
             </div>
-            <div className="flex w-full max-w-md gap-3">
-              <input className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm outline-none placeholder:text-white/35" placeholder="Enter your email" />
-              <button className="rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-5 py-3 text-sm font-bold shadow-glow">Subscribe</button>
-            </div>
+            <SubscribeForm source="blog-footer" variant="inline" />
           </div>
         </Container>
       </div>

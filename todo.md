@@ -27,6 +27,27 @@ Legend: ☐ open · ◐ partial (scaffolding exists) · ☑ done
 
 ---
 
+## ☑ BLOG OVERHAUL — world-class articles + engagement (SHIPPED 2026-07-14)
+
+Every `/blog` cover-story stub is now a **complete, fun, fully-written article** — 20 posts
+total (9 stubs fleshed out in place + 11 new), 3–4 per category across all 6 categories, each
+with a **topic-matched free-license Unsplash hero photo** (every URL verified live AND visually
+confirmed via a rendered contact sheet before assignment). Engagement is real and 100%
+Supabase-wired: **♥ likes** (anonymous per-visitor via the durable `bubaly_vid` id, optimistic
+UI with a pop animation, one-per-post enforced by a DB unique constraint) and **email
+subscriptions** (sidebar card + footer inline + end-of-article CTA; honeypot + IP rate limit +
+strict normalization; unsubscribe token + one-click `/api/blog/unsubscribe` closes the consent
+loop). Migrations **`0201_blog_engagement.sql`** (hero-image columns + `blog_post_likes` +
+`blog_subscribers`, service-role-only RLS) + **`0202_blog_articles.sql`** (idempotent content
+upsert by slug) — both PG16-verified idempotent ×2. Routes `/api/blog/like|subscribe|unsubscribe`
+follow the house pattern (service client, `enforceRequestRateLimit`, bounded JSON). Pages
+redesigned around real photography (`next/image` + `images.unsplash.com` remote pattern, OG
+images per article, credit lines, dead Load-More/subscribe stubs removed). Pure rules in
+`lib/blog/engagement.ts` (**9 tests**); 2779 tests + `next build` (228 pages) green.
+⚠️ apply `0201` + `0202` to prod (see `docs/PENDING_PROD_MIGRATIONS.md`).
+
+---
+
 ## 🔒 SECURITY AUDIT — status & remaining items (2026-07-10) — READ FIRST
 
 A dedicated adversarial audit ran over Marketplace, Payments/Stripe, Auth/OAuth, and AI/concierge.
@@ -271,7 +292,7 @@ Owner ask: fully build out the Amazon/Echo-Show-style Kitchen Display (`/display
   now fetches up to 6 recipes for the rotating hero and passes settings. Weather is °F-native (open-meteo);
   the °C toggle converts.
 - **Verified** tsc 0 · eslint 0 · vitest 2826 green · `next build` green (`/display` 13.7 kB). Migration doc
-  row added (0200); next free number → **0201**.
+  row added (0200); next free number → **0203** (0201/0202 = blog engagement + articles).
 
 ## 💡 FEEDBACK / IDEA BOARD — DONE (2026-07-14)
 

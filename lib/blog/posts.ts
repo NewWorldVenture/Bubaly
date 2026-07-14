@@ -22,6 +22,9 @@ export type BlogPost = {
   category: BlogCategory;
   featured?: boolean;
   accentColor?: string;
+  heroImageUrl?: string;
+  heroImageAlt?: string;
+  heroImageCredit?: string;
   body: BlogBlock[];
 };
 
@@ -89,6 +92,9 @@ function toPost(r: Row): BlogPost {
     category: r.category as BlogCategory,
     featured: r.featured,
     accentColor: r.accent_color ?? undefined,
+    heroImageUrl: r.hero_image_url ?? undefined,
+    heroImageAlt: r.hero_image_alt ?? undefined,
+    heroImageCredit: r.hero_image_credit ?? undefined,
     body: normalizeBody(r.body),
   };
 }
