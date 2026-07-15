@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Calendar, CheckSquare, UtensilsCrossed, ShoppingCart,
   GraduationCap, Trophy, HeartPulse, Home, FolderLock, StickyNote,
   Sparkles, Settings, CreditCard, UsersRound, ShieldCheck, Activity,
-  FolderKanban, Plug, BarChart3, Sun, CalendarDays, Stethoscope, Smile, TicketCheck,
+  FolderKanban, Plug, BarChart3, Sun, CalendarDays, Stethoscope, Smile, TicketCheck, MessagesSquare,
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
@@ -229,6 +229,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/backup', label: 'Backup & Restore', icon: HardDrive },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: ClipboardList },
   { href: '/admin/support-tickets', label: 'Support Tickets', icon: TicketCheck },
+  { href: '/admin/feedback', label: 'Feedback & Ideas', icon: MessagesSquare },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
   { href: '/admin/admins', label: 'Admin', icon: UserCog },
 ];

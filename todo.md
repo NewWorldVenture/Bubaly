@@ -313,6 +313,16 @@ Owner ask: fully build out the Amazon/Echo-Show-style Kitchen Display (`/display
 
 ## 💡 FEEDBACK / IDEA BOARD — DONE (2026-07-14)
 
+> **+ Super Admin console SHIPPED (2026-07-14).** The board can now be RECEIVED and ACTED ON from the
+> admin: **`/admin/feedback`** (nav: "Feedback & Ideas") lists every submitted idea (all statuses incl.
+> declined) with a summary strip (needs-review / active / shipped / total votes), status + category +
+> search filters, and per-idea actions — move it through the roadmap (**status + public note** in one
+> save), **pin/unpin**, **reply as the Bubaly team** (`is_team` comment), and **delete** spam. All via
+> super-admin-guarded server actions on the service role (no public UPDATE/DELETE on ideas) that
+> **revalidate the public `/feedback` board instantly**. Pure `lib/feedback/admin.ts`
+> (`feedbackAdminSummary` + `filterIdeasForAdmin`, **6 tests**); tsc·eslint·2906 tests·build green. No
+> new migration (reuses 0197).
+
 Owner ask: build a **new `/feedback` page** opened by the **Gift icon** in the home top bar, mirroring the
 "Let's make life easier—together" idea-board design 100%, fully Supabase-wired and production-ready.
 
