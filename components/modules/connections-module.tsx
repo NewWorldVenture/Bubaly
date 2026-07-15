@@ -14,7 +14,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
-import { SkeletonList } from '@/components/ui/states';
+import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -40,7 +40,7 @@ export function ConnectionsModule() {
   const router = useRouter();
   const { success, error: toastError } = useToast();
 
-  const { data: rows, loading } = useRealtimeQuery<Connection>({
+  const { data: rows, loading, error, refresh } = useRealtimeQuery<Connection>({
     table: 'family_connections', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_connections').select('*').eq('family_id', familyId),
   });
@@ -58,19 +58,20 @@ export function ConnectionsModule() {
   }
 
   if (loading) return <SkeletonList count={5} />;
+  if (error) return <ErrorState message="Could not load your connections. Refresh and try again." onRetry={refresh} />;
 
   return (
     <div className="mx-auto w-full max-w-3xl">
       <PageHeader
         title="Connections"
-        description="Bubaly connects the services your family already uses — it doesn’t replace them. Link a service to bring its data into your hubs."
+        description="Bubaly connects the services your family already uses â€” it doesnâ€™t replace them. Link a service to bring its data into your hubs."
       />
 
       <div className="mb-5 flex items-center gap-2 rounded-xl border border-border bg-surface/50 px-4 py-3 text-sm">
         <Network className="h-4 w-4 text-brand-text" />
         {connected > 0
           ? <span><span className="font-semibold text-fg">{connected}</span> {connected === 1 ? 'service' : 'services'} connected across {grouped.length} categories.</span>
-          : <span>Nothing connected yet — link a calendar, bank, or grocery service to get started.</span>}
+          : <span>Nothing connected yet â€” link a calendar, bank, or grocery service to get started.</span>}
       </div>
 
       <div className="space-y-6">
@@ -117,9 +118,10 @@ export function ConnectionsModule() {
       <p className="mt-6 flex items-start gap-2 rounded-xl border border-border bg-surface/40 p-3 text-xs text-muted">
         <KeyRound className="mt-0.5 h-4 w-4 shrink-0" />
         Connecting records the integration and brings supported data into your hubs. Full two-way live
-        sync for each provider activates as its secure keys are configured — nothing here stores your passwords.
+        sync for each provider activates as its secure keys are configured â€” nothing here stores your passwords.
       </p>
 
     </div>
   );
 }
+
