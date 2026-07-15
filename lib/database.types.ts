@@ -468,6 +468,16 @@ export interface Database {
         { id?: string; kind?: string; title: string; body?: string | null; url?: string | null; related_type?: string | null; related_id?: string | null; meta?: Json; is_read?: boolean },
         Partial<{ kind: string; title: string; body: string | null; url: string | null; is_read: boolean }>
       >;
+      family_contact_channels: T<
+        { family_id: string; email_local: string | null; phone_number: string | null; phone_number_sid: string | null; provisioning_status: string; ai_concierge_enabled: boolean; ai_greeting: string | null; forward_to_phone: string | null } & Stamps,
+        { family_id: string; email_local?: string | null; phone_number?: string | null; phone_number_sid?: string | null; provisioning_status?: string; ai_concierge_enabled?: boolean; ai_greeting?: string | null; forward_to_phone?: string | null },
+        Partial<{ email_local: string | null; phone_number: string | null; phone_number_sid: string | null; provisioning_status: string; ai_concierge_enabled: boolean; ai_greeting: string | null; forward_to_phone: string | null }>
+      >;
+      family_inbox_messages: T<
+        { id: string; family_id: string; channel: string; direction: string; from_addr: string | null; to_addr: string | null; subject: string | null; body: string | null; ai_summary: string | null; ai_intent: string | null; ai_handled: boolean; status: string; provider_ref: string | null; occurred_at: string; created_at: string },
+        { id?: string; family_id: string; channel: string; direction?: string; from_addr?: string | null; to_addr?: string | null; subject?: string | null; body?: string | null; ai_summary?: string | null; ai_intent?: string | null; ai_handled?: boolean; status?: string; provider_ref?: string | null; occurred_at?: string },
+        Partial<{ channel: string; direction: string; from_addr: string | null; to_addr: string | null; subject: string | null; body: string | null; ai_summary: string | null; ai_intent: string | null; ai_handled: boolean; status: string }>
+      >;
       feedback_votes: T<
         { id: string; idea_id: string; user_id: string; created_at: string },
         { id?: string; idea_id: string; user_id: string },

@@ -1,0 +1,63 @@
+// Twilio transcribeCallback for a Contact Center voicemail. Files the transcript
+// into the unified inbox, runs the AI concierge (summary + intent), and escalates
+// genuine urgencies to the family's human fallback. Fires asynchronously after
+// the call ends, so it returns 204 with no TwiML.
+
+import { NextRequest, NextResponse } from 'next/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { validateTwilioSignature, sendSms } from '@/lib/guardian/twilio';
+import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
+import { getOrCreateChannel, recordInboundMessage } from '@/lib/contact-center/server';
+import { runConcierge } from '@/lib/contact-center/concierge';
+import { shouldNotifyFamily } from '@/lib/contact-center/routing';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+const BASE_URL = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '');
+const MAX_BODY = 64 * 1024;
+
+export async function POST(req: NextRequest) {
+  const form = await readBoundedRequestFormData(req, MAX_BODY);
+  if (!form.ok) return new NextResponse('Invalid callback', { status: form.reason === 'too_large' ? 413 : 400 });
+  const params = Object.fromEntries(form.value.entries()) as Record<string, string>;
+
+  const familyId = new URL(req.url).searchParams.get('familyId') ?? '';
+  if (process.env.NODE_ENV === 'production') {
+    const sig = req.headers.get('x-twilio-signature') ?? '';
+    const url = `${BASE_URL}/api/contact-center/voice/transcription?familyId=${familyId}`;
+    if (!validateTwilioSignature(sig, url, params)) return new NextResponse('Unauthorized', { status: 401 });
+  }
+  if (!familyId) return new NextResponse('', { status: 204 });
+
+  const text = (params.TranscriptionText ?? '').slice(0, 4096);
+  const from = params.From ?? null;
+  const sid = params.RecordingSid ?? params.TranscriptionSid ?? null;
+  if (!text.trim()) return new NextResponse('', { status: 204 });
+
+  const admin = createServiceClient();
+  const [channel, { data: fam }] = await Promise.all([
+    getOrCreateChannel(admin, familyId),
+    admin.from('families').select('name').eq('id', familyId).maybeSingle(),
+  ]);
+  const familyLabel = fam?.name || 'the family';
+
+  const result = await runConcierge({ channel: 'voice', from: from ?? undefined, text, familyLabel });
+  await recordInboundMessage(admin, {
+    familyId, channel: 'voice', from: from ?? undefined, subject: 'Voicemail', body: text,
+    providerRef: sid ?? undefined, aiSummary: result.summary, aiIntent: result.intent,
+  });
+
+  if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
+    try { await sendSms(channel.forward_to_phone, `🚨 Urgent voicemail at your Bubaly line: ${result.summary}`); } catch { /* best-effort */ }
+    try {
+      await admin.from('notifications').insert({
+        family_id: familyId, type: 'system',
+        title: '🚨 Urgent voicemail at your family line', body: result.summary,
+        related_type: 'contact_center',
+      });
+    } catch { /* best-effort */ }
+  }
+
+  return new NextResponse('', { status: 204 });
+}
