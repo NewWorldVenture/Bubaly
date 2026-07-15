@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Admin Wallet Reconciliation Read Boundary
+
+- Focused reconciliation suites: 2 files, 12 tests passed.
+- Full `npm.cmd test`: 456 test files, 3,202 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed.
+- `/admin/wallet/reconciliation` now preserves bucket and transaction read errors and renders a retryable ErrorState before running ledger reconciliation.
+- Live Super Admin role/browser outage drills, remote RLS, backup/restore, and deployment evidence remain open.
+
 ## Latest Local Evidence - Billing Mutation Consistency and Checkout Recovery
 
 - Focused billing/webhook suites: 2 files, 8 tests passed.

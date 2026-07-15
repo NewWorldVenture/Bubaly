@@ -5,7 +5,7 @@ Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 455 Vitest files and 3,201 tests pass in the latest full local gate.
+- 456 Vitest files and 3,202 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and production build pass; the build generated 250 routes and emitted the existing Supabase Edge-runtime compatibility warning.
 - The build generates 250 static routes.
 - Migration filename audit passes for 230 numbered migrations through `0214`; next version is `0215`.
@@ -31,6 +31,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
 - Checkout completion is now self-healing: validated plan metadata travels with the Stripe session and the
   signed completion webhook upserts `checkout_sessions`, so a failed pre-checkout tracking insert does not
   permanently break completion or abandoned-checkout lifecycle state.
+- Super Admin wallet reconciliation now fails visibly with a retry state when bucket or transaction reads
+  fail, instead of calculating a healthy report from empty fallback arrays.
 - Onboarding replay integrity is repaired locally: migration `0210` adds keyed upserts for managed
   records and a service-only per-user family claim lock. The focused contract suite and full validation
   are green, but migration application, live RLS, authenticated E2E, and provider/backup evidence remain open.

@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0336 - Admin wallet reconciliation hid ledger read failures as a healthy report
+
+- Timestamp: 2026-07-15 15:45 America/New_York
+- Service: Super Admin wallet reconciliation and ledger observability
+- Route: `/admin/wallet/reconciliation`
+- Affected files: `app/(app)/admin/wallet/reconciliation/page.tsx`, `tests/admin-wallet-reconciliation-boundary.test.ts`
+- Role: Super Admin and financial operator
+- Scenario: a failed bucket or transaction read became an empty array and the page could show a healthy report during a Supabase outage.
+- Severity: P1
+- Launch impact: operators could miss wallet anomalies or act on incomplete financial evidence.
+- Root cause: parallel Supabase result errors were discarded during destructuring.
+- Resolution: both read results are retained and checked; a server-side diagnostic is logged and the page renders a retryable ErrorState before reconciliation.
+- Supabase impact: no schema change; existing service-role read boundary is now fail-visible.
+- Tests run: `tests/admin-wallet-reconciliation-boundary.test.ts`, `tests/wallet-reconcile.test.ts` (12 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Validation evidence: 456 test files, 3,202 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: pending source commit
+- Status: Resolved in code; live Super Admin role/browser/outage evidence remains open
+- Remaining dependencies: isolated Supabase read-failure, role, browser, RLS, and deployed admin smoke drills
+
 ### PLA-0335 - Stripe Checkout completion depended on a best-effort tracking insert
 
 - Timestamp: 2026-07-15 15:40 America/New_York

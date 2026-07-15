@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 15:40:00 -04:00
+- Last updated: 2026-07-15 15:45:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `726a5e57` includes billing mutation consistency and self-healing Stripe Checkout tracking; live provider and deployment evidence remains open
+- Commit: latest source increment adds the admin wallet reconciliation read boundary; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,27 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0336 - Admin wallet reconciliation hid ledger read failures as a healthy report
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Admin observability / wallet reconciliation / Supabase failure handling
+- Feature: Super Admin wallet reconciliation
+- Route: `/admin/wallet/reconciliation`
+- File or files: `app/(app)/admin/wallet/reconciliation/page.tsx`, `tests/admin-wallet-reconciliation-boundary.test.ts`
+- Database objects: `wallet_buckets` and `wallet_transactions`
+- Affected roles: Super Admin and billing/financial operators
+- Scenario: either required ledger query failed while the page mapped empty fallbacks into `reconcileLedger`, allowing the UI to report a healthy or empty ledger during a database outage.
+- Launch impact: operators could miss wallet anomalies or make financial decisions from incomplete data.
+- Root cause: parallel Supabase results were destructured without retaining or checking their error fields.
+- Required remediation: check both reads, log only server-side diagnostics, and render a retryable error state before reconciliation.
+- Implementation notes: the page now retains result objects, returns a visible ErrorState with refresh link on either failure, and only reconciles verified rows.
+- Test plan: focused admin read-boundary contract, typecheck, lint, full Vitest, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/admin-wallet-reconciliation-boundary.test.ts`, `tests/wallet-reconcile.test.ts` (12 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Evidence: latest full gate passed with 456 files/3,202 tests, 0 production dependency vulnerabilities, and a 250-route build.
+- Resolution: source repair validated locally; commit and push verification pending.
+- Remaining dependencies: live Super Admin role/browser outage drill and deployed Supabase evidence.
 
 #### TODO-0335 - Stripe Checkout completion depended on a best-effort tracking insert
 
