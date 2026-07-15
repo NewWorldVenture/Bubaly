@@ -1311,4 +1311,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
 - `git diff --check`: passed.
 - The `/admin/content` page now reports document, family, and uploader read failures through a visible refreshable error state.
-- Source commit: `5c4bad4d`; docs update and remote push verification remain pending.
+- Source commit: `5c4bad4d`; docs and source are published on `origin/main` at `ed2ca56d`.
