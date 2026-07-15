@@ -28,8 +28,9 @@ export async function GET(req: NextRequest) {
     // last-refresh time. Best-effort: if the table isn't migrated yet, the map is
     // empty and every family falls through to a refresh.
     const dirtyByFamily = new Map<string, { dirty: boolean; refreshedAt: string | null }>();
-    const { data: dirtyRows } = await supabase.from('family_model_dirty')
+    const { data: dirtyRows, error: dirtyRowsError } = await supabase.from('family_model_dirty')
       .select('family_id, dirty, refreshed_at').limit(10000);
+    if (dirtyRowsError) throw dirtyRowsError;
     for (const r of dirtyRows ?? []) {
       dirtyByFamily.set(r.family_id, { dirty: r.dirty ?? false, refreshedAt: r.refreshed_at ?? null });
     }
@@ -49,16 +50,22 @@ export async function GET(req: NextRequest) {
         // R10: keep the hard-signal family intelligence current too. Non-fatal —
         // a signal-detection hiccup must not fail the twin/prep refresh.
         try { await runSignalDetection(supabase, fam.id, now); } catch (e) { console.error(`Signal detection failed for ${fam.id}:`, e); }
-        const ok = twin.ok && prep.ok;
+        let ok = twin.ok && prep.ok;
+        let dirtyWriteFailed = false;
         // Clear the dirty flag once a refresh succeeds.
         if (ok) {
-          await supabase.from('family_model_dirty')
+          const { error: dirtyWriteError } = await supabase.from('family_model_dirty')
             .upsert({ family_id: fam.id, dirty: false, refreshed_at: now.toISOString() }, { onConflict: 'family_id' });
+          if (dirtyWriteError) {
+            console.error(`Model-refresh dirty-state write failed for ${fam.id}:`, dirtyWriteError);
+            ok = false;
+            dirtyWriteFailed = true;
+          }
         }
         outcomes.push({
           familyId: fam.id, ok,
           entities: twin.entities, edges: twin.edges, plans: prep.plans,
-          ...(twin.error || prep.error ? { error: 'Model refresh failed.' } : {}),
+          ...(twin.error || prep.error || dirtyWriteFailed ? { error: 'Model refresh failed.' } : {}),
         });
       } catch (err) {
         console.error(`Model-refresh cron failed for family ${fam.id}:`, err);

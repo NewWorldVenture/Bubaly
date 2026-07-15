@@ -16,60 +16,85 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const admin = createServiceClient();
-  const now = new Date();
-  const nowIso = now.toISOString();
+  try {
+    const admin = createServiceClient();
+    const now = new Date();
+    const nowIso = now.toISOString();
 
-  // Open rent/borrow orders with a due date; the partial index backs this.
-  const { data: due, error } = await admin
-    .from('marketplace_orders')
-    .select('id, family_id, listing_id, buyer_member, kind, status, ends_on, due_reminder_sent_at, overdue_notified_at, returned_at')
-    .in('kind', ['rent', 'borrow']).in('status', ['confirmed', 'active'])
-    .not('ends_on', 'is', null)
-    .limit(BATCH);
-  if (error) return NextResponse.json({ ok: false, error: 'Could not load orders.' }, { status: 500 });
+    // Open rent/borrow orders with a due date; the partial index backs this.
+    const { data: due, error } = await admin
+      .from('marketplace_orders')
+      .select('id, family_id, listing_id, buyer_member, kind, status, ends_on, due_reminder_sent_at, overdue_notified_at, returned_at')
+      .in('kind', ['rent', 'borrow']).in('status', ['confirmed', 'active'])
+      .not('ends_on', 'is', null)
+      .limit(BATCH);
+    if (error) return NextResponse.json({ ok: false, error: 'Could not load orders.' }, { status: 500 });
 
-  // Titles for friendlier copy.
-  const listingIds = [...new Set((due ?? []).map((o) => o.listing_id))];
-  const { data: listings } = listingIds.length
-    ? await admin.from('marketplace_listings').select('id, title').in('id', listingIds)
-    : { data: [] };
-  const titleOf = new Map((listings ?? []).map((l) => [l.id, l.title]));
+    // Titles for friendlier copy. A failed lookup is a failed batch because the
+    // job must not acknowledge a partial notification run as healthy.
+    const listingIds = [...new Set((due ?? []).map((o) => o.listing_id))];
+    const { data: listings, error: listingError } = listingIds.length
+      ? await admin.from('marketplace_listings').select('id, title').in('id', listingIds)
+      : { data: [], error: null };
+    if (listingError) {
+      console.error('Return-reminders listing lookup failed:', listingError);
+      return NextResponse.json({ ok: false, error: 'Could not load listing titles.' }, { status: 502 });
+    }
+    const titleOf = new Map((listings ?? []).map((l) => [l.id, l.title]));
 
-  let reminded = 0, overdue = 0;
-  for (const o of due ?? []) {
-    const order = {
-      kind: o.kind, status: o.status, endsOn: o.ends_on, returnedAt: o.returned_at,
-      dueReminderSentAt: o.due_reminder_sent_at, overdueNotifiedAt: o.overdue_notified_at,
-    };
-    const title = titleOf.get(o.listing_id) ?? 'a borrowed item';
-    const verb = o.kind === 'rent' ? 'rental' : 'borrowed item';
+    let reminded = 0, overdue = 0, failed = 0;
+    for (const o of due ?? []) {
+      const order = {
+        kind: o.kind, status: o.status, endsOn: o.ends_on, returnedAt: o.returned_at,
+        dueReminderSentAt: o.due_reminder_sent_at, overdueNotifiedAt: o.overdue_notified_at,
+      };
+      const title = titleOf.get(o.listing_id) ?? 'a borrowed item';
+      const verb = o.kind === 'rent' ? 'rental' : 'borrowed item';
 
-    if (needsOverdueAlert(order, now)) {
-      const late = Math.abs(daysUntilDue(o.ends_on, now) ?? 0);
-      await admin.from('notifications').insert({
-        family_id: o.family_id, user_id: null, type: 'system',
-        title: `Overdue: "${title}"`,
-        body: `This ${verb} was due ${late} day${late === 1 ? '' : 's'} ago. Arrange the return so it doesn't hold anyone up.`,
-        related_type: 'marketplace_orders', related_id: o.id,
-      });
-      await admin.from('marketplace_orders').update({ overdue_notified_at: nowIso }).eq('id', o.id);
-      overdue++;
-      continue; // don't also send a due-soon nudge for the same order
+      if (needsOverdueAlert(order, now)) {
+        const late = Math.abs(daysUntilDue(o.ends_on, now) ?? 0);
+        const { error: notificationError } = await admin.from('notifications').insert({
+          family_id: o.family_id, user_id: null, type: 'system',
+          title: `Overdue: "${title}"`,
+          body: `This ${verb} was due ${late} day${late === 1 ? '' : 's'} ago. Arrange the return so it doesn't hold anyone up.`,
+          related_type: 'marketplace_orders', related_id: o.id,
+        });
+        const { error: stampError } = notificationError
+          ? { error: notificationError }
+          : await admin.from('marketplace_orders').update({ overdue_notified_at: nowIso }).eq('id', o.id);
+        if (notificationError || stampError) {
+          console.error(`Return-reminders overdue notification failed for ${o.id}:`, notificationError ?? stampError);
+          failed++;
+        } else {
+          overdue++;
+        }
+        continue; // don't also send a due-soon nudge for the same order
+      }
+
+      if (needsDueReminder(order, now)) {
+        const d = daysUntilDue(o.ends_on, now) ?? 0;
+        const { error: notificationError } = await admin.from('notifications').insert({
+          family_id: o.family_id, user_id: null, type: 'system',
+          title: `Due ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}: "${title}"`,
+          body: `Time to return this ${verb}. Tap to see the exchange details.`,
+          related_type: 'marketplace_orders', related_id: o.id,
+        });
+        const { error: stampError } = notificationError
+          ? { error: notificationError }
+          : await admin.from('marketplace_orders').update({ due_reminder_sent_at: nowIso }).eq('id', o.id);
+        if (notificationError || stampError) {
+          console.error(`Return-reminders due notification failed for ${o.id}:`, notificationError ?? stampError);
+          failed++;
+        } else {
+          reminded++;
+        }
+      }
     }
 
-    if (needsDueReminder(order, now)) {
-      const d = daysUntilDue(o.ends_on, now) ?? 0;
-      await admin.from('notifications').insert({
-        family_id: o.family_id, user_id: null, type: 'system',
-        title: `Due ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}: "${title}"`,
-        body: `Time to return this ${verb}. Tap to see the exchange details.`,
-        related_type: 'marketplace_orders', related_id: o.id,
-      });
-      await admin.from('marketplace_orders').update({ due_reminder_sent_at: nowIso }).eq('id', o.id);
-      reminded++;
-    }
+    const ok = failed === 0;
+    return NextResponse.json({ ok, reminded, overdue, failed }, { status: ok ? 200 : 502 });
+  } catch (err) {
+    console.error('Return-reminders cron error:', err);
+    return NextResponse.json({ ok: false, error: 'Return-reminders cron failed' }, { status: 500 });
   }
-
-  return NextResponse.json({ ok: true, reminded, overdue });
 }

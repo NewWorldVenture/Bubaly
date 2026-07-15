@@ -975,6 +975,24 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: focused validation passes; full gate and live scheduler/Resend evidence remain open
 - Status: Resolved in code; live delivery evidence remains open
 - Remaining dependencies: execute scheduler, provider outage/retry, recipient, and duplicate-run drills
+### PLA-0325 - Return and model refresh crons acknowledged persistence failures
+
+- Timestamp: 2026-07-15 14:35 America/New_York
+- Service: Marketplace return reminders and household model refresh
+- Route: `/api/cron/return-reminders`, `/api/cron/model-refresh`
+- Affected files: `app/api/cron/return-reminders/route.ts`, `app/api/cron/model-refresh/route.ts`, `tests/cron-return-reminders-boundary.test.ts`
+- Role: family members waiting on returns, household members relying on model projections, and scheduled cron workers
+- Scenario: secondary listing, notification, order-stamp, dirty-state, or dirty-flag failures were ignored after primary reads succeeded
+- Severity: P1
+- Launch impact: reminders could repeat or disappear, and model refresh could report success while stale work remained queued
+- Root cause: Supabase result errors from secondary reads and writes were discarded
+- Resolution: required reads and writes are checked; failed reminder items and dirty-state persistence now produce retryable non-success responses
+- Supabase impact: no schema change; existing marketplace and model-dirty scopes remain unchanged
+- Tests run: `tests/cron-return-reminders-boundary.test.ts`, `tests/cron-batch-failure-status.test.ts`, `tests/cron-auth.test.ts` (10 focused tests); typecheck; lint; diff check
+- Validation evidence: focused validation and full local gate pass; live scheduler/provider/RLS evidence remains open
+- Status: Resolved in code; live scheduled delivery evidence remains open
+- Remaining dependencies: execute scheduler, duplicate-run, provider outage/retry, and live Supabase drills
+
 ### PLA-0324 - Journey Recovery acknowledged failed abandonment sweeps
 
 - Timestamp: 2026-07-15 14:30 America/New_York

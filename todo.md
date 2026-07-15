@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 14:30:00 -04:00
+- Last updated: 2026-07-15 14:35:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest local source repair includes Journey Recovery cron failure boundaries; publication to branch and `main` follows this evidence update
+- Commit: latest local source repair includes Return Reminders and Model Refresh persistence failure boundaries; publication to branch and `main` follows this evidence update
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0325 - Return and model refresh crons acknowledged persistence failures
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / scheduled jobs / state persistence
+- Feature: Marketplace return reminders and household model refresh
+- Route: `/api/cron/return-reminders`, `/api/cron/model-refresh`
+- File or files: `app/api/cron/return-reminders/route.ts`, `app/api/cron/model-refresh/route.ts`, `tests/cron-return-reminders-boundary.test.ts`
+- Database objects: `marketplace_orders`, `marketplace_listings`, `notifications`, `family_model_dirty`, and `families`
+- Affected roles: families waiting on return reminders, household members relying on current model projections, and scheduled cron workers
+- Scenario: listing, notification, deduplication-stamp, dirty-state, or dirty-flag persistence failures were ignored while the job reported success
+- Launch impact: reminders could repeat or disappear, and model refreshes could appear complete while stale state remained queued
+- Root cause: secondary Supabase result errors were discarded after the primary batch read succeeded
+- Resolution: required reads and writes are checked; per-order reminder failures and dirty-state persistence failures now produce retryable non-success responses
+- Tests performed: `tests/cron-return-reminders-boundary.test.ts`, `tests/cron-batch-failure-status.test.ts`, `tests/cron-auth.test.ts` (10 focused tests); typecheck; lint; diff check
+- Evidence: focused validation and final full gate passed with 453 files/3,184 tests, 0 production dependency vulnerabilities, and 250-route build
+- Remaining dependencies: run scheduler, duplicate-run, provider, and live Supabase/RLS drills
 
 #### TODO-0324 - Journey Recovery acknowledged failed abandonment sweeps
 
