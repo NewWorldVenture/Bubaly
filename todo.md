@@ -25,6 +25,24 @@
 
 ### Active audit issue
 
+#### TODO-0303 - Admin subscriptions hid billing reads as empty plan totals
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / observability / admin
+- Feature: Super Admin subscriptions and billing history
+- Route: `/admin/subscriptions`
+- File or files: `app/(app)/admin/subscriptions/page.tsx`, `tests/admin-subscriptions-read-boundary.test.ts`
+- Database objects: `subscriptions`, `families`, `billing_customers`
+- Affected roles: Super Admin
+- Scenario: a subscription, family, or billing-customer read fails
+- Launch impact: an operator can mistake unavailable billing state for zero customers, zero revenue, or zero churn
+- Root cause: Supabase read errors were discarded during page loading
+- Resolution: preserve read errors, log the boundary, and render a refreshable error state before deriving plan metrics
+- Tests performed: `tests/admin-subscriptions-read-boundary.test.ts` (1 focused test); full 426-file/3,097-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused contract covers subscription, family, and billing-customer reads plus the visible error state
+- Remaining dependencies: publish docs and run isolated subscription-read failure/browser drills
+
 #### TODO-0302 - Admin feedback and integrations hid read failures as empty or unconfigured
 
 - Status: `[~]` In progress

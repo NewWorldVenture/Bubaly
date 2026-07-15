@@ -1,11 +1,11 @@
 # Production Readiness Report
 
-Audit snapshot: 2026-07-15 11:04 America/New_York
+Audit snapshot: 2026-07-15 11:10 America/New_York
 Decision: **NO-GO**
 
 FamilyOS has a strong local engineering baseline but is not yet launch-ready. Current verified gates are:
 
-- 425 Vitest files and 3,096 tests pass in the latest full local gate.
+- 426 Vitest files and 3,097 tests pass in the latest full local gate.
 - Typecheck, lint, dependency audit, and clean production build pass.
 - The build generates 250 static routes.
 - Migration filename audit passes for 229 numbered migrations; next version is `0214`.
@@ -63,6 +63,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   instead of rendering empty or zero-valued views; live outage and browser evidence remain open.
 - Super Admin Feedback and Integrations now surface feedback queue and connected-account read failures instead
   of rendering an empty board or a false not-configured status; live outage and browser evidence remain open.
+- Super Admin Subscriptions now surfaces subscription, family, and billing-customer read failures instead of
+  rendering empty plan totals; live billing and browser evidence remain open.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

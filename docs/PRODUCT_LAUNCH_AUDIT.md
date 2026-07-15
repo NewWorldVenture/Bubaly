@@ -596,3 +596,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `9f4c6fa9`
 - Status: Resolved in code; live feedback/integration outage and Super Admin browser evidence remain open
 - Remaining dependencies: run isolated feedback and connected-account read-failure drills and verify no empty/configuration status is presented as authoritative
+
+### PLA-0303 - Admin subscriptions hid billing reads as empty plan totals
+
+- Timestamp: 2026-07-15 11:10 America/New_York
+- Service: Super Admin subscriptions and billing history
+- Route: `/admin/subscriptions`
+- Affected files: `app/(app)/admin/subscriptions/page.tsx`, `tests/admin-subscriptions-read-boundary.test.ts`
+- Role: Super Admin
+- Scenario: subscription, family, or billing-customer reads failed while the page substituted empty arrays and zero-valued plan metrics
+- Severity: P1
+- Launch impact: operators could misread unavailable subscription state as no customers, no revenue, or no churn
+- Root cause: three Supabase read errors were discarded during page loading
+- Resolution: the page now preserves read errors, logs the boundary, and renders a refreshable error state before deriving plan metrics
+- Supabase impact: no schema change; subscription-read failures are explicit and non-destructive
+- Tests run: `tests/admin-subscriptions-read-boundary.test.ts` (1 focused test), full 426-file/3,097-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contract verifies subscription, family, and billing-customer failure paths plus the visible error state
+- Commit: `7092ab60`
+- Status: Resolved in code; live billing outage and Super Admin browser evidence remain open
+- Remaining dependencies: run isolated subscription-read failure drills and verify no zero-valued plan report is presented as authoritative
