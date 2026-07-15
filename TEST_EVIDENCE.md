@@ -2,6 +2,19 @@
 
 Audit date: 2026-07-15
 
+## Latest Audit Update - Notification email failure contract
+
+- `npm.cmd run test -- tests/notification-email-boundary.test.ts tests/cron-notification-failure-status.test.ts tests/cron-auth.test.ts tests/database-error-boundaries.test.ts`: 4 files, 9 tests passed.
+- `npm.cmd run test`: 415 files, 3,073 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: 227 numbered SQL files; next available version `0212`; passed.
+- `npm.cmd run build`: passed after clearing a stale generated `.next` artifact; 250 routes generated. Next.js emitted existing non-blocking cache and Edge-runtime warnings.
+- `deliverNotificationEmails` now returns `sent`, `failed`, and `skipped`, checks Supabase read/update errors, and leaves failed sends retryable; the notification cron includes email failures in its 502 status.
+- Publication verified at commit `a704a41f`; local and `origin/main` are aligned.
+
 ## Latest Audit Update - Notification cron failure status
 
 - `npm.cmd run test -- tests/cron-notification-failure-status.test.ts tests/cron-batch-failure-status.test.ts tests/cron-provider-sync.test.ts tests/cron-auth.test.ts tests/database-error-boundaries.test.ts`: 5 files, 13 tests passed.

@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 09:50:12 -04:00
+- Last updated: 2026-07-15 09:56:14 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `92eb434a` (notification cron failure-status increment)
+- Commit: `a704a41f` (notification email failure-contract increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -4782,4 +4782,24 @@ roadmap entries and user worktree changes are preserved.
 - Verified by: Codex
 - Commit: `92eb434a`
 - Date completed: 2026-07-15
-- Remaining dependencies: give `deliverNotificationEmails` a failure-aware result contract, then run live push/email failure drills and verify alert routing/deployment.
+- Remaining dependencies: run live push/email failure drills and verify alert routing/deployment.
+
+### TODO-0292 - Notification email delivery hid provider and persistence failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Notifications / email delivery / Supabase persistence / cron observability
+- Feature: Per-recipient notification email digests
+- File or files: `lib/server/notification-emails.ts`, `app/api/cron/notifications/route.ts`,
+  `tests/notification-email-boundary.test.ts`, `tests/cron-notification-failure-status.test.ts`
+- Description: The helper ignored Supabase read/update errors and returned only a sent count, so provider
+  failures and unresolved `sent_at` writes were invisible to the notification cron.
+- Resolution: Added a sent/failed/skipped result, checked pending/prefs/recipient/resolve boundaries, left
+  failed sends retryable, and included email failures in the cron's HTTP 502 status.
+- Tests performed: 9 focused notification/error-boundary tests; full 415-file/3,073-test suite; typecheck;
+  lint; dependency audit; migration audit; diff check; and clean 250-route production build.
+- Evidence: `tests/notification-email-boundary.test.ts` guards helper results and route consumption.
+- Verified by: Codex
+- Commit: `a704a41f`
+- Date completed: 2026-07-15
+- Remaining dependencies: live Resend failure/duplicate/retry drills, alert routing, and remote cron deployment verification.

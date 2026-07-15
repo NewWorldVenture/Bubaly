@@ -36,8 +36,10 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   live cron invocation and callback/retry drills remain open.
 - Calendar-feed, Autopilot, model-refresh, and auction-settlement batch crons now return HTTP 502 for partial
   failure instead of unconditional success; isolated live failure drills remain open.
-- Notification and push-scan crons now return HTTP 502 for generation or push delivery failures; the email
-  helper still exposes only a sent count and needs a separate failure-contract audit.
+- Notification and push-scan crons now return HTTP 502 for generation or push delivery failures; notification
+  email failures are included in the same operational summary.
+- Notification email delivery now returns sent/failed/skipped counts and checks Supabase resolution boundaries;
+  live Resend failure/retry evidence remains open.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

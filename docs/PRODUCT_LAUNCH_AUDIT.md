@@ -386,4 +386,23 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: static contracts cover both routes and preserve sanitized errors; 250-route build passes
 - Commit: `92eb434a`
 - Status: Resolved in code; live push/email provider delivery and scheduled retry evidence remain open
-- Remaining dependencies: audit the email helper's sent-count-only contract, run provider failure drills, verify alert routing, and validate remote cron deployment
+- Remaining dependencies: run live push/email provider failure drills, verify alert routing, and validate remote cron deployment
+
+### PLA-0292 - Notification email delivery hid provider and persistence failures
+
+- Timestamp: 2026-07-15 09:56 America/New_York
+- Service: Notifications and email delivery
+- Route: `/api/cron/notifications`, `deliverNotificationEmails`
+- Affected files: `lib/server/notification-emails.ts`, `app/api/cron/notifications/route.ts`, `tests/notification-email-boundary.test.ts`, `tests/cron-notification-failure-status.test.ts`
+- Role: scheduled system worker; family notification recipients
+- Scenario: pending notification reads, preference/recipient lookups, email sends, or `sent_at` resolution updates failed while the helper returned only a sent count
+- Severity: P1
+- Launch impact: email outages could be mistaken for an empty queue, and successful sends could be retried without a visible persistence failure
+- Root cause: Supabase errors were ignored and provider failures were not represented in the return value
+- Resolution: the helper now returns `sent`, `failed`, and `skipped`, checks each read/update boundary, leaves failed sends unresolved for retry, and feeds email failures into the cron's sanitized 502 response
+- Supabase impact: no schema change; failed `sent_at` updates remain retryable and successful sends preserve existing resolution behavior
+- Tests run: `tests/notification-email-boundary.test.ts`, `tests/cron-notification-failure-status.test.ts`, `tests/cron-auth.test.ts`, and `tests/database-error-boundaries.test.ts` (9 tests), full 415-file/3,073-test suite, typecheck, lint, dependency audit, migration audit, diff check, and production build
+- Validation evidence: helper and cron contracts cover read/send/update failures; 250-route build passes
+- Commit: `a704a41f`
+- Status: Resolved in code; live Resend/provider failure and retry evidence remain open
+- Remaining dependencies: run sandbox email failure/duplicate/retry drills, verify alert routing, and validate remote cron deployment
