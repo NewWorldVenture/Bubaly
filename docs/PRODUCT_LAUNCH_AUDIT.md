@@ -21,7 +21,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: no schema change; event claims remain replay-safe and wallet/subscription writes retain existing scoping and idempotency boundaries
 - Tests run: `tests/stripe-webhook-replay-contract.test.ts`, `tests/stripe-issuing-auth.test.ts`, `tests/wallet-money-action-boundaries.test.ts` (19 focused tests); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check
 - Validation evidence: latest full gate passed with 455 test files, 3,198 tests, 0 production dependency vulnerabilities, and a 250-route build
-- Commit: pending publication
+- Commit: `632402bf`
 - Status: Resolved in code; live webhook evidence remains open
 - Remaining dependencies: execute isolated Stripe signature, authorization, capture, reversal, duplicate-delivery, subscription, refund, connected-account, reconciliation, RLS, and browser drills against deployed services
 
