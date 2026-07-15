@@ -21,7 +21,7 @@ export default async function FeedbackPage() {
   const [admin, ideasRes, votesRes] = await Promise.all([
     isSuperAdmin(),
     supabase.from('feedback_ideas')
-      .select('id, title, problem, body, category, impact, audience, status, admin_note, image_url, author_name, vote_count, comment_count, pinned, created_at')
+      .select('id, title, problem, body, category, impact, audience, kind, status, admin_note, image_url, author_name, vote_count, comment_count, pinned, created_at')
       .order('pinned', { ascending: false }).order('vote_count', { ascending: false }).order('created_at', { ascending: false })
       .limit(400),
     supabase.from('feedback_votes').select('idea_id').eq('user_id', ctx.user.id).limit(1000),
