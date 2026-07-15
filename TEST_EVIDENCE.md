@@ -1261,5 +1261,6 @@ Audit date: 2026-07-15
 - `npm.cmd run db:audit:migrations`: passed; 228 numbered SQL files, next version `0213`.
 - `git diff --check`: passed.
 - Migration `0212_atomic_family_provisioning.sql` adds a service-only `ensure_family_for_user` RPC with a per-user advisory transaction lock. `ensureActiveFamily` calls it first and retains a compatibility fallback for rolling deployment.
-- Publication verified in commit `e0674b15`; remote push verification remains pending.
+- After integrating the concurrent feedback-board changes from `origin/main`, the merged suite passed at 416 files and 3,077 tests; typecheck and migration audit passed.
+- Publication verified on `origin/main` at merge commit `cdaf1ce3` (source repair commit `e0674b15`).
 - This is local contract evidence only. Remote migration application, authenticated two-request first-login verification, Auth Admin health, and cross-family RLS probes remain open.
