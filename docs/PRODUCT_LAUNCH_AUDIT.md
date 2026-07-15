@@ -924,3 +924,20 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Validation evidence: final local gate passed with 0 production dependency vulnerabilities and 250 generated routes
 - Status: Resolved in code; live wallet/RLS, role, concurrency, and browser evidence remain open
 - Remaining dependencies: execute manager/member wallet, invest, gift, babysitter, child-wallet, reconciliation, and tenant-isolation drills against deployed Supabase
+### PLA-0321 - Stripe subscription webhook ignored prior billing state failures
+
+- Timestamp: 2026-07-15 14:11 America/New_York
+- Service: Stripe subscription webhook synchronization and growth alerts
+- Route: `/api/webhooks/stripe`
+- Affected files: `app/api/webhooks/stripe/route.ts`, `tests/webhook-persistence-boundaries.test.ts`
+- Role: paying family and Super Admin operator
+- Scenario: billing-customer and prior-subscription reads ran together, but only the billing-customer error was checked before subscription persistence and conversion/churn comparison
+- Severity: P0
+- Launch impact: Stripe events could write subscription state with an untrusted transition baseline or fail to trigger accurate growth alerts
+- Root cause: `priorSubscriptionError` was discarded; payment automation failures were silently swallowed
+- Resolution: both required state reads now fail closed through the reprocessable webhook error path; payment automation failures are logged
+- Supabase impact: no schema change; existing event claim/finalization and family-scoped subscription persistence remain in place
+- Tests run: `tests/webhook-persistence-boundaries.test.ts`, `tests/stripe-growth-alerts-contract.test.ts`, and `tests/stripe-webhook-replay-contract.test.ts` (11 focused tests); typecheck; lint; diff check
+- Validation evidence: focused validation passes; full gate and live Stripe evidence remain open
+- Status: Resolved in code; live replay/idempotency and provider evidence remain open
+- Remaining dependencies: execute non-destructive subscription lifecycle, replay, retry, and growth-alert drills in Stripe test mode

@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 14:08:00 -04:00
+- Last updated: 2026-07-15 14:12:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: latest local source repair `32b541d1` hardens Contact Center email ingress; publication to branch and `main` is pending
+- Commit: latest published source repair `1e2c8172` hardens remaining wallet reads; Stripe webhook state-boundary repair is currently being verified
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0321 - Stripe subscription webhook ignored prior billing state failures
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Reliability / billing / webhook state integrity
+- Feature: Stripe subscription lifecycle synchronization and growth alerts
+- Route: `/api/webhooks/stripe`
+- File or files: `app/api/webhooks/stripe/route.ts`, `tests/webhook-persistence-boundaries.test.ts`
+- Database objects: `billing_customers`, `subscriptions`, `stripe_webhook_events`, and `admin_notifications`
+- Affected roles: paying families, Super Admin operators, and Stripe webhook delivery
+- Scenario: the webhook read the billing customer and prior subscription in parallel but only checked the customer error; a failed prior-state read could be treated as an empty baseline before subscription persistence and conversion/churn evaluation
+- Launch impact: subscription state could be written without a trustworthy transition baseline, causing inaccurate growth alerts or hiding a database outage from Stripe retry behavior
+- Root cause: `priorSubscriptionError` was discarded; payment automation failures were also silently swallowed
+- Resolution: both billing-state reads now fail closed and leave the event reprocessable through the existing webhook error path; payment automation failures are logged
+- Tests performed: `tests/webhook-persistence-boundaries.test.ts`, `tests/stripe-growth-alerts-contract.test.ts`, and `tests/stripe-webhook-replay-contract.test.ts` (11 focused tests); typecheck; lint; diff check
+- Evidence: focused validation passes; final full local gate pending publication
+- Remaining dependencies: run non-destructive Stripe test-mode subscription create/update/delete, replay, idempotency, retry, and alert drills
 
 #### TODO-0320 - Remaining wallet routes hid financial read failures
 

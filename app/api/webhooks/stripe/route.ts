@@ -32,11 +32,14 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
 
   // Resolve billing_customer_id + the PRIOR subscription state (to detect a
   // brand-new paid conversion vs. a routine renewal).
-  const [{ data: bc, error: billingCustomerError }, { data: priorSub }] = await Promise.all([
+  const [{ data: bc, error: billingCustomerError }, { data: priorSub, error: priorSubscriptionError }] = await Promise.all([
     supabase.from('billing_customers').select('id').eq('family_id', familyId).maybeSingle(),
     supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).maybeSingle(),
   ]);
-  if (billingCustomerError) throw new Error('Billing customer lookup failed');
+  if (billingCustomerError || priorSubscriptionError) {
+    console.error('[stripe webhook] Billing state lookup failed', billingCustomerError ?? priorSubscriptionError);
+    throw new Error('Billing state lookup failed');
+  }
 
   const { error: subscriptionError } = await supabase.from('subscriptions').upsert(
     {
@@ -162,8 +165,8 @@ export async function POST(req: NextRequest) {
             subjectKey: eventSubjectKey('payment_completed', [session.id]),
             context: { familyId: familyId ?? null, sessionId: session.id },
           });
-        } catch {
-          /* non-fatal */
+        } catch (error) {
+          console.error('[stripe webhook] payment automation failed', error);
         }
         break;
       }

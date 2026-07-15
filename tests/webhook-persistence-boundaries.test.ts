@@ -9,6 +9,8 @@ const referrals = readFileSync('lib/referrals/server.ts', 'utf8');
 describe('webhook persistence boundaries', () => {
   it('fails Stripe delivery when subscription, checkout, or event finalization fails', () => {
     expect(stripeRoute).toContain('Subscription persistence failed');
+    expect(stripeRoute).toContain('priorSubscriptionError');
+    expect(stripeRoute).toContain('Billing state lookup failed');
     expect(stripeRoute).toContain('Checkout persistence failed');
     expect(stripeRoute).toContain("Webhook storage unavailable");
     expect(stripeHelper).toContain(".select('stripe_event_id').maybeSingle()");

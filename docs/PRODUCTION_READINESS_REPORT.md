@@ -118,6 +118,10 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   billing state reads fail; billing-customer writes and checkout tracking/synchronization failures are logged and
   surfaced without presenting a successful billing state. Focused boundary coverage is green; live Stripe and
   Supabase failure drills remain open.
+- Stripe subscription webhooks now fail closed when either the billing-customer lookup or prior-subscription
+  transition baseline cannot be read, preventing conversion/churn alerts and subscription writes from using an
+  untrusted state comparison; payment automation failures are logged. Live replay, idempotency, and Stripe
+  test-mode evidence remain open.
 - The Family Contact Center now fails visibly when channel, inbox, family-context, or phone-routing reads fail;
   inbound and outbound inbox persistence errors are no longer discarded, and SMS, voice, voicemail, and inbound
   email callbacks return retryable 503 responses for database outages. Provider callback, retry, and live RLS
