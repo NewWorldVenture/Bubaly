@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 10:45:00 -04:00
+- Last updated: 2026-07-15 10:54:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `cfd52efa` (published main; source repair `03442ccf`)
+- Commit: `4accc171` (published main; source repair `ecfb4f95`)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0300 - Admin operational pages hid usage read failures as zero metrics
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / observability / admin
+- Feature: Super Admin system and data operations
+- Route: `/admin/system`, `/admin/backup`
+- File or files: `app/(app)/admin/system/page.tsx`, `app/(app)/admin/backup/page.tsx`, `tests/admin-system-read-boundary.test.ts`
+- Database objects: `profiles`, `families`, `subscriptions`, `documents`, and tracked operational tables
+- Affected roles: Super Admin
+- Scenario: a privileged usage/count query fails
+- Launch impact: an operator can mistake unavailable metrics for zero-valued healthy data
+- Root cause: Supabase read errors were discarded while deriving usage totals
+- Resolution: preserve read errors, log the boundary, and render a refreshable error state before displaying metrics
+- Tests performed: `tests/admin-system-read-boundary.test.ts`, `tests/admin-audit-read-boundary.test.ts`, and `tests/admin-read-boundaries.test.ts` (6 focused tests); full 423-file/3,092-test suite; migration audit; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused contracts cover system and table-count failures plus visible error-state paths
+- Remaining dependencies: publish docs and run isolated operational-read failure/browser drills
 
 #### TODO-0299 - Admin audit views hid incomplete history after read failures
 

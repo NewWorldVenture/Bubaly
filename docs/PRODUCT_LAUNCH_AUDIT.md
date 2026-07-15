@@ -539,3 +539,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `03442ccf`
 - Status: Resolved in code; live audit outage and Super Admin browser evidence remain open
 - Remaining dependencies: run isolated audit-read failure drills and verify the operator can distinguish unavailable history from an empty history
+
+### PLA-0300 - Admin operational pages hid usage read failures as zero metrics
+
+- Timestamp: 2026-07-15 10:54 America/New_York
+- Service: Super Admin system and data operations
+- Routes: `/admin/system`, `/admin/backup`
+- Affected files: `app/(app)/admin/system/page.tsx`, `app/(app)/admin/backup/page.tsx`, `tests/admin-system-read-boundary.test.ts`
+- Role: Super Admin
+- Scenario: a privileged count, profile, subscription, document, or tracked-table query failed while the page substituted zero-valued usage metrics
+- Severity: P1
+- Launch impact: operators could interpret unavailable system usage, storage, or table counts as an empty but healthy platform
+- Root cause: Supabase read errors were discarded while deriving counts and storage totals
+- Resolution: both pages now preserve query errors, log the read boundary, and render refreshable error states before displaying usage metrics
+- Supabase impact: no schema change; operational-read failures are explicit and non-destructive
+- Tests run: `tests/admin-system-read-boundary.test.ts`, `tests/admin-audit-read-boundary.test.ts`, and `tests/admin-read-boundaries.test.ts` (6 focused tests across 3 files), full 423-file/3,092-test suite, migration audit, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contracts verify system and table-count failure paths plus visible retry states
+- Commit: `ecfb4f95`; merged remote work is preserved in `4accc171`
+- Status: Resolved in code; live operational outage and Super Admin browser evidence remain open
+- Remaining dependencies: run isolated usage-read failure drills and verify the operator can distinguish unavailable metrics from zero metrics

@@ -1336,3 +1336,16 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - The `/admin/audit` and `/admin/audit-logs` pages now render refreshable error states when audit-log, family, or actor-profile reads fail.
 - Source commit: `03442ccf`; docs and source are published on `origin/main` at `cfd52efa`.
+
+## Latest Local Evidence - Admin Operational Read Failure
+
+- `npm.cmd exec vitest run tests/admin-system-read-boundary.test.ts tests/admin-audit-read-boundary.test.ts`: 2 files, 4 focused tests passed before the remote churn merge.
+- `npm.cmd test`: 423 files, 3,092 tests passed after merging the concurrent founder churn alert work.
+- `npm.cmd run db:audit:migrations`: passed with 229 numbered migrations; next available version `0214`.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
+- `git diff --check`: passed.
+- `/admin/system` and `/admin/backup` now render refreshable error states when privileged usage/count reads fail instead of reporting zero metrics.
+- Source commit: `ecfb4f95`; merged remote work and source are published on `origin/main` at `4accc171`; docs publication commit is pending.
