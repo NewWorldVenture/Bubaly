@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { fmtDate } from '@/lib/utils/format';
 
@@ -20,7 +20,7 @@ export default async function AdminAuditPage({ searchParams }: Params) {
 
   // Pull a bounded recent window; admin-scale auditing would page server-side,
   // flagged here rather than hidden.
-  const [{ data: logs }, { data: families }] = await Promise.all([
+  const [{ data: logs, error: logsError }, { data: families, error: familiesError }] = await Promise.all([
     supabase.from('audit_logs').select('id, family_id, actor_id, action, resource, metadata, created_at')
       .order('created_at', { ascending: false }).limit(1000),
     supabase.from('families').select('id, name'),
@@ -29,9 +29,14 @@ export default async function AdminAuditPage({ searchParams }: Params) {
   const rows = logs ?? [];
   const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
   const actorIds = [...new Set(rows.map((l) => l.actor_id).filter((x): x is string => !!x))];
-  const { data: actors } = actorIds.length
+  const { data: actors, error: actorsError } = actorIds.length
     ? await supabase.from('profiles').select('id, full_name, email').in('id', actorIds)
-    : { data: [] as { id: string; full_name: string | null; email: string | null }[] };
+    : { data: [] as { id: string; full_name: string | null; email: string | null }[], error: null };
+  const readError = logsError ?? familiesError ?? actorsError;
+  if (readError) {
+    console.error('[admin-audit] audit read failed', readError);
+    return <AdminAuditReadError />;
+  }
   const actorById = new Map((actors ?? []).map((a) => [a.id, a]));
 
   const actionOptions = [...new Set(rows.map((l) => l.action))].sort();
@@ -142,6 +147,19 @@ export default async function AdminAuditPage({ searchParams }: Params) {
           )}
         </div>
       </Card>
+    </div>
+  );
+}
+
+function AdminAuditReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Audit Logs</h1>
+        <p className="mt-1 text-sm text-muted">An append-only record of sensitive actions across every family and the site admin.</p>
+      </div>
+      <ErrorState message="Could not load audit logs from Supabase. Refresh and try again." />
+      <a href="/admin/audit" className="text-sm font-medium text-brand-text underline">Refresh audit logs</a>
     </div>
   );
 }

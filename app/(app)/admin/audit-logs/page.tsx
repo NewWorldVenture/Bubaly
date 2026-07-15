@@ -3,7 +3,7 @@ import { ClipboardList, Shield, User, Folder, Calendar, Settings } from 'lucide-
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
 import { fmtDate } from '@/lib/utils/format';
 
@@ -25,11 +25,15 @@ export default async function AuditLogsPage({ searchParams }: Params) {
   const sp = await searchParams;
   const supabase = createServiceClient();
 
-  const { data: logs } = await supabase
+  const { data: logs, error: logsError } = await supabase
     .from('audit_logs')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(500);
+  if (logsError) {
+    console.error('[admin-audit-logs] audit read failed', logsError);
+    return <AdminAuditLogsReadError />;
+  }
 
   const allLogs = logs ?? [];
   const actions = [...new Set(allLogs.map((l) => l.action))].sort();
@@ -136,6 +140,19 @@ export default async function AuditLogsPage({ searchParams }: Params) {
           </div>
         </div>
       </Card>
+    </div>
+  );
+}
+
+function AdminAuditLogsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Audit Logs</h1>
+        <p className="mt-1 text-sm text-muted">Complete audit trail of all system actions.</p>
+      </div>
+      <ErrorState message="Could not load audit logs from Supabase. Refresh and try again." />
+      <a href="/admin/audit-logs" className="text-sm font-medium text-brand-text underline">Refresh audit logs</a>
     </div>
   );
 }
