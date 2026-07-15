@@ -235,3 +235,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: pending publication
 - Status: Resolved in code; live provider, role/privacy, and RLS verification remain open
 - Remaining dependencies: run isolated Twilio retry/failure smoke tests and verify parent notification privacy in Supabase
+
+### PLA-0284 - Family membership RLS allowed self-promotion and family reassignment
+
+- Timestamp: 2026-07-15 08:42 America/New_York
+- Service: Authentication, tenant isolation, and RLS
+- Route: `/family/members`, `/family/permissions`, direct authenticated Supabase membership writes
+- Affected files: `supabase/migrations/0118_rls_drift_repair.sql`, `supabase/migrations/0211_family_members_update_rls.sql`, `tests/tenant-isolation-rls.test.ts`
+- Role: any authenticated family member; parent/manager administrator
+- Scenario: a non-manager updates their own `family_members` row to change role, `is_active`, or `family_id`
+- Severity: P0
+- Launch impact: tenant membership and role boundaries could be escalated or reassigned, undermining all family-scoped RLS
+- Root cause: migration `0118` restored the legacy `or user_id = auth.uid()` UPDATE exception without a manager-only `WITH CHECK`
+- Resolution: migration `0211_family_members_update_rls.sql` reasserts manager-only `USING` and `WITH CHECK` policies; profile and child-login writes remain server-side service-role operations after auth guards
+- Supabase impact: policy-only repair on `family_members`; no destructive data change; migration must be applied remotely
+- Tests run: four focused files, 9 tests; typecheck; migration filename audit; diff check
+- Validation evidence: migration contains manager-only update predicates and no self-update exception; ordinary account actions have no direct client membership update path
+- Commit: pending publication
+- Status: Resolved in code; remote migration application and authenticated two-tenant RLS verification remain open
+- Remaining dependencies: apply `0211`, prove non-manager deny/manager allow behavior, and re-run Auth Admin health

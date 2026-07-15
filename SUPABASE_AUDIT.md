@@ -4,7 +4,7 @@
 
 - Configured host: live Supabase project loaded from `.env.local` (secret values omitted).
 - Migration files at audit start: 193, through `0177_remove_synthetic_auth_users.sql`.
-- Current migration files: 226, through `0210_onboarding_idempotency.sql`.
+- Current migration files: 227, through `0211_family_members_update_rls.sql`.
 - New migrations: `0178_marketplace_circles_rls_recursion.sql`,
   `0179_harden_rate_limit_rpc_grants.sql`, `0180_resend_webhook_dedup.sql`, and
   `0181_guardian_callback_replay.sql`, `0182_stripe_webhook_claims.sql`,
@@ -21,7 +21,7 @@
   `0199_marketplace_handoff_completion.sql`, `0200_display_settings.sql`, `0201_blog_engagement.sql`,
   `0202_blog_articles.sql`, `0203_service_descriptions.sql`, `0204_atomic_loyalty_transactions.sql`,
   and `0205_atomic_wallet_money_actions.sql`, `0206`-`0209` admin/notification updates, and
-  `0210_onboarding_idempotency.sql`.
+  `0210_onboarding_idempotency.sql` and `0211_family_members_update_rls.sql`.
 - SQL files: 338.
 - Static counts: 1,190 policy declarations, 642 RLS enable statements, 100 function declarations,
   417 trigger declarations, and 65 `storage.objects` references. Counts are source-text counts,
@@ -466,6 +466,16 @@ calls. Its deterministic event identity prefers the source communication ID, and
 the actual relationship from `family_members.user_id` to `profiles.id` rather than treating membership row IDs
 as profile IDs. Database read/record failures remain retryable through the ledger's `error` state. Live Twilio,
 privacy, role, and RLS verification remain launch dependencies.
+
+### Family membership RLS drift repair - migration 0211
+
+Migration `0118_rls_drift_repair.sql` reintroduced a legacy `family_members` update policy with
+`or user_id = auth.uid()`. Because the policy had no stricter `WITH CHECK`, any member could attempt to
+change their own role, activation state, or family assignment through a direct authenticated update.
+Migration `0211_family_members_update_rls.sql` drops and recreates `fm_update` with
+`can_manage_family(family_id)` in both `USING` and `WITH CHECK`. Profile synchronization and child-login
+linking already run through guarded server-side service-role flows. Remote migration application and live
+two-tenant allow/deny probes remain required.
 
 The public A/B event path now validates `variant_key` against `ab_experiments.variants` before writing
 to `ab_events` with the service-role client.

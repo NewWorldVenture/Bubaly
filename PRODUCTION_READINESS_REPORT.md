@@ -41,6 +41,10 @@ Latest repair increment (2026-07-15): Guardian emergency escalation now validate
 claims a durable callback event before SMS/calls, resolves parent phones through `family_members.user_id`, and
 keeps database failures retryable. Live provider, privacy, role, and RLS evidence remains open.
 
+Latest repair increment (2026-07-15): migration `0211_family_members_update_rls.sql` restores manager-only
+`family_members` UPDATE policies after migration `0118` reintroduced a self-update exception. Local RLS
+contracts pass; remote application and two-tenant authenticated probes remain open.
+
 Latest repair increment (2026-07-15): onboarding finalization now derives authenticated deterministic
 submission/item keys and uses database-enforced keyed upserts for managed members, invites, imported
 calendar events, and import markers. First-family creation is serialized by the service-only

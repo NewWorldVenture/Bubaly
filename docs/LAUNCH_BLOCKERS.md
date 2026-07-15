@@ -5,8 +5,8 @@ they are not counted as completed audit weight.
 
 | ID | Severity | Blocker | Evidence | Owner/dependency | Exit criteria | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| LB-001 | P0 | Supabase Auth Admin users health check returns HTTP 500 | `npm.cmd run db:audit:auth` latest request `019f65c5-4a08-7c92-9949-7caaff74a0d0` | Supabase project/operator access | Admin users endpoint returns healthy response and auth smoke passes | Open |
-| LB-002 | P0 | Remote migration ledger is not verified against checkout | Current audit scripts are not linked to a confirmed remote migration history | Supabase project access | Reconcile all 226 migrations with remote ledger and safely apply 0208 and 0210 | Open |
+| LB-001 | P0 | Supabase Auth Admin users health check returns HTTP 500 | `npm.cmd run db:audit:auth` latest request `019f65cf-7a30-7a5b-b7d0-0ae58eb1dcde` | Supabase project/operator access | Admin users endpoint returns healthy response and auth smoke passes | Open |
+| LB-002 | P0 | Remote migration ledger is not verified against checkout | Current audit scripts are not linked to a confirmed remote migration history; local checkout now has 227 migrations through 0211 | Supabase project access | Reconcile all 227 migrations with remote ledger and safely apply 0208, 0210, and 0211 | Open |
 | LB-003 | P0 | Historical Supabase service credential requires rotation | Credential exposure and rotation dependency are documented in existing readiness report | Supabase owner/secret manager | Rotate/revoke, update deployment secrets, verify old key fails | Open |
 | LB-004 | P1 | Local Postgres/RLS lint is unavailable without a running Supabase container | `supabase db lint --local` previously failed with `LegacyDbConnectError` | Docker/Supabase local runtime | Run migration/RLS lint in isolated local or CI database | Open |
 | LB-005 | P1 | Authenticated browser E2E coverage includes an intentional skip | Public E2E baseline records 51 passed and 1 authenticated skip out of 52 | Test credentials/isolated environment | Execute authenticated role/device suite with no unexplained skips | Open |

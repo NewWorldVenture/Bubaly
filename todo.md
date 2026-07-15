@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 08:30:00 -04:00
+- Last updated: 2026-07-15 08:42:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `6148080d` (published Guardian audit increment)
+- Commit: pending publication (auth/RLS increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -70,6 +70,26 @@
 - Verified by: Codex local validation; publication commit recorded in `docs/PRODUCT_LAUNCH_AUDIT.md`
 - Remaining dependencies: live Twilio callback, provider failure/retry, role/privacy, and RLS smoke tests
 
+#### TODO-0284 - Family membership RLS allowed self-promotion and family reassignment
+
+- Status: `[~]` In progress
+- Severity: P0
+- Category: Security / tenant isolation / RLS
+- Feature: Family membership and role administration
+- Route: `/family/members`, `/family/permissions`, authenticated Supabase writes
+- File or files: `supabase/migrations/0118_rls_drift_repair.sql`, `supabase/migrations/0211_family_members_update_rls.sql`, `tests/tenant-isolation-rls.test.ts`
+- Database objects: `family_members`, `is_family_member`, `can_manage_family`
+- Affected roles: any authenticated family member; parent/manager administrators
+- Scenario: a non-manager sends a direct `family_members` UPDATE changing their role, active state, or family ID
+- Launch impact: a member could promote themselves or mutate tenant membership, invalidating all downstream RLS assumptions
+- Root cause: migration `0118` reintroduced `using (can_manage_family(...) or user_id = auth.uid())` without a manager-only check constraint for updates
+- Required remediation: reassert manager-only `USING` and `WITH CHECK` policies in the next migration; keep self-profile and child-login updates behind authenticated server-side service-role flows
+- Supabase impact: migration `0211_family_members_update_rls.sql` changes policy only; no data mutation
+- Tests performed: `tests/tenant-isolation-rls.test.ts`, `tests/migration-version-safety.test.ts`, `tests/admin-auth-boundary.test.ts`, `tests/account-action-error-boundaries.test.ts` (9 tests); typecheck; migration audit; diff check
+- Resolution: added migration `0211` and static contract coverage proving the self-update exception is absent and ordinary account actions have no direct membership update path
+- Verified by: Codex local validation; remote migration application and two-tenant role/RLS probes remain required
+- Remaining dependencies: apply `0211`, run authenticated member/manager cross-tenant allow/deny tests, and verify profile/child-login workflows in isolation
+
 ## Current Coverage Matrices
 
 These matrices are intentionally conservative: `Verified` means the specific boundary has local
@@ -80,7 +100,7 @@ matrices remain authoritative and are updated with each increment.
 
 | Route family | Feature | Audience | Auth/role boundary | Supabase objects | Current status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `/login`, `/signup`, middleware | Authentication and redirects | anonymous, authenticated | session and route guards | `auth.users`, profiles, family membership | In progress | `tests/admin-auth-boundary.test.ts`; live Auth Admin/RLS open |
+| `/login`, `/signup`, middleware | Authentication and redirects | anonymous, authenticated | session and route guards | `auth.users`, profiles, family membership | In progress | `tests/admin-auth-boundary.test.ts`, `tests/tenant-isolation-rls.test.ts`; live Auth Admin/RLS open |
 | `/onboarding`, `/join` | Family provisioning and invitations | new owner, invited user | authenticated owner/manager | families, family_members, invites, onboarding_progress | In progress | `tests/onboarding-failure-safety.test.ts`, `tests/onboarding-idempotency.test.ts` |
 | `/dashboard/*` | Family operating surfaces | family roles | active-family context | family-scoped domain tables | In progress | route inventory and feature tests; page-by-page traversal open |
 | `/wallet/*`, `/dashboard/payments` | Money movement | parent/guardian/child | manager RPCs and entitlements | wallet ledger, goals, allowances, subscriptions | In progress | atomic wallet tests; remote migrations and live concurrency open |

@@ -12,7 +12,8 @@
 - [ ] Back up the target database and confirm a tested restore path.
 - [ ] Run `npm run db:audit:migrations`, then reconcile and apply migrations in order through the validated current set, including `0208_atomic_wallet_goal_funding.sql` and `0210_onboarding_idempotency.sql`.
 - [ ] Run `npm run db:audit:schema` and `npm run db:audit:auth`.
-- [ ] Run isolated RLS allow/deny tests for family boundaries and marketplace circles.
+- [ ] Run isolated RLS allow/deny tests for family boundaries and marketplace circles, including a
+      non-manager attempt to update `family_members.role`, `is_active`, or `family_id` after applying `0211`.
 - [ ] Confirm all storage buckets, object policies, RPC grants, trigger functions, and realtime tables.
 - [ ] Inspect and resolve the current Auth Admin `Database error finding users` before launch.
 - [ ] Exercise onboarding with a forced failure in an isolated environment; confirm the required write

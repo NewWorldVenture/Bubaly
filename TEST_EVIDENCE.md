@@ -2,6 +2,18 @@
 
 Audit date: 2026-07-15
 
+## Latest Audit Update - Family membership RLS tenant boundary
+
+- `npm.cmd run test -- tests/tenant-isolation-rls.test.ts tests/migration-version-safety.test.ts tests/admin-auth-boundary.test.ts tests/account-action-error-boundaries.test.ts`: 4 files, 9 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run db:audit:migrations`: 227 numbered SQL files; next available version `0212`; passed.
+- `git diff --check`: passed.
+- Found and repaired migration drift where `0118` allowed any member to update their own membership row,
+  including role, active state, and family ID. Migration `0211` restores manager-only `USING` and `WITH CHECK`.
+- Remote application, authenticated two-tenant RLS probes, and Auth Admin health remain open.
+- Latest live probes: schema audit passed all 11 checks; Auth Admin users still returned HTTP 500 with
+  request ID `019f65cf-7a30-7a5b-b7d0-0ae58eb1dcde`; local `supabase status` could not connect to the Docker Desktop Linux engine.
+
 ## Latest Audit Update - Guardian emergency escalation replay and phone mapping
 
 - `npm.cmd run test -- tests/guardian-escalation-replay.test.ts tests/guardian-callback-security.test.ts`: 2 files, 11 tests passed.
