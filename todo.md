@@ -25,6 +25,24 @@
 
 ### Active audit issue
 
+#### TODO-0304 - Admin Stripe hid financial reads as zero or unavailable capabilities
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / payments / admin
+- Feature: Super Admin Stripe financial mode
+- Route: `/admin/stripe`
+- File or files: `lib/stripe/capabilities.ts`, `app/(app)/admin/stripe/page.tsx`, `tests/admin-stripe-read-boundary.test.ts`
+- Database objects: `feature_flags`, `stripe_settings`, `stripe_connected_accounts`, `stripe_financial_accounts`, `stripe_issuing_cards`, `stripe_authorizations`, `stripe_webhook_events`
+- Affected roles: Super Admin and wallet consumers
+- Scenario: a financial read fails while the admin page reports empty or unavailable capability state
+- Launch impact: operators can misdiagnose Stripe readiness or miss financial operational failures
+- Root cause: admin Stripe reads discarded Supabase errors and capability flags had no diagnostic error path
+- Resolution: add an error-aware helper for diagnostics, preserve consumer ledger fallback, and render a refreshable admin error state
+- Tests performed: `tests/admin-stripe-read-boundary.test.ts` (2 focused tests); full 427-file/3,099-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused contracts cover capability flags, Stripe settings, financial tables, webhook reads, and the visible error state
+- Remaining dependencies: publish docs and run isolated Stripe read-failure/callback/browser drills
+
 #### TODO-0303 - Admin subscriptions hid billing reads as empty plan totals
 
 - Status: `[~]` In progress

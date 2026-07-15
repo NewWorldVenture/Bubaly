@@ -615,3 +615,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `7092ab60`
 - Status: Resolved in code; live billing outage and Super Admin browser evidence remain open
 - Remaining dependencies: run isolated subscription-read failure drills and verify no zero-valued plan report is presented as authoritative
+
+### PLA-0304 - Admin Stripe hid financial reads as zero or unavailable capabilities
+
+- Timestamp: 2026-07-15 11:22 America/New_York
+- Service: Super Admin Stripe financial mode
+- Route: `/admin/stripe`
+- Affected files: `lib/stripe/capabilities.ts`, `app/(app)/admin/stripe/page.tsx`, `tests/admin-stripe-read-boundary.test.ts`
+- Role: Super Admin
+- Scenario: feature flags, Stripe settings, connected accounts, financial accounts, cards, authorizations, or webhook events failed to load while the page substituted empty or zero-valued status
+- Severity: P1
+- Launch impact: operators could misdiagnose financial readiness or miss Stripe operational failures
+- Root cause: the admin page discarded Supabase read errors and the capability helper exposed no diagnostic error path
+- Resolution: added an error-aware feature-flag helper for diagnostics, preserved consumer ledger fallback, and made the admin page fail visibly on any financial read failure
+- Supabase impact: no schema change; financial-read failures are explicit and non-destructive
+- Tests run: `tests/admin-stripe-read-boundary.test.ts` (2 focused tests), full 427-file/3,099-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contracts verify error-aware capability reads, Stripe settings, feature flags, financial tables, webhooks, and the visible retry state
+- Commit: `748d0a7d`
+- Status: Resolved in code; live Stripe credentials, callbacks, permissions, and browser evidence remain open
+- Remaining dependencies: run isolated Stripe read-failure and callback drills with production-safe test credentials

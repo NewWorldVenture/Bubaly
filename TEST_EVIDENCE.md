@@ -1385,3 +1385,15 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - `/admin/subscriptions` now renders a refreshable error state when subscription, family, or billing-customer reads fail instead of reporting empty plan totals.
 - Source commit: `7092ab60`; docs and source are published on `origin/main` at `b2da0375`.
+
+## Latest Local Evidence - Admin Stripe Read Failure
+
+- `npm.cmd exec vitest run tests/admin-stripe-read-boundary.test.ts`: 1 file, 2 focused tests passed.
+- `npm.cmd test`: 427 files, 3,099 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
+- `git diff --check`: passed.
+- `/admin/stripe` now renders a refreshable error state for feature-flag, configuration, financial-table, or webhook read failures while wallet consumers retain ledger fallback.
+- Source commit: `748d0a7d`; docs publication commit is pending.
