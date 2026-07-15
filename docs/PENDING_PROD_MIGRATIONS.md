@@ -127,8 +127,11 @@ before contacting Supabase and fails if a new or changed collision appears.
   opt in), **`close-auctions`** (every 5 min — closes expired marketplace
   auctions: winner → order + notify, reserve-not-met → withdrawn + notify), and
   **`return-reminders`** (daily 08:00 — due-soon nudges + overdue alerts for
-  borrowed/rented marketplace items). Without it those endpoints return 401,
-  auctions never auto-close, and borrowers get no return reminders.
+  borrowed/rented marketplace items), and **`admin-digest`** (daily 12:30 UTC —
+  emails super admins a growth-first rollup of the last 24h of `admin_notifications`;
+  reuses `RESEND_API_KEY`, sends only on days with activity, dark without the key).
+  Without it those endpoints return 401, auctions never auto-close, borrowers get
+  no return reminders, and the daily digest never sends.
 - **`CHILD_LOGIN_SECRET`** — required for **Kid Logins** (username + PIN, no email).
   It's mixed into the child's derived auth password so a 4-digit PIN can't be
   brute-forced offline. Without it, `/kid-login` and "create child login" report

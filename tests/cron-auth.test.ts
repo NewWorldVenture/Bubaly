@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { hasCronAuthorization, hasInternalSecret } from '@/lib/server/cron-auth';
 
 const cronRoutes = [
+  'app/api/cron/admin-digest/route.ts',
   'app/api/cron/automations/route.ts',
   'app/api/cron/autopilot-scan/route.ts',
   'app/api/cron/calendar-feeds/route.ts',
