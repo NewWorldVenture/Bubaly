@@ -257,7 +257,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ### PLA-0285 - Admin notification failures were silent to operators
 
-- Timestamp: 2026-07-15 08:55 America/New_York
+- Timestamp: 2026-07-15 09:04 America/New_York
 - Service: Admin operations and notification observability
 - Route: `/admin/notifications`, global admin notification bell
 - Affected files: `lib/admin/notify.ts`, `app/(app)/admin/notifications-actions.ts`, `components/admin/admin-notifications-list.tsx`, `components/admin/admin-notification-bell.tsx`, `tests/admin-notification-boundary.test.ts`
@@ -270,6 +270,6 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Supabase impact: existing service-role-only `admin_notifications` table; no migration or data change
 - Tests run: `tests/admin-notification-boundary.test.ts` and `tests/admin-notifications.test.ts` (12 tests), full 409-file/3,045-test suite, typecheck, lint, dependency audit, migration audit, diff check, and production build
 - Validation evidence: producer checks query errors; both history and bell handlers branch on `{ ok: false }` before `router.refresh()`; 250-route build passed; live schema audit passed all 11 checks
-- Commit: pending publication
+- Commit: `991ad4dd`
 - Status: Resolved in code; live Super Admin workflow and failure-injection evidence remain open
 - Remaining dependencies: failure injection, auth permission, alert routing, and browser/operator smoke tests
