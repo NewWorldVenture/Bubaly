@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 16:58:06 -04:00
+- Last updated: 2026-07-15 17:05:57 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `194e4ecb` adds vacation report read safety after the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `f36ea6c5` adds trip overview read safety after Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0347 - Trip overview hid incomplete readiness and itinerary reads
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Vacation overview / Supabase failure handling
+- Feature: Trip Overview
+- Route: `/dashboard/vacations/[id]/overview`
+- File or files: `components/vacations/trip-overview.tsx`, `tests/trip-overview-boundary.test.ts`
+- Database objects: `vacations`, `vacation_members`, `vacation_lodging`, `vacation_flights`, `vacation_transportation`, `vacation_activities`, `vacation_reservations`, `vacation_budgets`, `vacation_expenses`, `vacation_packing_items`, `vacation_documents`, `vacation_emergency_contacts`, `vacation_itinerary_days`, `vacation_itinerary_items`, `vacation_weather_snapshots`, and `vacation_ai_recommendations`
+- Affected roles: authenticated family members and household trip planners
+- Scenario: any secondary overview read could fail while readiness, budget, transport, weather, or recommendation summaries rendered from partial arrays.
+- Launch impact: families could treat an incomplete trip overview as current and act on an inaccurate readiness score or financial summary.
+- Root cause: only the trip query exposed loading state; the other 16 required reads ignored loading and error state.
+- Required remediation: centralize all overview query handles, wait for every required result, and render a sanitized retry state before deriving summary data.
+- Implementation notes: Trip Overview now fails closed on any required read failure and retries all overview reads together.
+- Test plan: focused trip overview boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/trip-overview-boundary.test.ts` (2 focused assertions); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 465 files/3,214 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `f36ea6c5`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0346 - Vacation reports hid incomplete financial and travel-score reads
 
@@ -200,31 +221,7 @@
 - Category: Security operations / Auth Admin / Supabase failure handling
 - Feature: Super Admin Security page
 - Route: `/admin/security`
-- File or files: `app/(app)/admin/security/page.tsx`, `tests/admin-security-read-boundary.test.ts`
-- Database objects: `invites`, `audit_logs`, `families`, and actor `profiles`; Supabase Auth Admin users endpoint
-- Affected roles: Super Admin and security operators
-- Scenario: Auth Admin users, invite, audit, family, or actor-profile reads could fail while the page rendered zero/empty account security and sensitive activity signals.
-- Launch impact: operators could miss unconfirmed, banned, or newly created accounts and audit activity precisely when the security backend is degraded.
-- Root cause: parallel results and actor lookup results were destructured without preserving error state.
-- Required remediation: fail visibly on any required source read, retain server diagnostics, and provide a refresh path.
-- Implementation notes: required query results and actor profile lookup now surface sanitized retryable ErrorState responses.
-- Test plan: focused Security read-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
-- Tests performed: `tests/admin-security-read-boundary.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
-- Evidence: latest full gate passed with 458 files/3,204 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Resolution: source repair validated locally in commit `f13af1c2`; push and post-push ref verification pending.
-- Remaining dependencies: live Auth Admin health, Super Admin role/browser, audit-log, and deployed Supabase evidence.
-
-#### TODO-0337 - Admin wallet overview hid required read failures as zero metrics
-
-- Status: `[~]` In progress
-- Severity: P1
-- Category: Admin observability / wallet oversight / Supabase failure handling
-- Feature: Super Admin wallet overview
-- Route: `/admin/wallet`
-- File or files: `app/(app)/admin/wallet/page.tsx`, `tests/admin-wallet-read-boundary.test.ts`
-- Database objects: `family_wallets`, `child_wallets`, `gift_payments`, `parent_approvals`, `wallet_transactions`, `feature_flags`, and `wallet_audit_logs`
-- Affected roles: Super Admin and financial operators
-- Scenario: any of seven parallel reads could fail while the page su…110278 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
+- File or files: `app/(app)/admin…110845 tokens truncated…d leave orphan posts, and provider exceptions could expose raw details.
 - Resolution: Required reads/writes now fail closed, incomplete pre-publish posts are cleaned up, publish results are persisted before final target state, uncertain post-publish state is preserved for review, and provider exceptions use stable client messages.
 - Tests performed: Focused social publishing tests, full Vitest, typecheck, lint, dependency audit, migration audit, live schema probes, production build, public Playwright/axe/overflow E2E.
 - Evidence: `tests/social-publish-persistence.test.ts` guards target setup, job/read transitions, result ordering, schedule cleanup, safe action errors, and connector redaction.
