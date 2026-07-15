@@ -3,7 +3,7 @@ import { FileText, BookOpen, Send } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { BLOG_CATEGORIES } from '@/lib/marketing/blog-publish';
 import { createContentItem } from '../actions';
@@ -21,10 +21,17 @@ type BlogMeta = { slug?: string; category?: string; author?: string; excerpt?: s
 
 export default async function ContentPage() {
   const supabase = createServiceClient();
-  const [{ data: items }, { data: posts }] = await Promise.all([
+  const [itemsResult, postsResult] = await Promise.all([
     supabase.from('marketing_content_items').select('*').is('deleted_at', null).order('publish_at', { ascending: true, nullsFirst: false }),
     supabase.from('blog_posts').select('slug, title, category, published, published_at').order('published_at', { ascending: false }).limit(20),
   ]);
+  const readError = itemsResult.error ?? postsResult.error;
+  if (readError) {
+    console.error('[admin-marketing-content] content read failed', readError);
+    return <AdminContentReadError />;
+  }
+  const { data: items } = itemsResult;
+  const { data: posts } = postsResult;
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
@@ -128,6 +135,19 @@ export default async function ContentPage() {
         </form>
         <p className="mt-3 text-xs text-muted">Blog items: write the body, set category/author, then “Publish to blog” to push live at <code>/blog/&lt;slug&gt;</code>.</p>
       </Card>
+    </div>
+  );
+}
+
+function AdminContentReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Content</h1>
+        <p className="mt-1 text-sm text-muted">Manage the content pipeline and published blog posts.</p>
+      </div>
+      <ErrorState message="Could not load marketing content from Supabase. Refresh and try again." />
+      <a href="/admin/marketing/content" className="text-sm font-medium text-brand-text underline">Refresh content</a>
     </div>
   );
 }

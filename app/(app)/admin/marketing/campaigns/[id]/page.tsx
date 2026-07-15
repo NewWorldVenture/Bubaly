@@ -4,8 +4,9 @@ import { notFound } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/states';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
-import { getMarketingCustomers, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
+import { getMarketingCustomersWithError, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
 import { setCampaignStatus } from '../../actions';
 
 export const metadata: Metadata = { title: 'Marketing · Campaign', robots: { index: false } };
@@ -16,16 +17,27 @@ const STATUSES = ['draft', 'scheduled', 'active', 'paused', 'completed', 'archiv
 export default async function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = createServiceClient();
-  const { data: c } = await supabase.from('marketing_campaigns').select('*').eq('id', id).maybeSingle();
+  const { data: c, error: campaignError } = await supabase.from('marketing_campaigns').select('*').eq('id', id).maybeSingle();
+  if (campaignError) {
+    console.error('[admin-marketing-campaign-detail] campaign read failed', campaignError);
+    return <CampaignDetailReadError />;
+  }
   if (!c) notFound();
 
   let audience = 0;
   let segmentName: string | null = null;
   if (c.segment_id) {
-    const [{ data: seg }, customers] = await Promise.all([
+    const [segmentResult, customersResult] = await Promise.all([
       supabase.from('marketing_segments').select('name, rules').eq('id', c.segment_id).maybeSingle(),
-      getMarketingCustomers(supabase),
+      getMarketingCustomersWithError(supabase),
     ]);
+    const readError = segmentResult.error ?? customersResult.error;
+    if (readError) {
+      console.error('[admin-marketing-campaign-detail] audience read failed', readError);
+      return <CampaignDetailReadError />;
+    }
+    const seg = segmentResult.data;
+    const { customers } = customersResult;
     if (seg) {
       segmentName = seg.name;
       audience = evaluateSegment(customers, (seg.rules ?? {}) as SegmentRules).length;
@@ -80,6 +92,19 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
           ))}
         </div>
       </Card>
+    </div>
+  );
+}
+
+function CampaignDetailReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Campaign</h1>
+        <p className="mt-1 text-sm text-muted">Review campaign details, audience, and status.</p>
+      </div>
+      <ErrorState message="Could not load this marketing campaign from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/campaigns" className="text-sm font-medium text-brand-text underline">Back to campaigns</Link>
     </div>
   );
 }

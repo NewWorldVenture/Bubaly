@@ -4,7 +4,7 @@ import { Send, Plus } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
 
 export const metadata: Metadata = { title: 'Marketing · Campaigns', robots: { index: false } };
@@ -16,7 +16,11 @@ const STATUS_TONE: Record<string, 'neutral' | 'brand' | 'success' | 'warning'> =
 
 export default async function CampaignsPage() {
   const supabase = createServiceClient();
-  const { data: campaigns } = await supabase.from('marketing_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  const { data: campaigns, error: campaignsError } = await supabase.from('marketing_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  if (campaignsError) {
+    console.error('[admin-marketing-campaigns] campaign read failed', campaignsError);
+    return <AdminCampaignsReadError />;
+  }
 
   return (
     <div className="space-y-4">
@@ -53,6 +57,19 @@ export default async function CampaignsPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function AdminCampaignsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Campaigns</h1>
+        <p className="mt-1 text-sm text-muted">Plan and monitor lifecycle campaigns.</p>
+      </div>
+      <ErrorState message="Could not load marketing campaigns from Supabase. Refresh and try again." />
+      <a href="/admin/marketing/campaigns" className="text-sm font-medium text-brand-text underline">Refresh campaigns</a>
     </div>
   );
 }
