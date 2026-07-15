@@ -32,6 +32,8 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   verification remain open.
 - Legacy Google Calendar and Gmail adapter contracts now fail closed until real provider I/O is implemented;
   planned adapters cannot be marked runnable by key presence alone.
+- Provider-sync cron now returns HTTP 502 when any account fails, making scheduled failures visible to monitoring;
+  live cron invocation and callback/retry drills remain open.
 
 These checks do not prove complete launch readiness. Authentication Admin health, remote migration history,
 credential rotation, authenticated browser coverage, third-party callback smoke tests, backup/restore, and

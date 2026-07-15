@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 09:33:11 -04:00
+- Last updated: 2026-07-15 09:38:44 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `0ae5cdb0` (legacy connection adapter increment)
+- Commit: `24e0b64d` (provider sync cron increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -4723,3 +4723,22 @@ roadmap entries and user worktree changes are preserved.
 - Date completed: 2026-07-15
 - Remaining dependencies: implement and expose Gmail, banking, grocery, and smart-home provider flows with
   real OAuth, token, retry, callback, and sandbox evidence before advertising them as live integrations.
+
+### TODO-0289 - Provider sync cron returned success after account failures
+
+- Status: [x] Completed in code and covered by regression tests.
+- Severity: P1
+- Category: Notifications / cron / provider synchronization / observability
+- Feature: Scheduled provider synchronization
+- File or files: `app/api/cron/provider-sync/route.ts`, `tests/cron-provider-sync.test.ts`
+- Description: The cron counted failed account runs but returned HTTP 200 and `ok: true`, which could hide
+  provider outages from scheduler monitoring and delay recovery.
+- Resolution: Final response status and `ok` now derive from the failure count; any account failure returns
+  sanitized HTTP 502 while retaining per-account diagnostic counts and details.
+- Tests performed: 7 focused cron/error-boundary tests; full 412-file/3,065-test suite; typecheck; lint;
+  dependency audit; migration audit; diff check; and clean 250-route production build.
+- Evidence: `tests/cron-provider-sync.test.ts` guards non-2xx failure status and raw-error sanitization.
+- Verified by: Codex
+- Commit: `24e0b64d`
+- Date completed: 2026-07-15
+- Remaining dependencies: authenticated provider failure/retry drill, alert routing, and remote cron deployment verification.

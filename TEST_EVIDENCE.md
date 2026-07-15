@@ -2,6 +2,19 @@
 
 Audit date: 2026-07-15
 
+## Latest Audit Update - Provider sync cron failure status
+
+- `npm.cmd run test -- tests/cron-provider-sync.test.ts tests/cron-auth.test.ts tests/database-error-boundaries.test.ts`: 3 files, 7 tests passed.
+- `npm.cmd run test`: 412 files, 3,065 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `git diff --check`: passed.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run db:audit:migrations`: 227 numbered SQL files; next available version `0212`; passed.
+- `npm.cmd run build`: passed; 250 routes generated.
+- `/api/cron/provider-sync` now returns sanitized HTTP 502 and `ok: false` when any account sync fails; successful runs remain HTTP 200.
+- Publication verified at commit `24e0b64d`; local and `origin/main` are aligned.
+
 ## Latest Audit Update - Legacy connection adapters fail closed
 
 - `npm.cmd run test -- tests/connections-adapter.test.ts tests/connections-providers.test.ts tests/connections-ui-boundary.test.ts`: 3 files, 25 tests passed.

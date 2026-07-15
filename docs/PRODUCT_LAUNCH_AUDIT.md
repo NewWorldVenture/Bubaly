@@ -330,3 +330,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `0ae5cdb0`
 - Status: Resolved in code; full third-party integration audit remains open
 - Remaining dependencies: implement real Gmail, banking, grocery, and smart-home providers, then verify OAuth callbacks, token storage, retries, and provider sandbox behavior
+
+### PLA-0289 - Provider sync cron returned success after account failures
+
+- Timestamp: 2026-07-15 09:35 America/New_York
+- Service: Notifications, cron, and provider synchronization
+- Route: `/api/cron/provider-sync`
+- Affected files: `app/api/cron/provider-sync/route.ts`, `tests/cron-provider-sync.test.ts`
+- Role: scheduled system worker; connected account owner
+- Scenario: one or more account syncs failed, but the cron response still returned HTTP 200 with `ok: true`
+- Severity: P1
+- Launch impact: scheduler and alerting could record a failed provider run as successful, delaying retry or operator response
+- Root cause: the route counted failures but hard-coded the final response to success
+- Resolution: final status now derives from `failed === 0`; any account failure returns sanitized HTTP 502 and `ok: false`, while per-account details remain available
+- Supabase impact: no schema change; existing sync failure rows and audit logging remain unchanged
+- Tests run: `tests/cron-provider-sync.test.ts`, `tests/cron-auth.test.ts`, and `tests/database-error-boundaries.test.ts` (7 tests), full 412-file/3,065-test suite, typecheck, lint, dependency audit, migration audit, diff check, and production build
+- Validation evidence: route contract covers non-2xx failure status and sanitized response fields; 250-route build passes
+- Commit: `24e0b64d`
+- Status: Resolved in code; live scheduled invocation and provider callback evidence remain open
+- Remaining dependencies: run an authenticated provider failure/retry drill, verify alert routing, and validate remote cron deployment
