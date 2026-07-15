@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Vacation Reports Read Boundary
+
+- Focused vacation reports suite: 1 file, 2 assertions passed.
+- Full `npm.cmd test`: 464 test files, 3,212 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- `/dashboard/vacations/reports` now waits for and validates trips, expenses, budgets, and travel scores before calculating totals, and renders a retryable failure state on any required read error.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Family Connections Read Boundary
 
 - Focused Connections suite: 1 file, 3 assertions passed.
@@ -272,20 +286,7 @@ Audit date: 2026-07-15
 
 ## Latest Local Evidence - Contact Center Failure Boundaries
 
-- Focused Contact Center suite: 1 file, 15 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `git diff --check`: passed.
-- Contact Center channel and inbox reads now render retryable failure state; SMS, voice, voicemail, and email routing return 503 on database read failure; provisioning and inbox persistence errors are checked and logged.
-- The final post-repair full gate passed with 450 test files, 3,176 tests, 0 production dependency vulnerabilities, and a 250-route build.
-- Inbound email routing exists at `/api/contact-center/email`; provider configuration, signed callback verification, retry behavior, and live RLS/browser verification remain open.
-
-## Latest Local Evidence - Remaining Wallet Read Boundaries
-
-- Focused wallet read-boundary suite: 1 file, 3 tests passed.
-- Full `npm.cmd test -- --run`: 450 files, 3,177 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or error…23494 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- …23762 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
