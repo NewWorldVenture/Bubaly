@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 17:27:51 -04:00
+- Last updated: 2026-07-15 17:33:09 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `2a86d411` adds weather and packing read safety after the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `b72a02d2` adds family check-in read safety after weather and packing, the Emergency Summary, shared vacation CRUD, Trip Itinerary, Trip Overview, Vacation Reports, the Connections hub, Sync conflict/account routes, family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -22,6 +22,27 @@
 - An item is completed only after the repair is tested, documented, committed, and pushed.
 - Production data is never mutated destructively; destructive tests require an isolated environment.
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
+
+#### TODO-0352 - Family check-in feed hid safety read failures as no check-ins
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Family safety / Supabase failure handling
+- Feature: Family Check In
+- Route: `/dashboard/check-in`
+- File or files: `components/family/check-in-view.tsx`, `tests/family-check-in-boundary.test.ts`
+- Database objects: `safety_check_ins`
+- Affected roles: authenticated family members and safety operators
+- Scenario: the family check-in read could fail while the feed rendered “No check-ins yet,” indistinguishable from a household with no safety activity.
+- Launch impact: family members could miss safety status updates during an incident.
+- Root cause: the view ignored the `useRealtimeQuery` error state before choosing its empty state.
+- Required remediation: surface a sanitized retryable error before rendering the empty feed.
+- Implementation notes: Family Check In now renders an ErrorState with the realtime refresh callback on read failure.
+- Test plan: focused check-in boundary, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/family-check-in-boundary.test.ts` (1 focused assertion); full Vitest; typecheck; lint; dependency audit; clean production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 470 files/3,223 tests, 0 production dependency vulnerabilities, and a clean 250-route build.
+- Resolution: source repair validated locally in commit `b72a02d2`; documentation and remote publication remain pending for this increment.
+- Remaining dependencies: live provider callbacks, RLS, browser, backup, and deployed verification.
 
 #### TODO-0351 - Weather and packing views hid failed trip dependencies as empty plans
 
