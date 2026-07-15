@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Quote, BookOpenCheck, Eye, EyeOff } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
 import {
@@ -20,10 +22,17 @@ const btnCls = 'h-9 rounded-lg bg-brand px-4 text-sm font-semibold text-white ho
 
 export default async function ReputationPage() {
   const supabase = createServiceClient();
-  const [{ data: testimonials }, { data: caseStudies }] = await Promise.all([
+  const [testimonialsResult, caseStudiesResult] = await Promise.all([
     supabase.from('testimonials').select('*').order('sort_order').order('created_at', { ascending: false }).limit(200),
     supabase.from('case_studies').select('*').order('created_at', { ascending: false }).limit(200),
   ]);
+  const readError = testimonialsResult.error ?? caseStudiesResult.error;
+  if (readError) {
+    console.error('[admin-marketing-reputation] reputation read failed', readError);
+    return <AdminReputationReadError />;
+  }
+  const { data: testimonials } = testimonialsResult;
+  const { data: caseStudies } = caseStudiesResult;
   const tList = (testimonials ?? []) as Testimonial[];
   const cList = (caseStudies ?? []) as CaseStudy[];
 
@@ -115,6 +124,19 @@ export default async function ReputationPage() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function AdminReputationReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Reputation &amp; Trust</h1>
+        <p className="mt-1 text-sm text-muted">Manage testimonials and case studies used across the site.</p>
+      </div>
+      <ErrorState message="Could not load reputation content from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/reputation" className="text-sm font-medium text-brand-text underline">Refresh reputation</Link>
     </div>
   );
 }

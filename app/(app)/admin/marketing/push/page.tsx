@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { BellRing, Send, AlertTriangle } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { Badge } from '@/components/ui/badge';
 import { fmtDate } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
@@ -23,10 +25,17 @@ const STATUS_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> 
 
 export default async function PushPage() {
   const supabase = createServiceClient();
-  const [{ data }, { count: deviceCount }] = await Promise.all([
+  const [campaignsResult, devicesResult] = await Promise.all([
     supabase.from('marketing_push_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(200),
     supabase.from('push_devices').select('id', { count: 'exact', head: true }).eq('enabled', true),
   ]);
+  const readError = campaignsResult.error ?? devicesResult.error;
+  if (readError) {
+    console.error('[admin-marketing-push] push read failed', readError);
+    return <AdminPushReadError />;
+  }
+  const { data } = campaignsResult;
+  const { count: deviceCount } = devicesResult;
   const campaigns = (data ?? []) as Campaign[];
   const stats = summarizePush(campaigns);
   const cfg = pushConfigured();
@@ -99,6 +108,19 @@ export default async function PushPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function AdminPushReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Push</h1>
+        <p className="mt-1 text-sm text-muted">Create and deliver consent-aware push campaigns.</p>
+      </div>
+      <ErrorState message="Could not load push campaigns from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/push" className="text-sm font-medium text-brand-text underline">Refresh push</Link>
     </div>
   );
 }

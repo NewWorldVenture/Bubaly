@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Film, Eye, EyeOff, FileText, Youtube } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
 import { thumbnailUrl, formatDuration, isVideoProvider, type VideoProvider } from '@/lib/marketing/video';
@@ -20,10 +22,17 @@ const PROVIDER_LABEL: Record<VideoProvider, string> = { youtube: 'YouTube', vime
 
 export default async function VideoPage() {
   const supabase = createServiceClient();
-  const [{ data: videoData }, { data: assetData }] = await Promise.all([
+  const [videosResult, assetsResult] = await Promise.all([
     supabase.from('marketing_videos').select('*').is('deleted_at', null).order('created_at', { ascending: false }).limit(300),
     supabase.from('marketing_assets').select('id, name').eq('kind', 'video').is('deleted_at', null).order('created_at', { ascending: false }).limit(200),
   ]);
+  const readError = videosResult.error ?? assetsResult.error;
+  if (readError) {
+    console.error('[admin-marketing-video] video read failed', readError);
+    return <AdminVideoReadError />;
+  }
+  const { data: videoData } = videosResult;
+  const { data: assetData } = assetsResult;
   const videos = (videoData ?? []) as Video[];
   const videoAssets = (assetData ?? []) as Pick<Asset, 'id' | 'name'>[];
   const published = videos.filter((v) => v.status === 'published').length;
@@ -108,6 +117,19 @@ export default async function VideoPage() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function AdminVideoReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Video Marketing</h1>
+        <p className="mt-1 text-sm text-muted">Catalog and publish video content across the site.</p>
+      </div>
+      <ErrorState message="Could not load marketing videos from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/video" className="text-sm font-medium text-brand-text underline">Refresh videos</Link>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Star, MessageSquareQuote, Settings2, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ratingStats, DEFAULT_REPUTATION } from '@/lib/marketing/reviews';
 import { ReviewRow } from './review-row';
 import { saveReputationSettingsAction } from './actions';
@@ -20,10 +20,17 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
   const active = (FILTERS as readonly string[]).includes(status ?? '') ? status! : 'all';
   const supabase = createServiceClient();
 
-  const [{ data: all }, { data: settings }] = await Promise.all([
+  const [reviewsResult, settingsResult] = await Promise.all([
     supabase.from('reviews').select('*').is('deleted_at', null).order('submitted_at', { ascending: false }).limit(500),
     supabase.from('reputation_settings').select('*').eq('singleton', true).maybeSingle(),
   ]);
+  const readError = reviewsResult.error ?? settingsResult.error;
+  if (readError) {
+    console.error('[admin-marketing-reviews] review read failed', readError);
+    return <AdminReviewsReadError />;
+  }
+  const { data: all } = reviewsResult;
+  const { data: settings } = settingsResult;
   const rows = all ?? [];
   const stats = ratingStats(rows.map((r) => r.rating));
   const filtered = active === 'all' ? rows : rows.filter((r) => r.status === active);
@@ -105,6 +112,19 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
           <div className="sm:col-span-2"><button className="inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">Save settings</button></div>
         </form>
       </Card>
+    </div>
+  );
+}
+
+function AdminReviewsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Reviews &amp; Reputation</h1>
+        <p className="mt-1 text-sm text-muted">Collect, review, and publish customer feedback.</p>
+      </div>
+      <ErrorState message="Could not load reviews from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/reviews" className="text-sm font-medium text-brand-text underline">Refresh reviews</Link>
     </div>
   );
 }

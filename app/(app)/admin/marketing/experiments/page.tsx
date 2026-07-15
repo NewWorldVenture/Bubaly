@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { FlaskConical, Trophy } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { computeABResults, leadingVariant, type ABVariant, type VariantTotals } from '@/lib/marketing/ab';
 import { NewExperimentForm, ExperimentControls } from './experiments-client';
 
@@ -17,16 +19,21 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default async function ABTestingPage() {
   const supabase = createServiceClient();
-  const { data: experiments } = await supabase
+  const { data: experiments, error: experimentsError } = await supabase
     .from('ab_experiments')
     .select('*')
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
   const keys = (experiments ?? []).map((e) => e.key);
-  const { data: events } = keys.length
+  const eventResult = keys.length
     ? await supabase.from('ab_events').select('experiment_key, variant_key, kind').in('experiment_key', keys).limit(100000)
-    : { data: [] as { experiment_key: string; variant_key: string; kind: string }[] };
+    : { data: [] as { experiment_key: string; variant_key: string; kind: string }[], error: null };
+  if (experimentsError || eventResult.error) {
+    console.error('[admin-marketing-experiments] experiment read failed', experimentsError ?? eventResult.error);
+    return <AdminExperimentsReadError />;
+  }
+  const { data: events } = eventResult;
 
   // Tally exposures/conversions per experiment+variant.
   const tally = new Map<string, { exposures: number; conversions: number }>();
@@ -96,6 +103,19 @@ export default async function ABTestingPage() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function AdminExperimentsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">A/B Testing</h1>
+        <p className="mt-1 text-sm text-muted">Run experiments with deterministic assignment and live results.</p>
+      </div>
+      <ErrorState message="Could not load experiment results from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/experiments" className="text-sm font-medium text-brand-text underline">Refresh experiments</Link>
     </div>
   );
 }
