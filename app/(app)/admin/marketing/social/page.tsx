@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Share2 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createSocialPost } from '../actions';
 
@@ -15,7 +16,11 @@ const PLATFORMS = ['facebook', 'instagram', 'linkedin', 'tiktok', 'x', 'youtube'
 
 export default async function SocialPage() {
   const supabase = createServiceClient();
-  const { data: posts } = await supabase.from('marketing_social_posts').select('*').is('deleted_at', null).order('scheduled_at', { ascending: true, nullsFirst: false });
+  const { data: posts, error: postsError } = await supabase.from('marketing_social_posts').select('*').is('deleted_at', null).order('scheduled_at', { ascending: true, nullsFirst: false });
+  if (postsError) {
+    console.error('[admin-marketing-social] social post read failed', postsError);
+    return <AdminSocialReadError />;
+  }
 
   return (
     <div className="space-y-4">
@@ -50,6 +55,19 @@ export default async function SocialPage() {
           </form>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function AdminSocialReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Social</h1>
+        <p className="mt-1 text-sm text-muted">Plan and schedule social posts across supported platforms.</p>
+      </div>
+      <ErrorState message="Could not load marketing social posts from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/social" className="text-sm font-medium text-brand-text underline">Refresh social posts</Link>
     </div>
   );
 }

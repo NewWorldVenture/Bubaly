@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { ClipboardList, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createForm, setFormStatus } from '../actions';
 
 export const metadata: Metadata = { title: 'Marketing · Forms', robots: { index: false } };
@@ -12,10 +13,17 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 
 export default async function FormsPage() {
   const supabase = createServiceClient();
-  const [{ data: forms }, { data: subs }] = await Promise.all([
+  const [formsResult, submissionsResult] = await Promise.all([
     supabase.from('marketing_forms').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
     supabase.from('marketing_form_submissions').select('form_id'),
   ]);
+  const readError = formsResult.error ?? submissionsResult.error;
+  if (readError) {
+    console.error('[admin-marketing-forms] form read failed', readError);
+    return <AdminFormsReadError />;
+  }
+  const { data: forms } = formsResult;
+  const { data: subs } = submissionsResult;
   const countByForm = new Map<string, number>();
   for (const s of subs ?? []) countByForm.set(s.form_id, (countByForm.get(s.form_id) ?? 0) + 1);
 
@@ -72,6 +80,19 @@ export default async function FormsPage() {
           <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">Create form</button>
         </form>
       </Card>
+    </div>
+  );
+}
+
+function AdminFormsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Forms</h1>
+        <p className="mt-1 text-sm text-muted">Create and monitor public lead-capture forms.</p>
+      </div>
+      <ErrorState message="Could not load marketing forms from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/forms" className="text-sm font-medium text-brand-text underline">Refresh forms</Link>
     </div>
   );
 }

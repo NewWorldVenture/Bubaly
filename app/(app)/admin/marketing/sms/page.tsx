@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { MessageSquare, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createSmsDraft } from '../actions';
 
@@ -14,10 +15,17 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 
 export default async function SmsPage() {
   const supabase = createServiceClient();
-  const [{ data: sms }, { data: segments }] = await Promise.all([
+  const [smsResult, segmentsResult] = await Promise.all([
     supabase.from('marketing_sms_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
     supabase.from('marketing_segments').select('id, name').is('deleted_at', null).order('name'),
   ]);
+  const readError = smsResult.error ?? segmentsResult.error;
+  if (readError) {
+    console.error('[admin-marketing-sms] SMS read failed', readError);
+    return <AdminSmsReadError />;
+  }
+  const { data: sms } = smsResult;
+  const { data: segments } = segmentsResult;
   const ready = !!process.env.TWILIO_AUTH_TOKEN;
 
   return (
@@ -59,6 +67,19 @@ export default async function SmsPage() {
           </form>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function AdminSmsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing SMS</h1>
+        <p className="mt-1 text-sm text-muted">Draft and manage consent-aware SMS campaigns.</p>
+      </div>
+      <ErrorState message="Could not load marketing SMS data from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/sms" className="text-sm font-medium text-brand-text underline">Refresh SMS</Link>
     </div>
   );
 }

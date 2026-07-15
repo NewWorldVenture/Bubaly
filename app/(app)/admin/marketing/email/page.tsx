@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Mail, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/states';
+import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createEmailDraft } from '../actions';
 import { SendCampaignButton } from '@/components/admin/send-campaign-button';
@@ -15,10 +16,17 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 
 export default async function EmailPage() {
   const supabase = createServiceClient();
-  const [{ data: emails }, { data: segments }] = await Promise.all([
+  const [emailsResult, segmentsResult] = await Promise.all([
     supabase.from('marketing_email_campaigns').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
     supabase.from('marketing_segments').select('id, name').is('deleted_at', null).order('name'),
   ]);
+  const readError = emailsResult.error ?? segmentsResult.error;
+  if (readError) {
+    console.error('[admin-marketing-email] email read failed', readError);
+    return <AdminEmailReadError />;
+  }
+  const { data: emails } = emailsResult;
+  const { data: segments } = segmentsResult;
 
   const providerReady = !!process.env.RESEND_API_KEY;
 
@@ -74,6 +82,19 @@ export default async function EmailPage() {
           </form>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function AdminEmailReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Email</h1>
+        <p className="mt-1 text-sm text-muted">Draft, review, and send customer email campaigns.</p>
+      </div>
+      <ErrorState message="Could not load marketing email data from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/email" className="text-sm font-medium text-brand-text underline">Refresh email</Link>
     </div>
   );
 }

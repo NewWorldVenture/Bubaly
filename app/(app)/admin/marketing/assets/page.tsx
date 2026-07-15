@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Image as ImageIcon, FileText, Film, Palette, UploadCloud } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
 import {
@@ -27,19 +29,27 @@ const BUCKET = 'marketing-assets';
 
 export default async function AssetsPage() {
   const supabase = createServiceClient();
-  const { data } = await supabase
+  const { data, error: assetsError } = await supabase
     .from('marketing_assets')
     .select('*')
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(300);
+  if (assetsError) {
+    console.error('[admin-marketing-assets] asset read failed', assetsError);
+    return <AdminAssetsReadError />;
+  }
   const assets = (data ?? []) as Asset[];
 
   // Mint short-lived signed URLs for image previews (private bucket).
   const imagePaths = assets.filter((a) => isImageMime(a.mime_type)).map((a) => a.storage_path);
   const signed = new Map<string, string>();
   if (imagePaths.length) {
-    const { data: urls } = await supabase.storage.from(BUCKET).createSignedUrls(imagePaths, 3600);
+    const { data: urls, error: signedError } = await supabase.storage.from(BUCKET).createSignedUrls(imagePaths, 3600);
+    if (signedError) {
+      console.error('[admin-marketing-assets] asset preview read failed', signedError);
+      return <AdminAssetsReadError />;
+    }
     for (const u of urls ?? []) if (u.signedUrl && u.path) signed.set(u.path, u.signedUrl);
   }
 
@@ -122,6 +132,19 @@ export default async function AssetsPage() {
           );
         })
       )}
+    </div>
+  );
+}
+
+function AdminAssetsReadError() {
+  return (
+    <div className="module-page">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Asset Library</h1>
+        <p className="mt-1 text-sm text-muted">Manage reusable images, video, documents, and brand files.</p>
+      </div>
+      <ErrorState message="Could not load marketing assets from Supabase. Refresh and try again." />
+      <Link href="/admin/marketing/assets" className="text-sm font-medium text-brand-text underline">Refresh assets</Link>
     </div>
   );
 }
