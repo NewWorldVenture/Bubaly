@@ -26,7 +26,7 @@ FamilyOS has a strong local engineering baseline but is not yet launch-ready. Cu
   use a per-user advisory lock around the membership check and initial household writes. Remote application
   and an authenticated two-request first-login drill remain launch dependencies.
 - Latest live evidence: all 11 schema probes pass; Auth Admin users still returns HTTP 500 (request
-  `019f668b-0f90-77e1-9f85-1db7f6b87ffd`); local Docker/Supabase status is unavailable.
+  `019f669f-9f42-7c56-b92c-dd6180f3eeac`); local Docker/Supabase status is unavailable.
 - Shared auth now logs provider and super-admin lookup failures, authenticated context treats auth reads as unavailable,
   OAuth callback membership failures fail closed, and the admin shell shows non-blocking warnings for profile, invite,
   and notification read failures instead of silently substituting defaults.
