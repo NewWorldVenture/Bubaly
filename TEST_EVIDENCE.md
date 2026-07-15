@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Trip Overview Read Boundary
+
+- Focused trip overview suite: 1 file, 2 assertions passed.
+- Full `npm.cmd test`: 465 test files, 3,214 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- `/dashboard/vacations/[id]/overview` now waits for all 17 required trip, itinerary, finance, weather, and recommendation reads before deriving readiness and summaries, and renders a retryable failure state when any read fails.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Vacation Reports Read Boundary
 
 - Focused vacation reports suite: 1 file, 2 assertions passed.
@@ -270,23 +284,7 @@ Audit date: 2026-07-15
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
 - `git diff --check`: passed.
 - Guardian Learning, Network Aggregation, auction notifications, provider audit logging, and calendar-feed event/status writes now surface required read/write failures with retryable non-success responses.
-- Final full gate after this increment: 454 test files, 3,188 tests; 0 production dependency vulnerabilities; typecheck, lint, diff check, and 250-route build passed.
-- Live scheduler, provider, duplicate-run, and Supabase/RLS evidence remain open.
-
-## Latest Local Evidence - Return Reminder and Model Refresh Boundaries
-
-- Focused scheduled-job suites: 3 files, 10 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `git diff --check`: passed.
-- Return Reminders now checks listing reads, notification inserts, and order deduplication-stamp writes, returning HTTP 502 when a batch item fails.
-- Model Refresh now fails when dirty-state reads fail and counts dirty-state writes as refresh failures instead of acknowledging stale dirty records.
-- Final full gate after this increment: 453 test files, 3,184 tests; 0 production dependency vulnerabilities; typecheck, lint, diff check, and 250-route build passed.
-- Live scheduler, provider, duplicate-run, and Supabase/RLS evidence remain open.
-
-## Latest Local Evidence - Contact Center Failure Boundaries
-
-- …23762 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- Final full gate after this increment: 454 test files, 3,188 tests; 0 production dependenc…24036 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
