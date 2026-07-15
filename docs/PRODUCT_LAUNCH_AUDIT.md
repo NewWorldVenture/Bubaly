@@ -760,7 +760,7 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Resolution: primary wallet failure now renders a retryable ErrorState; dependent failures are logged and shown in accessible page-specific data-health warnings
 - Supabase impact: no schema change; all reads remain family scoped and preserve existing wallet permissions
 - Tests run: `tests/wallet-read-boundary.test.ts` (2 focused tests); full 448-file/3,159-test suite; typecheck; lint; dependency audit; production build; diff check
-- Validation evidence: source repair pending publication; build generated 250 routes; live wallet/RLS, role, concurrency, and payment workflow evidence remain open
+- Validation evidence: source commit `d3147d0e`; build generated 250 routes; branch and `main` publication verified; live wallet/RLS, role, concurrency, and payment workflow evidence remain open
 - Status: Resolved in code; live workflow evidence remains open
 - Remaining dependencies: execute isolated wallet activation, balance, send, ledger, goal, rule, concurrency, and tenant-isolation drills against deployed Supabase
 

@@ -40,7 +40,7 @@
 - Root cause: Supabase result errors were discarded across all three server-rendered wallet pages
 - Resolution: wallet failures now render a retryable error state; dependent failures are logged and surfaced in accessible page-specific data-health warnings while unaffected data remains visible
 - Tests performed: `tests/wallet-read-boundary.test.ts` (2 focused tests); full 448-file/3,159-test suite; typecheck; lint; dependency audit; production build; diff check
-- Evidence: source commit pending publication; live wallet/RLS/role/concurrency/payment workflow evidence remains open
+- Evidence: source commit `d3147d0e`; branch and `main` publication verified; live wallet/RLS/role/concurrency/payment workflow evidence remains open
 - Remaining dependencies: run isolated manager/member wallet activation, balance, send, ledger, goal, rule, concurrency, and tenant-isolation drills against deployed Supabase
 
 #### TODO-0316 - Marketplace Collections hid collection and item failures

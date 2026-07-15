@@ -1538,4 +1538,4 @@ Audit date: 2026-07-15
 - `npm.cmd run build`: passed and generated 250 routes.
 - `git diff --check`: passed.
 - Wallet Send Money, Activity, and Treasury now fail clearly on primary wallet reads and surface dependent ledger/identity/configuration failures instead of silently deriving zero or incomplete financial views.
-- Source commit: pending publication.
+- Source commit: `d3147d0e`; branch and `main` publication verified.
