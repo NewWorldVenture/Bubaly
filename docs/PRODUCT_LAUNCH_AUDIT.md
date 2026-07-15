@@ -482,3 +482,22 @@ commit, status, and remaining dependency. New findings must be added before or w
 - Commit: `c8ec95b1`
 - Status: Resolved in code; live Super Admin browser/read-failure verification remains open
 - Remaining dependencies: run an isolated `super_admins` read failure drill and verify the page preserves the error banner and does not present an empty allowlist as authoritative
+
+### PLA-0297 - Admin content page hid Supabase read failures as empty content
+
+- Timestamp: 2026-07-15 10:34 America/New_York
+- Service: Super Admin content management and document storage
+- Route: `/admin/content`
+- Affected files: `app/(app)/admin/content/page.tsx`, `tests/admin-content-read-boundary.test.ts`
+- Role: Super Admin
+- Scenario: documents, family labels, or uploader profile reads failed while the page substituted empty arrays
+- Severity: P1
+- Launch impact: a storage/database outage could appear as an empty content library, hiding operational data and encouraging incorrect follow-up actions
+- Root cause: all three Supabase errors were discarded during destructuring
+- Resolution: the page now aggregates the three read errors, logs the boundary, and renders a refreshable error state instead of an empty table
+- Supabase impact: no schema change; read behavior is explicit and non-destructive
+- Tests run: `tests/admin-content-read-boundary.test.ts`, `tests/admin-users-read-boundary.test.ts`, and `tests/admin-read-boundaries.test.ts` (5 tests), full 420-file/3,083-test suite, typecheck, lint, dependency audit, diff check, and 250-route production build
+- Validation evidence: focused contract covers documents, families, profiles, and the visible error state
+- Commit: `5c4bad4d`
+- Status: Resolved in code; live content outage and Super Admin browser evidence remain open
+- Remaining dependencies: run an isolated content-read failure drill and verify the refresh path preserves the operator context

@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 10:28:00 -04:00
+- Last updated: 2026-07-15 10:34:00 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `dc4f5bd1` (published main; source repair `c8ec95b1`)
+- Commit: pending (admin content read failure-contract increment)
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,24 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0297 - Admin content page hid Supabase read failures as empty content
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Reliability / private storage / admin
+- Feature: Super Admin content management
+- Route: `/admin/content`
+- File or files: `app/(app)/admin/content/page.tsx`, `tests/admin-content-read-boundary.test.ts`
+- Database objects: `documents`, `families`, `profiles`, private `documents` Storage bucket
+- Affected roles: Super Admin
+- Scenario: documents, family labels, or uploader profiles fail to load
+- Launch impact: a storage/database outage can look like an empty content library
+- Root cause: all three Supabase read errors were discarded and replaced with empty arrays
+- Resolution: aggregate the read errors, log the boundary, and render a refreshable error state before building content metrics
+- Tests performed: `tests/admin-content-read-boundary.test.ts`, `tests/admin-users-read-boundary.test.ts`, and `tests/admin-read-boundaries.test.ts` (5 tests); full 420-file/3,083-test suite; typecheck; lint; dependency audit; production build; diff check
+- Evidence: focused contract covers all three reads and the visible error state
+- Remaining dependencies: publish docs and run an isolated content-read failure/browser drill
 
 #### TODO-0296 - Admin users hid super-admin allowlist read failures
 

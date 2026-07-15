@@ -1300,3 +1300,15 @@ Audit date: 2026-07-15
 - `git diff --check`: passed.
 - The `/admin/users` page now includes `super_admins` in the visible Supabase load-error aggregation.
 - Source commit: `c8ec95b1`; docs and source are published on `origin/main` at `dc4f5bd1`.
+
+## Latest Local Evidence - Admin Content Read Failure
+
+- `npm.cmd exec vitest run tests/admin-content-read-boundary.test.ts tests/admin-users-read-boundary.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- `npm.cmd test`: 420 files, 3,083 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=moderate`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes; existing non-blocking cache and Edge-runtime warnings remain.
+- `git diff --check`: passed.
+- The `/admin/content` page now reports document, family, and uploader read failures through a visible refreshable error state.
+- Source commit: `5c4bad4d`; docs update and remote push verification remain pending.
