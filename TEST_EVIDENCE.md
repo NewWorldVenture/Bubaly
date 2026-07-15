@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Trip Itinerary Read Boundary
+
+- Focused trip itinerary suite: 1 file, 2 assertions passed.
+- Full `npm.cmd test`: 466 test files, 3,216 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- Clean `npm.cmd run build`: passed and generated 250 routes; known webpack cache serialization and Supabase Edge-runtime compatibility warnings remain.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed before commit.
+- `/dashboard/vacations/[id]/itinerary` now waits for trip, itinerary-day, and itinerary-item reads before rendering the schedule, and renders a retryable failure state when any read fails.
+- Live provider callbacks, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Trip Overview Read Boundary
 
 - Focused trip overview suite: 1 file, 2 assertions passed.
@@ -271,20 +285,7 @@ Audit date: 2026-07-15
 
 ## Latest Live Evidence Snapshot - 14:48 Supabase Refresh
 
-- `npm.cmd run db:audit:auth`: public Auth health passed; Auth Admin users returned HTTP 500 with request ID `019f6718-176b-7afb-b940-546891799a83`.
-- `npm.cmd run db:audit:migrations`: 230 numbered SQL files through `0214`; next available version `0215`; audit passed.
-- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
-- `supabase status`: unavailable because the Docker Desktop Linux engine is not running.
-- Remote migration-ledger reconciliation, authenticated cross-tenant RLS probes, and live account/role workflows remain unverified.
-
-## Latest Local Evidence - Scheduled Integration Persistence Boundaries
-
-- Focused scheduled-recovery suites: 5 files, 17 tests passed.
-- `npm.cmd run typecheck`: passed.
-- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
-- `git diff --check`: passed.
-- Guardian Learning, Network Aggregation, auction notifications, provider audit logging, and calendar-feed event/status writes now surface required read/write failures with retryable non-success responses.
-- Final full gate after this increment: 454 test files, 3,188 tests; 0 production dependenc…24036 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
+- `npm.cmd run db:audit:auth`: public Auth health passed; Auth Admin users returned HTTP 500 with request ID `019f6718-176b-7afb-b…24300 tokens truncated…ry.test.ts tests/admin-read-boundaries.test.ts`: 3 files, 5 tests passed.
 - `npm.cmd test`: 420 files, 3,083 tests passed.
 - `npm.cmd run typecheck`: passed.
 - `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
