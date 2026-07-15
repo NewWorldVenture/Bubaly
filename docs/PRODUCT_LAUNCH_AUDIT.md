@@ -6,6 +6,25 @@ commit, status, and remaining dependency. New findings must be added before or w
 
 ## Resolved Issues
 
+### PLA-0344 - Sync conflict and account routes hid required read failures
+
+- Timestamp: 2026-07-15 16:21 America/New_York
+- Service: Family Sync conflict resolution and connected accounts
+- Route: `/dashboard/sync/conflicts`, `/dashboard/sync/accounts`, `/dashboard/sync/accounts/[provider]`
+- Affected files: `app/(app)/dashboard/sync/conflicts/page.tsx`, `app/(app)/dashboard/sync/accounts/page.tsx`, `app/(app)/dashboard/sync/accounts/[provider]/page.tsx`, `tests/sync-route-read-boundaries.test.ts`
+- Role: authenticated family members and household integration operators
+- Scenario: conflict or connected-account reads could fail while the UI rendered “No open conflicts” or “Not connected”.
+- Severity: P1
+- Launch impact: families could miss records requiring manual resolution or believe provider credentials were absent when data was unavailable.
+- Root cause: query errors were discarded before empty-state and provider-status rendering.
+- Resolution: all three routes now log failures and render sanitized retry states before showing conflict or account status.
+- Supabase impact: no schema change; family-scoped sync conflict and account reads now have explicit failure contracts.
+- Tests run: `tests/sync-route-read-boundaries.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Validation evidence: 463 test files, 3,209 tests, 0 production dependency vulnerabilities, 250-route build, 230-migration audit, and 11 schema probes passed.
+- Commit: `ec14b828`
+- Status: Resolved in code; live provider callbacks, conflict-resolution, RLS, role, browser, and deployed evidence remains open
+- Remaining dependencies: provider sandbox callbacks, conflict-resolution action drills, cross-family RLS, browser, backup, and deployed Sync verification
+
 ### PLA-0343 - Family Sync showed zero health and history after required reads failed
 
 - Timestamp: 2026-07-15 16:16 America/New_York

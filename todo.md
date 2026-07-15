@@ -3,10 +3,10 @@
 ## Production Readiness Audit Control Plane
 
 - Audit started: 2026-07-15 08:04:04 -04:00
-- Last updated: 2026-07-15 16:16:36 -04:00
+- Last updated: 2026-07-15 16:21:58 -04:00
 - Repository: NewWorldVenture/FamilyOS
 - Branch: `codex/world-class-production`
-- Commit: `91394c90` adds family Sync read safety after the Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
+- Commit: `ec14b828` adds Sync conflict/account route read safety after the family Sync hub, Admin Users, Social, Security/Auth Admin, command-center, and Sync admin repairs; live provider and deployment evidence remains open
 - Environment: Windows workspace; Next.js 15; Supabase project configuration present locally
 - Supabase project: configured through `.env.local` (secrets intentionally omitted)
 - Auditor: Codex production-readiness audit
@@ -24,6 +24,27 @@
 - The companion evidence files are `docs/AUDIT_PROGRESS.md`, `docs/SERVICE_TEST_MATRIX.md`, `docs/SUPABASE_WIRING_MATRIX.md`, `docs/LAUNCH_BLOCKERS.md`, `docs/PRODUCT_LAUNCH_AUDIT.md`, and `docs/progress/`.
 
 ### Active audit issue
+
+#### TODO-0344 - Sync conflict and account routes hid required read failures
+
+- Status: `[~]` In progress
+- Severity: P1
+- Category: Family integrations / conflict resolution / Supabase failure handling
+- Feature: Family Sync conflicts and connected accounts
+- Route: `/dashboard/sync/conflicts`, `/dashboard/sync/accounts`, `/dashboard/sync/accounts/[provider]`
+- File or files: `app/(app)/dashboard/sync/conflicts/page.tsx`, `app/(app)/dashboard/sync/accounts/page.tsx`, `app/(app)/dashboard/sync/accounts/[provider]/page.tsx`, `tests/sync-route-read-boundaries.test.ts`
+- Database objects: `sync_conflicts` and `sync_accounts`
+- Affected roles: authenticated family members and household integration operators
+- Scenario: conflict or connected-account reads could fail while the UI rendered “No open conflicts” or “Not connected”.
+- Launch impact: families could miss records requiring manual resolution or believe provider credentials were absent when data was unavailable.
+- Root cause: query errors were discarded before empty-state and provider-status rendering.
+- Required remediation: preserve read errors, log diagnostics server-side, and render sanitized retry states before showing conflict or account status.
+- Implementation notes: all three routes now fail visibly with route-specific retry links.
+- Test plan: focused Sync route-boundary contract, full Vitest, typecheck, lint, dependency audit, production build, migration/schema probes, and diff check.
+- Tests performed: `tests/sync-route-read-boundaries.test.ts` (1 focused test); full Vitest; typecheck; lint; dependency audit; production build; migration audit; schema probes; diff check.
+- Evidence: full local gate passed with 463 files/3,209 tests, 0 production dependency vulnerabilities, and a 250-route build.
+- Resolution: source repair validated locally in commit `ec14b828`; documentation stamp and push pending.
+- Remaining dependencies: provider callbacks, conflict-resolution actions, RLS, browser, backup, and deployed verification.
 
 #### TODO-0343 - Family Sync showed zero health and history after required reads failed
 

@@ -2,6 +2,20 @@
 
 Audit date: 2026-07-15
 
+## Latest Local Evidence - Sync Conflict and Account Route Read Boundaries
+
+- Focused Sync route suite: 1 file, 1 test passed.
+- Full `npm.cmd test`: 463 test files, 3,209 tests passed.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run lint`: passed with no ESLint warnings or errors; only the known Next.js `next lint` deprecation notice remains.
+- `npm.cmd audit --omit=dev --audit-level=high`: passed with 0 vulnerabilities.
+- `npm.cmd run build`: passed and generated 250 routes.
+- `npm.cmd run db:audit:migrations`: passed with 230 numbered migrations through `0214`.
+- `npm.cmd run db:audit:schema`: all 11 required schema probes passed.
+- `git diff --check`: passed.
+- Sync conflicts, connected accounts, and provider detail now render retryable failure states instead of converting failed reads into empty conflict lists or disconnected account statuses.
+- Live provider callbacks, conflict-resolution actions, RLS/role, browser, backup, and deployment evidence remain open.
+
 ## Latest Local Evidence - Family Sync Read Boundary
 
 - Focused Sync suite: 1 file, 1 test passed.
