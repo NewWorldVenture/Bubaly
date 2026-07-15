@@ -7,7 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useToast } from '@/components/ui/toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/states';
+import { ErrorState, EmptyState, LoadingBlock } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { weatherCodeMeta, cToF, tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
 import type { Tables } from '@/lib/database.types';
@@ -20,9 +20,13 @@ const SEV_TONE = ['', 'text-blue-300 bg-blue-500/10', 'text-amber-300 bg-amber-5
 export function TripWeather({ vacationId }: { vacationId: string }) {
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
-  const { data: tripRows } = useRealtimeQuery<Trip>({ table: 'vacations', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacations').select('*').eq('id', vacationId) });
-  const trip = tripRows[0];
-  const { data: snapshots } = useRealtimeQuery<Weather>({ table: 'vacation_weather_snapshots', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_weather_snapshots').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
+  const tripQuery = useRealtimeQuery<Trip>({ table: 'vacations', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacations').select('*').eq('id', vacationId) });
+  const snapshotsQuery = useRealtimeQuery<Weather>({ table: 'vacation_weather_snapshots', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_weather_snapshots').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
+  const trip = tripQuery.data[0];
+  const snapshots = snapshotsQuery.data;
+  const loading = tripQuery.loading || snapshotsQuery.loading;
+  const readError = tripQuery.error || snapshotsQuery.error;
+  const refreshAll = () => { void Promise.all([tripQuery.refresh(), snapshotsQuery.refresh()]); };
 
   const [location, setLocation] = useState('');
   const [busy, setBusy] = useState(false);
@@ -42,6 +46,9 @@ export function TripWeather({ vacationId }: { vacationId: string }) {
     } catch { toastError('Network error'); }
     setBusy(false);
   }
+
+  if (loading) return <LoadingBlock />;
+  if (readError) return <ErrorState message="Could not load trip weather. Refresh and try again." onRetry={refreshAll} />;
 
   return (
     <div className="space-y-5">
